@@ -113,6 +113,10 @@ the leak slope.
   `RCTSurfacePresenterObserver`s, and registering as one needs a `RCTBridgeProxy`
   that bridgeless mode does not give us. The probe installs its own `IMP` on that
   method — same instant, no bridge required.
+- **Bytes per instance is the noisiest metric here.** It comes from two
+  `smaps_rollup` samples and has only one value per launch, so a loaded
+  emulator's GC state moves it 30% between runs. Treat a memory ratio as a
+  lead to chase, not a verdict, and prefer the `full` plan on a quiet machine.
 - **Emulator numbers are not device numbers.** They are comparable to each other
   within a run, which is all the gates use.
 
