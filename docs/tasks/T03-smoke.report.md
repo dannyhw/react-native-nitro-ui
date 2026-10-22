@@ -153,3 +153,146 @@ the brief scoped 0.86 iOS to "if time permits". Expo SDK 58 (RN 0.88) and RN
 CLI 0.88.0 verified green on iOS. Recommend: when backfilling an SDK 57 CI
 row, target an older simulator runtime, or treat 0.86 iOS as unsupported on
 iOS-27-runtime hosts until RN's prebuilt core catches up.
+
+---
+
+# Round 2 (review response)
+
+Review: `docs/tasks/T03-smoke.review.md` (verdict CHANGES-REQUIRED). All three
+BLOCKING items, all SHOULD-FIX items and all cheap NITs are addressed below.
+The review document itself is now committed alongside this report.
+
+## Round 2 gates (commands from the worktree root)
+
+| Command | Result | Timings | Artifacts (`/tmp/nitro-ui-smoke/artifacts/`) |
+| --- | --- | --- | --- |
+| `bun run check` (now incl. `autolinking:check`) | **PASS** | - | - |
+| `PLATFORM=ios bun run smoke:expo` (SDK 58) | **PASS** | 430 s (ios-build 142 s, ios-run 86 s) | `expo-20261022-220149-60361` |
+| `PLATFORM=android bun run smoke:expo` (SDK 58) | **PASS** | 467 s (android-build 355 s) | `expo-20261022-221334-70288` |
+| `RN=0.88.0 PLATFORM=ios bun run smoke:rn-cli` | **PASS** | 206 s (pod-install 45 s, ios-build 100 s, ios-run 7 s) | `rn-cli-20261022-222135-74329` |
+| `RN=0.88.0 PLATFORM=android bun run smoke:rn-cli` | **PASS** | 301 s (android-build 243 s) | `rn-cli-20261022-220003-59357` |
+| `RN=0.86.3 PLATFORM=android bun run smoke:rn-cli` | **PASS** | 333 s (android-build 238 s) | `rn-cli-20261022-215216-53042` |
+
+Every run packed a fresh tarball (no `SMOKE_TARBALL`/`SKIP_PACK` used). The
+0.86.3 Android pass is the proof that the Q1 BOM pin fixes the RN 0.86-line
+consumer that round 1 could not build. RN CLI 0.88 iOS re-verified through the
+new `bundle install && bundle exec pod install` path (autolinked
+`NitroUi`), so every README row is now green with round-2 scripts.
+
+iOS readiness seen in os_log (Expo run, `ios-runtime.log`):
+
+```
+2026-10-22 22:08:46.395 I  expoconsumer[66612:5958dc] [com.facebook.react.log:javascript] NITRO_UI_SMOKE_CORE_NOW=261565563.579833
+2026-10-22 22:08:46.398 I  expoconsumer[66612:5958dc] [com.facebook.react.log:javascript] NITRO_UI_SMOKE_READY
+```
+
+RN **0.86.3 iOS remains not verifiable on this machine** (iOS 27 simulator
+runtime hangs a library-free 0.86.3 control app too - round 1 Q2, control
+screenshots kept as JPEGs). `smoke.yml` excludes that matrix row with a
+comment; the README says so instead of claiming a pass.
+
+## Review item -> fix
+
+- **B1** README now lists only what passed (Expo 58 both platforms, RN CLI
+  0.88.0 both, RN CLI 0.86.3 Android; 0.86.3 iOS = "n/a" + reason) and the
+  BOM pin made 0.86.3 Android actually pass, so the floor claim in D8 holds
+  where verifiable. Commit messages make no unverified claims.
+- **B2** iOS readiness switched to the reviewer's os_log path:
+  `install_start_verify_ios` starts `xcrun simctl spawn $UDID log stream
+  --level info --style compact --predicate 'subsystem ==
+  "com.facebook.react.log"'` before a plain `simctl launch`, greps
+  `NITRO_UI_SMOKE_READY`, and fails fast on `Unhandled JS Exception|RCTFatal|
+  Fatal error`. A screenshot is taken on success and on timeout alike.
+  `scripts/smoke/pixel-ready.mjs` deleted (117 lines); the app still paints
+  white/red/blue as a human-readable cue only. The false "iOS strips console
+  in Release" premise is corrected in CONTRIBUTING, App.tsx and common.sh
+  comments. Verified by two iOS runs above.
+- **B3** All `pkill -f` uses removed. Apps are stopped with
+  `simctl terminate <udid> <bundleId>` / recorded PIDs only; the dead first
+  `exec=` assignment is gone.
+- **S1** App dirs and tarball dirs are now `mktemp -d`-unique per run
+  (`mk_run_dir`), pack writes into a per-run dir, and the exact tarball path
+  is handed to the consumer install - no shared-name `rm -rf`, no
+  `latest_tgz` races.
+- **S2** Both run scripts pack fresh by default. `SMOKE_TARBALL` is honoured
+  only when it matches the current HEAD (sidecar `<tgz>.gitsha`);
+  `SKIP_PACK=1` still works but logs a loud warning.
+- **S3** Background processes (log streams, logcat, emulators) are tracked in
+  `BG_PIDS` and killed by the EXIT trap; `./gradlew --stop` runs for created
+  project dirs on the same path. Gradle now runs
+  `--no-daemon -Pkotlin.compiler.execution.strategy=in-process`, and
+  `SHUTDOWN_DEVICES=1` (default) shuts down only devices a run booted. The
+  daemons the reviewer found (Gradle 9.3.1 `31153`, Kotlin 2.1.20 `31318`)
+  were terminated; `ps` shows zero daemons after the five round-2 runs.
+- **S4** `.github/workflows/smoke.yml` rewritten: `plan` job honours the
+  `platform` input; images use `x86_64` system images on ubuntu; PATH export
+  precedes `require_cmd emulator`; `sdkmanager --licenses` added; Expo iOS
+  does `gem install cocoapods`, rn-cli iOS uses
+  `bundle install && bundle exec pod install`; `simctl create` without a
+  runtime pin; `timeout-minutes` set; artifact actions SHA-pinned
+  (upload-artifact v7.0.1 / download-artifact v8.0.1, SHAs checked against
+  the GitHub API); the RN 0.86.3 x iOS row is excluded with a D8/iOS-27
+  comment; header comment now matches the env the jobs actually set. Valid
+  YAML (`ruby -ryaml`); still unrun by design.
+- **S5** `scripts/smoke` added to `tsconfig.json` include and `App.tsx` fixed
+  (three static styles via `StyleSheet.create`, `styles[status]`, no
+  function-inside-StyleSheet). A component-API rename now breaks
+  `bun run check` instead of a 10-minute smoke run.
+- **S6** `scripts/check-autolinking.mjs` added to `bun run check`: runs the
+  real `getPackageClassName` from `@react-native-community/cli-config-android`
+  plus both Expo resolver regexes over `android/` and asserts
+  `NitroUiPackage`. Proven to bite: pointed at main's pre-fix
+  `NitroUiPackage.kt` it resolves `still` and fails. (The reviewer's optional
+  `react-native.config.js` belt-and-braces was not added - see follow-ups.)
+- **S7** The two 3.5 MB springboard PNGs are deleted and replaced with
+  34 KB JPEGs (`sips -Z 600`). Whole evidence folder is now ~460 KB.
+  Screenshots refreshed from round-2 runs (Expo iOS/Android, RN CLI iOS/
+  Android 0.88, RN CLI 0.86.3 Android).
+- **S8** README install steps are npm-first and match the scripts verbatim;
+  bare RN shows `bundle install && bundle exec pod install`, which
+  `rn-cli.sh` now executes when the template ships a Gemfile (verified in
+  the round-2 RN CLI iOS run).
+- **Q1** `android/build.gradle` pins `compose-bom:2026.06.01` with the
+  "Compose 1.12+ needs compileSdk 37/AGP 9.1 - don't bump while RN 0.86 is
+  supported (D8)" comment. Only those two lines changed in that file. No
+  1.12-only APIs exist yet (the library has no Compose widgets until T10);
+  material3 is 1.4.0 in both BOMs. The nightly 0.86.3 Android row is the
+  guard, as recommended.
+- **NITs** (all done): nitro-modules version read from our
+  `peerDependencies` (`NITRO_MODULES_SPEC`); `CREATE_EXPO_APP_VERSION`
+  override for the create-expo pin; `PLATFORM` validated before any work;
+  whole run tee'd to `$ARTIFACTS/run.log`; Android crash detection filtered
+  by package, extended to native `Fatal signal ... <pkg>`, and re-checked
+  after the ready line; no more screenshot written then `mv`-overwritten;
+  `RUN_START` used for the total; early emulator-exit detection via
+  `kill -0` instead of waiting out `BOOT_TIMEOUT`; `sdkmanager
+  --list_installed` captured before grepping (no SIGPIPE under pipefail);
+  App.tsx top padding so text clears the iOS status bar; `key="switch"`
+  gone from the example comment; the non-existent `NitroUiCoreProbe` and the
+  unverified fetch-to-host claim are out of CONTRIBUTING; CONTRIBUTING gained
+  the os_log section, the new env vars (`SMOKE_TARBALL`, `SKIP_PACK`,
+  `SHUTDOWN_DEVICES`, `CREATE_EXPO_APP_VERSION`, `NITRO_MODULES_SPEC`) and
+  the `autolinking:check` row.
+
+## Round 2 cleanup evidence
+
+- Zero Gradle/Kotlin daemons running after the round (`ps` checked).
+- Emulator-5574 (`nitroui_t03`) not running; iPhone 17e
+  `C5CD4A7F-9079-4FAB-9EE3-88BC0754CB85` shut down. No other agent's device
+  (`emulator-5554/5560/5570`, iPhone 17, iPhone Air, nitroui_t01/t02) was
+  touched.
+
+## Round 2 known issues / follow-ups
+
+- shellcheck (not wired into CI) still shows cosmetic warnings in
+  `scripts/smoke/common.sh` (`SC2034` for `NITRO_MODULES_SPEC`, consumed by
+  the sourcing scripts; a couple of `SC2155` `local x=$(...)`); left as-is to
+  avoid churn while other tasks touch the same scripts.
+- `create-expo-app` defaults to `latest` (pinning it would rot with each
+  SDK); CI pins via `CREATE_EXPO_APP_VERSION` if desired.
+- Optional reviewer suggestion not taken: shipping `react-native.config.js`
+  with explicit `packageImportPath`/`packageInstance`. The regex regression
+  guard (S6) covers the failure mode; can be added later if a consumer
+  autolinker change ever breaks the regex path.
+- `smoke.yml` remains unrun by design; first real execution will be when the
+  orchestrator enables the nightly/CI trigger.
