@@ -1,0 +1,119 @@
+buildscript {
+  // Compose compiler plugin version MUST equal the host app's Kotlin Gradle Plugin version.
+  // RN CLI apps and Expo apps both expose it as rootProject.ext.kotlinVersion.
+  def kotlinVersion = rootProject.ext.has("kotlinVersion") ? rootProject.ext.get("kotlinVersion") : "2.2.0"
+  repositories { google(); mavenCentral() }
+  dependencies {
+    classpath "org.jetbrains.kotlin.plugin.compose:org.jetbrains.kotlin.plugin.compose.gradle.plugin:${kotlinVersion}"
+  }
+}
+
+ext.NitroUi = [
+  minSdkVersion: 24,
+  compileSdkVersion: 36
+]
+
+ext.getExtOrDefault = { prop ->
+  if (rootProject.ext.has(prop)) {
+    return rootProject.ext.get(prop)
+  }
+
+  return NitroUi[prop]
+}
+
+def reactNativeArchitectures() {
+  def value = rootProject.getProperties().get("reactNativeArchitectures")
+  return value ? value.split(",") : ["armeabi-v7a", "x86", "x86_64", "arm64-v8a"]
+}
+
+apply plugin: "com.android.library"
+
+if (project.extensions.findByName("kotlin") == null) {
+  apply plugin: "kotlin-android"
+}
+
+apply from: '../nitrogen/generated/android/nitroui+autolinking.gradle'
+
+apply plugin: "com.facebook.react"
+apply plugin: "org.jetbrains.kotlin.plugin.compose"
+
+// Without this the RN Gradle plugin scans the package root (incl. node_modules/react-native)
+// and re-generates core TurboModule specs -> duplicate classes in release dex merge.
+react {
+  jsRootDir = file("../src/")
+  libraryName = "nitroui"
+  codegenJavaPackageName = "com.margelo.nitro.nitroui"
+}
+
+android {
+  namespace "com.margelo.nitro.nitroui"
+
+  compileSdkVersion getExtOrDefault("compileSdkVersion")
+
+  defaultConfig {
+    minSdkVersion getExtOrDefault("minSdkVersion")
+
+    externalNativeBuild {
+      cmake {
+        cppFlags "-frtti -fexceptions -Wall -fstack-protector-all"
+        arguments "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+        abiFilters (*reactNativeArchitectures())
+
+        buildTypes {
+          debug {
+            cppFlags "-O1 -g"
+          }
+          release {
+            cppFlags "-O2"
+          }
+        }
+      }
+    }
+  }
+
+  if (rootProject.ext.has("ndkVersion")) {
+    ndkVersion rootProject.ext.ndkVersion
+  }
+
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+    }
+  }
+
+  packaging {
+    resources {
+      excludes += [
+        "META-INF",
+        "META-INF/**"
+      ]
+    }
+
+    jniLibs {
+      excludes += [
+        "**/libc++_shared.so",
+        "**/libfbjni.so",
+        "**/libjsi.so",
+        "**/libfolly_json.so",
+        "**/libfolly_runtime.so",
+        "**/libglog.so",
+        "**/libhermes.so",
+        "**/libreactnative.so"
+      ]
+    }
+  }
+
+  buildFeatures {
+    prefab true
+    compose true
+  }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+  implementation project(":react-native-nitro-modules")
+  implementation platform("androidx.compose:compose-bom:2026.09.00")
+  implementation "androidx.compose.material3:material3"
+  implementation "androidx.compose.ui:ui"
+  implementation "androidx.compose.foundation:foundation"
+}
