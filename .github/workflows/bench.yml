@@ -2,15 +2,22 @@ name: Bench
 
 # Perf is **report-only** here: hosted runners are noisy, so a red check would
 # teach people to ignore it. The hard gates stay static (lint, nitrogen drift,
-# API report, tarball manifest, Jest, Reassure render counts). This workflow
-# posts head/base ratios on request and files a nightly trend record.
+# API report, tarball manifest, Jest, Reassure render counts - the last one runs
+# inside `bun run check`). This workflow posts head/base ratios on request and
+# files a nightly trend record.
 #
-# Ask for it on a PR with the `bench` label or a `/bench` comment.
+# Ask for it on a PR with the `bench` label or a `/bench` comment from someone
+# who can write to the repository.
 #
 # NOTE: not yet exercised in CI - T02 wrote it from the same commands that
-# produced docs/tasks/T02-bench.report.md. Expect to tune runner images and
-# simulator names on the first run; everything it calls is the normal local
-# entry point (`bun bench`, `bun run bench:report`).
+# produced docs/tasks/T02-bench.report.md. Expect to tune on the first run;
+# everything it calls is the normal local entry point (`bun bench`,
+# `bun run bench:report`).
+#
+# Baselines: committed baselines are ratio-only and D9 wants them produced in one
+# canonical environment. This job is that environment, and it is the device pair
+# D9 names: `ios27-sim-iphone17` and `android35-emu-pixel9`. A machine on someone's
+# desk is a different device key, so it compares (`--compare`) rather than checks.
 
 on:
   pull_request:
@@ -20,22 +27,32 @@ on:
     types:
       - created
   schedule:
-    # Nightly trend record on the default branch, report-only.
+    # Nightly noise sample on the default branch, report-only. There is no base
+    # revision to compare against (merge-base of main with itself is main), so a
+    # nightly run measures how much this runner's noise is, nothing more.
     - cron: '30 3 * * *'
   workflow_dispatch:
 
+# `pull-requests: write` is needed by exactly two things: posting the comment and
+# `gh pr checkout`. Nothing else in here may write.
 permissions:
   contents: read
   pull-requests: write
 
 concurrency:
-  group: bench-${{ github.workflow }}-${{ github.ref }}
+  # Keyed on the pull request. `issue_comment` events all carry the same
+  # `github.ref` (the default branch), so keying on the ref let one PR's `/bench`
+  # cancel another PR's run, and both cancel the nightly (T02 review S14).
+  group: >-
+    bench-${{ github.workflow }}-${{
+      github.event.pull_request.number || github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   trigger:
     name: Should benchmarks run?
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       run: ${{ steps.decide.outputs.run }}
       pr: ${{ steps.decide.outputs.pr }}
@@ -49,25 +66,52 @@ jobs:
           IS_PR_COMMENT: ${{ github.event.issue.pull_request }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           PR_FROM_LABEL: ${{ github.event.pull_request.number }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
         run: |
+          run=false
+          pr=''
+
+          # This workflow builds and runs code from the pull request on a machine
+          # with an emulator and an Xcode, using a `pull-requests: write` token.
+          # So who may start it matters: labelling already requires write access,
+          # and a comment must come from someone who has it too (T02 review S14).
+          is_member() {
+            case "$1" in
+              OWNER|MEMBER|COLLABORATOR) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          # Anchored: an unanchored `/bench` also matches a comment that merely
+          # mentions `scripts/bench/run.mjs`.
           if [ "$EVENT" = "pull_request" ] && [ "$LABEL" = "bench" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "pr=$PR_FROM_LABEL" >> "$GITHUB_OUTPUT"
+            run=true
+            pr="$PR_FROM_LABEL"
           elif [ "$EVENT" = "issue_comment" ] && [ -n "$IS_PR_COMMENT" ] \
-            && printf '%s' "$BODY" | grep -q '/bench'; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "pr=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+            && is_member "$AUTHOR_ASSOCIATION" \
+            && printf '%s\n' "$BODY" | grep -qE '^/bench([[:space:]]|$)'; then
+            run=true
+            pr="$ISSUE_NUMBER"
           elif [ "$EVENT" = "workflow_dispatch" ] || [ "$EVENT" = "schedule" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
+            run=true
           fi
+
+          {
+            echo "run=$run"
+            if [ -n "$pr" ]; then
+              echo "pr=$pr"
+            fi
+          } >> "$GITHUB_OUTPUT"
+          echo "run=$run pr=${pr:-<none>}"
 
   bench-ios:
     name: Bench iOS
     needs: trigger
     if: needs.trigger.outputs.run == 'true'
-    runs-on: macos-15
+    # D2: the Xcode 27 label, not a macOS image name. Xcode 16 cannot build
+    # against the SDK Expo SDK 58 / RN 0.88 need.
+    runs-on: xcode-27
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,13 +122,31 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
-      - name: Pick a simulator
+      - name: Check out the pull request head
+        # An `issue_comment` event checks out the *default* branch, so without
+        # this `/bench` would have compared main against main (T02 review S14).
+        if: needs.trigger.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.trigger.outputs.pr }}
         run: |
-          UDID=$(xcrun simctl list devices available -j | jq -r \
-            '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
+          gh pr checkout "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+          git rev-parse HEAD
+
+      - name: Create and boot the simulator
+        # Named exactly `iPhone 17` on purpose: the results device key is derived
+        # from the simulator name plus its runtime (D9), so this run is attributed
+        # to `ios27-sim-iphone17`.
+        run: |
+          UDID=$(xcrun simctl create "iPhone 17" "iPhone 17")
           echo "IOS_SIM_UDID=$UDID" >> "$GITHUB_ENV"
-          echo "Picked simulator $UDID"
-          xcrun simctl boot "$UDID" || true
+          xcrun simctl boot "$UDID"
+
+      - name: Shut the simulator down
+        if: always()
+        # Only what this job created; `--shutdown` would be wrong for a device we
+        # did not boot.
+        run: xcrun simctl shutdown "$IOS_SIM_UDID" || true
 
       - name: Resolve revisions
         env:
@@ -96,33 +158,38 @@ jobs:
 
       # base first, head second, so the numbers under review are measured last on
       # an identically configured runner. `bench/ios` and `bench/results` are
-      # gitignored, so checking out another revision disturbs neither.
+      # gitignored, so checking out another revision disturbs neither - but a
+      # native-config change in head would be silently reused from base, hence
+      # `--prebuild` on both runs.
       - name: Build and run base
+        continue-on-error: true
         run: |
           git checkout -f "$BASE_SHA"
           bun install
-          bun bench --platform ios --plan quick
-        continue-on-error: true
+          bun bench --platform ios --plan quick --prebuild --shutdown
 
       - name: Build and run head
+        continue-on-error: true
         run: |
           git checkout -f "$HEAD_SHA"
           bun install
-          bun bench --platform ios --plan quick
-        continue-on-error: true
+          bun bench --platform ios --plan quick --prebuild --shutdown
 
       - name: Report
         run: |
-          BASE_FILE="bench/results/$BASE_SHA-ios.json"
-          HEAD_FILE="bench/results/$HEAD_SHA-ios.json"
-          if [ -f "$BASE_FILE" ]; then
-            node scripts/bench/report.mjs "$HEAD_FILE" --compare "$BASE_FILE" \
-              > bench-ios.md || true
-          elif [ -f "$HEAD_FILE" ]; then
-            node scripts/bench/report.mjs "$HEAD_FILE" > bench-ios.md
-          else
+          HEAD_FILE=$(ls -1 bench/results/ 2>/dev/null \
+            | grep -E "^${HEAD_SHA}(-dirty)?-ios-" | tail -1 || true)
+          if [ -z "$HEAD_FILE" ]; then
             echo 'No results were written - the runs failed.' > bench-ios.md
             exit 0
+          fi
+          # A nightly/dispatch run has base == head, which is a noise sample and
+          # not a comparison, so it gets no ratio table.
+          if [ "$BASE_SHA" != "$HEAD_SHA" ]; then
+            node scripts/bench/report.mjs "bench/results/$HEAD_FILE" \
+              --compare "$BASE_SHA" > bench-ios.md || true
+          else
+            node scripts/bench/report.mjs "bench/results/$HEAD_FILE" > bench-ios.md
           fi
 
       - name: Summarise
@@ -133,7 +200,8 @@ jobs:
             echo "## iOS benchmarks ($HEAD_SHA)"
             if [ -z "$PR_NUMBER" ]; then
               echo
-              echo '_Nightly trend record - no base comparison._'
+              echo '_Nightly noise sample on the default branch - no base comparison, and_'
+              echo '_the same revision twice is expected here. Read it as a noise floor._'
             fi
             echo
             cat bench-ios.md
@@ -148,8 +216,7 @@ jobs:
           {
             echo "### iOS benchmarks ($HEAD_SHA vs base $BASE_SHA)"
             echo
-            echo 'Report-only. Read the ratios; the runner flags a run as'
-            echo '*noisy, inconclusive* when the `rn-core` control moved.'
+            echo 'Report-only. Read the launch-paired ratios to `rn-core`.'
             echo
             cat bench-ios.md
           } > comment-ios.md
@@ -168,10 +235,12 @@ jobs:
     needs: trigger
     if: needs.trigger.outputs.run == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     env:
+      # The AVD the emulator runner creates, and the name `devices.mjs` derives
+      # the device key from. With `-profile: pixel_9` on API 35 that key is
+      # `android35-emu-pixel9`, D9's canonical Android device.
       ANDROID_AVD: nitroui-ci
-      # Hosted runners are x86_64; the AVD image has to match.
-      BENCH_ABIS: x86_64
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -180,6 +249,15 @@ jobs:
 
       - name: Setup
         uses: ./.github/actions/setup
+
+      - name: Check out the pull request head
+        if: needs.trigger.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.trigger.outputs.pr }}
+        run: |
+          gh pr checkout "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+          git rev-parse HEAD
 
       - name: Setup JDK
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -190,15 +268,6 @@ jobs:
       - name: Accept Android SDK licenses
         run: /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
 
-      - name: Create and boot the emulator
-        run: |
-          echo "no" | avdmanager create avd -n "$ANDROID_AVD" \
-            -k "system-images;android-35;google_apis;x86_64" -d pixel_6
-          nohup emulator -avd "$ANDROID_AVD" -no-audio -no-window \
-            -gpu swiftshader_indirect -no-snapshot > /tmp/emulator.log 2>&1 &
-          adb wait-for-device
-          adb shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 2; done'
-
       - name: Resolve revisions
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -207,32 +276,45 @@ jobs:
           BASE=$(git merge-base HEAD "origin/${BASE_REF:-main}")
           echo "BASE_SHA=$(git rev-parse --short "$BASE")" >> "$GITHUB_ENV"
 
-      - name: Build and run base
-        run: |
-          git checkout -f "$BASE_SHA"
-          bun install
-          bun bench --platform android --plan quick
-        continue-on-error: true
-
-      - name: Build and run head
-        run: |
-          git checkout -f "$HEAD_SHA"
-          bun install
-          bun bench --platform android --plan quick
-        continue-on-error: true
+      # This used to hand-roll `avdmanager create avd` plus a background
+      # `emulator`, which never installed the emulator or system-image packages
+      # and never touched KVM - so the job could not have booted anything
+      # (T02 review S14). The runner installs the packages, creates the AVD from
+      # the requested profile, waits for boot, and disables animations.
+      - name: Bench base, then head
+        uses: ReactiveCircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_9
+          avd-name: nitroui-ci
+          force-avd-creation: true
+          disable-animations: true
+          emulator-options: >-
+            -no-window -no-audio -no-boot-anim -no-snapshot-save
+            -gpu swiftshader_indirect
+          script: |
+            git checkout -f "$BASE_SHA"
+            bun install
+            bun bench --platform android --plan quick --prebuild || true
+            git checkout -f "$HEAD_SHA"
+            bun install
+            bun bench --platform android --plan quick --prebuild || true
 
       - name: Report
         run: |
-          BASE_FILE="bench/results/$BASE_SHA-android.json"
-          HEAD_FILE="bench/results/$HEAD_SHA-android.json"
-          if [ -f "$BASE_FILE" ]; then
-            node scripts/bench/report.mjs "$HEAD_FILE" --compare "$BASE_FILE" \
-              > bench-android.md || true
-          elif [ -f "$HEAD_FILE" ]; then
-            node scripts/bench/report.mjs "$HEAD_FILE" > bench-android.md
-          else
+          HEAD_FILE=$(ls -1 bench/results/ 2>/dev/null \
+            | grep -E "^${HEAD_SHA}(-dirty)?-android-" | tail -1 || true)
+          if [ -z "$HEAD_FILE" ]; then
             echo 'No results were written - the runs failed.' > bench-android.md
             exit 0
+          fi
+          if [ "$BASE_SHA" != "$HEAD_SHA" ]; then
+            node scripts/bench/report.mjs "bench/results/$HEAD_FILE" \
+              --compare "$BASE_SHA" > bench-android.md || true
+          else
+            node scripts/bench/report.mjs "bench/results/$HEAD_FILE" > bench-android.md
           fi
 
       - name: Summarise
@@ -243,7 +325,7 @@ jobs:
             echo "## Android benchmarks ($HEAD_SHA)"
             if [ -z "$PR_NUMBER" ]; then
               echo
-              echo '_Nightly trend record - no base comparison._'
+              echo '_Nightly noise sample on the default branch - no base comparison._'
             fi
             echo
             echo 'Software-rendered emulator: absolute times are not comparable'
@@ -261,7 +343,7 @@ jobs:
           {
             echo "### Android benchmarks ($HEAD_SHA vs base $BASE_SHA)"
             echo
-            echo 'Report-only. Read the ratios.'
+            echo 'Report-only. Read the launch-paired ratios to `rn-core`.'
             echo
             cat bench-android.md
           } > comment-android.md

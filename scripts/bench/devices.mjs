@@ -11,6 +11,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -59,24 +60,47 @@ export function resolveIosDevice() {
     );
   }
   const listing = JSON.parse(simctl(['list', 'devices', '-j']));
-  const all = Object.values(listing.devices).flat();
-  const device = all.find((entry) => entry.udid === udid);
+  const runtimeId =
+    Object.entries(listing.devices).find(([, devices]) =>
+      devices.some((entry) => entry.udid === udid)
+    )?.[0] ?? '';
+  const device = Object.values(listing.devices)
+    .flat()
+    .find((entry) => entry.udid === udid);
   if (device == null) {
     throw new Error(
       `iOS simulator ${udid} does not exist on this machine (create it first)`
     );
   }
-  if (device.state !== 'Booted') {
+  // `com.apple.CoreSimulator.SimRuntime.iOS-27-0` -> `27.0`
+  const runtimeMatch = /iOS-(\d+(?:-\d+)?)/.exec(runtimeId);
+  const runtime = runtimeMatch?.[1]?.replace('-', '.') ?? null;
+  const booted = device.state === 'Booted';
+  if (!booted) {
     process.stderr.write(`Booting ${device.name} (${udid})...\n`);
     simctl(['boot', udid]);
     simctl(['bootstatus', udid, '-d']);
   }
+  const major = runtime == null ? 'unknown' : runtime.split('.')[0];
   return {
     platform: 'ios',
     udid,
     name: device.name,
-    deviceKey: `ios-${slug(device.name)}-sim`,
+    runtime,
+    /** True when this invocation booted it, so `--shutdown` may power it off. */
+    bootedByUs: !booted,
+    deviceKey: `ios${major}-sim-${deviceClassName(device.name)}`,
   };
+}
+
+/**
+ * Device class for a key: lowercase alphanumerics only (`iPhone Air` ->
+ * `iphoneair`, `Pixel 9` -> `pixel9`), matching D9's examples.
+ */
+export function deviceClassName(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
 
 /** Serials adb currently sees, in `adb devices` order. */
@@ -143,13 +167,102 @@ export function resolveAndroidDevice() {
 
 function describeAndroidDevice(serial, avd) {
   const sdk = adb(serial, ['shell', 'getprop', 'ro.build.version.sdk']).trim();
+  const release = adb(serial, [
+    'shell',
+    'getprop',
+    'ro.build.version.release_or_codename',
+  ]).trim();
+  const model = adb(serial, ['shell', 'getprop', 'ro.product.model']).trim();
+  const fingerprint = adb(serial, [
+    'shell',
+    'getprop',
+    'ro.build.fingerprint',
+  ]).trim();
+  // `pixel_9` from the AVD's own config beats `sdk_gphone64_arm64` from the
+  // system image: the hardware profile is the device class D9 means.
+  const profile = avdHardwareProfile(avd);
+  const className = deviceClassName(profile ?? model);
   return {
     platform: 'android',
     serial,
     name: avd,
+    avd,
     sdk,
-    deviceKey: `android-api${sdk}-emu`,
+    release,
+    model,
+    image: fingerprint,
+    bootedByUs: false,
+    deviceKey: `android${sdk}-emu-${className}`,
   };
+}
+
+/** `hw.device.name` of an AVD, or null when the AVD dir is not on this machine. */
+function avdHardwareProfile(avd) {
+  if (avd == null) {
+    return null;
+  }
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+  for (const dir of [
+    path.join(home, '.android', 'avd', `${avd}.avd`, 'config.ini'),
+    path.join(home, '.android', 'avd', `${avd}.ini`),
+  ]) {
+    if (!fs.existsSync(dir)) {
+      continue;
+    }
+    for (const line of fs.readFileSync(dir, 'utf8').split('\n')) {
+      const [key, value] = line.split('=');
+      if (key?.trim() === 'hw.device.name' && value != null) {
+        return value.trim();
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Power off a device this process booted, and nothing else (AGENTS.md).
+ */
+export function shutdownDevice(device) {
+  if (device.bootedByUs !== true) {
+    process.stderr.write(
+      `Not shutting down ${device.name}: this run did not boot it.\n`
+    );
+    return;
+  }
+  if (device.platform === 'ios') {
+    simctl(['shutdown', device.udid]);
+  } else if (device.serial != null) {
+    try {
+      adb(device.serial, ['emu', 'kill'], { timeout: 20_000 });
+    } catch {
+      // already gone
+    }
+  }
+  process.stderr.write(`Shut down ${device.name}.\n`);
+}
+
+/**
+ * Restore the animation scales `prepareAndroid` zeroed. They are global device
+ * state, so leaving them at 0 is a side effect on whoever uses the AVD next.
+ */
+export function restoreAndroidAnimations(device, previous) {
+  for (const [setting, value] of Object.entries(previous ?? {})) {
+    if (value == null) {
+      continue;
+    }
+    try {
+      adb(device.serial, [
+        'shell',
+        'settings',
+        'put',
+        'global',
+        setting,
+        value,
+      ]);
+    } catch {
+      // best effort - never fail a run over restoring someone else's setting
+    }
+  }
 }
 
 /**
@@ -160,11 +273,23 @@ function describeAndroidDevice(serial, avd) {
  * instead of aborting a run that otherwise measures fine.
  */
 export function prepareAndroid(device, { attempts = 10, delayMs = 3000 } = {}) {
+  const previous = {};
   for (const setting of [
     'window_animation_scale',
     'transition_animation_scale',
     'animator_duration_scale',
   ]) {
+    try {
+      previous[setting] = adb(device.serial, [
+        'shell',
+        'settings',
+        'get',
+        'global',
+        setting,
+      ]).trim();
+    } catch {
+      previous[setting] = null;
+    }
     let lastError = null;
     for (let attempt = 1; attempt <= attempts; attempt++) {
       try {
@@ -189,6 +314,7 @@ export function prepareAndroid(device, { attempts = 10, delayMs = 3000 } = {}) {
       );
     }
   }
+  return previous;
 }
 
 export function slug(value) {
