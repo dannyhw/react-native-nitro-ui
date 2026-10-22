@@ -13,3 +13,7 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
 - **D6** Single npm package `react-native-nitro-ui`; core lives inside it (no `@nitro-ui/core`).
 - **D7** No optional (`?:`) Hybrid View props (nitro#1184); native specs use `T | null` and the JS
   wrapper always passes every prop.
+- **D8 (T03)** Supported floor stays **RN >= 0.86** (Expo SDK 57+). Android deps (Compose BOM etc.)
+  must be pinned to versions whose AAR metadata works with RN 0.86's default compileSdk/AGP, so
+  0.86 consumers need zero changes. RN 0.86 iOS can't be verified on this machine's iOS 27 runtime;
+  verify it in CI on an older runtime later.
