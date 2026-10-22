@@ -246,3 +246,43 @@ The load is the whole story behind the noise numbers above: iOS moved 0.90-1.09x
 on the control, Android 0.88-1.43x. On an idle machine expect the Android figure
 to come down towards iOS's; until then, run benches when the machine is quiet
 and read the drift line before anything else.
+
+## Questions for orchestrator
+
+1. **T10 owns `android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt`
+   and I changed it (comment-only, `e7fbabd`).** Without it no Android app that
+   links the library builds, so the bench could not start. If T10 edits that
+   file's KDoc independently, keep the wording clear of anything that reads like
+   `The <something> has to <verb>:` — the autolinking regex turns it into a
+   constructor call. Worth confirming the fix on the `example/` app too, as the
+   other consumer.
+2. **Who owns the Reassure render-count contract?** Reassure 1.6.1 exports
+   `measureRenders` but **not** `measureRerenders`, and a `useEffect` that sets
+   state escapes the measured window (it can flush after Jest tears the
+   environment down). The gate therefore measures *mount* renders today. If the
+   intended contract is "a Switch must not re-render more than once per prop
+   change", that needs `measureFunction` / `measurePerformance`, and T10 will
+   otherwise commit a baseline that measures less than `docs/PLAN.md` implies.
+3. **`METRO_PORT=8292` in my brief vs release builds.** The bench app embeds its
+   bundle and never starts Metro, and `CONTRIBUTING.md` pairs 8292 with T02 in an
+   example. Worth rewording so nobody reserves a port that is used by nothing.
+4. **Should committed baselines come from CI runners rather than a dev
+   machine?** I committed
+   `bench/baselines/{ios-iphone-air-sim,android-api35-emu}.json` from local runs
+   because they are the only numbers we have. They are ratios to `rn-core`, so
+   they should survive a machine change, but a nightly `--update-baseline` on the
+   CI image would make a better trend record — and if that is the plan, they may
+   not belong in the repo at all.
+5. **Device keys are per-task by necessity** (`ios-iphone-air-sim`,
+   `android-api35-emu`). Any task on different hardware gets its own baseline
+   file and no trend continuity. Do we want one canonical device per platform
+   that everyone shares, or are per-device baselines acceptable?
+6. **Concurrency warning for T03/T10**: emulator console ports churn on shared
+   machines — my AVD moved from 5572 to 5554 when its qemu aborted mid-task. The
+   bench runner resolves the serial from the AVD name for exactly this reason; if
+   T03's smoke runner pins serials it will fall into the same trap.
+7. **How much machine load is acceptable for a "measured" run?** On this laptop
+   the control arm moved up to 1.43x between runs, which is larger than the
+   regression the gate exists to catch. If component tasks keep benchmarking on
+   dev machines, the honest answer is "benchmarks inform review, they do not
+   gate" — which is what is built — but `docs/PLAN.md` should say so out loud.
