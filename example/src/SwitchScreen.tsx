@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   useColorScheme,
@@ -23,6 +25,18 @@ function useInk() {
     ink: dark ? '#ffffff' : '#000000',
     muted: dark ? '#9d9da2' : '#666666',
   };
+}
+
+/**
+ * Status bar height the system reserves for itself on Android.
+ *
+ * Android draws every app edge to edge, and RN's `SafeAreaView` only applies the
+ * iOS safe area, so the top inset has to be added by hand. `StatusBar` is the
+ * only built-in source for it; `react-native-safe-area-context` would be the
+ * portable answer.
+ */
+function useTopInset() {
+  return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
 /**
@@ -61,93 +75,119 @@ export default function SwitchScreen() {
     []
   );
 
+  const dark = useColorScheme() === 'dark';
+  const topInset = useTopInset();
+
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: ink.background }]}>
+    <SafeAreaView
+      style={[
+        styles.root,
+        { backgroundColor: ink.background, paddingTop: topInset },
+      ]}
+    >
+      {/* Edge to edge draws the screen behind the status bar, so only the icon
+          colour has to follow the appearance. */}
+      <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
       <ScrollView contentContainerStyle={styles.page}>
-      <Text style={[styles.title, { color: ink.ink }]} >react-native-nitro-ui · Switch</Text>
-      <Text style={styles.note}>
-        SwiftUI Toggle (.switch) on iOS, Material 3 Switch on Android.
-      </Text>
-
-      <Text style={[styles.section, { color: ink.ink }]}>Controlled</Text>
-      <Row label="value + onValueChange">
-        <Switch
-          value={controlled}
-          onValueChange={setControlled}
-          testID="switch-controlled"
-          accessibilityLabel="Controlled switch"
-        />
-      </Row>
-      <Row label="value shown to JS">
-        <Text testID="switch-controlled-value" style={[styles.value, { color: ink.ink }]}>
-          {controlled ? 'on' : 'off'}
+        <Text style={[styles.title, { color: ink.ink }]}>
+          react-native-nitro-ui · Switch
         </Text>
-      </Row>
-      <Pressable onPress={flipFromJs} testID="js-toggle" hitSlop={8}>
-        <Text style={styles.link}>flip from JS</Text>
-      </Pressable>
-
-      <Text style={[styles.section, { color: ink.ink }]}>Uncontrolled</Text>
-      <Row label="defaultValue={false}">
-        <Switch testID="switch-uncontrolled" />
-      </Row>
-      <Row label="defaultValue={true}">
-        <Switch defaultValue testID="switch-default-on" />
-      </Row>
-
-      <Text style={[styles.section, { color: ink.ink }]}>Rejected change</Text>
-      <Row label="value={false}, handler never accepts">
-        <Switch
-          value={false}
-          onValueChange={rejectChange}
-          testID="switch-rejected"
-        />
-      </Row>
-      <Row label="events JS saw">
-        <Text testID="switch-rejected-count" style={[styles.value, { color: ink.ink }]}>
-          {rejections}
+        <Text style={styles.note}>
+          SwiftUI Toggle (.switch) on iOS, Material 3 Switch on Android.
         </Text>
-      </Row>
 
-      <Text style={[styles.section, { color: ink.ink }]}>Styles</Text>
-      <Row label="disabled">
-        <Switch disabled value testID="switch-disabled" />
-      </Row>
-      <Row label="tintColor">
-        <Switch
-          value={tinted}
-          onValueChange={setTinted}
-          tintColor="#7C4DFF"
-          testID="switch-tinted"
-        />
-      </Row>
-      <Row label="custom size">
-        <Switch
-          defaultValue
-          testID="switch-big"
-          style={styles.bigSwitch}
-          onValueChange={() => {}}
-        />
-      </Row>
-      <Row label="measureContent()">
-        <Text testID="switch-measured-size" style={[styles.value, { color: ink.ink }]}>
-          {'(logged by the harness)'}
+        <Text style={[styles.section, { color: ink.ink }]}>Controlled</Text>
+        <Row label="value + onValueChange">
+          <Switch
+            value={controlled}
+            onValueChange={setControlled}
+            testID="switch-controlled"
+            accessibilityLabel="Controlled switch"
+          />
+        </Row>
+        <Row label="value shown to JS">
+          <Text
+            testID="switch-controlled-value"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {controlled ? 'on' : 'off'}
+          </Text>
+        </Row>
+        <Pressable onPress={flipFromJs} testID="js-toggle" hitSlop={8}>
+          <Text style={styles.link}>flip from JS</Text>
+        </Pressable>
+
+        <Text style={[styles.section, { color: ink.ink }]}>Uncontrolled</Text>
+        <Row label="defaultValue={false}">
+          <Switch testID="switch-uncontrolled" />
+        </Row>
+        <Row label="defaultValue={true}">
+          <Switch defaultValue testID="switch-default-on" />
+        </Row>
+
+        <Text style={[styles.section, { color: ink.ink }]}>
+          Rejected change
         </Text>
-      </Row>
+        <Row label="value={false}, handler never accepts">
+          <Switch
+            value={false}
+            onValueChange={rejectChange}
+            testID="switch-rejected"
+          />
+        </Row>
+        <Row label="events JS saw">
+          <Text
+            testID="switch-rejected-count"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {rejections}
+          </Text>
+        </Row>
 
-      <Text style={[styles.section, { color: ink.ink }]}>200 in a list</Text>
-      <View style={styles.list}>
-        {list.map((row, index) => (
-          <View key={row.id} style={styles.row}>
-            <Text style={[styles.label, { color: ink.muted }]}>row {index}</Text>
-            <Switch
-              defaultValue={row.on}
-              testID={`switch-list-${index}`}
-              nuiPerfId={null}
-            />
-          </View>
-        ))}
-      </View>
+        <Text style={[styles.section, { color: ink.ink }]}>Styles</Text>
+        <Row label="disabled">
+          <Switch disabled value testID="switch-disabled" />
+        </Row>
+        <Row label="tintColor">
+          <Switch
+            value={tinted}
+            onValueChange={setTinted}
+            tintColor="#7C4DFF"
+            testID="switch-tinted"
+          />
+        </Row>
+        <Row label="custom size">
+          <Switch
+            defaultValue
+            testID="switch-big"
+            style={styles.bigSwitch}
+            onValueChange={() => {}}
+          />
+        </Row>
+        <Row label="measureContent()">
+          <Text
+            testID="switch-measured-size"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {'(logged by the harness)'}
+          </Text>
+        </Row>
+
+        <Text style={[styles.section, { color: ink.ink }]}>200 in a list</Text>
+        <View style={styles.list}>
+          {list.map((row, index) => (
+            <View key={row.id} style={styles.row}>
+              <Text style={[styles.label, { color: ink.muted }]}>
+                row {index}
+              </Text>
+              <Switch
+                defaultValue={row.on}
+                testID={`switch-list-${index}`}
+                nuiPerfId={null}
+              />
+            </View>
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
