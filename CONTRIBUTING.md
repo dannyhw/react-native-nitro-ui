@@ -286,12 +286,13 @@ ANDROID_AVD=<avd>     bun bench --platform android --plan quick
 Every component task runs the `quick` plan on **both** platforms and pastes both
 tables into its report. It takes a few minutes per platform.
 
-| Variable         | Default     | Meaning                                                    |
-| ---------------- | ----------- | ---------------------------------------------------------- |
-| `IOS_SIM_UDID`   | unset       | Simulator UDID to boot and measure on                      |
-| `ANDROID_AVD`    | unset       | AVD name — the runner finds its serial among attached ones |
-| `ANDROID_SERIAL` | unset       | Used only when there is no AVD name (physical device)      |
-| `BENCH_ABIS`     | `arm64-v8a` | Android ABIs to build; CI sets `x86_64` for hosted runners |
+| Variable                 | Default     | Meaning                                                        |
+| ------------------------ | ----------- | -------------------------------------------------------------- |
+| `IOS_SIM_UDID`           | unset       | Simulator UDID to boot and measure on                          |
+| `ANDROID_AVD`            | unset       | AVD name — the runner finds its serial among attached ones     |
+| `ANDROID_SERIAL`         | unset       | Used only when there is no AVD name (physical device)          |
+| `BENCH_ABIS`             | `arm64-v8a` | Android ABIs to build; CI sets `x86_64` for hosted runners     |
+| `BENCH_LAUNCH_TIMEOUT_S` | `180`/`300` | Per-launch wall-clock budget (s); raise it on a loaded machine |
 
 Prefer `ANDROID_AVD` over `ANDROID_SERIAL`: console ports are allocated by
 availability, so a serial goes stale the moment another emulator boots or dies,
