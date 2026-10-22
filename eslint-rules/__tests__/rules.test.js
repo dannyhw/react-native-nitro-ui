@@ -159,6 +159,17 @@ ruleTester.run(
         filename: SPEC,
         code: 'interface Props extends HybridViewProps { label: string | null; }\ntype View = HybridView<Props, Methods>\ninterface Methods extends HybridViewMethods {}',
       },
+      {
+        // Callback props must be optional: Nitro only unwraps RN's `{ f: fn }`
+        // for props typed as functions, and `fn | null` (a variant) cannot.
+        filename: SPEC,
+        code: 'interface Props extends HybridViewProps { onValueChange?: (value: boolean, eventCount: number) => void; }',
+      },
+      {
+        // `| undefined` is what `?` means, so it is equally fine.
+        filename: SPEC,
+        code: 'interface Props extends HybridViewProps { onValueChange: ((value: boolean) => void) | undefined; }',
+      },
     ],
     invalid: [
       {
@@ -200,6 +211,18 @@ ruleTester.run(
         filename: SPEC,
         code: 'interface Methods extends HybridViewMethods {}\nexport type SwitchView = HybridView<{ label?: string }, Methods>;',
         errors: [{ messageId: 'optionalProp' }],
+      },
+      {
+        // A nullable callback generates `std::variant<std::function, NullType>`,
+        // which Nitro cannot convert (the `{ f: fn }` wrapper stays wrapped).
+        filename: SPEC,
+        code: 'interface Props extends HybridViewProps { onValueChange: ((value: boolean) => void) | null; }',
+        errors: [{ messageId: 'callbackPropNotNullable' }],
+      },
+      {
+        filename: SPEC,
+        code: 'interface Props extends HybridViewProps { onValueChange: (value: boolean) => void; }',
+        errors: [{ messageId: 'callbackPropMustBeOptional' }],
       },
     ],
   }
