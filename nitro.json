@@ -1,10 +1,14 @@
 {
-  "cxxNamespace": ["nitroui"],
+  "cxxNamespace": [
+    "nitroui"
+  ],
   "ios": {
     "iosModuleName": "NitroUi"
   },
   "android": {
-    "androidNamespace": ["nitroui"],
+    "androidNamespace": [
+      "nitroui"
+    ],
     "androidCxxLibName": "nitroui"
   },
   "autolinking": {
@@ -12,6 +16,16 @@
       "all": {
         "language": "c++",
         "implementationClassName": "HybridNitroUiCore"
+      }
+    },
+    "NitroUiSwitch": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiSwitch"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiSwitch"
       }
     }
   },

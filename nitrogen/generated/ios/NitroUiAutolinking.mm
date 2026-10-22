@@ -7,10 +7,11 @@
 
 #import <Foundation/Foundation.h>
 #import <NitroModules/HybridObjectRegistry.hpp>
-
+#import "NitroUi-Swift-Cxx-Umbrella.hpp"
 #import <type_traits>
 
 #include "HybridNitroUiCore.hpp"
+#include "HybridNitroUiSwitchSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -28,6 +29,13 @@
                     "The HybridObject \"HybridNitroUiCore\" is not default-constructible! "
                     "Create a public constructor that takes zero arguments to be able to autolink this HybridObject.");
       return std::make_shared<HybridNitroUiCore>();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiSwitch",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiSwitchSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiSwitch();
+      return hybridObject;
     }
   );
 }

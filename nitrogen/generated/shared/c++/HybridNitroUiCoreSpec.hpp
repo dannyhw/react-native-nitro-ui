@@ -13,9 +13,11 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
+// Forward declaration of `NitroUiPerfEvent` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiPerfEvent; }
 
-
-
+#include "NitroUiPerfEvent.hpp"
+#include <vector>
 
 namespace margelo::nitro::nitroui {
 
@@ -49,6 +51,8 @@ namespace margelo::nitro::nitroui {
     public:
       // Methods
       virtual double now() = 0;
+      virtual void setPerfEnabled(bool enabled) = 0;
+      virtual std::vector<NitroUiPerfEvent> drainPerf() = 0;
 
     protected:
       // Hybrid Setup
