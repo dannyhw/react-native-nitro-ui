@@ -1,12 +1,12 @@
 import type { ComponentType } from 'react';
 import type { ViewProps } from 'react-native';
-import { getHostComponent, type HybridViewProps } from 'react-native-nitro-modules';
+import {
+  getHostComponent,
+  type HybridViewProps,
+} from 'react-native-nitro-modules';
 
 import { NitroUiSwitchConfig } from './NitroUiSwitchConfig';
-import type {
-  NitroUiSwitch,
-  NitroUiSwitchMethods,
-} from './Switch.nitro';
+import type { NitroUiSwitch, NitroUiSwitchMethods } from './Switch.nitro';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
 
 type ValueChangeHandler = (value: boolean, eventCount: number) => void;

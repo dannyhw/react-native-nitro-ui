@@ -45,7 +45,7 @@ export const NitroModules = {
     if (factory == null) {
       throw new Error(
         `No mock registered for the HybridObject "${name}". Register one with ` +
-          "nitroUiHybridObjects.<Name> = () => ({ ... }) in the test."
+          'nitroUiHybridObjects.<Name> = () => ({ ... }) in the test.'
       );
     }
     return factory();
