@@ -37,6 +37,17 @@ ruleTester.run(
         code: '<Switch onValueChange={useStableCallback(onChange)} />;',
       },
       { filename: 'App.tsx', code: '<Switch label="on" />;' },
+      {
+        // Spread attributes are checked, plain spreads are fine.
+        filename: 'App.tsx',
+        code: '<Switch {...props} />;',
+      },
+      {
+        // Known gap (documented): a callback hoisted into a variable is not
+        // tracked. Module-scope `callback()` is also the recommended pattern.
+        filename: 'App.tsx',
+        code: "import { callback } from 'react-native-nitro-modules';\nconst onChange = callback(fn);\n<Switch onValueChange={onChange} />;",
+      },
     ],
     invalid: [
       {
@@ -57,6 +68,28 @@ ruleTester.run(
       {
         filename: 'App.tsx',
         code: '<Row><Switch onChange={callback(save)} /></Row>;',
+        errors: [{ messageId: 'inlineCallback' }],
+      },
+      {
+        // Exactly one report, not one per enclosing JSX attribute.
+        filename: 'App.tsx',
+        code: '<Switch render={() => <Inner onValueChange={callback(fn)} />} />;',
+        errors: [{ messageId: 'inlineCallback' }],
+      },
+      {
+        // Aliased imports of the helper count too.
+        filename: 'App.tsx',
+        code: "import { callback as stable } from 'react-native-nitro-modules';\n<Switch onValueChange={stable(fn)} />;",
+        errors: [{ messageId: 'inlineCallback' }],
+      },
+      {
+        filename: 'App.tsx',
+        code: '<Switch {...{ onValueChange: callback(fn) }} />;',
+        errors: [{ messageId: 'inlineCallback' }],
+      },
+      {
+        filename: 'App.tsx',
+        code: '<Switch onValueChange={condition ? callback(a) : fallback} />;',
         errors: [{ messageId: 'inlineCallback' }],
       },
     ],
@@ -117,6 +150,15 @@ ruleTester.run(
         filename: SPEC,
         code: 'interface Methods extends HybridViewMethods { measure(): void; reset?(): void; }',
       },
+      {
+        // A plain struct is not view props.
+        filename: SPEC,
+        code: 'interface FrameRateRange { minimum: number; preferred?: number; }\ninterface Props extends HybridViewProps { frameRate: FrameRateRange; }',
+      },
+      {
+        filename: SPEC,
+        code: 'interface Props extends HybridViewProps { label: string | null; }\ntype View = HybridView<Props, Methods>\ninterface Methods extends HybridViewMethods {}',
+      },
     ],
     invalid: [
       {
@@ -128,6 +170,36 @@ ruleTester.run(
         filename: SPEC,
         code: 'interface Props extends BaseViewProps, HybridViewProps { a?: number; b?: string; }',
         errors: [{ messageId: 'optionalProp' }, { messageId: 'optionalProp' }],
+      },
+      {
+        // Indirect base: the shared control-props interface is the one that
+        // extends HybridViewProps, the concrete props interface inherits it.
+        filename: SPEC,
+        code: 'interface ControlProps extends HybridViewProps {}\ninterface SwitchProps extends ControlProps { label?: string; }',
+        errors: [{ messageId: 'optionalProp' }],
+      },
+      {
+        // Type alias with an intersection instead of an interface.
+        filename: SPEC,
+        code: 'type Props = HybridViewProps & { tint?: string };',
+        errors: [{ messageId: 'optionalProp' }],
+      },
+      {
+        // Qualified base name (import * as n from '...'; extends n.HybridViewProps).
+        filename: SPEC,
+        code: 'interface Props extends n.HybridViewProps { label?: string; }',
+        errors: [{ messageId: 'optionalProp' }],
+      },
+      {
+        // Props named at the view boundary, without mentioning the base type.
+        filename: SPEC,
+        code: 'interface Props { label?: string; }\ninterface Methods extends HybridViewMethods {}\nexport type SwitchView = HybridView<Props, Methods>;',
+        errors: [{ messageId: 'optionalProp' }],
+      },
+      {
+        filename: SPEC,
+        code: 'interface Methods extends HybridViewMethods {}\nexport type SwitchView = HybridView<{ label?: string }, Methods>;',
+        errors: [{ messageId: 'optionalProp' }],
       },
     ],
   }

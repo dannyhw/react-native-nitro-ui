@@ -56,12 +56,13 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
-      # Publish exactly what the committed nitrogen output says. If codegen or
-      # the nitro#1655 patch changes anything, fail instead of shipping it.
-      - name: Build library
-        run: |
-          bun run prepare
-          git diff --exit-code -- nitrogen/
+      # Publish exactly what the CI gates validate. If codegen or the
+      # nitro#1655 patch changes anything, fail instead of shipping it.
+      - name: Run all checks
+        run: bun run check
+
+      - name: Verify committed codegen
+        run: git diff --exit-code -- nitrogen/
 
       - name: Release
         env:
