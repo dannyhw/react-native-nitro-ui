@@ -413,6 +413,8 @@ describe('benchmark gate', () => {
       ...makeRun(),
       dirty: false,
       problems: [],
+      plan: 'full',
+      launches: 8,
       machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
     };
     expect(baselineBlockers(clean)).toEqual([]);
@@ -433,6 +435,20 @@ describe('benchmark gate', () => {
     expect(
       baselineBlockers({ ...clean, machine: { cpuCount: 14 } }).length
     ).toBeGreaterThan(0);
+    // A `quick` run at 4 launches is local feedback, not baseline material
+    // (docs/DECISIONS.md D9). `report.mjs --update-baseline` reads files from
+    // disk, so the guard belongs in the shared blocker list rather than in the
+    // runner's flags.
+    expect(
+      baselineBlockers({ ...clean, plan: 'quick' }).some((reason) =>
+        reason.includes('full')
+      )
+    ).toBe(true);
+    expect(
+      baselineBlockers({ ...clean, launches: 4 }).some((reason) =>
+        reason.includes('launches')
+      )
+    ).toBe(true);
   });
 });
 
