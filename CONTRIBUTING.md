@@ -50,6 +50,9 @@ Run from the repo root.
 | `bun run manifest:update`  | Rewrite the manifest after an **intentional** publish-surface change |
 | `bun run harness:ios`      | On-device tests on iOS (see below)                                   |
 | `bun run harness:android`  | On-device tests on Android (see below)                               |
+| `bun run smoke:pack`       | `npm pack` the library into `$SMOKE_TMP/tarballs` (see below)        |
+| `bun run smoke:expo`       | Install the packed lib into a fresh Expo app, Release, on-device     |
+| `bun run smoke:rn-cli`     | Same for a fresh React Native CLI app                                |
 | `bun run example <script>` | Run an `example/` script, e.g. `bun run example ios`                 |
 | `bun run hooks:install`    | Install optional git hooks (see "Commit messages and releases")      |
 | `bun run hooks:uninstall`  | Remove them again                                                    |
@@ -181,6 +184,66 @@ someone else's Metro.
 
 Only start devices you need, never touch a device you did not start, and shut
 down the ones you started when you finish.
+
+## Consumer smoke tests
+
+The only true check of "zero-config install": `npm pack` the library, install
+it with **npm** (not bun - that's what users run) into a freshly generated app,
+build **Release** (bundle embedded, no Metro), install, launch, wait for the
+ready signal, screenshot, fail on crashes. If a fresh consumer ever needs a
+manual native change, that is a library bug - fix the library, never work
+around it in the scripts.
+
+Readiness travels over two channels, because **JS console output is fully
+stripped in iOS Release builds** (RN sends `console.*` nowhere once
+`__DEV__` is false, and even `fetch` to the host never leaves the process):
+
+- `NITRO_UI_SMOKE_READY` logged via `console.log` - grepped in Android
+  Release logcat, where RN's console still surfaces;
+- a **colour semaphore**: the smoke app paints its background white while
+  starting, **red** once `nitroUiCore.now()` answered, **blue** on failure.
+  `scripts/smoke/pixel-ready.mjs` decodes screenshots (channel dominance, so
+  emulator colour profiles don't matter) and is the readiness channel on iOS.
+
+```sh
+IOS_SIM_UDID=<udid> ANDROID_AVD=<avd> EMULATOR_PORT=5574 \
+  bun run smoke:expo            # Expo SDK 58 by default (SDK=57 to switch)
+PLATFORM=android RN=0.86.3 bun run smoke:rn-cli
+```
+
+| Env             | Default                  | Meaning                                         |
+| --------------- | ------------------------ | ----------------------------------------------- |
+| `PLATFORM`      | `both`                   | `ios` \| `android` \| `both`                    |
+| `SDK` / `RN`    | `58` / `0.88.0`          | Consumer template version                       |
+| `SMOKE_TMP`     | `/tmp/nitro-ui-smoke`    | Temp dir for apps (no spaces/`#`/`%`/non-ASCII) |
+| `IOS_SIM_UDID`  | - (required for iOS)     | Simulator UDID to install on                    |
+| `ANDROID_AVD`   | - (required for Android) | AVD; created from API 35 google_apis if absent  |
+| `EMULATOR_PORT` | `5554`                   | Emulator console port (never 5556/5560 here)    |
+| `KEEP_TMP`      | `0`                      | Keep the consumer app dir on success            |
+| `READY_TIMEOUT` | `180`                    | Seconds to wait for the ready line              |
+
+Scripts are re-runnable (they delete and recreate their app dir), clean up
+temp dirs on success, and always keep logs, screenshots and timings under
+`$SMOKE_TMP/artifacts/<script>-<timestamp>/`. On Android the scripts only boot
+an emulator that is not already running and leave it running for the next run;
+an agent/operator shuts down devices it started.
+
+### Keeping `scripts/smoke/App.tsx` current
+
+`scripts/smoke/App.tsx` is copied over the generated app's `App.tsx` and is the
+single source of truth for what a consumer must be able to render. Its rules:
+
+- render **every** component the package exports exactly once, each with a
+  `SMOKE-` testID;
+- log `NITRO_UI_SMOKE_READY` exactly once, after mount and after
+  `nitroUiCore.now()` answers, and flip the background semaphore to red (on
+  iOS that colour is the only observable channel in Release);
+- **adding a component = add its import + one JSX line** in the marked list.
+  Do not touch the ready-line logic. Components that need state get their own
+  small probe component above the list, like `NitroUiCoreProbe` would be.
+
+`.github/workflows/smoke.yml` runs the same scripts nightly and on demand, and
+CI mirrors this section.
 
 ## Perf contract
 
