@@ -15,11 +15,16 @@ namespace margelo::nitro::benchprobe {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridGetter("lastMountNs", &HybridBenchProbeSpec::getLastMountNs);
+      prototype.registerHybridGetter("lastPresentedNs", &HybridBenchProbeSpec::getLastPresentedNs);
       prototype.registerHybridMethod("now", &HybridBenchProbeSpec::now);
       prototype.registerHybridMethod("armMountObserver", &HybridBenchProbeSpec::armMountObserver);
+      prototype.registerHybridMethod("awaitMount", &HybridBenchProbeSpec::awaitMount);
+      prototype.registerHybridMethod("awaitPresented", &HybridBenchProbeSpec::awaitPresented);
       prototype.registerHybridMethod("nextFrameNs", &HybridBenchProbeSpec::nextFrameNs);
       prototype.registerHybridMethod("threadCpuNs", &HybridBenchProbeSpec::threadCpuNs);
       prototype.registerHybridMethod("footprintBytes", &HybridBenchProbeSpec::footprintBytes);
+      prototype.registerHybridMethod("nativeHeapBytes", &HybridBenchProbeSpec::nativeHeapBytes);
+      prototype.registerHybridMethod("javaHeapBytes", &HybridBenchProbeSpec::javaHeapBytes);
       prototype.registerHybridMethod("gc", &HybridBenchProbeSpec::gc);
       prototype.registerHybridMethod("launchPlan", &HybridBenchProbeSpec::launchPlan);
       prototype.registerHybridMethod("writeNdjson", &HybridBenchProbeSpec::writeNdjson);

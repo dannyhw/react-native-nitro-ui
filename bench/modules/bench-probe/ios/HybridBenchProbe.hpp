@@ -26,11 +26,11 @@
 namespace margelo::nitro::benchprobe {
 
   /**
-   * All returned timestamps are nanoseconds relative to process load, on
-   * `CLOCK_UPTIME_RAW`. Relative (instead of absolute) because an absolute
-   * `CLOCK_UPTIME_RAW` value is ~1e17 ns on a long-running machine, which is
-   * past the exact-integer range of a `double` and would quantise every
-   * measurement to ~16 ns.
+   * Timestamps are absolute nanoseconds on `CLOCK_UPTIME_RAW`, the same clock
+   * base as `NitroUiCore.now()` (docs/DECISIONS.md D1), so a probe stamp and a
+   * library perf mark can be lined up in one trace. There is no process-load
+   * offset: `CLOCK_UPTIME_RAW` only passes 2^53 ns after ~104 days of awake
+   * uptime, and at 1e15 the ULP of a `double` is 0.125 ns.
    */
   class HybridBenchProbe: public HybridBenchProbeSpec {
     public:
@@ -38,12 +38,17 @@ namespace margelo::nitro::benchprobe {
       HybridBenchProbe(): HybridObject(TAG) { }
 
       double getLastMountNs() override;
+      double getLastPresentedNs() override;
 
       double now() override;
       void armMountObserver() override;
+      std::shared_ptr<Promise<double>> awaitMount(double timeoutMs) override;
+      std::shared_ptr<Promise<double>> awaitPresented(double timeoutMs) override;
       std::shared_ptr<Promise<double>> nextFrameNs() override;
       double threadCpuNs(BenchThread thread) override;
       double footprintBytes() override;
+      double nativeHeapBytes() override;
+      double javaHeapBytes() override;
       void gc() override;
       std::string launchPlan() override;
       std::string writeNdjson(const std::string& contents) override;

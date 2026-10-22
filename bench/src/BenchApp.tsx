@@ -1,5 +1,4 @@
 import {
-  Profiler,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -113,14 +112,6 @@ function BenchRunner({
     []
   );
 
-  const profilerMsRef = useRef(0);
-  const onRender = useCallback(
-    (_id: string, _phase: string, actualDuration: number) => {
-      profilerMsRef.current += actualDuration;
-    },
-    []
-  );
-
   useEffect(() => {
     let cancelled = false;
 
@@ -167,7 +158,6 @@ function BenchRunner({
       const engine: Engine = {
         commit,
         emit,
-        profilerTotalMs: () => profilerMsRef.current,
       };
 
       switch (plan.scenario) {
@@ -228,9 +218,13 @@ function BenchRunner({
       <Text testID="bench-status">
         {`NITRO_BENCH ${plan.scenario} ${plan.implementation} n=${String(plan.n)} ${phase}`}
       </Text>
-      <Profiler id="bench-list" onRender={onRender}>
-        <List n={count} value={value} />
-      </Profiler>
+      {/* No `React.Profiler` wrapper: it only reports when React is built with
+          `__PROFILE__`, so in the release build the bench uses it would always
+          read 0 ms and the report would print a number nobody asked for. The
+          React-side cost is measured directly instead - `jsCommitNs` brackets
+          the commit, and `ReactFabric-profiling` can be aliased in
+          bench/metro.config.js by whoever wants that metric for real. */}
+      <List n={count} value={value} />
       {/* Keep React from unmounting the text while the list grows large. */}
       <View style={styles.spacer} />
     </View>
