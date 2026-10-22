@@ -19,7 +19,9 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: node_modules
-        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-${{ hashFiles('package.json', 'example/package.json') }}
+        # bun.lock records a patchedDependencies *path*, not its contents, so
+        # the patch files must be part of the key as well.
+        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-${{ hashFiles('package.json', 'example/package.json', 'patches/**') }}
 
     - name: Install dependencies
       if: steps.bun-cache.outputs.cache-hit != 'true'

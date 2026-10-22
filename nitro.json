@@ -15,5 +15,14 @@
       }
     }
   },
-  "ignorePaths": ["node_modules"]
+  "ignorePaths": [
+    "node_modules",
+    "example",
+    "bench",
+    "lib",
+    "dist",
+    "docs",
+    "scripts",
+    "patches"
+  ]
 }

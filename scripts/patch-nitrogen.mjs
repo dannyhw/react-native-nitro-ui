@@ -20,8 +20,15 @@
 // Called by `bun run nitrogen`, which bob's `custom` target also runs, so
 // `prepare`/`npm pack` always ship patched code.
 
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const PATCH_MARKER = '// nitro-ui: initializeDynamicProps';
 
@@ -34,7 +41,7 @@ const UPSTREAM_CALL = 'RawPropsCompat::initializeDynamicProps';
 /**
  * @param {string} source contents of a nitrogen-generated `*Component.cpp`
  * @param {string} fileName only used for error messages
- * @returns {{ code: string, status: 'patched' | 'already-patched' | 'upstream', error?: string }}
+ * @returns {{ code: string, status: 'patched' | 'already-patched' | 'upstream' | 'error', error?: string }}
  */
 export function patchComponentSource(source, fileName = 'Component.cpp') {
   if (source.includes(UPSTREAM_CALL)) {
@@ -111,10 +118,34 @@ export function patchGeneratedViews(root = process.cwd()) {
   return { count: files.length, results };
 }
 
-if (
-  process.argv[1] != null &&
-  import.meta.url === `file://${process.argv[1]}`
-) {
+/**
+ * Is this file the process entry point? `import.meta.url === 'file://' +
+ * process.argv[1]` is not good enough: it breaks for any path that needs URL
+ * percent-encoding (a space, `#`, `%`, non-ASCII), which silently turned the
+ * CLI into a no-op - including its hard-fail - from such a checkout.
+ * `import.meta.main` (Node >= 24, Bun) is exact; the path comparison is the
+ * fallback for older runtimes.
+ * @returns {boolean}
+ */
+function invokedDirectly() {
+  if (typeof import.meta.main === 'boolean') {
+    return import.meta.main;
+  }
+  const entry = process.argv[1];
+  if (entry == null) {
+    return false;
+  }
+  try {
+    return (
+      realpathSync(fileURLToPath(import.meta.url)) ===
+      realpathSync(resolve(entry))
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (invokedDirectly()) {
   const root = process.argv[2] ?? process.cwd();
   const { count, results } = patchGeneratedViews(root);
   if (count === 0) {

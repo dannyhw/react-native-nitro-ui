@@ -137,9 +137,13 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
+      # No .ruby-version/.tool-versions is committed in example/, so the version
+      # must be explicit (the action fails without one). The Gemfile only asks
+      # for ruby >= 2.6.10.
       - name: Setup Ruby and gems
         uses: ruby/setup-ruby@6797dcbb9a1889fd411d07e8aba7eded53fb8b48 # v1.264.0
         with:
+          ruby-version: '3.3'
           working-directory: example
           bundler-cache: true
 

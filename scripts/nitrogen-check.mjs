@@ -19,13 +19,14 @@ import {
   rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 
 import { PATCH_MARKER, patchGeneratedViews } from './patch-nitrogen.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const committed = join(root, 'nitrogen');
 const UPSTREAM_CALL = 'RawPropsCompat::initializeDynamicProps';
+const KEEP_DOTFILES = new Set(['.gitattributes']);
 
 function listFiles(dir, prefix = '') {
   if (!existsSync(dir)) {
@@ -43,14 +44,43 @@ function listFiles(dir, prefix = '') {
   return out;
 }
 
+/**
+ * Files of `dir` that git tracks, relative to `dir`. Falls back to a working
+ * tree listing (dotfiles except `KEEP_DOTFILES` ignored) outside a checkout,
+ * such as an unpacked npm tarball.
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function listTrackedFiles(dir) {
+  const prefix = relative(root, dir);
+  const tracked = spawnSync('git', ['ls-files', '--', prefix || '.'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (tracked.status === 0 && tracked.stdout.trim() !== '') {
+    const head = `${prefix}/`;
+    return tracked.stdout
+      .split('\n')
+      .filter((line) => line.startsWith(head))
+      .map((line) => line.slice(head.length));
+  }
+  return listFiles(dir).filter(
+    (file) =>
+      !basename(file).startsWith('.') || KEEP_DOTFILES.has(basename(file))
+  );
+}
+
 const workDir = mkdtempSync(join(tmpdir(), 'nitrogen-check-'));
 const generated = join(workDir, 'nitrogen');
 let failed = false;
 
 try {
+  // Same base path as `bun run nitrogen`: only this package's `src/` holds
+  // library specs, so a spec that belongs to another nitro module in the repo
+  // (T02's bench app) can never show up in the library's codegen.
   const nitrogenArgs = [
     'nitrogen',
-    root,
+    join(root, 'src'),
     '--out',
     join(generated, 'generated'),
     '--config',
@@ -94,8 +124,10 @@ try {
     }
   }
 
-  // 2) Fresh codegen must equal the committed codegen.
-  const before = listFiles(committed);
+  // 2) Fresh codegen must equal the committed codegen. The committed side is
+  // read from the index (not the working tree) so a stray .DS_Store in a
+  // generated folder cannot report false drift.
+  const before = listTrackedFiles(committed);
   const after = listFiles(generated);
   const missing = before.filter((f) => !after.includes(f));
   const extra = after.filter((f) => !before.includes(f));

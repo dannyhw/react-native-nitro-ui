@@ -1,15 +1,28 @@
+# Git hooks are OPT-IN for this repo: `bun install` never installs them, because
+# `package.json` lists the dependency scripts bun may run in `trustedDependencies`
+# and lefthook is deliberately not in it. That is on purpose: git hooks live in
+# the shared `.git` directory, so installing them from one worktree rewrites the
+# hooks of every other worktree (and of the main checkout, which has no
+# node_modules - its `bunx --no-install` commands then fail instead of silently
+# fetching look-alike packages from npm).
+#
+# Enable them in a checkout that has its dependencies installed:
+#   bun run hooks:install     (remove again with `bun run hooks:uninstall`)
+#
+# Commands use `bunx --no-install` so they resolve this checkout's local
+# binaries and fail loudly instead of downloading a look-alike package from npm.
 pre-commit:
   parallel: true
   commands:
     lint:
       glob: '*.{js,ts,jsx,tsx}'
-      run: npx eslint {staged_files}
+      run: bunx --no-install eslint {staged_files}
 
     types:
       glob: '*.{js,ts,jsx,tsx}'
-      run: npx tsc
+      run: bunx --no-install tsc
 commit-msg:
   parallel: true
   commands:
     commitlint:
-      run: npx commitlint --edit
+      run: bunx --no-install commitlint --edit {1}

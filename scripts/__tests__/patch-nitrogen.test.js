@@ -4,6 +4,7 @@
 import { beforeAll, describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import {
+  copyFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -114,6 +115,42 @@ describe('patch-nitrogen', () => {
       );
       expect(file).not.toContain('NitroUiPropsCompat');
     });
+  });
+
+  // Regression: the CLI used to compare `import.meta.url` with a raw
+  // `file://` + argv[1] string, which never matches once the checkout path
+  // needs URL percent-encoding - so both the patch and its hard-fail vanished.
+  it.each([
+    ['a space', 't01 review space'],
+    ['a hash', 't01#review'],
+    ['a percent sign', 't01%review'],
+    ['non-ASCII characters', 't01-prüfung'],
+  ])('works from a checkout path containing %s', (_label, dirName) => {
+    const base = mkdtempSync(join(tmpdir(), `${dirName}-`));
+    try {
+      const scriptCopy = join(base, 'patch-nitrogen.mjs');
+      copyFileSync(script, scriptCopy);
+
+      const okRoot = join(base, 'ok');
+      cpSync(join(fixtures, 'basic'), okRoot, { recursive: true });
+      const patched = spawnSync(process.execPath, [scriptCopy, okRoot], {
+        encoding: 'utf8',
+        cwd: repoRoot,
+      });
+      expect(patched.status).toBe(0);
+      expect(patched.stdout).toContain('patched HybridNitroUiComponent.cpp');
+
+      const badRoot = join(base, 'changed-shape');
+      cpSync(join(fixtures, 'changed-shape'), badRoot, { recursive: true });
+      const failed = spawnSync(process.execPath, [scriptCopy, badRoot], {
+        encoding: 'utf8',
+        cwd: repoRoot,
+      });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain('pattern not found');
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 
   it('is a no-op when there are no Hybrid Views', () => {
