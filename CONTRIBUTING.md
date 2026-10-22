@@ -68,8 +68,9 @@ Run from the repo root.
 | `bun run clean`             | Delete build outputs (`lib/`, native build dirs)                     |
 
 `bun run check` = typecheck → bench:typecheck → lint → format → test →
-nitrogen:check → autolinking:check → prepare → publint → manifest:check →
-perf:renders.
+perf:renders → nitrogen:check → autolinking:check → prepare → publint →
+manifest:check. `perf:renders` is part of `check` on purpose: render counts are
+deterministic, so they can block, unlike anything measured on a device.
 
 ### Changing the published surface
 
@@ -271,6 +272,7 @@ single source of truth for what a consumer must be able to render. Its rules:
 
 `.github/workflows/smoke.yml` runs the same scripts nightly and on demand, and
 CI mirrors this section.
+
 ## Running the benchmarks
 
 `bench/` is a release-build app that measures a component against RN core on a
@@ -284,7 +286,9 @@ ANDROID_AVD=<avd>     bun bench --platform android --plan quick
 ```
 
 Every component task runs the `quick` plan on **both** platforms and pastes both
-tables into its report. It takes a few minutes per platform.
+tables (absolute and ratio-to-`rn-core`) into its report. It takes a few minutes
+per platform. `--shutdown` powers off a simulator or emulator the runner booted
+itself, which is what a task brief means by "shut down devices you start".
 
 | Variable                 | Default     | Meaning                                                        |
 | ------------------------ | ----------- | -------------------------------------------------------------- |
@@ -303,9 +307,14 @@ Metro — `METRO_PORT` is irrelevant to it. Native projects under `bench/ios` an
 `bench/android` are CNG output and gitignored; delete them (or pass `--prebuild`)
 when configuration changes.
 
-Gates: perf numbers never fail a PR automatically. They are ratios against
-`rn-core`, reported on request (`.github/workflows/bench.yml`, `bench` label or
-`/bench` comment). The hard perf gate is the Reassure render count, below.
+Gates: on-device numbers **inform review** and block only on a clear regression.
+Both `--compare <ref>` and `--check` gate the `nitro-ui` arms on launch-paired
+ratios to `rn-core`, and a verdict needs the ratio over 1.20 with a 95 % CI that
+excludes 1.05 on a cell that was quiet inside its own run; the `rn-core` control
+and the `expo-ui-*` reference arms can never fail your pull request. CI is
+report-only (`.github/workflows/bench.yml`, `bench` label or `/bench` comment).
+The gate that always blocks is the Reassure render count, below, because it is
+deterministic.
 
 ## Perf contract
 
