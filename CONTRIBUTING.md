@@ -28,6 +28,9 @@ scripts/           patch-nitrogen.mjs, nitrogen-check.mjs, package-files.mjs
 eslint-rules/        local ESLint plugin enforcing the perf contract
 etc/                 package-files.txt (the published tarball manifest)
 example/             bare RN app + react-native-harness tests
+bench/               release-build benchmark app + private BenchProbe Nitro module
+scripts/bench/       bench build/run/report tooling
+scripts/perf/        Reassure render-count gate
 docs/research/       architecture + tooling decisions (read before coding)
 ```
 
@@ -39,6 +42,7 @@ Run from the repo root.
 | --------------------------- | -------------------------------------------------------------------- |
 | `bun run check`             | **All static gates.** Run this before pushing.                       |
 | `bun run typecheck`         | `tsc` over the library and example                                   |
+| `bun run bench:typecheck`   | `tsc` over `bench/` for each platform                                |
 | `bun run lint`              | ESLint, including the local perf-contract rules                      |
 | `bun run format`            | Prettier check (`format:write` to fix)                               |
 | `bun run test`              | Jest unit tests (JS wrappers, lint rules, patch script)              |
@@ -54,13 +58,18 @@ Run from the repo root.
 | `bun run smoke:pack`        | `npm pack` the library into `$SMOKE_TMP/tarballs` (see below)        |
 | `bun run smoke:expo`        | Install the packed lib into a fresh Expo app, Release, on-device     |
 | `bun run smoke:rn-cli`      | Same for a fresh React Native CLI app                                |
+| `bun bench`                 | Run the on-device benchmarks (see "Running the benchmarks")          |
+| `bun run bench:report`      | Re-render an existing results file, no device needed                 |
+| `bun run probe:nitrogen`    | Regenerate the private `bench/modules/bench-probe` Nitro code        |
+| `bun run perf:renders`      | Reassure render-count gate for the JS wrappers                       |
 | `bun run example <script>`  | Run an `example/` script, e.g. `bun run example ios`                 |
 | `bun run hooks:install`     | Install optional git hooks (see "Commit messages and releases")      |
 | `bun run hooks:uninstall`   | Remove them again                                                    |
 | `bun run clean`             | Delete build outputs (`lib/`, native build dirs)                     |
 
-`bun run check` = typecheck → lint → format → test → nitrogen:check →
-autolinking:check → prepare → publint → manifest:check.
+`bun run check` = typecheck → bench:typecheck → lint → format → test →
+nitrogen:check → autolinking:check → prepare → publint → manifest:check →
+perf:renders.
 
 ### Changing the published surface
 
@@ -262,6 +271,40 @@ single source of truth for what a consumer must be able to render. Its rules:
 
 `.github/workflows/smoke.yml` runs the same scripts nightly and on demand, and
 CI mirrors this section.
+## Running the benchmarks
+
+`bench/` is a release-build app that measures a component against RN core on a
+real simulator or emulator. The full story — metrics, protocol, what the numbers
+mean, baselines, per-component checklist — is
+`docs/architecture/benchmarks.md`. The commands:
+
+```sh
+IOS_SIM_UDID=<udid>   bun bench --platform ios     --plan quick
+ANDROID_AVD=<avd>     bun bench --platform android --plan quick
+```
+
+Every component task runs the `quick` plan on **both** platforms and pastes both
+tables into its report. It takes a few minutes per platform.
+
+| Variable         | Default     | Meaning                                                    |
+| ---------------- | ----------- | ---------------------------------------------------------- |
+| `IOS_SIM_UDID`   | unset       | Simulator UDID to boot and measure on                      |
+| `ANDROID_AVD`    | unset       | AVD name — the runner finds its serial among attached ones |
+| `ANDROID_SERIAL` | unset       | Used only when there is no AVD name (physical device)      |
+| `BENCH_ABIS`     | `arm64-v8a` | Android ABIs to build; CI sets `x86_64` for hosted runners |
+
+Prefer `ANDROID_AVD` over `ANDROID_SERIAL`: console ports are allocated by
+availability, so a serial goes stale the moment another emulator boots or dies,
+and a stale serial could otherwise point at a device belonging to another task.
+
+The bench app is **release-only**, so it embeds its own bundle and starts no
+Metro — `METRO_PORT` is irrelevant to it. Native projects under `bench/ios` and
+`bench/android` are CNG output and gitignored; delete them (or pass `--prebuild`)
+when configuration changes.
+
+Gates: perf numbers never fail a PR automatically. They are ratios against
+`rn-core`, reported on request (`.github/workflows/bench.yml`, `bench` label or
+`/bench` comment). The hard perf gate is the Reassure render count, below.
 
 ## Perf contract
 

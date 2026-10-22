@@ -80,3 +80,21 @@ android/generated
 example/**/__image_snapshots__/*.bak
 **/harness-*.log
 **/.harness/
+
+# T02 bench app
+# `bench/ios` and `bench/android` are CNG output: `expo prebuild --clean`
+# regenerates them, and the toolchain on a CI runner or another machine is not
+# what we want to pin. The sources live in `bench/src` and
+# `bench/modules/bench-probe` (which has its own ios/ and android/).
+bench/ios
+bench/android
+bench/.expo
+# Local benchmark output: every run writes `bench/results/<sha>-<platform>.json`.
+# Baselines that gate PRs are committed separately, in `bench/baselines/`.
+bench/results/*
+!bench/results/.gitkeep
+
+# Reassure scratch space: it writes the current run to `.reassure/` and reports
+# to `.reassure/output`; `scripts/perf/renders.mjs` reads `current.perf` from
+# there. Nothing in it is reviewable.
+.reassure/
