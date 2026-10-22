@@ -7,18 +7,40 @@
  * guardrails".
  */
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const WARMUP_ITERATIONS = 5;
 export const MEASURED_ITERATIONS = 20;
 export const LAUNCHES_PER_CELL = 4;
 export const LAUNCH_SETTLE_MS = 1000;
 
-/** Fail a PR when head/base is over this ... */
+/** Fail a run when the control-normalised head/base ratio is over this ... */
 export const RATIO_FAIL_THRESHOLD = 1.2;
 /** ... and the bootstrap CI of that ratio excludes this (so tiny moves do not fail). */
 export const RATIO_CI_EXCLUDES = 1.05;
-/** `rn-core` is the control: if *it* moved more than this, nothing is trustworthy. */
-export const CONTROL_DRIFT_THRESHOLD = 0.1;
+/**
+ * Above this, a control metric's head/base movement is *mentioned* in the report
+ * as machine context. It never suppresses a verdict (T02 review B1).
+ */
+export const CONTROL_NOTE_THRESHOLD = 0.1;
+/**
+ * Within-run noise limit, as the MAD of the launch-paired ratio divided by its
+ * median (docs/DECISIONS.md D9). Judged per (scenario, N, metric): a cell that
+ * bounced around inside one run cannot be attributed to a code change, and a
+ * cell that was stable stays conclusive even when another cell was noisy.
+ */
+export const NOISE_REL_SPREAD = 0.1;
+/**
+ * A machine is "unquiet" above 0.5 x core count (D9): a busy laptop may produce
+ * readable same-run ratios but must never mint a committed baseline.
+ */
+export const UNQUIET_LOAD_RATIO = 0.5;
+
+/**
+ * Only the implementation under development is gated. `expo-ui-*` are reference
+ * arms: an `@expo/ui` bump must not fail a nitro-ui PR, and `rn-core` is the
+ * control. They are measured and reported, never gated (T02 review S9).
+ */
+export const GATED_IMPLEMENTATIONS = ['nitro-ui'];
 
 export const IMPLEMENTATIONS = [
   'rn-core',
@@ -29,6 +51,23 @@ export const IMPLEMENTATIONS = [
 
 /** Latency metrics, all nanoseconds, all smaller-is-better. */
 export const LATENCY_METRICS = ['jsCommitNs', 'mountedNs', 'presentedNs'];
+
+/**
+ * Per-op CPU metrics. Named "per op" because the op is a mount+teardown cycle in
+ * the `mount` scenario and a prop update in the `update` scenario (T02 review
+ * S5 asked for the mount and the unmount to stop sharing one bracket).
+ */
+export const CPU_METRICS = ['jsNsPerOp', 'mainNsPerOp', 'unmountMainNsPerOp'];
+
+/** Footprint and leak metrics. */
+export const MEMORY_METRICS = ['bytesPerInstance', 'leakSlopeBytesPerCycle'];
+
+/** Everything that can be normalised to `rn-core` and gated. */
+export const GATE_METRICS = [
+  ...LATENCY_METRICS,
+  ...CPU_METRICS,
+  ...MEMORY_METRICS,
+];
 
 /**
  * Plans are lists of `scenario:N` cells. The implementation dimension is crossed
@@ -182,39 +221,75 @@ function percentile(values, quantile) {
 }
 
 /**
- * 95% CI of `median(numerator) / median(denominator)`, resampling whole launches
- * (iterations inside one launch share a process, so they are not independent).
+ * 95% CI of `median(head) / median(base)` where both sides are **launch-paired
+ * ratios** (`arm launch median / rn-core launch median` for the same launch
+ * index), so machine drift cancels the way it does in the point estimate.
  *
- * Each argument is an array of per-launch sample arrays. Returns null when a
- * side has no samples: "no CI" must never be read as "no risk".
+ * Two sampling modes, both honest about what they resample:
+ *
+ * - **hierarchical** - when a side has its per-launch iterations, resample
+ *   launches first and then iterations inside each sampled launch (iterations in
+ *   one launch share a process, so they are not independent).
+ * - **launch-level** - a committed baseline only stores the per-launch paired
+ *   ratios, so that side resamples those.
+ *
+ * Returns null when a side has no samples: "no CI" must never read as "no risk".
  */
-export function bootstrapMedianRatio(
-  numeratorLaunches,
-  denominatorLaunches,
-  { resamples = 2000, seed = 20261022 } = {}
+export function bootstrapComparisonRatio(
+  head,
+  base,
+  { resamples = 4000, seed = 20261022 } = {}
 ) {
-  const numerator = (numeratorLaunches ?? [])
-    .filter((values) => Array.isArray(values) && values.length > 0)
-    .map((values) => median(values));
-  const denominator = (denominatorLaunches ?? [])
-    .filter((values) => Array.isArray(values) && values.length > 0)
-    .map((values) => median(values));
-  if (numerator.length === 0 || denominator.length === 0) {
+  const headRatios = (head?.launchRatios ?? []).filter(isNumber);
+  const baseRatios = (base?.launchRatios ?? []).filter(isNumber);
+  if (headRatios.length === 0 || baseRatios.length === 0) {
     return null;
   }
-  const denCentre = median(denominator);
-  const observed = denCentre === 0 ? null : median(numerator) / denCentre;
+  const centre = (values) => {
+    const m = median(values);
+    return m === 0 ? null : m;
+  };
+  const observed = (() => {
+    const b = centre(baseRatios);
+    return b === null ? null : centre(headRatios) / b;
+  })();
   if (!isNumber(observed)) {
     return null;
   }
+  const sideValue = (side, ratios, random) => {
+    const arm = side?.arm ?? null;
+    const control = side?.control ?? null;
+    const paired = [];
+    for (let index = 0; index < ratios.length; index++) {
+      const launch = Math.floor(random() * ratios.length);
+      const armValues = arm?.[launch];
+      const controlValues = control?.[launch];
+      if (
+        Array.isArray(armValues) &&
+        armValues.length > 0 &&
+        Array.isArray(controlValues) &&
+        controlValues.length > 0
+      ) {
+        const den = median(resample(controlValues, random));
+        if (den === 0) {
+          continue;
+        }
+        paired.push(median(resample(armValues, random)) / den);
+      } else {
+        paired.push(ratios[launch] ?? 0);
+      }
+    }
+    return paired.length > 0 ? median(paired) : null;
+  };
   const random = mulberry32(seed);
   const ratios = [];
   for (let index = 0; index < resamples; index++) {
-    const denSample = median(resample(denominator, random));
-    if (denSample === 0) {
+    const headValue = sideValue(head, headRatios, random);
+    const baseValue = sideValue(base, baseRatios, random);
+    if (headValue == null || baseValue == null || baseValue === 0) {
       continue;
     }
-    const ratio = median(resample(numerator, random)) / denSample;
+    const ratio = headValue / baseValue;
     if (isNumber(ratio)) {
       ratios.push(ratio);
     }
@@ -226,19 +301,12 @@ export function bootstrapMedianRatio(
     ratio: observed,
     low: percentile(ratios, 0.025),
     high: percentile(ratios, 0.975),
-    launchSamples: numerator.length + denominator.length,
+    launchSamples: headRatios.length + baseRatios.length,
+    hierarchical: head?.arm != null && base?.arm != null,
   };
 }
 
 /* -------------------------------- aggregate ------------------------------- */
-
-function addAll(values) {
-  const numbers = values.filter(isNumber);
-  if (numbers.length === 0) {
-    return null;
-  }
-  return numbers.reduce((total, value) => total + value, 0);
-}
 
 function leastSquaresSlope(points) {
   const count = points.length;
@@ -272,15 +340,27 @@ function emptyCell(record) {
       mountedNs: new Map(),
       presentedNs: new Map(),
     },
-    cpu: new Map(),
+    /** `mount` = the timed op, `unmount` = the teardown that precedes it. */
+    cpu: { mount: new Map(), unmount: new Map() },
     memory: new Map(),
+    sanity: {
+      missingMount: 0,
+      missingPresented: 0,
+      presentedBeforeMount: 0,
+      mountBeforeCommit: 0,
+    },
   };
 }
 
 /** How many launches actually produced data for a cell (they can differ per metric). */
 function distinctLaunches(cell) {
   const launches = new Set();
-  for (const map of [...Object.values(cell.latency), cell.cpu, cell.memory]) {
+  for (const map of [
+    ...Object.values(cell.latency),
+    cell.cpu.mount,
+    cell.cpu.unmount,
+    cell.memory,
+  ]) {
     for (const launch of map.keys()) {
       launches.add(launch);
     }
@@ -288,6 +368,15 @@ function distinctLaunches(cell) {
   return launches.size;
 }
 
+/**
+ * One cell's numbers.
+ *
+ * `median`/`mad` are the median and MAD **of the per-launch medians** - the
+ * "median of medians" the protocol promises - so a launch is the unit of
+ * variation, which matches how the launches are interleaved and how the gate
+ * bootstraps. `p95`/`min`/`max` stay pooled over iterations because a tail
+ * latency only shows up in the pooled distribution.
+ */
 function summariseCell(key, cell) {
   const metrics = {};
   for (const metric of LATENCY_METRICS) {
@@ -295,44 +384,70 @@ function summariseCell(key, cell) {
       (a, b) => a[0] - b[0]
     );
     const values = perLaunch.flatMap(([, list]) => list);
+    const launchMedians = perLaunch.map(([, list]) => median(list));
     metrics[metric] = {
-      median: median(values),
-      mad: medianAbsoluteDeviation(values),
+      median: median(launchMedians),
+      mad: medianAbsoluteDeviation(launchMedians),
       p95: p95(values),
       min: values.length === 0 ? null : Math.min(...values),
       max: values.length === 0 ? null : Math.max(...values),
       samples: values.length,
-      launchMedians: perLaunch.map(([, list]) => median(list)),
+      launchMedians,
     };
   }
 
-  const cpuSamples = [...cell.cpu.values()];
+  const cpuPhase = (samples) => {
+    const perUpdate = (pick) =>
+      median(samples.map((s) => pick(s)).filter(isNumber));
+    const launches = (pick) => samples.map((s) => pick(s)).filter(isNumber);
+    return {
+      launches: samples.length,
+      jsNsPerOp: perUpdate((s) => s.jsNsPerOp),
+      mainNsPerOp: perUpdate((s) => s.mainNsPerOp),
+      launchJsNsPerOp: launches((s) => s.jsNsPerOp),
+      launchMainNsPerOp: launches((s) => s.mainNsPerOp),
+    };
+  };
+  const mount = cpuPhase([...cell.cpu.mount.values()]);
+  const unmount = cpuPhase([...cell.cpu.unmount.values()]);
   const cpu = {
-    launches: cpuSamples.length,
-    jsNsPerUpdate: median(
-      cpuSamples.map((s) => s.jsNsPerUpdate).filter(isNumber)
-    ),
-    mainNsPerUpdate: median(
-      cpuSamples.map((s) => s.mainNsPerUpdate).filter(isNumber)
-    ),
-    profilerMsPerUpdate: median(
-      cpuSamples.map((s) => s.profilerMsPerUpdate).filter(isNumber)
-    ),
-    profilerTotalMs: addAll(cpuSamples.map((s) => s.profilerTotalMs)),
-    launchJsNsPerUpdate: cpuSamples
-      .map((s) => s.jsNsPerUpdate)
-      .filter(isNumber),
-    launchMainNsPerUpdate: cpuSamples
-      .map((s) => s.mainNsPerUpdate)
-      .filter(isNumber),
+    launches: mount.launches,
+    jsNsPerOp: mount.jsNsPerOp,
+    mainNsPerOp: mount.mainNsPerOp,
+    launchJsNsPerOp: mount.launchJsNsPerOp,
+    launchMainNsPerOp: mount.launchMainNsPerOp,
+    unmountLaunches: unmount.launches,
+    unmountMainNsPerOp: unmount.mainNsPerOp,
+    launchUnmountMainNsPerOp: unmount.launchMainNsPerOp,
   };
 
   const perLaunchBytes = [];
   const slopes = [];
+  const launchSlopes = [];
   const monotonic = [];
+  const heapCollected = [];
+  const perLaunchNative = [];
+  const perLaunchJava = [];
   for (const phases of cell.memory.values()) {
     if (isNumber(phases.empty) && isNumber(phases.full) && cell.n > 0) {
       perLaunchBytes.push((phases.full - phases.empty) / cell.n);
+    }
+    if (typeof phases.heapCollected === 'boolean') {
+      heapCollected.push(phases.heapCollected);
+    }
+    for (const [heapKey, bucket] of [
+      ['nativeHeap', perLaunchNative],
+      ['javaHeap', perLaunchJava],
+    ]) {
+      const breakdown = phases[heapKey];
+      if (
+        breakdown != null &&
+        isNumber(breakdown.empty) &&
+        isNumber(breakdown.full) &&
+        cell.n > 0
+      ) {
+        bucket.push((breakdown.full - breakdown.empty) / cell.n);
+      }
     }
     const cycles = Object.entries(phases)
       .filter(([phase]) => phase.startsWith('leak'))
@@ -340,7 +455,11 @@ function summariseCell(key, cell) {
       .filter(([, bytes]) => isNumber(bytes))
       .sort((a, b) => a[0] - b[0]);
     if (cycles.length >= 2) {
-      slopes.push(leastSquaresSlope(cycles));
+      const slope = leastSquaresSlope(cycles);
+      if (isNumber(slope)) {
+        slopes.push(slope);
+        launchSlopes.push(slope);
+      }
       monotonic.push(
         cycles.every(
           ([, bytes], index) =>
@@ -368,9 +487,30 @@ function summariseCell(key, cell) {
       bytesPerInstanceLaunches: perLaunchBytes.length,
       launchBytesPerInstance: perLaunchBytes,
       leakSlopeBytesPerCycle: median(slopes),
+      launchLeakSlopeBytesPerCycle: launchSlopes,
       leakMonotonic: monotonic.length === 0 ? null : monotonic.every(Boolean),
       leakLaunches: slopes.length,
+      /** Whether `globalThis.gc()` existed, so the heap really was collected. */
+      heapCollected:
+        heapCollected.length === 0 ? null : heapCollected.every(Boolean),
+      /**
+       * Where the per-instance bytes actually live (review S8): `Debug
+       * .getNativeHeapAllocatedSize()` and Java-heap-used deltas on Android,
+       * `null` on iOS, where `phys_footprint` already attributes the native heap
+       * to the process. Reported, deliberately **not gated** - `bytesPerInstance`
+       * is the memory verdict, these two explain it (the Expo arms have measured
+       * below `rn-core` on PSS, which is only believable with a breakdown).
+       */
+      nativeBytesPerInstance: median(perLaunchNative),
+      javaBytesPerInstance: median(perLaunchJava),
+      heapBreakdownLaunches: perLaunchNative.length,
     },
+    /**
+     * Cross-checks on the native signals (T02 review S2): `presented` is a frame
+     * stamp, so `presented < mounted` or `mounted < jsCommit` means a signal
+     * arrived out of order and the reader must not trust the latency pair.
+     */
+    sanity: cell.sanity,
   };
 }
 
@@ -412,20 +552,54 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
           cell.latency[metric].set(record.launch, bucket);
         }
       }
+      if (record.mountedNs == null) {
+        cell.sanity.missingMount += 1;
+      }
+      if (record.presentedNs == null) {
+        cell.sanity.missingPresented += 1;
+      }
+      if (
+        isNumber(record.presentedNs) &&
+        isNumber(record.mountedNs) &&
+        record.presentedNs < record.mountedNs
+      ) {
+        cell.sanity.presentedBeforeMount += 1;
+      }
+      if (
+        isNumber(record.mountedNs) &&
+        isNumber(record.jsCommitNs) &&
+        record.mountedNs < record.jsCommitNs
+      ) {
+        cell.sanity.mountBeforeCommit += 1;
+      }
     } else if (record.kind === 'cpu') {
+      const phase = record.phase === 'unmount' ? 'unmount' : 'mount';
       const perUpdate = (value) =>
         isNumber(value) && record.iterations > 0
           ? value / record.iterations
           : null;
-      cell.cpu.set(record.launch, {
-        jsNsPerUpdate: perUpdate(record.jsCpuNs),
-        mainNsPerUpdate: perUpdate(record.mainCpuNs),
-        profilerMsPerUpdate: perUpdate(record.profilerTotalMs),
-        profilerTotalMs: record.profilerTotalMs,
+      cell.cpu[phase].set(record.launch, {
+        jsNsPerOp: perUpdate(record.jsCpuNs),
+        mainNsPerOp: perUpdate(record.mainCpuNs),
       });
     } else if (record.kind === 'mem') {
       const phases = cell.memory.get(record.launch) ?? {};
       phases[record.phase] = record.footprintBytes;
+      if (typeof record.heapCollected === 'boolean') {
+        phases.heapCollected = record.heapCollected;
+      }
+      // Heap breakdown, kept per phase so the same empty/full delta that gives
+      // `bytesPerInstance` can be attributed to a heap (review S8). iOS reports
+      // -1 for both, which stays `null` here rather than becoming a number.
+      for (const [heapKey, bytes] of [
+        ['nativeHeap', record.nativeHeapBytes],
+        ['javaHeap', record.javaHeapBytes],
+      ]) {
+        if (isNumber(bytes) && bytes >= 0) {
+          const breakdown = (phases[heapKey] ??= {});
+          breakdown[record.phase] = value;
+        }
+      }
       cell.memory.set(record.launch, phases);
     }
   }
@@ -434,8 +608,8 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
   for (const [key, cell] of cells) {
     const summary = summariseCell(key, cell);
     if (keepRaw) {
-      // Kept only in `bench/results/*` (gitignored), so a `--compare` can
-      // bootstrap over iterations instead of over 4 launch medians.
+      // Kept only in `bench/results/*` (gitignored), so a `--compare` can run a
+      // hierarchical bootstrap (launches, then iterations inside each launch).
       summary.raw = {};
       for (const metric of LATENCY_METRICS) {
         summary.raw[metric] = Object.fromEntries(cell.latency[metric]);
@@ -446,13 +620,16 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
   return out;
 }
 
-/* --------------------------------- compare -------------------------------- */
+/* ------------------------- ratios to the control arm ------------------------ */
 
 /**
- * Metrics a cell contributes to a comparison: the three latencies, the two CPU
- * numbers, and bytes-per-instance for the memory scenario (skipped when the two
- * footprint samples came out equal or inverted - a 0/n ratio is noise, not a
- * result).
+ * Metrics a cell contributes to a comparison. Smaller is better for all of them,
+ * and each must be a positive number to mean anything.
+ *
+ * The leak slope only counts when the footprint actually climbed monotonically:
+ * §6 of setup-decisions asks to "fail on a monotonic increase", and a slope from
+ * a wobbling series is not an increase (T02 review S8 - it used to be printed
+ * and never gated).
  */
 export function comparableMetrics(cell) {
   const metrics = {};
@@ -462,87 +639,190 @@ export function comparableMetrics(cell) {
       metrics[metric] = value;
     }
   }
-  if (isNumber(cell.cpu?.mainNsPerUpdate) && cell.cpu.mainNsPerUpdate > 0) {
-    metrics.mainNsPerUpdate = cell.cpu.mainNsPerUpdate;
-  }
-  if (isNumber(cell.cpu?.jsNsPerUpdate) && cell.cpu.jsNsPerUpdate > 0) {
-    metrics.jsNsPerUpdate = cell.cpu.jsNsPerUpdate;
-  }
-  if (
-    cell.scenario === 'memory' &&
-    isNumber(cell.memory?.bytesPerInstance) &&
-    cell.memory.bytesPerInstance > 0
-  ) {
-    metrics.bytesPerInstance = cell.memory.bytesPerInstance;
+  for (const [metric, value] of [
+    ['jsNsPerOp', cell.cpu?.jsNsPerOp],
+    ['mainNsPerOp', cell.cpu?.mainNsPerOp],
+    ['unmountMainNsPerOp', cell.cpu?.unmountMainNsPerOp],
+    ['bytesPerInstance', cell.memory?.bytesPerInstance],
+    ['leakSlopeBytesPerCycle', cell.memory?.leakSlopeBytesPerCycle],
+  ]) {
+    if (!isNumber(value) || value <= 0) {
+      continue;
+    }
+    if (
+      metric === 'leakSlopeBytesPerCycle' &&
+      cell.memory?.leakMonotonic !== true
+    ) {
+      continue;
+    }
+    metrics[metric] = value;
   }
   return metrics;
 }
 
 /**
- * Head-vs-base ratios for every cell both runs measured.
- *
- * Takes a full results run or a bare `cells` map: `--check` compares against
- * baseline cells that have been normalised to the control, which no longer
- * belong to a run document.
+ * Per-launch samples of one metric: an array of iterations per launch for the
+ * latency metrics (raw is kept in `bench/results/*` only), otherwise a one-value
+ * array per launch.
  */
-export function compareResults(base, head) {
-  const baseCells = cellsFrom(base);
-  const headCells = cellsFrom(head);
-  const rows = [];
-  for (const [key, headCell] of Object.entries(headCells)) {
-    const baseCell = baseCells[key];
-    if (baseCell == null) {
-      rows.push({
-        key,
-        status: 'missing-base',
-        head: headCell,
-        base: null,
-        perMetric: {},
-      });
-      continue;
-    }
-    const headMetrics = comparableMetrics(headCell);
-    const baseMetrics = comparableMetrics(baseCell);
-    const perMetric = {};
-    for (const [metric, headValue] of Object.entries(headMetrics)) {
-      const baseValue = baseMetrics[metric];
-      if (!isNumber(baseValue) || baseValue === 0) {
-        continue;
-      }
-      perMetric[metric] = {
-        base: baseValue,
-        head: headValue,
-        ratio: headValue / baseValue,
-      };
-    }
-    const skippedBoth =
-      headCell.skipReason != null && baseCell.skipReason != null;
-    rows.push({
-      key,
-      status: skippedBoth ? 'skipped-both' : 'ok',
-      head: headCell,
-      base: baseCell,
-      perMetric,
-    });
+export function launchValues(cell, metric) {
+  if (cell == null) {
+    return null;
   }
-  return rows;
+  const raw = cell.raw?.[metric];
+  if (raw != null) {
+    const perLaunch = Object.values(raw)
+      .filter((values) => Array.isArray(values) && values.length > 0)
+      .map((values) => values.filter(isNumber));
+    return perLaunch.length > 0 ? perLaunch : null;
+  }
+  const single = {
+    jsCommitNs: () => cell.metrics?.jsCommitNs?.launchMedians,
+    mountedNs: () => cell.metrics?.mountedNs?.launchMedians,
+    presentedNs: () => cell.metrics?.presentedNs?.launchMedians,
+    jsNsPerOp: () => cell.cpu?.launchJsNsPerOp,
+    mainNsPerOp: () => cell.cpu?.launchMainNsPerOp,
+    unmountMainNsPerOp: () => cell.cpu?.launchUnmountMainNsPerOp,
+    bytesPerInstance: () => cell.memory?.launchBytesPerInstance,
+    leakSlopeBytesPerCycle: () => cell.memory?.launchLeakSlopeBytesPerCycle,
+  }[metric];
+  const values = single?.();
+  if (!Array.isArray(values)) {
+    return null;
+  }
+  const filtered = values.filter(isNumber).map((value) => [value]);
+  return filtered.length > 0 ? filtered : null;
 }
 
 /**
- * `rn-core` is measured in every run only to answer "was this machine behaving?".
- * If the control itself moved, nothing else in the run can be trusted, so the
- * answer to that question turns a failure into "noisy, inconclusive".
+ * Launch-paired ratio of one cell against the `rn-core` cell of the same
+ * scenario and N: launch `L`'s arm median over launch `L`'s control median.
+ *
+ * Pairing by launch index is the whole point - the launches are interleaved
+ * ABBA across implementations, so whatever the machine did during launch 2
+ * affected both arms. Dividing two pooled medians instead would keep that drift.
  */
-export function controlDrift(base, head) {
-  const findings = [];
+export function pairedLaunchRatios(cell, control, metric) {
+  const arm = launchValues(cell, metric);
+  const base = launchValues(control, metric);
+  if (arm == null || base == null) {
+    return { launchRatios: [], arm, control: base };
+  }
+  const launchRatios = [];
+  for (let index = 0; index < arm.length; index++) {
+    const denominator = median(base[index] ?? []);
+    const numerator = median(arm[index] ?? []);
+    if (isNumber(numerator) && isNumber(denominator) && denominator > 0) {
+      launchRatios.push(numerator / denominator);
+    }
+  }
+  return { launchRatios, arm, control: base };
+}
+
+/**
+ * Divide every metric by the `rn-core` value for the same scenario and N.
+ *
+ * Absolute numbers drift with the OS build, the simulator image and whatever
+ * else the machine is doing; a launch-paired ratio to the control arm does not.
+ * That is why committed baselines carry ratios only (docs/DECISIONS.md D9).
+ */
+export function ratioTable(source) {
+  const cells = cellsFrom(source);
+  const out = {};
+  for (const [key, cell] of Object.entries(cells)) {
+    const entry = {
+      key,
+      scenario: cell.scenario,
+      implementation: cell.implementation,
+      n: cell.n,
+      skipReason: cell.skipReason ?? null,
+      metrics: {},
+    };
+    out[key] = entry;
+    if (cell.skipReason != null) {
+      continue;
+    }
+    const control =
+      cell.implementation === 'rn-core'
+        ? cell
+        : cells[`${cell.scenario}:rn-core:${cell.n}`];
+    if (control == null) {
+      continue;
+    }
+    for (const metric of Object.keys(comparableMetrics(cell))) {
+      if (cell.implementation === 'rn-core') {
+        entry.metrics[metric] = {
+          ratio: 1,
+          launchRatios: [1],
+          samples: 1,
+          control: true,
+        };
+        continue;
+      }
+      const { launchRatios, arm } = pairedLaunchRatios(cell, control, metric);
+      const ratio = median(launchRatios);
+      if (!isNumber(ratio)) {
+        continue;
+      }
+      entry.metrics[metric] = {
+        ratio,
+        launchRatios,
+        samples: launchRatios.length,
+        iterationsPerLaunch: arm ?? undefined,
+      };
+    }
+  }
+  return out;
+}
+
+/**
+ * Within-run noise of a ratio table, per cell and metric: the MAD of the
+ * launch-paired ratios over their median (D9). `rn-core` itself is 1.0 by
+ * construction, so the spread of *every other arm's* paired ratio is the honest
+ * answer to "how much did this machine move while measuring this cell?".
+ */
+export function noiseTable(table) {
+  const out = {};
+  for (const [key, entry] of Object.entries(table)) {
+    const metrics = {};
+    for (const [metric, value] of Object.entries(entry.metrics)) {
+      if (value.control === true) {
+        continue;
+      }
+      const spread = medianAbsoluteDeviation(value.launchRatios ?? []);
+      const centre = median(value.launchRatios ?? []);
+      const relSpread =
+        isNumber(spread) && isNumber(centre) && centre > 0
+          ? spread / centre
+          : null;
+      metrics[metric] = {
+        relSpread,
+        noisy: relSpread == null || relSpread > NOISE_REL_SPREAD,
+      };
+    }
+    out[key] = { key, metrics };
+  }
+  return out;
+}
+
+/**
+ * How much the `rn-core` control moved between two runs, per cell and metric.
+ *
+ * Informational only. It used to suppress the whole run when any single control
+ * metric drifted, which - measured on absolute numbers between two sessions -
+ * happened almost every time and made `--check` structurally unable to fail
+ * (T02 review B1). Noise is judged within the run instead (see `noiseTable`).
+ */
+export function controlMovement(base, head) {
   const baseCells = cellsFrom(base);
   const headCells = cellsFrom(head);
+  const findings = [];
   for (const [key, headCell] of Object.entries(headCells)) {
-    if (headCell.implementation !== 'rn-core') {
+    if (headCell.implementation !== 'rn-core' || headCell.skipReason != null) {
       continue;
     }
     const baseCell = baseCells[key];
-    if (baseCell == null) {
+    if (baseCell == null || baseCell.skipReason != null) {
       continue;
     }
     const headMetrics = comparableMetrics(headCell);
@@ -553,7 +833,7 @@ export function controlDrift(base, head) {
         continue;
       }
       const ratio = headValue / baseValue;
-      if (Math.abs(ratio - 1) > CONTROL_DRIFT_THRESHOLD) {
+      if (Math.abs(ratio - 1) > CONTROL_NOTE_THRESHOLD) {
         findings.push({ key, metric, base: baseValue, head: headValue, ratio });
       }
     }
@@ -561,58 +841,274 @@ export function controlDrift(base, head) {
   return findings;
 }
 
+/* ---------------------------------- gate ---------------------------------- */
+
 /**
- * The gate. Every metric over `RATIO_FAIL_THRESHOLD` is reported; it is only
- * *conclusive* (i.e. allowed to fail a job) when the bootstrap CI of the ratio
- * excludes `RATIO_CI_EXCLUDES`.
+ * The one gate (`T02 review S11`): `run.mjs` and `report.mjs` both call this, so
+ * the standalone reporter cannot drift away from the runner again.
+ *
+ * Both sides arrive as **launch-paired ratios to `rn-core`**, so:
+ *
+ * - `--check` compares today's ratios with a committed ratio baseline;
+ * - `--compare` compares head's ratios with base's ratios, i.e.
+ *   `head(x/rn-core) / base(x/rn-core)`;
+ * - noise is per (scenario, N, metric) inside each run, never a whole-run veto;
+ * - only `nitro-ui` is gated: `expo-ui-*` stay reference arms (S9).
  */
-export function gateFailures(comparison) {
+export function gate({
+  head,
+  base,
+  headTable = ratioTable(head),
+  baseTable = ratioTable(base),
+  headNoise = noiseTable(headTable),
+  baseNoise = noiseTable(baseTable),
+}) {
+  const rows = [];
   const failures = [];
-  for (const row of comparison) {
-    if (row.status !== 'ok') {
+  for (const [key, headEntry] of Object.entries(headTable)) {
+    const baseEntry = baseTable[key];
+    if (baseEntry == null) {
+      rows.push({
+        key,
+        implementation: headEntry.implementation,
+        status: 'missing-base',
+        perMetric: {},
+      });
       continue;
     }
-    for (const [metric, value] of Object.entries(row.perMetric)) {
-      if (value.ratio <= RATIO_FAIL_THRESHOLD) {
+    if (headEntry.skipReason != null && baseEntry.skipReason != null) {
+      rows.push({
+        key,
+        implementation: headEntry.implementation,
+        status: 'skipped-both',
+        perMetric: {},
+      });
+      continue;
+    }
+    const gated = GATED_IMPLEMENTATIONS.includes(headEntry.implementation);
+    const perMetric = {};
+    for (const [metric, headValue] of Object.entries(headEntry.metrics)) {
+      const baseValue = baseEntry.metrics?.[metric];
+      if (
+        baseValue == null ||
+        !isNumber(baseValue.ratio) ||
+        baseValue.ratio === 0
+      ) {
         continue;
       }
-      const ci = bootstrapMedianRatio(
-        launchSamples(row.head, metric),
-        launchSamples(row.base, metric)
+      const ratio = headValue.ratio / baseValue.ratio;
+      const headNoisy = headNoise[key]?.metrics?.[metric]?.noisy === true;
+      const baseNoisy = baseNoise[key]?.metrics?.[metric]?.noisy === true;
+      const noisy = headNoisy || baseNoisy;
+      const ci = bootstrapComparisonRatio(
+        {
+          launchRatios: headValue.launchRatios,
+          arm: headValue.iterationsPerLaunch,
+          control: (() => {
+            const controlCell =
+              headEntry.implementation === 'rn-core'
+                ? null
+                : cellsFrom(head)[
+                    `${headEntry.scenario}:rn-core:${headEntry.n}`
+                  ];
+            return controlCell == null
+              ? null
+              : launchValues(controlCell, metric);
+          })(),
+        },
+        {
+          launchRatios: baseValue.launchRatios,
+          arm:
+            baseValue.iterationsPerLaunch ??
+            launchValues(cellsFrom(base)[key], metric) ??
+            undefined,
+          control: (() => {
+            const controlCell =
+              baseEntry.implementation === 'rn-core'
+                ? null
+                : cellsFrom(base)[
+                    `${baseEntry.scenario}:rn-core:${baseEntry.n}`
+                  ];
+            return controlCell == null
+              ? null
+              : launchValues(controlCell, metric);
+          })(),
+        }
       );
-      failures.push({
-        key: row.key,
-        metric,
-        ratio: value.ratio,
-        base: value.base,
-        head: value.head,
+      const overThreshold = ratio > RATIO_FAIL_THRESHOLD;
+      const conclusive =
+        gated &&
+        overThreshold &&
+        !noisy &&
+        ci != null &&
+        isNumber(ci.low) &&
+        ci.low > RATIO_CI_EXCLUDES;
+      const detail = {
+        base: baseValue.ratio,
+        head: headValue.ratio,
+        ratio,
         ci,
-        conclusive: ci != null && ci.low > RATIO_CI_EXCLUDES,
-      });
+        noisy,
+        headNoisy,
+        baseNoisy,
+        gated,
+        overThreshold,
+        conclusive,
+        samples: headValue.samples,
+      };
+      perMetric[metric] = detail;
+      if (overThreshold) {
+        failures.push({
+          key,
+          metric,
+          implementation: headEntry.implementation,
+          ...detail,
+        });
+      }
     }
+    rows.push({
+      key,
+      implementation: headEntry.implementation,
+      status: headEntry.skipReason != null ? 'skipped' : 'ok',
+      gated,
+      perMetric,
+    });
   }
-  return failures;
+  const conclusiveFailures = failures.filter((failure) => failure.conclusive);
+  return {
+    rows,
+    failures,
+    conclusiveFailures,
+    conclusiveFailure: conclusiveFailures.length > 0,
+    headNoise,
+    baseNoise,
+  };
 }
 
 /**
- * Per-launch samples for a comparison metric. Latencies keep their raw
- * iterations; CPU and memory only survive as one number per launch.
+ * Whether a run may mint a committed baseline (D9 + T02 review S10): clean tree,
+ * every launch completed, and an idle machine. `--force` overrides, loudly.
  */
-export function launchSamples(cell, metric) {
-  if (cell.raw?.[metric] != null) {
-    return Object.values(cell.raw[metric]);
+export function baselineBlockers(run) {
+  const reasons = [];
+  if (run.dirty === true) {
+    reasons.push(
+      'the working tree is dirty (a baseline must be attributable to a commit)'
+    );
   }
-  const raw = cell.metrics?.[metric]?.launchMedians;
-  if (Array.isArray(raw)) {
-    return raw.map((value) => [value]);
+  if (Array.isArray(run.problems) && run.problems.length > 0) {
+    reasons.push(
+      `${String(run.problems.length)} launch(es) did not complete in this run`
+    );
   }
-  const scalar =
-    metric === 'mainNsPerUpdate'
-      ? cell.cpu?.launchMainNsPerUpdate
-      : metric === 'jsNsPerUpdate'
-        ? cell.cpu?.launchJsNsPerUpdate
-        : cell.memory?.launchBytesPerInstance;
-  return Array.isArray(scalar) ? scalar.map((value) => [value]) : [];
+  const machine = run.machine ?? {};
+  if (isNumber(machine.loadavg1) && isNumber(machine.cpuCount)) {
+    const ceiling = machine.cpuCount * UNQUIET_LOAD_RATIO;
+    if (machine.loadavg1 > ceiling) {
+      reasons.push(
+        `the machine was busy: load average ${machine.loadavg1.toFixed(2)} over ${String(
+          machine.cpuCount
+        )} cores (ceiling ${ceiling.toFixed(1)})`
+      );
+    }
+  } else if (machine.loadavg1 == null) {
+    reasons.push('the run did not record a load average');
+  }
+  return reasons;
+}
+
+/**
+ * Committed baselines are **ratio-only**: per cell and metric the launch-paired
+ * ratio to `rn-core`, plus the within-run noise it was measured with. Absolute
+ * numbers and trends belong in CI artifacts, not in git (D9).
+ */
+export function buildBaseline(run) {
+  const table = ratioTable(run);
+  const noise = noiseTable(table);
+  const cells = {};
+  for (const [key, entry] of Object.entries(table)) {
+    cells[key] = {
+      scenario: entry.scenario,
+      implementation: entry.implementation,
+      n: entry.n,
+      skipReason: entry.skipReason,
+      metrics: Object.fromEntries(
+        Object.entries(entry.metrics).map(([metric, value]) => [
+          metric,
+          {
+            ratio: value.ratio,
+            launchRatios: value.launchRatios,
+            samples: value.samples,
+            noise: noise[key]?.metrics?.[metric]?.relSpread ?? null,
+          },
+        ])
+      ),
+      sanity: cellsFrom(run.cells)[key]?.sanity ?? null,
+    };
+  }
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    platform: run.platform,
+    deviceKey: run.deviceKey,
+    deviceName: run.deviceName,
+    sha: run.sha,
+    plan: run.plan,
+    launches: run.launches,
+    updatedAt: run.createdAt,
+    machine: run.machine ?? null,
+    cells,
+  };
+}
+
+/** A baseline from before D9 (absolute cells) cannot be gated against. */
+export function isCompatibleBaseline(baseline) {
+  return baseline?.schemaVersion === SCHEMA_VERSION && baseline.cells != null;
+}
+
+/**
+ * Turn a ratio baseline back into the shape `gate` reads, so baseline and run go
+ * through one implementation.
+ */
+export function baselineTable(baseline) {
+  const out = {};
+  for (const [key, cell] of Object.entries(baseline.cells)) {
+    out[key] = {
+      key,
+      scenario: cell.scenario,
+      implementation: cell.implementation,
+      n: cell.n,
+      skipReason: cell.skipReason ?? null,
+      metrics: Object.fromEntries(
+        Object.entries(cell.metrics).map(([metric, value]) => [
+          metric,
+          {
+            ratio: value.ratio,
+            launchRatios: value.launchRatios ?? [value.ratio],
+            samples: value.samples ?? 1,
+            control: cell.implementation === 'rn-core',
+          },
+        ])
+      ),
+    };
+  }
+  return out;
+}
+
+/** Noise recorded *with* the baseline, so `--check` honours both sides. */
+export function baselineNoise(baseline) {
+  const out = {};
+  for (const [key, cell] of Object.entries(baseline.cells)) {
+    const metrics = {};
+    for (const [metric, value] of Object.entries(cell.metrics)) {
+      const relSpread = value.noise;
+      metrics[metric] = {
+        relSpread: isNumber(relSpread) ? relSpread : null,
+        noisy: !isNumber(relSpread) || relSpread > NOISE_REL_SPREAD,
+      };
+    }
+    out[key] = { key, metrics };
+  }
+  return out;
 }
 
 /* --------------------------------- format --------------------------------- */
@@ -649,6 +1145,10 @@ export function formatMs(value) {
   return isNumber(value) ? `${value.toFixed(2)} ms` : 'n/a';
 }
 
+export function formatSpread(value) {
+  return isNumber(value) ? `${(value * 100).toFixed(1)}%` : 'n/a';
+}
+
 /** Markdown table with a header row, used by the report and the PR comment. */
 export function markdownTable(header, rows) {
   const cells = (row) => row.map((cell) => String(cell ?? ''));
@@ -666,125 +1166,37 @@ export function markdownTable(header, rows) {
   ].join('\n');
 }
 
-/* ------------------------------- baselines -------------------------------- */
+/* ------------------------------- file naming ------------------------------ */
 
 /**
- * Divide every metric by the `rn-core` value for the same scenario and N.
- *
- * Absolute numbers drift with the OS build, the simulator image and whatever
- * else the machine is doing; a ratio to the control arm does not. That is why
- * committed baselines carry tolerances *only* on these ratios
- * (docs/research/setup-decisions.md SS6).
+ * Results files are named `<sha>[-dirty]-<platform>-<run stamp>.json` so two
+ * runs of the same commit never overwrite each other (T02 review S12), and a
+ * dirty-tree run can never masquerade as the clean run of that commit.
  */
-export function normaliseToControl(cells) {
-  const out = {};
-  for (const [key, cell] of Object.entries(cells)) {
-    const control = cells[`${cell.scenario}:rn-core:${cell.n}`];
-    const copy = JSON.parse(JSON.stringify({ ...cell, metrics: {} }));
-    delete copy.raw;
-    copy.cpu = { ...cell.cpu };
-    copy.memory = { ...cell.memory };
-
-    // Pair by launch index rather than dividing two aggregates: a launch that
-    // was slow for everyone then slows both arms equally.
-    const paired = (cellSamples, controlSamples) => {
-      const ratios = [];
-      for (let index = 0; index < cellSamples.length; index++) {
-        const base = controlSamples[index];
-        const value = cellSamples[index];
-        if (isNumber(value) && isNumber(base) && base !== 0) {
-          ratios.push(value / base);
-        }
-      }
-      return ratios;
-    };
-
-    for (const metric of LATENCY_METRICS) {
-      const stats = cell.metrics?.[metric];
-      const controlStats = control?.metrics?.[metric];
-      if (stats?.median == null) {
-        continue;
-      }
-      const perLaunch = paired(
-        stats.launchMedians ?? [],
-        controlStats?.launchMedians ?? []
-      );
-      copy.metrics[metric] = {
-        median:
-          perLaunch.length > 0
-            ? median(perLaunch)
-            : isNumber(controlStats?.median) && controlStats.median !== 0
-              ? stats.median / controlStats.median
-              : stats.median,
-        mad: medianAbsoluteDeviation(perLaunch),
-        p95: p95(perLaunch),
-        samples: perLaunch.length,
-        launchMedians: perLaunch,
-      };
-    }
-
-    const scalarLaunches = (side, metric) =>
-      metric === 'mainNsPerUpdate'
-        ? (side.cpu?.launchMainNsPerUpdate ?? [])
-        : metric === 'jsNsPerUpdate'
-          ? (side.cpu?.launchJsNsPerUpdate ?? [])
-          : metric === 'bytesPerInstance'
-            ? (side.memory?.launchBytesPerInstance ?? [])
-            : [];
-    for (const metric of [
-      'jsNsPerUpdate',
-      'mainNsPerUpdate',
-      'bytesPerInstance',
-    ]) {
-      if (!isNumber(copy.cpu?.[metric]) && !isNumber(copy.memory?.[metric])) {
-        continue;
-      }
-      const perLaunch = paired(
-        scalarLaunches(cell, metric),
-        scalarLaunches(control, metric)
-      );
-      const fallbackRatio = (base) =>
-        isNumber(base) && base !== 0
-          ? (copy.cpu?.[metric] ?? copy.memory?.[metric]) / base
-          : (copy.cpu?.[metric] ?? copy.memory?.[metric]);
-      const target = isNumber(copy.cpu?.[metric]) ? copy.cpu : copy.memory;
-      target[metric] =
-        perLaunch.length > 0
-          ? median(perLaunch)
-          : fallbackRatio(
-              metric === 'mainNsPerUpdate'
-                ? control?.cpu?.mainNsPerUpdate
-                : metric === 'jsNsPerUpdate'
-                  ? control?.cpu?.jsNsPerUpdate
-                  : control?.memory?.bytesPerInstance
-            );
-      if (metric === 'mainNsPerUpdate') {
-        copy.cpu.launchMainNsPerUpdate = perLaunch;
-      } else if (metric === 'jsNsPerUpdate') {
-        copy.cpu.launchJsNsPerUpdate = perLaunch;
-      } else {
-        copy.memory.launchBytesPerInstance = perLaunch;
-      }
-    }
-    copy.memory.bytesPerInstanceLaunches =
-      copy.memory.bytesPerInstanceLaunches ?? 0;
-    out[key] = copy;
-  }
-  return out;
+export function resultsFileName(
+  sha,
+  platform,
+  when = new Date(),
+  dirty = false
+) {
+  const stamp = when
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d+Z$/, 'Z');
+  return `${sha}${dirty ? '-dirty' : ''}-${platform}-${stamp}.json`;
 }
 
-/** Strip per-iteration arrays so a committed baseline stays reviewable. */
-export function trimCells(cells) {
-  return Object.fromEntries(
-    Object.entries(cells).map(([key, cell]) => {
-      const copy = { ...cell };
-      delete copy.raw;
-      return [key, copy];
-    })
-  );
+/** Newest matching results file name for a short sha, clean runs preferred. */
+export function newestResultsName(names, sha, platform) {
+  const escaped = sha.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^${escaped}(-dirty)?-${platform}-.+\\.json$`);
+  const matches = names.filter((name) => pattern.test(name));
+  const clean = matches.filter((name) => !name.includes('-dirty-'));
+  const pool = clean.length > 0 ? clean : matches;
+  return pool.sort().reverse()[0] ?? null;
 }
 
 /** Accept both a full results run and a bare `cells` map. */
 export function cellsFrom(run) {
-  return run.cells ?? run;
+  return run?.cells ?? run ?? {};
 }

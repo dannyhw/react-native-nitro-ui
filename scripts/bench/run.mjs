@@ -17,12 +17,15 @@
  * artifact instead of rebuilding.
  *
  * Devices come from the environment (see scripts/bench/devices.mjs) and must be
- * the ones your brief assigned. The runner boots what you point it at and never
- * shuts anything down.
+ * the ones your brief assigned. The runner boots what you point it at and leaves
+ * it running, because booting an emulator costs minutes and `quick` plans run
+ * back to back; pass `--shutdown` to power off whatever *this* run booted (AGENTS.md:
+ * never touch a device you did not start).
  */
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { build, flag, locateArtifact } from './build.mjs';
@@ -31,28 +34,29 @@ import {
   prepareAndroid,
   resolveAndroidDevice,
   resolveIosDevice,
+  restoreAndroidAnimations,
+  shutdownDevice,
   simctl,
 } from './devices.mjs';
 import {
   LAUNCHES_PER_CELL,
   PLANS,
   SCHEMA_VERSION,
+  UNQUIET_LOAD_RATIO,
   aggregateRecords,
+  baselineNoise,
+  baselineTable,
   buildSchedule,
-  normaliseToControl,
+  isCompatibleBaseline,
   planString,
-  trimCells,
+  resultsFileName,
 } from './lib.mjs';
+import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
 import {
   baselinePath,
-  detailSections,
   readJson,
-  resultsPath,
-  runHeader,
-  summaryTable,
-  verdict,
-  verdictSummary,
-  verdictTable,
+  resolveCompareTarget,
+  writeBaseline,
   writeReportFiles,
 } from './report.mjs';
 
@@ -105,6 +109,56 @@ function resolveRef(ref) {
   }
 }
 
+function tryExec(command, args) {
+  try {
+    return execFileSync(command, args, {
+      encoding: 'utf8',
+      timeout: 30_000,
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Who ran this, on what, and how busy they were (T02 review S10, D9).
+ *
+ * A baseline is only meaningful if it says so: the load average decides whether
+ * the run may mint one at all, and the OS runtime is part of the device key
+ * because a runtime change breaks comparability sooner than a device change.
+ */
+function collectMachine(platform, device) {
+  const loadavg = os.loadavg();
+  const cpuCount = os.cpus().length;
+  const machine = {
+    hostname: os.hostname(),
+    osPlatform: os.platform(),
+    osRelease: os.release(),
+    osVersion: os.version(),
+    arch: os.arch(),
+    cpuCount,
+    loadavg1: loadavg[0] ?? null,
+    loadavg5: loadavg[1] ?? null,
+    totalMemoryGb: Math.round((os.totalmem() / 1024 ** 3) * 10) / 10,
+    xcode: tryExec('xcodebuild', ['-version'])?.split('\n')[0] ?? null,
+  };
+  machine.quiet =
+    isNumberLike(machine.loadavg1) &&
+    machine.loadavg1 <= cpuCount * UNQUIET_LOAD_RATIO;
+  if (platform === 'ios') {
+    machine.simRuntime = device.runtime ?? null;
+  } else {
+    machine.avd = device.avd ?? null;
+    machine.androidApi = device.sdkInt ?? null;
+    machine.androidImage = device.image ?? null;
+  }
+  return machine;
+}
+
+function isNumberLike(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
 function log(message) {
   process.stderr.write(`${message}\n`);
 }
@@ -122,6 +176,7 @@ function sleep(ms) {
  * a release build).
  */
 function iosTarget(device, appPath, bundleId) {
+  const appBinaryName = path.basename(appPath, '.app');
   const ndjsonPath = () => {
     const container = simctl([
       'get_app_container',
@@ -154,6 +209,50 @@ function iosTarget(device, appPath, bundleId) {
     },
     read(file) {
       return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    },
+    /**
+     * 'alive' | 'dead' | 'unknown' - see the note on `liveness` below.
+     *
+     * `ps` is asked for the process table and matched here, so a failed `ps`
+     * reads as 'unknown' (keep waiting) rather than as a dead app.
+     */
+    liveness() {
+      const ps = tryExec('xcrun', [
+        'simctl',
+        'spawn',
+        device.udid,
+        '/bin/ps',
+        '-ax',
+        '-o',
+        'comm=',
+      ]);
+      if (ps == null) {
+        return 'unknown';
+      }
+      return ps.includes(appBinaryName) ? 'alive' : 'dead';
+    },
+    crashHint() {
+      const dir = path.join(
+        os.homedir(),
+        'Library',
+        'Logs',
+        'DiagnosticReports'
+      );
+      const reports = fs.existsSync(dir)
+        ? fs
+            .readdirSync(dir)
+            .filter((name) => name.startsWith(`${appBinaryName}-`))
+            .map((name) => ({
+              name,
+              mtimeMs: fs.statSync(path.join(dir, name)).mtimeMs,
+            }))
+            .sort((a, b) => b.mtimeMs - a.mtimeMs)
+        : [];
+      const newest = reports[0];
+      if (newest == null || Date.now() - newest.mtimeMs > 120_000) {
+        return null;
+      }
+      return `~/Library/Logs/DiagnosticReports/${newest.name}`;
     },
     async terminate() {
       try {
@@ -207,6 +306,25 @@ function androidTarget(device, apkPath, packageName) {
         return '';
       }
     },
+    /**
+     * `pidof` prints nothing and succeeds when the app is not running, which is
+     * the only reliable "dead" signal; a failed adb call is 'unknown'.
+     */
+    liveness() {
+      const out = tryExec('adb', [
+        '-s',
+        device.serial,
+        'shell',
+        'pidof',
+        packageName,
+      ]);
+      if (out == null) {
+        return 'unknown';
+      }
+      return out.trim().length > 0 ? 'alive' : 'dead';
+    },
+    crashHint: () =>
+      'adb logcat -d -s ReactNativeViewManager NITRO_BENCH AndroidRuntime',
     async terminate() {
       adb(device.serial, ['shell', 'am', 'force-stop', packageName]);
     },
@@ -234,6 +352,7 @@ function parseNdjson(text) {
 
 async function runLaunch(target, entry) {
   const started = Date.now();
+  let deadChecks = 0;
   const handle = await target.run(entry);
   const expected = planString(entry.scenario, entry.implementation, entry.n);
   const budget = TIMEOUTS[entry.scenario] ?? 180_000;
@@ -264,6 +383,32 @@ async function runLaunch(target, entry) {
         ms: Date.now() - started,
         error: `no end sentinel within ${String(Math.round(budget / 1000))}s`,
       };
+    }
+    // A crashed app writes nothing, so the old behaviour was to burn the whole
+    // budget per launch and print a timeout. Three consecutive "dead" answers
+    // (and never an 'unknown') stop that in a couple of seconds and say where
+    // the crash log is, which is the difference between a 5 second diagnosis and
+    // a 7 minute one.
+    if (
+      target.liveness != null &&
+      Date.now() - started > 10_000 &&
+      text.length === 0
+    ) {
+      if (target.liveness() === 'dead') {
+        deadChecks += 1;
+        if (deadChecks >= 3) {
+          const hint = target.crashHint?.() ?? null;
+          return {
+            records: [],
+            ms: Date.now() - started,
+            error:
+              `${expected}: the app exited before writing any results` +
+              (hint == null ? '.' : ` - look at ${hint}`),
+          };
+        }
+      } else {
+        deadChecks = 0;
+      }
     }
     await sleep(500);
   }
@@ -315,61 +460,8 @@ async function drive({ target, schedule }) {
   return { records, problems };
 }
 
-/* --------------------------------- verdicts -------------------------------- */
-
-/** Baselines are compared as ratios to rn-core, so both sides get normalised. */
-function normaliseSide(runOrBaseline) {
-  return {
-    ...runOrBaseline,
-    cells: normaliseToControl(runOrBaseline.cells ?? runOrBaseline),
-  };
-}
-
-function writeBaseline(file, run) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(
-    file,
-    `${JSON.stringify(
-      {
-        schemaVersion: SCHEMA_VERSION,
-        platform: run.platform,
-        deviceKey: run.deviceKey,
-        deviceName: run.deviceName,
-        sha: run.sha,
-        plan: run.plan,
-        updatedAt: run.createdAt,
-        cells: trimCells(run.cells),
-      },
-      null,
-      2
-    )}\n`
-  );
-}
-
 function appendSection(markdownFile, section) {
   fs.appendFileSync(markdownFile, section);
-}
-
-function renderMarkdown(run) {
-  return [
-    `# Bench ${run.platform} - ${run.plan}`,
-    '',
-    runHeader(run),
-    `- duration: ${String(Math.round(run.durationMs / 1000))}s`,
-    run.problems.length === 0
-      ? '- problems: none'
-      : `- problems:\n${run.problems.map((problem) => `  - ${problem}`).join('\n')}`,
-    '',
-    '## Summary (absolute)',
-    '',
-    summaryTable(run),
-    '',
-    '## Summary (ratio to rn-core)',
-    '',
-    summaryTable(run, { vsControl: true }),
-    '',
-    detailSections(run),
-  ].join('\n');
 }
 
 /* ----------------------------------- main --------------------------------- */
@@ -379,8 +471,8 @@ export async function main(argv) {
   if (platform !== 'ios' && platform !== 'android') {
     log(
       'usage: bun bench --platform ios|android [--plan quick|full] [--compare <ref|file>]\n' +
-        '           [--check] [--update-baseline] [--skip-build] [--only <impl,impl>] [--launches N]\n' +
-        '           [--prebuild]'
+        '           [--check] [--update-baseline] [--force] [--skip-build] [--only <impl,impl>]\n' +
+        '           [--launches N] [--prebuild] [--shutdown]'
     );
     process.exitCode = 2;
     return;
@@ -402,10 +494,24 @@ export async function main(argv) {
 
   const device =
     platform === 'ios' ? resolveIosDevice() : resolveAndroidDevice();
+  let previousAnimations = {};
   if (platform === 'android') {
-    prepareAndroid(device);
+    previousAnimations = prepareAndroid(device) ?? {};
   }
 
+  // Restore what the run changed on a shared device, on every exit path, and
+  // only power off a device this run booted when asked to (AGENTS.md).
+  const shouldShutdown = argv.includes('--shutdown');
+  process.on('exit', () => {
+    if (platform === 'android') {
+      restoreAndroidAnimations(device, previousAnimations);
+    }
+    if (shouldShutdown) {
+      shutdownDevice(device);
+    }
+  });
+
+  const force = argv.includes('--force');
   const built = argv.includes('--skip-build')
     ? locateArtifact(platform)
     : build(platform, { prebuildFirst: argv.includes('--prebuild') });
@@ -452,11 +558,21 @@ export async function main(argv) {
     clock: Object.values(cells)[0]?.clock ?? null,
     createdAt: new Date().toISOString(),
     durationMs: Date.now() - started,
+    machine: collectMachine(platform, device),
     problems,
     cells,
   };
 
-  const written = writeReportFiles({ run, markdown: renderMarkdown(run) });
+  const written = writeReportFiles({
+    run,
+    markdown: renderMarkdown(run),
+    fileName: resultsFileName(
+      run.sha,
+      platform,
+      new Date(run.createdAt),
+      run.dirty
+    ),
+  });
   log(`\nResults: ${path.relative(process.cwd(), written.json)}`);
   log(`Report:  ${path.relative(process.cwd(), written.md)}`);
   process.stdout.write(
@@ -472,29 +588,42 @@ export async function main(argv) {
 
   const compare = flag(argv, '--compare');
   if (compare != null) {
-    const baseFile = fs.existsSync(compare)
-      ? compare
-      : resultsPath(resolveRef(compare), platform);
-    if (!fs.existsSync(baseFile)) {
-      log(
-        `\n--compare: no results file at ${baseFile}. Run the bench once with that revision checked out (results are named after their commit), then pass --compare again.`
-      );
+    let comparisonTarget;
+    try {
+      comparisonTarget = resolveCompareTarget(resolveRef(compare), platform);
+    } catch (error) {
+      log(`\n${error instanceof Error ? error.message : String(error)}`);
       exitCode = Math.max(exitCode, 2);
-    } else {
-      const result = verdict({ base: readJson(baseFile), head: run });
-      const section = `\n## head/base vs ${path.basename(baseFile)}\n\n${verdictTable(result)}\n\n${verdictSummary(result)}\n`;
-      process.stdout.write(section);
-      appendSection(written.md, section);
-      if (result.conclusiveFailure && !result.noisy) {
-        exitCode = 1;
-      }
+    }
+    if (comparisonTarget != null) {
+      const section = comparisonSections({
+        run,
+        base: readJson(comparisonTarget.file),
+        mode: 'compare',
+        label: comparisonTarget.label,
+      });
+      process.stdout.write(`\n${section.markdown}\n`);
+      appendSection(written.md, `\n${section.markdown}\n`);
+      exitCode = Math.max(exitCode, section.exitCode);
     }
   }
 
   if (argv.includes('--update-baseline')) {
     const file = baselinePath(run.deviceKey);
-    writeBaseline(file, run);
-    log(`Baseline written: ${path.relative(process.cwd(), file)}`);
+    const outcome = writeBaseline(file, run, { force });
+    if (outcome.written) {
+      log(`Baseline written: ${path.relative(process.cwd(), file)}`);
+      if (force) {
+        log('  (written with --force; review the guards below)');
+      }
+    } else {
+      log(
+        `\n--update-baseline refused (pass --force to override):\n${outcome.blockers
+          .map((reason) => `  - ${reason}`)
+          .join('\n')}`
+      );
+      exitCode = Math.max(exitCode, 2);
+    }
   }
 
   if (argv.includes('--check')) {
@@ -506,23 +635,24 @@ export async function main(argv) {
       exitCode = Math.max(exitCode, 2);
     } else {
       const baseline = readJson(file);
-      const result = verdict({
-        base: normaliseSide(baseline),
-        head: normaliseSide(run),
-        normalised: true,
-      });
-      // After normalisation the control arm is 1.0 by construction, so drift has
-      // to be judged on the absolute numbers instead.
-      const absoluteDrift = verdict({ base: baseline, head: run });
-      result.drift = absoluteDrift.drift.filter((finding) =>
-        finding.key.includes(':rn-core:')
-      );
-      result.noisy = result.drift.length > 0;
-      const section = `\n## Check against ${path.basename(file)} (ratios to rn-core)\n\n${verdictTable(result)}\n\n${verdictSummary(result)}\n`;
-      process.stdout.write(section);
-      appendSection(written.md, section);
-      if (result.conclusiveFailure && !result.noisy) {
-        exitCode = 1;
+      if (!isCompatibleBaseline(baseline)) {
+        log(
+          `\n--check: ${file} is not a v${SCHEMA_VERSION} ratio baseline (found v${String(baseline?.schemaVersion)}).\n` +
+            '        The pre-D9 baseline gated on absolute rn-core drift and could never fire; re-record it with --update-baseline on a clean, quiet commit.'
+        );
+        exitCode = Math.max(exitCode, 2);
+      } else {
+        const section = comparisonSections({
+          run,
+          base: { cells: {} },
+          mode: 'check',
+          label: `${path.relative(process.cwd(), file)} (ratios to rn-core)`,
+          baseTable: baselineTable(baseline),
+          baseNoise: baselineNoise(baseline),
+        });
+        process.stdout.write(`\n${section.markdown}\n`);
+        appendSection(written.md, `\n${section.markdown}\n`);
+        exitCode = Math.max(exitCode, section.exitCode);
       }
     }
   }
