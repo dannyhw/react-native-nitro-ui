@@ -34,7 +34,6 @@ import {
   simctl,
 } from './devices.mjs';
 import {
-  IMPLEMENTATIONS,
   LAUNCHES_PER_CELL,
   PLANS,
   SCHEMA_VERSION,
@@ -57,13 +56,26 @@ import {
   writeReportFiles,
 } from './report.mjs';
 
-/** Wall-clock budget per launch, by scenario. */
+/**
+ * Wall-clock budget per launch, by scenario. Generous on an idle machine, so
+ * hitting it means something is wrong, not that the component is slow.
+ */
 const TIMEOUTS = {
   mount: 180_000,
   update: 180_000,
   memory: 180_000,
   leak: 300_000,
 };
+
+// A machine shared with other emulators or another agent's build can starve a
+// launch well past these budgets. Raise the ceiling rather than let a busy
+// laptop turn a bench run into a wall of timeouts.
+const overrideSeconds = Number(process.env.BENCH_LAUNCH_TIMEOUT_S);
+if (Number.isFinite(overrideSeconds) && overrideSeconds > 0) {
+  for (const scenario of Object.keys(TIMEOUTS)) {
+    TIMEOUTS[scenario] = overrideSeconds * 1000;
+  }
+}
 
 function git(args) {
   return execFileSync('git', args, { encoding: 'utf8' }).trim();
@@ -402,19 +414,26 @@ export async function main(argv) {
       ? iosTarget(device, built.appPath, built.bundleId)
       : androidTarget(device, built.apkPath, built.packageName);
 
-  log(`Device:    ${target.label}`);
-  log(
-    `App:       ${built.appPath ?? built.apkPath}${built.reused ? ' (reused)' : ''}`
-  );
-  log(
-    `Plan:      ${plan} (${String(PLANS[plan].length)} cells x ${String(IMPLEMENTATIONS.length)} implementations x ${String(launches)} launches)`
-  );
-
   const schedule = buildSchedule({
     plan,
     launches,
     only: flag(argv, '--only'),
   });
+
+  // Counted from the schedule itself: `--only` narrows the implementation
+  // dimension, and the progress counter below is `schedule.length`.
+  const dimension = (pick) => new Set(schedule.map(pick)).size;
+  log(`Device:    ${target.label}`);
+  log(
+    `App:       ${built.appPath ?? built.apkPath}${built.reused ? ' (reused)' : ''}`
+  );
+  log(
+    `Plan:      ${plan} (${String(dimension((e) => `${e.scenario}:${e.n}`))} cells x ${String(
+      dimension((e) => e.implementation)
+    )} implementations x ${String(dimension((e) => e.launch))} launches = ${String(
+      schedule.length
+    )} launches)`
+  );
   await target.install();
 
   const started = Date.now();

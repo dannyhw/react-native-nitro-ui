@@ -39,6 +39,8 @@ The device comes from the environment, exactly like the Harness config:
 | `IOS_SIM_UDID`   | Simulator UDID from your task brief (boots it if needed)           |
 | `ANDROID_AVD`    | AVD name — the runner resolves the serial from the running AVD     |
 | `ANDROID_SERIAL` | Fallback when there is no AVD name (physical device)               |
+| `BENCH_ABIS`     | Android ABIs to build (`arm64-v8a` locally, `x86_64` on CI)           |
+| `BENCH_LAUNCH_TIMEOUT_S` | Wall-clock budget per launch; raise it on a busy machine |
 
 `ANDROID_AVD` is preferred over `ANDROID_SERIAL`: console ports are allocated by
 availability, so a serial from a brief goes stale as soon as another emulator
@@ -186,4 +188,5 @@ drift, API report, manifest, Jest, Reassure render counts).
 | `mount` crashes on iOS with a promise mutex abort | A freed frame-context; contexts are `shared_ptr` captured by both the display-link and fallback timers. |
 | Stale native code despite editing sources | `build.mjs` rebuilds when any source is newer than the artifact; `--prebuild` forces a full CNG regen. |
 | Emulator vanished mid-run (`device not found`) | qemu aborts occasionally on macOS. Re-run the same command: each cell is independent and results are per-file. |
+| `no end sentinel within 180s`, cells report 0 iterations | The device was starved by other work on the machine (another emulator, a concurrent gradle/Xcode build) and did not finish a launch inside its budget. Re-run when the machine is quieter, or pass `BENCH_LAUNCH_TIMEOUT_S=600`. |
 | Numbers 3× worse than yesterday | Something else is using the machine (another emulator, a gradle build). Re-run; the control-drift check exists for this. |
