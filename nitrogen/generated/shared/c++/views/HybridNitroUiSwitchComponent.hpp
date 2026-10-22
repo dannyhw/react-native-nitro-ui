@@ -21,9 +21,9 @@
 #include <variant>
 #include <string>
 #include <functional>
+#include <optional>
 #include <memory>
 #include "HybridNitroUiSwitchSpec.hpp"
-#include <optional>
 
 namespace margelo::nitro::nitroui::views {
 
@@ -53,7 +53,7 @@ namespace margelo::nitro::nitroui::views {
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> testID;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> accessibilityLabel;
     nitro::ReactProp<std::variant<nitro::NullType, double>> nuiPerfId;
-    nitro::ReactProp<std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType>> onValueChange;
+    nitro::ReactProp<std::optional<std::function<void(bool /* value */, double /* eventCount */)>>> onValueChange;
     nitro::ReactProp<std::optional<std::function<void(const std::shared_ptr<HybridNitroUiSwitchSpec>& /* ref */)>>> hybridRef;
 
     [[nodiscard]]

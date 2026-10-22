@@ -45,8 +45,18 @@ export interface NitroUiSwitchProps extends HybridViewProps {
    * Called on every user interaction with the value native now displays, plus
    * native's event count (the JS wrapper echoes it back as
    * `mostRecentEventCount`).
+   *
+   * Callback props are the one exception to the no-optional rule above, and
+   * `| null` is not an alternative: RN cannot send a function as a prop, so
+   * Nitro sends `{ f: fn }` and only unwraps `f` for props whose type *is* a
+   * function (`IsFunctionProp`). A `fn | null` union becomes a
+   * `std::variant<std::function, NullType>`, which is not a function type, so
+   * the wrapper never gets unwrapped and converting the prop throws at mount.
+   * Optional (`?`) generates `std::optional<std::function>`, which does unwrap.
+   * The JS wrapper therefore always sends a callback (see `useControlled`) and
+   * `undefined` instead of `null` when there is none.
    */
-  onValueChange: ((value: boolean, eventCount: number) => void) | null;
+  onValueChange?: (value: boolean, eventCount: number) => void;
 }
 
 export interface NitroUiSwitchMethods extends HybridViewMethods {

@@ -25,6 +25,7 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 #include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 
@@ -143,33 +144,19 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Func_void_bool_double_Wrapper(std::move(value));
   }
   
-  // pragma MARK: std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType>
+  // pragma MARK: std::optional<std::function<void(bool /* value */, double /* eventCount */)>>
   /**
-   * Wrapper struct for `std::variant<std::function<void(bool / * value * /, double / * eventCount * /)>, nitro::NullType>`.
-   * std::variant cannot be used in Swift because of a Swift bug.
-   * Not even specializing it works. So we create a wrapper struct.
+   * Specialized version of `std::optional<std::function<void(bool / * value * /, double / * eventCount * /)>>`.
    */
-  struct std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_ final {
-    std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType> variant;
-    std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_(std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType> variant): variant(variant) { }
-    operator std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType>() const noexcept {
-      return variant;
-    }
-    inline size_t index() const noexcept {
-      return variant.index();
-    }
-    inline std::function<void(bool /* value */, double /* eventCount */)> get_0() const noexcept {
-      return std::get<0>(variant);
-    }
-    inline nitro::NullType get_1() const noexcept {
-      return std::get<1>(variant);
-    }
-  };
-  inline std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_ create_std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_(const std::function<void(bool /* value */, double /* eventCount */)>& value) noexcept {
-    return std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_(value);
+  using std__optional_std__function_void_bool____value_____double____eventCount______ = std::optional<std::function<void(bool /* value */, double /* eventCount */)>>;
+  inline std::optional<std::function<void(bool /* value */, double /* eventCount */)>> create_std__optional_std__function_void_bool____value_____double____eventCount______(const std::function<void(bool /* value */, double /* eventCount */)>& value) noexcept {
+    return std::optional<std::function<void(bool /* value */, double /* eventCount */)>>(value);
   }
-  inline std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_ create_std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_(nitro::NullType value) noexcept {
-    return std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_(value);
+  inline bool has_value_std__optional_std__function_void_bool____value_____double____eventCount______(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(bool /* value */, double /* eventCount */)> get_std__optional_std__function_void_bool____value_____double____eventCount______(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& optional) noexcept {
+    return optional.value();
   }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiSwitchSpec>

@@ -76,11 +76,19 @@ abstract class HybridNitroUiSwitchSpec: HybridView() {
   @set:Keep
   abstract var nuiPerfId: Variant_NullType_Double
   
-  @get:DoNotStrip
-  @get:Keep
-  @set:DoNotStrip
-  @set:Keep
-  abstract var onValueChange: Variant__value__Boolean__eventCount__Double_____Unit_NullType
+  abstract var onValueChange: ((value: Boolean, eventCount: Double) -> Unit)?
+  
+  private var onValueChange_cxx: Func_void_bool_double?
+    @Keep
+    @DoNotStrip
+    get() {
+      return onValueChange?.let { Func_void_bool_double_java(it) }
+    }
+    @Keep
+    @DoNotStrip
+    set(value) {
+      onValueChange = value?.let { it }
+    }
 
   // Methods
   @DoNotStrip

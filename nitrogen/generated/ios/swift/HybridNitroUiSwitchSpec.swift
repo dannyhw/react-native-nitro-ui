@@ -18,7 +18,7 @@ public protocol HybridNitroUiSwitchSpec_protocol: HybridObject, HybridView {
   var testID: Variant_NullType_String { get set }
   var accessibilityLabel: Variant_NullType_String { get set }
   var nuiPerfId: Variant_NullType_Double { get set }
-  var onValueChange: Variant____value__Bool____eventCount__Double_____Void_NullType { get set }
+  var onValueChange: ((_ value: Bool, _ eventCount: Double) -> Void)? { get set }
 
   // Methods
   func measureContent() throws -> NitroUiSize

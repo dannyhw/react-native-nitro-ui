@@ -18,7 +18,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSize; }
 #include <string>
 #include "JVariant_NullType_String.hpp"
 #include <functional>
-#include "JVariant__value__Boolean__eventCount__Double_____Unit_NullType.hpp"
+#include <optional>
 #include "JFunc_void_bool_double.hpp"
 #include <NitroModules/JNICallable.hpp>
 #include "NitroUiSize.hpp"
@@ -126,14 +126,22 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant_NullType_Double> /* nuiPerfId */)>("setNuiPerfId");
     method(_javaPart, JVariant_NullType_Double::fromCpp(nuiPerfId));
   }
-  std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType> JHybridNitroUiSwitchSpec::getOnValueChange() {
-    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JVariant__value__Boolean__eventCount__Double_____Unit_NullType>()>("getOnValueChange");
+  std::optional<std::function<void(bool /* value */, double /* eventCount */)>> JHybridNitroUiSwitchSpec::getOnValueChange() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JFunc_void_bool_double::javaobject>()>("getOnValueChange_cxx");
     auto __result = method(_javaPart);
-    return __result->toCpp();
+    return __result != nullptr ? std::make_optional([&]() -> std::function<void(bool /* value */, double /* eventCount */)> {
+      if (__result->isInstanceOf(JFunc_void_bool_double_cxx::javaClassStatic())) [[likely]] {
+        auto downcast = jni::static_ref_cast<JFunc_void_bool_double_cxx::javaobject>(__result);
+        return downcast->cthis()->getFunction();
+      } else {
+        auto __resultRef = jni::make_global(__result);
+        return JNICallable<JFunc_void_bool_double, void(bool, double)>(std::move(__resultRef));
+      }
+    }()) : std::nullopt;
   }
-  void JHybridNitroUiSwitchSpec::setOnValueChange(const std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType>& onValueChange) {
-    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant__value__Boolean__eventCount__Double_____Unit_NullType> /* onValueChange */)>("setOnValueChange");
-    method(_javaPart, JVariant__value__Boolean__eventCount__Double_____Unit_NullType::fromCpp(onValueChange));
+  void JHybridNitroUiSwitchSpec::setOnValueChange(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& onValueChange) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void_bool_double::javaobject> /* onValueChange */)>("setOnValueChange_cxx");
+    method(_javaPart, onValueChange.has_value() ? JFunc_void_bool_double_cxx::fromCpp(onValueChange.value()) : nullptr);
   }
 
   // Methods

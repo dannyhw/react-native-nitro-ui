@@ -323,39 +323,33 @@ open class HybridNitroUiSwitchSpec_cxx {
     }
   }
   
-  public final var onValueChange: bridge.std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_ {
+  public final var onValueChange: bridge.std__optional_std__function_void_bool____value_____double____eventCount______ {
     @inline(__always)
     get {
-      return { () -> bridge.std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_ in
-        switch self.__implementation.onValueChange {
-          case .first(let __value):
-            return bridge.create_std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_({ () -> bridge.Func_void_bool_double in
-              let __closureWrapper = Func_void_bool_double(__value)
-              return bridge.create_Func_void_bool_double(__closureWrapper.toUnsafe())
-            }())
-          case .second(let __value):
-            return bridge.create_std__variant_std__function_void_bool____value_____double____eventCount_______nitro__NullType_(margelo.nitro.NullType.null)
+      return { () -> bridge.std__optional_std__function_void_bool____value_____double____eventCount______ in
+        if let __unwrappedValue = self.__implementation.onValueChange {
+          return bridge.create_std__optional_std__function_void_bool____value_____double____eventCount______({ () -> bridge.Func_void_bool_double in
+            let __closureWrapper = Func_void_bool_double(__unwrappedValue)
+            return bridge.create_Func_void_bool_double(__closureWrapper.toUnsafe())
+          }())
+        } else {
+          return .init()
         }
       }()
     }
     @inline(__always)
     set {
-      self.__implementation.onValueChange = { () -> Variant____value__Bool____eventCount__Double_____Void_NullType in
-        let __variant = newValue
-        switch __variant.index() {
-          case 0:
-            let __actual = __variant.get_0()
-            return .first({ () -> (Bool, Double) -> Void in
-              let __wrappedFunction = bridge.wrap_Func_void_bool_double(__actual)
-              return { (__value: Bool, __eventCount: Double) -> Void in
-                __wrappedFunction.call(__value, __eventCount)
-              }
-            }())
-          case 1:
-            let __actual = __variant.get_1()
-            return .second(NullType.null)
-          default:
-            fatalError("Variant can never have index \(__variant.index())!")
+      self.__implementation.onValueChange = { () -> ((_ value: Bool, _ eventCount: Double) -> Void)? in
+        if bridge.has_value_std__optional_std__function_void_bool____value_____double____eventCount______(newValue) {
+          let __unwrapped = bridge.get_std__optional_std__function_void_bool____value_____double____eventCount______(newValue)
+          return { () -> (Bool, Double) -> Void in
+            let __wrappedFunction = bridge.wrap_Func_void_bool_double(__unwrapped)
+            return { (__value: Bool, __eventCount: Double) -> Void in
+              __wrappedFunction.call(__value, __eventCount)
+            }
+          }()
+        } else {
+          return nil
         }
       }()
     }

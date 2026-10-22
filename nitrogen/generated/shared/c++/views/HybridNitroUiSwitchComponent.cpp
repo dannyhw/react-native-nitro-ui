@@ -29,7 +29,7 @@ namespace margelo::nitro::nitroui::views {
     testID(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiSwitch", "testID", rawProps, sourceProps.testID)),
     accessibilityLabel(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiSwitch", "accessibilityLabel", rawProps, sourceProps.accessibilityLabel)),
     nuiPerfId(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiSwitch", "nuiPerfId", rawProps, sourceProps.nuiPerfId)),
-    onValueChange(nitro::ReactProp<std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType>>::fromRawValue("NitroUiSwitch", "onValueChange", rawProps, sourceProps.onValueChange)),
+    onValueChange(nitro::ReactProp<std::optional<std::function<void(bool /* value */, double /* eventCount */)>>>::fromRawValue("NitroUiSwitch", "onValueChange", rawProps, sourceProps.onValueChange)),
     hybridRef(nitro::ReactProp<std::optional<std::function<void(const std::shared_ptr<HybridNitroUiSwitchSpec>& /* ref */)>>>::fromRawValue("NitroUiSwitch", "hybridRef", rawProps, sourceProps.hybridRef)) {
     // nitro-ui: initializeDynamicProps
     ::nitroui::compat::initializeDynamicProps(*this, sourceProps, rawProps, filterObjectKeys);

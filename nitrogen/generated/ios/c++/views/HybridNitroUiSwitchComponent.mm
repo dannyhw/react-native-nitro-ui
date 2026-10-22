@@ -146,7 +146,7 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.nuiPerfId.hasSameValue(oldViewProps->nuiPerfId)) {
       swiftPart.setNuiPerfId(newViewProps.nuiPerfId.get());
     }
-    // onValueChange: variant
+    // onValueChange: optional
     if (oldViewProps == nullptr
           ? newViewProps.onValueChange.isProvided()
           : !newViewProps.onValueChange.hasSameValue(oldViewProps->onValueChange)) {
