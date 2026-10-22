@@ -13,9 +13,23 @@ const styles = StyleSheet.create({
 
 export const rowStyle = styles.row;
 
-/** One host tall enough for the whole batch, for the shared-host arms. */
-export function stackStyle(n: number) {
-  return { height: ROW_HEIGHT * n, width: '100%' as const };
+/**
+ * One host tall enough for the whole batch, for the shared-host arms.
+ *
+ * Cached per `n`: building a new object on every render hands the `Host` a style
+ * prop whose identity changed, i.e. a prop update on every value flip, which no
+ * other arm pays (T02 review NIT).
+ */
+const stackStyles = new Map<number, { height: number; width: '100%' }>();
+
+export function stackStyle(n: number): { height: number; width: '100%' } {
+  const cached = stackStyles.get(n);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const style = { height: ROW_HEIGHT * n, width: '100%' as const };
+  stackStyles.set(n, style);
+  return style;
 }
 
 /**
