@@ -1,7 +1,7 @@
 import { Switch } from 'react-native';
 
 import type { BenchListProps } from '../types';
-import { ROW_HEIGHT, onValueChange, range } from './shared';
+import { onValueChange, range, rowStyle } from './shared';
 
 /**
  * The control arm: plain `react-native` `Switch`, i.e. the platform widget
@@ -18,7 +18,7 @@ export function RnCoreList({ n, value }: BenchListProps) {
           testID={`bench-rn-core-${index}`}
           value={value}
           onValueChange={onValueChange}
-          style={{ height: ROW_HEIGHT }}
+          style={rowStyle}
         />
       ))}
     </>
