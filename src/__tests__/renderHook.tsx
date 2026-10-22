@@ -16,7 +16,9 @@ export interface HookResult<Result> {
   unmount: () => void;
 }
 
-export function renderHook<Result>(getArguments: () => Result): HookResult<Result> {
+export function renderHook<Result>(
+  getArguments: () => Result
+): HookResult<Result> {
   const result = { current: undefined as unknown as Result };
   const counts = { renders: 0 };
 

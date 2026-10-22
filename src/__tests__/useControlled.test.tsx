@@ -17,7 +17,9 @@ const nativeChangeOf = (
 
 describe('useControlled - uncontrolled', () => {
   it('sends no value, and seeds native with defaultValue', () => {
-    const { result } = renderHook(() => useControlled<boolean>(undefined, true, undefined));
+    const { result } = renderHook(() =>
+      useControlled<boolean>(undefined, true, undefined)
+    );
     expect(result.current.value).toBeNull();
     expect(result.current.defaultValue).toBe(true);
     expect(result.current.mostRecentEventCount).toBe(0);
@@ -88,7 +90,9 @@ describe('useControlled - controlled', () => {
   });
 
   it('never lets a late event rewind the echo', () => {
-    const hook = renderHook(() => useControlled<boolean>(false, false, undefined));
+    const hook = renderHook(() =>
+      useControlled<boolean>(false, false, undefined)
+    );
     const change = nativeChangeOf(hook.result.current.onNativeChange);
 
     run(() => change(true, 5));

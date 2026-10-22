@@ -13,9 +13,7 @@ describe('useStableCallback', () => {
   });
 
   it('wraps a handler the way Nitro expects ({ f: fn })', () => {
-    const { result } = renderHook(() =>
-      useStableCallback<Handler>(() => {})
-    );
+    const { result } = renderHook(() => useStableCallback<Handler>(() => {}));
     expect(result.current).not.toBeNull();
     expect(typeof result.current?.f).toBe('function');
   });

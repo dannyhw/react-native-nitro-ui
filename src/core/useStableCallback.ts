@@ -4,7 +4,6 @@ import { useInsertionEffect, useMemo, useRef } from 'react';
 /**
  * Any function that can be handed to a Nitro callback prop.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFunction = (...args: any[]) => unknown;
 
 /**
@@ -57,7 +56,6 @@ export function useStableCallback<Fn extends AnyFunction>(
       return null;
     }
     const latest = ((...args: Parameters<Fn>) =>
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ref.current?.(...(args as any))) as unknown as Fn;
     return wrapCallback(latest);
   }, [hasCallback]);
