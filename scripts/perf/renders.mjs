@@ -1,9 +1,12 @@
 /**
- * Hard gate on JS wrapper render counts, backed by Reassure.
+ * Hard gate on JS wrapper renders, backed by Reassure. It runs inside
+ * `bun run check` (T02 review S13), so a wrapper regression fails every task's
+ * own gate command.
  *
- *   bun run perf:renders                     measure + compare to the baseline
+ *   bun run check                              includes this gate
+ *   bun run perf:renders                       measure + compare to the baseline
  *   bun run perf:renders -- --update-baseline  record current counts as baseline
- *   bun run perf:renders -- --root src        widen/narrow where tests live
+ *   bun run perf:renders -- --root src         widen/narrow where tests live
  *
  * Reassure measures **JS renders only** - nothing native (docs/research/
  * setup-decisions.md SS6: "Reassure measures nothing native"). Its job is to
@@ -11,18 +14,23 @@
  * that now re-renders a subtree, a `useEffect` that causes an extra commit. So
  * the gate is exact equality on render counts, not a tolerance.
  *
- * A component opts in by adding `src/<Component>.perf-test.tsx`:
+ * Four things have to hold, per measured test (docs/tasks/T02-bench.review.md
+ * "Re-render gate" - counts alone are not enough):
  *
- *   import { measureRenders } from 'reassure';
- *   import { Switch } from './Switch';
+ * 1. the count equals the baseline's;
+ * 2. every one of the ~10 runs produced the **same** count - a median would hide
+ *    a wrapper that renders nondeterministically (review NIT);
+ * 3. `issues.initialUpdateCount === 0` - no synchronous `setState` in a mount
+ *    effect, i.e. no render that the first render could have produced itself;
+ * 4. `issues.redundantUpdates` is empty - no commit whose rendered output was
+ *    identical to the previous one (prop churn, a missing memo).
  *
- *   it('Switch renders once per mount', () => {
- *     measureRenders(<Switch value />);
- *   });
- *
- * `runs: 10` is Reassure's default and what the research doc picked, so the
- * tests do not set it. These files do not match Jest's default `testMatch`, so
- * `bun test` ignores them and only this script runs them.
+ * For 3 and 4 to mean anything, the test must **drive** the component through a
+ * `scenario`, not just mount it: a bare mount measures one render and there is
+ * nothing redundant to find. See docs/architecture/benchmarks.md ("Re-render
+ * contract") for the harness pattern - flip the control a few times *and* render
+ * an unrelated parent a few times, so "re-renders when told, and only then"
+ * becomes the assertion.
  *
  * With no `*.perf-test.tsx` present the script passes loudly: the gate is wired
  * but there is nothing to measure yet (true until the first component lands).
@@ -90,7 +98,8 @@ function readCurrentMeasurements() {
       `Reassure finished without writing ${path.relative(REPO_ROOT, CURRENT_FILE)}.`
     );
   }
-  const counts = new Map();
+  /** @type {Map<string, {count: number|null, samples: number[], unstableCounts: number[]|null, initialUpdateCount: number|null, redundantUpdates: number[]|null}>} */
+  const measurements = new Map();
   for (const line of fs
     .readFileSync(CURRENT_FILE, 'utf8')
     .split('\n')
@@ -105,25 +114,37 @@ function readCurrentMeasurements() {
     if (record.type !== 'render' || record.name == null) {
       continue;
     }
-    // Reassure reports per-run render counts as `counts` plus `meanCount`.
-    // The median of the runs is what the gate compares: it is a whole number,
-    // and one flaky run that rendered an extra time out of ten does not move
-    // it. A real wrapper regression moves it every run.
     const samples = Array.isArray(record.counts)
       ? record.counts.filter((entry) => typeof entry === 'number')
       : [];
-    const value =
-      samples.length > 0
-        ? samples.sort((a, b) => a - b)[Math.floor(samples.length / 2)]
-        : record.meanCount;
-    if (typeof value !== 'number') {
+    // `median(counts)` used to be the gate value, which read the same whether a
+    // wrapper rendered 4 times every run or 4/5/4/9/4/... A wrapper whose render
+    // count is not reproducible is exactly the bug this gate exists to catch, so
+    // the spread is an outcome, not noise to average away.
+    const unique = [...new Set(samples)].sort((a, b) => a - b);
+    const value = unique.length === 1 ? (unique[0] ?? null) : null;
+    if (samples.length === 0 && typeof record.meanCount !== 'number') {
       throw new Error(
         `Cannot read a render count from ${path.relative(REPO_ROOT, CURRENT_FILE)} for "${String(record.name)}" (expected Reassure's \`counts\` or \`meanCount\`).`
       );
     }
-    counts.set(record.name, value);
+    const issues = record.issues ?? {};
+    measurements.set(record.name, {
+      // `meanCount` is only a fallback for builds that do not write `counts`;
+      // with no per-run samples the spread simply cannot be judged.
+      count: value ?? record.meanCount,
+      samples,
+      unstableCounts: unique.length > 1 ? unique : null,
+      initialUpdateCount:
+        typeof issues.initialUpdateCount === 'number'
+          ? issues.initialUpdateCount
+          : null,
+      redundantUpdates: Array.isArray(issues.redundantUpdates)
+        ? issues.redundantUpdates
+        : null,
+    });
   }
-  return counts;
+  return measurements;
 }
 
 function readBaseline() {
@@ -134,9 +155,23 @@ function readBaseline() {
   return parsed?.tests ?? parsed;
 }
 
+/** One-line summary of Reassure's `issues` for a measured test. */
+function issuesText(measurement) {
+  const parts = [];
+  if (measurement.initialUpdateCount != null) {
+    parts.push(`mount+${String(measurement.initialUpdateCount)}`);
+  }
+  if (measurement.redundantUpdates != null) {
+    parts.push(`redundant[${String(measurement.redundantUpdates.join(','))}]`);
+  }
+  return parts.join(' ') === '' ? 'n/a' : parts.join(' ');
+}
+
 function writeBaseline(counts) {
   const sorted = Object.fromEntries(
-    [...counts.entries()].sort(([a], [b]) => a.localeCompare(b))
+    [...counts.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, measurement]) => [name, measurement.count])
   );
   fs.mkdirSync(path.dirname(BASELINE_FILE), { recursive: true });
   fs.writeFileSync(
@@ -144,7 +179,7 @@ function writeBaseline(counts) {
     `${JSON.stringify(
       {
         $comment:
-          'JS render counts recorded by `bun run perf:renders -- --update-baseline`. The gate is exact equality: re-run with --update-baseline and review the diff when a wrapper legitimately changes how often it renders.',
+          'JS render counts recorded by `bun run perf:renders -- --update-baseline`. The gate is exact equality (every run must produce this count), plus Reassure `issues` checks: no render right after mount and no redundant commit. Re-run with --update-baseline and review the diff when a wrapper legitimately changes how often it renders.',
         tests: sorted,
       },
       null,
@@ -154,7 +189,7 @@ function writeBaseline(counts) {
 }
 
 function table(rows) {
-  const header = ['Test', 'Baseline', 'Current', 'Status'];
+  const header = ['Test', 'Baseline', 'Current', 'Issues', 'Status'];
   const widths = header.map((title, index) =>
     Math.max(
       title.length,
@@ -231,18 +266,62 @@ export async function main(argv) {
     );
   }
 
+  // A count that varies between runs cannot be a baseline, so refuse to mint one
+  // from it rather than freezing whichever number the median happened to pick.
+  const unstable = [...current.entries()].filter(
+    ([, measurement]) => measurement.count === null
+  );
+  if (unstable.length > 0) {
+    throw new Error(
+      [
+        `${String(unstable.length)} measured test(s) did not render the same number of times in every run:`,
+        ...unstable.map(
+          ([name, measurement]) =>
+            `  - ${name}: saw ${String(measurement.unstableCounts?.join(', '))} across ${String(measurement.samples.length)} runs`
+        ),
+        'A wrapper must render deterministically; make the test drive a fixed',
+        'sequence of actions (and check for a timer or an effect that fires late).',
+      ].join('\n')
+    );
+  }
+
+  const issueRows = [...current.entries()]
+    .filter(
+      ([, measurement]) =>
+        (measurement.initialUpdateCount ?? 0) > 0 ||
+        (measurement.redundantUpdates?.length ?? 0) > 0
+    )
+    .map(([name, measurement]) => [
+      name,
+      '-',
+      measurement.count,
+      issuesText(measurement),
+      'redundant renders',
+    ]);
+
   if (update) {
     writeBaseline(current);
     process.stdout.write(
-      `\nRecorded ${current.size} render count(s) in ${path.relative(REPO_ROOT, BASELINE_FILE)}:\n\n`
+      `\nRecorded ${String(current.size)} render count(s) in ${path.relative(REPO_ROOT, BASELINE_FILE)}:\n\n`
     );
     process.stdout.write(
       `${table(
         [...current.entries()]
           .sort(([a], [b]) => a.localeCompare(b))
-          .map(([name, value]) => [name, '-', value, 'recorded'])
+          .map(([name, measurement]) => [
+            name,
+            '-',
+            measurement.count,
+            issuesText(measurement),
+            'recorded',
+          ])
       )}\n`
     );
+    if (issueRows.length > 0) {
+      process.stdout.write(
+        '\nWARNING: the recorded baseline includes wrappers with redundant renders.\n'
+      );
+    }
     return;
   }
 
@@ -255,41 +334,62 @@ export async function main(argv) {
 
   const rows = [];
   let failed = false;
-  for (const [name, value] of [...current.entries()].sort(([a], [b]) =>
+  for (const [name, measurement] of [...current.entries()].sort(([a], [b]) =>
     a.localeCompare(b)
   )) {
+    const value = measurement.count;
     const expected = baseline[name];
+    const status = [];
     if (expected == null) {
-      failed = true;
-      rows.push([name, '-', value, 'NEW (no baseline)']);
+      status.push('NEW (no baseline)');
     } else if (expected !== value) {
+      const delta = Number(value) - expected;
+      status.push(`CHANGED (${delta > 0 ? '+' : ''}${String(delta)})`);
+    }
+    if ((measurement.initialUpdateCount ?? 0) > 0) {
+      status.push(
+        `${String(measurement.initialUpdateCount)} update render(s) right after mount`
+      );
+    }
+    if ((measurement.redundantUpdates?.length ?? 0) > 0) {
+      status.push(
+        `${String(measurement.redundantUpdates?.length)} redundant render(s)`
+      );
+    }
+    if (status.length > 0) {
       failed = true;
-      const delta = value - expected;
       rows.push([
         name,
-        expected,
+        expected ?? '-',
         value,
-        `CHANGED (${delta > 0 ? '+' : ''}${String(delta)})`,
+        issuesText(measurement),
+        status.join('; '),
       ]);
     } else {
-      rows.push([name, expected, value, 'ok']);
+      rows.push([name, expected, value, issuesText(measurement), 'ok']);
     }
   }
   for (const name of Object.keys(baseline).sort()) {
     if (!current.has(name)) {
       failed = true;
-      rows.push([name, baseline[name], '-', 'REMOVED (stale baseline)']);
+      rows.push([name, baseline[name], '-', '-', 'REMOVED (stale baseline)']);
     }
   }
 
   process.stdout.write(`\n${table(rows)}\n`);
   if (failed) {
     throw new Error(
-      'Render counts changed. If this is intended, run `bun run perf:renders -- --update-baseline` and review the baseline diff.'
+      [
+        'Render contract violated: counts moved away from the baseline, or a',
+        'wrapper performed a render it should not have (an extra render after',
+        'mount, or a commit whose output was unchanged).',
+        'If a count change is intended, run',
+        '`bun run perf:renders -- --update-baseline` and review the diff.',
+      ].join('\n')
     );
   }
   process.stdout.write(
-    `\nPASS - ${String(current.size)} wrapper(s) render exactly as many times as the baseline says.\n`
+    `\nPASS - ${String(current.size)} wrapper(s) render exactly as many times as the baseline says, with no redundant renders.\n`
   );
 }
 
