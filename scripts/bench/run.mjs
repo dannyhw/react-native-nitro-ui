@@ -58,6 +58,7 @@ import {
   resolveCompareTarget,
   writeBaseline,
   writeReportFiles,
+  writeRawRecords,
 } from './report.mjs';
 
 /**
@@ -544,6 +545,15 @@ export async function main(argv) {
 
   const started = Date.now();
   const { records, problems } = await drive({ target, schedule });
+  const resultsName = resultsFileName(
+    shortSha(),
+    platform,
+    new Date(started),
+    isGitDirty()
+  );
+  // Persist the raw pull *before* aggregating: re-aggregating is free, another
+  // device run is not, so a bug in the maths must not cost the measurement.
+  const raw = writeRawRecords({ fileName: resultsName, records });
   const cells = aggregateRecords(records, { keepRaw: true });
 
   const run = {
@@ -566,14 +576,10 @@ export async function main(argv) {
   const written = writeReportFiles({
     run,
     markdown: renderMarkdown(run),
-    fileName: resultsFileName(
-      run.sha,
-      platform,
-      new Date(run.createdAt),
-      run.dirty
-    ),
+    fileName: resultsName,
   });
   log(`\nResults: ${path.relative(process.cwd(), written.json)}`);
+  log(`Raw:     ${path.relative(process.cwd(), raw)}`);
   log(`Report:  ${path.relative(process.cwd(), written.md)}`);
   process.stdout.write(
     `\n${summaryTable(run)}\n\nRatio to rn-core:\n\n${summaryTable(run, { vsControl: true })}\n`
