@@ -71,6 +71,7 @@
     },
   },
   "trustedDependencies": [
+    "esbuild",
     "unrs-resolver",
     "@parcel/watcher",
   ],
