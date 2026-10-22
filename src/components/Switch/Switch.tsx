@@ -8,7 +8,7 @@ import { NativeNitroUiSwitch } from './NativeNitroUiSwitch';
 import type { NitroUiSwitch } from './Switch.nitro';
 
 /**
- * Props of {@linkcode Switch}.
+ * Props of {@link Switch}.
  *
  * `value`/`defaultValue`/`onValueChange`/`disabled`/`tintColor` follow the
  * platform controls they wrap (UIKit `UISwitch`, SwiftUI `Toggle`, Compose

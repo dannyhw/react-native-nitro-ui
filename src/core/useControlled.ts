@@ -43,10 +43,10 @@ export interface ControlledState<Value> {
  * - **uncontrolled mode**: with `value === undefined` JS never sets state, so a
  *   toggle costs no React render at all.
  *
- * @param value the controlled value, or `undefined` for uncontrolled
- * @param defaultValue initial value of an uncontrolled component; handed back
+ * @param value - the controlled value, or `undefined` for uncontrolled
+ * @param defaultValue - initial value of an uncontrolled component; handed back
  *   untouched so a wrapper sends exactly what this hook decided
- * @param onChange the user's `onValueChange` handler
+ * @param onChange - the user's `onValueChange` handler
  */
 export function useControlled<Value>(
   value: Value | undefined,
