@@ -88,6 +88,7 @@
     "@react-native/jest-preset": "0.88.0",
     "@release-it/conventional-changelog": "^12.0.2",
     "@types/react": "^19.2.0",
+    "@types/react-test-renderer": "^19.3.0",
     "@typescript-eslint/parser": "^8.72.0",
     "commitlint": "^21.2.4",
     "del-cli": "^8.0.1",
@@ -104,6 +105,7 @@
     "react-native": "0.88.0",
     "react-native-builder-bob": "^0.44.1",
     "react-native-nitro-modules": "^0.37.1",
+    "react-test-renderer": "19.3.0",
     "release-it": "^21.1.1",
     "turbo": "^2.11.10",
     "typescript": "^6.0.3"
@@ -166,6 +168,9 @@
       "<rootDir>/example/",
       "<rootDir>/bench/",
       "<rootDir>/lib/"
+    ],
+    "testMatch": [
+      "**/*.test.[jt]s?(x)"
     ]
   },
   "commitlint": {

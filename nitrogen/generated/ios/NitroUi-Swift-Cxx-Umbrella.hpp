@@ -8,10 +8,21 @@
 #pragma once
 
 // Forward declarations of C++ defined types
-
+// Forward declaration of `HybridNitroUiSwitchSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
+// Forward declaration of `NitroUiSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiSize; }
 
 // Include C++ defined types
-
+#include "HybridNitroUiSwitchSpec.hpp"
+#include "NitroUiSize.hpp"
+#include <NitroModules/Null.hpp>
+#include <NitroModules/Result.hpp>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <string>
+#include <variant>
 
 // C++ helpers for Swift
 #include "NitroUi-Swift-Cxx-Bridge.hpp"
@@ -23,7 +34,8 @@
 #include <NitroModules/DateToChronoDate.hpp>
 
 // Forward declarations of Swift defined types
-
+// Forward declaration of `HybridNitroUiSwitchSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 
 // Include Swift defined types
 #if __has_include("NitroUi-Swift.h")
