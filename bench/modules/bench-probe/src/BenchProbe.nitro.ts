@@ -18,13 +18,16 @@ export type BenchThread = 'main' | 'js';
  * directly subtractable:
  *
  * - iOS: `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` (same base as
- *   `CACurrentMediaTime()`, so a `CADisplayLink.targetTimestamp` converts by
- *   `* 1e9`).
- * - Android: `System.nanoTime()` (same base as Choreographer's
- *   `frameTimeNanos`, which is why `elapsedRealtimeNanos()` is NOT used).
+ *   `CACurrentMediaTime()` and `CADisplayLink.timestamp`).
+ * - Android: `System.nanoTime()` (same base as Choreographer's `frameTimeNanos`
+ *   and of `FrameMetrics` timestamps, which is why `elapsedRealtimeNanos()` is
+ *   NOT used).
  *
- * This mirrors `NitroUiCore.now()`'s base (docs/DECISIONS.md D1); the core
- * reports milliseconds, this probe reports nanoseconds.
+ * Values are **absolute**, exactly like `NitroUiCore.now()` (docs/DECISIONS.md
+ * D1), so a probe timestamp can be lined up against the library's own perf marks
+ * in one trace. There is deliberately no process-load offset: `CLOCK_UPTIME_RAW`
+ * only passes 2^53 ns after roughly 104 days of awake uptime, and at 1e15 the
+ * ULP of a `double` is 0.125 ns, so nothing is quantised away.
  *
  * iOS is implemented in ObjC++ (`c++`) rather than Swift on purpose - see
  * docs/architecture/benchmarks.md "Why the probe is ObjC++ on iOS".
@@ -33,24 +36,57 @@ export interface BenchProbe extends HybridObject<{
   ios: 'c++';
   android: 'kotlin';
 }> {
-  /** Monotonic clock in nanoseconds. Only deltas are meaningful. */
+  /** Monotonic clock in nanoseconds, same base as `NitroUiCore.now()` (D1). */
   now(): number;
 
   /**
-   * Start listening for the next Fabric mount of the app's root tag.
-   * Call before triggering the mount, then read `lastMountNs` after it.
+   * Start capturing the next Fabric mounting transaction: when it was applied
+   * natively, and the frame that presented it.
+   *
+   * Call this **before** triggering the change, then `awaitMount()` and
+   * `awaitPresented()`. Both resolve from the native side, so no JS polling loop
+   * sits inside a timed region - a `setTimeout(0)` poll burns JS CPU for as long
+   * as the native mount takes, which made a slow mount look like slow JS.
    */
   armMountObserver(): void;
 
   /**
-   * Timestamp of the most recent mount observed since `armMountObserver()`,
-   * or `-1` when nothing has been observed yet.
+   * Timestamp of the most recent mount observed since `armMountObserver()`, or
+   * `-1` when nothing has been observed. Debugging aid; prefer
+   * {@link awaitMount}.
    */
   readonly lastMountNs: number;
 
   /**
-   * Resolves with the `targetTimestamp`/`frameTimeNanos` of the next frame
-   * that is presented *after* this call, in the same clock base as `now()`.
+   * Timestamp of the frame that presented that transaction, or `-1`.
+   *
+   * Captured natively in the same turn as the mount (iOS: a one-shot
+   * `CADisplayLink` armed inside the mount callback; Android: the activity
+   * window's `OnFrameMetricsAvailableListener`, reporting intended vsync plus
+   * total frame duration). It is a *frame stamp*, not a duration, and its
+   * semantics are one frame apart between platforms - compare arms, not
+   * platforms.
+   */
+  readonly lastPresentedNs: number;
+
+  /**
+   * Resolves with the mount timestamp of the armed transaction, `-1` on
+   * timeout. Resolves immediately when the mount already happened.
+   */
+  awaitMount(timeoutMs: number): Promise<number>;
+
+  /**
+   * Resolves with the presenting frame timestamp of the armed transaction, `-1`
+   * on timeout. Resolves immediately when the frame already passed.
+   */
+  awaitPresented(timeoutMs: number): Promise<number>;
+
+  /**
+   * Resolves when the next frame is presented after this call.
+   *
+   * Pacing only ("let two frames pass between iterations"). The measured
+   * `presented` number comes from {@link awaitPresented}, which is armed at the
+   * mount instead of after a JS round trip.
    */
   nextFrameNs(): Promise<number>;
 
@@ -65,8 +101,23 @@ export interface BenchProbe extends HybridObject<{
   footprintBytes(): number;
 
   /**
-   * Ask the runtime to collect, then settle. No-op on iOS (there is no
-   * synchronous Swift/ObjC collect and ARC is not a heap to settle).
+   * Allocated native heap in bytes (`Debug.getNativeHeapAllocatedSize()`), `-1`
+   * on iOS - `phys_footprint` already accounts for it there.
+   */
+  nativeHeapBytes(): number;
+
+  /**
+   * Used Java heap in bytes (`totalMemory - freeMemory`), `-1` on iOS.
+   *
+   * PSS includes the Hermes heap, so without a breakdown the Expo arms can read
+   * below `rn-core` for reasons that have nothing to do with views.
+   */
+  javaHeapBytes(): number;
+
+  /**
+   * Ask the runtime to collect, then settle. No-op on iOS (no synchronous
+   * Swift/ObjC collect, and ARC is not a heap to settle); the JS side also calls
+   * `globalThis.gc?.()` so Hermes collects when the build exposes it.
    */
   gc(): void;
 

@@ -48,14 +48,19 @@ namespace margelo::nitro::benchprobe {
     public:
       // Properties
       virtual double getLastMountNs() = 0;
+      virtual double getLastPresentedNs() = 0;
 
     public:
       // Methods
       virtual double now() = 0;
       virtual void armMountObserver() = 0;
+      virtual std::shared_ptr<Promise<double>> awaitMount(double timeoutMs) = 0;
+      virtual std::shared_ptr<Promise<double>> awaitPresented(double timeoutMs) = 0;
       virtual std::shared_ptr<Promise<double>> nextFrameNs() = 0;
       virtual double threadCpuNs(BenchThread thread) = 0;
       virtual double footprintBytes() = 0;
+      virtual double nativeHeapBytes() = 0;
+      virtual double javaHeapBytes() = 0;
       virtual void gc() = 0;
       virtual std::string launchPlan() = 0;
       virtual std::string writeNdjson(const std::string& contents) = 0;

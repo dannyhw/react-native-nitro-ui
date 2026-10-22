@@ -30,6 +30,10 @@ abstract class HybridBenchProbeSpec: HybridObject() {
   @get:DoNotStrip
   @get:Keep
   abstract val lastMountNs: Double
+  
+  @get:DoNotStrip
+  @get:Keep
+  abstract val lastPresentedNs: Double
 
   // Methods
   @DoNotStrip
@@ -42,6 +46,14 @@ abstract class HybridBenchProbeSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun awaitMount(timeoutMs: Double): Promise<Double>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun awaitPresented(timeoutMs: Double): Promise<Double>
+  
+  @DoNotStrip
+  @Keep
   abstract fun nextFrameNs(): Promise<Double>
   
   @DoNotStrip
@@ -51,6 +63,14 @@ abstract class HybridBenchProbeSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun footprintBytes(): Double
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nativeHeapBytes(): Double
+  
+  @DoNotStrip
+  @Keep
+  abstract fun javaHeapBytes(): Double
   
   @DoNotStrip
   @Keep

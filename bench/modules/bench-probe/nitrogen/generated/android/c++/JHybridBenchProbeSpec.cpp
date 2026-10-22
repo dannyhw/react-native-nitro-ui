@@ -51,6 +51,11 @@ namespace margelo::nitro::benchprobe {
     auto __result = method(_javaPart);
     return __result;
   }
+  double JHybridBenchProbeSpec::getLastPresentedNs() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<double()>("getLastPresentedNs");
+    auto __result = method(_javaPart);
+    return __result;
+  }
 
   // Methods
   double JHybridBenchProbeSpec::now() {
@@ -61,6 +66,38 @@ namespace margelo::nitro::benchprobe {
   void JHybridBenchProbeSpec::armMountObserver() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void()>("armMountObserver");
     method(_javaPart);
+  }
+  std::shared_ptr<Promise<double>> JHybridBenchProbeSpec::awaitMount(double timeoutMs) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(double /* timeoutMs */)>("awaitMount");
+    auto __result = method(_javaPart, timeoutMs);
+    return [&]() {
+      auto __promise = Promise<double>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
+        auto __result = jni::static_ref_cast<jni::JDouble>(__boxedResult);
+        __promise->resolve(__result->value());
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
+  }
+  std::shared_ptr<Promise<double>> JHybridBenchProbeSpec::awaitPresented(double timeoutMs) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(double /* timeoutMs */)>("awaitPresented");
+    auto __result = method(_javaPart, timeoutMs);
+    return [&]() {
+      auto __promise = Promise<double>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
+        auto __result = jni::static_ref_cast<jni::JDouble>(__boxedResult);
+        __promise->resolve(__result->value());
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
   }
   std::shared_ptr<Promise<double>> JHybridBenchProbeSpec::nextFrameNs() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("nextFrameNs");
@@ -85,6 +122,16 @@ namespace margelo::nitro::benchprobe {
   }
   double JHybridBenchProbeSpec::footprintBytes() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<double()>("footprintBytes");
+    auto __result = method(_javaPart);
+    return __result;
+  }
+  double JHybridBenchProbeSpec::nativeHeapBytes() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<double()>("nativeHeapBytes");
+    auto __result = method(_javaPart);
+    return __result;
+  }
+  double JHybridBenchProbeSpec::javaHeapBytes() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<double()>("javaHeapBytes");
     auto __result = method(_javaPart);
     return __result;
   }

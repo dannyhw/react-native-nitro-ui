@@ -70,12 +70,17 @@ export type BenchRecord =
       implementation: ImplementationName;
       n: number;
       launch: number;
+      /**
+       * Which part of the iteration the bracket covered. `mount` is the commit
+       * plus the native mount only; `unmount` is the teardown that follows it.
+       * They used to share one bracket, so "UI CPU/op" was really the cost of a
+       * mount+teardown cycle (T02 review S5).
+       */
+      phase: 'mount' | 'unmount';
       iterations: number;
       /** CPU (not wall-clock) ns over the measured batch, divided later by `iterations`. */
       jsCpuNs: number | null;
       mainCpuNs: number | null;
-      /** Sum of `React.Profiler` `actualDuration` over the measured batch. */
-      profilerTotalMs: number;
     }
   | {
       /**
@@ -105,4 +110,14 @@ export type BenchRecord =
       /** `empty` | `full` | `leak0` ... `leakN` */
       phase: string;
       footprintBytes: number | null;
+      /**
+       * Whether a JS garbage collector was reachable before this sample.
+       * Footprint includes the Hermes heap, so a sample without a collect is a
+       * sample of whatever the GC happened to leave behind.
+       */
+      heapCollected: boolean;
+      /** Android only: allocated native heap, or null. */
+      nativeHeapBytes: number | null;
+      /** Android only: used Java heap, or null. */
+      javaHeapBytes: number | null;
     };

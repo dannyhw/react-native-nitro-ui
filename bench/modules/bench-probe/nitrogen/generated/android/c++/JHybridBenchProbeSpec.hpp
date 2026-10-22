@@ -51,14 +51,19 @@ namespace margelo::nitro::benchprobe {
   public:
     // Properties
     double getLastMountNs() override;
+    double getLastPresentedNs() override;
 
   public:
     // Methods
     double now() override;
     void armMountObserver() override;
+    std::shared_ptr<Promise<double>> awaitMount(double timeoutMs) override;
+    std::shared_ptr<Promise<double>> awaitPresented(double timeoutMs) override;
     std::shared_ptr<Promise<double>> nextFrameNs() override;
     double threadCpuNs(BenchThread thread) override;
     double footprintBytes() override;
+    double nativeHeapBytes() override;
+    double javaHeapBytes() override;
     void gc() override;
     std::string launchPlan() override;
     std::string writeNdjson(const std::string& contents) override;

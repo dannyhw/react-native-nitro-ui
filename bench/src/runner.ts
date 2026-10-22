@@ -1,4 +1,12 @@
-import { nextFrameNs, probe, settle, waitForMountNs } from './probe';
+import {
+  awaitMountNs,
+  awaitPresentedNs,
+  collectGarbage,
+  heapBreakdown,
+  nextFrameNs,
+  probe,
+  settle,
+} from './probe';
 import type { BenchPlan, BenchRecord } from './types';
 
 /** Noise control protocol (docs/research/setup-decisions.md SS6). */
@@ -20,8 +28,6 @@ export interface Engine {
     nextValue: boolean
   ): Promise<{ t0: number; tCommit: number }>;
   emit(record: BenchRecord): void;
-  /** Running total of `React.Profiler` `actualDuration`. See the release-build caveat in BenchApp. */
-  profilerTotalMs(): number;
 }
 
 interface IterationTarget {
@@ -33,17 +39,20 @@ interface IterationTarget {
   warmup: boolean;
 }
 
+/**
+ * One measured operation: commit, native apply, presenting frame.
+ *
+ * `mountedNs`/`presentedNs` are absolute D1 timestamps (`probe.now()` shares that
+ * base), so each is reported as an offset from `t0` rather than a duration.
+ */
 async function measureLatency(
   engine: Engine,
   target: IterationTarget
 ): Promise<void> {
   const { t0, tCommit } = await engine.commit(target.count, target.value);
 
-  const jsCommitNs = tCommit - t0;
-  const mountedAt = await waitForMountNs();
-  const mountedNs = mountedAt === null ? null : mountedAt - t0;
-  const presentedAt = await nextFrameNs();
-  const presentedNs = presentedAt - t0;
+  const mountedAt = await awaitMountNs();
+  const presentedAt = await awaitPresentedNs();
 
   engine.emit({
     kind: 'iter',
@@ -53,61 +62,105 @@ async function measureLatency(
     launch: target.launch,
     index: target.index,
     warmup: target.warmup,
-    jsCommitNs,
-    mountedNs,
-    presentedNs,
+    jsCommitNs: tCommit - t0,
+    mountedNs: mountedAt === null ? null : mountedAt - t0,
+    presentedNs: presentedAt === null ? null : presentedAt - t0,
   });
-}
-
-interface CpuBracket {
-  jsBefore: number;
-  mainBefore: number;
-  profilerBefore: number;
-}
-
-function cpuBracketStart(engine: Engine): CpuBracket {
-  return {
-    jsBefore: probe.threadCpuNs('js'),
-    mainBefore: probe.threadCpuNs('main'),
-    profilerBefore: engine.profilerTotalMs(),
-  };
-}
-
-function cpuBracketEnd(
-  engine: Engine,
-  plan: BenchPlan,
-  launch: number,
-  iterations: number,
-  start: CpuBracket
-): void {
-  const jsAfter = probe.threadCpuNs('js');
-  const mainAfter = probe.threadCpuNs('main');
-  engine.emit({
-    kind: 'cpu',
-    scenario: plan.scenario,
-    implementation: plan.implementation,
-    n: plan.n,
-    launch,
-    iterations,
-    jsCpuNs: jsBeforeOrNull(jsAfter, start.jsBefore),
-    mainCpuNs: jsBeforeOrNull(mainAfter, start.mainBefore),
-    profilerTotalMs: engine.profilerTotalMs() - start.profilerBefore,
-  });
-}
-
-function jsBeforeOrNull(after: number, before: number): number | null {
-  if (after < 0 || before < 0) {
-    return null;
-  }
-  const delta = after - before;
-  return delta < 0 ? null : delta;
 }
 
 /**
- * `mount`: tear the batch down, then mount `n` controls and time the commit,
- * the native mount and the following presented frame. A fresh mount is forced
- * per iteration by unmounting first and letting two frames pass, so a leftover
- * mount from the previous iteration can never be attributed to this one.
+ * Teardown of the batch, timed by its own CPU bracket.
+ *
+ * Tearing down `n` hosting controllers is real work - unmounting it used to sit
+ * inside the "mount" bracket, so a costlier teardown looked like a costlier
+ * mount (T02 review S5).
+ */
+async function teardown(
+  engine: Engine,
+  target: IterationTarget
+): Promise<void> {
+  await engine.commit(0, target.value);
+  await awaitMountNs();
+}
+
+/* ------------------------------------------------------------------ CPU ---- */
+
+interface CpuSample {
+  js: number;
+  main: number;
+}
+
+/**
+ * Sums one thread's CPU deltas over a batch of iterations.
+ *
+ * A delta is dropped (rather than clamped to 0) when either sample is missing or
+ * the pair went backwards, so an unreadable counter yields `null` for the whole
+ * batch instead of an understated number.
+ */
+class CpuBatch {
+  private jsTotal = 0;
+  private mainTotal = 0;
+  private reliable = true;
+  private open: CpuSample | null = null;
+
+  start(): void {
+    this.open = {
+      js: probe.threadCpuNs('js'),
+      main: probe.threadCpuNs('main'),
+    };
+  }
+
+  stop(): void {
+    const before = this.open;
+    this.open = null;
+    if (before === null) {
+      return;
+    }
+    const js = probe.threadCpuNs('js');
+    const main = probe.threadCpuNs('main');
+    const jsDelta = deltaOrNull(js, before.js);
+    const mainDelta = deltaOrNull(main, before.main);
+    if (jsDelta === null || mainDelta === null) {
+      this.reliable = false;
+      return;
+    }
+    this.jsTotal += jsDelta;
+    this.mainTotal += mainDelta;
+  }
+
+  emit(engine: Engine, plan: BenchPlan, launch: number, phase: string): void {
+    const iterations = MEASURED_ITERATIONS;
+    engine.emit({
+      kind: 'cpu',
+      scenario: plan.scenario,
+      implementation: plan.implementation,
+      n: plan.n,
+      launch,
+      phase: phase === 'unmount' ? 'unmount' : 'mount',
+      iterations,
+      jsCpuNs: this.reliable ? this.jsTotal : null,
+      mainCpuNs: this.reliable ? this.mainTotal : null,
+    });
+  }
+}
+
+function deltaOrNull(after: number, before: number): number | null {
+  if (after < 0 || before < 0) {
+    return null;
+  }
+  const value = after - before;
+  return value < 0 ? null : value;
+}
+
+/* -------------------------------------------------------------- scenarios --- */
+
+/**
+ * `mount`: mount `n` controls, measure, then tear them down.
+ *
+ * Each iteration is teardown -> two idle frames -> a short settle -> mount, so a
+ * leftover mount from the previous iteration can never be attributed to this
+ * one. The pacing sits outside both CPU brackets, and the teardown has its own
+ * bracket, so `mount` CPU is the op alone.
  */
 export async function runMountScenario(
   engine: Engine,
@@ -115,7 +168,8 @@ export async function runMountScenario(
   launch: number
 ): Promise<void> {
   let value = false;
-  let cpuStart: CpuBracket | null = null;
+  const mountBatch = new CpuBatch();
+  const unmountBatch = new CpuBatch();
 
   for (
     let index = 0;
@@ -123,34 +177,36 @@ export async function runMountScenario(
     index++
   ) {
     const warmup = index < WARMUP_ITERATIONS;
-    if (!warmup && cpuStart === null) {
-      cpuStart = cpuBracketStart(engine);
-    }
-
-    await engine.commit(0, value);
-    await nextFrameNs();
-    await nextFrameNs();
-    await settle(20);
-
-    await measureLatency(engine, {
+    const target = {
       count: plan.n,
       value,
       plan,
       launch,
       index,
       warmup,
-    });
+    };
+
+    await nextFrameNs();
+    await nextFrameNs();
+    await settle(20);
+
+    if (!warmup) mountBatch.start();
+    await measureLatency(engine, target);
+    if (!warmup) mountBatch.stop();
+
+    if (!warmup) unmountBatch.start();
+    await teardown(engine, target);
+    if (!warmup) unmountBatch.stop();
   }
 
-  if (cpuStart !== null) {
-    cpuBracketEnd(engine, plan, launch, MEASURED_ITERATIONS, cpuStart);
-  }
+  mountBatch.emit(engine, plan, launch, 'mount');
+  unmountBatch.emit(engine, plan, launch, 'unmount');
 }
 
 /**
- * `update`: mount the batch once, then flip the controlled value K times, each
- * awaited to its own presented frame. `mountedNs` here is "native applied the
- * update", because the same mounting-transaction signal covers updates.
+ * `update`: mount the batch once, then flip the controlled value K times.
+ * `mountedNs` here is "native applied the update", because the same
+ * mounting-transaction signal covers updates.
  */
 export async function runUpdateScenario(
   engine: Engine,
@@ -162,7 +218,7 @@ export async function runUpdateScenario(
   await settle(250);
   await nextFrameNs();
 
-  let cpuStart: CpuBracket | null = null;
+  const opBatch = new CpuBatch();
 
   for (
     let index = 0;
@@ -170,11 +226,9 @@ export async function runUpdateScenario(
     index++
   ) {
     const warmup = index < WARMUP_ITERATIONS;
-    if (!warmup && cpuStart === null) {
-      cpuStart = cpuBracketStart(engine);
-    }
     value = !value;
 
+    if (!warmup) opBatch.start();
     await measureLatency(engine, {
       count: plan.n,
       value,
@@ -183,22 +237,31 @@ export async function runUpdateScenario(
       index,
       warmup,
     });
+    if (!warmup) opBatch.stop();
   }
 
-  if (cpuStart !== null) {
-    cpuBracketEnd(engine, plan, launch, MEASURED_ITERATIONS, cpuStart);
-  }
+  opBatch.emit(engine, plan, launch, 'mount');
 }
 
-/** Footprint sample: collect, settle, then read (footprint is slow on Android). */
+/* ----------------------------------------------------------------- memory --- */
+
+/**
+ * Footprint sample: collect every heap, settle, then read.
+ *
+ * Both `phys_footprint` and PSS include the Hermes heap, so skipping a JS
+ * collect measures garbage rather than the controls. Whether a collector was
+ * reachable is recorded with the sample, because a release Hermes build is not
+ * guaranteed to expose one.
+ */
 async function sampleFootprint(
   engine: Engine,
   plan: BenchPlan,
   launch: number,
   phase: string
 ) {
-  probe.gc();
+  const heapCollected = collectGarbage();
   await settle(1000);
+  const { nativeHeapBytes, javaHeapBytes } = heapBreakdown();
   engine.emit({
     kind: 'mem',
     scenario: plan.scenario,
@@ -207,6 +270,9 @@ async function sampleFootprint(
     launch,
     phase,
     footprintBytes: probe.footprintBytes(),
+    heapCollected,
+    nativeHeapBytes,
+    javaHeapBytes,
   });
 }
 
@@ -227,9 +293,9 @@ export async function runMemoryScenario(
 }
 
 /**
- * `leak`: repeated mount/unmount cycles with a footprint sample after each, so
- * a monotonic climb (a leak) is visible in the slope rather than hidden by a
- * single sample.
+ * `leak`: repeated mount/unmount cycles with a footprint sample after each, so a
+ * monotonic climb (a leak) is visible in the slope rather than hidden by a
+ * single sample. The reporter gates on that slope (T02 review S8).
  */
 export async function runLeakScenario(
   engine: Engine,
@@ -244,16 +310,6 @@ export async function runLeakScenario(
     await settle(250);
     await engine.commit(plan.n, false);
     await settle(250);
-    probe.gc();
-    await settle(400);
-    engine.emit({
-      kind: 'mem',
-      scenario: plan.scenario,
-      implementation: plan.implementation,
-      n: plan.n,
-      launch,
-      phase: `leak${cycle}`,
-      footprintBytes: probe.footprintBytes(),
-    });
+    await sampleFootprint(engine, plan, launch, `leak${String(cycle)}`);
   }
 }
