@@ -11,7 +11,7 @@
  * display `true` and the second tap would report `false`.
  */
 import { useCallback, useState } from 'react';
-import { Text, TurboModuleRegistry, View } from 'react-native';
+import { processColor, Text, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
   beforeAll,
@@ -23,11 +23,7 @@ import {
   waitFor,
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
-import {
-  Switch,
-  nitroUiCore,
-  type NitroUiSwitch,
-} from 'react-native-nitro-ui';
+import { Switch, nitroUiCore, type NitroUiSwitch } from 'react-native-nitro-ui';
 
 /**
  * Bounds of a rendered view, read straight from the harness native module.
@@ -50,6 +46,32 @@ const captureHybrid = (view: NitroUiSwitch) => {
   hybrid = view;
 };
 
+/**
+ * Wait for a testID to exist, and return it.
+ *
+ * `screen.findByTestId` throws on the first pass that finds nothing: it has no
+ * timeout argument. A hosted control only becomes queryable after it has
+ * mounted, laid out and committed, which on a loaded machine can take longer
+ * than that single pass, so the suite polls the non-throwing query first and
+ * only then asks the harness for the reference.
+ */
+async function waitForTestId(testId: string, timeoutMs = 10000) {
+  const deadline = nitroUiCore.now() + timeoutMs;
+  for (;;) {
+    if (harnessUi.queryByTestId(testId) != null) {
+      // Hand back the harness' own reference: the press/screenshot helpers
+      // expect that shape, and it is the same lookup the poll just made.
+      return screen.findByTestId(testId);
+    }
+    if (nitroUiCore.now() > deadline) {
+      throw new Error(
+        `No element with testID "${testId}" within ${timeoutMs}ms.`
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 afterEach(() => {
   cleanup();
   hybrid = null;
@@ -62,10 +84,9 @@ describe('Switch · core runtime', () => {
     // UIHostingController commit. On a cold Android emulator that is more than
     // the 1000ms the harness waits for a mount, so pay it here - every test
     // below then measures a steady-state mount, which is what it asserts on.
-    const { unmount } = await render(
-      <Switch defaultValue testID="warm-up" />,
-      { timeout: 15000 }
-    );
+    const { unmount } = await render(<Switch defaultValue testID="warm-up" />, {
+      timeout: 15000,
+    });
     unmount();
   });
 
@@ -73,7 +94,7 @@ describe('Switch · core runtime', () => {
     await render(
       <Switch defaultValue testID="sized" hybridRef={captureHybrid} />
     );
-    await screen.findByTestId('sized');
+    await waitForTestId('sized');
     // Both numbers come from the native side: `measureContent()` from the
     // hosted control's own measure pass, the box from the Fabric node's frame.
     const content = hybrid?.measureContent() ?? null;
@@ -87,6 +108,25 @@ describe('Switch · core runtime', () => {
     expect(content!.height).toBeGreaterThan(10);
     expect(box!.width).toBeGreaterThan(20);
     expect(box!.height).toBeGreaterThan(10);
+  });
+
+  it('round-trips an opaque tintColor', async () => {
+    // A fully opaque colour is >= 0x80000000, which is above `Int32.max`. iOS
+    // `processColor` returns it unsigned and Android's returns it signed, so a
+    // native decode that assumes one of the two silently drops the other - and
+    // the control then keeps the platform accent with no error anywhere. The
+    // getter has to hand back what the platform's own `processColor` produced.
+    const tint = processColor('#7C4DFF') as number;
+    await render(
+      <Switch
+        defaultValue
+        tintColor="#7C4DFF"
+        testID="tinted-prop"
+        hybridRef={captureHybrid}
+      />
+    );
+    await waitForTestId('tinted-prop');
+    expect(hybrid?.tintColor).toBe(tint);
   });
 
   it('follows a controlled value in both directions', async () => {
@@ -105,7 +145,7 @@ describe('Switch · core runtime', () => {
       );
     }
     await render(<Controlled />);
-    const element = await screen.findByTestId('controlled');
+    const element = await waitForTestId('controlled');
 
     await userEvent.press(element);
     await waitFor(() => expect(seen).toEqual([true]));
@@ -124,7 +164,7 @@ describe('Switch · core runtime', () => {
         hybridRef={captureHybrid}
       />
     );
-    const element = await screen.findByTestId('rejected');
+    const element = await waitForTestId('rejected');
 
     await userEvent.press(element);
     await waitFor(() => expect(seen.length).toBe(1));
@@ -156,7 +196,7 @@ describe('Switch · core runtime', () => {
         testID="from-js"
       />
     );
-    const element = await screen.findByTestId('from-js');
+    const element = await waitForTestId('from-js');
 
     // The tap reports the value the control displayed *before* the tap, so
     // `false` here means the prop write reached SwiftUI/Compose.
@@ -168,9 +208,13 @@ describe('Switch · core runtime', () => {
   it('keeps its own state when uncontrolled', async () => {
     const seen: boolean[] = [];
     await render(
-      <Switch defaultValue onValueChange={(next) => seen.push(next)} testID="free" />
+      <Switch
+        defaultValue
+        onValueChange={(next) => seen.push(next)}
+        testID="free"
+      />
     );
-    const element = await screen.findByTestId('free');
+    const element = await waitForTestId('free');
 
     await userEvent.press(element);
     await waitFor(() => expect(seen).toEqual([false]));
@@ -189,7 +233,7 @@ describe('Switch · core runtime', () => {
         hybridRef={captureHybrid}
       />
     );
-    const element = await screen.findByTestId('off-limits');
+    const element = await waitForTestId('off-limits');
 
     await userEvent.press(element);
     await userEvent.press(element);
@@ -212,7 +256,7 @@ describe('Switch · core runtime', () => {
     await render(
       <Switch onValueChange={(next) => seen.push(next)} testID="after-cycles" />
     );
-    await userEvent.press(await screen.findByTestId('after-cycles'));
+    await userEvent.press(await waitForTestId('after-cycles'));
     await waitFor(() => expect(seen).toEqual([true]));
   });
 
@@ -228,7 +272,7 @@ describe('Switch · core runtime', () => {
           hybridRef={captureHybrid}
         />
       );
-      await screen.findByTestId('marked');
+      await waitForTestId('marked');
       // `drainPerf()` consumes the buffer, so every poll has to keep what it
       // read: the marks land on the UI thread and may arrive after the first
       // poll already emptied the ring.
@@ -257,13 +301,30 @@ describe('Switch · core runtime', () => {
 
   it('mounts many instances at once', async () => {
     const rows = Array.from({ length: 40 }, (_, index) => index);
+    // 40 hosted controls is the stress case, and it is slower than the harness's
+    // 1000ms default: one `UIHostingController` / Compose composition each has to
+    // be built, laid out and committed. So this render gets its own timeout, and
+    // the measured time is asserted against a budget an order of magnitude above
+    // what the platforms actually take (see docs/tasks/T10-core-switch.report.md).
+    const startedAt = nitroUiCore.now();
     await render(
       <View>
         {rows.map((row) => (
-          <Switch key={row} defaultValue={row % 2 === 0} testID={`many-${row}`} />
+          <Switch
+            key={row}
+            defaultValue={row % 2 === 0}
+            testID={`many-${row}`}
+          />
         ))}
-      </View>
+      </View>,
+      { timeout: 20000 }
     );
-    expect((await screen.findAllByTestId('many-39')).length).toBe(1);
+    const mountedIn = nitroUiCore.now() - startedAt;
+    console.log(
+      `Switch stress: 40 hosted controls mounted in ${mountedIn.toFixed(1)}ms`
+    );
+    expect(mountedIn).toBeLessThan(10000);
+    await waitForTestId('many-39');
+    expect(harnessUi.queryByTestId('many-39')).not.toBeNull();
   });
 });
