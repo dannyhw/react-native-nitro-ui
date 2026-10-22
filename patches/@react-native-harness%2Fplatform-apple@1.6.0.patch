@@ -1,0 +1,42 @@
+diff --git a/dist/xcrun/simctl.js b/dist/xcrun/simctl.js
+index 1c2f32ffb2c72f83c39f32fca389dde394fb0a94..3b32740853fc7416e0e65d967fe14c0d6a091945 100644
+--- a/dist/xcrun/simctl.js
++++ b/dist/xcrun/simctl.js
+@@ -87,13 +87,31 @@ export const collectCrashReports = async ({ udid, processNames, crashArtifactWri
+     simctlLogger.debug('no crash report candidates matched simulator udid');
+     return [];
+ };
++// nitro-ui patch: Xcode's `simctl appinfo` exits with code 3 and prints
++// "Application not found" when the bundle id has no application record, so a
++// not-installed app surfaces as a rejected spawn instead of an empty plist.
++// `isAppInstalled` then throws instead of returning false, which makes the
++// harness fail on a simulator where the app has not been installed yet. Treat
++// that specific output as "not installed" and keep failing loudly on anything
++// else. Drop this patch once react-native-harness handles the exit code.
++const APP_INFO_NOT_INSTALLED = /application not found|no application record found/i;
++const isAppInfoMissingError = (error) => APP_INFO_NOT_INSTALLED.test(`${error?.stdout ?? ''}\n${error?.stderr ?? ''}`);
+ export const getAppInfo = async (udid, bundleId) => {
+-    const { stdout: plistOutput } = await spawn('xcrun', [
+-        'simctl',
+-        'appinfo',
+-        udid,
+-        bundleId,
+-    ]);
++    let plistOutput;
++    try {
++        ({ stdout: plistOutput } = await spawn('xcrun', [
++            'simctl',
++            'appinfo',
++            udid,
++            bundleId,
++        ]));
++    }
++    catch (error) {
++        if (isAppInfoMissingError(error)) {
++            return null;
++        }
++        throw error;
++    }
+     const json = await plistToJson(plistOutput);
+     // If there is only one entry, it means the app is not installed
+     const hasMoreThanOneEntry = Object.keys(json).length > 1;

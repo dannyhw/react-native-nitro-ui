@@ -1,0 +1,36 @@
+{
+  // Explicit program: `tsc` must not pick up a future `bench/` app (its own
+  // tsconfig configures it) or build output. `example/` is typechecked with the
+  // library, which is why the `paths` mapping above exists.
+  "include": ["src", "example/src", "example/__tests__"],
+  "exclude": ["node_modules", "**/node_modules", "lib", "bench", "docs"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "paths": {
+      "react-native-nitro-ui": ["./src/index"]
+    },
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "customConditions": [
+      "react-native-nitro-ui-source",
+      "react-native-strict-api"
+    ],
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ESNext",
+    "verbatimModuleSyntax": true
+  }
+}

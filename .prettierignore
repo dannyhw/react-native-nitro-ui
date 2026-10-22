@@ -1,0 +1,28 @@
+node_modules
+lib
+nitrogen/generated
+coverage
+.turbo
+# Inputs owned outside this task: the research notes, task briefs and agent
+# rules are source material, and formatting them would rewrite other people's
+# files. Same reason `docs/` is in the ESLint ignore list.
+docs
+AGENTS.md
+example/ios/Pods
+example/ios/build
+example/android
+android/build
+example/**/__image_snapshots__
+**/.harness
+package-lock.json
+# Future T02 bench app: same generated/vendored outputs as the example app.
+bench/android
+bench/ios/Pods
+bench/ios/build
+bench/dist
+bench/.expo
+# bundler's gem install path (example/vendor is gitignored, flat config cannot
+# read .gitignore, so prettier/eslint list it explicitly).
+example/vendor
+**/Pods
+**/.expo
