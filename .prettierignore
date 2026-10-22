@@ -1,0 +1,17 @@
+node_modules
+lib
+nitrogen/generated
+coverage
+.turbo
+# Inputs owned outside this task: the research notes, task briefs and agent
+# rules are source material, and formatting them would rewrite other people's
+# files. Same reason `docs/` is in the ESLint ignore list.
+docs
+AGENTS.md
+example/ios/Pods
+example/ios/build
+example/android
+android/build
+example/**/__image_snapshots__
+**/.harness
+package-lock.json

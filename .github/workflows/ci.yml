@@ -1,0 +1,179 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Every static gate: tsc, eslint (incl. the perf-contract rules), prettier,
+  # jest, nitrogen drift, bob build, publint and the committed tarball manifest.
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Run all checks
+        run: bun run check
+
+  # A release build of the example app: this is what catches codegen/dex/packaging
+  # problems that a debug build tolerates. x86_64 only, matching hosted runners.
+  build-android:
+    name: Build Android (release)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Setup JDK
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Accept Android SDK licenses
+        run: /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          # v6's default cache provider is a proprietary GitHub service; basic
+          # caching works on public and self-hosted runners alike.
+          cache-provider: basic
+          cache-read-only: false
+
+      - name: Assemble release APK
+        working-directory: example/android
+        env:
+          GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
+        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --console=plain
+
+  # On-device tests (example/__tests__/*.harness.tsx) against a debug build.
+  # The harness action boots and caches the AVD named in rn-harness.config.mjs.
+  harness-android:
+    name: Harness (Android)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Setup JDK
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Accept Android SDK licenses
+        run: /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: basic
+          cache-read-only: false
+
+      - name: Assemble debug APK
+        working-directory: example/android
+        env:
+          GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
+        run: ./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64 --no-daemon --console=plain
+
+      - name: Run Harness tests
+        uses: callstackincubator/react-native-harness@3e3e25b8ddfd0018fbc0700e0932448ffe5a95db # v1.6.0
+        with:
+          runner: android
+          projectRoot: example
+          packageManager: bun
+          # Relative to projectRoot, which is where the action starts the CLI.
+          app: android/app/build/outputs/apk/debug/app-debug.apk
+
+  # Builds a Debug simulator app and runs the Harness tests on it. Xcode 27 is
+  # required because rn-harness.config.mjs asks for an iOS 27 simulator (the
+  # label is currently a GitHub preview image). Add a `macos-26` row here once
+  # the supported iOS floor is decided; override IOS_VERSION for it.
+  harness-ios:
+    name: Harness (iOS)
+    runs-on: xcode-27
+
+    env:
+      RCT_USE_PREBUILT_RNCORE: 1
+      RCT_USE_RN_DEP: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Setup Ruby and gems
+        uses: ruby/setup-ruby@6797dcbb9a1889fd411d07e8aba7eded53fb8b48 # v1.264.0
+        with:
+          working-directory: example
+          bundler-cache: true
+
+      - name: Cache CocoaPods
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: example/ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('example/ios/Podfile.lock', 'bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Install pods
+        working-directory: example
+        run: bundle exec pod install --project-directory=ios
+
+      - name: Build debug app for the simulator
+        working-directory: example/ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace NitroUiExample.xcworkspace \
+            -scheme NitroUiExample \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Run Harness tests
+        uses: callstackincubator/react-native-harness@3e3e25b8ddfd0018fbc0700e0932448ffe5a95db # v1.6.0
+        with:
+          runner: ios
+          projectRoot: example
+          packageManager: bun
+          # Relative to projectRoot, which is where the action starts the CLI.
+          app: ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app
