@@ -66,6 +66,7 @@ lib/typescript/src/core/useStableCallback.d.ts
 lib/typescript/src/core/useStableCallback.d.ts.map
 lib/typescript/src/index.d.ts
 lib/typescript/src/index.d.ts.map
+lib/typescript/src/tsdoc-metadata.json
 nitro.json
 nitrogen/generated/android/c++/JFunc_void_bool_double.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.cpp
