@@ -35,28 +35,32 @@ docs/research/       architecture + tooling decisions (read before coding)
 
 Run from the repo root.
 
-| Command                    | What it does                                                         |
-| -------------------------- | -------------------------------------------------------------------- |
-| `bun run check`            | **All static gates.** Run this before pushing.                       |
-| `bun run typecheck`        | `tsc` over the library and example                                   |
-| `bun run lint`             | ESLint, including the local perf-contract rules                      |
-| `bun run format`           | Prettier check (`format:write` to fix)                               |
-| `bun run test`             | Jest unit tests (JS wrappers, lint rules, patch script)              |
-| `bun run nitrogen`         | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`       |
-| `bun run nitrogen:check`   | Regenerate into a temp dir and fail on drift against `nitrogen/`     |
-| `bun run prepare`          | Build `lib/` with builder-bob (also runs `nitrogen`)                 |
-| `bun run publint`          | Validate `package.json` publish surface                              |
-| `bun run manifest:check`   | Tarball contents must equal `etc/package-files.txt`                  |
-| `bun run manifest:update`  | Rewrite the manifest after an **intentional** publish-surface change |
-| `bun run harness:ios`      | On-device tests on iOS (see below)                                   |
-| `bun run harness:android`  | On-device tests on Android (see below)                               |
-| `bun run example <script>` | Run an `example/` script, e.g. `bun run example ios`                 |
-| `bun run hooks:install`    | Install optional git hooks (see "Commit messages and releases")      |
-| `bun run hooks:uninstall`  | Remove them again                                                    |
-| `bun run clean`            | Delete build outputs (`lib/`, native build dirs)                     |
+| Command                     | What it does                                                         |
+| --------------------------- | -------------------------------------------------------------------- |
+| `bun run check`             | **All static gates.** Run this before pushing.                       |
+| `bun run typecheck`         | `tsc` over the library and example                                   |
+| `bun run lint`              | ESLint, including the local perf-contract rules                      |
+| `bun run format`            | Prettier check (`format:write` to fix)                               |
+| `bun run test`              | Jest unit tests (JS wrappers, lint rules, patch script)              |
+| `bun run nitrogen`          | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`       |
+| `bun run nitrogen:check`    | Regenerate into a temp dir and fail on drift against `nitrogen/`     |
+| `bun run autolinking:check` | RN CLI + Expo autolinkers must both resolve `NitroUiPackage`         |
+| `bun run prepare`           | Build `lib/` with builder-bob (also runs `nitrogen`)                 |
+| `bun run publint`           | Validate `package.json` publish surface                              |
+| `bun run manifest:check`    | Tarball contents must equal `etc/package-files.txt`                  |
+| `bun run manifest:update`   | Rewrite the manifest after an **intentional** publish-surface change |
+| `bun run harness:ios`       | On-device tests on iOS (see below)                                   |
+| `bun run harness:android`   | On-device tests on Android (see below)                               |
+| `bun run smoke:pack`        | `npm pack` the library into `$SMOKE_TMP/tarballs` (see below)        |
+| `bun run smoke:expo`        | Install the packed lib into a fresh Expo app, Release, on-device     |
+| `bun run smoke:rn-cli`      | Same for a fresh React Native CLI app                                |
+| `bun run example <script>`  | Run an `example/` script, e.g. `bun run example ios`                 |
+| `bun run hooks:install`     | Install optional git hooks (see "Commit messages and releases")      |
+| `bun run hooks:uninstall`   | Remove them again                                                    |
+| `bun run clean`             | Delete build outputs (`lib/`, native build dirs)                     |
 
-`bun run check` = typecheck → lint → format → test → nitrogen:check → prepare →
-publint → manifest:check.
+`bun run check` = typecheck → lint → format → test → nitrogen:check →
+autolinking:check → prepare → publint → manifest:check.
 
 ### Changing the published surface
 
@@ -181,6 +185,83 @@ someone else's Metro.
 
 Only start devices you need, never touch a device you did not start, and shut
 down the ones you started when you finish.
+
+## Consumer smoke tests
+
+The only true check of "zero-config install": `npm pack` the library, install
+it with **npm** (not bun - that's what users run) into a freshly generated app,
+build **Release** (bundle embedded, no Metro), install, launch, wait for the
+ready signal, screenshot, fail on crashes. If a fresh consumer ever needs a
+manual native change, that is a library bug - fix the library, never work
+around it in the scripts.
+
+One signal, both platforms: `scripts/smoke/App.tsx` logs
+`NITRO_UI_SMOKE_READY` once the native core answers, and RN routes `console.*`
+to a host-readable stream in **every** build configuration - Android logcat,
+and on iOS `os_log` under subsystem `com.facebook.react.log` (`console.log` maps
+to `INFO`, so the stream needs `--level info`):
+
+```sh
+xcrun simctl spawn "$IOS_SIM_UDID" log stream --level info --style compact \
+  --predicate 'subsystem == "com.facebook.react.log"'
+```
+
+The same stream fails the run fast on `Unhandled JS Exception` / `RCTFatal`
+instead of waiting out the timeout. The app also paints its background white
+while starting, **red** when ready and **blue** on a failed core call, so a
+screenshot is readable by a human without being the machine channel. Never
+launch with `simctl launch --console-pty`: it does not carry `os_log`.
+
+```sh
+IOS_SIM_UDID=<udid> ANDROID_AVD=<avd> EMULATOR_PORT=5574 \
+  bun run smoke:expo            # Expo SDK 58 by default (SDK=57 to switch)
+PLATFORM=android RN=0.86.3 bun run smoke:rn-cli
+```
+
+| Env                | Default                  | Meaning                                          |
+| ------------------ | ------------------------ | ------------------------------------------------ |
+| `PLATFORM`         | `both`                   | `ios` \| `android` \| `both`                     |
+| `SDK` / `RN`       | `58` / `0.88.0`          | Consumer template version                        |
+| `SMOKE_TMP`        | `/tmp/nitro-ui-smoke`    | Temp root for apps (no spaces/`#`/`%`/non-ASCII) |
+| `IOS_SIM_UDID`     | - (required for iOS)     | Simulator UDID to install on                     |
+| `ANDROID_AVD`      | - (required for Android) | AVD; created from API 35 google_apis if absent   |
+| `EMULATOR_PORT`    | `5554`                   | Emulator console port (never 5556/5560 here)     |
+| `KEEP_TMP`         | `0`                      | Keep the consumer app dir on success             |
+| `READY_TIMEOUT`    | `180`                    | Seconds to wait for the ready line               |
+| `SHUTDOWN_DEVICES` | `1`                      | Shut down devices this run booted, on exit       |
+| `SMOKE_TARBALL`    | -                        | Install this tarball and skip packing (CI)       |
+| `SKIP_PACK`        | `0`                      | Reuse the newest tarball (may be stale)          |
+
+By default every run **packs the library fresh** from the working tree into its
+own dir under `$SMOKE_TMP/tarballs`, so an edit can never be masked by a stale
+tarball. `SMOKE_TARBALL` (what CI uses) skips packing and refuses a tarball
+whose recorded `.gitsha` is not the current commit.
+
+Scripts are re-runnable and never collide: each run gets a unique
+`mktemp -d`-made app dir under `$SMOKE_TMP`, and background processes, Gradle
+daemons and devices it booted are cleaned up on every exit path (Gradle also
+runs `--no-daemon`). Logs, screenshots and timings always stay under
+`$SMOKE_TMP/artifacts/<script>-<timestamp>-<pid>/`, including the full console
+of the run in `run.log`.
+
+### Keeping `scripts/smoke/App.tsx` current
+
+`scripts/smoke/App.tsx` is copied over the generated app's `App.tsx` and is the
+single source of truth for what a consumer must be able to render. Its rules:
+
+- render **every** component the package exports exactly once, each with a
+  `SMOKE-` testID;
+- log `NITRO_UI_SMOKE_READY` exactly once, after mount and after
+  `nitroUiCore.now()` answers, and flip the background to red;
+- **adding a component = add its import + one JSX line** in the marked list.
+  Do not touch the ready-line logic. Components that need state get their own
+  small probe component above the list (one `useState` + the render call).
+- it is typechecked by `bun run check` (`tsconfig.json` includes
+  `scripts/smoke`), so a public-API rename fails the static gate instead of
+  surfacing ten minutes into a smoke run.
+
+`.github/workflows/smoke.yml` runs the same scripts nightly and on demand, and
+CI mirrors this section.
 
 ## Perf contract
 
