@@ -41,3 +41,7 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   Each device task uses a private adb server (`ANDROID_ADB_SERVER_PORT` assigned in its brief) and
   never runs `adb kill-server` on the default port. Retries/warm-ups are allowed in harness helpers
   but a gate must still be green at normal load.
+- **D14 (T10 review)** v0.1 does not expose `hybridRef`/native view types publicly; all props flow
+  through React (UI thread, batched). Imperative methods come later with explicit main-thread
+  hopping + commit. iOS default sizes must match the running OS (iOS 26+ Toggle is 61×28 layout),
+  until T11's measured sizing replaces defaults.
