@@ -1,0 +1,276 @@
+name: Bench
+
+# Perf is **report-only** here: hosted runners are noisy, so a red check would
+# teach people to ignore it. The hard gates stay static (lint, nitrogen drift,
+# API report, tarball manifest, Jest, Reassure render counts). This workflow
+# posts head/base ratios on request and files a nightly trend record.
+#
+# Ask for it on a PR with the `bench` label or a `/bench` comment.
+#
+# NOTE: not yet exercised in CI - T02 wrote it from the same commands that
+# produced docs/tasks/T02-bench.report.md. Expect to tune runner images and
+# simulator names on the first run; everything it calls is the normal local
+# entry point (`bun bench`, `bun run bench:report`).
+
+on:
+  pull_request:
+    types:
+      - labeled
+  issue_comment:
+    types:
+      - created
+  schedule:
+    # Nightly trend record on the default branch, report-only.
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: bench-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    name: Should benchmarks run?
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+      pr: ${{ steps.decide.outputs.pr }}
+    steps:
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          LABEL: ${{ github.event.label.name }}
+          BODY: ${{ github.event.comment.body }}
+          IS_PR_COMMENT: ${{ github.event.issue.pull_request }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PR_FROM_LABEL: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT" = "pull_request" ] && [ "$LABEL" = "bench" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "pr=$PR_FROM_LABEL" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT" = "issue_comment" ] && [ -n "$IS_PR_COMMENT" ] \
+            && printf '%s' "$BODY" | grep -q '/bench'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "pr=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT" = "workflow_dispatch" ] || [ "$EVENT" = "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  bench-ios:
+    name: Bench iOS
+    needs: trigger
+    if: needs.trigger.outputs.run == 'true'
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The head/base comparison needs history.
+          fetch-depth: 0
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Pick a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | jq -r \
+            '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
+          echo "IOS_SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          echo "Picked simulator $UDID"
+          xcrun simctl boot "$UDID" || true
+
+      - name: Resolve revisions
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          echo "HEAD_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          BASE=$(git merge-base HEAD "origin/${BASE_REF:-main}")
+          echo "BASE_SHA=$(git rev-parse --short "$BASE")" >> "$GITHUB_ENV"
+
+      # base first, head second, so the numbers under review are measured last on
+      # an identically configured runner. `bench/ios` and `bench/results` are
+      # gitignored, so checking out another revision disturbs neither.
+      - name: Build and run base
+        run: |
+          git checkout -f "$BASE_SHA"
+          bun install
+          bun bench --platform ios --plan quick
+        continue-on-error: true
+
+      - name: Build and run head
+        run: |
+          git checkout -f "$HEAD_SHA"
+          bun install
+          bun bench --platform ios --plan quick
+        continue-on-error: true
+
+      - name: Report
+        run: |
+          BASE_FILE="bench/results/$BASE_SHA-ios.json"
+          HEAD_FILE="bench/results/$HEAD_SHA-ios.json"
+          if [ -f "$BASE_FILE" ]; then
+            node scripts/bench/report.mjs "$HEAD_FILE" --compare "$BASE_FILE" \
+              > bench-ios.md || true
+          elif [ -f "$HEAD_FILE" ]; then
+            node scripts/bench/report.mjs "$HEAD_FILE" > bench-ios.md
+          else
+            echo 'No results were written - the runs failed.' > bench-ios.md
+            exit 0
+          fi
+
+      - name: Summarise
+        env:
+          PR_NUMBER: ${{ needs.trigger.outputs.pr }}
+        run: |
+          {
+            echo "## iOS benchmarks ($HEAD_SHA)"
+            if [ -z "$PR_NUMBER" ]; then
+              echo
+              echo '_Nightly trend record - no base comparison._'
+            fi
+            echo
+            cat bench-ios.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on the pull request
+        if: needs.trigger.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.trigger.outputs.pr }}
+        run: |
+          {
+            echo "### iOS benchmarks ($HEAD_SHA vs base $BASE_SHA)"
+            echo
+            echo 'Report-only. Read the ratios; the runner flags a run as'
+            echo '*noisy, inconclusive* when the `rn-core` control moved.'
+            echo
+            cat bench-ios.md
+          } > comment-ios.md
+          gh pr comment "$PR_NUMBER" --body-file comment-ios.md
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bench-ios-${{ github.run_id }}
+          path: bench/results/
+          if-no-files-found: ignore
+
+  bench-android:
+    name: Bench Android
+    needs: trigger
+    if: needs.trigger.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_AVD: nitroui-ci
+      # Hosted runners are x86_64; the AVD image has to match.
+      BENCH_ABIS: x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Setup JDK
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Accept Android SDK licenses
+        run: /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Create and boot the emulator
+        run: |
+          echo "no" | avdmanager create avd -n "$ANDROID_AVD" \
+            -k "system-images;android-35;google_apis;x86_64" -d pixel_6
+          nohup emulator -avd "$ANDROID_AVD" -no-audio -no-window \
+            -gpu swiftshader_indirect -no-snapshot > /tmp/emulator.log 2>&1 &
+          adb wait-for-device
+          adb shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 2; done'
+
+      - name: Resolve revisions
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          echo "HEAD_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          BASE=$(git merge-base HEAD "origin/${BASE_REF:-main}")
+          echo "BASE_SHA=$(git rev-parse --short "$BASE")" >> "$GITHUB_ENV"
+
+      - name: Build and run base
+        run: |
+          git checkout -f "$BASE_SHA"
+          bun install
+          bun bench --platform android --plan quick
+        continue-on-error: true
+
+      - name: Build and run head
+        run: |
+          git checkout -f "$HEAD_SHA"
+          bun install
+          bun bench --platform android --plan quick
+        continue-on-error: true
+
+      - name: Report
+        run: |
+          BASE_FILE="bench/results/$BASE_SHA-android.json"
+          HEAD_FILE="bench/results/$HEAD_SHA-android.json"
+          if [ -f "$BASE_FILE" ]; then
+            node scripts/bench/report.mjs "$HEAD_FILE" --compare "$BASE_FILE" \
+              > bench-android.md || true
+          elif [ -f "$HEAD_FILE" ]; then
+            node scripts/bench/report.mjs "$HEAD_FILE" > bench-android.md
+          else
+            echo 'No results were written - the runs failed.' > bench-android.md
+            exit 0
+          fi
+
+      - name: Summarise
+        env:
+          PR_NUMBER: ${{ needs.trigger.outputs.pr }}
+        run: |
+          {
+            echo "## Android benchmarks ($HEAD_SHA)"
+            if [ -z "$PR_NUMBER" ]; then
+              echo
+              echo '_Nightly trend record - no base comparison._'
+            fi
+            echo
+            echo 'Software-rendered emulator: absolute times are not comparable'
+            echo 'to a device, only the ratios mean anything.'
+            echo
+            cat bench-android.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on the pull request
+        if: needs.trigger.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.trigger.outputs.pr }}
+        run: |
+          {
+            echo "### Android benchmarks ($HEAD_SHA vs base $BASE_SHA)"
+            echo
+            echo 'Report-only. Read the ratios.'
+            echo
+            cat bench-android.md
+          } > comment-android.md
+          gh pr comment "$PR_NUMBER" --body-file comment-android.md
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bench-android-${{ github.run_id }}
+          path: bench/results/
+          if-no-files-found: ignore
