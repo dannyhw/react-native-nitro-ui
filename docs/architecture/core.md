@@ -78,7 +78,14 @@ The JS side guarantees the batching preconditions:
   real callback whenever the view is mounted, never `null`. Same for
   `hybridRef`.
 - **Colours** are processed once (`useProcessedColor`) and travel as an ARGB
-  `number | null`.
+  `number | null`. Decode the bits, never the sign: `processColor` returns an
+  *unsigned* 32-bit value on iOS and a *signed* one on Android, so an opaque
+  colour arrives as `4286676479` on one platform and `-8692737` on the other. A
+  decode written with `Int32(exactly:)` (or a Kotlin `toInt()` that assumes the
+  signed half) silently discards every opaque iOS colour and the control keeps
+  the platform accent, with no error anywhere. `UInt32(truncatingIfNeeded:)`
+  accepts both; a prop getter returns whatever its own platform's
+  `processColor` would produce, so JS can compare them.
 - **`testID`/`accessibilityLabel`** are ordinary props: RN's own accessibility
   pipeline already puts `testID` on the iOS component view as
   `accessibilityIdentifier`, so iOS hosts deliberately do not set it again (that
