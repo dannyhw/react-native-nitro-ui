@@ -330,8 +330,16 @@ export function verdictSummary(result) {
       `Metrics over the ${formatRatio(RATIO_FAIL_THRESHOLD)} threshold (a failure needs a bootstrap CI that excludes 1.05):`
     );
     for (const failure of result.failures) {
+      // A noisy run cannot support a failure, so never print one: the exit
+      // code already ignored it, and a "FAIL" line here would be read as a
+      // regression by whoever is holding the report.
+      const label = failure.conclusive
+        ? result.noisy
+          ? 'fail (suppressed: noisy run)'
+          : 'FAIL'
+        : 'warn';
       lines.push(
-        `- ${failure.conclusive ? 'FAIL' : 'warn'} \`${failure.key}\` ${
+        `- ${label} \`${failure.key}\` ${
           METRIC_LABELS[failure.metric] ?? failure.metric
         }: ${formatRatio(failure.ratio)}${
           failure.ci == null
