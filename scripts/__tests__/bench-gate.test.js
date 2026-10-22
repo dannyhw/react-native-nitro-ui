@@ -133,6 +133,7 @@ function memoryRecords({
   perInstance = 40_000,
   leakPerCycle = 0,
   wobble = false,
+  heaps = null,
 }) {
   const records = [
     {
@@ -157,8 +158,14 @@ function memoryRecords({
       phase,
       footprintBytes: bytes,
       heapCollected: true,
-      nativeHeapBytes: null,
-      javaHeapBytes: null,
+      nativeHeapBytes:
+        heaps == null
+          ? null
+          : empty + heaps.native * n * (phase === 'full' ? 1 : 0),
+      javaHeapBytes:
+        heaps == null
+          ? null
+          : empty + heaps.java * n * (phase === 'full' ? 1 : 0),
     });
   };
   for (let launch = 0; launch < LAUNCHES; launch++) {
@@ -487,5 +494,43 @@ describe('bench report CLI', () => {
     });
     expect(result.stdout).toContain('noisy');
     expect(result.status).toBe(0);
+  });
+});
+
+describe('memory aggregation', () => {
+  /**
+   * Round 2 regression: the Android heap breakdown stored an undefined variable,
+   * which killed the runner *after* it had measured 48 launches. iOS reports -1
+   * for both heaps, so no iOS run - and no iOS-shaped fixture - ever reached that
+   * line. Android has to be in the fixture for that to be worth testing.
+   */
+  it('folds the Android heap breakdown into per-instance bytes', () => {
+    const n = 200;
+    const cells = aggregateRecords(
+      memoryRecords({
+        implementation: 'rn-core',
+        n,
+        perInstance: 40_000,
+        heaps: { native: 3_000, java: 2_000 },
+      })
+    );
+    const memory = cells['memory:rn-core:200'].memory;
+
+    // PSS moved 40 KB per instance, of which 5 KB is attributable to a heap.
+    expect(memory.bytesPerInstance).toBeCloseTo(40_000, 0);
+    expect(memory.nativeBytesPerInstance).toBeCloseTo(3_000, 0);
+    expect(memory.javaBytesPerInstance).toBeCloseTo(2_000, 0);
+    expect(memory.heapBreakdownLaunches).toBe(LAUNCHES);
+    expect(memory.heapCollected).toBe(true);
+  });
+
+  it('leaves the heap breakdown null on iOS, where the probe reports -1', () => {
+    const cells = aggregateRecords(
+      memoryRecords({ implementation: 'rn-core', n: 200 })
+    );
+    const memory = cells['memory:rn-core:200'].memory;
+    expect(memory.bytesPerInstance).toBeCloseTo(40_000, 0);
+    expect(memory.nativeBytesPerInstance).toBeNull();
+    expect(memory.javaBytesPerInstance).toBeNull();
   });
 });

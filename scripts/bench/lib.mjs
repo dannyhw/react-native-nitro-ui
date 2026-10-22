@@ -597,7 +597,7 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       ]) {
         if (isNumber(bytes) && bytes >= 0) {
           const breakdown = (phases[heapKey] ??= {});
-          breakdown[record.phase] = value;
+          breakdown[record.phase] = bytes;
         }
       }
       cell.memory.set(record.launch, phases);

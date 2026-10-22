@@ -116,6 +116,22 @@ export function writeReportFiles({ run, markdown, fileName }) {
   return { json, md };
 }
 
+/**
+ * The raw records a device produced, saved next to the results *before* anything
+ * can throw. Re-aggregating is cheap and offline; a 10-minute device run is
+ * not, so a bug in the maths must not cost the measurement. `bench/results/` is
+ * gitignored.
+ */
+export function writeRawRecords({ fileName, records }) {
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  const file = path.join(RESULTS_DIR, fileName.replace(/\.json$/, '.ndjson'));
+  fs.writeFileSync(
+    file,
+    `${records.map((record) => JSON.stringify(record)).join('\n')}\n`
+  );
+  return file;
+}
+
 if (
   process.argv[1] != null &&
   import.meta.url === new URL(`file://${path.resolve(process.argv[1])}`).href
