@@ -1,0 +1,238 @@
+# Consumer smoke tests: npm-pack the library, install it with npm into a fresh
+# Expo app and a fresh React Native CLI app, build Release, launch on a device
+# and wait for the NITRO_UI_SMOKE_READY log line (Android logcat / iOS os_log).
+# The only true check of "trivial install" (docs/research/setup-decisions.md §4).
+#
+# The pack job's tarball (+ its `.gitsha`) is a workflow artifact; the run jobs
+# download it and export SMOKE_TARBALL, which also skips re-packing and fails if
+# the tarball was not built from this exact commit.
+name: Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform
+        type: choice
+        default: both
+        options: [both, ios, android]
+  schedule:
+    # Nightly, after the main CI window.
+    - cron: '30 4 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SMOKE_TMP: /tmp/nitro-ui-smoke
+  SMOKE_TARBALL_DIR: /tmp/nitro-ui-smoke/tarballs
+
+jobs:
+  # The workflow_dispatch `platform` input, turned into a JSON matrix.
+  plan:
+    name: Resolve platforms
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      platforms: ${{ steps.pick.outputs.platforms }}
+    steps:
+      - id: pick
+        run: |
+          case '${{ inputs.platform || 'both' }}' in
+            both) echo 'platforms=["ios","android"]' >> "$GITHUB_OUTPUT" ;;
+            ios) echo 'platforms=["ios"]' >> "$GITHUB_OUTPUT" ;;
+            android) echo 'platforms=["android"]' >> "$GITHUB_OUTPUT" ;;
+            *) echo "unknown platform input" && exit 1 ;;
+          esac
+
+  pack:
+    name: Pack library
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Pack
+        run: bun run smoke:pack
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tarball
+          path: ${{ env.SMOKE_TARBALL_DIR }}
+
+  # Shared steps for both consumer jobs.
+  expo:
+    name: Expo consumer ${{ env.SDK }} (${{ matrix.platform }})
+    needs: [plan, pack]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.plan.outputs.platforms) }}
+    runs-on: ${{ matrix.platform == 'ios' && 'xcode-27' || 'ubuntu-latest' }}
+    timeout-minutes: 75
+    env:
+      SDK: '58'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Download tarball
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tarball
+          path: ${{ env.SMOKE_TARBALL_DIR }}
+
+      - name: Use the packed tarball
+        run: |
+          echo "SMOKE_TARBALL=$(find "$SMOKE_TARBALL_DIR" -name 'react-native-nitro-ui-*.tgz' | head -1)" >> "$GITHUB_ENV"
+
+      - name: Setup JDK (Android)
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Accept Android SDK licenses
+        if: matrix.platform == 'android'
+        run: /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Enable KVM (Android)
+        if: matrix.platform == 'android'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set Android AVD name
+        if: matrix.platform == 'android'
+        run: echo "ANDROID_AVD=nitroui-smoke" >> "$GITHUB_ENV"
+
+      - name: Setup Ruby (iOS)
+        if: matrix.platform == 'ios'
+        uses: ruby/setup-ruby@6797dcbb9a1889fd411d07e8aba7eded53fb8b48 # v1.264.0
+        with:
+          ruby-version: '3.3'
+
+      - name: Install CocoaPods (iOS)
+        # An Expo app has no Gemfile, so the script calls plain `pod install`.
+        if: matrix.platform == 'ios'
+        run: gem install cocoapods
+
+      - name: Create simulator (iOS)
+        # Runtime omitted on purpose: the macos image's default runtime must
+        # match the SDK the app builds against.
+        if: matrix.platform == 'ios'
+        run: |
+          UDID=$(xcrun simctl create "Smoke iPhone 17e" "iPhone 17e")
+          echo "IOS_SIM_UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Run smoke test
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: bun run smoke:expo
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smoke-expo-${{ matrix.platform }}
+          path: ${{ env.SMOKE_TMP }}/artifacts/
+
+  rn-cli:
+    name: RN CLI consumer ${{ matrix.rn }} (${{ matrix.platform }})
+    needs: [plan, pack]
+    strategy:
+      fail-fast: false
+      matrix:
+        rn: ['0.88.0', '0.86.3']
+        platform: ${{ fromJSON(needs.plan.outputs.platforms) }}
+        # D8 keeps RN 0.86 supported: its Android row is the guard for the
+        # pinned Compose BOM in android/build.gradle. The 0.86 iOS row is
+        # skipped: RN 0.86's prebuilt core hangs at launch on an iOS 27
+        # simulator runtime (reproduced with a library-free control app), so it
+        # needs a macOS image with an iOS 26.x runtime to be verifiable.
+        exclude:
+          - rn: '0.86.3'
+            platform: ios
+    runs-on: ${{ matrix.platform == 'ios' && 'xcode-27' || 'ubuntu-latest' }}
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Download tarball
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tarball
+          path: ${{ env.SMOKE_TARBALL_DIR }}
+
+      - name: Use the packed tarball
+        run: |
+          echo "SMOKE_TARBALL=$(find "$SMOKE_TARBALL_DIR" -name 'react-native-nitro-ui-*.tgz' | head -1)" >> "$GITHUB_ENV"
+
+      - name: Setup JDK (Android)
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Accept Android SDK licenses
+        if: matrix.platform == 'android'
+        run: /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Enable KVM (Android)
+        if: matrix.platform == 'android'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set Android AVD name
+        if: matrix.platform == 'android'
+        run: echo "ANDROID_AVD=nitroui-smoke" >> "$GITHUB_ENV"
+
+      - name: Setup Ruby (iOS)
+        if: matrix.platform == 'ios'
+        uses: ruby/setup-ruby@6797dcbb9a1889fd411d07e8aba7eded53fb8b48 # v1.264.0
+        with:
+          ruby-version: '3.3'
+          bundler-cache: false
+
+      - name: Install bundler (iOS)
+        # The RN template ships ios/Gemfile (which pins CocoaPods); the smoke
+        # script runs `bundle install && bundle exec pod install` in it.
+        if: matrix.platform == 'ios'
+        run: gem install bundler
+
+      - name: Create simulator (iOS)
+        if: matrix.platform == 'ios'
+        run: |
+          UDID=$(xcrun simctl create "Smoke iPhone 17e" "iPhone 17e")
+          echo "IOS_SIM_UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Run smoke test
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          RN: ${{ matrix.rn }}
+        run: bun run smoke:rn-cli
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smoke-rn-cli-${{ matrix.rn }}-${{ matrix.platform }}
+          path: ${{ env.SMOKE_TMP }}/artifacts/
