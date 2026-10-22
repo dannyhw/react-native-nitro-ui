@@ -29,3 +29,15 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   - Wrapper re-render counts are a hard gate via Reassure `measureRenders` scenarios
     (counts stable, `redundantUpdates` empty) and run in `bun run check`.
   - Release benches never start Metro; no `METRO_PORT` in bench briefs.
+- **D7b (T10)** Exception to D7: **callback props** must be optional `fn?` (Nitro only unwraps
+  `{ f }` for a pure function type; `fn | null` throws at mount). Enforced by lint.
+- **D10 (T10)** Colours: `processColor` is unsigned on iOS and signed on Android — native decodes
+  must use the bit pattern, never assume a sign (see docs/architecture/core.md "Colours").
+- **D11 (T10)** Dev-tooling bugs (e.g. react-native-harness) may be patched in `patches/` (D5);
+  record each one in `docs/upstream.md` with a link/issue draft so we can upstream them later.
+- **D12 (T10)** Dev-only apps (example/, bench/) may use `react-native-safe-area-context`. The
+  library itself must not depend on it.
+- **D13 (T10) Device concurrency.** At most **2 device-heavy tasks** run at once on this machine.
+  Each device task uses a private adb server (`ANDROID_ADB_SERVER_PORT` assigned in its brief) and
+  never runs `adb kill-server` on the default port. Retries/warm-ups are allowed in harness helpers
+  but a gate must still be green at normal load.
