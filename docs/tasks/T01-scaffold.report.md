@@ -146,26 +146,170 @@ the device, so the harness's own install path is covered too.
 - `example/jest.config.js` is a template leftover; the harness uses
   `example/jest.harness.config.mjs`. Harmless, can be pruned later.
 
-## Questions for orchestrator
+## Questions for orchestrator — Resolved
 
-1. **Clock semantics for `nitroUiCore.now()`** — I use `CLOCK_UPTIME_RAW` (Apple) /
-   `CLOCK_MONOTONIC` (Android), matching §6's bench-probe clocks; the brief said
-   "`SystemClock.elapsedRealtimeNanos` equivalents", and elapsedRealtime keeps
-   counting during suspend. Recommendation: keep the current clocks and update the
-   brief's wording, because T02's Choreographer-based numbers must share this time
-   base. Needs a decision before T02, not before T10.
-2. **iOS CI floor** — is the `xcode-27` preview label acceptable for CI, or should
-   the gate run on `macos-26` (Xcode 26.6) with an iOS 26 simulator? That also
-   decides `min_ios_version_supported` usage in the example. Recommendation: keep
-   `xcode-27` now, add a `macos-26` row when the supported floor is a product
-   decision rather than an image availability one.
-3. **Metro port allocation** — T01's default is 8291 (documented in
-   `CONTRIBUTING.md`). If T02/T03/T10 can run concurrently, each brief should
-   assign an explicit `METRO_PORT` (and device) instead of inheriting the default.
-   Recommendation: add a one-line "Metro port" to each future brief.
-4. **api-extractor** — add `etc/react-native-nitro-ui.api.md` now, or when the
-   public surface becomes real in T10? Recommendation: T10; the API today is one
-   internal clock accessor, so a report file would be churn.
-5. **`patches/` in the repo** — acceptable as the mechanism for the harness bug
-   fix, or do you prefer to pin/avoid something else? Recommendation: keep the
-   patch (it is small, self-documenting and auto-applied by `bun install`).
+All five were answered by the orchestrator (recorded in `docs/DECISIONS.md` on
+`main`; that file is not edited from this branch).
+
+1. **Clock semantics** — Resolved: `nitroUiCore.now()` stays on
+   `CLOCK_UPTIME_RAW` (Apple) / `CLOCK_MONOTONIC` (Android). No change; T02's
+   Choreographer numbers share this base.
+2. **iOS CI floor** — Resolved: the `xcode-27` preview label is OK for
+   `harness-ios`. A `macos-26` row stays a later product decision.
+3. **Metro port / device allocation** — Resolved: parallel tasks must be
+   env-driven, not default-driven. `example/rn-harness.config.mjs` now takes
+   `METRO_PORT`, `IOS_SIM_UDID` (or `IOS_SIM`), and `ANDROID_AVD` with neutral
+   defaults, documented in `CONTRIBUTING.md`. Future briefs can pass their own
+   values without editing the repo.
+4. **api-extractor** — Resolved: deferred to T10, when the public surface is
+   real. Nothing added here.
+5. **`patches/`** — Resolved: acceptable for dev-only patches. The
+   `@react-native-harness/platform-apple` patch stays until upstream ships a
+   fix; it is dev/test-only and is not part of the published tarball.
+
+# Round 2
+
+Review `docs/tasks/T01-scaffold.review.md` (committed in this round): all
+SHOULD-FIX #1–#8 and every NIT are addressed. No BLOCKING items existed. Nothing
+here is a "declined" item; one finding is recorded as a documented gap rather
+than a fix (#5, third bullet).
+
+## SHOULD-FIX
+
+1. **Hooks no longer leak across worktrees.** `package.json` now declares
+   `"trustedDependencies": ["@parcel/watcher", "esbuild", "unrs-resolver"]`, so
+   `bun install` refuses lefthook's postinstall and installs **zero** git hooks.
+   Opt-in is `bun run hooks:install` (and `bun run hooks:uninstall`), and both
+   `lefthook.yml` commands use `bunx --no-install` so a hook never needs a
+   network install or an absolute path into one worktree's `node_modules`
+   (`commitlint --edit {1}` replaced the `--print-config`-style invocation).
+   The Yarn-ism `dependenciesMeta` block is gone. Verified: in a throwaway git
+   repo with this `package.json` + `bun.lock`, `bun install` leaves
+   `.git/hooks` at `*.sample` only, and `bun pm untrusted` blocks exactly
+   lefthook. `lefthook` remains in `devDependencies` and the shared
+   `/Users/daniel.williams/Developer/oss/nitro-ui/.git/hooks/` was checked: it
+   already holds only `*.sample` files, so there was nothing to delete. This
+   also retires the round-1 "Lefthook side effect" note above.
+   - Finding worth recording: **bun treats an empty `trustedDependencies` array
+     as unset** and falls back to its built-in list, which trusts lefthook. The
+     array must be non-empty and explicit — verified with a matrix of
+     absent/empty/explicit installs.
+2. **`harness-ios` Ruby.** `.github/workflows/ci.yml` pins
+   `ruby-version: '3.3'` on the iOS job (`example/Gemfile` requires >= 2.6.10 and
+   there is no `.ruby-version`), so the job gets past "Setup Ruby" before
+   `bundle install`.
+3. **Trusted publishing.** `package.json` release-it config is now
+   `"npm": { "publish": true, "skipChecks": true }`, and the release workflow
+   (`release.yml`) runs `bun run check` and then
+   `git diff --exit-code -- nitrogen/`, so a build that regenerates codegen fails
+   the release instead of publishing a drift.
+4. **Entry guard.** `scripts/patch-nitrogen.mjs` uses `invokedDirectly()`:
+   `import.meta.main` when the loader sets it, otherwise it compares
+   `realpathSync(fileURLToPath(import.meta.url))` against
+   `realpathSync(resolve(process.argv[1]))`. The old `argv[1].includes(...)`
+   test silently no-opped. `scripts/__tests__/patch-nitrogen.test.js` now runs an
+   `it.each` over a path containing a space, `#`, `%` and a non-ASCII directory,
+   asserting a changed-shape fixture exits non-zero every time; the legacy guard
+   was confirmed to exit 0 (silent no-op) on the same fixtures, so these are real
+   regression tests. JSDoc status union gained `'error'`.
+5. **`no-optional-view-props` false negatives.** `eslint-rules/index.js` now
+   resolves interface extends transitively, follows type aliases and
+   intersections, matches qualified names on the right-most segment
+   (`nitro.HybridObject`), and roots the search at view boundaries
+   (`HybridView<P, M>`, `NitroView`, `viewProps(...)`/`view(...)`/`component<P>()`)
+   instead of one hardcoded name. Reports are `TSPropertySignature[optional]`
+   from `container.body ?? container.members`, so the TS-estree shape used by the
+   parser is covered. Plain (non-view) structs and method-only interfaces still
+   produce no diagnostics — new valid/invalid fixtures cover both. Rule tests are
+   up to 34 (5 new invalid, 2 new valid cases).
+   `no-inline-callback-in-jsx` was hardened the same way: it binds the
+   `callback` import from `react-native-nitro-modules` including aliases
+   (`import { callback as cb }`), handles `JSXSpreadAttribute`
+   (`{...{ onX: callback(fn) }}`), and reports once per attribute instead of
+   twice for nested JSX. `const c = callback(fn)` in a render body stays a
+   documented gap (not a JSX attribute), and the JSDoc says so. `isSpecFile`
+   collapsed to the single `/\.nitro\.tsx?$/` test.
+6. **Nitrogen only scans `src/`.** `package.json` runs `nitrogen src`, and
+   `scripts/nitrogen-check.mjs` invokes nitrogen with `join(root, "src")`, so
+   nothing outside the library can create library codegen. `nitro.json` also
+   carries `ignorePaths` for `node_modules`, `example`, `bench`, `lib`, `dist`,
+   `docs`, `scripts`, `patches` as a second line of defence (strict JSON —
+   comments there break nitrogen). Verified: codegen output is byte-identical
+   before/after the scoping, and a probe `bench/src/BenchProbe.nitro.ts` produced
+   **no** files under `nitrogen/generated`. `scripts/__tests__/
+   nitrogen-scope.test.js` guards the contract so T02 cannot quietly widen it.
+   The future bench app ships its own nitro module with its own `nitro.json`.
+7. **Root configs are bench-ready.** `tsconfig.json` gained
+   `include: ["src", "example/src", "example/__tests__"]` and
+   `exclude: ["node_modules", "**/node_modules", "lib", "bench", "docs"]` (which
+   also stops stale `lib/**/*.d.ts` from entering the program);
+   `tsconfig.build.json` is `include: ["src"]` / `exclude: ["example", "bench",
+   "lib", "node_modules"]`; jest ignores `<rootDir>/bench/`; `eslint.config.mjs`
+   switched from a few repo-root strings to glob ignores (`**/build/`,
+   `**/Pods/`, `**/.gradle/`, `**/.cxx/`, `**/.expo/`, `**/dist/`,
+   `**/vendor/`, `**/node_modules/`) and the spec-only rules also apply to
+   `bench/**/*.nitro.ts`; `.prettierignore` covers bench build outputs,
+   `example/vendor`, `**/Pods`, `**/.expo`; `turbo.json` now watches `bun.lock`
+   instead of `.yarnrc.yml`. So an Expo app in `bench/` plus `example/vendor`
+   cannot break `bun run check`.
+8. **Device selection is fully env-driven.** `example/rn-harness.config.mjs`
+   reads `IOS_SIM_UDID` (resolved through `xcrun simctl list -j devices` into a
+   name + runtime, because the harness API only accepts name + version; it hard
+   errors on an unknown UDID and on same-name/same-runtime twins rather than
+   guessing), `IOS_SIM`/`IOS_VERSION` (neutral `iPhone 17` / `27.0`),
+   `ANDROID_AVD` (neutral `nitroui`, with `AVD` accepted as a legacy alias),
+   `ANDROID_API_LEVEL`, `AVD_PROFILE` and `METRO_PORT` (8291). No task-specific
+   identity remains. Documented in `CONTRIBUTING.md` under "Devices and ports",
+   including the recommendation that parallel tasks each pass their own UDID, AVD
+   and port.
+
+## NITs
+
+- `CONTRIBUTING.md`: ViewProps references corrected to nitro#1655/#1656, and the
+  rule is described as "no `callback(...)` **call** inside a JSX attribute"; the
+  opt-in hooks section and the slow-`pre-commit` note were added.
+- `publint` now runs with `--strict` in the gate.
+- `scripts/nitrogen-check.mjs` compares against `git ls-files nitrogen/` (fs
+  fallback keeps `.gitattributes`), so an untracked `.DS_Store` no longer reads
+  as drift.
+- `.github/actions/setup/action.yml` cache key includes `patches/**`, so an
+  edited patch invalidates `node_modules`.
+- `package.json` `files` dropped the nonexistent `react-native.config.js`
+  (`ios/` still appears in round 1's note; T10 creates it).
+- `CODE_OF_CONDUCT.md` contact is `me@dannyhw.com`.
+- `example/README.md` says bun and explains the monorepo layout;
+  `example/jest.config.js` deleted (`git rm`) — the harness uses
+  `example/jest.harness.config.mjs`.
+
+## Round-2 gates
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Aggregate | `bun run check` | PASS — typecheck, lint, format, 47 tests (4 suites), `nitrogen:check` "no drift (14 generated files match, 0 view(s) patched)", bob build, `publint --strict` "All good!", manifest 43 files |
+| Clean install | `bun install --frozen-lockfile` | PASS — `bun.lock` records the trusted list (`esbuild`, `unrs-resolver`, `@parcel/watcher`) and no hooks land in `.git/hooks` |
+| Codegen scope | `bun run nitrogen` then `git diff -- nitrogen/` | PASS — no diff; probe spec under `bench/src` generates nothing |
+| Spaced path | run `scripts/patch-nitrogen.mjs` against a changed-shape fixture from a path with a space (and `#`, `%`, non-ASCII) | PASS — exits non-zero with the anchor error; asserted in `scripts/__tests__/patch-nitrogen.test.js` |
+| iOS harness | `cd example && IOS_SIM_UDID=F08675D3-A32B-4F88-BC81-02D7E0CB797E METRO_PORT=8291 HARNESS_APP_PATH="$PWD/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app" bunx react-native-harness --harnessRunner ios` | PASS — 4/4; the run logs "Booting iOS simulator iPhone 17", i.e. the UDID was resolved to the harness's name+version form |
+| Rule tests | `bun run test -- eslint-rules` | PASS — 34 rule cases |
+
+Round 1's iOS `.app` was reused (nothing native or in `example/src` changed this
+round); Android was not re-run, which the round-2 brief allows. After the harness
+run the simulator was `Shutdown`, nothing was listening on 8291, and no
+harness/Metro processes remained. Devices started in round 1 (`nitroui_t01` AVD,
+`iPhone 17` sim) were already shut down at the time, and `emulator-5560`
+(`PR1505_Pixel`) was never touched.
+
+## Follow-ups
+
+- Reviewer notes for T10 (view managers, per-view `autolinking` entries,
+  `manifest:update`, expect "1 view(s) patched") and T03 (`manifest:check` needs
+  `lib/` first) still stand; T02's #6/#7 concerns are now prevented by the
+  `src`-scoped codegen and the bench-ready configs, and it must keep `bench`
+  hoisted on the same RN version to avoid the duplicate-RN problem (harness #215).
+- ViewProps patch remains pinned to nitrogen 0.37.1's output shape; the anchor
+  failure mode is loud and now fails even from awkward paths.
+- Add `USE_FRAMEWORKS: [unset, static]` and an Xcode matrix to `harness-ios` if
+  Expo static-framework users need coverage (§7), plus a `smoke.yml` gate on
+  `release.yml` once T03 exists.
+- File the react-native-harness `simctl appinfo` bug upstream and delete
+  `patches/` when a release fixes it.
