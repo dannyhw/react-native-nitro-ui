@@ -15,6 +15,9 @@
 
 #include "HybridNitroUiCoreSpec.hpp"
 
+#include <string>
+#include <vector>
+
 namespace margelo::nitro::nitroui {
 
   /**
@@ -29,6 +32,8 @@ namespace margelo::nitro::nitroui {
       HybridNitroUiCore(): HybridObject(TAG) { }
 
       double now() override;
+      void setPerfEnabled(bool enabled) override;
+      std::vector<NitroUiPerfEvent> drainPerf() override;
   };
 
 } // namespace margelo::nitro::nitroui

@@ -21,6 +21,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSize; }
 #include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 

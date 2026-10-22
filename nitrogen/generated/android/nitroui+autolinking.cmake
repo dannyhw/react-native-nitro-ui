@@ -41,7 +41,6 @@ target_sources(
   ../nitrogen/generated/android/c++/JVariant_Boolean_NullType.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_Double.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_String.cpp
-  ../nitrogen/generated/android/c++/JVariant__value__Boolean__eventCount__Double_____Unit_NullType.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.cpp
 )
 

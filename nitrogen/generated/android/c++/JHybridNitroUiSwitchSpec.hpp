@@ -66,8 +66,8 @@ namespace margelo::nitro::nitroui {
     void setAccessibilityLabel(const std::variant<nitro::NullType, std::string>& accessibilityLabel) override;
     std::variant<nitro::NullType, double> getNuiPerfId() override;
     void setNuiPerfId(const std::variant<nitro::NullType, double>& nuiPerfId) override;
-    std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType> getOnValueChange() override;
-    void setOnValueChange(const std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType>& onValueChange) override;
+    std::optional<std::function<void(bool /* value */, double /* eventCount */)>> getOnValueChange() override;
+    void setOnValueChange(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& onValueChange) override;
 
   public:
     // Methods

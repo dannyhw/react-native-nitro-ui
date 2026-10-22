@@ -19,6 +19,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSize; }
 #include <variant>
 #include <string>
 #include <functional>
+#include <optional>
 #include "NitroUiSize.hpp"
 
 #include "NitroUi-Swift-Cxx-Umbrella.hpp"
@@ -121,11 +122,11 @@ namespace margelo::nitro::nitroui {
     inline void setNuiPerfId(const std::variant<nitro::NullType, double>& nuiPerfId) noexcept override {
       _swiftPart.setNuiPerfId(nuiPerfId);
     }
-    inline std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType> getOnValueChange() noexcept override {
+    inline std::optional<std::function<void(bool /* value */, double /* eventCount */)>> getOnValueChange() noexcept override {
       auto __result = _swiftPart.getOnValueChange();
       return __result;
     }
-    inline void setOnValueChange(const std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType>& onValueChange) noexcept override {
+    inline void setOnValueChange(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& onValueChange) noexcept override {
       _swiftPart.setOnValueChange(onValueChange);
     }
 

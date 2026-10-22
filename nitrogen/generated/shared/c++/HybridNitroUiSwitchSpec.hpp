@@ -20,6 +20,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSize; }
 #include <variant>
 #include <string>
 #include <functional>
+#include <optional>
 #include "NitroUiSize.hpp"
 
 namespace margelo::nitro::nitroui {
@@ -65,8 +66,8 @@ namespace margelo::nitro::nitroui {
       virtual void setAccessibilityLabel(const std::variant<nitro::NullType, std::string>& accessibilityLabel) = 0;
       virtual std::variant<nitro::NullType, double> getNuiPerfId() = 0;
       virtual void setNuiPerfId(const std::variant<nitro::NullType, double>& nuiPerfId) = 0;
-      virtual std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType> getOnValueChange() = 0;
-      virtual void setOnValueChange(const std::variant<std::function<void(bool /* value */, double /* eventCount */)>, nitro::NullType>& onValueChange) = 0;
+      virtual std::optional<std::function<void(bool /* value */, double /* eventCount */)>> getOnValueChange() = 0;
+      virtual void setOnValueChange(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& onValueChange) = 0;
 
     public:
       // Methods

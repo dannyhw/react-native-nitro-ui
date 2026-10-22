@@ -19,6 +19,12 @@ Pod::Spec.new do |s|
     "cpp/**/*.{hpp,cpp}",
   ]
 
+  # Only the header-only core utilities are public: Swift reaches them through
+  # C++ interop (`margelo.nitro.nitroui.NitroUiPerf`), which needs the header to
+  # be in the module map. Same pattern as the generated spec headers, and enough
+  # to keep our own C++ implementations (`cpp/*.hpp`) internal.
+  s.public_header_files = ["cpp/core/**/*.hpp"]
+
   s.dependency 'React-jsi'
   s.dependency 'React-callinvoker'
 

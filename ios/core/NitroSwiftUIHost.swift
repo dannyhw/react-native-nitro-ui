@@ -1,0 +1,305 @@
+//
+//  NitroSwiftUIHost.swift
+//  react-native-nitro-ui
+//
+//  The one place in this library that hosts SwiftUI. Every component's Hybrid
+//  View owns exactly one of these, created with it and never replaced
+//  (docs/research/core-architecture.md §2).
+//
+
+import ObjectiveC
+import SwiftUI
+import UIKit
+
+// Perf ring buffer, shared with C++/Kotlin (cpp/core/NitroUiPerf.hpp).
+private typealias NitroUiPerf = margelo.nitro.nitroui.NitroUiPerf
+
+/// Perf mark kinds, mirroring `NitroUiPerf::KIND_*`.
+enum NitroUiPerfKind: Int32 {
+  case propsApplied = 0
+  case firstFrame = 1
+}
+
+/// `nuiPerfId` of a view that never set one.
+let nitroUiPerfNoInstance: Int32 = -1
+
+/// A `UIView` that hosts one concrete SwiftUI `Content` and applies React props to
+/// it in batches.
+///
+/// Lifetime:
+/// - `init` creates the `UIHostingController` once. Nothing here ever re-creates
+///   it or assigns a new `rootView`, which is the perf contract's main rule.
+/// - prop setters on the component only write the model and call ``markDirty()``;
+///   ``commit()`` runs once per `afterUpdate` and sends `objectWillChange` once.
+/// - ``prepareForRecycle()`` resets for reuse but keeps the controller - it is
+///   the expensive part.
+/// - ``drop()`` releases what must not outlive a mount. It runs before
+///   `prepareForRecycle` too (see the generated `.mm`), so it must stay cheap and
+///   reversible.
+final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
+  /// The component's state. Never replaced.
+  let model: Content.Model
+  /// The hosted controller. Never replaced, and its `rootView` is never reassigned.
+  private let hostingController: UIHostingController<NitroUiRoot<Content>>
+  /// `hostingController.view`, kept non-optional so layout code stays readable.
+  private let hostedView: UIView
+
+  /// Set `true` by components that present something (Picker menu, DatePicker,
+  /// Menu): they need a view-controller parent for presentation and traits.
+  /// Switch, Slider, Button, Progress and SegmentedControl do not.
+  var needsContainment = false
+  /// Set `true` by components that want ``contentSize`` maintained (T11's sizing,
+  /// plus `measureContent()`). It costs a `sizeThatFits` per commit, so it is off
+  /// by default.
+  var wantsContentSize = false
+  /// `nuiPerfId` of the owning view, or ``nitroUiPerfNoInstance``.
+  var perfInstanceId: Int32 = nitroUiPerfNoInstance
+
+  /// Last measured content size, in points, or `nil` if never measured.
+  ///
+  /// Written on the main thread and read from any thread - a Hybrid View's
+  /// `measureContent()` runs on JS, which must never call into SwiftUI
+  /// (docs/research/core-architecture.md §1.4). A `CGSize?` is not read atomically
+  /// on its own, so the lock is what makes that legal. It is only ever taken by
+  /// components with ``wantsContentSize``, once per commit.
+  var contentSize: CGSize? {
+    sizeLock.lock()
+    defer { sizeLock.unlock() }
+    return _contentSize
+  }
+
+  private var _contentSize: CGSize?
+  private let sizeLock = NSLock()
+
+  private var isDirty = true
+  private var hasCommitted = false
+  private var suppressesNextAnimation = true
+  private var hasMarkedFirstFrame = false
+  private var measuredSize: CGSize = .zero
+  private weak var containerViewController: UIViewController?
+
+  init(model: Content.Model) {
+    nitroUiAssertMainThread()
+    let controller = UIHostingController(rootView: NitroUiRoot<Content>(model: model))
+    // `UIViewController.view` is optional in Swift even though a hosting
+    // controller always has one; load it once and keep it non-optional.
+    guard let hosted = controller.view else {
+      fatalError("nitro-ui: UIHostingController has no view")
+    }
+    self.model = model
+    self.hostingController = controller
+    self.hostedView = hosted
+    super.init(frame: .zero)
+    backgroundColor = .clear
+
+    hosted.backgroundColor = .clear
+    // RN owns the keyboard, and a hosting controller must not reserve safe area
+    // for the control; see NitroUiRoot for the pre-16.4 half of this.
+    if #available(iOS 16.4, *) {
+      controller.safeAreaRegions = []
+    }
+    addSubview(hosted)
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) {
+    fatalError("nitro-ui: NitroSwiftUIHost cannot be built from a nib")
+  }
+
+  // MARK: - Layout
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    if hostedView.frame != bounds, bounds.width > 0, bounds.height > 0 {
+      // Frame, not Auto Layout constraints: RN already decided our size in Yoga.
+      hostedView.frame = bounds
+    }
+    markFirstFrameIfNeeded()
+    refreshContentSize()
+  }
+
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    if window == nil {
+      detachFromContainer()
+    } else {
+      markFirstFrameIfNeeded()
+      attachToContainerIfNeeded()
+    }
+  }
+
+  override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+    super.traitCollectionDidChange(previousTraitCollection)
+    // Content size category and legibility weight change the control's size.
+    if previousTraitCollection?.preferredContentSizeCategory
+      != traitCollection.preferredContentSizeCategory
+      || previousTraitCollection?.legibilityWeight != traitCollection.legibilityWeight {
+      measuredSize = .zero
+      refreshContentSize()
+    }
+  }
+
+  // MARK: - Updating
+
+  /// Called by prop setters: record that something changed, apply nothing.
+  func markDirty() {
+    isDirty = true
+  }
+
+  /// Apply the batch. Called once, from `afterUpdate()`.
+  ///
+  /// Components are expected to only ``markDirty()`` when something *rendered*
+  /// changed, so bookkeeping props (the controlled value's `js` copy and event
+  /// count, the callback) cost zero re-renders on an interaction round-trip.
+  func commit() {
+    nitroUiAssertMainThread()
+    let visual = isDirty
+    isDirty = false
+    mark(.propsApplied)
+    guard visual else {
+      return
+    }
+    // First mount and the first commit after a recycle must not animate, so a
+    // recycled Toggle does not slide from the previous row's value.
+    let disableAnimations = !hasCommitted || suppressesNextAnimation
+    suppressesNextAnimation = false
+    hasCommitted = true
+
+    if disableAnimations {
+      var transaction = Transaction()
+      transaction.disablesAnimations = true
+      withTransaction(transaction) {
+        model.objectWillChange.send()
+      }
+    } else {
+      model.objectWillChange.send()
+    }
+
+    // The content itself may have changed size (a shorter label, a new selection),
+    // so a visual commit always re-measures rather than trusting the last frame.
+    measuredSize = .zero
+    refreshContentSize()
+  }
+
+  /// Reset for reuse. Keeps the hosting controller and its SwiftUI state.
+  func prepareForRecycle() {
+    nitroUiAssertMainThread()
+    isDirty = true
+    suppressesNextAnimation = true
+    measuredSize = .zero
+    // The next mount is a new view as far as measurements go: a recycled host
+    // that kept its flag would never report `firstFrame` again.
+    hasMarkedFirstFrame = false
+    detachFromContainer()
+  }
+
+  /// Tear down what must not outlive a mount.
+  ///
+  /// Note the generated component view calls `onDropView` before
+  /// `prepareForRecycle` as well as on a real unmount, so this must not destroy
+  /// the hosting controller.
+  func drop() {
+    nitroUiAssertMainThread()
+    detachFromContainer()
+    hasMarkedFirstFrame = false
+    sizeLock.lock()
+    _contentSize = nil
+    sizeLock.unlock()
+    measuredSize = .zero
+  }
+
+  // MARK: - Measuring
+
+  /// The fitting size of the hosted content, measured on the main thread.
+  ///
+  /// This is the hook T11 will push into Fabric state; today only
+  /// `measureContent()` and the harness read it.
+  @discardableResult
+  private func refreshContentSize() -> CGSize? {
+    guard wantsContentSize, hasCommitted, !bounds.isEmpty else {
+      return contentSize
+    }
+    guard measuredSize != bounds.size || contentSize == nil else {
+      return contentSize
+    }
+    measuredSize = bounds.size
+    let size = measureFittingSize()
+    sizeLock.lock()
+    _contentSize = size
+    sizeLock.unlock()
+    return size
+  }
+
+  private func measureFittingSize() -> CGSize {
+    if #available(iOS 16.0, *) {
+      // An unbounded proposal asks SwiftUI what the control wants to be, which is
+      // the intrinsic size T11 needs; Yoga's box is a separate question.
+      let size = hostingController.sizeThatFits(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity))
+      if size.width > 0, size.height > 0 {
+        return size
+      }
+    }
+    // iOS 15, or a content view that refused the unbounded proposal.
+    return hostedView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+  }
+
+  // MARK: - Perf
+
+  private func markFirstFrameIfNeeded() {
+    guard !hasMarkedFirstFrame, !bounds.isEmpty, window != nil else {
+      return
+    }
+    hasMarkedFirstFrame = true
+    mark(.firstFrame)
+  }
+
+  private func mark(_ kind: NitroUiPerfKind) {
+    // A view without `nuiPerfId` records nothing - a plain int compare keeps the
+    // disabled path off the C++/JNI call entirely.
+    guard perfInstanceId >= 0 else {
+      return
+    }
+    NitroUiPerf.mark(perfInstanceId, kind.rawValue)
+  }
+
+  // MARK: - View controller containment
+
+  private func attachToContainerIfNeeded() {
+    guard needsContainment, containerViewController == nil else {
+      return
+    }
+    guard let parent = findContainerViewController() else {
+      return
+    }
+    parent.addChild(hostingController)
+    hostingController.didMove(toParent: parent)
+    containerViewController = parent
+  }
+
+  private func detachFromContainer() {
+    guard let parent = containerViewController else {
+      return
+    }
+    hostingController.willMove(toParent: nil)
+    hostingController.removeFromParent()
+    containerViewController = nil
+  }
+
+  /// Walk the responder chain for the nearest usable view controller.
+  ///
+  /// Deliberately no `import React`: `reactViewController()` is just this walk,
+  /// and navigation/tab controllers cannot host a presentation cleanly, so they
+  /// are skipped - unlike Expo, which always contains in the nearest one.
+  private func findContainerViewController() -> UIViewController? {
+    var responder: UIResponder? = next
+    while let current = responder {
+      if let controller = current as? UIViewController {
+        if !(controller is UINavigationController) && !(controller is UITabBarController) {
+          return controller
+        }
+      }
+      responder = current.next
+    }
+    return nil
+  }
+}
