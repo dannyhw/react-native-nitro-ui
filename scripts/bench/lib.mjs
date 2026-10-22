@@ -34,6 +34,13 @@ export const NOISE_REL_SPREAD = 0.1;
  * readable same-run ratios but must never mint a committed baseline.
  */
 export const UNQUIET_LOAD_RATIO = 0.5;
+/**
+ * A committed baseline is a `full` plan at 8 launches or more
+ * (bench/baselines/README.md): a `quick` plan is local feedback, and 4 launches
+ * give a within-run spread too wide for a ratio to be a threshold.
+ */
+export const BASELINE_PLAN = 'full';
+export const BASELINE_LAUNCHES = 8;
 
 /**
  * Only the implementation under development is gated. `expo-ui-*` are reference
@@ -994,6 +1001,16 @@ export function baselineBlockers(run) {
   if (run.dirty === true) {
     reasons.push(
       'the working tree is dirty (a baseline must be attributable to a commit)'
+    );
+  }
+  if (run.plan !== BASELINE_PLAN) {
+    reasons.push(
+      `the run used plan "${String(run.plan ?? 'unknown')}", and a baseline needs "${BASELINE_PLAN}" - quick-plan numbers are local feedback`
+    );
+  }
+  if (!isNumber(run.launches) || run.launches < BASELINE_LAUNCHES) {
+    reasons.push(
+      `the run used ${String(run.launches ?? 'an unknown number of')} launches per cell, and a baseline needs at least ${String(BASELINE_LAUNCHES)}`
     );
   }
   if (Array.isArray(run.problems) && run.problems.length > 0) {
