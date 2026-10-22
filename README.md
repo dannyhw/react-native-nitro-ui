@@ -24,14 +24,25 @@ of re-implementing them in React Native.
 ## Installation
 
 React Native autolinks the native code: no config plugin, no Podfile or Gradle
-edits, no manual linking. The steps below are the exact ones our consumer smoke
-tests run (`scripts/smoke/`) against a fresh Expo SDK 58 app and fresh React
-Native CLI apps (0.88.0 and 0.86.3), on iOS and Android.
+edits, no manual linking. The steps below are the ones our consumer smoke tests
+run (`scripts/smoke/`, with `npm` and a Release build) against a fresh Expo SDK
+58 app and fresh React Native CLI apps, verified green on:
+
+| Consumer              | iOS | Android |
+| --------------------- | --- | ------- |
+| Expo SDK 58 (RN 0.88) | ✅  | ✅      |
+| RN CLI 0.88.0         | ✅  | ✅      |
+| RN CLI 0.86.3         | n/a | ✅      |
+
+RN 0.86.3 is supported (it is our floor) and its Android install is covered by
+a nightly smoke row. Its iOS run is not verifiable on this machine's iOS 27
+simulator runtime — a fresh 0.86.3 app without this library hangs at launch
+there too — so it is verified in CI on an older runtime instead.
 
 ### Expo (Continuous Native Generation)
 
 ```sh
-npx expo install react-native-nitro-ui react-native-nitro-modules
+npm install react-native-nitro-ui react-native-nitro-modules
 npx expo prebuild   # or: npx expo run:ios / npx expo run:android / eas build
 ```
 
@@ -40,9 +51,8 @@ Requires a dev build - Expo Go is not supported.
 ### Bare React Native CLI
 
 ```sh
-bun add react-native-nitro-ui react-native-nitro-modules
-# or: npm install react-native-nitro-ui react-native-nitro-modules
-cd ios && pod install
+npm install react-native-nitro-ui react-native-nitro-modules
+cd ios && bundle install && bundle exec pod install
 ```
 
 Rebuild the app (`npx react-native run-ios` / `run-android`) so the new native
