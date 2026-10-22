@@ -1,0 +1,24 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["benchprobe"],
+  "ios": {
+    "iosModuleName": "BenchProbe"
+  },
+  "android": {
+    "androidNamespace": ["benchprobe"],
+    "androidCxxLibName": "benchprobe"
+  },
+  "autolinking": {
+    "BenchProbe": {
+      "ios": {
+        "language": "c++",
+        "implementationClassName": "HybridBenchProbe"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridBenchProbe"
+      }
+    }
+  },
+  "ignorePaths": ["node_modules", "**/node_modules", "lib", "dist"]
+}

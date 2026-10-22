@@ -1,0 +1,749 @@
+{
+  "schemaVersion": 1,
+  "platform": "ios",
+  "deviceKey": "ios-iphone-air-sim",
+  "deviceName": "iPhone Air",
+  "sha": "e39db3c",
+  "plan": "quick",
+  "updatedAt": "2026-10-22T20:38:57.058Z",
+  "cells": {
+    "mount:rn-core:50": {
+      "key": "mount:rn-core:50",
+      "scenario": "mount",
+      "implementation": "rn-core",
+      "n": 50,
+      "skipReason": null,
+      "skipReasons": [],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 5,
+        "measured": 20
+      },
+      "launches": 4,
+      "metrics": {
+        "jsCommitNs": {
+          "median": 1880979,
+          "mad": 261479,
+          "p95": 3336792,
+          "min": 1108125,
+          "max": 3739834,
+          "samples": 80,
+          "launchMedians": [1582854, 1948896, 1849312.5, 2653333.5]
+        },
+        "mountedNs": {
+          "median": 11374354,
+          "mad": 1428396,
+          "p95": 13311709,
+          "min": 6305250,
+          "max": 15804625,
+          "samples": 80,
+          "launchMedians": [9068458.5, 11257021, 11778000.5, 12051645.5]
+        },
+        "presentedNs": {
+          "median": 32643771,
+          "mad": 66062.5,
+          "p95": 32795709,
+          "min": 32427958,
+          "max": 32799000,
+          "samples": 80,
+          "launchMedians": [32783187.5, 32619563, 32617979, 32747187.5]
+        }
+      },
+      "cpu": {
+        "launches": 4,
+        "jsNsPerUpdate": 3085300,
+        "mainNsPerUpdate": 16447275,
+        "profilerMsPerUpdate": 0,
+        "profilerTotalMs": 0,
+        "launchJsNsPerUpdate": [2545350, 3073700, 3096900, 3735450],
+        "launchMainNsPerUpdate": [14157750, 16737600, 16380650, 16513900]
+      },
+      "memory": {
+        "bytesPerInstance": null,
+        "bytesPerInstanceLaunches": 0,
+        "launchBytesPerInstance": [],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "mount:expo-ui-host-per-control:50": {
+      "key": "mount:expo-ui-host-per-control:50",
+      "scenario": "mount",
+      "implementation": "expo-ui-host-per-control",
+      "n": 50,
+      "skipReason": null,
+      "skipReasons": [],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 5,
+        "measured": 20
+      },
+      "launches": 4,
+      "metrics": {
+        "jsCommitNs": {
+          "median": 2580604.5,
+          "mad": 226729.5,
+          "p95": 3918625,
+          "min": 2304375,
+          "max": 4319500,
+          "samples": 80,
+          "launchMedians": [3183500, 2392437.5, 2436229, 3559937.5]
+        },
+        "mountedNs": {
+          "median": 21524208.5,
+          "mad": 1515291.5,
+          "p95": 35836083,
+          "min": 19535125,
+          "max": 43711625,
+          "samples": 80,
+          "launchMedians": [25302917, 20412062.5, 20663833, 29594833]
+        },
+        "presentedNs": {
+          "median": 182861041.5,
+          "mad": 16472041.5,
+          "p95": 299522875,
+          "min": 164436750,
+          "max": 332827334,
+          "samples": 80,
+          "launchMedians": [224291395.5, 182559666.5, 182640229, 241043000.5]
+        }
+      },
+      "cpu": {
+        "launches": 4,
+        "jsNsPerUpdate": 4593475,
+        "mainNsPerUpdate": 208583800,
+        "profilerMsPerUpdate": 0,
+        "profilerTotalMs": 0,
+        "launchJsNsPerUpdate": [5025750, 3992600, 4161200, 5308100],
+        "launchMainNsPerUpdate": [233829650, 176455000, 183337950, 255257750]
+      },
+      "memory": {
+        "bytesPerInstance": null,
+        "bytesPerInstanceLaunches": 0,
+        "launchBytesPerInstance": [],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "mount:expo-ui-shared-host:50": {
+      "key": "mount:expo-ui-shared-host:50",
+      "scenario": "mount",
+      "implementation": "expo-ui-shared-host",
+      "n": 50,
+      "skipReason": null,
+      "skipReasons": [],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 5,
+        "measured": 20
+      },
+      "launches": 4,
+      "metrics": {
+        "jsCommitNs": {
+          "median": 1688604,
+          "mad": 155875.5,
+          "p95": 2041125,
+          "min": 1079375,
+          "max": 3081708,
+          "samples": 80,
+          "launchMedians": [1114750, 1702625.5, 1711812.5, 1712354]
+        },
+        "mountedNs": {
+          "median": 7863000,
+          "mad": 316937.5,
+          "p95": 8764583,
+          "min": 4876750,
+          "max": 10202041,
+          "samples": 80,
+          "launchMedians": [5017396, 7904645.5, 8013896, 8016771]
+        },
+        "presentedNs": {
+          "median": 171710938,
+          "mad": 8062812,
+          "p95": 184519417,
+          "min": 112580792,
+          "max": 200401042,
+          "samples": 80,
+          "launchMedians": [114366437.5, 170455729.5, 177063271, 175168542]
+        }
+      },
+      "cpu": {
+        "launches": 4,
+        "jsNsPerUpdate": 2994825,
+        "mainNsPerUpdate": 170409600,
+        "profilerMsPerUpdate": 0,
+        "profilerTotalMs": 0,
+        "launchJsNsPerUpdate": [1946000, 2927100, 3062550, 3146450],
+        "launchMainNsPerUpdate": [103074600, 163243150, 179526300, 177576050]
+      },
+      "memory": {
+        "bytesPerInstance": null,
+        "bytesPerInstanceLaunches": 0,
+        "launchBytesPerInstance": [],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "mount:nitro-ui:50": {
+      "key": "mount:nitro-ui:50",
+      "scenario": "mount",
+      "implementation": "nitro-ui",
+      "n": 50,
+      "skipReason": "react-native-nitro-ui does not export a Switch yet (lands with T10); bench/src/implementations/nitroUi.tsx is the one-file change",
+      "skipReasons": [
+        "react-native-nitro-ui does not export a Switch yet (lands with T10); bench/src/implementations/nitroUi.tsx is the one-file change"
+      ],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 0,
+        "measured": 0
+      },
+      "launches": 0,
+      "metrics": {
+        "jsCommitNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "mountedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "presentedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        }
+      },
+      "cpu": {
+        "launches": 0,
+        "jsNsPerUpdate": null,
+        "mainNsPerUpdate": null,
+        "profilerMsPerUpdate": null,
+        "profilerTotalMs": null,
+        "launchJsNsPerUpdate": [],
+        "launchMainNsPerUpdate": []
+      },
+      "memory": {
+        "bytesPerInstance": null,
+        "bytesPerInstanceLaunches": 0,
+        "launchBytesPerInstance": [],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "update:rn-core:50": {
+      "key": "update:rn-core:50",
+      "scenario": "update",
+      "implementation": "rn-core",
+      "n": 50,
+      "skipReason": null,
+      "skipReasons": [],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 5,
+        "measured": 20
+      },
+      "launches": 4,
+      "metrics": {
+        "jsCommitNs": {
+          "median": 1557187.5,
+          "mad": 213104.5,
+          "p95": 2165667,
+          "min": 1001416,
+          "max": 3393125,
+          "samples": 80,
+          "launchMedians": [1209437.5, 1578146.5, 1575000, 1108479]
+        },
+        "mountedNs": {
+          "median": 6447583.5,
+          "mad": 474646,
+          "p95": 7150792,
+          "min": 4235833,
+          "max": 8993875,
+          "samples": 80,
+          "launchMedians": [5076687.5, 6613500.5, 6579833.5, 4675937]
+        },
+        "presentedNs": {
+          "median": 32749895.5,
+          "mad": 16812,
+          "p95": 32790667,
+          "min": 32596125,
+          "max": 32798417,
+          "samples": 80,
+          "launchMedians": [32769250, 32745354, 32744271.5, 32776375]
+        }
+      },
+      "cpu": {
+        "launches": 4,
+        "jsNsPerUpdate": 1819600,
+        "mainNsPerUpdate": 6603575,
+        "profilerMsPerUpdate": 0,
+        "profilerTotalMs": 0,
+        "launchJsNsPerUpdate": [1601250, 1981150, 1958500, 1680700],
+        "launchMainNsPerUpdate": [5895400, 7311750, 7328750, 5798550]
+      },
+      "memory": {
+        "bytesPerInstance": null,
+        "bytesPerInstanceLaunches": 0,
+        "launchBytesPerInstance": [],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "update:expo-ui-host-per-control:50": {
+      "key": "update:expo-ui-host-per-control:50",
+      "scenario": "update",
+      "implementation": "expo-ui-host-per-control",
+      "n": 50,
+      "skipReason": null,
+      "skipReasons": [],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 5,
+        "measured": 20
+      },
+      "launches": 4,
+      "metrics": {
+        "jsCommitNs": {
+          "median": 3133166.5,
+          "mad": 255646,
+          "p95": 3659583,
+          "min": 1984625,
+          "max": 3939375,
+          "samples": 80,
+          "launchMedians": [2766292, 3249708, 3177437.5, 2035249.5]
+        },
+        "mountedNs": {
+          "median": 5888417,
+          "mad": 364604,
+          "p95": 6418375,
+          "min": 3712000,
+          "max": 6868625,
+          "samples": 80,
+          "launchMedians": [5182541.5, 6045104.5, 6048937.5, 3783020.5]
+        },
+        "presentedNs": {
+          "median": 32753229,
+          "mad": 17791.5,
+          "p95": 32799209,
+          "min": 32643083,
+          "max": 32811625,
+          "samples": 80,
+          "launchMedians": [32753979.5, 32741312.5, 32744333.5, 32790458]
+        }
+      },
+      "cpu": {
+        "launches": 4,
+        "jsNsPerUpdate": 3292600,
+        "mainNsPerUpdate": 19057250,
+        "profilerMsPerUpdate": 0,
+        "profilerTotalMs": 0,
+        "launchJsNsPerUpdate": [3043250, 3574400, 3541950, 2260000],
+        "launchMainNsPerUpdate": [17499200, 20615300, 20909950, 13102850]
+      },
+      "memory": {
+        "bytesPerInstance": null,
+        "bytesPerInstanceLaunches": 0,
+        "launchBytesPerInstance": [],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "update:expo-ui-shared-host:50": {
+      "key": "update:expo-ui-shared-host:50",
+      "scenario": "update",
+      "implementation": "expo-ui-shared-host",
+      "n": 50,
+      "skipReason": null,
+      "skipReasons": [],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 5,
+        "measured": 20
+      },
+      "launches": 4,
+      "metrics": {
+        "jsCommitNs": {
+          "median": 1523104.5,
+          "mad": 52375,
+          "p95": 1950083,
+          "min": 1070458,
+          "max": 3430416,
+          "samples": 80,
+          "launchMedians": [1531437.5, 1560083, 1542666.5, 1161354]
+        },
+        "mountedNs": {
+          "median": 4104979,
+          "mad": 110291,
+          "p95": 4516250,
+          "min": 2839000,
+          "max": 6174208,
+          "samples": 80,
+          "launchMedians": [4114187.5, 4132854.5, 4174417, 3141813]
+        },
+        "presentedNs": {
+          "median": 32749583,
+          "mad": 14645.5,
+          "p95": 32786417,
+          "min": 32617750,
+          "max": 32810833,
+          "samples": 80,
+          "launchMedians": [32743562.5, 32738896, 32742875, 32777354.5]
+        }
+      },
+      "cpu": {
+        "launches": 4,
+        "jsNsPerUpdate": 1926700,
+        "mainNsPerUpdate": 18132050,
+        "profilerMsPerUpdate": 0,
+        "profilerTotalMs": 0,
+        "launchJsNsPerUpdate": [1926950, 1926450, 1930250, 1409300],
+        "launchMainNsPerUpdate": [18289150, 18432150, 17974950, 13714300]
+      },
+      "memory": {
+        "bytesPerInstance": null,
+        "bytesPerInstanceLaunches": 0,
+        "launchBytesPerInstance": [],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "update:nitro-ui:50": {
+      "key": "update:nitro-ui:50",
+      "scenario": "update",
+      "implementation": "nitro-ui",
+      "n": 50,
+      "skipReason": "react-native-nitro-ui does not export a Switch yet (lands with T10); bench/src/implementations/nitroUi.tsx is the one-file change",
+      "skipReasons": [
+        "react-native-nitro-ui does not export a Switch yet (lands with T10); bench/src/implementations/nitroUi.tsx is the one-file change"
+      ],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 0,
+        "measured": 0
+      },
+      "launches": 0,
+      "metrics": {
+        "jsCommitNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "mountedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "presentedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        }
+      },
+      "cpu": {
+        "launches": 0,
+        "jsNsPerUpdate": null,
+        "mainNsPerUpdate": null,
+        "profilerMsPerUpdate": null,
+        "profilerTotalMs": null,
+        "launchJsNsPerUpdate": [],
+        "launchMainNsPerUpdate": []
+      },
+      "memory": {
+        "bytesPerInstance": null,
+        "bytesPerInstanceLaunches": 0,
+        "launchBytesPerInstance": [],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "memory:rn-core:200": {
+      "key": "memory:rn-core:200",
+      "scenario": "memory",
+      "implementation": "rn-core",
+      "n": 200,
+      "skipReason": null,
+      "skipReasons": [],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 5,
+        "measured": 20
+      },
+      "launches": 4,
+      "metrics": {
+        "jsCommitNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "mountedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "presentedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        }
+      },
+      "cpu": {
+        "launches": 0,
+        "jsNsPerUpdate": null,
+        "mainNsPerUpdate": null,
+        "profilerMsPerUpdate": null,
+        "profilerTotalMs": null,
+        "launchJsNsPerUpdate": [],
+        "launchMainNsPerUpdate": []
+      },
+      "memory": {
+        "bytesPerInstance": 111779.95999999999,
+        "bytesPerInstanceLaunches": 4,
+        "launchBytesPerInstance": [111820.92, 111657.08, 111739, 112066.68],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "memory:expo-ui-host-per-control:200": {
+      "key": "memory:expo-ui-host-per-control:200",
+      "scenario": "memory",
+      "implementation": "expo-ui-host-per-control",
+      "n": 200,
+      "skipReason": null,
+      "skipReasons": [],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 5,
+        "measured": 20
+      },
+      "launches": 4,
+      "metrics": {
+        "jsCommitNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "mountedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "presentedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        }
+      },
+      "cpu": {
+        "launches": 0,
+        "jsNsPerUpdate": null,
+        "mainNsPerUpdate": null,
+        "profilerMsPerUpdate": null,
+        "profilerTotalMs": null,
+        "launchJsNsPerUpdate": [],
+        "launchMainNsPerUpdate": []
+      },
+      "memory": {
+        "bytesPerInstance": 375275.76,
+        "bytesPerInstanceLaunches": 4,
+        "launchBytesPerInstance": [376258.8, 369213.8, 374292.72, 429670.64],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "memory:expo-ui-shared-host:200": {
+      "key": "memory:expo-ui-shared-host:200",
+      "scenario": "memory",
+      "implementation": "expo-ui-shared-host",
+      "n": 200,
+      "skipReason": null,
+      "skipReasons": [],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 5,
+        "measured": 20
+      },
+      "launches": 4,
+      "metrics": {
+        "jsCommitNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "mountedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "presentedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        }
+      },
+      "cpu": {
+        "launches": 0,
+        "jsNsPerUpdate": null,
+        "mainNsPerUpdate": null,
+        "profilerMsPerUpdate": null,
+        "profilerTotalMs": null,
+        "launchJsNsPerUpdate": [],
+        "launchMainNsPerUpdate": []
+      },
+      "memory": {
+        "bytesPerInstance": 338739.44,
+        "bytesPerInstanceLaunches": 4,
+        "launchBytesPerInstance": [338493.68, 339149.04, 338985.2, 292946.16],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    },
+    "memory:nitro-ui:200": {
+      "key": "memory:nitro-ui:200",
+      "scenario": "memory",
+      "implementation": "nitro-ui",
+      "n": 200,
+      "skipReason": "react-native-nitro-ui does not export a Switch yet (lands with T10); bench/src/implementations/nitroUi.tsx is the one-file change",
+      "skipReasons": [
+        "react-native-nitro-ui does not export a Switch yet (lands with T10); bench/src/implementations/nitroUi.tsx is the one-file change"
+      ],
+      "clock": "CLOCK_UPTIME_RAW",
+      "platform": "ios 27.0",
+      "protocol": {
+        "warmup": 0,
+        "measured": 0
+      },
+      "launches": 0,
+      "metrics": {
+        "jsCommitNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "mountedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        },
+        "presentedNs": {
+          "median": null,
+          "mad": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "samples": 0,
+          "launchMedians": []
+        }
+      },
+      "cpu": {
+        "launches": 0,
+        "jsNsPerUpdate": null,
+        "mainNsPerUpdate": null,
+        "profilerMsPerUpdate": null,
+        "profilerTotalMs": null,
+        "launchJsNsPerUpdate": [],
+        "launchMainNsPerUpdate": []
+      },
+      "memory": {
+        "bytesPerInstance": null,
+        "bytesPerInstanceLaunches": 0,
+        "launchBytesPerInstance": [],
+        "leakSlopeBytesPerCycle": null,
+        "leakMonotonic": null,
+        "leakLaunches": 0
+      }
+    }
+  }
+}
