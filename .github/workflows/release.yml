@@ -1,0 +1,73 @@
+name: Release
+
+# Manual, reviewed release. Version bump, CHANGELOG, tag, GitHub release and
+# `npm publish` all happen through release-it.
+#
+# Publishing uses npm trusted publishing (no NPM_TOKEN):
+# 1. the first publish is manual: `npm publish --access public`
+# 2. then register this repo + release.yml as the package's Trusted Publisher
+#    and turn on "disallow tokens"
+# Provenance is attached automatically, so no --provenance flag is needed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      increment:
+        description: Version increment
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          registry-url: 'https://registry.npmjs.org'
+
+      # npm trusted publishing needs npm >= 11.5.1.
+      - name: Update npm
+        run: npm install --global npm@latest
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # Publish exactly what the CI gates validate. If codegen or the
+      # nitro#1655 patch changes anything, fail instead of shipping it.
+      - name: Run all checks
+        run: bun run check
+
+      - name: Verify committed codegen
+        run: git diff --exit-code -- nitrogen/
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bunx release-it ${{ inputs.increment }} --ci
