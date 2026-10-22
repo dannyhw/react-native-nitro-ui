@@ -23,16 +23,19 @@ of re-implementing them in React Native.
 
 ## Installation
 
-React Native 0.76+ autolinks the native code; there is nothing to link by hand.
+React Native autolinks the native code: no config plugin, no Podfile or Gradle
+edits, no manual linking. The steps below are the exact ones our consumer smoke
+tests run (`scripts/smoke/`) against a fresh Expo SDK 58 app and fresh React
+Native CLI apps (0.88.0 and 0.86.3), on iOS and Android.
 
 ### Expo (Continuous Native Generation)
 
 ```sh
 npx expo install react-native-nitro-ui react-native-nitro-modules
-npx expo prebuild
+npx expo prebuild   # or: npx expo run:ios / npx expo run:android / eas build
 ```
 
-No config plugin is needed. Rebuild the native project after installing.
+Requires a dev build - Expo Go is not supported.
 
 ### Bare React Native CLI
 
