@@ -4,24 +4,24 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Consumer smoke app. scripts/smoke/expo.sh and scripts/smoke/rn-cli.sh copy
-// this file over the generated app's App.tsx.
+// this file over the generated app's App.tsx. It is typechecked by
+// `bun run check`, so a public-API rename fails the gate instead of a 10-minute
+// smoke run.
 //
 // Contract:
 //   - renders every component the package exports exactly once, each with a
 //     `SMOKE-` testID;
-//   - signals readiness over TWO host-observable channels, because JS console
-//     output is stripped in iOS Release builds (RN routes console.* nowhere
-//     once `__DEV__` is false):
-//       1. logs NITRO_UI_SMOKE_READY once, after mount and once the native
-//          core answers (visible in Android Release logcat);
-//       2. paints the background a semaphore colour:
-//            white = still starting, red = READY, blue = core call failed.
-//          scripts/smoke/pixel-ready.mjs decodes a screenshot and reads it.
-//   A component that crashes on mount therefore never turns the screen red.
+//   - logs NITRO_UI_SMOKE_READY once, after mount and once the native core
+//     answers. That one line is the readiness signal on BOTH platforms: RN
+//     routes console.* to Android logcat and to os_log (subsystem
+//     "com.facebook.react.log") in every build configuration, Release included
+//     - see "Consumer smoke tests" in CONTRIBUTING.md;
+//   - paints a background colour (white starting, red ready, blue core-call
+//     failed) so a screenshot is readable by a human at a glance. A component
+//     that crashes on mount therefore never turns the screen red.
 //
 // Adding a component = add its import + ONE line to the JSX list below.
-// Do not touch the ready/semaphore logic. See "Consumer smoke tests" in
-// CONTRIBUTING.md.
+// Do not touch the ready-line logic. See CONTRIBUTING.md.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type SmokeStatus = 'starting' | 'ready' | 'error';
@@ -53,17 +53,14 @@ export default function App(): React.ReactElement {
   }, [status]);
 
   return (
-    <View
-      testID="SMOKE-root"
-      style={[StyleSheet.absoluteFill, styles.semaphore(status)]}
-    >
+    <View testID="SMOKE-root" style={[StyleSheet.absoluteFill, styles[status]]}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text testID="SMOKE-nitro-ui-core">
           NitroUiCore.now(): {coreNow == null ? 'pending' : coreNow}
         </Text>
 
         {/* ── One line per exported component goes here. Example: ───────────
-        <NitroUiSwitch key="switch" testID="SMOKE-switch" value={true} /> */}
+        <NitroUiSwitch testID="SMOKE-switch" value={true} /> */}
       </ScrollView>
     </View>
   );
@@ -74,13 +71,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 24,
+    // Stay clear of the iOS status bar / notch in screenshots.
+    paddingTop: 60,
   },
-  semaphore: (status: SmokeStatus) => ({
-    backgroundColor:
-      status === 'ready'
-        ? '#ff0000'
-        : status === 'error'
-          ? '#0000ff'
-          : '#ffffff',
-  }),
+  starting: {
+    backgroundColor: '#ffffff',
+  },
+  ready: {
+    backgroundColor: '#ff0000',
+  },
+  error: {
+    backgroundColor: '#0000ff',
+  },
 });

@@ -1,35 +1,37 @@
 #!/usr/bin/env bash
 # Consumer smoke test: fresh Expo app (SDK=$SDK, default 58), installed with
-# npm from the packed tarball, Release build, launched, ready-line + screenshot.
+# npm from the packed tarball, Release build, launched, ready line + screenshot.
 # PLATFORM=ios|android|both. See docs/research/setup-decisions.md §2/§4.
 SCRIPT_NAME=expo.sh
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 PLATFORM="${PLATFORM:-both}"
 SDK="${SDK:-58}"
+CREATE_EXPO_APP_VERSION="${CREATE_EXPO_APP_VERSION:-latest}"
 START=$(date +%s)
-require_cmd npx; require_cmd npm
-
-TGZ=$(latest_tgz)
-WORK="$SMOKE_TMP/expo-$SDK"
-APP="$WORK/expo-consumer"
-rm -rf "$WORK"; mkdir -p "$WORK"
-
-log "creating Expo consumer (SDK $SDK) in $APP"
-( cd "$WORK" && npx -y create-expo-app@latest expo-consumer \
-    --template "blank-typescript@sdk-$SDK" --no-install )
-timer "create-expo-app" "$START"
-
-START=$(date +%s)
-( cd "$APP" && npm install --no-audit --no-fund \
-    && npm install --no-audit --no-fund "$TGZ" 'react-native-nitro-modules@^0.37.1' )
-cp "$SMOKE_ROOT/scripts/smoke/App.tsx" "$APP/App.tsx"
-timer "npm-install" "$START"
+require_cmd npx; require_cmd npm; require_cmd node
 
 case "$PLATFORM" in
   both | ios | android) ;;
   *) fail "PLATFORM must be ios|android|both (got $PLATFORM)" ;;
 esac
+
+# Unique per run: never shares (or rm -rf's) another run's app dir.
+WORK=$(mk_run_dir "expo-$SDK")
+APP="$WORK/expo-consumer"
+
+resolve_tarball
+
+log "creating Expo consumer (SDK $SDK) in $APP"
+( cd "$WORK" && npx -y "create-expo-app@$CREATE_EXPO_APP_VERSION" expo-consumer \
+    --template "blank-typescript@sdk-$SDK" --no-install )
+timer "create-expo-app" "$START"
+
+START=$(date +%s)
+( cd "$APP" && npm install --no-audit --no-fund \
+    && npm install --no-audit --no-fund "$SMOKE_TARBALL" "react-native-nitro-modules@$NITRO_MODULES_SPEC" )
+cp "$SMOKE_ROOT/scripts/smoke/App.tsx" "$APP/App.tsx"
+timer "npm-install" "$START"
 
 if [ "$PLATFORM" != android ]; then
   START=$(date +%s)
