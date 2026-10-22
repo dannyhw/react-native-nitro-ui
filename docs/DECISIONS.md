@@ -17,3 +17,15 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   must be pinned to versions whose AAR metadata works with RN 0.86's default compileSdk/AGP, so
   0.86 consumers need zero changes. RN 0.86 iOS can't be verified on this machine's iOS 27 runtime;
   verify it in CI on an older runtime later.
+- **D9 (T02) Benchmark policy.**
+  - Gate only `nitro-ui` arms, on **launch-paired ratios to `rn-core`** measured in the same run;
+    noise is judged within the run per (scenario, metric), not by absolute drift vs baseline.
+  - Committed baselines are ratio-only, produced on a clean tree, on an idle machine (record load
+    average; refuse when busy), in a dedicated commit. Absolute numbers/trends live in CI artifacts.
+  - Device keys = platform + OS runtime + device class (e.g. `ios27-sim-iphone17`,
+    `android35-emu-pixel9`). One canonical device per platform; other hardware uses `--compare`.
+  - Locally and on hosted CI, benchmarks **inform review**; they block only on a clear regression
+    (ratio CI excludes the threshold) on the canonical device.
+  - Wrapper re-render counts are a hard gate via Reassure `measureRenders` scenarios
+    (counts stable, `redundantUpdates` empty) and run in `bun run check`.
+  - Release benches never start Metro; no `METRO_PORT` in bench briefs.
