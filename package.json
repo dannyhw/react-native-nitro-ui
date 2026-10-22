@@ -53,7 +53,7 @@
     "publint": "publint --strict",
     "manifest:check": "node scripts/package-files.mjs",
     "manifest:update": "node scripts/package-files.mjs --update",
-    "check": "bun run typecheck && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check",
+    "check": "bun run typecheck && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check",
     "harness:ios": "bun --cwd example harness:ios",
     "harness:android": "bun --cwd example harness:android",
     "smoke:pack": "bash scripts/smoke/pack.sh",
@@ -187,7 +187,11 @@
     ],
     "testMatch": [
       "**/*.test.[jt]s?(x)"
-    ]
+    ],
+    "transform": {
+      "^.+\\.(js|mjs|jsx|ts|tsx)$": "babel-jest",
+      "^.+\\.(bmp|gif|jpg|jpeg|mp4|png|psd|svg|webp)$": "@react-native/jest-preset/jest/assetFileTransformer.js"
+    }
   },
   "commitlint": {
     "extends": [

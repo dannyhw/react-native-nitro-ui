@@ -1,0 +1,473 @@
+/**
+ * Markdown + verdict rendering for benchmark results. Pure: no filesystem, no
+ * `import.meta`, so `gate()` and the tables around it are unit-testable in jest
+ * (scripts/__tests__/bench-gate.test.js), which transpiles .mjs to CommonJS.
+ *
+ * This is the single implementation of the gate presentation: `run.mjs` and
+ * `scripts/bench/report.mjs` both call `comparisonSections()` with the same
+ * arguments they print, so the standalone reporter cannot drift from the runner
+ * (review S11). What the numbers mean is documented in report.mjs's header and
+ * docs/architecture/benchmarks.md.
+ */
+
+import {
+  cellsFrom,
+  comparableMetrics,
+  CONTROL_NOTE_THRESHOLD,
+  controlMovement,
+  formatBytes,
+  formatNs,
+  formatRatio,
+  formatSpread,
+  gate,
+  IMPLEMENTATIONS,
+  isNumber,
+  LATENCY_METRICS,
+  markdownTable,
+  NOISE_REL_SPREAD,
+  noiseTable,
+  RATIO_FAIL_THRESHOLD,
+  ratioTable,
+} from './lib.mjs';
+
+const METRIC_LABELS = {
+  jsCommitNs: 'JS commit',
+  mountedNs: 'mounted',
+  presentedNs: 'presented',
+  jsNsPerOp: 'JS CPU/op',
+  mainNsPerOp: 'UI CPU/op',
+  unmountMainNsPerOp: 'UI CPU/unmount',
+  bytesPerInstance: 'bytes/inst',
+  leakSlopeBytesPerCycle: 'leak slope',
+};
+
+function formatMetric(metric, value) {
+  if (metric === 'bytesPerInstance' || metric === 'leakSlopeBytesPerCycle') {
+    return formatBytes(value);
+  }
+  return formatNs(value);
+}
+
+function cellSort(a, b) {
+  const scenarioOrder = ['mount', 'update', 'memory', 'leak'];
+  return (
+    scenarioOrder.indexOf(a.scenario) - scenarioOrder.indexOf(b.scenario) ||
+    a.n - b.n ||
+    IMPLEMENTATIONS.indexOf(a.implementation) -
+      IMPLEMENTATIONS.indexOf(b.implementation)
+  );
+}
+
+/**
+ * The main table: one row per (scenario, N, implementation), columns are the
+ * metrics. With `vsControl` every value is the launch-paired ratio to `rn-core`
+ * - including `rn-core` itself, which is exactly 1.00x and is the reader's proof
+ * the normalisation is honest. That is also the only form a baseline stores.
+ */
+export function summaryTable(run, { vsControl = false } = {}) {
+  const cells = cellsFrom(run);
+  const table = vsControl ? ratioTable(cells) : null;
+  const rows = [];
+  for (const cell of Object.values(cells).sort(cellSort)) {
+    if (cell.skipReason != null) {
+      rows.push([
+        `${cell.scenario} N=${String(cell.n)}`,
+        cell.implementation,
+        `skipped: ${cell.skipReason}`,
+        '',
+        '',
+        '',
+        '',
+      ]);
+      continue;
+    }
+    const absolute = comparableMetrics(cell);
+    const ratios = table?.[cell.key]?.metrics ?? {};
+    const asValue = (metric) => {
+      if (vsControl) {
+        return isNumber(ratios[metric]?.ratio)
+          ? formatRatio(ratios[metric]?.ratio)
+          : 'n/a';
+      }
+      return isNumber(absolute[metric])
+        ? formatMetric(metric, absolute[metric])
+        : 'n/a';
+    };
+    rows.push([
+      `${cell.scenario} N=${String(cell.n)}`,
+      cell.implementation,
+      asValue('presentedNs'),
+      asValue('mountedNs'),
+      asValue('jsCommitNs'),
+      asValue('jsNsPerOp'),
+      asValue('mainNsPerOp'),
+      asValue('bytesPerInstance'),
+    ]);
+  }
+  return markdownTable(
+    [
+      'Cell',
+      'Implementation',
+      'presented',
+      'mounted',
+      'JS commit',
+      'JS CPU/op',
+      'UI CPU/op',
+      'bytes/inst',
+    ],
+    rows
+  );
+}
+
+/** Per-cell detail, including the sanity counters the latency numbers need. */
+export function detailSections(run) {
+  const cells = cellsFrom(run);
+  const table = ratioTable(cells);
+  const noise = noiseTable(table);
+  const sections = [];
+  for (const cell of Object.values(cells).sort(cellSort)) {
+    const header = `### ${cell.scenario} N=${String(cell.n)} - ${cell.implementation}`;
+    if (cell.skipReason != null) {
+      sections.push(`${header}\n\nskipped: ${cell.skipReason}\n`);
+      continue;
+    }
+    const rows = LATENCY_METRICS.map((metric) => {
+      const stats = cell.metrics?.[metric] ?? {};
+      const ratio = table[cell.key]?.metrics?.[metric];
+      return [
+        metric,
+        formatMetric(metric, stats.median),
+        `+/- ${formatMetric(metric, stats.mad)}`,
+        formatMetric(metric, stats.p95),
+        String(stats.samples ?? 0),
+        isNumber(ratio?.ratio) ? formatRatio(ratio.ratio) : 'n/a',
+      ];
+    });
+    rows.push([
+      'JS CPU per op',
+      formatMetric('jsNsPerOp', cell.cpu?.jsNsPerOp),
+      `${String(cell.cpu?.launches ?? 0)} launch samples`,
+      '',
+      '',
+      formatRatio(table[cell.key]?.metrics?.jsNsPerOp?.ratio),
+    ]);
+    rows.push([
+      'UI CPU per op',
+      formatMetric('mainNsPerOp', cell.cpu?.mainNsPerOp),
+      `${String(cell.cpu?.launches ?? 0)} launch samples`,
+      '',
+      '',
+      formatRatio(table[cell.key]?.metrics?.mainNsPerOp?.ratio),
+    ]);
+    if (isNumber(cell.cpu?.unmountMainNsPerOp)) {
+      rows.push([
+        'UI CPU per unmount',
+        formatMetric('unmountMainNsPerOp', cell.cpu.unmountMainNsPerOp),
+        `${String(cell.cpu.unmountLaunches ?? 0)} launch samples`,
+        '',
+        '',
+        formatRatio(table[cell.key]?.metrics?.unmountMainNsPerOp?.ratio),
+      ]);
+    }
+    if (isNumber(cell.memory?.bytesPerInstance)) {
+      rows.push([
+        'bytes / instance',
+        formatBytes(cell.memory.bytesPerInstance),
+        `${String(cell.memory.bytesPerInstanceLaunches)} launch samples`,
+        '',
+        '',
+        formatRatio(table[cell.key]?.metrics?.bytesPerInstance?.ratio),
+      ]);
+    }
+    for (const [label, value] of [
+      ['native heap / inst', cell.memory?.nativeBytesPerInstance],
+      ['java heap / inst', cell.memory?.javaBytesPerInstance],
+    ]) {
+      if (isNumber(value)) {
+        rows.push([
+          label,
+          formatBytes(value),
+          `${String(cell.memory.heapBreakdownLaunches ?? 0)} launch samples`,
+          'reported only (not gated)',
+          '',
+          '',
+        ]);
+      }
+    }
+    if (isNumber(cell.memory?.leakSlopeBytesPerCycle)) {
+      rows.push([
+        'leak slope',
+        `${formatBytes(cell.memory.leakSlopeBytesPerCycle)}/cycle`,
+        cell.memory.leakMonotonic
+          ? 'MONOTONIC (gated as a leak)'
+          : 'not monotonic (not gated)',
+        '',
+        '',
+        formatRatio(table[cell.key]?.metrics?.leakSlopeBytesPerCycle?.ratio),
+      ]);
+    }
+
+    const detail = [
+      `${header}\n\n${markdownTable(
+        [
+          'Metric',
+          'median of launch medians',
+          'MAD',
+          'p95 (pooled)',
+          'n',
+          'x rn-core',
+        ],
+        rows
+      )}\n`,
+    ];
+
+    const noisy = Object.entries(noise[cell.key]?.metrics ?? {})
+      .filter(([, value]) => value.noisy)
+      .map(([metric]) => metric);
+    if (noisy.length > 0) {
+      detail.push(
+        `Within-run spread above ${String(
+          Math.round(NOISE_REL_SPREAD * 100)
+        )}% on: ${noisy
+          .map(
+            (metric) =>
+              `${METRIC_LABELS[metric] ?? metric} (${formatSpread(
+                noise[cell.key]?.metrics?.[metric]?.relSpread
+              )})`
+          )
+          .join(
+            ', '
+          )}. Those metrics are reported but cannot carry a verdict.\n`
+      );
+    }
+    const sanity = cell.sanity ?? {};
+    const bad = Object.entries(sanity).filter(([, count]) => count > 0);
+    detail.push(
+      bad.length === 0
+        ? `Signal sanity: no out-of-order samples (${String(
+            cell.launches ?? 0
+          )} launches x ${String(cell.protocol?.measured ?? 0)} iterations).\n`
+        : `Signal sanity: ${bad
+            .map(([name, count]) => `${name}=${String(count)}`)
+            .join(', ')} - treat this cell's latency pair with care.\n`
+    );
+    if (cell.memory?.heapCollected === false) {
+      detail.push(
+        'Hermes `globalThis.gc()` is unavailable in this build, so footprint samples include uncollected JS heap.\n'
+      );
+    }
+    sections.push(detail.join('\n'));
+  }
+  return sections.join('\n');
+}
+
+/** Human summary of run metadata, so a pasted table explains itself. */
+export function runHeader(run) {
+  const cells = cellsFrom(run);
+  const protocol = Object.values(cells)[0]?.protocol ?? {};
+  const machine = run.machine ?? {};
+  const lines = [
+    `- platform: \`${run.platform}\` on \`${run.deviceName}\` (key \`${run.deviceKey}\`)`,
+    `- commit: \`${run.sha}\`${run.dirty ? ' (dirty tree)' : ''}`,
+    `- plan: \`${run.plan}\`, ${String(run.launches ?? '?')} launches per cell, ${String(protocol.warmup ?? '?')} warmup + ${String(protocol.measured ?? '?')} measured iterations`,
+    `- clock: \`${run.clock ?? 'unknown'}\` (absolute, per D1)`,
+  ];
+  if (machine.cpuCount != null) {
+    lines.push(
+      `- machine: \`${machine.hostname}\`, ${String(machine.cpuCount)} cores, load average ${machine.loadavg1?.toFixed(2)} / ${machine.loadavg5?.toFixed(2)}${machine.quiet === false ? ' **(busy)**' : ''}`
+    );
+  }
+  if (machine.osVersion != null) {
+    lines.push(
+      `- OS: \`${machine.osPlatform}\` ${machine.osVersion}${machine.xcode != null ? `, Xcode \`${machine.xcode}\`` : ''}${machine.androidImage != null ? `, image \`${machine.androidImage}\`` : ''}`
+    );
+  }
+  lines.push(`- generated: ${run.createdAt}`);
+  return lines.join('\n');
+}
+
+/**
+ * One comparison -> markdown + exit code, shared by `run.mjs` and the standalone
+ * reporter (`mode` only changes the wording and whether absolute control
+ * movement is worth printing).
+ */
+export function comparisonSections({
+  run,
+  base,
+  mode,
+  label,
+  baseTable = null,
+  baseNoise = null,
+}) {
+  const headTable = ratioTable(run);
+  const headNoise = noiseTable(headTable);
+  const resolvedBaseTable = baseTable ?? ratioTable(base);
+  const resolvedBaseNoise = baseNoise ?? noiseTable(resolvedBaseTable);
+  const result = gate({
+    head: run,
+    base,
+    headTable,
+    baseTable: resolvedBaseTable,
+    headNoise,
+    baseNoise: resolvedBaseNoise,
+  });
+  const movement =
+    mode === 'compare' ? controlMovement(cellsFrom(base), cellsFrom(run)) : [];
+
+  const sections = [
+    `## ${mode === 'check' ? 'Check against' : 'head/base vs'} ${label}`,
+    '',
+    mode === 'check'
+      ? 'Both columns are launch-paired ratios to `rn-core`, so an OS or machine change cannot move the verdict.'
+      : 'Gated on `head(x/rn-core) / base(x/rn-core)`, so machine drift cancels.',
+    '',
+    gateTable(result, mode),
+    '',
+    gateSummary(result, mode),
+  ];
+  if (movement.length > 0) {
+    sections.push(
+      '',
+      `Context only - the \`rn-core\` control itself moved more than ${String(
+        Math.round(CONTROL_NOTE_THRESHOLD * 100)
+      )}% between the two runs on ${String(movement.length)} metric(s): ${movement
+        .map(
+          (finding) =>
+            `\`${finding.key}\` ${METRIC_LABELS[finding.metric] ?? finding.metric} ${formatRatio(finding.ratio)}`
+        )
+        .join(', ')}.`
+    );
+  }
+  return {
+    markdown: `${sections.join('\n')}\n`,
+    result,
+    exitCode: result.conclusiveFailure ? 1 : 0,
+  };
+}
+
+function gateTable(result, mode) {
+  const rows = [];
+  for (const row of result.rows) {
+    if (row.status === 'missing-base') {
+      rows.push([row.key, '-', '-', '-', '-', 'not measured in base']);
+      continue;
+    }
+    if (row.status === 'skipped-both' || row.status === 'skipped') {
+      rows.push([row.key, '-', '-', '-', '-', 'skipped']);
+      continue;
+    }
+    for (const [metric, value] of Object.entries(row.perMetric)) {
+      const notes = [];
+      if (!value.gated) {
+        notes.push(
+          row.implementation === 'rn-core' ? 'control' : 'reference arm'
+        );
+      }
+      if (value.noisy) {
+        notes.push('noisy');
+      }
+      if (value.conclusive) {
+        notes.push('FAIL');
+      } else if (value.overThreshold && value.gated) {
+        notes.push('over threshold, not conclusive');
+      }
+      rows.push([
+        row.key,
+        METRIC_LABELS[metric] ?? metric,
+        formatRatio(value.base),
+        formatRatio(value.head),
+        formatRatio(value.ratio),
+        notes.join(', ') ||
+          (mode === 'check' ? 'within tolerance' : 'within tolerance'),
+      ]);
+    }
+  }
+  return markdownTable(
+    [
+      'Cell',
+      'Metric',
+      'base x rn-core',
+      'head x rn-core',
+      'head/base',
+      'verdict',
+    ],
+    rows
+  );
+}
+
+function gateSummary(result, mode) {
+  const lines = [];
+  const noisyCount = Object.values(result.headNoise).reduce(
+    (total, cell) =>
+      total + Object.values(cell.metrics).filter((value) => value.noisy).length,
+    0
+  );
+  lines.push(
+    noisyCount === 0
+      ? `Every (scenario, N, metric) was quiet within the run (launch-paired ratio spread under ${String(
+          Math.round(NOISE_REL_SPREAD * 100)
+        )}% MAD), so every verdict below is conclusive.`
+      : `${String(noisyCount)} metric(s) were noisy within the run (launch-paired ratio spread over ${String(
+          Math.round(NOISE_REL_SPREAD * 100)
+        )}% MAD); those cannot carry a verdict, the rest can.`
+  );
+  if (result.failures.length === 0) {
+    lines.push(
+      ``,
+      `No gated metric exceeded the ${formatRatio(RATIO_FAIL_THRESHOLD)} threshold${
+        mode === 'check' ? ' against the baseline' : ' versus base'
+      }.`
+    );
+    return lines.join('\n');
+  }
+  lines.push(
+    ``,
+    `Metrics over the ${formatRatio(RATIO_FAIL_THRESHOLD)} threshold (only \`nitro-ui\` arms gate; a failure also needs a 95% CI that excludes 1.05 and a quiet run):`
+  );
+  for (const failure of result.failures) {
+    const label = failure.conclusive
+      ? 'FAIL'
+      : failure.gated
+        ? failure.noisy
+          ? 'reported, not conclusive (noisy)'
+          : 'reported, not conclusive (CI covers 1.05)'
+        : 'reported (reference arm - never gates)';
+    lines.push(
+      `- ${label} \`${failure.key}\` ${METRIC_LABELS[failure.metric] ?? failure.metric}: ${formatRatio(failure.ratio)}${
+        failure.ci == null
+          ? ' (no CI: too few launch samples)'
+          : failure.ci.hierarchical
+            ? `, 95% CI ${formatRatio(failure.ci.low)}-${formatRatio(failure.ci.high)} (hierarchical bootstrap over ${String(failure.ci.launchSamples)} launches)`
+            : `, 95% CI ${formatRatio(failure.ci.low)}-${formatRatio(failure.ci.high)} (launch bootstrap over ${String(failure.ci.launchSamples)} launches)`
+      }`
+    );
+  }
+  return lines.join('\n');
+}
+
+export function renderMarkdown(run) {
+  return [
+    `# Bench ${run.platform} - ${run.plan}`,
+    '',
+    runHeader(run),
+    `- duration: ${String(Math.round(run.durationMs / 1000))}s`,
+    run.problems.length === 0
+      ? '- problems: none'
+      : `- problems:\n${run.problems.map((problem) => `  - ${problem}`).join('\n')}`,
+    '',
+    '## Summary (absolute)',
+    '',
+    summaryTable(run),
+    '',
+    '## Summary (launch-paired ratio to rn-core)',
+    '',
+    summaryTable(run, { vsControl: true }),
+    '',
+    '> `presented` is a frame stamp, not a duration: the time from the start of',
+    '> the JS commit until the frame that latched the transaction (iOS: the first',
+    '> `CADisplayLink` tick after the mount; Android: intended vsync + total frame',
+    '> duration). Both platforms differ by a frame, so compare arms, not platforms.',
+    '',
+    detailSections(run),
+  ].join('\n');
+}
