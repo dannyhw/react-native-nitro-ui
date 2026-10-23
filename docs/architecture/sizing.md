@@ -17,7 +17,8 @@ exists to keep that question off the layout path:
 - the shadow node answers layout from that cache, the node's own state, or a declared fallback —
   a lookup, never a call (`cpp/NitroUiIntrinsic.hpp:197`);
 - when the cache did not know, the correction is applied as a Fabric state update at the end of the
-  turn, batched, with a per-turn budget of synchronous updates.
+  turn, batched, with a per-flush budget of synchronous updates — the platform's number, not the
+  engine's (§3).
 
 A control's size therefore arrives in two steps — a guess that is laid out immediately, and the
 measured size that replaces it before the frame is drawn where the platform allows. The guess is
@@ -52,9 +53,9 @@ size it just measured, and drops the report without queueing anything
 
 `flush()` (`cpp/NitroUiSizingEngine.cpp:321`) applies the queued reports as one batch: it corrects
 **every** instance that was laid out for the configuration a report answers for, keeps at most
-`kImmediateBudgetPerTurn` (2) of them synchronous, batches the rest, ignores changes under 0.5
-dp/pt, and returns whether anything changed — Android's `OnPreDrawListener` uses that to cancel a
-frame whose layout was stale.
+`kImmediateBudgetPerTurn` (2, or whatever the platform hands `flush(immediateBudget)`: Android hands
+one) of them synchronous, batches the rest, ignores changes under 0.5 dp/pt, and returns whether
+anything changed — Android's `OnPreDrawListener` uses that to cancel a frame whose layout was stale.
 
 ## 3. Where a turn ends, per platform
 
@@ -81,6 +82,42 @@ A natively measured size cannot exist before the native side has laid the contro
 case is not a scheduling bug to fix by flushing earlier: it is the first turn having nothing to
 flush. It is also what stock RN does — it keeps the old box until something re-measures too. The
 trace (`§7`) is what turned this from an argument into a number.
+
+### How many corrections a flush may make synchronously
+
+`flush(immediateBudget)` takes the number of synchronous pushes the platform wants to pay for, and
+the platforms differ because a synchronous push is a Fabric commit run *where `flush` was called*:
+
+| Platform | Budget | Why |
+| -------- | ------ | --- |
+| iOS      | 2 (`kImmediateBudgetPerTurn`) | the commit joins the turn already on its way, so a push is nearly free — a cold batch of 200 costs 8.5 ms for the flush |
+| Android  | 1 (`IMMEDIATE_BUDGET_PER_FLUSH`) | the commit happens inside the pre-draw pass that is about to cancel the frame, so it is a full re-layout spent on a frame that never draws |
+
+T12 phase 2 attributed the Android number on the harness's cold batch of 200 (debug build): the
+engine's own work — 200 reports, one correction, 199 asynchronous enqueues — is **0.09 ms**, and the
+flush is **36–38 ms** on a quiet emulator (84–125 ms on a loaded one). The whole cost is the one
+synchronous commit, so a second synchronous push re-lays out a tree that commit just made correct
+and spending none is what the 0.09 ms measures. Dropping from two pushes to one is dropping one of
+those commits, and T12 measured it on three rounds each side (same tree, same probe):
+
+| N   | Budget 2 (first batch / median of 3) | Budget 1 (first batch / median of 3) | Median  |
+| --- | ------------------------------------ | ------------------------------------ | ------- |
+| 200 | 38.80 ms / 18.88 ms                  | 36.76 ms / 12.84 ms                  | −32 %   |
+| 500 | 75.38 ms / 42.51 ms                  | 53.97 ms / 26.77 ms                  | −37 %   |
+
+Quote it as both, not as one number: the first batch in a process — the one the committed test sits
+in — moves −5 % at 200 rows and −28 % at 500, while later rounds in the same process move far more,
+because a cold first commit is paying for a tree that has just been built. All six pairs are lower.
+
+One is also the smallest budget that keeps D17's floor: at 0 the harness's own cold-control test goes
+red, and the same cold batch measures `stale=100` — every box drawn wrong once — because no
+correction at all reaches the cancelled frame. At 1 the batch T12 measured drew `stale=0`, which is a
+measurement on one device rather than a property of the budget: one synchronous push clones one
+family, so an untouched sibling keeps the measurement it cached
+(`cpp/NitroUiIntrinsic.hpp`, `shouldNewRevisionDirtyMeasurement`), and T11 round 2 expected 198 of 200
+to arrive after the redraw. What is *not* in doubt is the floor — one instance, the one that reported,
+is corrected inside the frame that gets cancelled — and the remaining batch is what D17 already
+allows to land on the next frame. The harness logs `stale` for this reason and does not assert it.
 
 ## 4. The first mount, counted
 

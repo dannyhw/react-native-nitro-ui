@@ -6,13 +6,13 @@ import android.os.Build
 import android.view.View
 import android.widget.FrameLayout
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
@@ -26,6 +26,7 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.findViewTreeSavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import java.lang.ref.WeakReference
 
 /** An immutable size in dp, safe to publish across threads with a `@Volatile`. */
 data class NitroUiDpSize(val width: Double, val height: Double)
@@ -539,6 +540,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     // report; the engine decides whether the epoch moves.
     // `LocaleList` is not an `Iterable`, so the tags come out as the platform
     // already renders them: one comma-separated string, in priority order.
+    // The dynamic colours come from resource overlays, and a configuration
+    // change can swap them (night mode certainly does). Cheaper to rebuild the
+    // one scheme than to key it on every part of a Configuration.
+    NitroUiColorSchemes.invalidate()
     val locales = newConfig?.locales?.toLanguageTags() ?: ""
     NitroUiSizing.invalidateEnvironmentIfChanged(
       "${newConfig?.fontScale}|${newConfig?.densityDpi}|$locales",
@@ -562,11 +567,90 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 fun NitroUiTheme(content: @Composable () -> Unit) {
   val dark = isSystemInDarkTheme()
   val context = LocalContext.current
-  // Dynamic colour reads ~50 framework resources, and every hosted control is
-  // its own composition, so build it once per (context, appearance) instead of
-  // once per hosted instance.
-  val colorScheme =
-    remember(context, dark) {
+  MaterialTheme(colorScheme = NitroUiColorSchemes.forContext(context, dark), content = content)
+}
+
+/**
+ * The key of [NitroUiColorSchemes], held weakly.
+ *
+ * A process-wide cache that keeps its key strongly keeps everything the key keeps.
+ * Here the key is the `Context` the colours were read from - RN's
+ * `ThemedReactContext`, whose base context is the `Activity` - so a strong key
+ * would pin a destroyed Activity and its whole view hierarchy in every process
+ * that ever mounts a control, until some later control composes against a
+ * different context (which may be never). The value may stay strong: a
+ * `ColorScheme` is a bag of colour longs and reaches nothing.
+ *
+ * Collected is not wrong, just a miss: [matches] compares the referent, so once
+ * the context is gone the next control rebuilds the scheme. Nothing has to be
+ * unregistered, and no entry outlives the thing it describes.
+ *
+ * Identity, not `equals`, as before: resource overlays are per-context, and two
+ * `ThemedReactContext`s that compare equal can still be themed differently.
+ */
+internal class WeakKey<T : Any>(value: T) {
+  private val reference = WeakReference(value)
+
+  /** Whether this key is still alive and *is* [candidate]. */
+  fun matches(candidate: T): Boolean = reference.get() === candidate
+
+  /** The referent, or null once it has been collected. For tests of the contract. */
+  val held: T?
+    get() = reference.get()
+}
+
+/**
+ * The one Material colour scheme of the process, shared by every hosted control.
+ *
+ * `remember` cannot do this job, which is what an earlier version of
+ * [NitroUiTheme] assumed: a `remember` lives in one composition, and every
+ * hosted control *is* its own composition (D8 - one host per view). So the
+ * dynamic scheme, which reads ~50 framework resources and allocates a
+ * `ColorScheme` with ~30 colours, was built once per mounted control, and
+ * `SwitchColorsCache` (the tinted-colour cache), keyed by scheme identity - could never hit across
+ * controls. Both costs are per instance, which is the wrong shape for a
+ * value that is the same for every control on screen.
+ *
+ * The key is the `Context` the resources were read from (identity: resource
+ * overlays are per-context) plus what the build actually branches on. A
+ * configuration change can move those colours, so [invalidate] drops the entry
+ * and the next control to compose rebuilds it; `uiMode` is also in the key
+ * because the cached scheme can outlive every mounted control, and reading the
+ * live `Configuration` is a field read, not a copy
+ * (`ResourcesImpl#getConfiguration`).
+ *
+ * The context half of the key is a [WeakKey]: this object lives for the process,
+ * and the context it is keyed on is the host's `Activity`. See [WeakKey] for why
+ * that is a leak and why losing the entry to the collector is only a miss.
+ *
+ * Residual, measured as cosmetic rather than fixed: a dynamic-colour change the
+ * platform delivers *without* a configuration change (a wallpaper swap on
+ * Android 12+) keeps the old scheme until the next configuration change.
+ * Material's own `DynamicColors` closes that with a process-wide receiver for
+ * `ACTION_WALLPAPER_CHANGED` that bumps a version; silently registering another
+ * receiver on the host app for a cosmetic case is a worse trade.
+ */
+internal object NitroUiColorSchemes {
+  private class Entry(
+    val contextKey: WeakKey<Context>,
+    val dark: Boolean,
+    val uiMode: Int,
+    val scheme: ColorScheme,
+  )
+
+  @Volatile private var entry: Entry? = null
+
+  fun forContext(
+    context: Context,
+    dark: Boolean,
+  ): ColorScheme {
+    val uiMode = context.resources.configuration.uiMode
+    entry?.let {
+      if (it.contextKey.matches(context) && it.dark == dark && it.uiMode == uiMode) {
+        return it.scheme
+      }
+    }
+    val built =
       when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
           if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
@@ -574,8 +658,14 @@ fun NitroUiTheme(content: @Composable () -> Unit) {
         dark -> darkColorScheme()
         else -> lightColorScheme()
       }
-    }
-  MaterialTheme(colorScheme = colorScheme, content = content)
+    entry = Entry(WeakKey(context), dark, uiMode, built)
+    return built
+  }
+
+  /** A configuration change can move the dynamic colours: build the next one fresh. */
+  fun invalidate() {
+    entry = null
+  }
 }
 
 /**

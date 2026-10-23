@@ -5,6 +5,9 @@ import android.view.View
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwitchColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -95,6 +98,121 @@ internal class SwitchModel : NitroUiModel() {
 }
 
 /**
+ * The library's `SwitchColors`, so that the *tinted* Switch costs one
+ * `SwitchColors` per (colour scheme, tint) instead of one per recomposition.
+ *
+ * What Material 3 1.4 already does: `SwitchDefaults.colors()` with no arguments
+ * returns `colorScheme`'s own memoised default set (a `defaultSwitchColorsCached`
+ * field), so an untinted Switch pays a field read per recomposition, not an
+ * allocation. What it does not do: `SwitchDefaults.colors(checkedTrackColor = …)`
+ * - the tinted path, and the one an app using `tintColor` is on - builds a fresh
+ * 18-`Color` object from the scheme on every call, which at one call per
+ * recomposition per mounted Switch is per-frame garbage on the UI thread, on the
+ * exact path the `update` bench scenario exercises.
+ *
+ * It cannot be a `remember`: `remember`'s calculation lambda is
+ * `@DisallowComposableCalls` and building the colours needs a composable read of
+ * the scheme. So a cache with the miss in the composable - and it only pays
+ * across instances while the *scheme identity* is shared, which is what
+ * `NitroUiTheme`'s process-wide scheme is for (see `NitroComposeHost.kt`). A
+ * per-host `remember` is not impossible (read `SwitchDefaults.colors()` in the
+ * composable, then `remember(base, tint) { base.copy(checkedTrackColor = …) }`,
+ * since `SwitchColors.copy` is public and not composable), but it is one object
+ * per mounted control, which is the shape this cache exists to remove.
+ *
+ * Bounded and self-clearing: one scheme at a time (identity is the key because
+ * identity is what the memo and `SwitchDefaults` both read), at most
+ * [MAX_TINTED_ENTRIES] tints, and a scheme change drops everything.
+ */
+private object SwitchColorsCache {
+  /**
+   * Tints to remember before starting over. An app tints a few Switches at most;
+   * the cap is what stops a component that derives a colour per list row from
+   * growing this for the life of the process.
+   */
+  private const val MAX_TINTED_ENTRIES = 8
+
+  private var scheme: ColorScheme? = null
+  private var untinted: SwitchColors? = null
+  private var tinted: HashMap<Int, SwitchColors>? = null
+
+  /**
+   * The cached colours for this scheme and tint, or `null` on a miss - which the
+   * caller fills by *calling the composable*, because building them is a
+   * `@ReadOnlyComposable` and cannot be handed to this object as a lambda.
+   *
+   * Composition happens on the UI thread today, but a second window can compose
+   * against another `Choreographer`, and a half-written entry here would show one
+   * Switch wearing a stale theme; the guard is one uncontended monitor per
+   * recomposition, paid for by the allocation and 18 colour reads it avoids.
+   */
+  @Synchronized
+  fun get(
+    scheme: ColorScheme,
+    tint: Int?,
+  ): SwitchColors? {
+    adopt(scheme)
+    return if (tint == null) untinted else tinted?.get(tint)
+  }
+
+  /** Record a colour set the caller just built. */
+  @Synchronized
+  fun put(
+    scheme: ColorScheme,
+    tint: Int?,
+    colors: SwitchColors,
+  ) {
+    adopt(scheme)
+    if (tint == null) {
+      untinted = colors
+      return
+    }
+    val entries = tinted ?: HashMap<Int, SwitchColors>().also { tinted = it }
+    if (entries.size >= MAX_TINTED_ENTRIES) {
+      entries.clear()
+    }
+    entries[tint] = colors
+  }
+
+  /** Drop what a different scheme invalidates. Called with the lock held. */
+  private fun adopt(scheme: ColorScheme) {
+    if (this.scheme === scheme) {
+      return
+    }
+    this.scheme = scheme
+    untinted = null
+    tinted?.clear()
+  }
+}
+
+/**
+ * The Switch's colours for [tint] (an ARGB int, or `null` for the scheme's own),
+ * served by [SwitchColorsCache].
+ *
+ * A hit is a lookup. The composable call is on the miss only - once per
+ * (scheme, tint) for the process rather than once per recomposition - and it has
+ * to sit here rather than inside the cache, because a building lambda would be a
+ * composable in disguise (and `remember`'s calculation lambda is explicitly not
+ * one). Plain `@Composable` rather than `@ReadOnlyComposable` for the same reason:
+ * Material 3 1.4's `colors()` is not read-only, so a read-only context cannot
+ * call it - the group that costs is around the miss, which runs once.
+ */
+@Composable
+private fun switchColors(tint: Int?): SwitchColors {
+  val scheme = MaterialTheme.colorScheme
+  SwitchColorsCache.get(scheme, tint)?.let { cached -> return cached }
+  val built =
+    if (tint != null) {
+      // The checked track is the closest analogue of iOS `.tint()`.
+      SwitchDefaults.colors(checkedTrackColor = ComposeColor(tint))
+    } else {
+      SwitchDefaults.colors()
+    }
+  SwitchColorsCache.put(scheme, tint, built)
+  return built
+}
+
+/**
  * The Switch's host: [NitroComposeHost] plus this component's composable.
  *
  * [Content] is fixed for the lifetime of the view, which is why it lives in a
@@ -131,13 +249,7 @@ private class SwitchHost(
         model.onChange?.invoke(requested, eventCount.toDouble())
       },
       enabled = model.enabled,
-      colors =
-        if (tint != null) {
-          // The checked track is the closest analogue of iOS `.tint()`.
-          SwitchDefaults.colors(checkedTrackColor = ComposeColor(tint))
-        } else {
-          SwitchDefaults.colors()
-        },
+      colors = switchColors(tint),
     )
   }
 }
