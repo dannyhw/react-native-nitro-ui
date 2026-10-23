@@ -9,6 +9,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
@@ -37,6 +40,13 @@ internal class SwitchModel : NitroUiModel() {
   /** ARGB `processColor` int of the checked track, or `null` for the scheme's. */
   var checkedTrackColor by mutableStateOf<Int?>(null)
 
+  /**
+   * `accessibilityLabel`, read by the composable so it can put the label on the
+   * Switch itself. Not the container's `contentDescription` - see the a11y rule
+   * in `docs/architecture/core.md`.
+   */
+  var accessibilityLabel by mutableStateOf<String?>(null)
+
   /** Event-count handshake. Not observed: it drives [displayed], never renders. */
   val state = NitroUiControlledValue<Boolean>(false)
 
@@ -52,6 +62,7 @@ internal class SwitchModel : NitroUiModel() {
     displayed = false
     enabled = true
     checkedTrackColor = null
+    accessibilityLabel = null
     state.displayed = false
     state.js = null
     state.nativeEvents = 0
@@ -77,7 +88,14 @@ private class SwitchHost(
   @Composable
   override fun Component(model: SwitchModel) {
     val tint = model.checkedTrackColor
+    val label = model.accessibilityLabel
+    // The label goes on the control, which is the node TalkBack focuses (it
+    // carries M3's `Role.Switch`). Setting `contentDescription` on the host View
+    // instead would put a second, focusable empty box around it.
+    val labelModifier =
+      if (label != null) Modifier.semantics { contentDescription = label } else Modifier
     Switch(
+      modifier = labelModifier,
       checked = model.displayed,
       onCheckedChange = { requested ->
         // Native is optimistic: show the new value now, before React has seen the
@@ -169,7 +187,10 @@ class HybridNitroUiSwitch(
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
       val raw = next.asSecondOrNull()
-      val argb = if (raw != null && raw.isFinite()) raw.toInt() else null
+      // `processColor` on Android hands back the ARGB int as a double. Going via
+      // `toLong()` keeps the bit pattern (D10): `Double.toInt()` saturates, so an
+      // opaque colour above `Int.MAX_VALUE` would become `Int.MAX_VALUE`.
+      val argb = if (raw != null && raw.isFinite()) raw.toLong().toInt() else null
       if (argb == model.checkedTrackColor) {
         return
       }
@@ -189,10 +210,15 @@ class HybridNitroUiSwitch(
 
   override var accessibilityLabel: Variant_NullType_String
     get() =
-      host.contentDescription?.toString()?.let { Variant_NullType_String.Second(it) }
+      model.accessibilityLabel?.let { Variant_NullType_String.Second(it) }
         ?: Variant_NullType_String.First(NullType.NULL)
     set(next) {
-      host.contentDescription = next.asSecondOrNull()
+      val label = next.asSecondOrNull()
+      if (label == model.accessibilityLabel) {
+        return
+      }
+      model.accessibilityLabel = label
+      host.markDirty()
     }
 
   override var nuiPerfId: Variant_NullType_Double
@@ -227,9 +253,12 @@ class HybridNitroUiSwitch(
 
   override fun prepareForRecycle() {
     host.tag = null
-    host.contentDescription = null
     host.perfInstanceId = NitroUiPerf.NO_INSTANCE
-    // Resets the model; the composition and its owners survive on purpose.
+    // Resets the model. The composition does not survive a recycle: Nitro's
+    // generated manager calls `onDropView()` (-> [onDropView] below, which
+    // disposes it) before `prepareToRecycleView`, and `AbstractComposeView`
+    // rebuilds it on the next attach. What recycling still saves is this object
+    // graph: View, Hybrid, model and host allocations plus the owner wiring.
     host.prepareForRecycle()
   }
 

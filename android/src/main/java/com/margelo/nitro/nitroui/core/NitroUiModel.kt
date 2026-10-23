@@ -15,8 +15,12 @@ package com.margelo.nitro.nitroui.core
  */
 abstract class NitroUiModel {
   /**
-   * Called when the view is recycled: put every field back to its default. The
-   * composition survives, so leftover state would show up in the next row.
+   * Called when the view is recycled: put every field back to its default.
+   *
+   * Nothing carries over from the previous row - not the model fields, and not
+   * the composition either, which `NitroComposeHost.drop()` disposed before this
+   * ran (see `docs/architecture/core.md` §6). Leftover state here would show up
+   * in the reused row with no props having been sent yet.
    */
   abstract fun reset()
 }
