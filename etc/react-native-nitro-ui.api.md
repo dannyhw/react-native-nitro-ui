@@ -84,6 +84,41 @@ export interface NitroUiSizingTraceEvent {
 export function prewarm(componentNames: readonly string[]): number;
 
 // @public
+export function Slider(input: SliderProps): JSX.Element;
+
+// @public
+export interface SliderProps extends ViewProps {
+    defaultValue?: number | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly value: number | null;
+        readonly mostRecentEventCount: number;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestDrag(to: number, steps: number, msPerStep: number): void;
+        nuiTestAccessibilityStep(direction: number): void;
+        nuiTestAccessibilityStepReport(): string;
+        nuiTestFramePumpArmed(): boolean;
+    }) => void) | undefined;
+    maximumValue?: number | undefined;
+    minimumValue?: number | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onSlidingComplete?: ((value: number) => void) | undefined;
+    onSlidingStart?: ((value: number) => void) | undefined;
+    onValueChange?: ((value: number) => void) | undefined;
+    step?: number | undefined;
+    tintColor?: ColorValue | undefined;
+    value?: number | undefined;
+}
+
+// @public
 export function Switch(input: SwitchProps): JSX.Element;
 
 // @public

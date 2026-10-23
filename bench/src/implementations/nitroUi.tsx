@@ -1,7 +1,13 @@
-import { Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { Slider, Switch, nitroUiCore } from 'react-native-nitro-ui';
 
 import type { BenchListProps, BenchPerfMark } from '../types';
-import { onValueChange, range, rowStyle } from './shared';
+import {
+  onSliderChange,
+  onValueChange,
+  range,
+  rowStyle,
+  sliderValue,
+} from './shared';
 
 /**
  * =====================================================================================
@@ -84,9 +90,31 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
  * literally free (one integer compare per mark site), and the numbers in the
  * published tables should be the numbers a consumer gets.
  */
-export function NitroUiList({ n, value, perfMarks }: BenchListProps) {
+export function NitroUiList({
+  n,
+  value,
+  perfMarks,
+  component,
+}: BenchListProps) {
   if (n === 0) {
     return null;
+  }
+  const style = rowStyle(component);
+  if (component === 'slider') {
+    return (
+      <>
+        {range(n).map((index) => (
+          <Slider
+            key={index}
+            testID={`bench-nitro-ui-slider-${String(index)}`}
+            value={sliderValue(value)}
+            onValueChange={onSliderChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
   }
   return (
     <>
@@ -97,7 +125,7 @@ export function NitroUiList({ n, value, perfMarks }: BenchListProps) {
           value={value}
           onValueChange={onValueChange}
           nuiPerfId={perfMarks ? index : null}
-          style={rowStyle}
+          style={style}
         />
       ))}
     </>

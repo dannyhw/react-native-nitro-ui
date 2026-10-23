@@ -13,6 +13,7 @@
 import {
   cellsFrom,
   comparableMetrics,
+  componentOf,
   CONTROL_NOTE_THRESHOLD,
   controlMovement,
   formatBytes,
@@ -30,6 +31,7 @@ import {
   noiseTable,
   RATIO_FAIL_THRESHOLD,
   ratioTable,
+  scenarioActionOf,
 } from './lib.mjs';
 
 const METRIC_LABELS = {
@@ -55,10 +57,22 @@ function formatNumber(value, digits = 0) {
   return isNumber(value) ? value.toFixed(digits) : 'n/a';
 }
 
+/**
+ * Cells group by what the launch does, then by which control it mounted, then
+ * by size. A scenario cell carries its component (`mount.slider`), so sorting on
+ * the whole string would put `mount.slider` next to `mount` only by luck and
+ * every later component wherever the alphabet puts it.
+ */
 function cellSort(a, b) {
   const scenarioOrder = ['mount', 'update', 'memory', 'leak'];
+  const actionOrder = (scenario) => {
+    const index = scenarioOrder.indexOf(scenarioActionOf(scenario));
+    // An action the reporter has never seen goes last, not first.
+    return index === -1 ? scenarioOrder.length : index;
+  };
   return (
-    scenarioOrder.indexOf(a.scenario) - scenarioOrder.indexOf(b.scenario) ||
+    actionOrder(a.scenario) - actionOrder(b.scenario) ||
+    componentOf(a.scenario).localeCompare(componentOf(b.scenario)) ||
     a.n - b.n ||
     IMPLEMENTATIONS.indexOf(a.implementation) -
       IMPLEMENTATIONS.indexOf(b.implementation)
@@ -262,13 +276,26 @@ export function detailSections(run) {
     const sanity = cell.sanity ?? {};
     const bad = Object.entries(sanity).filter(([, count]) => count > 0);
     detail.push(
-      bad.length === 0
-        ? `Signal sanity: no out-of-order samples (${String(
-            cell.launches ?? 0
-          )} launches x ${String(cell.protocol?.measured ?? 0)} iterations).\n`
-        : `Signal sanity: ${bad
-            .map(([name, count]) => `${name}=${String(count)}`)
-            .join(', ')} - treat this cell's latency pair with care.\n`
+      cell.mountSignal === false
+        ? // The nulls here are the arm, not the rig: this cell's control has no
+          // native transaction to timestamp, so the pair is absent by design and
+          // the runner was told not to wait for it.
+          `Signal sanity: this cell declares \`mountSignal: false\` - no mount or ` +
+            `presentation transaction can exist for this arm, so its latency pair is ` +
+            `n/a and ungated by design (${String(
+              sanity.missingMount ?? 0
+            )} iterations absent by construction, and none of them waited). ${
+              bad.length > 1
+                ? `Other samples out of order: ${bad.map(([name, count]) => `${name}=${String(count)}`).join(', ')}.`
+                : ''
+            }\n`
+        : bad.length === 0
+          ? `Signal sanity: no out-of-order samples (${String(
+              cell.launches ?? 0
+            )} launches x ${String(cell.protocol?.measured ?? 0)} iterations).\n`
+          : `Signal sanity: ${bad
+              .map(([name, count]) => `${name}=${String(count)}`)
+              .join(', ')} - treat this cell's latency pair with care.\n`
     );
     const incomplete = incompleteMetrics(cell);
     if (incomplete.length > 0) {

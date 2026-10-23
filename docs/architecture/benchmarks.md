@@ -380,8 +380,14 @@ instance of both.)
 1. Add the implementation in `bench/src/implementations/` and register it in
    `bench/src/implementations/index.ts` (`{ name, available, skipReason, List }`).
    Pass **every** prop explicitly - never `undefined` (nitro#1184).
-2. Run the quick plan on both platforms:
-   `bun bench --platform ios --plan quick` and `--platform android`.
+2. Run the quick plan on both platforms, filtered to your component:
+   `bun bench --platform ios --plan quick --component <name>` and
+   `--platform android`. A cell's scenario carries the component as
+   `mount.<component>` / `update.<component>` / `memory.<component>` /
+   `leak.<component>`, and the bare `mount`/`update`/`memory`/`leak` name is the
+   first component (`switch`) - so pre-existing plans, baselines and report rows
+   still line up. `componentOf` (`scripts/bench/lib.mjs`) is the only reader of
+   that encoding, and `--component` is the filter.
 3. Paste both summary tables (absolute **and** ratio-to-`rn-core`) into your task
    report, plus the sanity/noise lines, so a reader can see the column was
    measurable.
@@ -406,6 +412,17 @@ Every arm must do **equivalent work**: RN core `Switch`, `@expo/ui` `Toggle`
 (`labelsHidden()`, no label text) and the nitro-ui `Switch` are all a bare
 switch, because a SwiftUI `Text` next to the control is a real cost that belongs
 to nobody's comparison.
+
+Where RN core has no control to compare against, `rn-core` is a **floor** rather
+than a peer, and the report must say so. RN core's `Slider` left the framework in
+0.80, so the `slider` floor is a bare `View` in the same box: it hosts no control,
+runs no gesture code and owns no value, so its ratio answers "what does any native
+slider cost over drawing nothing" and the `expo-ui-*` arms answer "over another
+native slider". A floor that changes nothing per update also produces **no mount
+signal** in an `update` cell, so that cell's `mountedNs`/`presentedNs` are
+unreportable by construction (`MAX_MISSING_SAMPLE_RATIO`) and each of its
+iterations pays the probe's timeout - visible in the log as
+`N without a mount signal`, which is expected rather than a fault.
 
 ## CI
 

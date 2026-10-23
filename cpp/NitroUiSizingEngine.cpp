@@ -67,6 +67,45 @@ namespace margelo::nitro::nitroui {
       return a.flags == b.flags && nearlyEqual(a.width, b.width) && nearlyEqual(a.height, b.height);
     }
 
+    /**
+     * Same *on-screen* size, which for a `fillWidth` control is not the same
+     * question as "same numbers".
+     *
+     * `fillWidth` means the width belongs to the Yoga box:
+     * `IntrinsicShadowNode::measureContent` answers with the cached height and
+     * then replaces the width with the constraint's (cpp/NitroUiIntrinsic.hpp:205-212),
+     * and the host measures the control *at that width* - so every report of a
+     * wide Slider says "wide" and every report of a narrow one says "narrow",
+     * whatever the configuration's own answer was. Two Sliders of one
+     * configuration therefore differ in the one number the policy declares not to
+     * matter, and comparing it:
+     *
+     * - made every instance pay a correction on its first report, where D17
+     *   promises an already-exact configuration 0 stale frames and
+     *   `docs/architecture/sizing.md` SS4 promises "every later instance is free
+     *   either way"; and
+     * - let each correction rewrite the cache with that instance's box width, so
+     *   the answer a cold mount got depended on the last parent that happened to
+     *   be measured.
+     *
+     * A `fillWidth` width can only ever be a restatement of the box, so it says
+     * nothing a push could change; the height still decides. The cached width for
+     * such a configuration is therefore the last box width seen, and only the
+     * height is meaningful - see `docs/architecture/sizing.md` SS5.
+     *
+     * An `intrinsic` control's width *is* its own answer, so nothing is ignored
+     * there: Switch behaves exactly as before.
+     */
+    inline bool sameSizeForPush(const NitroUiMeasuredSize& a, const NitroUiMeasuredSize& b) {
+      if (a.flags != b.flags) {
+        return false;
+      }
+      if ((a.flags & NitroUiSizingEngine::kFlagFillWidth) != 0) {
+        return nearlyEqual(a.height, b.height);
+      }
+      return nearlyEqual(a.width, b.width) && nearlyEqual(a.height, b.height);
+    }
+
 #if defined(__APPLE__)
     /**
      * iOS: one observer on the main run loop, ordered *before* Core Animation's
@@ -447,9 +486,11 @@ namespace margelo::nitro::nitroui {
       }
       const NitroUiSizeKey& key = ledger->second.key;
       const NitroUiMeasuredSize measured{width, height, key, flags};
-      // Does this agree with what the instance is already laid out with? (The key
-      // is not part of that question - see `sameSizeIgnoringKey`.)
-      const bool agrees = ledger->second.laidOut.width > 0 && sameSizeIgnoringKey(ledger->second.laidOut, measured);
+      // Does this agree with what the instance is already laid out with - would a
+      // push change what is on screen? Neither the key (see `sameSizeIgnoringKey`)
+      // nor a `fillWidth` control's box-owned width is part of that question
+      // (see `sameSizeForPush`).
+      const bool agrees = ledger->second.laidOut.width > 0 && sameSizeForPush(ledger->second.laidOut, measured);
 
       if (agrees) {
         bool othersPending = false;
@@ -686,7 +727,7 @@ namespace margelo::nitro::nitroui {
           // Marked before the push: the new layout this push causes will re-enter
           // `measure`, find the cache full, and record `exact` itself.
           targetLedger->second.exact = true;
-          if (targetLedger->second.laidOut.width > 0 && sameSizeIgnoringKey(targetLedger->second.laidOut, measured)) {
+          if (targetLedger->second.laidOut.width > 0 && sameSizeForPush(targetLedger->second.laidOut, measured)) {
             // It is already on screen at this size (an environment change that
             // moved the epoch and not the control). Confirming it must not cost a
             // commit - or the epoch bump would push every mounted control a size it
