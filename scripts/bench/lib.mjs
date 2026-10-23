@@ -973,12 +973,28 @@ export function gate({
         });
       }
     }
+    const newArm =
+      gated &&
+      headEntry.skipReason == null &&
+      Object.keys(perMetric).length === 0;
     rows.push({
       key,
       implementation: headEntry.implementation,
-      status: headEntry.skipReason != null ? 'skipped' : 'ok',
+      // A gated arm whose baseline cell was skipped (the component did not
+      // exist when the baseline was recorded) has ratios to `rn-core` but no
+      // base ratio to regress against. Saying `ok` would imply it was checked.
+      status:
+        headEntry.skipReason != null ? 'skipped' : newArm ? 'new-arm' : 'ok',
       gated,
       perMetric,
+      armRatios: newArm
+        ? Object.fromEntries(
+            Object.entries(headEntry.metrics).map(([metric, value]) => [
+              metric,
+              value.ratio,
+            ])
+          )
+        : null,
     });
   }
   const conclusiveFailures = failures.filter((failure) => failure.conclusive);

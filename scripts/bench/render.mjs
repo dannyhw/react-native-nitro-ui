@@ -356,6 +356,23 @@ function gateTable(result, mode) {
       rows.push([row.key, '-', '-', '-', '-', 'skipped']);
       continue;
     }
+    if (row.status === 'new-arm') {
+      const ratios = Object.entries(row.armRatios ?? {})
+        .sort((a, b) => b[1] - a[1])
+        .map(
+          ([metric, ratio]) =>
+            `${METRIC_LABELS[metric] ?? metric} ${formatRatio(ratio)}`
+        );
+      rows.push([
+        row.key,
+        '-',
+        '-',
+        '-',
+        '-',
+        `new arm - ${ratios.slice(0, 2).join(', ')} versus rn-core, nothing to regress against until the baseline is refreshed`,
+      ]);
+      continue;
+    }
     for (const [metric, value] of Object.entries(row.perMetric)) {
       const notes = [];
       if (!value.gated) {
