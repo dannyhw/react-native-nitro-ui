@@ -459,10 +459,11 @@ ratio, and the ratio moves in our favour:
 | mount presented vs host-per-control | 1.09x | 0.98x         | **0.99x**                      |
 | mount UI CPU vs host-per-control    | 0.70x | 0.62x         | **0.59x**                      |
 
-**Interpretation.** One third of the gap this task was sent to close was a build-configuration
-artefact: our host view, its composition and the generated `HybridView` manager were being
-*interpreted*, while `expo-ui`'s Compose code and `rn-core`'s Java were partly covered by the
-profiles their AARs ship. With the profile in force, mount `presented` is at parity with the shared
+**Interpretation.** Much of the gap this task was sent to close was a build-configuration artefact:
+our host view, its composition and the generated `HybridView` manager were being *interpreted*, while
+`expo-ui`'s Compose code and `rn-core`'s Java were partly covered by the profiles their AARs ship. In
+absolute terms the gap to the shared host shrank from **7.02 ms to 0.22 ms** on mount `presented` and
+from **4.37 ms to 2.38 ms** on mount UI CPU (45 per cent). With the profile in force, mount `presented` is at parity with the shared
 host (1.01x, 32.60 ms against 32.38 ms) and we are 41 per cent *cheaper* than the per-control arm on
 mount UI CPU. `rn-core`'s own UI CPU is the noisiest column here (6.0–7.9 ms across three runs), so
 the `÷ rn-core` ratios (1.15x–1.45x for the same code) are not a signal worth reading; the D15 gate
@@ -536,7 +537,8 @@ T11's 84-125 ms on a loaded machine is the same 38 ms waiting for CPU. So the fl
 synchronous Fabric commit** and the engine is 0.2 per cent of it: capping instances per flush would
 keep the milliseconds and lose the correction, because the engine's work is already nothing. The knob
 is how many commits, which is what `flush(immediateBudget)` (31438d5) makes settable. Before/after,
-three rounds each, same probe, budget 2 rebuilt from the same tree as budget 1:
+three rounds each, same probe, budget 2 rebuilt from the same tree as budget 1 - and note that round 1
+is the first batch in that process, which is the expensive one the committed test sits in:
 
 | N   | Budget 2 (before) | Budget 1 (after) | Per round            | Median      |
 | --- | ----------------- | ---------------- | -------------------- | ----------- |
@@ -558,14 +560,14 @@ pass that then cancels the frame: it is the price of D17's `stale=0` on Android,
 upstream API question (worth an N-entry if the orchestrator wants it pursued), not a library change.
 
 **Not kept: "all-async above a batch size".** At budget 0 the flush is 0.086 ms and the same batch
-draws `stale=100` — D17's rule, broken. Rejected by the gate, and shown to break it (§Gate evidence).
+draws `stale=100` — D17's rule, broken. Rejected by the gate, and shown to break it in the table below.
 
 **Attribution of the O(N × tree) JS-thread commits.** Warm-vs-cold, same process, N=500: warm (no
 corrections) 771.8 ms vs cold 768.8 ms, and 572.0 vs 608.2 ms in the second round. The 499 batched
 pushes are real work on the JS thread but they are **off the measured mount path**: `mountedIn` ends
 when the last host appears, and the corrections land afterwards. What is *not* noise is first touch:
-the first cold 500-row mount in a process measured 1.4–4.6 s against 0.41–0.68 s for the same batch
-in later rounds. A cold list's cost in a real app is the first one, and that is ART interpreting the
+the first cold 500-row mount in a process measured 1.0–4.6 s against 0.41–0.77 s for the same batch
+in later rounds (six samples each side across the probes in this section). A cold list's cost in a real app is the first one, and that is ART interpreting the
 host, not our bookkeeping — which is the same finding as P1, seen from the harness.
 
 ## P2d. Change B — the library baseline profile, as its own row
@@ -638,7 +640,8 @@ traces and this residual attached.**
 ## P2g. N5 closed as quantified-negligible
 
 Per §2 and the post-T11 absolutes: our `jsCommitNs` on `mount:50` is 1.60 ms against the shared host's
-1.89 ms and rn-core's 1.37 ms, while the same cell's gap is 14.85 ms of UI CPU against 10.48 ms. The
+1.89 ms and rn-core's 1.37 ms, while the same cell's gap is 14.85 ms of UI CPU against 10.48 ms -
+and in the compiled state that gap is 2.38 ms, still several times what the second delivery costs. The
 second `updateState` is one perf mark and one JNI diff; no generator patch was spent on it. Recorded
 in `docs/upstream.md` (N5) and `docs/architecture/core.md` §3.
 
@@ -648,7 +651,9 @@ in `docs/upstream.md` (N5) and `docs/architecture/core.md` §3.
 N compositions and N view trees.**
 
 Against `expo-ui-shared-host`, on `nitroui_t02`, quick plan, 4 launches, all arms primed
-(`ed620cb`, load 3.05 — this is the state a user gets after the app has been opened once):
+(`ed620cb`, load 3.05 — this is the state a user gets after the app has been opened once). The five
+commits after it are docs, a tool-format fix and the package manifest, so this row is HEAD's code;
+nothing was re-run for them.
 
 | Metric          | measured | target  | verdict |
 | --------------- | -------- | ------- | ------- |
