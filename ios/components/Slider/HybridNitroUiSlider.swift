@@ -92,10 +92,11 @@ final class SliderModel: NitroUiModel {
   var onSlidingStart: ((Double, Double) -> Void)?
   var onSlidingComplete: ((Double, Double) -> Void)?
 
-  /// The newest value reached during this drag that has not been emitted. The
-  /// single field that is both what an interaction writes and what the `Binding`
-  /// reads, so a re-render mid-drag cannot show an older value (§11).
-  var pending: Double?
+  /// The un-emitted drag sample is `state.unreported` - part of the handshake
+  /// itself, not a Slider field, so "a React write may not overtake a sample JS
+  /// has not been told about" is one rule for every control (§4, §11).
+  /// What the `Binding` reads is `state.displayed`, which an interaction also
+  /// writes at sample time, so a re-render mid-drag cannot show an older value.
   /// Whether a drag is in flight.
   var dragging = false
   ///
@@ -112,7 +113,7 @@ final class SliderModel: NitroUiModel {
   override init() {
     super.init()
     pump.onFrame = { [weak self] in
-      self?.deliverPending()
+      self?.deliverUnreported()
     }
   }
 }
@@ -177,14 +178,15 @@ extension SliderModel {
       beginDrag()
     }
     state.displayed = quantize(raw)
-    pending = state.displayed
+    state.unreported = state.displayed
     pump.start()
   }
 
   /// The finger lifted. The final value always reaches JS, even when the frame
   /// that carried it was the last thing emitted.
+  ///
   func endDrag() {
-    deliverPending()
+    deliverUnreported()
     dragging = false
     pump.stop()
     onSlidingComplete?(state.displayed, Double(state.nativeEvents))
@@ -194,16 +196,16 @@ extension SliderModel {
   /// or dropped, and a callback delivered to whoever owned this instance before
   /// is a callback delivered to the wrong app.
   func cancelDrag() {
-    pending = nil
+    state.unreported = nil
     dragging = false
     pump.stop()
     dragGeneration += 1
   }
 
   /// The frame tick: one event for everything the finger did since the last one.
-  private func deliverPending() {
-    guard let value = pending else { return }
-    pending = nil
+  private func deliverUnreported() {
+    guard let value = state.unreported else { return }
+    state.unreported = nil
     // The invalidation is on the same frame budget as the emit. `displayed` was
     // written when the finger moved, and SwiftUI's own control renders that
     // write; this is the rest of the hosted body, and at touch-sample rate it

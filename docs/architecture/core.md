@@ -172,8 +172,8 @@ hoisted out of the composable. Never `remember`-only, and never constructed inli
 
 ## 4. Controlled values (the event-count handshake)
 
-`src/core/useControlled.ts` plus `NitroUiControlledValue` on each platform (`ios/core/NitroUiModel.swift:40-72`,
-`android/.../nitroui/core/NitroUiModel.kt:40-73`):
+`src/core/useControlled.ts` plus `NitroUiControlledValue` on each platform (`ios/core/NitroUiModel.swift:40-84`,
+`android/.../nitroui/core/NitroUiModel.kt:40-88`):
 
 - Native owns the *displayed* value and writes it immediately on interaction — no visual latency, and an uncontrolled
   control costs no React render at all.
@@ -181,9 +181,14 @@ hoisted out of the composable. Never `remember`-only, and never constructed inli
   in the same commit — *before* the user's handler, so a handler that throws cannot strand native
   (`src/core/useControlled.ts:102-113`).
 - Native accepts a `value` write only once it has seen at least that many of its own events: `jsEvents >= nativeEvents`
-  (`ios/core/NitroUiModel.swift:65-71`, `android/.../nitroui/core/NitroUiModel.kt:66-72`). That covers rejected changes
+  (`ios/core/NitroUiModel.swift:77-83`, `android/.../nitroui/core/NitroUiModel.kt:80-87`). That covers rejected changes
   (JS kept its value, so the prop is unchanged but the count moved → still a commit → native reverts), stale writes (a
   `value` in flight is ignored) and uncontrolled mode (`value === null`).
+- Native also refuses a write while `unreported` is set — the newest value an interaction reached that native has **not
+  emitted yet** (§11). The counts cannot express that window: `nativeEvents` advances only when we emit, so a commit that
+  lands between an input sample and the frame tick looks fully echoed while native is ahead by a value JS cannot have
+  seen. Accepting it would paint the app's number for a frame and then emit the interaction's value under it. The refusal
+  is a drop, not a queue: the next commit decides again.
 - `defaultValue` seeds an uncontrolled control once, then is ignored
   (`ios/components/Switch/HybridNitroUiSwitch.swift:126-141`, `android/.../HybridNitroUiSwitch.kt:152-165`).
 - Uncontrolled → controlled is supported but warned: JS remembers counts in both modes and seeds the echo on the flip
@@ -494,25 +499,33 @@ dirty. Do not let JS infer "finished" from a timeout — it drifts.
 JS echoes the **latest** count it processed, not every count (`src/core/useControlled.ts:102-113` keeps a monotonic max),
 so intermediate counts are legitimately skipped whenever JS is slower than native. Hence `reconcile` accepts a write as
 soon as `jsEvents >= nativeEvents` and must **not** require 1:1 agreement — which is what the twins do
-(`ios/core/NitroUiModel.swift:66`, `android/.../nitroui/core/NitroUiModel.kt:68`), and "rapid interaction applies the
+(`ios/core/NitroUiModel.swift:78`, `android/.../nitroui/core/NitroUiModel.kt:81`), and "rapid interaction applies the
 newest write" is already a vector in both native suites. Do not "fix" a skipped echo by waiting for equality.
 
-What that costs during a drag, stated exactly: a parent's `value` write is ignored **only while JS lags**. While the
-finger keeps moving, native is ahead by design (`jsEvents < nativeEvents`), so `reconcile` rejects the write and the drag
-wins — the intended behaviour. But the instant JS has caught up (`jsEvents == nativeEvents`) and the finger is still
-down, the next props commit applies a differing `value` mid-drag. A parent that writes something else while the user is
-dragging (a value derived from elsewhere, a reset, an animation) therefore does fight the finger, and the thumb jumps
-under the hand. Clamping to the in-drag range only hides the fight; it does not decide who wins. If a component must be
-immune, gate its own writes while a drag is in flight — the end-of-drag hook below is the signal — and document that
-choice. After release the newest echo lands and writes apply normally.
+What that costs during a drag, stated exactly: a parent's `value` write is ignored **while JS lags or a sample is still
+un-emitted**. While the finger keeps moving, native is ahead by design — `jsEvents < nativeEvents`, or `unreported` set
+between an input sample and the frame tick — so `reconcile` rejects the write and the drag wins, which is intended.
+The second of those is not a policy choice but a hole in the first: the counts advance only on emit, so before
+`unreported` a commit landing in that sub-frame window looked fully echoed while native held a value JS had never seen.
+Both platforms then rendered something they had not reported — iOS showed the app's number for a frame and emitted the
+dragged value under it (the thumb snapped back under the finger), Android rendered the app's number and then emitted the
+dragged value without repainting. Refusing the write is what makes the pair *emitted value* → *rendered value* hold.
+
+What remains is the fight the counts do describe: JS fully caught up, **no sample in flight**, and a differing `value`
+committed while the finger is still down. A parent that writes something else then (a value derived from elsewhere, a
+reset, an animation) does fight the finger, and the thumb jumps under the hand. Clamping to the in-drag range only hides
+the fight; it does not decide who wins. If a component must be immune, gate its own writes while a drag is in flight —
+the end-of-drag hook below is the signal — and document that choice. After release the newest echo lands and writes
+apply normally.
 
 ### Where a drag ends, and what the read side returns
 
 - **The read side must return the in-drag value (iOS).** SwiftUI re-reads `Binding.get` whenever the view is invalidated,
   which under the manual publisher (§3) means every emitted frame of the drag. If `get` returns the props value instead
   of the coalesced "value during this drag" field, the thumb renders the *previous* emitted value and trails the finger a
-  frame at the exact moment the user is watching. One field is both what `set` writes and what `get` reads — the Switch's
-  one-bit version is `ios/components/Switch/HybridNitroUiSwitch.swift:42-51`.
+  frame at the exact moment the user is watching. One field is both what `set` writes and what `get` reads (a continuous
+  control also records the write in `unreported`, §4) — the Switch's one-bit version is
+  `ios/components/Switch/HybridNitroUiSwitch.swift:42-51`.
 - **A drag start has two candidates, and neither is reliable alone.** `onEditingChanged(true)` and the first
   `Binding` write have no defined order, and a tap that jumps the thumb can write before it says editing started.
   Make the start idempotent (`if dragging { return }`) and call it from both, so whoever arrives first opens the
@@ -532,8 +545,8 @@ choice. After release the newest echo lands and writes apply normally.
 
 ### Float equality in `reconcile`
 
-Compare exactly — Swift `==` on `Double`, Kotlin `==`, `js != displayed`. No epsilon (`ios/core/NitroUiModel.swift:65-71`,
-`android/.../nitroui/core/NitroUiModel.kt:66-72`). It is safe because native computes the value, JS stores and re-sends
+Compare exactly — Swift `==` on `Double`, Kotlin `==`, `js != displayed`. No epsilon (`ios/core/NitroUiModel.swift:77-83`,
+`android/.../nitroui/core/NitroUiModel.kt:80-87`). It is safe because native computes the value, JS stores and re-sends
 the number it received, and Nitro carries `number` ↔ `double` without loss, so the round trip returns the same bits; both
 native suites test with `Double` (`scripts/native-tests/handshake.test.swift:105-115`,
 `android/src/test/.../NitroUiControlledValueTest.kt:97`). An epsilon is worse than useless: `js != displayed` is also how
