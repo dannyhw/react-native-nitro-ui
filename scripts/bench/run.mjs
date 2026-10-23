@@ -271,23 +271,45 @@ function iosTarget(device, appPath, bundleId) {
 }
 
 /**
- * Make ART compile the app now, from the profile it was installed with.
+ * Get the app into the compiled state a device would eventually leave it in, and
+ * report what that state turned out to be.
  *
- * `adb install` only *stores* a baseline profile; the compiler that consumes it
- * normally runs later, in `BackgroundDexOptService`, so whether a measured launch
- * ran AOT-compiled code would depend on how long the device had been idle since
- * the install. That is fine for a library that ships no profile (every arm is in
- * the same position) and unforgivable for one that does: the benefit could land
- * before, after or between the launches being compared. Forcing the compile here
- * is what puts a library `baseline-prof.txt` on trial - the arms still share one
- * APK and one install, so the command applies to every implementation equally
- * (D9's pairing), and the only thing it can change is the profile's own effect.
+ * Three steps, because none of them does the others' job (all measured on API 35
+ * with the bench app):
  *
- * `speed-profile` is the filter ART would reach for anyway once it had compiled
- * this profile; `-f` is what makes it ignore the "already compiled" state the
- * install left behind.
+ * 1. `adb install` leaves `[status=verify]`. The APK's merged
+ *    `assets/dexopt/baseline.prof` is only *stored*; a `cmd package bg-dexopt-job`
+ *    pass does not consume it either.
+ * 2. Starting the app once lets `androidx.profileinstaller` write that asset where
+ *    ART compiles from - the app's own profile file, which no shell command may
+ *    write on a non-rooted image. Without this step there is no profile to compile
+ *    from and `-m speed-profile` quietly falls back to verify.
+ * 3. `cmd package compile -m speed-profile -f` then compiles from it synchronously
+ *    instead of waiting for an idle window: `[status=speed-profile]`.
+ *
+ * `speed-profile` is the filter ART uses for a profile anyway, so this is the state
+ * a phone reaches hours after an install; measuring before it means measuring the
+ * interpreter. The arms share one APK and one install, so the sequence applies to
+ * every implementation identically (D9's pairing) and the only thing it can change
+ * is what a profile is worth.
+ *
+ * The status is read back and logged because "the profile did nothing" and "the
+ * profile was worth nothing" look identical in a results table otherwise.
  */
-function applyArtProfile(serial, packageName) {
+function primeArtProfile(serial, packageName) {
+  // 2. One throwaway launch, settled, so the profile is on disk before the compile.
+  adb(serial, [
+    'shell',
+    'am',
+    'start',
+    '-W',
+    '-S',
+    '-n',
+    `${packageName}/.MainActivity`,
+  ]);
+  sleep(4_000);
+  adb(serial, ['shell', 'am', 'force-stop', packageName]);
+  // 3. Compile from it now.
   adb(serial, [
     'shell',
     'cmd',
@@ -298,6 +320,15 @@ function applyArtProfile(serial, packageName) {
     '-f',
     packageName,
   ]);
+  const dexopt = adb(serial, ['shell', 'dumpsys', 'package', 'dexopt']);
+  const block = dexopt.slice(dexopt.indexOf(`[${packageName}]`));
+  const status = /\[status=([^\]]+)\]/.exec(block)?.[1] ?? 'unknown';
+  log(`ART:       ${packageName} -> ${status}`);
+  if (status !== 'speed-profile') {
+    log(
+      'ART:       not speed-profile - this run measures the interpreter, not a baseline profile'
+    );
+  }
 }
 
 function androidTarget(device, apkPath, packageName) {
@@ -306,7 +337,7 @@ function androidTarget(device, apkPath, packageName) {
     label: `Android ${device.name} (${device.serial})`,
     async install() {
       adb(device.serial, ['install', '-r', apkPath]);
-      applyArtProfile(device.serial, packageName);
+      primeArtProfile(device.serial, packageName);
     },
     async run(entry) {
       // Benign when the file (or, on API 33+, its not-yet-created parent dir)
