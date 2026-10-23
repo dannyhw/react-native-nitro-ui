@@ -831,6 +831,91 @@ namespace {
   }
 
   /**
+   * The box a `fillWidth` node is laid out with: the height the engine answered
+   * with, and the width Yoga gave it. This mirrors the last three lines of
+   * `IntrinsicShadowNode::measureContent` (cpp/NitroUiIntrinsic.hpp:205-212) -
+   * the engine cannot see the constraints, so the shadow node applies the policy
+   * after `measure` returns, and a test of the policy has to apply it too.
+   */
+  NitroUiMeasuredSize layoutAt(const NitroUiMeasuredSize& measured, float boxWidth) {
+    NitroUiMeasuredSize laidOut = measured;
+    if ((measured.flags & NitroUiSizingEngine::kFlagFillWidth) != 0) {
+      laidOut.width = boxWidth;
+    }
+    return laidOut;
+  }
+
+  /**
+   * A Slider's width belongs to its parent, so two Sliders of one configuration
+   * legitimately have different widths - and the engine must see that as nothing
+   * to correct. D17: a configuration already exact in the cache lays out exact
+   * on its first frame, with 0 corrections, for *every* instance of it.
+   *
+   * The declared fallback is 328 wide and the real boxes are 300 and 200, so a
+   * comparison that looks at the width sees a change on every instance: each
+   * report queues a correction, and each correction rewrites the cache to that
+   * instance's box width. Measured on the round this was written: two pushes and
+   * a cache that answered 200 to a control that had only ever been 300 wide.
+   */
+  void testFillWidthInstancesOfDifferentWidthsCostNothing() {
+    resetEngine();
+    // 40 is a stand-in height - the engine is component-agnostic, and the real
+    // Slider measures 31 pt on iOS and 48 dp on Android. The guess is right
+    // where it can be (D17), so the only difference left is the width.
+    engine().setFallback("NitroUiSwitch", 328, 40, NitroUiSizingEngine::kFlagFillWidth);
+    bind(71, 71);
+
+    auto first = measure(71, "");
+    checkSize(layoutAt(first, 300), 300, 40, "the first Slider is laid out at its box width");
+    engine().report(71, 300, 40, NitroUiSizingEngine::kFlagFillWidth);
+    check(!engine().flush(), "a 300-wide report for a 300-wide layout is not a change");
+    checkEquals(pushes.size(), size_t{0}, "which costs no commit");
+
+    // Warm now: the next instance is exact on its first layout (D17), in a box
+    // of a *different* width - which is the ordinary case, not an edge one.
+    bind(72, 72);
+    auto second = measure(72, "");
+    checkSize(second, 300, 40, "the cached answer is what the cache learned");
+    checkSize(layoutAt(second, 200), 200, 40, "and the box still owns the width");
+    engine().report(72, 200, 40, NitroUiSizingEngine::kFlagFillWidth);
+    check(!engine().flush(), "the 200-wide Slider's report is not a change either");
+    checkEquals(pushes.size(), size_t{0}, "so the second instance costs nothing");
+
+    // And the cache did not become this instance's box width.
+    bind(73, 73);
+    auto third = measure(73, "");
+    checkSize(third, 300, 40, "a third Slider reads an answer, not the last box");
+  }
+
+  /**
+   * The width is what a `fillWidth` control may disagree about; the height is
+   * still its own answer and a wrong guess about it must still be corrected.
+   * The fallback here is deliberately 33 against a real 40 (fixtures must not
+   * coincide with the answer), so a blind comparison shows up as a missing push.
+   */
+  void testFillWidthStillCorrectsAWrongHeight() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 328, 33, NitroUiSizingEngine::kFlagFillWidth);
+    bind(74, 74);
+
+    auto first = measure(74, "");
+    checkSize(layoutAt(first, 300), 300, 33, "the first frame is the guess, at the box width");
+    engine().report(74, 300, 40, NitroUiSizingEngine::kFlagFillWidth);
+    check(engine().flush(), "a 7 pt wrong height is a change");
+    checkEquals(pushes.size(), size_t{1}, "and it is corrected");
+    check(std::fabs(pushes[0].height - 40) < 0.001f, "with the measured height");
+
+    // Warm with the right height: a different box width must not undo it.
+    pushes.clear();
+    bind(75, 75);
+    auto second = measure(75, "");
+    checkSize(layoutAt(second, 250), 250, 40, "the next Slider is exact on its first frame");
+    engine().report(75, 250, 40, NitroUiSizingEngine::kFlagFillWidth);
+    check(!engine().flush(), "and its report costs nothing");
+    checkEquals(pushes.size(), size_t{0}, "no commit for a warm instance");
+  }
+
+  /**
    * Review S7: a correction for an instance that is not bound yet must be kept,
    * not dropped - both for the instance that reported and for another instance
    * of the same configuration waiting for the answer.
@@ -1008,6 +1093,8 @@ int main() {
   testALearnedSizeBelongsToItsOwnConfiguration();
   testKeyChangeReMeasuresAndCorrects();
   testFillWidthKeepsTheFlag();
+  testFillWidthInstancesOfDifferentWidthsCostNothing();
+  testFillWidthStillCorrectsAWrongHeight();
   testUnboundReporterKeepsItsCorrection();
   testUnboundTargetKeepsTheCorrection();
   testAnUnboundTargetIsCorrectedByALaterReport();
