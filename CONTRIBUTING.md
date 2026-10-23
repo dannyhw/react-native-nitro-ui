@@ -196,6 +196,55 @@ someone else's Metro.
 Only start devices you need, never touch a device you did not start, and shut
 down the ones you started when you finish.
 
+## Running the real-input tests
+
+The harness drives controls through the library's own test hooks, which is how it
+can assert on a Nitro callback. What it cannot prove is that a touch delivered by
+the operating system reaches a hosted SwiftUI/Compose control inside a React
+Native app - a known failure class for SwiftUI-in-RN, and one G2 hit when a
+SwiftUI `Button` ignored the harness's HID-less touch. The real-input suite does
+that one thing: it synthesises taps and drags outside the app (`XCUIDevice`'s
+event path on iOS, `adb shell input` on Android) and asserts only on `Text` the
+app renders on screen. No test hook, no Nitro callback, no in-app tracer.
+
+```sh
+# iOS - the simulator must already be booted (the suite boots nothing)
+IOS_UDID=<simulator udid> METRO_PORT=8291 bun run test:real-input:ios
+
+# Android - the emulator must already be booted, on your own adb server
+ANDROID_AVD=<avd> ANDROID_ADB_SERVER_PORT=<port> METRO_PORT=8292 \
+  bun run test:real-input:android
+
+# one control at a time
+bun run test:real-input:android --control slider
+```
+
+Both build first (iOS: `pod install` + the workspace's `NitroUiExampleUITests`
+scheme; Android: the debug APK), install, point the debug build at your
+`METRO_PORT`, and read the screen afterwards - `accessibilityIdentifier` on iOS,
+`uiautomator dump` on Android - which is what a person and a screen reader have.
+Neither script boots or shuts down a device, and neither accepts a device it was
+not told about: `IOS_UDID` and `ANDROID_AVD`/`ANDROID_SERIAL` are required, and
+an emulator running another AVD is refused.
+
+They are **not** part of `bun run check`: they need a booted device, a simulator
+build and several minutes. Run them when you change how a control receives
+touch, and expect the maintainer to run them before a release.
+
+Each run keeps its evidence in `.real-input/<platform>/` (gitignored): the full
+`xcodebuild` and `adb` logs, the accessibility hierarchy printed by a failing
+case, the `.xcresult` bundle, and Metro's log. When a check fails, that is the
+directory to read.
+
+### Adding a control to the suite
+
+One entry in `scripts/real-input/controls.mjs`, then one check per platform:
+`func testRealInput<Id>` in
+`example/ios/NitroUiExampleUITests/RealInputTests.swift`, and one key in `CHECKS`
+in `scripts/real-input/android.mjs`. Both runners compare their checks against
+the shared table and fail - never skip - if a control has no check, or a check
+has no control, so a control cannot leave the suite unnoticed.
+
 ## Consumer smoke tests
 
 The only true check of "zero-config install": `npm pack` the library, install

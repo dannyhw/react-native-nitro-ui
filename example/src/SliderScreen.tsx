@@ -80,6 +80,32 @@ export default function SliderScreen() {
     [slowMs]
   );
 
+  // The three gesture phases, counted separately.
+  //
+  // `react-native-harness` proves the phases through Nitro callbacks. The
+  // real-input suite has to prove them with a touch synthesised by the OS, and
+  // the only thing that suite may read is what a person can see on screen, so
+  // each phase gets its own counter. The counters carry a text prefix rather
+  // than being a bare number: the Android check reads them out of a
+  // `uiautomator` dump, where a bare "1" would not say which row it came from.
+  const [starts, setStarts] = useState(0);
+  const [changes, setChanges] = useState(0);
+  const [completes, setCompletes] = useState(0);
+  const [phaseValue, setPhaseValue] = useState<number | null>(null);
+
+  const noteStart = useCallback((value: number) => {
+    setStarts((count) => count + 1);
+    setPhaseValue(value);
+  }, []);
+  const noteChange = useCallback((value: number) => {
+    setChanges((count) => count + 1);
+    setPhaseValue(value);
+  }, []);
+  const noteComplete = useCallback((value: number) => {
+    setCompletes((count) => count + 1);
+    setPhaseValue(value);
+  }, []);
+
   const list = useMemo(
     () =>
       Array.from({ length: 200 }, (_, index) => ({
@@ -134,6 +160,54 @@ export default function SliderScreen() {
         >
           <Text style={styles.link}>set 0.5 from JS</Text>
         </Pressable>
+
+        {/* Directly under the Controlled section on purpose: the real-input
+            suite drags these controls with OS-synthesised events, and a target
+            that first needs scrolling makes the check depend on scroll position
+            instead of on the control. */}
+        <Text style={[styles.section, { color: ink.ink }]}>Drag phases</Text>
+        <Slider
+          defaultValue={0.5}
+          onSlidingStart={noteStart}
+          onValueChange={noteChange}
+          onSlidingComplete={noteComplete}
+          testID="slider-phases"
+          accessibilityLabel="Phases slider"
+        />
+        <Row label="gesture started">
+          <Text
+            testID="slider-start-count"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {`start=${starts}`}
+          </Text>
+        </Row>
+        <Row label="values during">
+          <Text
+            testID="slider-change-count"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {`change=${changes}`}
+          </Text>
+        </Row>
+        <Row label="gesture finished">
+          <Text
+            testID="slider-complete-count"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {`complete=${completes}`}
+          </Text>
+        </Row>
+        <Row label="last shown">
+          <Text
+            testID="slider-phase-value"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {phaseValue === null
+              ? 'value=none'
+              : `value=${phaseValue.toFixed(3)}`}
+          </Text>
+        </Row>
 
         <Text style={[styles.section, { color: ink.ink }]}>Uncontrolled</Text>
         <Slider defaultValue={0.4} testID="slider-uncontrolled" />
