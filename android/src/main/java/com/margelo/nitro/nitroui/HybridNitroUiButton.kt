@@ -127,8 +127,9 @@ internal class ButtonModel : NitroUiModel() {
   var systemImage: String? = null
 
   /**
-   * The size configuration React sent. Stored for symmetry with the other props;
-   * the sizing engine reads the key out of Fabric state itself.
+   * The size configuration React sent. The sizing engine reads the key out of Fabric
+   * state itself; the host only needs to hear that it changed (see
+   * [NitroComposeHost.noteSizingKeyChanged]).
    */
   var sizingKey = ""
 
@@ -621,9 +622,17 @@ class HybridNitroUiButton(
   override var nuiSizingKey: String
     get() = model.sizingKey
     set(next) {
-      // Store only: the engine reads the key out of Fabric state, and Compose
-      // re-measures on its own when a size-affecting prop moves.
+      if (next == model.sizingKey) {
+        return
+      }
       model.sizingKey = next
+      // The engine has no answer for a key it has not seen, so it lays this out at
+      // the declared fallback. A `systemImage` change measures what the old
+      // configuration measured, and that is the size the host's dedupe would swallow
+      // the correcting report against; Compose also never re-measures a mounted
+      // control whose box merely moved, so the host has to be asked for both (F1).
+      // Guarded, because React re-sends an unchanged key on every render.
+      host.noteSizingKeyChanged()
     }
 
   override var nuiSizingId: Double

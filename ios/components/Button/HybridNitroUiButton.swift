@@ -53,8 +53,9 @@ final class ButtonModel: NitroUiModel {
   var systemImage: String?
   var testID: String?
   var accessibilityLabel: String?
-  /// The size configuration React sent. Stored for symmetry with the other
-  /// props; the sizing engine reads the key out of Fabric state itself.
+  /// The size configuration React sent. The sizing engine reads the key out of
+  /// Fabric state itself; the host only needs to hear that it changed (see
+  /// ``NitroSwiftUIHost/noteSizingKeyChanged()``).
   var sizingKey = ""
   /// `onPress`, wired through a stable JS callback.
   var onPress: (() -> Void)?
@@ -354,7 +355,16 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
 
   var nuiSizingKey: String {
     get { model.sizingKey }
-    set { model.sizingKey = newValue }
+    set {
+      guard newValue != model.sizingKey else { return }
+      model.sizingKey = newValue
+      // The engine has no answer for a key it has not seen, so it lays this out at
+      // the declared fallback; the new configuration may measure exactly what the old
+      // one did, and that is the size the host's dedupe would swallow the correcting
+      // report against (review F1). Guarded, because React re-sends an unchanged key
+      // on every render and the reset costs a measure.
+      host.noteSizingKeyChanged()
+    }
   }
 
   var nuiSizingId: Double {
