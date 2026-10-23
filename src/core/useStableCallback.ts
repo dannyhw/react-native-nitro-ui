@@ -40,6 +40,16 @@ function wrapCallback<Fn extends AnyFunction>(fn: Fn): NitroCallbackProp<Fn> {
  * any child effect or layout effect can fire, and it is concurrent-safe (unlike
  * writing a ref during render).
  *
+ * Two caveats a component author has to live with:
+ * - Identity comes from `useMemo`, and React may throw away memo caches (it is
+ *   allowed to). Then a new wrapper reaches native, which re-applies the prop -
+ *   correct, just not the steady state. `useState(() => …)` is the form React
+ *   guarantees; it is not used here because the wrapper has to depend on whether
+ *   a handler exists at all, which changes over the lifetime.
+ * - A callback prop that is already installed is *never re-invoked*: a changed
+ *   function does not run again on the native side. That is why `hybridRef` fires
+ *   once, at mount, and why swapping a `hybridRef` closure changes nothing.
+ *
  * @returns `{ f: fn }` while a handler is set, `null` while it is not - pass it
  * straight to the native prop.
  */
