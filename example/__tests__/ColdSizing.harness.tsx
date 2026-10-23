@@ -25,12 +25,17 @@
  * is `Slider.harness.tsx`), so the cold tests *check* for the condition instead
  * of assuming it: `measurements` is the engine's cumulative count of the sizes it
  * has handed out, and the harness does not mount the example app's own screens, so
- * `0` witnesses that nothing has been measured in this process yet.
+ * `0` witnesses that nothing has been measured in this process yet. It is a
+ * running total that never resets, and this file's own first test measures a
+ * control, so the witness is read exactly once - in that first test, before
+ * anything here has mounted - and both cold tests assert against that one value
+ * (`coldOnEntry` below). Reading it again in a later test proves nothing but
+ * "a test in this file ran before it".
  *
  *  - `bun run harness:cold:ios` / `harness:cold:android` run this file alone, so
- *    the two cold tests assert their full claim: first frame at the *declared*
- *    size. That is the invocation that goes red on `main` (`0 x 0` in both cases)
- *    and the one the T14 report cites.
+ *    that value is `true` there and the two cold tests assert their full claim:
+ *    first frame at the *declared* size. That is the invocation that goes red on
+ *    `main` (`0 x 0` in both cases) and the one the T14 report cites.
  *  - In a whole-suite run the guard logs `NOT COLD`, the two cold tests drop to
  *    the weaker claim that still holds there (the first frame is *some* size,
  *    never 0), and the two poisoned tests go on asserting that a wrong fallback is
@@ -108,6 +113,17 @@ const iosMajor = Number.parseInt(osVersion ?? String(Platform.Version), 10);
 /** The height a Slider declares, and the height its control really is. */
 const SLIDER_HEIGHT = Platform.select({ android: 48, default: 31 })!;
 
+/**
+ * The box a Slider's startup declaration carries. A `fillWidth` control's
+ * declared width never reaches a real layout, but the tests re-seed the
+ * declaration after poisoning it, and that seed must restore what the platform
+ * actually declares (D14: Android 328, iOS 351) - not Android's number on both.
+ */
+const SLIDER_FALLBACK = Platform.select({
+  android: { width: 328, height: 48 },
+  default: { width: 351, height: 31 },
+})!;
+
 /** The box a Switch declares, which is also the box its control really is. */
 const SWITCH_BOX = Platform.select({
   android: { width: 52, height: 48 },
@@ -146,12 +162,20 @@ function describeEvents(events: NitroUiSizingTraceEvent[]) {
  * Is this a process in which the cold tests may claim "first instance ever"? See
  * the ordering contract above. `measurements` counts every size the engine has
  * handed out since the process started, so 0 is the only witness that no earlier
- * suite has already registered a fallback by mounting one.
+ * suite has already registered a fallback by mounting one - and it has to be read
+ * before this file's own tests have measured anything, because the counter never
+ * goes back down. Captured on the first call (which the first cold test makes
+ * before it mounts), and `coldOnEntry` is what the cold assertions use.
  */
+let coldOnEntry: boolean | null = null;
+
 function coldProcessStats() {
   const stats = nitroUiCore.sizingStats();
+  if (coldOnEntry === null) {
+    coldOnEntry = stats.measurements === 0;
+  }
   console.log(
-    `t14 ${stats.measurements === 0 ? 'COLD' : 'NOT COLD'} process: ` +
+    `t14 ${coldOnEntry ? 'COLD' : 'NOT COLD'} process (on entry): ` +
       `measurements=${String(stats.measurements)}`
   );
   return stats;
@@ -272,8 +296,8 @@ describe('Sizing · declared before the first measure (T14)', () => {
     // "nothing but the startup table's fallback" the only thing the measure below
     // can answer from. (The harness does not mount the example app's screens, so
     // nothing upstream of this file measures either.)
-    const coldStart = coldProcessStats();
-    const epoch = coldStart.environmentEpoch;
+    const entry = coldProcessStats();
+    const epoch = entry.environmentEpoch;
     declareThenGoCold(SLIDER, null, epoch);
     startTrace();
 
@@ -303,7 +327,7 @@ describe('Sizing · declared before the first measure (T14)', () => {
     // Never 0 tall - which is what a `fillWidth` control with no fallback does
     // (D17). This half of the claim holds in any process.
     expect(laidOut[0]!.height).toBeGreaterThan(0);
-    if (coldStart.measurements === 0) {
+    if (coldOnEntry === true) {
       // And in a cold process, specifically the *declared* height: the frame the
       // first measure asked for is the one the startup table registered rather
       // than a cached answer or a guess left by an earlier mount. On `main` the
@@ -365,19 +389,15 @@ describe('Sizing · declared before the first measure (T14)', () => {
     expect(near(box.height, SLIDER_HEIGHT)).toBe(true);
 
     unmount();
-    declareThenGoCold(
-      SLIDER,
-      { width: 328, height: SLIDER_HEIGHT },
-      after.environmentEpoch
-    );
+    declareThenGoCold(SLIDER, SLIDER_FALLBACK, after.environmentEpoch);
   });
 
   it('has a declared size ready for the first Switch this process measures', async () => {
     // The rule D17 states for an `intrinsic` control, and the second of the two
     // cold cases the brief asks for. Measured red on `main` as `0 x 0` on the
     // first frame (`laidOut:0.0x0.0`), corrected to 61x28 one event later.
-    const coldStart = coldProcessStats();
-    const epoch = coldStart.environmentEpoch;
+    const entry = coldProcessStats();
+    const epoch = entry.environmentEpoch;
     declareThenGoCold(SWITCH, null, epoch);
     startTrace();
 
@@ -407,7 +427,7 @@ describe('Sizing · declared before the first measure (T14)', () => {
     // has already sized a Switch can still prove (see the ordering contract).
     expect(laidOut[0]!.width).toBeGreaterThan(0);
     expect(laidOut[0]!.height).toBeGreaterThan(0);
-    if (coldStart.measurements === 0) {
+    if (coldOnEntry === true) {
       // In a cold process the first frame is the declared box, from the startup
       // table. On `main` it is `0 x 0` and the correction is what makes the box
       // right one event later.
