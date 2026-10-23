@@ -1,4 +1,5 @@
 #include <jni.h>
+#include "NitroUiSizingJni.hpp"
 #include "nitrouiOnLoad.hpp"
 #include "core/NitroUiPerf.hpp"
 
@@ -43,11 +44,15 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
   return facebook::jni::initialize(vm, [&]() {
     margelo::nitro::nitroui::registerAllNatives();
     JNIEnv* env = facebook::jni::Environment::current();
-    if (env == nullptr || !registerPerfNatives(env)) {
-      // Perf marks are opt-in diagnostics; losing them must not break startup.
-      // Kotlin's `NitroUiPerf.mark` throws UnsatisfiedLinkError if it is ever
-      // reached, which only happens for a view that set `nuiPerfId`.
+    if (env == nullptr) {
       return;
     }
+    // Perf marks are opt-in diagnostics; losing them must not break startup.
+    // Kotlin's `NitroUiPerf.mark` throws UnsatisfiedLinkError if it is ever
+    // reached, which only happens for a view that set `nuiPerfId`.
+    registerPerfNatives(env);
+    // Same for sizing: a build without the engine lays views out with their
+    // fallback size instead of crashing at startup.
+    registerSizingNatives(env);
   });
 }
