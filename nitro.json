@@ -18,6 +18,16 @@
         "implementationClassName": "HybridNitroUiCore"
       }
     },
+    "NitroUiProgress": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiProgress"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiProgress"
+      }
+    },
     "NitroUiSlider": {
       "ios": {
         "language": "swift",

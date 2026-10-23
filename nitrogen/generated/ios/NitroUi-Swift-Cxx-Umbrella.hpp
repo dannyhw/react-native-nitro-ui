@@ -8,6 +8,8 @@
 #pragma once
 
 // Forward declarations of C++ defined types
+// Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 // Forward declaration of `HybridNitroUiSliderSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSliderSpec; }
 // Forward declaration of `HybridNitroUiSwitchSpec` to properly resolve imports.
@@ -18,6 +20,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSize; }
 namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 
 // Include C++ defined types
+#include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "NitroUiSize.hpp"
@@ -41,6 +44,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 #include <NitroModules/DateToChronoDate.hpp>
 
 // Forward declarations of Swift defined types
+// Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 // Forward declaration of `HybridNitroUiSliderSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSliderSpec_cxx; }
 // Forward declaration of `HybridNitroUiSwitchSpec_cxx` to properly resolve imports.
