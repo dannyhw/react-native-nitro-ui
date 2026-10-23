@@ -22,6 +22,7 @@
 #include <fbjni/fbjni.h>
 #include <react/fabric/StateWrapperImpl.h>
 
+#include <iterator>
 #include <string>
 
 using namespace facebook;
@@ -93,6 +94,10 @@ namespace margelo::nitro::nitroui {
       NitroUiSizing::invalidateEnvironment();
     }
 
+    void nativeRecordDrawnSize(JNIEnv* /*env*/, jclass, jlong instanceId, jdouble width, jdouble height) {
+      NitroUiSizing::recordDrawnSize(static_cast<int64_t>(instanceId), static_cast<double>(width), static_cast<double>(height));
+    }
+
     jlong nativeCachedSizeCount(JNIEnv* /*env*/, jclass) {
       return static_cast<jlong>(NitroUiSizing::cachedSizeCount());
     }
@@ -104,6 +109,7 @@ namespace margelo::nitro::nitroui {
       {"nSetFallback", "(Ljava/lang/String;DDI)V", reinterpret_cast<void*>(&nativeSetFallback)},
       {"nInvalidateEnvironment", "()V", reinterpret_cast<void*>(&nativeInvalidateEnvironment)},
       {"nCachedSizeCount", "()J", reinterpret_cast<void*>(&nativeCachedSizeCount)},
+      {"nRecordDrawnSize", "(JDD)V", reinterpret_cast<void*>(&nativeRecordDrawnSize)},
     };
 
   } // namespace
@@ -116,7 +122,7 @@ namespace margelo::nitro::nitroui {
       env->ExceptionClear();
       return false;
     }
-    const jint result = env->RegisterNatives(clazz, sizingMethods, 6);
+    const jint result = env->RegisterNatives(clazz, sizingMethods, static_cast<jint>(std::size(sizingMethods)));
     env->DeleteLocalRef(clazz);
     if (result != JNI_OK) {
       env->ExceptionClear();

@@ -15,8 +15,14 @@ export interface NitroUiCore extends HybridObject<{
     android: 'c++';
 }> {
     drainPerf(): NitroUiPerfEvent[];
+    drainSizingTrace(): NitroUiSizingTraceEvent[];
+    invalidateSizingEnvironment(): void;
     now(): number;
+    prewarmSizing(componentNames: string[]): number;
+    seedSizingSize(componentName: string, sizingKey: string, width: number, height: number): void;
     setPerfEnabled(enabled: boolean): void;
+    setSizingTraceEnabled(enabled: boolean): void;
+    sizingStats(): NitroUiSizingStats;
 }
 
 // @public
@@ -24,6 +30,12 @@ export const nitroUiCore: {
     now(): number;
     setPerfEnabled(enabled: boolean): void;
     drainPerf(): NitroUiPerfEvent[];
+    sizingStats(): NitroUiSizingStats;
+    seedSizingSize(componentName: string, sizingKey: string, width: number, height: number): void;
+    invalidateSizingEnvironment(): void;
+    prewarmSizing(componentNames: readonly string[]): number;
+    setSizingTraceEnabled(enabled: boolean): void;
+    drainSizingTrace(): NitroUiSizingTraceEvent[];
 };
 
 // @public
@@ -31,6 +43,36 @@ export interface NitroUiPerfEvent {
     instanceId: number;
     kind: string;
     time: number;
+}
+
+// @public
+export interface NitroUiSizingStats {
+    cachedSizes: number;
+    // (undocumented)
+    correctionsBatched: number;
+    correctionsImmediate: number;
+    environmentEpoch: number;
+    flushes: number;
+    lastFlushMs: number;
+    // (undocumented)
+    maxFlushMs: number;
+    measurements: number;
+    // (undocumented)
+    reportsDropped: number;
+    reportsQueued: number;
+    // (undocumented)
+    staleFramesSkipped: number;
+    traceDropped: number;
+}
+
+// @public
+export interface NitroUiSizingTraceEvent {
+    // (undocumented)
+    height: number;
+    instanceId: number;
+    stage: string;
+    time: number;
+    width: number;
 }
 
 // @public

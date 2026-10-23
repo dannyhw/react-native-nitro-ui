@@ -34,6 +34,8 @@ object NitroUiSizing {
 
   private external fun nCachedSizeCount(): Long
 
+  private external fun nRecordDrawnSize(instanceId: Long, width: Double, height: Double)
+
   /** Whether [registerNatives] found the class in this build. */
   @Volatile
   private var unavailable: Boolean = false
@@ -107,6 +109,23 @@ object NitroUiSizing {
     }
     try {
       nInvalidateEnvironment()
+    } catch (_: UnsatisfiedLinkError) {
+      unavailable = true
+    }
+  }
+
+  /**
+   * Record the box this instance was drawn at, in dp, on its first frame.
+   *
+   * Sizing never reads it: it feeds the trace that lets an on-device test tell
+   * "corrected before the frame was drawn" from "corrected one frame late".
+   */
+  fun recordDrawnSize(instanceId: Long, width: Double, height: Double) {
+    if (unavailable || instanceId == NO_INSTANCE) {
+      return
+    }
+    try {
+      nRecordDrawnSize(instanceId, width, height)
     } catch (_: UnsatisfiedLinkError) {
       unavailable = true
     }
