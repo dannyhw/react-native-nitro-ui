@@ -881,3 +881,79 @@ line each, attributed to the round-1 verification. None fixed here.
 Emulator `nitroui_t01` was started on port 5570 against adb server 5041 and shut
 down at the end; the human's `PR1505_Pixel` (`emulator-5560`) and G2's
 `nitroui_t02` (adb 5042) were not used.
+
+---
+
+## FIX1 round — iOS a11y probe reports the disabled state
+
+**Branch:** `fix/slider-ios-disabled-probe` (from `main` at `fc7d433`)
+
+### The bug
+
+`381b1f2` added, to the `ignores a drag while disabled` harness test, two
+assertions that the a11y probe text contains `disabled=true` / `disabled=false`.
+Only the Android probe (`runTestAccessibilityStep`, reading the merged semantics
+node's `Disabled` property) emitted that field. The iOS probe built its report
+without it, so on iOS `toContain('disabled=true')` was comparing against a string
+that never carried `disabled=` — the assertion could only ever be green on
+Android. On main the iOS suite therefore failed that test.
+
+### The fix
+
+`ios/components/Slider/HybridNitroUiSlider.swift` — `runTestAccessibilityStep`
+now reads the adjustable element's disabled state the same way the Slider vends
+it (`refresh()` sets `[.adjustable, .notEnabled]` when disabled), via
+`nitroUiAccessibilityTraits(of: element)?.contains(.notEnabled)`, and appends
+`disabled=<bool>` to both the "performed" and "does not respond" reports — the
+same `disabled=` format Android already used. The assertion is now a real check on
+both platforms, not an Android-only one. The element stays `.adjustable` while
+disabled (so the probe still finds and performs on it) and `accessibilityStep` is
+inert when disabled, so the disabled report reads `…0.6->0.6 disabled=true`.
+
+### Every gate shown to run on both platforms
+
+AGENTS.md (the new rule) — the assertion is exercised on iOS and Android, and the
+iOS check was shown to fail when the behaviour it guards is removed.
+
+| Gate | Command | Result |
+| ---- | ------- | ------ |
+| `bun run check` | `bun run check` (typecheck, bench:typecheck, lint, format, jest, test:native ASan, perf:renders, nitrogen:check, autolinking, bob, api-extractor, publint, manifest) | **PASS** (exit 0) |
+| iOS harness (full, with fix) | `cd example && IOS_SIM_UDID=F08675D3-… METRO_PORT=8293 HARNESS_APP_PATH=$PWD/ios/build/…/NitroUiExample.app bunx react-native-harness --harnessRunner ios` | **PASS — 54/54** (3 suites) on iPhone 17 / iOS 27 |
+| iOS Slider suite, negative control | same, filter `Slider.harness`, after removing `.notEnabled` from `refresh()` | **RED** — `Slider › ignores a drag while disabled` → `expected '…accessibilityIncrement…' to contain 'disabled=true'`; 20 passed, 1 failed |
+| iOS Slider suite, restored | same, after restoring `.notEnabled` | **PASS — 21/21** |
+| Android harness (Slider suite) | `cd example && HARNESS_APP_PATH=$PWD/android/app/build/outputs/apk/debug/app-debug.apk ANDROID_AVD=nitroui_t01 ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 bunx react-native-harness --harnessRunner android Slider.harness` | **PASS — 21/21** on `nitroui_t01` (emulator-5570) |
+
+Builds: iOS `xcodebuild … -derivedDataPath build build` (BUILD SUCCEEDED,
+repeated for the mutation and the restore); Android `./gradlew :app:assembleDebug
+-PreactNativeArchitectures=arm64-v8a` (BUILD SUCCESSFUL).
+
+### The negative control, in full
+
+`refresh()` was temporarily changed to `accessibilityTraits = .adjustable`
+(dropping `.notEnabled`), iOS rebuilt, Slider suite run on iOS: the disabled test
+went red on `toContain('disabled=true')` because the probe now reported
+`disabled=false` for a disabled element — proving the assertion is wired to the
+`.notEnabled` trait and not tautological. Restored to
+`model.disabled ? [.adjustable, .notEnabled] : .adjustable`; Slider suite green
+again. The final tree differs from `main` by the probe change only.
+
+### Files changed
+
+- `ios/components/Slider/HybridNitroUiSlider.swift` (probe reports `disabled=`)
+
+### Notes / follow-ups (not in scope, D19)
+
+- iOS full-suite run hit a transient `app heartbeat timed out` on `Sizing.harness`
+  on the first pass; the immediate re-run was 54/54, so it is an infra flake, not
+  a regression. Not chased (out of scope).
+- Android-only observation: the harness logs "Hardware acceleration (KVM/HVF)
+  appears unavailable" yet the Slider suite completed in 33s (hardware speed), so
+  that harness heuristic is a false negative on this host. Reported, not fixed.
+
+### Device discipline
+
+Started only: `nitroui_t01` on `emulator-5570` (adb server 5041), which the
+harness shut down at the end. iPhone 17 (F08675D3) was already booted by the
+environment, so it was used and left as-is. Never touched: `emulator-5560` /
+PR1505_Pixel, iPhone Air, `nitroui_t02` (5042), the default adb server. Port 8293
+Metro was left free.
