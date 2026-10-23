@@ -11,6 +11,10 @@ const IMPLEMENTATIONS: readonly ImplementationName[] = [
   'expo-ui-host-per-control',
   'expo-ui-shared-host',
   'nitro-ui',
+  'rn-core-button',
+  'expo-ui-host-per-control-button',
+  'expo-ui-shared-host-button',
+  'nitro-ui-button',
 ];
 
 function isScenario(value: string): value is ScenarioName {

@@ -1,8 +1,22 @@
 import type { ComponentType } from 'react';
 
-/** Every implementation the registry can measure. */
+/**
+ * Every implementation the registry can measure.
+ *
+ * The Switch arms keep their original bare names; a Button arm is the same name
+ * with a `-button` suffix, because the name *is* the launch-plan token and the
+ * results-cell key (bench/src/implementations/index.ts "The component
+ * dimension"). Each suffix set has its own `rn-core` control.
+ */
 export type ImplementationName =
-  'rn-core' | 'expo-ui-host-per-control' | 'expo-ui-shared-host' | 'nitro-ui';
+  | 'rn-core'
+  | 'expo-ui-host-per-control'
+  | 'expo-ui-shared-host'
+  | 'nitro-ui'
+  | 'rn-core-button'
+  | 'expo-ui-host-per-control-button'
+  | 'expo-ui-shared-host-button'
+  | 'nitro-ui-button';
 
 export type ScenarioName = 'mount' | 'update' | 'memory' | 'leak';
 
