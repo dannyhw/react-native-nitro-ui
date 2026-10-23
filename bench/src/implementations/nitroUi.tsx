@@ -1,9 +1,10 @@
-import { Slider, Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { Progress, Slider, Switch, nitroUiCore } from 'react-native-nitro-ui';
 
 import type { BenchListProps, BenchPerfMark } from '../types';
 import {
   onSliderChange,
   onValueChange,
+  progressValue,
   range,
   rowStyle,
   sliderValue,
@@ -109,6 +110,25 @@ export function NitroUiList({
             testID={`bench-nitro-ui-slider-${String(index)}`}
             value={sliderValue(value)}
             onValueChange={onSliderChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'progress') {
+    // The default `variant` (`'linear'`) and a determinate value: that is the
+    // control G3 is asked to price, and the one whose box every arm can match.
+    // `tintColor`/`trackColor` stay unset like the other arms' colours - the
+    // comparison is each runtime's platform default.
+    return (
+      <>
+        {range(n).map((index) => (
+          <Progress
+            key={index}
+            testID={`bench-nitro-ui-progress-${String(index)}`}
+            value={progressValue(value)}
             nuiPerfId={perfMarks ? index : null}
             style={style}
           />
