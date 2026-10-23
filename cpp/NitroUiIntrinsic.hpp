@@ -218,6 +218,16 @@ namespace margelo::nitro::nitroui {
      * a Switch was merely toggled. Without this, every props update would dirty
      * Yoga's measurement of every instance (`YogaLayoutableShadowNode` returns
      * `true` by default) and throw away the cached answer.
+     *
+     * One prop turn is exempt: an instance the engine has already corrected
+     * (FIX2, review S1 against `requiresFreshMeasure`). Yoga keeps every answer it
+     * was ever given for a node it was never dirtied for, so the answer from
+     * before a correction is still a live entry in the cloned node's measurement
+     * cache - `canUseCachedMeasurement` will reuse a `MaxContent` answer of 40x20
+     * for a later `FitContent` question about a control that is 61x28 - and a
+     * clean clone is then laid out at the superseded size with `measureContent`
+     * never reached to notice. Trusting the cache there is what put a controlled
+     * Switch's `Toggle` outside the window (T15 Finding 1).
      */
     bool shouldNewRevisionDirtyMeasurement(const ShadowNode& /*sourceShadowNode*/, const ShadowNodeFragment& fragment) const override {
       if (fragment.state != nullptr) {
@@ -246,8 +256,10 @@ namespace margelo::nitro::nitroui {
       if (previous == nullptr || incoming == nullptr) {
         return true;
       }
-      return detail::sizingIdOf(incoming->nuiSizingId.get()) != detail::sizingIdOf(previous->nuiSizingId.get()) ||
+      const int64_t instanceId = detail::sizingIdOf(incoming->nuiSizingId.get());
+      const bool newConfiguration = instanceId != detail::sizingIdOf(previous->nuiSizingId.get()) ||
           detail::sizingKeyOf(incoming->nuiSizingKey.get()) != detail::sizingKeyOf(previous->nuiSizingKey.get());
+      return newConfiguration || NitroUiSizingEngine::shared().requiresFreshMeasure(instanceId);
     }
   };
 
