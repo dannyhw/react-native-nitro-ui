@@ -483,3 +483,131 @@ where this task measured something close to a limit (Android's flush at 8.5–24
 D14 ends "…until T11's measured sizing replaces defaults" (`docs/DECISIONS.md:47`),
 which T11 has now done. DECISIONS.md is cross-task and other agents edit it, so this is
 a one-line change for whoever next owns it rather than something I changed mid-flight.
+
+---
+
+# Round 2
+
+Opus review (`docs/tasks/T11-intrinsic-sizing.review.md`, committed here) returned
+CHANGES-REQUIRED. Findings in the order I was asked to take them.
+
+## Gate status this round (exact commands)
+
+| Gate | Result |
+| --- | --- |
+| `bun run check` | **PASS** (exit 0; includes `test:native`, `nitrogen:check`, `api-extractor:check`, `manifest:check`) |
+| `bun run test:native` | **PASS** — 147 checks, and the same suite again under `-fsanitize=address,undefined` |
+| iOS harness, iPhone 17 `F08675D3` | **FAIL — 29 passed, 3 failed** (details below) |
+| Android harness, `nitroui_t01` | **not run this round** |
+
+## Blocking
+
+**B1 (use-after-free) — fixed.** `pushMeasuredSize` captures `measured` by value; the
+reasoning is at the capture site. A `[&measured]` capture is a `Pending::measured`
+reference into a vector owned by `applyReports`, which an `Asynchronous` update runs on
+the JS thread after that returns.
+Evidence it can fail: `scripts/check-sizing-capture.sh` (a grep — no fake push can see
+the engine's own header) is wired into `test:native` and goes red on `[&measured]`;
+`test:native` now also runs the whole sizing suite under ASan+UBSan (kept in the gate;
+the suite is milliseconds, the run is seconds), including
+`testDeferredPushesReadSizesAfterFlush`, whose fake push stores the callback and runs it
+after `flush()` returns, and a re-entrant push that calls `measure()`/`bind()` to pin the
+no-push-under-the-lock rule. Leak checking is off deliberately (N3 leaks the engine).
+
+**B2 (prewarm poisons the cache) — fixed, plus a second bug it exposed.**
+Seeded/pre-warmed entries are `provisional`: they answer the layout, and the first
+report either promotes the entry (matching size, still zero commits) or replaces it with
+the measured size. `prewarmKeys` pre-warms only from a *declared* fallback.
+Then the device tests still failed, and reproducing the scenario natively in milliseconds
+found the next layer: `fallbacks_` is keyed by **component**, and `applyReports` was
+writing every measured size into it — so one configuration became another one's guess.
+Repro (host, this repo): after a `|w100` variant reports 100x28, a fresh default mount
+answers **100x28**. Fixed by filing a learned size under (component, sizingKey)
+(`guesses_`) and never under the component; the declared fallback is now written only by
+declarations. This also keeps the property D14 wanted (a configuration's own last size is
+its guess across an environment bump, so a control that did not move still costs nothing).
+`testALearnedSizeBelongsToItsOwnConfiguration` + the rewritten key-change check cover it:
+re-introducing the one-line leak turns both red (verified, then reverted).
+
+## Should-fix
+
+- **S1 — fixed in code, not yet green on device.** The dirty check now compares the
+  incoming props with the props the *state* still carries (`completeClone` passes the node
+  itself as source, so the old comparison was a node with itself). Native coverage added
+  (`testKeyChangeReMeasuresAndCorrects`). The on-device test still fails — see "What is
+  not green".
+- **S2 — fixed in code, not yet green on device.** The bump keeps ledger entries, marks
+  them inexact and recomputes their key; hosts invalidate once per real change via a
+  signature (content size category + legibility weight / font scale + density + locale)
+  instead of once per view. Native coverage added
+  (`testEnvironmentChangeCorrectsAMountedInstance`).
+- **S3 — fixed.** `forget(id)` from `onDropView`/`prepareForRecycle` on both platforms
+  (Android via JNI), plus a bounded expired sweep. Ledger/registry flat across
+  mount/unmount is asserted in the host suite and in a new harness test.
+- **S4 — fixed, with the reviewer's first option.** One process-global atomic in C++
+  behind `nitroUiCore.nextSizingId()`, handed out once per mount by a single
+  `useSizingId` hook in `src/core`. Chosen over keying maps by (componentHash, id) +
+  a per-runtime salt because that still needs a salt that survives a reload and a
+  cross-component uniqueness rule, while one counter is uniqueness by construction and
+  costs one atomic increment per mount.
+- **S5 — implemented; iOS still draws one fallback frame on a cold mount.** The host now
+  measures an `intrinsic` control on the first commit regardless of bounds and `report()`
+  calls `CFRunLoopWakeUp`. Measured trace for a cold mount after the fix:
+  `laidOut:40.0x20.0 → drew:40.0x20.0 → corrected:61.0x28.0`, `corrections=1
+  immediate=1`. The correction is issued, but SwiftUI's fitting size does not exist until
+  its own layout pass, so it lands in the next turn. See Questions.
+- **S6 — not fixed; honest number.** `immediate` budget is 2 per flush, so in the cold
+  batch of 200 exactly **2 corrections can land in the cancelled frame and 198 arrive
+  after it redraws** (`corrections=200 immediate=2 batched=198 flushes=1`). Making pushes
+  synchronous inside `onPreDraw` would fix the number and risk a deadlock (a synchronous
+  commit re-enters `measureContent`, which takes the same lock), so I left the budget and
+  corrected the claim in `sizing.md` instead.
+- **S7 — fixed.** An unbound target is put back into `needsCorrection_`, and an unbound
+  report is requeued for a bounded number of flushes instead of being dropped.
+- **S8 — mostly done.** Wrong-guess seeds, all-200 assertions, Android tightened to 0
+  stale frames, mount/unmount stress with rapid props, teardown with corrections in
+  flight, and the deferred/re-entrant native pushes are all in. Not done: a reload test,
+  and Android's 0-stale assertion is unrun this round.
+
+## NITs
+
+N1 (narrow through `react::State`), N2 (`flushScheduled` reset), N3 (leaked singleton),
+N4 (epsilon comment matches value), N5 + N6 + N8 + N9 (docs; `staleFramesSkipped` renamed
+everywhere including the regenerated API report), N7 (patch script hard-fails on a
+generated `updateState:oldState:` / a second Kotlin bind, with fixtures), N10 (JNI
+comment says the missing class is survivable only because Kotlin catches the link error)
+— all done. None skipped.
+
+## What is not green, and the next experiment
+
+Two of the three iOS failures are one symptom, and I could not close them: the
+`nuiSizingKey` does not appear to vary on device. The evidence:
+
+- a **default**-configuration mount is laid out **100x28** — the *wide* variant's size —
+  which is only possible if both variants share one cache entry that the wide instance
+  made authoritative;
+- after an environment change, rerendering the same instance to the wide configuration
+  leaves it at **61x28**, which is what S1's fix cannot do if the key actually moved;
+- both survive my per-configuration fix (the fix changes the *guess*, not an overwritten
+  *authoritative* entry), while the identical scenario passes in the host suite.
+
+Cheapest decisive check: log `delta(before).cachedSizes` around the wide mount in the
+key-change test. One new configuration means the key moved and the bug is elsewhere; zero
+means Fabric is not varying `nuiSizingKey` and the trail goes to the generated prop
+plumbing (`ReactProp<std::string>` with an empty-string default for the base variant).
+The third failure is `lastSampleIsRight` on a cold iOS mount — S5's residual frame, above.
+
+## Questions for orchestrator
+
+1. **D16's assumption for cold mounts does not hold.** "One stale iOS frame after an
+   environment change, accepted" also implies a cold mount, and even with S5's first-commit
+   measure iOS still draws the fallback box on frame 1 of a cold mount (measured trace
+   above). Accept it as platform truth and relax the harness, or fund "hide the control
+   until its size is confirmed"?
+2. **Do you want me to keep chasing the key plumbing?** My read is that the remaining two
+   failures are one bug in prop delivery, not in the engine, and it is a small isolated
+   hunt; I stopped rather than guess at an API/Architecture decision about how
+   `nuiTestWidth`/`nuiSizingKey` are declared.
+3. **S6's number.** "Up to `kImmediateBudgetPerTurn` (2) instances per frame get a
+   correction before the redraw" is now the documented claim on Android. Do you want the
+   budget raised instead, given 198 of 200 is the realistic cold-batch number?
