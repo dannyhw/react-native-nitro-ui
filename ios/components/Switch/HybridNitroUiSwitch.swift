@@ -135,6 +135,17 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     return true
   }()
 
+  /// Hand this control's declared size to the sizing engine, once per process
+  /// (the static above is lazy and thread-safe, so repeat calls cost nothing).
+  ///
+  /// ``NitroUiDeclaredFallbacks`` calls this at startup, which is the point that
+  /// matters: Fabric measures a Switch's shadow node before it creates any Switch
+  /// view, so a fallback declared from `init` is one measure too late for the
+  /// first instance (T14). `init` still calls it, as the backstop.
+  static func declareFallback() {
+    _ = Self.declaresFallback
+  }
+
   /// The Nitro `view` - created once here and never replaced.
   override init() {
     host = NitroSwiftUIHost(model: SwitchModel())
@@ -147,9 +158,10 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     // components that opt out.
     host.wantsContentSize = true
     host.sizingPolicy = .intrinsic
-    // A Swift static is lazy and thread-safe, so this runs once - on the first
-    // Switch, before any of them can be measured.
-    _ = Self.declaresFallback
+    // The backstop: startup normally registers this through
+    // ``NitroUiDeclaredFallbacks`` long before a Switch can be measured, and a
+    // host built without that table still gets its fallback here.
+    Self.declareFallback()
   }
 
   var view: NitroSwiftUIHost<SwitchContent> {
