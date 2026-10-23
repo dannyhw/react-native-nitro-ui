@@ -49,6 +49,14 @@ export const BASELINE_LAUNCHES = 8;
  */
 export const GATED_IMPLEMENTATIONS = ['nitro-ui'];
 
+/**
+ * The arms that can report their *own* native perf marks (`bun bench
+ * --perf-marks`). Only the library under development has a mark source
+ * (`nitroUiCore.drainPerf()`), so a marks run narrows the matrix to these and
+ * never pretends to instrument `@expo/ui` or `rn-core`.
+ */
+export const MARK_CAPABLE_IMPLEMENTATIONS = ['nitro-ui'];
+
 export const IMPLEMENTATIONS = [
   'rn-core',
   'expo-ui-host-per-control',
@@ -103,6 +111,18 @@ export function planString(scenario, implementation, n) {
   return `${scenario}:${implementation}:${n}`;
 }
 
+/**
+ * The launch string for one schedule entry, including the `:marks` flag when the
+ * entry asked for the runtime's own perf marks. A results *cell* key never carries
+ * it (`cellKey`): a marks run is a diagnosis of the same cell, not a fifth arm.
+ */
+export function launchPlanString(entry) {
+  return (
+    planString(entry.scenario, entry.implementation, entry.n) +
+    (entry.perfMarks === true ? ':marks' : '')
+  );
+}
+
 /** `mount:rn-core:50` - the key a cell of the results matrix is stored under. */
 export function cellKey(scenario, implementation, n) {
   return planString(scenario, implementation, n);
@@ -125,6 +145,7 @@ export function buildSchedule({
   implementations = IMPLEMENTATIONS,
   launches = LAUNCHES_PER_CELL,
   only = null,
+  perfMarks = false,
 } = {}) {
   const cells = PLANS[plan];
   if (cells == null) {
@@ -132,7 +153,7 @@ export function buildSchedule({
       `Unknown plan "${String(plan)}" (expected ${Object.keys(PLANS).join(' or ')})`
     );
   }
-  const wanted =
+  let wanted =
     only == null
       ? implementations
       : implementations.filter((name) => only.split(',').includes(name.trim()));
@@ -140,6 +161,19 @@ export function buildSchedule({
     throw new Error(
       `--only matched no implementation (known: ${IMPLEMENTATIONS.join(', ')})`
     );
+  }
+  if (perfMarks) {
+    // Only the library records marks, so a marks run measures nothing else - it
+    // would just burn launches whose marks are structurally empty.
+    const marked = wanted.filter((name) =>
+      MARK_CAPABLE_IMPLEMENTATIONS.includes(name)
+    );
+    if (marked.length === 0) {
+      throw new Error(
+        `--perf-marks needs an implementation with marks (${MARK_CAPABLE_IMPLEMENTATIONS.join(', ')}); asked for ${wanted.join(', ')}`
+      );
+    }
+    wanted = marked;
   }
 
   const schedule = [];
@@ -151,6 +185,7 @@ export function buildSchedule({
           scenario: cell.scenario,
           implementation,
           n: cell.n,
+          perfMarks: perfMarks === true,
           launch,
         });
       }
@@ -350,6 +385,8 @@ function emptyCell(record) {
     /** `mount` = the timed op, `unmount` = the teardown that precedes it. */
     cpu: { mount: new Map(), unmount: new Map() },
     memory: new Map(),
+    /** launch -> the `perf` records of that launch (marks runs only). */
+    marks: new Map(),
     sanity: {
       missingMount: 0,
       missingPresented: 0,
@@ -476,6 +513,35 @@ function summariseCell(key, cell) {
     }
   }
 
+  /**
+   * The runtime's own native perf marks, when this cell came from a
+   * `--perf-marks` run. Reported, never gated: recording a mark is a mutex write
+   * and draining one is JS work, so these iterations are instrumented and cannot
+   * be compared with the clean numbers above. They exist to explain them - the
+   * `propsAppliedPerInstance` count says how many native prop commits one React
+   * commit really caused, and `drawLatencyNs` is the library's own props-to-pixels
+   * span inside what the probe measures as `UI CPU/op`.
+   */
+  const markRecords = [...cell.marks.values()].flat();
+  const markMedians = (pick) => median(markRecords.map(pick).filter(isNumber));
+  const marks =
+    markRecords.length === 0
+      ? null
+      : {
+          iterations: markRecords.length,
+          launches: cell.marks.size,
+          propsApplied: markMedians((record) => record.propsApplied),
+          propsAppliedPerInstance:
+            cell.n > 0
+              ? markMedians((record) => record.propsApplied / cell.n)
+              : null,
+          firstFrame: markMedians((record) => record.firstFrame),
+          instances: markMedians((record) => record.instances),
+          propsAppliedNs: markMedians((record) => record.propsAppliedNs),
+          firstFrameNs: markMedians((record) => record.firstFrameNs),
+          drawLatencyNs: markMedians((record) => record.drawLatencyNs),
+        };
+
   return {
     key,
     scenario: cell.scenario,
@@ -517,6 +583,7 @@ function summariseCell(key, cell) {
      * stamp, so `presented < mounted` or `mounted < jsCommit` means a signal
      * arrived out of order and the reader must not trust the latency pair.
      */
+    marks,
     sanity: cell.sanity,
   };
 }
@@ -589,6 +656,10 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
         jsNsPerOp: perUpdate(record.jsCpuNs),
         mainNsPerOp: perUpdate(record.mainCpuNs),
       });
+    } else if (record.kind === 'perf') {
+      const marks = cell.marks.get(record.launch) ?? [];
+      marks.push(record);
+      cell.marks.set(record.launch, marks);
     } else if (record.kind === 'mem') {
       const phases = cell.memory.get(record.launch) ?? {};
       phases[record.phase] = record.footprintBytes;
@@ -1014,6 +1085,11 @@ export function gate({
  */
 export function baselineBlockers(run) {
   const reasons = [];
+  if (run.perfMarks === true) {
+    reasons.push(
+      'the run turned on native perf marks (--perf-marks), so every iteration there paid for instrumentation'
+    );
+  }
   if (run.dirty === true) {
     reasons.push(
       'the working tree is dirty (a baseline must be attributable to a commit)'
@@ -1210,20 +1286,28 @@ export function resultsFileName(
   sha,
   platform,
   when = new Date(),
-  dirty = false
+  dirty = false,
+  marks = false
 ) {
   const stamp = when
     .toISOString()
     .replace(/[-:]/g, '')
     .replace(/\.\d+Z$/, 'Z');
-  return `${sha}${dirty ? '-dirty' : ''}-${platform}-${stamp}.json`;
+  return `${sha}${dirty ? '-dirty' : ''}-${platform}-${stamp}${marks ? '-marks' : ''}.json`;
 }
 
-/** Newest matching results file name for a short sha, clean runs preferred. */
+/**
+ * Newest matching results file name for a short sha, clean runs preferred.
+ *
+ * `--perf-marks` runs are named `-marks.json` and are excluded: they are
+ * instrumented, so they must never become a `--compare` base by accident.
+ */
 export function newestResultsName(names, sha, platform) {
   const escaped = sha.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`^${escaped}(-dirty)?-${platform}-.+\\.json$`);
-  const matches = names.filter((name) => pattern.test(name));
+  const matches = names.filter(
+    (name) => pattern.test(name) && !name.includes('-marks.json')
+  );
   const clean = matches.filter((name) => !name.includes('-dirty-'));
   const pool = clean.length > 0 ? clean : matches;
   return pool.sort().reverse()[0] ?? null;
