@@ -43,7 +43,9 @@ function formatMetric(metric, value) {
 
 function formatRatio(ratio, spread) {
   if (!Number.isFinite(ratio)) return 'n/a';
-  const noise = Number.isFinite(spread) ? ` (${(spread * 100).toFixed(0)}%)` : '';
+  const noise = Number.isFinite(spread)
+    ? ` (${(spread * 100).toFixed(0)}%)`
+    : '';
   return `${ratio.toFixed(2)}x${noise}`;
 }
 
@@ -91,9 +93,8 @@ for (const file of process.argv.slice(2)) {
         const ratio = median(launchRatios);
         const spread =
           Number.isFinite(ratio) && launchRatios.length > 1
-            ? (median(
-                launchRatios.map((value) => Math.abs(value - ratio))
-              ) ?? Number.NaN) / ratio
+            ? (median(launchRatios.map((value) => Math.abs(value - ratio))) ??
+                Number.NaN) / ratio
             : Number.NaN;
         row.push(formatRatio(ratio, spread));
       }
