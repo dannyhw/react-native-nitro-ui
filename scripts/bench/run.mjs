@@ -6,6 +6,12 @@
  *   bun bench --platform ios --plan full --check
  *   bun bench --platform ios --plan quick --compare <git-ref|results-file>
  *   bun bench --platform ios --plan quick --update-baseline
+ *   bun bench --platform android --plan quick --component button
+ *
+ * `--component` restricts the run to one component's cells. A component is part
+ * of the scenario cell (`mount.button`), so the filter crosses the plan rather
+ * than renaming the arms, and every component's ratios still divide by the same
+ * `rn-core` control (scripts/bench/lib.mjs `componentOf`).
  *
  * Per cell of the matrix (scenario x implementation x N) the protocol is a
  * **fresh process**, a 1 s settle, 5 warmup + 20 measured iterations, and

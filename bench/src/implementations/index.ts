@@ -13,8 +13,9 @@ import { RnCoreList } from './rnCore';
  * `rn-core` is the control arm and always runs. `nitro-ui` is the library under
  * development - the only arm with native perf marks, and the only gated one.
  *
- * Adding a new component to the matrix means adding one entry here plus its
- * scenario props; nothing else in the harness changes.
+ * Adding a new component to the matrix means one branch per arm here (they
+ * dispatch on `BenchListProps.component`) plus the plan cells; the arm names, the
+ * runner and the gate do not change.
  */
 export const implementations: BenchImplementation[] = [
   {

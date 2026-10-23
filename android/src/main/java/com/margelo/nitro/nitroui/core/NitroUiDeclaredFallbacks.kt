@@ -1,5 +1,6 @@
 package com.margelo.nitro.nitroui.core
 
+import com.margelo.nitro.nitroui.HybridNitroUiButton
 import com.margelo.nitro.nitroui.HybridNitroUiSlider
 import com.margelo.nitro.nitroui.HybridNitroUiSwitch
 
@@ -31,5 +32,6 @@ object NitroUiDeclaredFallbacks {
     // is ever reached twice (a second `NitroUiSizing` class loader, say).
     HybridNitroUiSwitch.declareFallback()
     HybridNitroUiSlider.declareFallback()
+    HybridNitroUiButton.declareFallback()
   }
 }

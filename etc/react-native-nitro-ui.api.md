@@ -10,6 +10,42 @@ import { JSX } from 'react';
 import { ViewProps } from 'react-native';
 
 // @public
+export function Button(input: ButtonProps): JSX.Element;
+
+// @public
+export interface ButtonProps extends ViewProps {
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly title: string;
+        readonly variant: string;
+        readonly size: string;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly systemImage: string | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+    }) => void) | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onPress?: (() => void) | undefined;
+    size?: ButtonSize | undefined;
+    systemImage?: string | undefined;
+    tintColor?: ColorValue | undefined;
+    title: string;
+    variant?: ButtonVariant | undefined;
+}
+
+// @public
+export type ButtonSize = 'small' | 'medium' | 'large';
+
+// @public
+export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
+
+// @public
 export interface NitroUiCore extends HybridObject<{
     ios: 'c++';
     android: 'c++';
