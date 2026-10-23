@@ -26,6 +26,7 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.findViewTreeSavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import java.lang.ref.WeakReference
 
 /** An immutable size in dp, safe to publish across threads with a `@Volatile`. */
 data class NitroUiDpSize(val width: Double, val height: Double)
@@ -570,6 +571,35 @@ fun NitroUiTheme(content: @Composable () -> Unit) {
 }
 
 /**
+ * The key of [NitroUiColorSchemes], held weakly.
+ *
+ * A process-wide cache that keeps its key strongly keeps everything the key keeps.
+ * Here the key is the `Context` the colours were read from - RN's
+ * `ThemedReactContext`, whose base context is the `Activity` - so a strong key
+ * would pin a destroyed Activity and its whole view hierarchy in every process
+ * that ever mounts a control, until some later control composes against a
+ * different context (which may be never). The value may stay strong: a
+ * `ColorScheme` is a bag of colour longs and reaches nothing.
+ *
+ * Collected is not wrong, just a miss: [matches] compares the referent, so once
+ * the context is gone the next control rebuilds the scheme. Nothing has to be
+ * unregistered, and no entry outlives the thing it describes.
+ *
+ * Identity, not `equals`, as before: resource overlays are per-context, and two
+ * `ThemedReactContext`s that compare equal can still be themed differently.
+ */
+internal class WeakKey<T : Any>(value: T) {
+  private val reference = WeakReference(value)
+
+  /** Whether this key is still alive and *is* [candidate]. */
+  fun matches(candidate: T): Boolean = reference.get() === candidate
+
+  /** The referent, or null once it has been collected. For tests of the contract. */
+  val held: T?
+    get() = reference.get()
+}
+
+/**
  * The one Material colour scheme of the process, shared by every hosted control.
  *
  * `remember` cannot do this job, which is what an earlier version of
@@ -589,6 +619,10 @@ fun NitroUiTheme(content: @Composable () -> Unit) {
  * live `Configuration` is a field read, not a copy
  * (`ResourcesImpl#getConfiguration`).
  *
+ * The context half of the key is a [WeakKey]: this object lives for the process,
+ * and the context it is keyed on is the host's `Activity`. See [WeakKey] for why
+ * that is a leak and why losing the entry to the collector is only a miss.
+ *
  * Residual, measured as cosmetic rather than fixed: a dynamic-colour change the
  * platform delivers *without* a configuration change (a wallpaper swap on
  * Android 12+) keeps the old scheme until the next configuration change.
@@ -598,7 +632,7 @@ fun NitroUiTheme(content: @Composable () -> Unit) {
  */
 internal object NitroUiColorSchemes {
   private class Entry(
-    val context: Context,
+    val contextKey: WeakKey<Context>,
     val dark: Boolean,
     val uiMode: Int,
     val scheme: ColorScheme,
@@ -612,7 +646,9 @@ internal object NitroUiColorSchemes {
   ): ColorScheme {
     val uiMode = context.resources.configuration.uiMode
     entry?.let {
-      if (it.context === context && it.dark == dark && it.uiMode == uiMode) return it.scheme
+      if (it.contextKey.matches(context) && it.dark == dark && it.uiMode == uiMode) {
+        return it.scheme
+      }
     }
     val built =
       when {
@@ -622,7 +658,7 @@ internal object NitroUiColorSchemes {
         dark -> darkColorScheme()
         else -> lightColorScheme()
       }
-    entry = Entry(context, dark, uiMode, built)
+    entry = Entry(WeakKey(context), dark, uiMode, built)
     return built
   }
 
