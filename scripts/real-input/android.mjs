@@ -44,6 +44,11 @@ import {
   findTab,
   parseHierarchy,
 } from './uiautomator.mjs';
+import { assertSupportedNode } from '../node-version.mjs';
+
+// One Node across every device gate: the harness cannot run on Node 25/26 at
+// all, so a real-input run on that runtime is not comparable evidence.
+assertSupportedNode({ command: 'bun run test:real-input:android' });
 
 const BUNDLE_ID = 'nitroui.example';
 const ACTIVITY = `${BUNDLE_ID}/.MainActivity`;
