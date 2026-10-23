@@ -288,3 +288,238 @@ because every component with a colour prop would otherwise rediscover it.
    one polling helper were enough here, and every gate/suite is green at load < 30.
    Should device tasks get a serial queue, or run a private adb server
    (`ANDROID_ADB_SERVER_PORT`) so they stop killing each other's?
+
+---
+
+# Round 2 — review fixes
+
+Reviewed in `docs/tasks/T10-core-switch.review.md` (CHANGES-REQUIRED). Every
+BLOCKING item and every SHOULD-FIX item is addressed; NITs are fixed or written
+down where the honest answer is a limitation. Two items are answered with
+evidence instead of code — B3's keep-or-drop recycling call and SF6's Android
+intrinsic measure — both explained below.
+
+## Verification (round 2)
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Full check | `bun run check` | PASS — typecheck, lint (0/0), format, 72 unit tests (7 suites), `test:native`, `nitrogen:check` (51 files), `autolinking:check`, `bob build`, `api-extractor:check`, `publint --strict`, `manifest:check` (133 files) |
+| API report | `bun run api-extractor:check` | PASS — **0 warnings** (`etc/react-native-nitro-ui.api.md`) |
+| Host native tests | `bun run test:native` | PASS — `clock.test` (C++/Obj-C++) + `handshake.test` (Swift), all checks |
+| Kotlin unit tests | `bun run test:native:android` | PASS — 7 tests (`android/build/test-results/testDebugUnitTest/`) |
+| iOS harness | `IOS_SIM_UDID=F08675D3-… METRO_PORT=8293 HARNESS_APP_PATH=… bun run harness:ios` | PASS — 14/14, `iPhone 17` (iOS 27.0) |
+| Android harness | `ANDROID_AVD=nitroui_t01 ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 HARNESS_APP_PATH=… bun run harness:android` | PASS — 14/14, AVD `nitroui_t01` (`emulator-5570`), against an APK rebuilt from this tree at 00:55 |
+| Consumer smoke | `PLATFORM=android ANDROID_AVD=nitroui_t01 EMULATOR_PORT=5570 ANDROID_ADB_SERVER_PORT=5041 bun run smoke:rn-cli` | PASS — fresh RN 0.88.0 CLI app, npm-installed tarball, release APK, `NITRO_UI_SMOKE_READY` with the Switch mounted; 93 s total (rn-init 6 s, npm 22 s, build 55 s, run 6 s) |
+
+Round-1 numbers that moved: 40 hosted Switches mount in **287.7 ms** on
+`nitroui_t01` (was 313 ms) — the suite logs it every run. Still ~10× iOS, still
+a debug build on an emulator, still T02's release-mode question (NIT 5).
+
+## BLOCKING
+
+**B1 — iOS default size, OS-versioned.** `usesModernSwitchSize()`
+(`src/components/Switch/Switch.tsx:69-83`) reads `Platform.constants.osVersion`
+(a string on iOS — the `typeof Platform.Version === 'number'` trap is called out
+in the comment) and picks **61×28 from iOS 26, 51×31 before** it
+(`src/components/Switch/Switch.tsx:98-104`), per D14. Verified three ways: the
+new harness test asserts the Yoga box equals the expected box within 0.6 pt,
+that `measureContent()` is not larger than the box, and that a press near each
+inside edge is delivered (`example/__tests__/Switch.harness.tsx:251-292`);
+Android logs `fabric=52.19x48 hosted=52.19x48`; and a pixel pass over the
+committed iOS screenshot measures the painted capsule at 187×79 px = 62.3×26.3 pt
+inside a 61×28 pt box (183×84 px) — the ~1 pt/side difference is the glass
+rendering the review predicted, where the old 51 pt box had a 189 px track
+(~6 pt dead at each end). `docs/architecture/core.md` §7 carries the table and
+the failure mode, and says T11 replaces the constant, not the plumbing.
+
+**B2 — D1 clock base.** New `cpp/core/NitroUiClock.hpp`:
+`clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` on Apple, `clock_gettime(CLOCK_MONOTONIC)`
+elsewhere, and it is now the single base for `nitroUiCore.now()`, the perf marks
+and both frame clocks. `std::chrono::steady_clock` is rejected in the header
+comment with the reason (on Apple it is `CLOCK_MONOTONIC_RAW`, which keeps
+counting through sleep). The time-base test is host-side, deterministic and in
+`check`: `scripts/native-tests/clock.test.mm` asserts `nowNs()` against
+`CACurrentMediaTime()` — the base `CADisplayLink.timestamp`/`targetTimestamp`
+use — plus `NSProcessInfo.systemUptime` and a direct
+`clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` read (all within 9 µs, tolerance
+5 ms), that it is monotonic, and that it is *not* `CLOCK_MONOTONIC_RAW` —
+measured 9.1 h of divergence on this machine, which is the bug the review
+predicted. `NitroUiPerf` marks are asserted to use the same clock.
+
+**B3 — Android recycling, with the real ordering.** The claim was right: the
+composition does not survive a recycle, and the guide said it did. Investigation
+(RN 0.88 + the nitrogen-generated manager, all cited in
+`docs/architecture/core.md` §6): reuse needs *both* `RecyclableView` (only that
+makes the generated manager call `setupViewRecycling()`) and
+`ReactNativeFeatureFlags.enableViewRecycling()`, which is `false` by default —
+so by default every `onDropViewInstance` is a real unmount. When both are on,
+the generated `onDropViewInstance` calls `hybridView.onDropView()` **before**
+`super.onDropViewInstance(view)`, and `prepareToRecycleView` runs inside that
+super call. So `drop()` → `disposeComposition()` always precedes
+`prepareForRecycle()`, and "survive the recycle by not disposing" would mean
+leaving a composition alive on every *real* unmount — the default case.
+**Decision: keep the dispose**, document precisely, and let T02 measure a
+keep-alive variant with the flag on. `NitroComposeHost`'s class docs,
+`prepareForRecycle()` (`:222-229`, re-arms `isMeasurePending`,
+`contentSize`, `firstFrame`) and `docs/components/switch.md` now say the same
+thing as §6, including the asymmetry with iOS, where `+shouldBeRecycled`/
+`_didDropView` keep the hosting controller and composition alive. Rule written
+down: a component must be correct after a bare `prepareForRecycle()` on both
+platforms, and must never assume it was recycled.
+
+**B4 — smoke app.** `scripts/smoke/App.tsx` now imports `Switch` and renders
+`<Switch testID="SMOKE-switch" defaultValue={true} />` — one import, one line,
+per T03's contract. One smoke run executed (table above): a fresh RN 0.88.0 CLI
+consumer, release APK from the packed tarball, ready line, screenshot. It also
+needed `android/build.gradle` to set `react { jsRootDir }` — the template omits
+it and the release build then fails with duplicate `index.android.bundle`
+classes (recorded as B1 in `docs/upstream.md`).
+
+**B5 — `docs/upstream.md`.** Created, with a status table and a paste-ready
+issue draft per entry, and a **Removal** line saying what to delete when
+upstream fixes it. Covers the two `patches/@react-native-harness%2Fplatform-apple@1.6.0.patch`
+fixes (H1: `simctl install` skipped when the app is already installed, so a
+stale binary silently ran the suite; H2: `simctl appinfo` exit 3 surfacing as a
+throw), the non-patched harness gaps (H3 `findByTestId` has no timeout,
+H4 `screen.screenshot(element)` reports 0×0, H9/H10 the Modal second-window
+gaps), the nitro workarounds (N1 base `ViewProps` dropped on Android — fixed
+upstream, unreleased; N2 = nitro#1184; N3 callbacks must be optional;
+N4 generated `SimpleViewManager` ignores border/radius) and the
+`create-react-native-library` (bob) template bugs from
+`docs/research/setup-decisions.md` (B1 `jsRootDir`, B2 `--tools` keeping only
+the first value). D11 now has something to point at.
+
+## SHOULD-FIX
+
+1. **iOS `accessibilityLabel`** now guards on a real change and calls
+   `host.markDirty()` (`ios/components/Switch/HybridNitroUiSwitch.swift:183-197`),
+   with a comment: only the handshake props may skip the mark.
+2. **Android label moved onto the control.** It is a `mutableStateOf` field on
+   the model and reaches the M3 `Switch` through
+   `Modifier.semantics { contentDescription = it }`
+   (`android/.../HybridNitroUiSwitch.kt:93-98`); the container keeps none, so
+   TalkBack gets one actionable node instead of a named box around an unnamed
+   control. `core.md` §3 states the pattern for later components.
+3. **`hybridRef` is no longer a typed invitation** (D14): `src/index.ts` stops
+   exporting the native view types, the handle in `SwitchProps.hybridRef` is an
+   inline **read-only** shape, and it is `@internal` with what it is for
+   (harness + benchmarks) and the fact that a new closure never re-fires it.
+   `core.md` §5 covers threading, the off-main write hazard, and how a real
+   imperative API should arrive.
+4. **Uncontrolled → controlled** no longer freezes JS writes: every native
+   event count is remembered in a ref in both modes, and the render-phase mode
+   flip seeds `mostRecentEventCount` from it
+   (`src/core/useControlled.ts:59-75`); the echo runs **before** the user's
+   handler so a throwing handler cannot strand native
+   (`src/core/useControlled.ts:96-113`); a `__DEV__` warning fires on a mode
+   switch, as React DOM does. 11 unit tests in
+   `src/__tests__/useControlled.test.tsx` (jest: 69 → 72 tests).
+5. **`sizeThatFits` is off the hot path.** `wantsContentSize` defaults to off
+   and, when a component turns it on, the measure runs per **bounds change,
+   size-affecting trait change, first commit or `invalidateContentSize()`** —
+   never per commit (`ios/core/NitroSwiftUIHost.swift:176-195`, `:242`).
+   `invalidateContentSize()` exists because content can change size with
+   neither signal (`Picker`'s longer title, a re-wrapped label); that rule is in
+   §7 so T11+ doesn't rediscover it.
+6. **Android `contentSize` — answered, not changed.** An unbounded answer is
+   not available inside the pass: a `Measurable` may be measured exactly once
+   per pass (`MeasurePassDelegate` throws otherwise), and the default
+   `maxIntrinsicWidth/Height` is not implemented for the wrappers we use, so it
+   would answer 0 rather than the truth. §7 now says plainly that the two
+   platforms answer different questions — Android "what size did it get in this
+   box", iOS the unbounded question — why, and that the unbounded Android answer
+   is T11's design (`docs/tasks/T11-intrinsic-sizing.md` §11), not a constant.
+7. **Public surface matches intent.** `src/index.ts` exports components and the
+   shared clock only; the hooks, `ControlledState`, `NitroCallbackProp`, the
+   Hybrid View types and `NitroUiSize` are package-internal. `api-extractor` is
+   back to **0 warnings**, this time with nothing swept under
+   `ae-forgotten-export`.
+8. **The disabled test has a barrier.** A second enabled Switch is pressed after
+   the two presses on the disabled one and its event is awaited
+   (`example/__tests__/Switch.harness.tsx:494-528`), so the assertion is "the
+   pipeline demonstrably flushed and nothing arrived", not "nothing arrived
+   yet". The vacuous `:294` comment is gone.
+9. **Native handshake tests exist**, as host binaries rather than new
+   simulators: `scripts/native-tests.sh` compiles the shipping sources with
+   `clang`/`swiftc` and runs them in `bun run test:native` (so in `check`), and
+   `scripts/native-tests-android.sh` runs the Kotlin twin
+   (`android/src/test/java/com/margelo/nitro/nitroui/core/NitroUiControlledValueTest.kt`,
+   7 tests). Both mirror the JS vectors — stale drop, rejected revert, rapid
+   double toggle, mode switch, `Double` equality — because
+   `NitroUiControlledValue` is the file a later component edits. New on-device
+   coverage too: taps faster than a React round trip, and mount/unmount repeat
+   with `disabled`/`tint` re-checked after reuse.
+10. **Android Modal fallback sets both owners** — `LifecycleOwner` *and*
+    `SavedStateRegistryOwner`, each filled only if missing
+    (`android/.../NitroComposeHost.kt:248-262`) — and the stale "the gap is RN
+    Modal" comment is replaced with the truth: in 0.88 `Modal` is a
+    `ComponentDialog`, whose window already provides both, so this is a fallback
+    for a parent that provides neither. R6 is closed with an on-device test that
+    hosts, measures and takes props inside a Modal.
+11. **`docs/architecture/core.md` is now buildable-from** for Slider and
+    Progress: §5 threading/`hybridRef`, §6 recycling on both platforms, §7
+    sizing, §8 what each perf mark does and does not mean per platform, §9 the
+    checklists (testing, perf, and the file list a new component must touch —
+    export, `api-extractor`, smoke line, `docs/components/<name>.md`), §10 the
+    traps, then **§11 Slider** — emit at most one event per frame and coalesce
+    to the newest, `NitroUiControlledValue.user()` exactly once per emitted
+    event, `onValueChange` vs `onSlidingComplete`, why `reconcile` accepts a
+    write as soon as `jsEvents >= nativeEvents` (during a drag native is ahead
+    *by design*), exact float equality with no epsilon plus "quantise in native
+    before emitting", the fact that **a native interaction must re-render
+    itself** and how that differs per platform (Swift `objectWillChange.send()`
+    in the binding setter; Compose a plain snapshot write and *no*
+    `sendApplyNotifications()` outside `commit()`), and recomposition scoping —
+    and **§12 Progress** — no handshake, no callbacks, what still applies.
+
+## NITs
+
+1. Kotlin colour decode is `raw.toLong().toInt()`, the bit-pattern rule from
+   D10 (`android/.../HybridNitroUiSwitch.kt:193`).
+2. `propsApplied` is aligned: Android marks every `updateState`, like iOS marks
+   every commit, and `core.md` §8 documents both marks' real meaning (neither is
+   a drawn frame; use T02's `BenchProbe` for a frame boundary).
+3. `NitroUiTheme` wraps the dynamic colour scheme in
+   `remember(context, dark)` (`android/.../NitroComposeHost.kt:391`).
+4. §8 says the ring is mutex-guarded, not lock-free, and states the gating
+   cost exactly: one integer compare for an unmarked view, one relaxed load for
+   a marked one with recording off.
+5. Kept as a T02 lead, and the suite now prints the number every run
+   (`Switch stress: 40 hosted controls mounted in 287.7ms`).
+6. `useStableCallback`'s doc comment states the `useMemo` caveat and that a
+   changed callback prop is never re-invoked — which is why `hybridRef` fires
+   once, at mount (`src/core/useStableCallback.ts:40-55`).
+7. Documented as a Switch limit: no `ref` forwarding, no `aria-*` translation,
+   and why a container-level `accessible`/`accessibilityRole` can hide the
+   hosted control from the a11y tree.
+8. Documented as a Switch limit: a rejected change reverts without animation
+   (the thumb snaps back), on purpose for v0.1, with the file:line of the only
+   place animation is suppressed.
+
+## Judgement calls worth a second opinion
+
+- **Recycling (B3)**: chosen on the evidence above — keep the dispose, document
+  the ordering, let T02 measure the alternative with `enableViewRecycling` on.
+  If the orchestrator would rather ship "survives recycling" now, the change is
+  to skip `disposeComposition()` when the call came from
+  `onDropViewInstance` and the pool accepted the view — RN gives no such signal,
+  so it would need a flag of our own plus a leak budget.
+- **Android intrinsic measure (SF6)**: left as-is with the reasoning in §7
+  because doing it properly is T11's shadow-node design, not a one-line
+  `Constraints()` swap; the record path is honest about which question it asks.
+- **`wantsContentSize` stays on for Switch** rather than off-until-T11, because
+  the harness test and `measureContent()` need a size and the measure is no
+  longer per-commit. If T02's 200-row mount says otherwise, the flag is one
+  line.
+
+## Round-1 questions, resolved
+
+Q4 is settled by the review and D14 (OS-versioned default now, runtime
+measurement in T11). Q1 (the callback-prop amendment to D7, and the
+unsigned-on-iOS colour rule) is recorded in `core.md` §3 and §"Colours" and as
+N2/N3 in `docs/upstream.md`. Q2 (patches vs upstream) is now attributable per
+entry in `docs/upstream.md`, each with an issue draft and a Removal line — say
+the word and the harness patches come out. Q3 (safe area in the example/bench
+apps) and Q5 (device contention) are still open, and Q5 got louder: this round
+lost ~15 min to a stale `nitroui_t01` APK and to background jobs dying with
+their shell, not to the code.
