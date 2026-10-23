@@ -10,6 +10,8 @@
 // Forward declarations of C++ defined types
 // Forward declaration of `HybridNitroUiButtonSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
+// Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSegmentedControlSpec; }
 // Forward declaration of `HybridNitroUiSliderSpec` to properly resolve imports.
@@ -28,6 +30,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridNitroUiButtonSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
+// Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSegmentedControlSpec_cxx; }
 // Forward declaration of `HybridNitroUiSliderSpec_cxx` to properly resolve imports.
@@ -37,6 +41,7 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 
 // Include C++ defined types
 #include "HybridNitroUiButtonSpec.hpp"
+#include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
@@ -176,6 +181,45 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<NitroUiButtonSize>::withError(error);
   }
   
+  // pragma MARK: std::shared_ptr<HybridNitroUiProgressSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiProgressSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiProgressSpec_ = std::shared_ptr<HybridNitroUiProgressSpec>;
+  std::shared_ptr<HybridNitroUiProgressSpec> create_std__shared_ptr_HybridNitroUiProgressSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiProgressSpec_(std__shared_ptr_HybridNitroUiProgressSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiProgressSpec>
+  using std__weak_ptr_HybridNitroUiProgressSpec_ = std::weak_ptr<HybridNitroUiProgressSpec>;
+  inline std__weak_ptr_HybridNitroUiProgressSpec_ weakify_std__shared_ptr_HybridNitroUiProgressSpec_(const std::shared_ptr<HybridNitroUiProgressSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiSize>
+  using Result_NitroUiSize_ = Result<NitroUiSize>;
+  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const NitroUiSize& value) noexcept {
+    return Result<NitroUiSize>::withValue(value);
+  }
+  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiSize>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::string>
+  using Result_std__string_ = Result<std::string>;
+  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
+    return Result<std::string>::withValue(value);
+  }
+  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
+    return Result<std::string>::withError(error);
+  }
+  
+  // pragma MARK: Result<bool>
+  using Result_bool_ = Result<bool>;
+  inline Result_bool_ create_Result_bool_(bool value) noexcept {
+    return Result<bool>::withValue(std::move(value));
+  }
+  inline Result_bool_ create_Result_bool_(const std::exception_ptr& error) noexcept {
+    return Result<bool>::withError(error);
+  }
+  
   // pragma MARK: std::vector<std::string>
   /**
    * Specialized version of `std::vector<std::string>`.
@@ -290,24 +334,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<void>::withError(error);
   }
   
-  // pragma MARK: Result<std::string>
-  using Result_std__string_ = Result<std::string>;
-  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
-    return Result<std::string>::withValue(value);
-  }
-  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
-    return Result<std::string>::withError(error);
-  }
-  
-  // pragma MARK: Result<bool>
-  using Result_bool_ = Result<bool>;
-  inline Result_bool_ create_Result_bool_(bool value) noexcept {
-    return Result<bool>::withValue(std::move(value));
-  }
-  inline Result_bool_ create_Result_bool_(const std::exception_ptr& error) noexcept {
-    return Result<bool>::withError(error);
-  }
-  
   // pragma MARK: std::variant<bool, nitro::NullType>
   /**
    * Wrapper struct for `std::variant<bool, nitro::NullType>`.
@@ -385,14 +411,5 @@ namespace margelo::nitro::nitroui::bridge::swift {
   // pragma MARK: std::weak_ptr<HybridNitroUiSwitchSpec>
   using std__weak_ptr_HybridNitroUiSwitchSpec_ = std::weak_ptr<HybridNitroUiSwitchSpec>;
   inline std__weak_ptr_HybridNitroUiSwitchSpec_ weakify_std__shared_ptr_HybridNitroUiSwitchSpec_(const std::shared_ptr<HybridNitroUiSwitchSpec>& strong) noexcept { return strong; }
-  
-  // pragma MARK: Result<NitroUiSize>
-  using Result_NitroUiSize_ = Result<NitroUiSize>;
-  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const NitroUiSize& value) noexcept {
-    return Result<NitroUiSize>::withValue(value);
-  }
-  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const std::exception_ptr& error) noexcept {
-    return Result<NitroUiSize>::withError(error);
-  }
 
 } // namespace margelo::nitro::nitroui::bridge::swift

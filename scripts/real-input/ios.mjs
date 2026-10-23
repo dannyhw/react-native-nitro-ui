@@ -37,6 +37,11 @@ import {
   Suite,
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS, iosCheckName } from './controls.mjs';
+import { assertSupportedNode } from '../node-version.mjs';
+
+// One Node across every device gate: the harness cannot run on Node 25/26 at
+// all, so a real-input run on that runtime is not comparable evidence.
+assertSupportedNode({ command: 'bun run test:real-input:ios' });
 
 const BUNDLE_ID = 'nitroui.example';
 const WORKSPACE = 'NitroUiExample.xcworkspace';

@@ -36,6 +36,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSegmentedControlSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSliderSpec.cpp
@@ -47,6 +49,8 @@ target_sources(
   ../nitrogen/generated/android/c++/JVariant_NullType_Double.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_String.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSegmentedControlSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSliderSpec.cpp
