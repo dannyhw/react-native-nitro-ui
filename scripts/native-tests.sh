@@ -74,7 +74,12 @@ run_case "sizing.test (C++)" \
 # The same test again under the sanitizers, because the properties worth checking
 # here are lifetime and UB rather than arithmetic: a correction is handed to a
 # push that may run it later, and the engine's maps are walked while being
-# mutated (`forget`, the expired sweep, a re-entrant `measure` from a push).
+# mutated (`forget`, a re-entrant `measure` from a push, and the expired registry
+# sweep - and the sweep is only really covered because
+# `testExpiredStatesAreSweptWithoutForget` measures its dead instances under a key
+# nothing reports, the only way to arrive here with entries left to walk. Review
+# F1 found a use-after-free in exactly that sweep, hidden until the test reached
+# it.)
 # The suite is milliseconds of work, so this costs seconds and stays in the gate.
 #
 # Leak checking is off deliberately: the engine is a leaked singleton on purpose

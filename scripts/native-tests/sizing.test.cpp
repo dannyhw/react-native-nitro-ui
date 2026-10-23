@@ -494,6 +494,17 @@ namespace {
    * A host that dies without calling `forget` (a crash in a new platform glue, a
    * view torn down off the recycle path) must not leak either: the sweep in
    * `flush` catches states the shadow tree released.
+   *
+   * The expired instances are measured under a *different* sizing key from the
+   * instance that reports. Under the same key they sit in the reported
+   * configuration's needs-correction set, `applyReports` finds their states dead
+   * and forgets them right there, and the sweep then walks an already-clean
+   * registry - the case passes without ever running the sweep (review F1, which
+   * is where the sweep's own use-after-free had been hiding). On their own key
+   * nothing else reaches them, so the sweep is the only thing that can clean up.
+   *
+   * The registry is only walked once it has grown by a sweep stride since the
+   * last walk, which is why there are 600 of them.
    */
   void testExpiredStatesAreSweptWithoutForget() {
     resetEngine();
@@ -502,14 +513,18 @@ namespace {
       // Deliberately no `kept_`: the last strong reference dies on scope exit.
       auto scoped = std::make_shared<FakeState>(FakeState{1});
       engine().registerInstance(id, NitroUiSizingEngine::componentHash("NitroUiSwitch"), &fakePush, NitroUiStateRef(scoped));
-      measure(id, "");
+      // A configuration the reporter below never reports, so only the sweep sees them.
+      measure(id, "expired");
     }
-    check(engine().stats().registryEntries > 0, "600 instances are registered");
+    checkEquals(engine().stats().registryEntries, int64_t{600}, "600 instances are registered");
     bind(1200, 1200);
     measure(1200, "");
     engine().report(1200, 70, 30, 0);
     engine().flush();
-    check(engine().stats().registryEntries < 100, "the sweep dropped the states that died without a forget");
+    // Exactly one entry survives, and it is the live one: the sweep, not
+    // `applyReports`, removed the other 600.
+    checkEquals(engine().stats().registryEntries, int64_t{1}, "the sweep dropped the states that died without a forget");
+    checkEquals(engine().stats().ledgerEntries, int64_t{1}, "and their ledger entries with them");
   }
 
   /**
