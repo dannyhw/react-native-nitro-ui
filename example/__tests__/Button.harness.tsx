@@ -384,8 +384,13 @@ describe('Button · G2', () => {
     // every variant, at the element's centre and at its own coordinates, with the
     // barometer in the same tree firing on the same call. `simulatePress` is the
     // same synthesis. So on iOS the button's half of the contract is asserted
-    // where the harness can reach it, and the tap itself is checked by hand in
-    // the example app (`docs/tasks/G2-button.report.md`).
+    // where the harness can reach it. A real (HID-level) tap is not available
+    // here either: `agent-device` 0.21.18 presses by ref, by `testID` and by
+    // coordinate against the example app on iPhone 17 left both the RN tab
+    // `Pressable` and the hosted SwiftUI `Toggle` untouched, so no tap this
+    // environment can inject reaches a button. That leaves the manual tap
+    // confirmation open - see "Known issues" in
+    // `docs/tasks/G2-button.report.md`.
     const rnPresses: string[] = [];
     await render(
       <View style={rowStyle}>
