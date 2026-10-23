@@ -146,6 +146,12 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.nuiPerfId.hasSameValue(oldViewProps->nuiPerfId)) {
       swiftPart.setNuiPerfId(newViewProps.nuiPerfId.get());
     }
+    // nuiTestWidth: variant
+    if (oldViewProps == nullptr
+          ? newViewProps.nuiTestWidth.isProvided()
+          : !newViewProps.nuiTestWidth.hasSameValue(oldViewProps->nuiTestWidth)) {
+      swiftPart.setNuiTestWidth(newViewProps.nuiTestWidth.get());
+    }
     // onValueChange: optional
     if (oldViewProps == nullptr
           ? newViewProps.onValueChange.isProvided()

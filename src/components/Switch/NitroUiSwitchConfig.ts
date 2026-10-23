@@ -27,6 +27,7 @@ export const NitroUiSwitchConfig: ViewConfig<NativeNitroUiSwitchProps> = {
     testID: true,
     accessibilityLabel: true,
     nuiPerfId: true,
+    nuiTestWidth: true,
     onValueChange: true,
     nuiSizingKey: true,
     nuiSizingId: true,

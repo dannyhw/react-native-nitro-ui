@@ -94,6 +94,11 @@ void JHybridNitroUiSwitchStateUpdater::updateViewProps(jni::alias_ref<jni::JClas
     hybridView->setNuiPerfId(newProps->nuiPerfId.get());
   }
   if (oldProps == nullptr
+        ? newProps->nuiTestWidth.isProvided()
+        : !newProps->nuiTestWidth.hasSameValue(oldProps->nuiTestWidth)) {
+    hybridView->setNuiTestWidth(newProps->nuiTestWidth.get());
+  }
+  if (oldProps == nullptr
         ? newProps->onValueChange.isProvided()
         : !newProps->onValueChange.hasSameValue(oldProps->onValueChange)) {
     hybridView->setOnValueChange(newProps->onValueChange.get());

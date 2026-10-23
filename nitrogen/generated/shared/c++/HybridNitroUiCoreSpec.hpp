@@ -61,6 +61,7 @@ namespace margelo::nitro::nitroui {
       virtual void setPerfEnabled(bool enabled) = 0;
       virtual std::vector<NitroUiPerfEvent> drainPerf() = 0;
       virtual NitroUiSizingStats sizingStats() = 0;
+      virtual double nextSizingId() = 0;
       virtual void seedSizingSize(const std::string& componentName, const std::string& sizingKey, double width, double height) = 0;
       virtual void invalidateSizingEnvironment() = 0;
       virtual double prewarmSizing(const std::vector<std::string>& componentNames) = 0;

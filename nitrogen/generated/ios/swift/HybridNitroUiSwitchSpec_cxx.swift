@@ -323,6 +323,36 @@ open class HybridNitroUiSwitchSpec_cxx {
     }
   }
   
+  public final var nuiTestWidth: bridge.std__variant_nitro__NullType__double_ {
+    @inline(__always)
+    get {
+      return { () -> bridge.std__variant_nitro__NullType__double_ in
+        switch self.__implementation.nuiTestWidth {
+          case .first(let __value):
+            return bridge.create_std__variant_nitro__NullType__double_(margelo.nitro.NullType.null)
+          case .second(let __value):
+            return bridge.create_std__variant_nitro__NullType__double_(__value)
+        }
+      }()
+    }
+    @inline(__always)
+    set {
+      self.__implementation.nuiTestWidth = { () -> Variant_NullType_Double in
+        let __variant = newValue
+        switch __variant.index() {
+          case 0:
+            let __actual = __variant.get_0()
+            return .first(NullType.null)
+          case 1:
+            let __actual = __variant.get_1()
+            return .second(__actual)
+          default:
+            fatalError("Variant can never have index \(__variant.index())!")
+        }
+      }()
+    }
+  }
+  
   public final var onValueChange: bridge.std__optional_std__function_void_bool____value_____double____eventCount______ {
     @inline(__always)
     get {

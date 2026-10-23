@@ -42,6 +42,9 @@ namespace margelo::nitro::nitroui {
       // core object instead of getting their own HybridObject: one seam between
       // JS and the engine is easier to keep honest than two.
       NitroUiSizingStats sizingStats() override;
+      // One process-global counter lives in the engine, so an id is unique across
+      // components, JS runtimes and reloads (review S4).
+      double nextSizingId() override;
       void seedSizingSize(const std::string& componentName, const std::string& sizingKey, double width,
                           double height) override;
       void invalidateSizingEnvironment() override;

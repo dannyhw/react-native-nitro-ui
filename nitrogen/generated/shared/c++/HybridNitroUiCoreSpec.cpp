@@ -18,6 +18,7 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridMethod("setPerfEnabled", &HybridNitroUiCoreSpec::setPerfEnabled);
       prototype.registerHybridMethod("drainPerf", &HybridNitroUiCoreSpec::drainPerf);
       prototype.registerHybridMethod("sizingStats", &HybridNitroUiCoreSpec::sizingStats);
+      prototype.registerHybridMethod("nextSizingId", &HybridNitroUiCoreSpec::nextSizingId);
       prototype.registerHybridMethod("seedSizingSize", &HybridNitroUiCoreSpec::seedSizingSize);
       prototype.registerHybridMethod("invalidateSizingEnvironment", &HybridNitroUiCoreSpec::invalidateSizingEnvironment);
       prototype.registerHybridMethod("prewarmSizing", &HybridNitroUiCoreSpec::prewarmSizing);

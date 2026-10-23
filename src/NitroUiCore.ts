@@ -45,6 +45,7 @@ export const nitroUiCore: {
   setPerfEnabled(enabled: boolean): void;
   drainPerf(): NitroUiPerfEvent[];
   sizingStats(): NitroUiSizingStats;
+  nextSizingId(): number;
   seedSizingSize(
     componentName: string,
     sizingKey: string,
@@ -67,6 +68,9 @@ export const nitroUiCore: {
   },
   sizingStats(): NitroUiSizingStats {
     return getCore().sizingStats();
+  },
+  nextSizingId(): number {
+    return getCore().nextSizingId();
   },
   seedSizingSize(
     componentName: string,
@@ -93,13 +97,17 @@ export const nitroUiCore: {
 
 /**
  * Adopt each named component's declared size as this environment's cached size,
- * so its first mount is laid out at the right size and costs no correction.
+ * so its first mount is laid out at that size and - when the size is right -
+ * costs no correction.
  *
  * Call it once, early - after the imports, before the first screen renders - for
  * the components the first screen uses. It is a guess with the library's own
- * declared number behind it (`docs/architecture/sizing.md`), not a measurement:
- * if the control's real size differs, the first instance corrects it like any
- * cold mount would, so calling this can never make a layout worse.
+ * declared number behind it (`docs/architecture/sizing.md`), not a measurement,
+ * and the engine treats it as such: the entry is provisional, so the first
+ * control that really measures that configuration replaces it and any instance
+ * laid out at the wrong size is corrected. A wrong guess therefore costs at most
+ * the correction a cold mount would have paid anyway - it cannot leave a layout
+ * wrong for the rest of the session.
  *
  * Returns how many components were seeded. A name the library does not know
  * costs nothing and counts as zero, which is what makes it safe to list a

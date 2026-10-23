@@ -126,6 +126,15 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant_NullType_Double> /* nuiPerfId */)>("setNuiPerfId");
     method(_javaPart, JVariant_NullType_Double::fromCpp(nuiPerfId));
   }
+  std::variant<nitro::NullType, double> JHybridNitroUiSwitchSpec::getNuiTestWidth() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JVariant_NullType_Double>()>("getNuiTestWidth");
+    auto __result = method(_javaPart);
+    return __result->toCpp();
+  }
+  void JHybridNitroUiSwitchSpec::setNuiTestWidth(const std::variant<nitro::NullType, double>& nuiTestWidth) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant_NullType_Double> /* nuiTestWidth */)>("setNuiTestWidth");
+    method(_javaPart, JVariant_NullType_Double::fromCpp(nuiTestWidth));
+  }
   std::optional<std::function<void(bool /* value */, double /* eventCount */)>> JHybridNitroUiSwitchSpec::getOnValueChange() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JFunc_void_bool_double::javaobject>()>("getOnValueChange_cxx");
     auto __result = method(_javaPart);
