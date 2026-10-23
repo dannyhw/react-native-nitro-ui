@@ -73,3 +73,8 @@ emulator, ratios: nitro-ui vs `@expo/ui` shared-host = **1.95× UI CPU, 2.67× m
   mount. Attribute it (per-instance cost of the JNI push / state update / measure) and reduce it,
   or cap instances per flush so no single frame exceeds the budget while D17's rule still holds.
   Measure before/after with the T11 cold-batch harness test (`lastFlushMs`).
+  T11 verification adds: the engine's own bookkeeping is ~0.02 ms; the cost is RN — each of the 2
+  immediate pushes is a full synchronous commit on the UI thread inside `onPreDraw` (cost scales
+  with tree size, not correction count), and the other 198 become **one commit each on the JS
+  thread** (O(N × tree)). Options: immediate budget 1 on Android, all-async above a batch size,
+  or coalescing batched pushes into one commit. Bench a 500-row cold list before/after.
