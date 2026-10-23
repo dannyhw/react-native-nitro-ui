@@ -60,3 +60,16 @@ during render to seed style, and native `onSizeChange` corrects. No `main.sync` 
   risks R1–R4/R9–R12 status, upstream-proposal notes (core-architecture §1.5 "Upstream").
 - `docs/architecture/sizing.md` explaining the mechanism and how a component opts in
   (sizing policy `intrinsic` / `fillWidth`, how to build `nuiSizingKey`).
+
+## Notes from T10 (read before starting)
+
+- Read `docs/architecture/core.md` (the core as built) — §7 sizing hooks: iOS `measureContent()`
+  is unbounded (`sizeThatFits`), Android reports intrinsic capped by the box max (one measure per
+  pass in `NitroUiMeasuredRoot`). T11 must decide how Android gets an unbounded intrinsic size
+  (e.g. measure with `Constraints()` in the root Layout, or a separate measure pass) — see the
+  T10 report's "judgement calls".
+- Current defaults: iOS 26+ 61×28 / earlier 51×31; Android 52×48. Replace them with measured
+  sizes; keep defaults only as the cache-miss fallback. Handle `UIDesignRequiresCompatibility`
+  apps (iOS 26 app opting out of the new design → 51×31 control) — measured sizing fixes it.
+- Perf marks + clock: `cpp/core/NitroUiPerf.hpp`, `cpp/core/NitroUiClock.hpp` (D1).
+- Upstream workarounds are tracked in `docs/upstream.md` — add any new nitrogen patching there.
