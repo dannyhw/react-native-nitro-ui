@@ -44,6 +44,12 @@ Background (read the sections your brief points to):
     `main.async` hops when already on main;
   - controlled values use the event-count handshake (core-architecture §4).
 - Benchmarks for components (once the bench infra exists): include numbers in your report.
+- **Every new test or gate must be shown to fail.** Before you rely on it, break the thing it guards
+  (wrong size, dropped event, regressed ratio, freed memory) and confirm it goes red; say in your
+  report how you proved it. Test fixtures must not coincide with the right answer (e.g. a sizing
+  fallback equal to the real size makes a failed correction invisible). Fakes that change timing
+  (synchronous stand-ins for async native calls) need a variant that keeps the real timing.
+- Native C++ unit tests run under ASan in `test:native` once T11 adds it.
 
 ## Asking for help
 
