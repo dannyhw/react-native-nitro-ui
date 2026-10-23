@@ -45,6 +45,14 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
 type SwitchHandle = {
   readonly value: boolean | null;
   measureContent(): { width: number; height: number };
+  /**
+   * Read through an optional member: v0.1 keeps the Hybrid View prop types off the
+   * public surface (D14), so `@internal` `NitroUiSwitchHandle` does not name it.
+   * The getter exists on both platforms, and it is how a test attributes a trace
+   * event to *its* control instead of to whatever else is mounted (see the cold
+   * test below). `null` here would make that test fail loudly.
+   */
+  readonly nuiSizingId?: number;
 };
 
 /**
@@ -310,10 +318,50 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(Math.abs(box!.height - content!.height)).toBeLessThan(0.6);
 
     // The first instance of a configuration pays exactly one state update: the
-    // shadow tree has to learn the size it will keep handing out.
-    const d = delta(before, stats());
-    expect(d.corrections).toBe(1);
-    expect(d.immediate).toBe(1);
+    // shadow tree has to learn the size it will keep handing out - asserted on
+    // *this instance's* trace events rather than on the process's counters.
+    //
+    // `toBe(1)` on the global delta was the flake (`corrections=0`, measured on
+    // iOS; the same shape as the Android `sizes a control inside a Modal` flake in
+    // docs/tasks/FOLLOWUPS.md, which G1 could not reproduce either). Both counters
+    // and the seeded guess are process-global, so the delta is this mount's
+    // correction *plus* every other Switch in the process that measured in the
+    // same window - a control an earlier test left mounted, or one of this file's
+    // own, since the runtime is reset between files while the engine is not. And
+    // because the guess is shared, whoever measures first also repairs it: when
+    // that was not this instance it mounted from the right size with nothing left
+    // to correct, and a second control's correction breaks the assertion from the
+    // other side. (G1's other suspect for the Android case is the `wrongGuess`
+    // test that runs immediately before it - docs/tasks/G1-slider.report.md.)
+    //
+    // What a lost correction cannot survive is the box assertions above - a Switch
+    // that was never corrected stays 40x20 (review S8) - and what a *second*
+    // correction cannot survive is this: at most one push for this instance, and
+    // if it did start from the wrong guess then it paid that push.
+    const mine = trace.filter(
+      (event: NitroUiSizingTraceEvent) =>
+        event.instanceId === (hybrid?.nuiSizingId ?? -1)
+    );
+    const laidOut = mine.filter(
+      (event: NitroUiSizingTraceEvent) => event.stage === 'laidOut'
+    );
+    const corrected = mine.filter(
+      (event: NitroUiSizingTraceEvent) => event.stage === 'corrected'
+    );
+    expect(laidOut.length).toBeGreaterThan(0);
+    expect(corrected.length).toBeLessThanOrEqual(1);
+    if (boxMatches(laidOut[0]!, WRONG_GUESS)) {
+      // Started from the poison: it must have been outranked, by exactly one push,
+      // with the control's own size as the result.
+      expect(corrected.length).toBe(1);
+      expect(boxMatches(corrected[0]!, expectedBox!)).toBe(true);
+    } else {
+      // Or its guess was already right when it mounted (another Switch in the
+      // process consumed the poison first) - then the only sizes it ever knew are
+      // the two real ones.
+      expect(boxMatches(laidOut[0]!, expectedBox!)).toBe(true);
+      expect(corrected.length).toBe(0);
+    }
     // What reached a frame. The guess here is deliberately wrong, so this is the
     // case that separates the platforms (`docs/architecture/sizing.md` §3):
     // Android's pre-draw listener cancels the draw whose layout was stale, iOS
