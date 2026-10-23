@@ -20,11 +20,17 @@
  *   behind it (`docs/components/progress.md`);
  * - **the two sizing policies**: `fillWidth` for a bar, `intrinsic` for a ring,
  *   both corrected from a poisoned cache, and a variant change that re-measures.
+ *
+ * Deliberately absent (AGENTS.md, and the Button suite's reasoning): a `beforeAll`
+ * that mounts a Progress to "warm the process". It hides the first-mount-of-a-
+ * process path, which is where a dropped ledger entry (review F2) is invisible -
+ * a warm circular configuration is an exact cache hit, so the test that should
+ * catch it passes for the wrong reason. The first test carries its own mount
+ * budget instead.
  */
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
-  beforeAll,
   cleanup,
   describe,
   expect,
@@ -34,6 +40,7 @@ import {
 } from 'react-native-harness';
 import { screen } from '@react-native-harness/ui';
 import { Progress, nitroUiCore } from 'react-native-nitro-ui';
+import { expectTimingBudget } from './timingGate';
 
 /**
  * Bounds of a rendered view, read straight from the harness native module.
@@ -234,22 +241,10 @@ afterEach(() => {
 });
 
 describe('Progress', () => {
-  beforeAll(async () => {
-    // The Switch/Slider suite's warm-up, for the same reason: the first hosted
-    // control of a process pays one-time costs (Nitro's first registry call, the
-    // first `UIHostingController` / Compose composition) that exceed the harness'
-    // mount timeout on a cold emulator. Every test below then measures a steady
-    // state. Both variants warm up: they are two different view trees.
-    const { unmount } = await render(
-      <View>
-        <Progress value={0.5} testID="warm-up-linear" />
-        <Progress variant="circular" value={0.5} testID="warm-up-circular" />
-      </View>,
-      { timeout: 20000 }
-    );
-    unmount();
-  });
-
+  // No warm-up: this first test is the process's first hosted control, so it pays
+  // Nitro's first registry call and the first `UIHostingController` / Compose
+  // composition. Own mount budget (the `mounts many instances` test's mechanism)
+  // rather than a `beforeAll` that hides the cold path from every test below.
   it('hosts each variant, fills the width for a bar and keeps a square for a ring', async () => {
     await render(
       <View style={{ width: 300 }}>
@@ -264,7 +259,8 @@ describe('Progress', () => {
           testID="box-circular"
           hybridRef={captureFor('box-circular')}
         />
-      </View>
+      </View>,
+      { timeout: 20000 }
     );
     const linearBox = await waitForBox('box-linear');
     const linear = await handleFor('box-linear');
@@ -288,6 +284,13 @@ describe('Progress', () => {
     expect(Math.abs(linearBox.width - 300)).toBeLessThan(1);
     expect(Math.abs(linearBox.height - LINEAR_HEIGHT)).toBeLessThan(1);
     expect(Math.abs(linearMeasured.height - LINEAR_HEIGHT)).toBeLessThan(1);
+    // The width the *control* drew, not only the box Yoga gave the wrapper.
+    // `fillWidth` means "the width is the box" (sizing.md §5), and the engine gets
+    // there by overriding the measured width with the box's - so a bar that draws
+    // 240 dp inside a 300 dp box still passes the two lines above. On Android
+    // Material 3's indicator has a 240 dp default of its own, which is exactly the
+    // difference this line is for (review F1).
+    expect(Math.abs(linearMeasured.width - 300)).toBeLessThan(1);
 
     // The `intrinsic` contract for the ring: its own square, in a box that is its
     // own - `alignSelf: 'flex-start'` is what stops a parent's `alignItems:
@@ -672,6 +675,87 @@ describe('Progress', () => {
     await waitForDisplayed(await handleFor('variant'), 'displayed=0.6');
   });
 
+  it('re-measures a variant change that starts from a poisoned guess', async () => {
+    // Review F2. A `variant` change remounts the native view, Fabric orders Delete
+    // before Create, and the dropped view's `onDropView` ends in
+    // `NitroUiSizing.forget(id)`. If the wrapper hands the *same* `nuiSizingId` to
+    // the new mount, that forget erases the ledger entry the new mount filed
+    // seconds earlier, so nothing can correct it any more: the ring stays in the
+    // linear-shaped guess. The warm variant test above cannot see this - its
+    // circular configuration is already exact in the cache - so this one poisons
+    // that key first and makes the correction the only road to the right box.
+    const wrong = { width: 137, height: 23 };
+    nitroUiCore.seedSizingSize(
+      COMPONENT,
+      CIRCULAR_KEY,
+      wrong.width,
+      wrong.height
+    );
+    nitroUiCore.invalidateSizingEnvironment();
+
+    const { rerender } = await render(
+      <View style={{ width: 300 }}>
+        <Progress
+          value={0.6}
+          testID="variant-poison"
+          hybridRef={captureFor('variant-poison')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    const asLinear = await waitForBox('variant-poison');
+    await handleFor('variant-poison');
+    expect(Math.abs(asLinear.height - LINEAR_HEIGHT)).toBeLessThan(1);
+
+    // The handle map is keyed by testID, and a dropped view does not revoke its
+    // handle - so drop the linear one first, or the poll below would happily return
+    // the measurement of the view that is going away.
+    handles.delete('variant-poison');
+    await rerender(
+      <View style={{ width: 300 }}>
+        <Progress
+          variant="circular"
+          value={0.6}
+          testID="variant-poison"
+          hybridRef={captureFor('variant-poison')}
+        />
+      </View>
+    );
+    const handle = await handleFor('variant-poison');
+    expect(handle.variant).toBe('circular');
+    const measured = await measuredOf(handle);
+    // Polled, not read once: D17 allows the correction one frame, and the poll's
+    // starting point is the poisoned guess, so agreeing is the correction happening.
+    const box = await pollUntil(
+      () => {
+        const found = harnessUi.queryByTestId('variant-poison');
+        return found !== null &&
+          Math.abs(found.width - measured.width) < 1 &&
+          Math.abs(found.height - measured.height) < 1
+          ? found
+          : null;
+      },
+      () =>
+        new Error(
+          `The ring never corrected the poisoned guess: box=${describeBox(
+            harnessUi.queryByTestId('variant-poison')
+          )} measured=${describeBox(measured)} guess=${String(
+            wrong.width
+          )}x${String(wrong.height)} (a dropped view's forget() likely wiped the new mount's ledger entry).`
+        )
+    );
+    console.log(
+      `variant poison: linear=${describeBox(asLinear)} box=${describeBox(
+        box
+      )} measured=${describeBox(measured)} guess=${wrong.width}x${wrong.height}`
+    );
+    expect(Math.abs(measured.width - CIRCULAR_SIZE)).toBeLessThan(1);
+    expect(Math.abs(measured.height - CIRCULAR_SIZE)).toBeLessThan(1);
+    expect(Math.abs(box.width - CIRCULAR_SIZE)).toBeLessThan(1);
+    expect(Math.abs(box.height - CIRCULAR_SIZE)).toBeLessThan(1);
+    await waitForDisplayed(handle, 'displayed=0.6');
+  });
+
   it('honours an explicit size instead of its own box', async () => {
     await render(
       <Progress
@@ -841,10 +925,15 @@ describe('Progress', () => {
       await waitForBox(`many-${row}`, 20000);
     }
     const elapsed = nitroUiCore.now() - startedAt;
-    console.log(`40 instances: ${elapsed.toFixed(1)}ms`);
-    // A budget an order of magnitude above what the platforms take (the T10 suite's
-    // reasoning) - enough to catch a regression, loose enough not to be a bench.
-    expect(elapsed).toBeLessThan(10000);
+    // A duration, so D21 reports it on every run and judges it only under
+    // `HARNESS_TIMING=1` on a quiet machine. The gate that runs everywhere is the
+    // loop above plus this: all 40 boxes are in the tree.
+    await expectTimingBudget({
+      label: 'Progress stress: mount 40 instances',
+      measuredMs: elapsed,
+      limitMs: 10000,
+      note: 'an order of magnitude above what the platforms take - enough to catch a regression, too loose to be a bench',
+    });
     unmount();
   });
 
@@ -898,19 +987,31 @@ describe('Progress', () => {
       }
       const applied: number[] = [];
       const firstFrames: number[] = [];
+      const readMarks = () => {
+        for (const event of nitroUiCore.drainPerf()) {
+          if (event.instanceId === instanceId) {
+            if (event.kind === 'propsApplied') applied.push(event.instanceId);
+            if (event.kind === 'firstFrame') firstFrames.push(event.instanceId);
+          }
+        }
+      };
+      // Settle first, count after. A poll that stops at the first sight of 20 marks
+      // cannot fail on 21 - and "not one per prop, not one per native side effect"
+      // is the whole claim (`docs/components/progress.md`, one commit per update).
       await waitFor(
         () => {
-          for (const event of nitroUiCore.drainPerf()) {
-            if (event.instanceId === instanceId) {
-              if (event.kind === 'propsApplied') applied.push(event.instanceId);
-              if (event.kind === 'firstFrame')
-                firstFrames.push(event.instanceId);
-            }
-          }
+          readMarks();
           expect(applied.length).toBeGreaterThanOrEqual(updates);
         },
         { timeout: 5000 }
       );
+      // Several frames' grace for a path that commits twice per turn: at 60 Hz the
+      // extra mark is at most a frame behind the real one.
+      await sleep(500);
+      readMarks();
+      // Exactly `updates`: the host marks once per `afterUpdate()` on both
+      // platforms (`core.md` §8), so a duplicate commit is a defect, not headroom.
+      expect(applied.length).toBe(updates);
       console.log(
         `perf: updates=${updates} propsApplied=${applied.length} firstFrame=${firstFrames.length}`
       );
