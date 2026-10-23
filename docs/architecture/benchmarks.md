@@ -111,13 +111,16 @@ come back as NDJSON written inside the app container (`Documents/bench.ndjson` o
 iOS, external files dir on Android) and echoed to the system log under
 `NITRO_BENCH` as a fallback.
 
-On Android the runner also forces ART to compile the app right after the install
-(`cmd package compile -m speed-profile -f`, `scripts/bench/run.mjs`). An install only
-*stores* a baseline profile — the compiler that consumes it usually runs later, in
-`BackgroundDexOptService` — so without this a measured launch may or may not have run
+On Android the runner also puts the app in the compiled state a device eventually leaves
+it in (`scripts/bench/run.mjs`): it asks `androidx.profileinstaller` to install the APK's
+merged baseline profile (the `INSTALL_PROFILE` broadcast), compiles from it
+(`cmd package compile -m speed-profile -f`), and logs the `dumpsys package dexopt` status it
+ended up with. An install alone only *stores* that profile — nothing reads it until the app
+itself writes the profile file, and the compiler that would do this in the background runs
+on an idle window — so without this step a measured launch may or may not have run
 AOT-compiled code depending on how long the device sat idle. All implementations live in
-one APK behind one install, so the command lands on every arm identically (D9's pairing);
-what it can change is only the effect of a library's own `baseline-prof.txt`
+one APK behind one install, so it lands on every arm identically (D9's pairing); what it can
+change is only the effect of a library's own `baseline-prof.txt`
 (`docs/architecture/core.md` §13).
 
 Scenarios: `mount` (N = 1/50/200), `update` (N = 1/50, K flips awaited per

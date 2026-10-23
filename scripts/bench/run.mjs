@@ -271,49 +271,48 @@ function iosTarget(device, appPath, bundleId) {
 }
 
 /**
- * Get the app into the compiled state a device would eventually leave it in, and
- * report what that state turned out to be.
+ * Get the app into the compiled state a device eventually leaves it in, and report
+ * what that state turned out to be.
  *
- * Three steps, because none of them does the others' job (all measured on API 35
- * with the bench app):
+ * Two steps, because neither does the other's job (all measured on API 35 with the
+ * bench app):
  *
- * 1. `adb install` leaves `[status=verify]`. The APK's merged
- *    `assets/dexopt/baseline.prof` is only *stored*; a `cmd package bg-dexopt-job`
- *    pass does not consume it either.
- * 2. Starting the app once lets `androidx.profileinstaller` write that asset where
- *    ART compiles from - the app's own profile file, which no shell command may
- *    write on a non-rooted image. Without this step there is no profile to compile
- *    from and `-m speed-profile` quietly falls back to verify.
- * 3. `cmd package compile -m speed-profile -f` then compiles from it synchronously
- *    instead of waiting for an idle window: `[status=speed-profile]`.
+ * 1. `adb install` only *stores* the merged baseline profile in
+ *    `assets/dexopt/baseline.prof`. Nothing consumes it on its own: the status stays
+ *    `[status=verify]` after the install, after a `cmd package bg-dexopt-job` pass,
+ *    and after a forced compile that runs before the profile has been written - the
+ *    compiler reads the app's profile file, not the APK, and quietly falls back to
+ *    verify when the file is not there. So ask `androidx.profileinstaller`, through
+ *    the `INSTALL_PROFILE` broadcast its `ProfileInstallReceiver` exists for (the
+ *    hook the benchmark library uses for the same reason), to write it.
+ * 2. `cmd package compile -m speed-profile -f` compiles from it synchronously
+ *    instead of waiting for an idle window, which is what produces
+ *    `[status=speed-profile]`.
  *
- * `speed-profile` is the filter ART uses for a profile anyway, so this is the state
- * a phone reaches hours after an install; measuring before it means measuring the
- * interpreter. The arms share one APK and one install, so the sequence applies to
- * every implementation identically (D9's pairing) and the only thing it can change
- * is what a profile is worth.
+ * `speed-profile` is the filter ART uses for a profile anyway, so this is the state a
+ * phone reaches some time after an install; measuring before it means measuring the
+ * interpreter. Every implementation shares one APK and one install, so this applies
+ * to all of them identically (D9's pairing) and the only thing it can change is what
+ * a profile is worth.
  *
  * The status is read back and logged because "the profile did nothing" and "the
- * profile was worth nothing" look identical in a results table otherwise, and the
- * cycle is repeated until it says `speed-profile`: the write lands a few seconds
- * after process start, and one measured run got `verify` from a single 4s settle.
+ * profile was worth nothing" look identical in a results table. A run whose app has no
+ * profileinstaller to ask still measures something - it just says so here.
  */
 function primeArtProfile(serial, packageName) {
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    // 2. One throwaway launch, settled, so the profile is on disk before the compile.
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    // 1. Have the app install its own baseline profile.
     adb(serial, [
       'shell',
       'am',
-      'start',
-      '-W',
-      '-S',
+      'broadcast',
       '-n',
-      `${packageName}/.MainActivity`,
+      `${packageName}/androidx.profileinstaller.ProfileInstallReceiver`,
+      '-a',
+      'androidx.profileinstaller.action.INSTALL_PROFILE',
     ]);
-    sleep(8_000);
-    adb(serial, ['shell', 'am', 'force-stop', packageName]);
     sleep(1_000);
-    // 3. Compile from it now.
+    // 2. Compile from it now.
     adb(serial, [
       'shell',
       'cmd',
