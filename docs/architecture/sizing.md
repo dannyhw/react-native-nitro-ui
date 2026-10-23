@@ -94,7 +94,7 @@ A cold Switch on iOS, counters as deltas (`example/__tests__/Sizing.harness.tsx`
    the view in a window, and SwiftUI has nothing to lay out while its view has none — a number taken
    there describes the content being replaced, not the content being mounted. So
    `refreshContentSize()` refuses while a content update is pending and the host is off-window, and
-   keeps the measure pending (`ios/core/NitroSwiftUIHost.swift:348`).
+   keeps the measure pending (`ios/core/NitroSwiftUIHost.swift:356`).
 4. `didMoveToWindow()` is the deferred measure point (`NitroSwiftUIHost.swift:175`), and it lands in
    the `Insert` of the **same** transaction. The pending update is applied (`layoutIfNeeded()`), then
    `sizeThatFits(.infinity)` says 61×28. An `intrinsic` control is measured regardless of its current
@@ -243,7 +243,7 @@ The policy also changes the **question the host asks the toolkit**, which is not
 `fillWidth` control must be proposed *the box's width* with unbounded height (what height does it want **at that
 width**?). Ask the unbounded question of a `fillWidth` control and you get two wrong numbers — a width nobody asked
 for, and a height implied by that width — which is what iOS did for both policies until the first `fillWidth`
-component arrived; the proposal is now per policy (`fittingSizeProposal`, `ios/core/NitroSwiftUIHost.swift:443`),
+component arrived; the proposal is now per policy (`fittingSizeProposal`, `ios/core/NitroSwiftUIHost.swift:457`),
 and the answer's width is replaced with the proposal's. Android has to be told the same question, in its own terms:
 `NitroUiMeasuredRoot` measures a `fillWidth` control at the box's **width** with the height **unbound**
 (`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt:632`). Unbinding the height is not a
