@@ -17,3 +17,5 @@
 - Transient iOS harness `app heartbeat timed out` on Sizing.harness (FIX1, re-run green).
 - Android: re-laying out an already-mounted control at a wrong guess produces no report (Compose doesn't re-measure when only the box moves); sizing.md's "every mounted instance is asked to measure again" is prospective there (T14).
 - iOS Slider only answers drags that start on the thumb (T15); matches UISlider behaviour — document in slider.md, not a bug.
+- G2 Button follow-ups (review + verification, ~12 items) are in docs/tasks/G2-button.report.md "Follow-ups"; incl. F1 adds one redundant report per warm key change (Android could skip it).
+- `scripts/real-input/support.mjs:103` dies with ERR_STREAM_WRITE_AFTER_END when the script owns Metro (pre-start Metro as a workaround) (T15b).

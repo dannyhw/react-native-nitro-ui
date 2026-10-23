@@ -1,15 +1,19 @@
 import {
+  Button,
   Column,
   Host,
   LoadingIndicator,
   Slider,
   Switch,
+  Text,
   useNativeState,
 } from '@expo/ui/jetpack-compose';
 import { useEffect } from 'react';
 
 import type { BenchListProps } from '../types';
 import {
+  buttonTitle,
+  onPress,
   onSliderChange,
   onValueChange,
   progressValue,
@@ -33,18 +37,45 @@ export function ExpoUiHostPerControlList({
   const style = rowStyle(component);
   return (
     <>
-      {range(n).map((index) => (
-        <Host key={index} style={style}>
-          {component === 'slider' ? (
-            <BenchSlider value={value} />
-          ) : component === 'progress' ? (
-            <BenchProgress value={value} />
-          ) : (
-            <Switch value={value} onCheckedChange={onValueChange} />
-          )}
-        </Host>
-      ))}
+      {range(n).map((index) =>
+        component === 'button' ? (
+          // `matchContents` lets the host take the button's fitting size, which
+          // is how a consumer ships a sized-to-content control here. It is part
+          // of what this arm costs per control and is measured as such - and it
+          // stays out of the switch/slider/progress arms, which are published
+          // numbers.
+          <Host key={index} matchContents style={style}>
+            <BenchButton value={value} />
+          </Host>
+        ) : (
+          <Host key={index} style={style}>
+            {component === 'slider' ? (
+              <BenchSlider value={value} />
+            ) : component === 'progress' ? (
+              <BenchProgress value={value} />
+            ) : (
+              <Switch value={value} onCheckedChange={onValueChange} />
+            )}
+          </Host>
+        )
+      )}
     </>
+  );
+}
+
+/**
+ * Material 3's filled `Button`, whose slot content is a `Text` - the same label
+ * cost SwiftUI's `Button(label:)` and RN core's `Pressable` + `Text` pay.
+ *
+ * The default palette is left alone: `seedColor` would change what the arm draws,
+ * and the comparison is each control's platform default. There is no `testID` to
+ * pass either - the Compose `Button` props carry none, as in the Switch arm.
+ */
+function BenchButton({ value }: { value: boolean }) {
+  return (
+    <Button onClick={onPress}>
+      <Text>{buttonTitle(value)}</Text>
+    </Button>
   );
 }
 
@@ -110,7 +141,9 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
     <Host style={stackStyle(n, component)}>
       <Column>
         {range(n).map((index) =>
-          component === 'slider' ? (
+          component === 'button' ? (
+            <BenchButton key={index} value={value} />
+          ) : component === 'slider' ? (
             <BenchSlider key={index} value={value} />
           ) : component === 'progress' ? (
             <BenchProgress key={index} value={value} />

@@ -8,18 +8,24 @@
 #pragma once
 
 // Forward declarations of C++ defined types
+// Forward declaration of `HybridNitroUiButtonSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 // Forward declaration of `HybridNitroUiSliderSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSliderSpec; }
 // Forward declaration of `HybridNitroUiSwitchSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
+// Forward declaration of `NitroUiButtonSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
 // Forward declaration of `NitroUiSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSize; }
 // Forward declaration of `NitroUiSliderSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 
 // Forward declarations of Swift defined types
+// Forward declaration of `HybridNitroUiButtonSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 // Forward declaration of `HybridNitroUiSliderSpec_cxx` to properly resolve imports.
@@ -28,9 +34,11 @@ namespace NitroUi { class HybridNitroUiSliderSpec_cxx; }
 namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 
 // Include C++ defined types
+#include "HybridNitroUiButtonSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
+#include "NitroUiButtonSize.hpp"
 #include "NitroUiSize.hpp"
 #include "NitroUiSliderSize.hpp"
 #include <NitroModules/Null.hpp>
@@ -104,6 +112,64 @@ namespace margelo::nitro::nitroui::bridge::swift {
   }
   inline std__variant_nitro__NullType__std__string_ create_std__variant_nitro__NullType__std__string_(const std::string& value) noexcept {
     return std__variant_nitro__NullType__std__string_(value);
+  }
+  
+  // pragma MARK: std::function<void()>
+  /**
+   * Specialized version of `std::function<void()>`.
+   */
+  using Func_void = std::function<void()>;
+  /**
+   * Wrapper class for a `std::function<void()>`, this can be used from Swift.
+   */
+  class Func_void_Wrapper final {
+  public:
+    explicit Func_void_Wrapper(std::function<void()>&& func): _function(std::make_unique<std::function<void()>>(std::move(func))) {}
+    inline void call() const noexcept {
+      _function->operator()();
+    }
+  private:
+    std::unique_ptr<std::function<void()>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void create_Func_void(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_Wrapper wrap_Func_void(Func_void value) noexcept {
+    return Func_void_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void()>>
+  /**
+   * Specialized version of `std::optional<std::function<void()>>`.
+   */
+  using std__optional_std__function_void____ = std::optional<std::function<void()>>;
+  inline std::optional<std::function<void()>> create_std__optional_std__function_void____(const std::function<void()>& value) noexcept {
+    return std::optional<std::function<void()>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void____(const std::optional<std::function<void()>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void()> get_std__optional_std__function_void____(const std::optional<std::function<void()>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiButtonSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiButtonSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiButtonSpec_ = std::shared_ptr<HybridNitroUiButtonSpec>;
+  std::shared_ptr<HybridNitroUiButtonSpec> create_std__shared_ptr_HybridNitroUiButtonSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiButtonSpec_(std__shared_ptr_HybridNitroUiButtonSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiButtonSpec>
+  using std__weak_ptr_HybridNitroUiButtonSpec_ = std::weak_ptr<HybridNitroUiButtonSpec>;
+  inline std__weak_ptr_HybridNitroUiButtonSpec_ weakify_std__shared_ptr_HybridNitroUiButtonSpec_(const std::shared_ptr<HybridNitroUiButtonSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiButtonSize>
+  using Result_NitroUiButtonSize_ = Result<NitroUiButtonSize>;
+  inline Result_NitroUiButtonSize_ create_Result_NitroUiButtonSize_(const NitroUiButtonSize& value) noexcept {
+    return Result<NitroUiButtonSize>::withValue(value);
+  }
+  inline Result_NitroUiButtonSize_ create_Result_NitroUiButtonSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiButtonSize>::withError(error);
   }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiProgressSpec>

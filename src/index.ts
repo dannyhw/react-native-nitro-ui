@@ -26,10 +26,18 @@ export type {
   NitroUiSizingTraceEvent,
 } from './NitroUiCore.nitro';
 
+export { Slider, type SliderProps } from './components/Slider/Slider';
+export { Switch, type SwitchProps } from './components/Switch/Switch';
+
+export {
+  Button,
+  type ButtonProps,
+  type ButtonSize,
+  type ButtonVariant,
+} from './components/Button/Button';
+
 export {
   Progress,
   type ProgressProps,
   type ProgressVariant,
 } from './components/Progress/Progress';
-export { Slider, type SliderProps } from './components/Slider/Slider';
-export { Switch, type SwitchProps } from './components/Switch/Switch';
