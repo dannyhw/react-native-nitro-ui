@@ -115,6 +115,31 @@ just a wrong colour.
 - A colour with no integer form (iOS dynamic provider) becomes `null` in JS with a dev warning
   (`src/core/useProcessedColor.ts:19-34`). Do not try to rescue it natively.
 
+### Shared objects: never build a theme or colour object per instance
+
+**A hosted control is its own composition, so `remember` cannot share anything between controls.**
+Anything built in a composable, or remembered in one host, is built again for every mounted control:
+N times, on the UI thread, in the middle of the mount D15 measures. T12 found two of these and fixed
+both (`docs/tasks/T12-android-perf.report.md`, Phase 2):
+
+- **The colour scheme is process state, not composition state.** A dynamic M3 `ColorScheme` is about
+  fifty framework resource reads plus a fresh object graph, and one `remember` per host was one per
+  control. `NitroComposeHost` now keeps one entry keyed on the context and the appearance, and drops
+  it on a configuration change - the event that can move those colours
+  (`android/.../core/NitroComposeHost.kt`, `colorSchemeFor`).
+- **Material's own factories allocate.** `SwitchDefaults.colors(...)` returns a fresh 18-colour
+  `SwitchColors` per call, so a tinted control allocated one per recomposition - and because
+  `SwitchColors` is a plain class, Compose could not skip the `Switch` subtree either. Cache it on the
+  scheme's identity and the appearance (`HybridNitroUiSwitch.kt`, `switchColorsFor`). That cache only
+  hits because of the rule above: Material memoises its untinted path on the `ColorScheme`, so handing
+  out a new scheme per control makes every downstream cache miss as well.
+
+The rule for a new component: objects derived from the theme, a colour, or a defaults factory are
+**shared** - a process-wide keyed cache, invalidated with the configuration - or `@Immutable` and
+hoisted out of the composable. Never `remember`-only, and never constructed inline in `Content()`. A
+`remember` is right for state that belongs to *this* control (a pressed flag, a
+`TransitionScope.AnimatedValue`); it is wrong for anything two controls could agree on.
+
 ### testID and accessibility
 
 - **`testID`** — RN already puts it on the iOS component view as `accessibilityIdentifier`, so iOS hosts do not set it
