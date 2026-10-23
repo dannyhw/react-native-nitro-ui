@@ -9,6 +9,7 @@
 
 // Include C++ implementation defined types
 #include "HybridNitroUiButtonSpecSwift.hpp"
+#include "HybridNitroUiProgressSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
 #include "HybridNitroUiSwitchSpecSwift.hpp"
 #include "NitroUi-Swift-Cxx-Umbrella.hpp"
@@ -37,6 +38,22 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiButtonSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiProgressSpec>
+  std::shared_ptr<HybridNitroUiProgressSpec> create_std__shared_ptr_HybridNitroUiProgressSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiProgressSpec_cxx swiftPart = NitroUi::HybridNitroUiProgressSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiProgressSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiProgressSpec_(std__shared_ptr_HybridNitroUiProgressSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiProgressSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiProgressSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiProgressSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiProgressSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
   

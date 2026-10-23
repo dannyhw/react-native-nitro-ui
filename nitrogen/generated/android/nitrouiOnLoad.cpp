@@ -18,6 +18,8 @@
 #include "JHybridNitroUiButtonSpec.hpp"
 #include "JFunc_void.hpp"
 #include "views/JHybridNitroUiButtonStateUpdater.hpp"
+#include "JHybridNitroUiProgressSpec.hpp"
+#include "views/JHybridNitroUiProgressStateUpdater.hpp"
 #include "JHybridNitroUiSliderSpec.hpp"
 #include "JFunc_void_double_double.hpp"
 #include "views/JHybridNitroUiSliderStateUpdater.hpp"
@@ -41,6 +43,14 @@ struct JHybridNitroUiButtonSpecImpl: public jni::JavaClass<JHybridNitroUiButtonS
     static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiButtonSpecImpl::javaobject()>();
     jni::local_ref<JHybridNitroUiButtonSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
     return javaPart->getJHybridNitroUiButtonSpec();
+  }
+};
+struct JHybridNitroUiProgressSpecImpl: public jni::JavaClass<JHybridNitroUiProgressSpecImpl, JHybridNitroUiProgressSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiProgress;";
+  static std::shared_ptr<JHybridNitroUiProgressSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiProgressSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiProgressSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiProgressSpec();
   }
 };
 struct JHybridNitroUiSliderSpecImpl: public jni::JavaClass<JHybridNitroUiSliderSpecImpl, JHybridNitroUiSliderSpec::JavaPart> {
@@ -68,6 +78,8 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiButtonSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiButtonStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiProgressSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiProgressStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSliderSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSliderStateUpdater::registerNatives();
@@ -89,6 +101,12 @@ void registerAllNatives() {
     "NitroUiButton",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiButtonSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiProgress",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiProgressSpecImpl::create();
     }
   );
   HybridObjectRegistry::registerHybridObjectConstructor(

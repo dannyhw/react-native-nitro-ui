@@ -1038,10 +1038,13 @@ describe('the Button cells (--component button)', () => {
       true
     );
     // `null` stays "every component", which is what a plain `bun bench` runs.
+    // G3's Progress cells are the fourth component, so this list and the count
+    // grow with every component that lands - a cell missing from the plan shows
+    // up here as a shorter schedule, not a silent skip.
     const all = buildSchedule({ plan: 'quick' });
     expect(new Set(all.map((entry) => componentOf(entry.scenario)))).toEqual(
-      new Set(['switch', 'slider', 'button'])
+      new Set(['switch', 'slider', 'button', 'progress'])
     );
-    expect(all.length).toBe(button.length * 3);
+    expect(all.length).toBe(button.length * 4);
   });
 });

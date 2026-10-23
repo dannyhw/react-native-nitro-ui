@@ -18,6 +18,10 @@ const ROW_HEIGHTS: Record<Exclude<ComponentName, 'button'>, number> = {
   // Above SwiftUI's measured 31 pt and Material 3's measured 40 dp, so nothing
   // clips and every arm still lays out the identical area.
   slider: 44,
+  // The circular variants are the tall ones: SwiftUI's `.circular` ProgressView
+  // is 32 pt and Material 3's loading indicator is 40 dp, so the row is as tall
+  // as the slider's to hold either without clipping the arm under test.
+  progress: 44,
 };
 
 /* Button has no row height on purpose - see `buttonRowStyle`. */
@@ -55,6 +59,7 @@ const styles = StyleSheet.create({
    */
   row: { height: ROW_HEIGHTS.switch, width: '100%' },
   sliderRow: { height: ROW_HEIGHTS.slider, width: '100%' },
+  progressRow: { height: ROW_HEIGHTS.progress, width: '100%' },
 });
 
 /**
@@ -68,7 +73,10 @@ export function rowStyle(component: ComponentName) {
   if (component === 'button') {
     return buttonRowStyle;
   }
-  return component === 'slider' ? styles.sliderRow : styles.row;
+  if (component === 'slider') {
+    return styles.sliderRow;
+  }
+  return component === 'progress' ? styles.progressRow : styles.row;
 }
 
 /**
@@ -144,6 +152,18 @@ export function buttonTitle(value: boolean): string {
  */
 export function onPress(): void {
   // Intentionally empty: state is driven by the runner.
+}
+
+/**
+ * The boolean the runner flips, spelled as a Progress value.
+ *
+ * Deliberately the same two numbers as `sliderValue`: arms must agree on how big
+ * a flip is, and a progress bar's 0.25→0.75 is the same one-prop commit a slider
+ * flip is. Named separately because a Progress and a Slider are different controls
+ * and a future change to one must not silently re-scale the other's table.
+ */
+export function progressValue(value: boolean): number {
+  return value ? 0.75 : 0.25;
 }
 
 export function range(n: number): number[] {

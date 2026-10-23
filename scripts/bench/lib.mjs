@@ -115,6 +115,9 @@ export const PLANS = {
     { scenario: 'mount.button', n: 50 },
     { scenario: 'update.button', n: 50 },
     { scenario: 'memory.button', n: 200 },
+    { scenario: 'mount.progress', n: 50 },
+    { scenario: 'update.progress', n: 50 },
+    { scenario: 'memory.progress', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -138,6 +141,13 @@ export const PLANS = {
     { scenario: 'update.button', n: 50 },
     { scenario: 'memory.button', n: 200 },
     { scenario: 'leak.button', n: 200 },
+    { scenario: 'mount.progress', n: 1 },
+    { scenario: 'mount.progress', n: 50 },
+    { scenario: 'mount.progress', n: 200 },
+    { scenario: 'update.progress', n: 1 },
+    { scenario: 'update.progress', n: 50 },
+    { scenario: 'memory.progress', n: 200 },
+    { scenario: 'leak.progress', n: 200 },
   ],
 };
 

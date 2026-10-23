@@ -11,7 +11,7 @@ export type ImplementationName =
  * second component on, the component is part of the scenario cell
  * (`mount.slider`). See `docs/architecture/benchmarks.md`.
  */
-export type ComponentName = 'switch' | 'slider' | 'button';
+export type ComponentName = 'switch' | 'slider' | 'button' | 'progress';
 
 /** What one launch does to the controls. */
 export type ScenarioAction = 'mount' | 'update' | 'memory' | 'leak';
@@ -22,7 +22,10 @@ export type ScenarioAction = 'mount' | 'update' | 'memory' | 'leak';
  * `component`, so nothing downstream has to know the encoding.
  */
 export type ScenarioName =
-  ScenarioAction | `${ScenarioAction}.slider` | `${ScenarioAction}.button`;
+  | ScenarioAction
+  | `${ScenarioAction}.slider`
+  | `${ScenarioAction}.button`
+  | `${ScenarioAction}.progress`;
 
 /**
  * A control set the harness can mount, update and unmount.

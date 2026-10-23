@@ -1,5 +1,16 @@
-import { Button, Host, Slider, Toggle, VStack } from '@expo/ui/swift-ui';
-import { buttonStyle, labelsHidden } from '@expo/ui/swift-ui/modifiers';
+import {
+  Button,
+  Host,
+  ProgressView,
+  Slider,
+  Toggle,
+  VStack,
+} from '@expo/ui/swift-ui';
+import {
+  buttonStyle,
+  labelsHidden,
+  progressViewStyle,
+} from '@expo/ui/swift-ui/modifiers';
 
 import type { BenchListProps } from '../types';
 import {
@@ -7,6 +18,7 @@ import {
   onPress,
   onSliderChange,
   onValueChange,
+  progressValue,
   range,
   rowStyle,
   sliderValue,
@@ -25,6 +37,16 @@ const LABELS_HIDDEN = [labelsHidden()];
  * same control.
  */
 const BORDERED_PROMINENT = [buttonStyle('borderedProminent')];
+
+/**
+ * Module-level for the same reason as `LABELS_HIDDEN`.
+ *
+ * `.linear` is spelled explicitly rather than left to `automatic`: outside a
+ * `Form`/`List` a SwiftUI `ProgressView` with a value is linear anyway, and the
+ * arm must not depend on the container it happens to sit in to be the control
+ * under test - nitro-ui's arm asks its toolkit the same explicit question.
+ */
+const LINEAR_STYLE = [progressViewStyle('linear')];
 
 /**
  * No `label`, plus `labelsHidden()`.
@@ -82,6 +104,24 @@ function BenchSlider({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
+ * A SwiftUI `ProgressView` with no label.
+ *
+ * `children` is a label that renders as `Text` next to the bar - the same reason
+ * `BenchToggle` hides its label and `BenchSlider` has none: labelling this arm
+ * would inflate its mount, UI CPU and memory numbers in the comparison this
+ * project publishes (T02 review B3).
+ */
+function BenchProgress({ index, value }: { index: number; value: boolean }) {
+  return (
+    <ProgressView
+      testID={`bench-expo-progress-${String(index)}`}
+      value={progressValue(value)}
+      modifiers={LINEAR_STYLE}
+    />
+  );
+}
+
+/**
  * `@expo/ui` worst case for the library: one SwiftUI hosting view per control.
  * Expo UI always needs a `Host`, so both Expo arms are required for a fair
  * comparison (docs/research/setup-decisions.md SS6).
@@ -105,6 +145,10 @@ export function ExpoUiHostPerControlList({
         ) : component === 'slider' ? (
           <Host key={index} style={style}>
             <BenchSlider index={index} value={value} />
+          </Host>
+        ) : component === 'progress' ? (
+          <Host key={index} style={style}>
+            <BenchProgress index={index} value={value} />
           </Host>
         ) : (
           <Host key={index} style={style}>
@@ -143,6 +187,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
         {range(n).map((index) =>
           component === 'slider' ? (
             <BenchSlider key={index} index={index} value={value} />
+          ) : component === 'progress' ? (
+            <BenchProgress key={index} index={index} value={value} />
           ) : (
             <BenchToggle key={index} index={index} value={value} />
           )
