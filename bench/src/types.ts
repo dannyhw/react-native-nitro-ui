@@ -11,7 +11,7 @@ export type ImplementationName =
  * second component on, the component is part of the scenario cell
  * (`mount.slider`). See `docs/architecture/benchmarks.md`.
  */
-export type ComponentName = 'switch' | 'slider';
+export type ComponentName = 'switch' | 'slider' | 'button';
 
 /** What one launch does to the controls. */
 export type ScenarioAction = 'mount' | 'update' | 'memory' | 'leak';
@@ -21,7 +21,8 @@ export type ScenarioAction = 'mount' | 'update' | 'memory' | 'leak';
  * and in every results cell key. `parsePlan` splits it into `action` and
  * `component`, so nothing downstream has to know the encoding.
  */
-export type ScenarioName = ScenarioAction | `${ScenarioAction}.slider`;
+export type ScenarioName =
+  ScenarioAction | `${ScenarioAction}.slider` | `${ScenarioAction}.button`;
 
 /**
  * A control set the harness can mount, update and unmount.

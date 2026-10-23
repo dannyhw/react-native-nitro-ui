@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
 import com.margelo.nitro.nitroui.core.NitroUiDeclaredFallbacks
+import com.margelo.nitro.nitroui.views.HybridNitroUiButtonManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSliderManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSwitchManager
 
@@ -41,6 +42,7 @@ class NitroUiPackage : BaseReactPackage() {
   ): List<ViewManager<*, *>> = listOf(
     HybridNitroUiSwitchManager(),
     HybridNitroUiSliderManager(),
+    HybridNitroUiButtonManager(),
   )
 
   companion object {
