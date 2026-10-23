@@ -356,7 +356,7 @@ async function runLaunch(target, entry) {
   const started = Date.now();
   let deadChecks = 0;
   const handle = await target.run(entry);
-  const expected = planString(entry.scenario, entry.implementation, entry.n);
+  const expected = launchPlanString(entry);
   const budget = TIMEOUTS[entry.scenario] ?? 180_000;
   for (;;) {
     const text = target.read(handle);
