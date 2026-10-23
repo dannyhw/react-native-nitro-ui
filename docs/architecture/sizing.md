@@ -347,6 +347,21 @@ there is no box width to use. Two consequences a component author must know:
   are only *queued* by `EventQueue::enqueueStateUpdate`. Round 1 captured `[&measured]`, a reference
   into a local vector in `applyReports`, so every batched correction read freed memory; ASan caught it
   in seconds once a host test deferred the push instead of running it inline. Capture by value.
+- **A superseded measurement does not leave a clean node's cache.** Yoga keeps *every* answer it was
+  ever handed for a node it was never dirtied for, and `shouldNewRevisionDirtyMeasurement`
+  (`cpp/NitroUiIntrinsic.hpp`) keeps a props-only clone clean on purpose (a Switch being toggled must
+  not re-size). That is sound while the answer never moves. Once an instance has been corrected, the
+  pre-correction answer is still a live entry, and `canUseCachedMeasurement` re-uses it: a
+  `MaxContent` answer of 40×20 stays "valid" for a later `FitContent` question about a control that is
+  61×28, and the smaller/older answer is the stickier. The engine meanwhile learned the right size, so
+  the host's next report is dropped as agreement and the wrong box is permanent for that instance —
+  only another instance's correction, which is per configuration, healed it. On iOS that is what put a
+  controlled Switch's `Toggle` outside the window and out of the a11y tree, its row's `flex: 1` label
+  grown by exactly the 61 pt that went missing (FIX2, T15 Finding 1; it reproduces on Android once the
+  first answer is wrong). The ledger therefore records whether an instance's answer ever moved
+  (`answerChanged`), and `requiresFreshMeasure` makes a props turn dirty the measurement of *that*
+  instance and nobody else: a control the engine never had to correct still costs no measure per prop
+  turn, and a control it did pays one lookup.
 - **An instance's id is owned by the JS side and its memory by the native side.** `forget(id)` from
   `drop()`/`prepareForRecycle()` is what keeps the ledger and registry bounded; pruning on weak
   expiry alone leaks one entry per mount for the life of the process, and a recycled Android host
@@ -407,7 +422,12 @@ without a commit.
 | 200 mounts, warm / cold        | 295–329 ms / 137–155 ms          | 899–2310 ms / 830–3469 ms     |
 | 50 mounts, warm / cold         | 0.66–0.71 / 0.76–0.83 ms ea.     | 5.7–12.0 / 7.5–12.1 ms ea.    |
 | 30 rapid prop turns            | 0 measures, 0 corrections        | same                          |
+| One further prop turn on an instance that *was* corrected | 1 measure, 0 corrections (§6, FIX2) | 1 measure, 0 corrections |
 | font scale 1.3 / Dynamic Type XL | unchanged size                 | unchanged size                |
+
+The two prop-turn rows are the same fast path read two ways: the storm test's Switch is answered at the size the
+engine already believed, so 30 turns cost 0 measures; an instance the engine had to correct re-asks once per turn
+and still costs no correction (§6).
 
 Ranges are the spread across the runs in the report. The Android ones are wide because another
 task's device work shares this machine (D13): its cold-batch flush measured 8.5 ms on a quiet
