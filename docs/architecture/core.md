@@ -78,7 +78,10 @@ applies no setter (the old snapshot from `holder.lastState` equals the new one),
 makes one unconditional mark plus one no-op `reconcile()`. Cost per mount: one extra JNI props diff, one `reconcile()`,
 one perf mark. **Read `propsApplied` = 2.00 on Android mount as the architecture's floor, never as a component
 regression** — every future Android component will show it. Upstream N5; a generator-side short-circuit (skip when the
-snapshot equals `lastState`) is the fix and belongs to whoever touches the generated path (T12), not to components.
+snapshot equals `lastState`) is the fix and belongs to whoever touches the generated path, not to
+components. T12 measured it instead of patching it: one perf mark plus one diff against an unchanged
+snapshot, next to a 4 ms UI-thread gap in the same cell, so it is recorded as **quantified-negligible**
+(`docs/upstream.md`, N5) and no nitrogen patch surface was spent on it.
 
 The JS side guarantees the batching preconditions:
 

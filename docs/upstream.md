@@ -30,7 +30,7 @@ means.
 | N2   | `react-native-nitro-modules` 0.37.1            | removed props arrive as `null`, which crashes optional props       | open (`nitro#1184`)      | lint rule + spec/wrapper rule (D7)     |
 | N3   | `nitrogen` 0.37.1                              | callback props must be optional; `fn \| null` throws at mount      | no upstream issue yet    | lint rule + spec rule (D7b)            |
 | N4   | `nitrogen` 0.37.1                              | generated `SimpleViewManager` ignores border/radius on Android     | no upstream issue yet    | documented limitation, undecided       |
-| N5   | `nitrogen` 0.37.1                              | generated Android `updateState` no-ops through RN's second per-view delivery | no upstream issue yet    | documented limitation; generator short-circuit is the fix (T12) |
+| N5   | `nitrogen` 0.37.1                              | generated Android `updateState` no-ops through RN's second per-view delivery | no upstream issue yet    | quantified-negligible (T12); generator short-circuit remains the fix |
 | N6   | `nitrogen` 0.37.1                              | no hook for a custom shadow node/state, so self-sizing needs post-processing | no upstream issue yet (draft below) | post-nitrogen patch via `nitro-ui.sizing.json`  |
 | B1   | `create-react-native-library` 0.64.0 (bob)     | template omits `react { jsRootDir }` → duplicate dex in release    | no upstream issue yet    | fixed in `android/build.gradle`        |
 | B2   | `create-react-native-library` 0.64.0 (bob)     | `--tools a b c` keeps only the first value, silently               | no upstream issue yet    | one `--tools` flag per tool            |
@@ -776,9 +776,26 @@ the bench sanity metric is interpreted through that note.
 design (view managers are expected to be idempotent), so the improvement is
 Nitro's: the generated `updateState` could return before `beforeUpdate` when
 the incoming props snapshot equals `holder.lastState`, or count `updateState`
-calls and "applied" marks separately. **Removal.** When the generator
-short-circuits (planned under T12), re-record the Android sanity expectations,
-drop this entry, and update the §3 note in `docs/architecture/core.md`.
+calls and "applied" marks separately.
+
+**Quantified (T12).** T12 measured the second delivery instead of guessing at it.
+It costs one perf mark and one JNI props diff against an unchanged snapshot, and
+no second composition: `commit()` marks unconditionally and returns when nothing
+is dirty (`android/.../core/NitroComposeHost.kt:207-214`), and `propsApplied` is
+2.00 on mount / 1.00 on update exactly as the Fabric floor predicts. On a
+launch-paired quick plan (`bench/results/b7b6acb-android-20261023T053110Z.json`,
+`mount:50`) our `jsCommitNs` is **1.60 ms** against the shared host's 1.89 ms and
+rn-core's 1.37 ms, while the same cell's gap worth chasing is **14.85 ms of UI
+CPU** against the shared host's 10.48 ms. Deleting the diff entirely is a
+sub-millisecond item on a cell with a 4 ms UI-thread gap, and the traces put that
+gap in compositions and view trees instead
+(`docs/tasks/T12-android-perf.report.md` §3, §5). Recorded as
+**quantified-negligible**: no nitrogen patch surface spent on it, and it is not a
+reason to avoid the library.
+
+**Removal.** When the generator short-circuits, re-record the Android sanity
+expectations, drop this entry, and update the §3 note in
+`docs/architecture/core.md`.
 
 ### N6 — no hook for a custom shadow node, so a self-sizing view must be post-processed
 
