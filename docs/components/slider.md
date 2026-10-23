@@ -138,8 +138,11 @@ only (`docs/architecture/sizing.md` §5), asserted on both platforms by
   accumulate and a frame tick (iOS `CADisplayLink`, Android `Choreographer`) emits
   the newest one. Every emission is a JS entry plus the app's handler plus a React
   render plus a props commit back (core.md §11), so per-sample events are exactly
-  the stutter this control cannot have. The pump runs only while a drag has
-  something to report.
+  the stutter this control cannot have. The pump is armed for the whole of a drag —
+  from the first sample to the release — and hands itself back at the end or at a
+  cancel; a frame with no new sample simply has nothing to emit. The harness asserts
+  both halves (`nuiTestFramePumpArmed` is true mid-drag and false after the release,
+  after a cancel, and after every accessibility step).
 - **The final value always arrives.** `onSlidingComplete` fires at release with
   the value the thumb settled on, even when the last frame already emitted it. A
   gesture that changed nothing reports nothing but the start/complete pair.
@@ -173,12 +176,20 @@ hosted control, never on the container (core.md §3 — a role or `accessible` o
 container hides the real control), and the label is applied only when set, because
 an empty `accessibilityLabel` would silence the control's own.
 
-- **iOS**: SwiftUI's `Slider` is an adjustable element; VoiceOver announces it and
-  swipe up/down increments and decrements by the step, and the announced value
-  tracks the native one during a drag.
-- **Android**: M3's `Slider` publishes progress semantics with
-  increase/decrease actions on the control node, so TalkBack's gestures move it by
-  a step; `accessibilityLabel` becomes the node's `contentDescription`.
+- **iOS**: the component view vends one `UIAccessibilityElement` with the
+  `.adjustable` trait: `accessibilityLabel` is the app's label, `accessibilityValue`
+  is the value the thumb shows (an app's unit, not a percentage), and
+  `accessibilityIncrement`/`accessibilityDecrement` — what VoiceOver's swipe up/down
+  performs — step by this Slider's own grid. `.accessibilityElement(children:
+  .ignore)` plus `.accessibilityAdjustableAction` say the same thing in SwiftUI, for
+  the case where a runtime builds its reader tree past `accessibilityElements`. The
+  spoken result (wording, rotor, whether the value is re-read after a step) has not
+  been verified with VoiceOver running.
+- **Android**: the control's semantics node is `clearAndSetSemantics`-owned: it
+  publishes `progressBarRangeInfo` (the real range and current value — M3 1.4's
+  `Slider` does not) and a `setProgress` action that steps by this Slider's own grid
+  rather than by Compose's stride; `accessibilityLabel` becomes that node's
+  `contentDescription`.
 
 The increment goes through the same native value rules as a drag, so an
 accessibility step on a range that is not a whole number of steps still lands on
@@ -194,13 +205,15 @@ values the thumb can show, and still emits through the same handshake.
   `onSlidingStart` comes from the first value change. A touch that never changes
   the value therefore reports nothing at all: `onSlidingComplete` is guarded on a
   drag having started, so the three callbacks are never half-emitted.
-- **Android a11y is not visible to the harness.** Compose semantics are not Views:
-  M3 publishes the label and its actions in the `SemanticsNode` tree, while
-  `@react-native-harness/ui`'s label query matches `View.contentDescription`. The
-  harness test therefore asserts that the label reached the control, and asserts
-  the queried box on iOS only; mirroring the label onto the host `View` would give
-  TalkBack a second focus stop, which core.md §3 forbids. Reported as a harness
-  gap in `docs/tasks/G1-slider.report.md`.
+- **Compose semantics are not Views.** `@react-native-harness/ui`'s label query
+  matches `View.contentDescription`, so it cannot see the label on either platform's
+  hosted control (on iOS it matches the wrapped `UISlider`, whose label SwiftUI sets
+  for us); the harness therefore asserts the label reached the control and asserts
+  the queried box on iOS only. Mirroring the label onto the host `View` would give
+  the reader a second focus stop, which core.md §3 forbids. The *actions* are
+  reachable: the harness steps the Android control by invoking its real
+  `SetProgress` semantics action, and the iOS one by performing
+  `accessibilityIncrement` on the element UIKit vends.
 - **No tick labels, no `Slider`-specific a11y value formatting, no reversed
   range.** `minimumValue > maximumValue` is treated as a one-value range (the
   thumb sits at an end) rather than an inverted track.

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
+  Platform,
+  StatusBar,
   StyleSheet,
   Text,
   useColorScheme,
@@ -21,6 +23,20 @@ type Screen = 'switch' | 'slider';
  * task report), which needs no Metro change and no rebuild of anything else.
  */
 const DEFAULT_SCREEN: Screen = 'switch';
+
+/**
+ * The tab bar's top padding.
+ *
+ * RN's `SafeAreaView` is iOS-only, and Android lays apps out edge to edge, so on
+ * Android the tabs drew under the clock - the round-1 review's screenshots.
+ * `StatusBar.currentHeight` is core's answer for that inset on Android and `null`
+ * on iOS, where `SafeAreaView` is already doing the work, so this covers both
+ * without taking `react-native-safe-area-context` into the example for one tab
+ * bar. A display cutout taller than the status bar would still overlap; the
+ * example is not where to solve that.
+ */
+const topInset =
+  (Platform.select({ android: StatusBar.currentHeight, default: 0 }) ?? 0) + 4;
 
 const TABS: { id: Screen; label: string }[] = [
   { id: 'switch', label: 'Switch' },
@@ -81,7 +97,9 @@ const styles = StyleSheet.create({
   tabs: {
     flexDirection: 'row',
     gap: 4,
-    padding: 4,
+    paddingHorizontal: 4,
+    paddingBottom: 4,
+    paddingTop: topInset,
     backgroundColor: '#111',
   },
   tabsLight: {
