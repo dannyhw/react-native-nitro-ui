@@ -89,3 +89,9 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
     DatePicker move to 0.2 unless they are already merged when the others are done. No new
     infrastructure tasks before release readiness unless a component is blocked by a bug.
   - **Perf:** a D15 miss after one optimisation task is documented (with follow-up), not chased.
+- **D20 (FIX2)** Exception to T11's S1 rule ("a props-only turn costs no measure"): an instance
+  whose laid-out size was ever **corrected** re-dirties its measurement on later props-only
+  clones (`requiresFreshMeasure`), because Yoga keeps the pre-correction answer in the node's
+  measurement cache and RN carries it into every clean clone. Never-corrected instances keep the
+  zero-cost path. Any future sizing change must keep the "box stays right across props turns
+  after a correction" harness cases green.
