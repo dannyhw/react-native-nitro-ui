@@ -585,6 +585,17 @@ Harness/tooling (reported rather than fixed here, since they are upstream):
   is pre-existing and load-sensitive, not Slider-specific; noted for whoever
   touches that test.
 
+- **Carried forward from the round-1 verification** (the verifier's own
+  follow-ups, one line each — none fixed in round 2):
+  - Kotlin `floor(x + 0.5)` rounds `0.49999999999999994` to 1, where Swift `.rounded()` gives 0. That single value is the only divergence left.
+  - `drag(to:)` calls `refreshAccessibility()` on every touch sample (`HybridNitroUiSlider.swift:256`), which formats a String per sample on the drag path. The tick at `:353` already refreshes.
+  - Xcode warning from this round's seam: `element.perform(selector)` result unused (`HybridNitroUiSlider.swift:997`). Fix with `_ =`.
+  - An a11y step during an in-flight finger drag ends that finger's drag on both platforms, because `beginDrag` is a no-op and `endDrag` closes the drag.
+  - The comment at `HybridNitroUiSlider.kt:527-529` says M3 1.4 publishes no progress range. Its `sliderSemantics` does call `progressSemantics`. The comment is wrong; the code is unaffected.
+  - The Android harness asserts `nextHandle !== abandonedHandle` (`Slider.harness.tsx:1152`). That pins RN's recycler behaviour rather than ours.
+  - There is still no device render for `min > max` (review §1).
+  - `forceAccessibilityForTesting(true)` stays on for a probed instance after the probe. It is test-only, but undocumented in the spec comment.
+
 ## Questions for orchestrator
 
 1. **iOS below 26 is unmeasured.** The declared fallback is the measured 31 pt
@@ -703,7 +714,7 @@ AGENTS.md again: applied, run, reverted.
 
 | Proof | Mutation / state | Red result |
 | ----- | ---------------- | ---------- |
-| Fix 1, iOS harness | `reconcile()` allowed while a sample is unreported (the pre-fix tree, JS writes the controlled value mid-drag) | `Slider › finishes a drag that a write from JS lands inside` → `expected 0.8 to be 0.5` (`/tmp/g1-ios-harness-1.log`) |
+| Fix 1, handshake guard | drop the `unreported` guard so `reconcile()` judges purely by the event counts (the pre-fix predicate) | Red **by construction** on both platforms: `handshake.test.swift:117-151` fails `a write is refused while native holds an un-emitted sample` and `what was last emitted is still what is shown` (the write is accepted and `displayed` lands on the JS value); `NitroUiControlledValueTest.kt:116-147` fails `writeIsRefusedWhileNativeHasAnUnreportedSample` and `unreportedSampleRefusesWritesAndNothingElse`. The harness case `Slider › finishes a drag that a write from JS lands inside` is a **liveness check, not the race proof** — its own comment says "the JS stream cannot see the bug", and the `expected 0.8 to be 0.5` once cited from `/tmp/g1-ios-harness-1.log` came from an earlier draft of that test that the committed file (`Slider.harness.tsx:789-874`, which accepts either release value) does not contain — the same class of error as `:722-726` below. |
 | Fix 3, iOS harness | before the view vended an adjustable element | both a11y tests fail with `no adjustable element` — they cannot even reach the action |
 | Fix 2, Kotlin | `roundHalfAway` restored to `kotlin.math.round` (which is `Math.rint`) | `NitroUiSliderValueTest > tiesGoAwayFromZeroNotToTheEvenNeighbour FAILED` — `0.5 goes to 1, not to the even 0 (got 0.0, want 1.0)`; `36 tests completed, 1 failed`, `BUILD FAILED` (`/tmp/g1-jvm-tie-red.log`) |
 | Fix 2, Swift | `.rounded(.toNearestOrEven)` | `slider-value.test: 8 failure(s)` → `test:native: FAIL`, including `a mid-range tie goes up, not to the even 2 (got 2.0, want 3.0)` and `a tie in a fraction goes up to the next stop (got 0.0, want 0.5)` (`/tmp/g1-swift-tie-red.log`) — the same bug, visible on the platform that had it right |
@@ -817,3 +828,56 @@ rewrite touched messages only: `git diff` between the pre-rewrite and post-rewri
 tips is empty, so `f5c0450` ≡ `8812717` and `7b6015e` ≡ `272e471` — which is why
 the bench artifact file names still show the old SHAs and why the tables above are
 unaffected by the rewrite.
+
+## Fix round 2
+
+Fix round 2 — the two MERGE-AFTER-SMALL-FIXES items from `## Fix round 1
+verification`, and nothing else (D19: this is the last round).
+
+**1. Android: a disabled Slider tells TalkBack it is disabled again.** A
+`if (!enabled) disabled()` inside the `clearAndSetSemantics` block at
+`HybridNitroUiSlider.kt` (`SliderTrack`), restating the flag M3's `sliderSemantics`
+used to publish before the subtree was cleared. `enabled` is already a
+`SliderTrack` parameter; iOS already marks the same element `.notEnabled`.
+
+The narrow test is an **assertion in the existing Android harness a11y test**
+(`Slider.harness.tsx`, `ignores a drag while disabled, and follows the flag
+back`). The a11y probe (`runTestAccessibilityStep`) already walks the merged
+`SemanticsNode` tree and reports what it found; it now also reports the found
+node's `SemanticsProperties.Disabled` flag (`disabled=…`). The test asserts
+`disabled=true` on the disabled control (the thing TalkBack reads) and
+`disabled=false` on the same node once the flag is rerendered back off, so the
+flag is shown to follow the prop rather than be a constant.
+
+- **Shown to fail without the line.** With the `if (!enabled) disabled()` guard
+  commented out and the probe/harness assertions kept, the Android harness answers
+  `Slider › ignores a drag while disabled, and follows the flag back` →
+  `expected '#1 performed SetProgress(0.65000004) …' to contain 'disabled=true'`,
+  `1 failed, 53 passed` (exit 1, `/tmp/g1-fr2/harness-red.log`). Restoring the
+  line: `54 passed, 3 total` (exit 0, `/tmp/g1-fr2/harness-green.log`). Both runs
+  on `nitroui_t01` (adb 5041, Metro 8293), each against an APK built in that run's
+  session.
+
+**2. Report red-proof corrected.** `G1-slider.report.md:706` cited `expected 0.8
+to be 0.5` from `/tmp/g1-ios-harness-1.log`, which came from an earlier draft of
+the harness test the committed file does not contain. Re-cited to the gates that
+are actually red by construction without the `unreported` guard —
+`handshake.test.swift:117-151` and `NitroUiControlledValueTest.kt:116-147` — and
+the harness case is now described for what it is: a liveness check, not the race
+proof ("the JS stream cannot see the bug"). This is the same class of error the
+report itself calls out at `:722-726`.
+
+The verifier's eight follow-ups are copied into the Follow-ups section above, one
+line each, attributed to the round-1 verification. None fixed here.
+
+### Gates on the fix-round-2 tip
+
+| Gate | Command | Result |
+| ---- | ------- | ------ |
+| Full check | `bun run check` | **exit 0** on the fix-round-2 tip (prettier re-wrapped one new harness assertion to two lines; no source warnings) |
+| Android JVM | `bun run test:native:android` | 36 tests, 0 failures; `compileDebugKotlin` compiles the new `disabled()` call and `SemanticsProperties.Disabled` read |
+| Android harness (this round's test) | `HARNESS_APP_PATH=… ANDROID_AVD=nitroui_t01 ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 bunx react-native-harness --harnessRunner android` | **54 passed, 3 suites** (red `1 failed, 53 passed` without the guard) |
+
+Emulator `nitroui_t01` was started on port 5570 against adb server 5041 and shut
+down at the end; the human's `PR1505_Pixel` (`emulator-5560`) and G2's
+`nitroui_t02` (adb 5042) were not used.
