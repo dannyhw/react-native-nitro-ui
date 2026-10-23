@@ -33,6 +33,11 @@ run_case() {
   status=1
 }
 
+# The B1 guard: the sizing state-update callback must capture its size by value
+# (scripts/check-sizing-capture.sh explains why that is a grep and not a test).
+run_case "sizing state-update captures by value" \
+  bash "$ROOT/scripts/check-sizing-capture.sh"
+
 echo "compiling (host clang/swiftc, into $OUT)"
 
 # The clock + perf ring: the shipping C++ headers, compiled as-is.
@@ -51,6 +56,44 @@ run_case "handshake.test (Swift)" \
       '$ROOT/ios/core/NitroUiModel.swift' \
       '$ROOT/scripts/native-tests/handshake.test.swift' \
       -o '$OUT/handshake' && '$OUT/handshake'
+  "
+
+# The intrinsic-sizing engine: cache, ledger and push decisions (T11). It links
+# the shipping C++ unchanged - `measureContent` is allowed to be a pure C++
+# lookup (core-architecture §1.4), which is what makes it testable here instead
+# of only on a device.
+run_case "sizing.test (C++)" \
+  bash -c "
+    clang++ -std=c++20 -Wall -Werror \
+      -I '$ROOT/cpp' \
+      -framework CoreFoundation \
+      '$ROOT/scripts/native-tests/sizing.test.cpp' \
+      '$ROOT/cpp/NitroUiSizingEngine.cpp' -o '$OUT/sizing' && '$OUT/sizing'
+  "
+
+# The same test again under the sanitizers, because the properties worth checking
+# here are lifetime and UB rather than arithmetic: a correction is handed to a
+# push that may run it later, and the engine's maps are walked while being
+# mutated (`forget`, a re-entrant `measure` from a push, and the expired registry
+# sweep - and the sweep is only really covered because
+# `testExpiredStatesAreSweptWithoutForget` measures its dead instances under a key
+# nothing reports, the only way to arrive here with entries left to walk. Review
+# F1 found a use-after-free in exactly that sweep, hidden until the test reached
+# it.)
+# The suite is milliseconds of work, so this costs seconds and stays in the gate.
+#
+# Leak checking is off deliberately: the engine is a leaked singleton on purpose
+# (review N3 - the run-loop observer outlives static destruction), so a leak
+# report would be a false positive by design.
+run_case "sizing.test (C++ / ASan + UBSan)" \
+  bash -c "
+    ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 \
+    clang++ -std=c++20 -Wall -Werror -g -O1 -fno-omit-frame-pointer \
+      -fsanitize=address,undefined -fno-sanitize-recover=all \
+      -I '$ROOT/cpp' \
+      -framework CoreFoundation \
+      '$ROOT/scripts/native-tests/sizing.test.cpp' \
+      '$ROOT/cpp/NitroUiSizingEngine.cpp' -o '$OUT/sizing-asan' && '$OUT/sizing-asan'
   "
 
 if [ "$status" -eq 0 ]; then

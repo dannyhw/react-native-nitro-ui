@@ -15,6 +15,7 @@ import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.R.id.associated_hybrid_view_tag
 import com.margelo.nitro.views.RecyclableView
 import com.margelo.nitro.nitroui.*
+import com.margelo.nitro.nitroui.core.NitroUiSizing
 
 /**
  * Represents the React Native `ViewManager` for the "NitroUiSwitch" Nitro HybridView.
@@ -56,6 +57,10 @@ public class HybridNitroUiSwitchManager: SimpleViewManager<View>() {
     // 1. Update each prop individually
     hybridView.beforeUpdate()
     HybridNitroUiSwitchStateUpdater.updateViewProps(hybridView, newState, oldState)
+    // nitro-ui: intrinsic sizing (docs/architecture/sizing.md): hand this
+    // instance's Fabric state to the sizing engine, so the size Compose
+    // measures can be pushed back into the shadow tree.
+    NitroUiSizing.bind(getName(), newState)
     hybridView.afterUpdate()
     holder.lastState = newState
 

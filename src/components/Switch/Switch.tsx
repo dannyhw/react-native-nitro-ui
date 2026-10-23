@@ -1,6 +1,6 @@
-import { Platform, type ColorValue, type ViewProps } from 'react-native';
-import { useMemo } from 'react';
+import { type ColorValue, type ViewProps } from 'react-native';
 
+import { useSizingId } from '../../core/useSizingId';
 import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useStableCallback } from '../../core/useStableCallback';
@@ -60,48 +60,55 @@ export interface SwitchProps extends ViewProps {
    * @internal Benchmark and diagnostics only - not app API.
    */
   nuiPerfId?: number | null | undefined;
+  /**
+   * TEMPORARY, test-only: the control's width in platform units, so a harness can
+   * drive a real size change through a prop and prove that a `nuiSizingKey` change
+   * re-measures (review S1). A Switch has no size-affecting public prop, and
+   * DECISIONS D16 gives the real R3 test to the G2 Button.
+   *
+   * @internal Not app API. Deleted once the G2 Button test exists.
+   */
+  nuiTestWidth?: number | null | undefined;
 }
 
 /**
- * Whether the running iOS lays a switch out at the iOS 26 size.
+ * The size configuration of a Switch, as the sizing engine sees it.
  *
- * `Platform.Version` is a **string** on iOS (`"27.0"`) and a number on Android,
- * so `typeof … === 'number' && … >= 26` is quietly false on every iPhone and the
- * pre-26 size ships everywhere - which the on-device box test caught. iOS also
- * reports the same value as `constants.osVersion`, which Android does not have,
- * hence the read-through-unknown cast: this runs on every platform because
- * `Platform.select` builds all of its branches.
+ * Every prop that can change a Switch's size has to appear in this variant
+ * (`docs/architecture/sizing.md`). A Switch has none: `value`, `disabled` and
+ * `tintColor` repaint, they do not resize - the only thing that changes a
+ * control's size is the environment (the OS's control size, the text size), and
+ * native folds that in itself through the environment epoch. So the variant is
+ * empty, which is the cheapest possible answer - one configuration, one cached
+ * size for the whole app - and the one `prewarmSizing(['NitroUiSwitch'])` can
+ * pre-warm, because an empty variant *is* the default configuration.
  */
-function usesModernSwitchSize(): boolean {
-  const osVersion = (
-    Platform.constants as { readonly osVersion?: string } | undefined
-  )?.osVersion;
-  const major = Number.parseInt(osVersion ?? String(Platform.Version), 10);
-  return Number.isFinite(major) && major >= 26;
+const SIZING_VARIANT = '';
+
+/**
+ * The sizing variant for one Switch, given the temporary test width. Setting a
+ * width makes it a different configuration, which is the point: two instances
+ * that are laid out at different sizes must never share one cache entry.
+ */
+function sizingVariantFor(testWidth: number | null | undefined): string {
+  return testWidth == null
+    ? SIZING_VARIANT
+    : `${SIZING_VARIANT}|w${String(testWidth)}`;
 }
 
 /**
- * The default box of a Switch, per platform, until T11 measures it natively.
+ * What a self-sizing control is laid out with, before any `style`.
  *
- * A Nitro Hybrid View is a plain Yoga leaf, so with no style it is 0x0
- * (docs/research/core-architecture.md §1.1). These are the *measured* intrinsic
- * sizes of the controls we host - see docs/components/switch.md:
- * - iOS: SwiftUI `Toggle(...).toggleStyle(.switch)` is 61x28 pt from iOS 26, and
- *   51x31 pt before it - the control changed size with the OS, so the default has
- *   to follow the running OS (DECISIONS D14). Anything smaller and SwiftUI
- *   overflows the Fabric box, which paints outside it and leaves dead touch zones
- *   at both ends; anything larger adds padding the control does not have.
- * - Android: a Material 3 `Switch` is a 52x32 dp track inside a 48 dp minimum
- *   interactive size, so it measures 52x48 dp.
- * A `style` from the user wins over these.
+ * `alignItems: stretch` (the default in a column) otherwise decides a control's
+ * width for it: Yoga gives a stretched child the row's width as an *exact*
+ * constraint, so the measured size is never even asked for and a Switch becomes
+ * a 402pt-wide box with a 61pt control in it. React Native's own `Switch` does
+ * the same thing for the same reason (`Libraries/Components/Switch/Switch.js`).
+ * It is a base style, not a forced one: an explicit `width`, `flex`, or
+ * `alignSelf: 'stretch'` in the caller's `style` wins, because their styles are
+ * applied after this.
  */
-const DEFAULT_SIZE = Platform.select({
-  ios: usesModernSwitchSize()
-    ? { width: 61, height: 28 }
-    : { width: 51, height: 31 },
-  android: { width: 52, height: 48 },
-  default: { width: 61, height: 28 },
-});
+const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
 
 /**
  * The platform Switch: SwiftUI `Toggle` with `.switch` style on iOS, Material 3
@@ -122,13 +129,14 @@ export function Switch({
   accessibilityLabel,
   hybridRef,
   nuiPerfId = null,
+  nuiTestWidth = null,
   style,
   ...restProps
 }: SwitchProps) {
   const controlled = useControlled(value, defaultValue, onValueChange);
   const processedTint = useProcessedColor(tintColor);
   const hybridRefCallback = useStableCallback(hybridRef);
-  const sizedStyle = useMemo(() => [DEFAULT_SIZE, style], [style]);
+  const sizingId = useSizingId();
 
   return (
     <NativeNitroUiSwitch
@@ -142,8 +150,11 @@ export function Switch({
       accessibilityLabel={accessibilityLabel ?? null}
       nuiPerfId={nuiPerfId}
       onValueChange={controlled.onNativeChange}
+      nuiSizingKey={sizingVariantFor(nuiTestWidth)}
+      nuiSizingId={sizingId}
+      nuiTestWidth={nuiTestWidth}
       hybridRef={hybridRefCallback ?? undefined}
-      style={sizedStyle}
+      style={[SELF_SIZING_BASE_STYLE, style]}
     />
   );
 }

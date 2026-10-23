@@ -61,11 +61,11 @@ is invoked once when the view mounts, and a new function does not re-run it.
 the Fabric node, and both are asserted on-device by
 `example/__tests__/Switch.harness.tsx`:
 
-| Platform             | Content measures | Default box         |
+| Platform             | Content measures | Box Yoga gives it   |
 | -------------------- | ---------------- | ------------------- |
 | iOS 26 and later     | 61 × 28 pt       | **61 × 28**         |
 | iOS 15 - 25          | 51 × 31 pt       | **51 × 31**         |
-| Android              | 52 × 48 dp       | **52 × 48**         |
+| Android              | 52.19 × 48 dp    | **52.19 × 48**      |
 
 Content does not grow with the box: rendered in a 90 × 50 box it still reports
 the numbers above, and the control is centred inside the space (`docs/`
@@ -84,18 +84,38 @@ the row it sat in was laid out ~12 pt too narrow.
 
 Android's number is the Material 3 track (52×32 dp) inside the 48 dp minimum
 interactive size, so the box includes the touch target the platform enforces.
+The width is fractional (137 px at the test device's 2.625 density) because it is
+the control's real measurement and not a written-down constant.
 It is the one answer that is capped by the box: Android asks the control for its
 size with a minimum of zero inside the box it was given, so the recorded content
 can never be bigger than the box, while iOS asks unbounded and can report a
 control that overflows.
 
-T11 replaces both constants: `measureContent()` already reports what the hosted
-control measures, so `DEFAULT_SIZE` in `src/components/Switch/Switch.tsx` is the
-only thing that has to go.
+**Nothing here is a constant any more** (T11). The host measures what it hosts and
+reports it, and Yoga lays the node out at that (`docs/architecture/sizing.md`).
+What `Switch` declares is only the *fallback* — the size used for the very first
+layout, before any measurement exists
+(`NitroUiSizing.setFallback`, `ios/components/Switch/HybridNitroUiSwitch.swift:113`,
+`android/.../HybridNitroUiSwitch.kt:173`), and it still follows the running iOS
+for the reason above. A real measurement replaces it for the whole process after
+the first instance, so an OS whose control is a different size corrects itself
+rather than shipping a wrong constant. `DEFAULT_SIZE` is gone; the base style is
+just `alignSelf: 'flex-start'` (`src/components/Switch/Switch.tsx:91`), and the
+harness now asserts the box the platform *drew*, not a style
+(`example/__tests__/Sizing.harness.tsx`).
 
-A Nitro Hybrid View is a plain Yoga leaf, so with no `style` at all it would be
-0×0. `DEFAULT_SIZE` fills that in; a user `style` wins (the control stays
-centered in whatever box it gets).
+A user `style` still wins: `width`, `height` or `flex` fixes the box and the
+control centres inside it — measured 120 × 60, and 300 × 28 / 300.19 × 48 for a
+`flex: 1` Switch in a 300 × 60 row. The one difference from the stock `Switch` is
+the cross axis: once the engine has written a size, Yoga has nothing left to
+stretch, so a parent's `alignItems: 'stretch'` does not widen it. Ask for the fill
+with `alignSelf: 'stretch'` (measured: 300 wide, control height kept).
+
+Text size does not move this control: neither `Toggle(.switch)` nor the M3 Switch
+changes size with font scale, measured at Android `font_scale 1.3` and iOS
+Accessibility Large (61 × 28 and 52.19 × 48 both unchanged). The environment epoch
+still fires on a real trait or configuration change — it just has nothing to
+invalidate here. See `docs/architecture/sizing.md` §9.
 
 ## Behaviour notes
 
@@ -120,7 +140,11 @@ centered in whatever box it gets).
 
 - `tintColor` on Android only re-colours the checked track (`SwitchDefaults`
   keeps the rest of the M3 scheme), which is the closest analogue of iOS `.tint()`.
-- The default box is a per-OS constant, not a measurement — until T11.
+- Its size is measured, not declared, so the first instance of a new configuration
+  costs one layout correction (usually the same numbers — `sizing.md` §4). The
+  fallback it starts from is still a per-OS constant.
+- A parent's `alignItems: 'stretch'` does not widen it (see Sizing above); stock
+  RN's `Switch` does stretch.
 - Android has no `testID` inside the Compose view; the id lands on the host
   `View.tag`, which is what the harness and `findNodeByName` read.
 - A rejected change reverts *without* animation: the thumb snaps back to the

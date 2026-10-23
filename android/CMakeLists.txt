@@ -8,11 +8,13 @@ set(CMAKE_CXX_STANDARD 20)
 # picked up by the podspec on iOS). Keep this list in sync with cpp/.
 set(NITRO_UI_CPP_SOURCES
         ../cpp/HybridNitroUiCore.cpp
+        ../cpp/NitroUiSizingEngine.cpp
 )
 
 # Define C++ library and add all sources
 add_library(${PACKAGE_NAME} SHARED
         src/main/cpp/cpp-adapter.cpp
+        src/main/cpp/NitroUiSizingJni.cpp
         ${NITRO_UI_CPP_SOURCES}
 )
 

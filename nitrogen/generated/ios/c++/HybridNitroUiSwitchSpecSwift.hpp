@@ -122,12 +122,32 @@ namespace margelo::nitro::nitroui {
     inline void setNuiPerfId(const std::variant<nitro::NullType, double>& nuiPerfId) noexcept override {
       _swiftPart.setNuiPerfId(nuiPerfId);
     }
+    inline std::variant<nitro::NullType, double> getNuiTestWidth() noexcept override {
+      auto __result = _swiftPart.getNuiTestWidth();
+      return __result;
+    }
+    inline void setNuiTestWidth(const std::variant<nitro::NullType, double>& nuiTestWidth) noexcept override {
+      _swiftPart.setNuiTestWidth(nuiTestWidth);
+    }
     inline std::optional<std::function<void(bool /* value */, double /* eventCount */)>> getOnValueChange() noexcept override {
       auto __result = _swiftPart.getOnValueChange();
       return __result;
     }
     inline void setOnValueChange(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& onValueChange) noexcept override {
       _swiftPart.setOnValueChange(onValueChange);
+    }
+    inline std::string getNuiSizingKey() noexcept override {
+      auto __result = _swiftPart.getNuiSizingKey();
+      return __result;
+    }
+    inline void setNuiSizingKey(const std::string& nuiSizingKey) noexcept override {
+      _swiftPart.setNuiSizingKey(nuiSizingKey);
+    }
+    inline double getNuiSizingId() noexcept override {
+      return _swiftPart.getNuiSizingId();
+    }
+    inline void setNuiSizingId(double nuiSizingId) noexcept override {
+      _swiftPart.setNuiSizingId(std::forward<decltype(nuiSizingId)>(nuiSizingId));
     }
 
   public:

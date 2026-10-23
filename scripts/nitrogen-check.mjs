@@ -21,7 +21,13 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 
-import { PATCH_MARKER, patchGeneratedViews } from './patch-nitrogen.mjs';
+import {
+  PATCH_MARKER,
+  SIZING_CONFIG_FILE,
+  SIZING_MARKER,
+  patchGeneratedViews,
+  readSizingConfig,
+} from './patch-nitrogen.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const committed = join(root, 'nitrogen');
@@ -98,8 +104,9 @@ try {
     process.exit(1);
   }
 
-  // Apply the same post-processing the real `bun run nitrogen` applies.
-  const { results } = patchGeneratedViews(workDir);
+  // Apply the same post-processing the real `bun run nitrogen` applies. The
+  // sizing config lives in the repository, not in the temp codegen directory.
+  const { results } = patchGeneratedViews(workDir, { sizingConfigRoot: root });
   if (process.exitCode === 1) {
     console.error(
       'nitrogen-check: the ViewProps patch could not be applied to fresh codegen.'
@@ -121,6 +128,39 @@ try {
         `nitrogen-check: ${file} does not restore RN base ViewProps (margelo/nitro#1656).`
       );
       failed = true;
+    }
+  }
+
+  // 1b) Every view the sizing config lists must have been rewritten - a patch
+  // that quietly stopped matching would otherwise only show up as wrong sizes on
+  // a device.
+  const { views, error } = readSizingConfig(root);
+  if (error != null) {
+    console.error(`nitrogen-check: ${error}`);
+    failed = true;
+  }
+  const generatedFiles = listFiles(join(generated, 'generated'));
+  for (const className of views.keys()) {
+    for (const suffix of [
+      `${className}Component.hpp`,
+      `${className}Component.mm`,
+      `${className}Manager.kt`,
+    ]) {
+      const file = generatedFiles.find((f) => f.endsWith(suffix));
+      if (file == null) {
+        console.error(
+          `nitrogen-check: ${SIZING_CONFIG_FILE} lists ${className}, but codegen emitted no ${suffix}.`
+        );
+        failed = true;
+        continue;
+      }
+      const source = readFileSync(join(generated, 'generated', file), 'utf8');
+      if (!source.includes(SIZING_MARKER)) {
+        console.error(
+          `nitrogen-check: ${file} does not carry the intrinsic-sizing patch.`
+        );
+        failed = true;
+      }
     }
   }
 

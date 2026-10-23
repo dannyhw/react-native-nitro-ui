@@ -15,9 +15,16 @@
 
 // Forward declaration of `NitroUiPerfEvent` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiPerfEvent; }
+// Forward declaration of `NitroUiSizingStats` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiSizingStats; }
+// Forward declaration of `NitroUiSizingTraceEvent` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiSizingTraceEvent; }
 
 #include "NitroUiPerfEvent.hpp"
 #include <vector>
+#include "NitroUiSizingStats.hpp"
+#include <string>
+#include "NitroUiSizingTraceEvent.hpp"
 
 namespace margelo::nitro::nitroui {
 
@@ -53,6 +60,13 @@ namespace margelo::nitro::nitroui {
       virtual double now() = 0;
       virtual void setPerfEnabled(bool enabled) = 0;
       virtual std::vector<NitroUiPerfEvent> drainPerf() = 0;
+      virtual NitroUiSizingStats sizingStats() = 0;
+      virtual double nextSizingId() = 0;
+      virtual void seedSizingSize(const std::string& componentName, const std::string& sizingKey, double width, double height) = 0;
+      virtual void invalidateSizingEnvironment() = 0;
+      virtual double prewarmSizing(const std::vector<std::string>& componentNames) = 0;
+      virtual void setSizingTraceEnabled(bool enabled) = 0;
+      virtual std::vector<NitroUiSizingTraceEvent> drainSizingTrace() = 0;
 
     protected:
       // Hybrid Setup
