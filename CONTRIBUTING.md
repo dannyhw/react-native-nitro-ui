@@ -9,7 +9,12 @@ commands. If you change one, change it here too.
   in `package.json`). Do not add `yarn`/`npm` lockfiles.
 - Xcode 26 or 27 (Xcode 27 if you want the iOS 27 simulator runtime), CocoaPods
 - JDK 17, Android SDK (`ANDROID_HOME`) with an emulator image for API 35
-- Node >= 22 (used by tooling; bun runs the scripts)
+- Node 22.11 - 24 — `.nvmrc` pins one, and the device gates refuse to start on
+  anything else (bun runs the scripts, but Node transforms the tests). Node 25
+  and 26 die later inside `react-native-harness`'s Jest transform with
+  `Must use import to load ES Module … react-native/index.js`, which reads like
+  a bug in the test file and is not one; the harness and real-input entry points
+  now say this up front instead.
 
 Install dependencies once at the repo root — the example app shares the root
 install (hoisted layout, see `bunfig.toml`):
@@ -154,15 +159,16 @@ reads everything from the environment, and its defaults are neutral (no `t01`,
 `t02`, … in them), because several tasks run this repo concurrently on one
 machine with their own simulator/AVD and their own Metro port.
 
-| Variable            | Default     | Meaning                                                |
-| ------------------- | ----------- | ------------------------------------------------------ |
-| `IOS_SIM_UDID`      | unset       | Simulator **UDID** — wins over `IOS_SIM`/`IOS_VERSION` |
-| `IOS_SIM`           | `iPhone 17` | Simulator name (used when no UDID is given)            |
-| `IOS_VERSION`       | `27.0`      | Simulator runtime the name is looked up in             |
-| `ANDROID_AVD`       | `nitroui`   | Emulator name (the harness creates it if missing)      |
-| `ANDROID_API_LEVEL` | `35`        | AVD system image                                       |
-| `AVD_PROFILE`       | `pixel_9`   | AVD device profile                                     |
-| `METRO_PORT`        | `8291`      | Metro port                                             |
+| Variable            | Default     | Meaning                                                         |
+| ------------------- | ----------- | --------------------------------------------------------------- |
+| `IOS_SIM_UDID`      | unset       | Simulator **UDID** — wins over `IOS_SIM`/`IOS_VERSION`          |
+| `IOS_SIM`           | `iPhone 17` | Simulator name (used when no UDID is given)                     |
+| `IOS_VERSION`       | `27.0`      | Simulator runtime the name is looked up in                      |
+| `ANDROID_AVD`       | `nitroui`   | Emulator name (the harness creates it if missing)               |
+| `ANDROID_API_LEVEL` | `35`        | AVD system image                                                |
+| `AVD_PROFILE`       | `pixel_9`   | AVD device profile                                              |
+| `METRO_PORT`        | `8291`      | Metro port                                                      |
+| `HARNESS_TIMING`    | unset       | Judge the wall-clock gates instead of only reporting them (D21) |
 
 `ANDROID_AVD` is the name to set; `AVD` is still accepted as a legacy alias.
 
@@ -195,6 +201,39 @@ someone else's Metro.
 
 Only start devices you need, never touch a device you did not start, and shut
 down the ones you started when you finish.
+
+### Wall-clock gates (`HARNESS_TIMING`)
+
+Harness assertions split in two (D21). **Structural** ones — corrections,
+immediate pushes, flushes, stale frames, event counts, and layout boxes in px —
+are wrong at any machine load, so every run asserts them. A threshold on a
+**duration** is not: several tasks share this machine, and a loaded host turns a
+correct implementation red. Those go through `expectTimingBudget`
+(`example/__tests__/timingGate.ts`), which:
+
+- **`HARNESS_TIMING` unset** (the default, and what CI and every gate run): logs
+  the measurement from inside the app and skips the threshold — the same way the
+  stress tests beside it have always logged their timings, so the number is
+  there for whoever reads a failing suite's output. It is not a verdict.
+- **`HARNESS_TIMING=1`, quiet machine**: asserts the threshold and fails on the
+  miss.
+- **`HARNESS_TIMING=1`, busy machine**: refuses. When the published 1-minute load
+  average is at or above `busyLoad1` (10), the gate throws rather than judge,
+  because a gate that cannot tell a slow build from a slow host is not evidence.
+
+The assertions run inside the app, which cannot see this machine's load average,
+so the runner publishes it for the duration of the run: `rn-harness.config.mjs`
+writes `example/harness-timing/state.json` (gitignored, refreshed every 2s) and
+`example/metro.config.js` declares the one Metro route that serves it, per
+request — so an assertion reads a current value, not one frozen at bundle time.
+It has to be the Metro port: an emulator reaches this machine only through the
+`adb reverse` the harness sets up for Metro. A reader checks the file's
+`metroPort` and age before trusting it, so a leftover from a dead run cannot be
+mistaken for this one's. `scripts/harness-timing-gate.js` is the publishing and
+serving half, required by both config files.
+
+The harness prints one line at startup saying which mode it is in and what the
+load average was; a timing run started on a loaded host is announced there too.
 
 ## Running the real-input tests
 
@@ -230,6 +269,10 @@ an emulator running another AVD is refused.
 They are **not** part of `bun run check`: they need a booted device, a simulator
 build and several minutes. Run them when you change how a control receives
 touch, and expect the maintainer to run them before a release.
+
+Both run on the Node `.nvmrc` pins and refuse to start on anything else, so that
+one runtime produced every device gate — a real-input pass on a Node the harness
+cannot run on is not comparable evidence.
 
 Each run keeps its evidence in `.real-input/<platform>/` (gitignored): the full
 `xcodebuild` and `adb` logs, the accessibility hierarchy printed by a failing
