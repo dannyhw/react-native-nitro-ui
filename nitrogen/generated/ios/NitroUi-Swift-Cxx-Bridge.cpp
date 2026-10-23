@@ -9,6 +9,7 @@
 
 // Include C++ implementation defined types
 #include "HybridNitroUiButtonSpecSwift.hpp"
+#include "HybridNitroUiSegmentedControlSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
 #include "HybridNitroUiSwitchSpecSwift.hpp"
 #include "NitroUi-Swift-Cxx-Umbrella.hpp"
@@ -40,12 +41,28 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return swiftPart.toUnsafe();
   }
   
-  // pragma MARK: std::function<void(double /* value */, double /* eventCount */)>
+  // pragma MARK: std::function<void(double /* index */, double /* eventCount */)>
   Func_void_double_double create_Func_void_double_double(void* NON_NULL swiftClosureWrapper) noexcept {
     auto swiftClosure = NitroUi::Func_void_double_double::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](double value, double eventCount) mutable -> void {
-      swiftClosure.call(value, eventCount);
+    return [swiftClosure = std::move(swiftClosure)](double index, double eventCount) mutable -> void {
+      swiftClosure.call(index, eventCount);
     };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiSegmentedControlSpec>
+  std::shared_ptr<HybridNitroUiSegmentedControlSpec> create_std__shared_ptr_HybridNitroUiSegmentedControlSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiSegmentedControlSpec_cxx swiftPart = NitroUi::HybridNitroUiSegmentedControlSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiSegmentedControlSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiSegmentedControlSpec_(std__shared_ptr_HybridNitroUiSegmentedControlSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiSegmentedControlSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiSegmentedControlSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiSegmentedControlSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiSegmentedControlSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
   }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiSliderSpec>

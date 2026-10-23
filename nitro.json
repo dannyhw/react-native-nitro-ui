@@ -47,6 +47,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiSwitch"
       }
+    },
+    "NitroUiSegmentedControl": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiSegmentedControl"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiSegmentedControl"
+      }
     }
   },
   "ignorePaths": [

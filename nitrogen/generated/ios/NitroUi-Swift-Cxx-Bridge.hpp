@@ -10,12 +10,16 @@
 // Forward declarations of C++ defined types
 // Forward declaration of `HybridNitroUiButtonSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
+// Forward declaration of `HybridNitroUiSegmentedControlSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiSegmentedControlSpec; }
 // Forward declaration of `HybridNitroUiSliderSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSliderSpec; }
 // Forward declaration of `HybridNitroUiSwitchSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 // Forward declaration of `NitroUiButtonSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
+// Forward declaration of `NitroUiSegmentedControlSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiSegmentedControlSize; }
 // Forward declaration of `NitroUiSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSize; }
 // Forward declaration of `NitroUiSliderSize` to properly resolve imports.
@@ -24,6 +28,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridNitroUiButtonSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
+// Forward declaration of `HybridNitroUiSegmentedControlSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiSegmentedControlSpec_cxx; }
 // Forward declaration of `HybridNitroUiSliderSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSliderSpec_cxx; }
 // Forward declaration of `HybridNitroUiSwitchSpec_cxx` to properly resolve imports.
@@ -31,9 +37,11 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 
 // Include C++ defined types
 #include "HybridNitroUiButtonSpec.hpp"
+#include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "NitroUiButtonSize.hpp"
+#include "NitroUiSegmentedControlSize.hpp"
 #include "NitroUiSize.hpp"
 #include "NitroUiSliderSize.hpp"
 #include <NitroModules/Null.hpp>
@@ -44,6 +52,7 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 /**
  * Contains specialized versions of C++ templated types so they can be accessed from Swift,
@@ -167,26 +176,73 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<NitroUiButtonSize>::withError(error);
   }
   
-  // pragma MARK: std::function<void(double /* value */, double /* eventCount */)>
+  // pragma MARK: std::vector<std::string>
+  /**
+   * Specialized version of `std::vector<std::string>`.
+   */
+  using std__vector_std__string_ = std::vector<std::string>;
+  inline std::vector<std::string> create_std__vector_std__string_(size_t size) noexcept {
+    std::vector<std::string> vector;
+    vector.reserve(size);
+    return vector;
+  }
+  
+  // pragma MARK: std::function<void(double /* index */, double /* eventCount */)>
   /**
    * Specialized version of `std::function<void(double, double)>`.
    */
-  using Func_void_double_double = std::function<void(double /* value */, double /* eventCount */)>;
+  using Func_void_double_double = std::function<void(double /* index */, double /* eventCount */)>;
   /**
-   * Wrapper class for a `std::function<void(double / * value * /, double / * eventCount * /)>`, this can be used from Swift.
+   * Wrapper class for a `std::function<void(double / * index * /, double / * eventCount * /)>`, this can be used from Swift.
    */
   class Func_void_double_double_Wrapper final {
   public:
-    explicit Func_void_double_double_Wrapper(std::function<void(double /* value */, double /* eventCount */)>&& func): _function(std::make_unique<std::function<void(double /* value */, double /* eventCount */)>>(std::move(func))) {}
-    inline void call(double value, double eventCount) const noexcept {
-      _function->operator()(value, eventCount);
+    explicit Func_void_double_double_Wrapper(std::function<void(double /* index */, double /* eventCount */)>&& func): _function(std::make_unique<std::function<void(double /* index */, double /* eventCount */)>>(std::move(func))) {}
+    inline void call(double index, double eventCount) const noexcept {
+      _function->operator()(index, eventCount);
     }
   private:
-    std::unique_ptr<std::function<void(double /* value */, double /* eventCount */)>> _function;
+    std::unique_ptr<std::function<void(double /* index */, double /* eventCount */)>> _function;
   } SWIFT_NONCOPYABLE;
   Func_void_double_double create_Func_void_double_double(void* NON_NULL swiftClosureWrapper) noexcept;
   inline Func_void_double_double_Wrapper wrap_Func_void_double_double(Func_void_double_double value) noexcept {
     return Func_void_double_double_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(double /* index */, double /* eventCount */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(double / * index * /, double / * eventCount * /)>>`.
+   */
+  using std__optional_std__function_void_double____index_____double____eventCount______ = std::optional<std::function<void(double /* index */, double /* eventCount */)>>;
+  inline std::optional<std::function<void(double /* index */, double /* eventCount */)>> create_std__optional_std__function_void_double____index_____double____eventCount______(const std::function<void(double /* index */, double /* eventCount */)>& value) noexcept {
+    return std::optional<std::function<void(double /* index */, double /* eventCount */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_double____index_____double____eventCount______(const std::optional<std::function<void(double /* index */, double /* eventCount */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(double /* index */, double /* eventCount */)> get_std__optional_std__function_void_double____index_____double____eventCount______(const std::optional<std::function<void(double /* index */, double /* eventCount */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiSegmentedControlSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiSegmentedControlSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiSegmentedControlSpec_ = std::shared_ptr<HybridNitroUiSegmentedControlSpec>;
+  std::shared_ptr<HybridNitroUiSegmentedControlSpec> create_std__shared_ptr_HybridNitroUiSegmentedControlSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiSegmentedControlSpec_(std__shared_ptr_HybridNitroUiSegmentedControlSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiSegmentedControlSpec>
+  using std__weak_ptr_HybridNitroUiSegmentedControlSpec_ = std::weak_ptr<HybridNitroUiSegmentedControlSpec>;
+  inline std__weak_ptr_HybridNitroUiSegmentedControlSpec_ weakify_std__shared_ptr_HybridNitroUiSegmentedControlSpec_(const std::shared_ptr<HybridNitroUiSegmentedControlSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiSegmentedControlSize>
+  using Result_NitroUiSegmentedControlSize_ = Result<NitroUiSegmentedControlSize>;
+  inline Result_NitroUiSegmentedControlSize_ create_Result_NitroUiSegmentedControlSize_(const NitroUiSegmentedControlSize& value) noexcept {
+    return Result<NitroUiSegmentedControlSize>::withValue(value);
+  }
+  inline Result_NitroUiSegmentedControlSize_ create_Result_NitroUiSegmentedControlSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiSegmentedControlSize>::withError(error);
   }
   
   // pragma MARK: std::optional<std::function<void(double /* value */, double /* eventCount */)>>

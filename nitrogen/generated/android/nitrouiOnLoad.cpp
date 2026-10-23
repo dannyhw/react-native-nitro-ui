@@ -18,8 +18,10 @@
 #include "JHybridNitroUiButtonSpec.hpp"
 #include "JFunc_void.hpp"
 #include "views/JHybridNitroUiButtonStateUpdater.hpp"
-#include "JHybridNitroUiSliderSpec.hpp"
+#include "JHybridNitroUiSegmentedControlSpec.hpp"
 #include "JFunc_void_double_double.hpp"
+#include "views/JHybridNitroUiSegmentedControlStateUpdater.hpp"
+#include "JHybridNitroUiSliderSpec.hpp"
 #include "views/JHybridNitroUiSliderStateUpdater.hpp"
 #include "JHybridNitroUiSwitchSpec.hpp"
 #include "JFunc_void_bool_double.hpp"
@@ -59,6 +61,14 @@ struct JHybridNitroUiSwitchSpecImpl: public jni::JavaClass<JHybridNitroUiSwitchS
     return javaPart->getJHybridNitroUiSwitchSpec();
   }
 };
+struct JHybridNitroUiSegmentedControlSpecImpl: public jni::JavaClass<JHybridNitroUiSegmentedControlSpecImpl, JHybridNitroUiSegmentedControlSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiSegmentedControl;";
+  static std::shared_ptr<JHybridNitroUiSegmentedControlSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiSegmentedControlSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiSegmentedControlSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiSegmentedControlSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -68,8 +78,10 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiButtonSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiButtonStateUpdater::registerNatives();
-  margelo::nitro::nitroui::JHybridNitroUiSliderSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiSegmentedControlSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiSegmentedControlStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiSliderSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSliderStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSwitchSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_bool_double_cxx::registerNatives();
@@ -101,6 +113,12 @@ void registerAllNatives() {
     "NitroUiSwitch",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiSwitchSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiSegmentedControl",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiSegmentedControlSpecImpl::create();
     }
   );
 }

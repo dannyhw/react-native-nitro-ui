@@ -120,6 +120,40 @@ export interface NitroUiSizingTraceEvent {
 export function prewarm(componentNames: readonly string[]): number;
 
 // @public
+export function SegmentedControl(input: SegmentedControlProps): JSX.Element;
+
+// @public
+export interface SegmentedControlChange {
+    index: number;
+    value: string;
+}
+
+// @public
+export interface SegmentedControlProps extends ViewProps {
+    defaultSelectedIndex?: number | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly options: string[];
+        readonly selectedIndex: number | null;
+        readonly mostRecentEventCount: number;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+    }) => void) | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onChange?: ((event: SegmentedControlChange) => void) | undefined;
+    options: string[];
+    selectedIndex?: number | undefined;
+    tintColor?: ColorValue | undefined;
+}
+
+// @public
 export function Slider(input: SliderProps): JSX.Element;
 
 // @public
