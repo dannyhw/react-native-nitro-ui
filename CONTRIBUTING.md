@@ -222,11 +222,14 @@ correct implementation red. Those go through `expectTimingBudget`
 
 The assertions run inside the app, which cannot see this machine's load average,
 so the runner publishes it for the duration of the run: `rn-harness.config.mjs`
-writes `example/.harness/timing-gate.json` (gitignored, refreshed every 2s), and
-Metro serves it from disk per request — so an assertion reads a current value,
-not one frozen at bundle time. A reader checks the file's `metroPort` and age
-before trusting it, so a leftover from a dead run cannot be mistaken for this
-one's. `scripts/harness-timing-gate.mjs` is the publishing half.
+writes `example/harness-timing/state.json` (gitignored, refreshed every 2s) and
+`example/metro.config.js` declares the one Metro route that serves it, per
+request — so an assertion reads a current value, not one frozen at bundle time.
+It has to be the Metro port: an emulator reaches this machine only through the
+`adb reverse` the harness sets up for Metro. A reader checks the file's
+`metroPort` and age before trusting it, so a leftover from a dead run cannot be
+mistaken for this one's. `scripts/harness-timing-gate.js` is the publishing and
+serving half, required by both config files.
 
 The harness prints one line at startup saying which mode it is in and what the
 load average was; a timing run started on a loaded host is announced there too.
