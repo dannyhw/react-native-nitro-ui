@@ -76,6 +76,20 @@ export interface SwitchProps extends ViewProps {
 const SIZING_KEY = 'Switch|';
 
 /**
+ * What a self-sizing control is laid out with, before any `style`.
+ *
+ * `alignItems: stretch` (the default in a column) otherwise decides a control's
+ * width for it: Yoga gives a stretched child the row's width as an *exact*
+ * constraint, so the measured size is never even asked for and a Switch becomes
+ * a 402pt-wide box with a 61pt control in it. React Native's own `Switch` does
+ * the same thing for the same reason (`Libraries/Components/Switch/Switch.js`).
+ * It is a base style, not a forced one: an explicit `width`, `flex`, or
+ * `alignSelf: 'stretch'` in the caller's `style` wins, because their styles are
+ * applied after this.
+ */
+const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
+
+/**
  * Source of `nuiSizingId`s. Module-level, so ids are unique among the mounted
  * Switches of this app run - the engine reports a measured size back to one
  * instance, and a shared id would correct the wrong view.
@@ -131,7 +145,7 @@ export function Switch({
       nuiSizingKey={SIZING_KEY}
       nuiSizingId={sizingIdRef.current}
       hybridRef={hybridRefCallback ?? undefined}
-      style={style}
+      style={[SELF_SIZING_BASE_STYLE, style]}
     />
   );
 }
