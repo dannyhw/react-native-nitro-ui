@@ -15,6 +15,7 @@ import {
   comparableMetrics,
   CONTROL_NOTE_THRESHOLD,
   controlMovement,
+  isControlImplementation,
   formatBytes,
   formatNs,
   formatRatio,
@@ -407,7 +408,7 @@ export function comparisonSections({
   if (movement.length > 0) {
     sections.push(
       '',
-      `Context only - the \`rn-core\` control itself moved more than ${String(
+      `Context only - the \`rn-core\` control arm itself moved more than ${String(
         Math.round(CONTROL_NOTE_THRESHOLD * 100)
       )}% between the two runs on ${String(movement.length)} metric(s): ${movement
         .map(
@@ -456,7 +457,9 @@ function gateTable(result, mode) {
       const notes = [];
       if (!value.gated) {
         notes.push(
-          row.implementation === 'rn-core' ? 'control' : 'reference arm'
+          isControlImplementation(row.implementation)
+            ? 'control'
+            : 'reference arm'
         );
       }
       if (value.noisy) {

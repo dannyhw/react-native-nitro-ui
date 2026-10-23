@@ -1,10 +1,16 @@
 import type { BenchImplementation } from '../types';
 import { ExpoUiHostPerControlList, ExpoUiSharedHostList } from './expoUi';
 import {
+  ExpoUiButtonHostPerControlList,
+  ExpoUiButtonSharedHostList,
+} from './expoUiButton';
+import {
+  NitroUiButtonList,
   NitroUiList,
   drainNitroUiPerfMarks,
   enableNitroUiPerfMarks,
 } from './nitroUi';
+import { RnCoreButtonList } from './rnCoreButton';
 import { RnCoreList } from './rnCore';
 
 /**
@@ -46,6 +52,38 @@ export const implementations: BenchImplementation[] = [
     available: true,
     skipReason: null,
     List: NitroUiList,
+    enablePerfMarks: enableNitroUiPerfMarks,
+    drainPerfMarks: drainNitroUiPerfMarks,
+  },
+  {
+    name: 'rn-core-button',
+    available: true,
+    skipReason: null,
+    List: RnCoreButtonList,
+    enablePerfMarks: null,
+    drainPerfMarks: null,
+  },
+  {
+    name: 'expo-ui-host-per-control-button',
+    available: true,
+    skipReason: null,
+    List: ExpoUiButtonHostPerControlList,
+    enablePerfMarks: null,
+    drainPerfMarks: null,
+  },
+  {
+    name: 'expo-ui-shared-host-button',
+    available: true,
+    skipReason: null,
+    List: ExpoUiButtonSharedHostList,
+    enablePerfMarks: null,
+    drainPerfMarks: null,
+  },
+  {
+    name: 'nitro-ui-button',
+    available: true,
+    skipReason: null,
+    List: NitroUiButtonList,
     enablePerfMarks: enableNitroUiPerfMarks,
     drainPerfMarks: drainNitroUiPerfMarks,
   },

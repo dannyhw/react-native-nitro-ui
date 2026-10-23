@@ -6,6 +6,12 @@
  *   bun bench --platform ios --plan full --check
  *   bun bench --platform ios --plan quick --compare <git-ref|results-file>
  *   bun bench --platform ios --plan quick --update-baseline
+ *   bun bench --platform android --plan quick --component button
+ *
+ * `--component` picks which arm set to schedule (default `switch`). Each set is
+ * a complete implementation dimension - its own `rn-core` control - so a
+ * component's ratios never divide by another component's numbers
+ * (scripts/bench/lib.mjs `COMPONENTS`).
  *
  * Per cell of the matrix (scenario x implementation x N) the protocol is a
  * **fresh process**, a 1 s settle, 5 warmup + 20 measured iterations, and
@@ -39,6 +45,7 @@ import {
   simctl,
 } from './devices.mjs';
 import {
+  COMPONENTS,
   LAUNCHES_PER_CELL,
   MARK_CAPABLE_IMPLEMENTATIONS,
   PLANS,
@@ -610,8 +617,16 @@ export async function main(argv) {
       ? iosTarget(device, built.appPath, built.bundleId)
       : androidTarget(device, built.apkPath, built.packageName);
 
+  const component = flag(argv, '--component') ?? 'switch';
+  if (COMPONENTS[component] == null) {
+    throw new Error(
+      `Unknown --component "${component}" (known: ${Object.keys(COMPONENTS).join(', ')})`
+    );
+  }
+
   const schedule = buildSchedule({
     plan,
+    implementations: COMPONENTS[component],
     launches,
     only: flag(argv, '--only'),
     perfMarks,

@@ -57,7 +57,7 @@ export const BASELINE_LAUNCHES = 8;
  * arms: an `@expo/ui` bump must not fail a nitro-ui PR, and `rn-core` is the
  * control. They are measured and reported, never gated (T02 review S9).
  */
-export const GATED_IMPLEMENTATIONS = ['nitro-ui'];
+export const GATED_IMPLEMENTATIONS = ['nitro-ui', 'nitro-ui-button'];
 
 /**
  * The arms that can report their *own* native perf marks (`bun bench
@@ -65,14 +65,55 @@ export const GATED_IMPLEMENTATIONS = ['nitro-ui'];
  * (`nitroUiCore.drainPerf()`), so a marks run narrows the matrix to these and
  * never pretends to instrument `@expo/ui` or `rn-core`.
  */
-export const MARK_CAPABLE_IMPLEMENTATIONS = ['nitro-ui'];
+export const MARK_CAPABLE_IMPLEMENTATIONS = ['nitro-ui', 'nitro-ui-button'];
 
-export const IMPLEMENTATIONS = [
+/**
+ * The arms of the Switch set, under their original bare names.
+ *
+ * Those names predate the second component and are also the keys of every
+ * committed baseline, so they stay; a Button arm is the same name with a
+ * `-button` suffix. The name is the launch-plan token and the results-cell key,
+ * so the suffix is what keeps two components out of each other's cells.
+ */
+export const SWITCH_IMPLEMENTATIONS = [
   'rn-core',
   'expo-ui-host-per-control',
   'expo-ui-shared-host',
   'nitro-ui',
 ];
+
+/** The arms of the Button set (task G2), same names plus the suffix. */
+export const BUTTON_IMPLEMENTATIONS = SWITCH_IMPLEMENTATIONS.map(
+  (name) => `${name}-button`
+);
+
+/**
+ * The component dimension: `bun bench --component <name>` restricts the
+ * implementation dimension to one arm set.
+ *
+ * A set is complete - it has its own `rn-core` control - so ratios never cross
+ * components. Default `switch` keeps every existing command working unchanged.
+ */
+export const COMPONENTS = {
+  switch: SWITCH_IMPLEMENTATIONS,
+  button: BUTTON_IMPLEMENTATIONS,
+};
+
+/** Every arm the runner can schedule. */
+export const IMPLEMENTATIONS = [
+  ...SWITCH_IMPLEMENTATIONS,
+  ...BUTTON_IMPLEMENTATIONS,
+];
+
+/** The arm one component's ratios are divided by. */
+export function controlImplementation(implementation) {
+  return implementation.endsWith('-button') ? 'rn-core-button' : 'rn-core';
+}
+
+/** Whether an arm *is* a control, i.e. its ratio to itself is 1 by definition. */
+export function isControlImplementation(implementation) {
+  return implementation === 'rn-core' || implementation === 'rn-core-button';
+}
 
 /** Latency metrics, all nanoseconds, all smaller-is-better. */
 export const LATENCY_METRICS = ['jsCommitNs', 'mountedNs', 'presentedNs'];
@@ -989,9 +1030,11 @@ export function ratioTable(source) {
       continue;
     }
     const control =
-      cell.implementation === 'rn-core'
+      cell.implementation === controlImplementation(cell.implementation)
         ? cell
-        : cells[`${cell.scenario}:rn-core:${cell.n}`];
+        : cells[
+            `${cell.scenario}:${controlImplementation(cell.implementation)}:${String(cell.n)}`
+          ];
     if (control == null) {
       continue;
     }
@@ -1005,7 +1048,7 @@ export function ratioTable(source) {
       if (!(metric in controlMetrics)) {
         continue;
       }
-      if (cell.implementation === 'rn-core') {
+      if (isControlImplementation(cell.implementation)) {
         entry.metrics[metric] = {
           ratio: 1,
           launchRatios: [1],
@@ -1073,7 +1116,10 @@ export function controlMovement(base, head) {
   const headCells = cellsFrom(head);
   const findings = [];
   for (const [key, headCell] of Object.entries(headCells)) {
-    if (headCell.implementation !== 'rn-core' || headCell.skipReason != null) {
+    if (
+      !isControlImplementation(headCell.implementation) ||
+      headCell.skipReason != null
+    ) {
       continue;
     }
     const baseCell = baseCells[key];
@@ -1160,11 +1206,12 @@ export function gate({
           launchRatios: headValue.launchRatios,
           arm: headValue.iterationsPerLaunch,
           control: (() => {
+            const controlName = controlImplementation(headEntry.implementation);
             const controlCell =
-              headEntry.implementation === 'rn-core'
+              headEntry.implementation === controlName
                 ? null
                 : cellsFrom(head)[
-                    `${headEntry.scenario}:rn-core:${headEntry.n}`
+                    `${headEntry.scenario}:${controlName}:${String(headEntry.n)}`
                   ];
             return controlCell == null
               ? null
@@ -1178,11 +1225,12 @@ export function gate({
             launchValues(cellsFrom(base)[key], metric) ??
             undefined,
           control: (() => {
+            const controlName = controlImplementation(baseEntry.implementation);
             const controlCell =
-              baseEntry.implementation === 'rn-core'
+              baseEntry.implementation === controlName
                 ? null
                 : cellsFrom(base)[
-                    `${baseEntry.scenario}:rn-core:${baseEntry.n}`
+                    `${baseEntry.scenario}:${controlName}:${String(baseEntry.n)}`
                   ];
             return controlCell == null
               ? null
@@ -1409,7 +1457,7 @@ export function baselineTable(baseline) {
             ratio: value.ratio,
             launchRatios: value.launchRatios ?? [value.ratio],
             samples: value.samples ?? 1,
-            control: cell.implementation === 'rn-core',
+            control: isControlImplementation(cell.implementation),
           },
         ])
       ),
