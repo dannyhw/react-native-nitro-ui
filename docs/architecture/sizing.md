@@ -249,8 +249,15 @@ and the answer's width is replaced with the proposal's. Android has to be told t
 (`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt:632`). Unbinding the height is not a
 detail — a `maxHeight` left in place lets a box that is temporarily the wrong height clamp the answer to itself, so
 the wrong height confirms itself (the report matches the layout, so the engine is never told and never corrects).
-The `fillWidth` measure must also not run on empty bounds — a zero proposal is not the box's width — which
-is why `refreshContentSize()` refuses it there.
+The `fillWidth` measure must also not run while the box has no **width** — a zero proposal is not the box's
+width — which is why `refreshContentSize()` refuses it there (`ios/core/NitroSwiftUIHost.swift:356`). Which
+half of the box gates it matters as much as the fact that something does: the **width** is the input a
+`fillWidth` control may not invent, so it gates; the **height** is the number being measured, so it must never
+gate. A cold first instance of a `fillWidth` control really can be laid out 0 tall — the fallback a component
+declares is registered by its first *view*, and Fabric creates that view after the shadow node's first
+measure — so a measure that waits for a non-zero height closes the loop the sizing engine exists to break: no
+measure, so no height, so no measure. On iOS the stalled host then paints SwiftUI's minimum content
+(`clipsToBounds` is false), which looks like a working control that has lost its track.
 
 **What a `fillWidth` cache entry stores.** Only the height is the configuration's own answer. The
 width in the entry is the last box width some instance was measured at — a restatement of a parent,
