@@ -99,8 +99,9 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     // Containment is for controls that present UI (menus, pickers); a Toggle
     // never does, so it stays a plain view (core-architecture §2).
     host.needsContainment = false
-    // T11 and `measureContent()` want the fitting size; it costs one
-    // `sizeThatFits` per commit and nothing for components that opt out.
+    // T11 and `measureContent()` want the fitting size. Cost is one
+    // `sizeThatFits` per bounds or trait change, not per commit, and nothing for
+    // components that opt out.
     host.wantsContentSize = true
   }
 
@@ -184,7 +185,15 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
       guard let label = model.accessibilityLabel else { return .first(.null) }
       return .second(label)
     }
-    set { model.accessibilityLabel = newValue.asType(String.self) }
+    set {
+      // Rendered, not bookkeeping: the label is on the SwiftUI element, so it
+      // needs a commit or a late-set label never reaches VoiceOver. Same rule as
+      // `disabled` above - only the handshake props may skip `markDirty()`.
+      let next = newValue.asType(String.self)
+      guard next != model.accessibilityLabel else { return }
+      model.accessibilityLabel = next
+      host.markDirty()
+    }
   }
 
   var nuiPerfId: Variant_NullType_Double {
