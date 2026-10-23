@@ -15,6 +15,8 @@
 #include <fbjni/fbjni.h>
 #include <NitroModules/HybridObjectRegistry.hpp>
 
+#include "JHybridNitroUiProgressSpec.hpp"
+#include "views/JHybridNitroUiProgressStateUpdater.hpp"
 #include "JHybridNitroUiSliderSpec.hpp"
 #include "JFunc_void_double_double.hpp"
 #include "views/JHybridNitroUiSliderStateUpdater.hpp"
@@ -32,6 +34,14 @@ int initialize(JavaVM* vm) {
   });
 }
 
+struct JHybridNitroUiProgressSpecImpl: public jni::JavaClass<JHybridNitroUiProgressSpecImpl, JHybridNitroUiProgressSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiProgress;";
+  static std::shared_ptr<JHybridNitroUiProgressSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiProgressSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiProgressSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiProgressSpec();
+  }
+};
 struct JHybridNitroUiSliderSpecImpl: public jni::JavaClass<JHybridNitroUiSliderSpecImpl, JHybridNitroUiSliderSpec::JavaPart> {
   static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiSlider;";
   static std::shared_ptr<JHybridNitroUiSliderSpec> create() {
@@ -54,6 +64,8 @@ void registerAllNatives() {
   using namespace margelo::nitro::nitroui;
 
   // Register native JNI methods
+  margelo::nitro::nitroui::JHybridNitroUiProgressSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiProgressStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSliderSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSliderStateUpdater::registerNatives();
@@ -69,6 +81,12 @@ void registerAllNatives() {
                     "The HybridObject \"HybridNitroUiCore\" is not default-constructible! "
                     "Create a public constructor that takes zero arguments to be able to autolink this HybridObject.");
       return std::make_shared<HybridNitroUiCore>();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiProgress",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiProgressSpecImpl::create();
     }
   );
   HybridObjectRegistry::registerHybridObjectConstructor(
