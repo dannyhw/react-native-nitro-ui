@@ -286,3 +286,312 @@ and read the drift line before anything else.
    regression the gate exists to catch. If component tasks keep benchmarking on
    dev machines, the honest answer is "benchmarks inform review, they do not
    gate" — which is what is built — but `docs/PLAN.md` should say so out loud.
+
+---
+
+# Round 2 — review response
+
+Reviewer verdict on round 1 (`d7f546e`) was CHANGES-REQUIRED: four blocking items,
+fourteen should-fix items and eight nits (`docs/tasks/T02-bench.review.md`, now
+committed). Round 2 is `8dd6c0f..HEAD` on this branch, rebased on `main`
+(D7b, D10-D14 and the Slider/Progress briefs are the only things the rebase
+picked up; `bun install` after it changed nothing).
+
+One round-1 commit is gone: the `NitroUiPackage.kt` comment-only fix. T03 fixed
+the same autolinking regex better and added `autolinking:check`, so this branch
+takes main's file and drops `e7fbabd`. `package.json`'s `check` chain and
+CONTRIBUTING's sections were merged by hand rather than taken wholesale.
+
+## Item-by-item
+
+### BLOCKING
+
+| Item | Fix | Where |
+| --- | --- | --- |
+| B1 gate cannot fail | Absolute control drift no longer vetoes anything. `--check` compares launch-paired ratios with a committed **ratio** baseline; `--compare` gates `head(x/rn-core) / base(x/rn-core)`; noise is measured **within the run** per (scenario, N, metric) from the spread of the paired ratio and suppresses only the cell it was seen on. Control drift is now a "context only" line in the report. | `gate()`, `noiseTable()`, `controlMovement()` in `scripts/bench/lib.mjs` |
+| B2 slot does not typecheck | `paths: { "react-native-nitro-ui": ["../src/index.ts"] }` in `bench/tsconfig.json` (TS mirror of Metro's `extraNodeModules`), so `bun run bench:typecheck` typechecks the slot against the library's source. `onValueChange` and `rowStyle` are imported and used; the snippet matches T10's API (`value`, `onValueChange(value)`, `style`, `testID`). `Switch` is resolved at runtime so the arm is live the moment T10 exports one, and until then it emits a `skip` record with the reason instead of measuring a stand-in. | `bench/tsconfig.json`, `bench/src/implementations/nitroUi.tsx` |
+| B3 iOS arms unequal | `label` dropped and `modifiers={[labelsHidden()]}` on every Expo `Toggle`, with the modifier array hoisted to module scope. All three arms now render a bare switch. Tables below are re-measured after this. | `bench/src/implementations/expoUi.ios.tsx` |
+| B4 merge conflicts | Rebased on `main`; `NitroUiPackage.kt` is main's version, `check` chains and CONTRIBUTING sections merged, `bun install` run. | - |
+
+### SHOULD-FIX (measurement)
+
+| Item | Fix |
+| --- | --- |
+| S1 JS poll inside the timed region | The probe resolves `awaitMount(timeoutMs)` / `awaitPresented(timeoutMs)` from the native mount hook. The `setTimeout(0)` loop is gone; a slow mount is no longer also charged to JS CPU. |
+| S2 `presented` after a JS round trip | Frame capture is armed **natively in the mount turn**: iOS a one-shot `CADisplayLink` inside the mount callback, Android the activity window's `OnFrameMetricsAvailableListener` reporting intended vsync + total duration. Stored as `lastPresentedNs`; `nextFrameNs()` is now pacing only. `presented` is labelled a frame stamp, and every cell prints a sanity line counting `presentedBeforeMount` / `mountBeforeCommit`. |
+| S3 100 Hz CPU ticks | `/proc/self/task/<tid>/schedstat` field 0 (ns) with the jiffies `stat` file only as a fallback; the report text about "0 or 10 ms" is corrected. |
+| S4 Profiler zeros in release | Dropped rather than aliased: `BenchApp.tsx` has no `Profiler` and the report prints no `React.Profiler 0.00 ms/op` row. (Aliasing `ReactFabric-profiling` would have changed what every arm links against.) |
+| S5 mount bracket covered unmount | Separate brackets: `unmountMainNsPerOp` is its own metric, gated and reported (`UI CPU/unmount`). On iOS `mount N=50` rn-core it is 2.67 ms against 8.86 ms for the mount, i.e. ~23 % of the cycle was previously invisible attribution. |
+| S6 "median of medians" | `median(launchMedians)` with the MAD **of the launch medians**; the bootstrap is now hierarchical (resample launches, then iterations inside each launch) and reports `hierarchical: true`. |
+| S7 clock offset | Removed. Timestamps are absolute `CLOCK_UPTIME_RAW` / `System.nanoTime()` values, directly comparable with `NitroUiCore.now()` and T10's perf marks (D1); the wrong "~1e17 ns" reasoning is gone from the comments. |
+| S8 heap / leak | `globalThis.gc?.()` runs before every footprint sample and the result is recorded as `heapCollected`. Android adds `Debug.getNativeHeapAllocatedSize()` and Java-heap-used per phase, surfaced as `nativeBytesPerInstance` / `javaBytesPerInstance` (reported, deliberately not gated). The leak slope is now gated, and only when the climb is monotonic. |
+| S9 gate covered reference arms | `GATED_IMPLEMENTATIONS = ['nitro-ui']`. `rn-core` is the control, `expo-ui-*` are labelled "reference arm" in every verdict row. |
+
+### SHOULD-FIX (runner, report, baselines)
+
+| Item | Fix |
+| --- | --- |
+| S10 unattributable baselines | `baselineBlockers()` refuses: dirty tree, any incomplete launch, no recorded load average, load above 0.5 x cores, and (found this round) a plan other than `full` or fewer than 8 launches. `--force` overrides and is the only way. Machine, load average, OS and emulator image are recorded in the run. Both round-1 baselines are deleted: they claimed `sha: e39db3c` (main) while being recorded from a dirty tree. |
+| S11 `report.mjs --compare` ignored `noisy` | One `gate()` in `lib.mjs`, called from the shared `comparisonSections()` in `render.mjs` that both the runner and the reporter use; a unit test asserts the reporter's exit code through the real CLI. |
+| S12 results collisions | `<sha>[-dirty]-<platform>-<utc>.json`, with `newestResultsName()` preferring clean runs, so a dirty run can no longer become a `--compare` base under a clean commit's name. |
+| S13 perf gate unwired | `perf:renders` runs inside `bun run check` (cheap while nothing is measured, and it passes loudly with "nothing to measure"). |
+| S14 bench.yml | `gh pr checkout` for the PR revision; `OWNER/MEMBER/COLLABORATOR` gate on who may start it; anchored `^/bench` trigger plus the `bench` label; concurrency keyed on the PR number; `runs-on: xcode-27` (D2); Android via `reactivecircus/android-emulator-runner` (system image + KVM); `--prebuild` on both base and head; nightly labelled as a noise sample; `benchmarks.md` no longer claims base and head are interleaved. |
+| devices.mjs | `--shutdown` powers off only what the run booted; animation scales are restored on every exit path; device keys carry the OS runtime (D9); load average is recorded. |
+
+### Re-render gate (report question 2)
+
+Implemented as proposed: `measureRenders` tests must drive a `scenario`, and the
+gate now requires (1) the count equals the baseline, (2) **every** measured run
+produced the same count - the median of ten used to hide nondeterminism,
+(3) `issues.initialUpdateCount === 0`, (4) `issues.redundantUpdates` empty.
+`docs/architecture/benchmarks.md` "Adding a `*.perf-test.tsx`" gives component
+tasks the harness pattern (flip the control a few times, then render an unrelated
+parent a few times) so "re-renders when told, and only then" is the assertion.
+The host-mock prop-churn test the review sketching is T10's to write - the gate
+reads whatever `*.perf-test.tsx` exists.
+
+### NITs
+
+Fixed: `pthread_mach_thread_np(pthread_self())` instead of scanning `task_threads`
+(and the port rights are deallocated); `stackStyle(n)` memoised per N; the
+non-existent `packageExportConditionTranslations` Metro option removed;
+`nextFrameNs` on Android gets the same 2 s fallback iOS has; `renders.mjs`
+requires all runs to agree; the "0 or 10 ms" report text is corrected. The R8
+note about Kotlin `HybridObject`s is T03/T10 territory and left alone.
+
+## Gates
+
+| Command | Result |
+| --- | --- |
+| `bun run check` | PASS - typecheck, bench:typecheck (both tsconfigs), lint, format, 61 Jest tests, perf:renders, nitrogen drift, autolinking, bob, publint, manifest |
+| `bun bench --platform ios --plan quick` | PASS end to end at `cc39202` (230 s) and again at the final tree `e7d4811` (234 s), `problems: none`, 80/80 samples per measured cell, ratios reproduced within 2 % |
+| `bun bench --platform android --plan quick --check` | PASS end to end at `cc39202` (225 s) and at `e7d4811` (227 s); the latter gated against the committed Android baseline: "No gated metric exceeded the 1.20x threshold against the baseline", exit 0, `problems: none` |
+| `bench:report <iOS run> --check` | `no baseline at bench/baselines/ios27-sim-iphoneair.json. Create it with --update-baseline.`, exit 1 - the honest no-baseline path, re-verified against the `e7d4811` run |
+| `bench:report <Android run> --check` | "No gated metric exceeded the 1.20x threshold against the baseline", exit 0; 6 metric cells labelled noisy in that run, the rest conclusive |
+| `bun bench --platform android --plan full --launches 8` | see Baselines below |
+| negative test - gate can fail | `scripts/__tests__/bench-gate.test.js`: a synthetic run where `nitro-ui` doubles must fail (ratio 2.0, CI low > 1.05) **and** `spawnSync` of `report.mjs --compare` must exit 1; the same file asserts the reference arms can never fail, that control drift neither suppresses nor manufactures a verdict, that a noisy cell is suppressed alone, that a monotonic leak climb gates, and that `--update-baseline` refuses a dirty/broken/busy/quick run |
+
+## Results (both platforms, clean tree at `cc39202`, `--plan quick`)
+
+Both runs report `problems: none`, 80/80 samples in every measured cell, and the
+`nitro-ui` arm self-skips with a reason - T10's `Switch` is not in `src/` yet, so
+there is nothing to gate on this round. `UI CPU/unmount` is the new teardown
+metric. `presented` is a frame stamp: iOS is one frame after the mount, Android
+is latched to the next intended vsync, so the honest read is arm-versus-arm
+within a platform, never iOS-versus-Android.
+
+### iOS (`iPhone Air` simulator, key `ios27-sim-iphoneair`)
+
+Absolute, `mount N=50`, median of launch medians with MAD on the latency metrics:
+
+| Arm                        | presented           | mounted           | JS commit          | JS CPU/op | UI CPU/op | UI CPU/unmount |
+| -------------------------- | ------------------- | ----------------- | ------------------ | --------- | --------- | -------------- |
+| rn-core                    | 15.98 ms +/- 21 us  | 12.16 ms +/- 1 ms | 3.36 ms +/- 122 us | 3.45 ms   | 8.86 ms   | 2.67 ms        |
+| expo-ui-host-per-control   | 105.94 ms +/- 466 us | 17.25 ms +/-128us | 2.24 ms +/- 7 us   | 2.43 ms   | 72.00 ms  | 18.87 ms       |
+| expo-ui-shared-host        | 48.76 ms +/- 1.3 ms | 4.61 ms +/- 81 us | 1.11 ms +/- 33 us  | 1.28 ms   | 30.09 ms  | 29.71 ms       |
+
+Launch-paired ratio to rn-core (rn-core is 1.00x by construction):
+
+| Cell         | Arm                      | presented | mounted | JS commit | JS CPU/op | UI CPU/op | UI CPU/unmount | bytes/inst           |
+| ------------ | ------------------------ | --------- | ------- | --------- | --------- | --------- | -------------- | -------------------- |
+| mount N=50   | expo-ui-host-per-control | 6.64x     | 1.42x   | 0.67x     | 0.71x     | 7.83x     | 5.57x          | n/a                  |
+| mount N=50   | expo-ui-shared-host      | 3.06x     | 0.39x   | 0.34x     | 0.38x     | 3.48x     | 11.13x         | n/a                  |
+| update N=50  | expo-ui-host-per-control | 1.00x     | 0.98x   | 1.63x     | 1.30x     | 1.86x     | n/a            | n/a                  |
+| update N=50  | expo-ui-shared-host      | 1.00x     | 0.76x   | 0.83x     | 0.71x     | 1.60x     | n/a            | n/a                  |
+| memory N=200 | expo-ui-host-per-control | n/a       | n/a     | n/a       | n/a       | n/a       | n/a            | 3.69x (392.6 KiB)    |
+| memory N=200 | expo-ui-shared-host      | n/a       | n/a     | n/a       | n/a       | n/a       | n/a            | 2.48x (264.7 KiB)    |
+
+Absolute rn-core baselines those ratios divide by: `update N=50` 16.13 ms
+presented / 3.51 ms mounted / 995.64 us commit / 1.33 ms JS CPU / 4.85 ms UI
+CPU, and `memory N=200` 106.5 KiB per instance.
+
+Metrics the run flagged as too noisy to carry a verdict (suppressed for that
+cell only): iOS mount host-per-control `UI CPU/unmount` (35.0% within-run
+spread), iOS mount shared-host `mounted` (10.0%) and `UI CPU/op` (11.2%), and
+iOS update `JS commit` on both Expo arms (18.6% / 19.2%).
+
+### Android (AVD `nitroui_t02`, key `android35-emu-pixel9`)
+
+Absolute, `mount N=50`:
+
+| Arm                      | presented           | mounted           | JS commit           | JS CPU/op  | UI CPU/op  | UI CPU/unmount |
+| ------------------------ | ------------------- | ----------------- | ------------------- | ---------- | ---------- | -------------- |
+| rn-core                  | 48.25 ms +/- 597 us | 19.90 ms +/- 505 us | 1.22 ms +/- 6 us    | 1.52 ms    | 6.33 ms    | 66.28 us       |
+| expo-ui-host-per-control | 49.34 ms +/- 276 us | 23.45 ms +/-121 us | 6.22 ms +/- 40 us   | 7.27 ms    | 14.01 ms   | 281.31 us      |
+| expo-ui-shared-host      | 49.31 ms +/- 424 us | 19.36 ms +/- 643 us | 1.38 ms +/- 13 us   | 1.80 ms    | 4.76 ms    | 180.39 us      |
+
+### Android ratio to rn-core
+
+| Cell         | Arm                      | presented | mounted | JS commit | JS CPU/op | UI CPU/op | UI CPU/unmount | bytes/inst        |
+| ------------ | ------------------------ | --------- | ------- | --------- | --------- | --------- | -------------- | ----------------- |
+| mount N=50   | expo-ui-host-per-control | 1.02x     | 1.18x   | 5.41x     | 4.83x     | 2.22x     | 3.58x          | n/a               |
+| mount N=50   | expo-ui-shared-host      | 1.02x     | 0.96x   | 1.13x     | 1.17x     | 0.83x     | 3.36x          | n/a               |
+| update N=50  | expo-ui-host-per-control | 0.93x     | 0.78x   | 2.27x     | 1.42x     | 4.57x     | n/a            | n/a               |
+| update N=50  | expo-ui-shared-host      | 0.95x     | 0.86x   | 1.09x     | 0.91x     | 3.46x     | n/a            | n/a               |
+| memory N=200 | expo-ui-host-per-control | n/a       | n/a     | n/a       | n/a       | n/a       | n/a            | 3.55x (191.3 KiB) |
+| memory N=200 | expo-ui-shared-host      | n/a       | n/a     | n/a       | n/a       | n/a       | n/a            | 0.86x (46.3 KiB)  |
+
+Absolute rn-core baselines: `update N=50` 48.92 ms presented / 16.19 ms mounted
+/ 804.52 us commit / 1.49 ms JS CPU / 2.18 ms UI CPU, and `memory N=200` 53.9
+KiB per instance. Noisy this run: Android mount host-per-control
+`UI CPU/unmount` (47.2%), Android mount shared-host `UI CPU/op` (16.1%) and
+`UI CPU/unmount` (11.3%). No out-of-order samples on either platform.
+
+### What the numbers say now that B3 is fixed
+
+With the label gone from the Expo arms, `presented` on iOS is no longer a text
+layout measurement: a control hosted per row costs 6.64x the frames of the
+control and a shared host 3.06x, which is the hosting cost the benchmark was
+meant to isolate. On Android the same three arms land within 2 % of each other
+on `presented` (Compose reaches the same vsync whichever host it is in) and the
+cost shows up instead in JS commit, where one Expo view per row is 5.41x the
+control. `UI CPU/unmount` also stops being free in the shared-host case (11.13x
+on iOS), which is exactly the attribution S5 said round 1 was missing.
+
+### Where the per-instance memory actually is (Android)
+
+PSS per instance was never a view cost on its own, and with the heap breakdown it
+stops looking like one. `memory N=200`, bytes per instance, footprint delta after
+`globalThis.gc?.()` + a native collect + a 1 s settle:
+
+| Arm | PSS/inst | native heap | Java heap | unattributed |
+| --- | --- | --- | --- | --- |
+| rn-core | 53.9 KiB | 40.1 KiB | 10.7 KiB | 3.1 KiB |
+| expo-ui-host-per-control | 191.3 KiB | 69.9 KiB | 101.6 KiB | 19.8 KiB |
+| expo-ui-shared-host | 46.3 KiB | 9.3 KiB | 24.8 KiB | 12.3 KiB |
+
+`rn-core`'s 54 KiB per switch is 94 % runtime heap churn, and the shared-host
+Expo arm's footprint grows *less* than `rn-core`'s while holding a Compose tree -
+which is exactly the reading the review said was unbelievable without a
+breakdown. The Expo host-per-control arm is where the real memory is: 100 KiB of
+Java heap per control, i.e. one Compose/View hierarchy's worth of Java objects
+per control.
+
+## Noise level (rn-core control, two consecutive runs, same build)
+
+The same `--compare` path the gate uses, head vs base being two runs of the same
+code. These are absolute control movements, reported as context, never as a
+verdict.
+
+| Platform | Metrics that moved > 10 % | Largest |
+| --- | --- | --- |
+| iOS (run 1 dirty vs run 2 clean, same app) | 4 of 11 | mount N=50 JS CPU/op 1.22x |
+| Android (two clean consecutive runs) | 3 of 11 | update N=50 JS CPU/op 0.78x |
+
+Round 1 recorded 7 of 11 (Android) over 10 % and read that as "the gate can
+never run". It is still true that a single control metric can move 20 % between
+sessions - which is why the gate is ratio-based and why the *within-run* spread
+of the paired ratio decides whether a cell can carry a verdict. In these runs the
+runner flagged 5 metrics per run as too noisy to judge, per cell, and left the
+rest conclusive. That is the behaviour D9 asks for: the noisy cells go
+inconclusive on their own, the run still produces verdicts.
+
+The no-baseline path is honest too: `bench:report <file> --check` currently
+prints `--check: no baseline at bench/baselines/ios27-sim-iphoneair.json` and
+exits 1 rather than inventing a verdict.
+
+## Baselines
+
+`bench/baselines/android35-emu-pixel9.json` is new and was produced the way D9
+requires: clean tree at `7b376f7`, `--plan full`, `--launches 8`, `problems:
+none`, load average 3.58 over 14 cores (ceiling 7.0), run duration 1850 s, and
+the file records the machine, the OS build and the emulator image. It is
+ratio-only: every metric entry carries `ratio`, `launchRatios`, `samples` and
+`noise` and nothing else, because an absolute nanosecond or byte count has no
+business in a committed baseline. One blemish in its provenance -
+`machine.androidApi` is null, recorded from `device.sdkInt` where
+`devices.mjs` returns `sdk`, fixed in the commit after it. The AVD really is the
+`pixel_9` hardware profile on API 35, so the key matches D9's canonical Android
+device; `hw.device.name` beats `ro.product.model` in `devices.mjs` for exactly
+that reason.
+
+`bench/baselines/ios27-sim-iphoneair.json` and `android-api35-emu.json` /
+`ios-iphone-air-sim.json` are deleted: both round-1 files claimed `sha:
+e39db3c`, which is `main`, while being recorded from a dirty tree, and the
+absolute-drift guard that consumed them no longer exists.
+
+**No iOS baseline this round, deliberately.** D9 names one canonical device per
+platform and the canonical iOS device is an iPhone 17 (`ios27-sim-iphone17`);
+T02's brief pins an iPhone Air, and the iPhone 17 simulator on this machine
+belongs to another task, so minting an iOS baseline here would either key it to
+non-canonical hardware - which D9 says must use `--compare` instead - or touch a
+device this task may not touch. The gap closes with one command on whichever
+machine owns the canonical device:
+
+    bun bench --platform ios --plan full --launches 8 --update-baseline
+
+Until then `--check` on iOS says `no baseline at bench/baselines/...json` and
+exits 1, which is the honest answer. `--compare <ref>` works everywhere and is
+what component tasks should use for a pull request.
+
+Verified against the committed baseline, offline:
+
+| Command | Result |
+| --- | --- |
+| `bench:report <full run> --check` | "No gated metric exceeded the 1.20x threshold against the baseline", exit 0 |
+| `bench:report <quick run> --check` | verdicts on every quiet cell; 3 metrics labelled noisy per cell, no whole-run veto |
+| `bench:report <real run + a nitro-ui mount N=50 arm synthesised at 2.2x rn-core> --check` | reports `new arm - JS commit 2.20x, mounted 2.20x versus rn-core, nothing to regress against until the baseline is refreshed`, exit 0 - see the note below |
+| the same comparison against a baseline that *has* a `nitro-ui` value | `bench-gate.test.js` asserts FAIL plus exit 1 through the real `report.mjs` CLI |
+
+**One thing the reviewer will want to decide.** A `nitro-ui` arm that the
+baseline has never seen cannot regress - there is no prior ratio. Round 2 makes
+that visible (`new arm`, plus the arm's ratios versus `rn-core`) instead of
+silent, but it does not block, because D9's rule is a *regression* whose CI
+excludes the threshold, and inventing an absolute ceiling versus `rn-core` is a
+policy decision, not an implementation one. The practical consequence: the first
+run of a new component establishes its baseline; the second can fail. If the
+orchestrator wants "slower than `rn-core` blocks immediately", that is a D9
+amendment plus one number.
+
+## Machine conditions
+
+Two device-heavy tasks share this laptop (D13: this task and T10), so every
+number here has load recorded with it. The runner records `os.loadavg()` and the
+core count in each run and refuses to mint a baseline above 0.5 x cores.
+
+| Run | Load avg (1m / 5m) | Cores | Duration | Problems |
+| --- | --- | --- | --- | --- |
+| iOS quick (clean, `cc39202`) | 3.53 / 3.50 | 14 | 230 s | none |
+| Android quick (clean, `cc39202`) | 3.86 / 4.19 | 14 | 225 s | none |
+| Android quick #2 (run-to-run noise) | 2.84 / 3.24 at start | 14 | 226 s | none |
+| Android full x8 (baseline, `7b376f7`) | 3.58 / 5.20 | 14 | 1850 s | none |
+| `bun run check` | 3.2 - 9.5 across the session (T10 was building during the first attempt) | 14 | ~2 min | - |
+| iOS quick re-run (final tree, `e7d4811`) | 3.26 / 3.98 | 14 | 234 s | none |
+| Android quick re-run + `--check` (final tree, `e7d4811`) | 6.96 / 4.29 at record time (the run itself is emulator + Metro on 14 cores) | 14 | 227 s | none |
+
+The Android emulator's console port moved again (5572 -> 5554), which is why
+`scripts/bench/devices.mjs` resolves the serial from the AVD name instead of
+trusting a port. Devices this task started are shut down at the end of the task;
+animation scales are restored by the runner on every exit path.
+
+## Questions for orchestrator (round 2)
+
+Round 1's questions 4, 5 and 7 are answered by D9 and are closed: baselines are
+ratio-only and gated by `baselineBlockers()`; device keys carry the OS runtime
+and non-canonical hardware uses `--compare`; PLAN.md-facing docs now say plainly
+that on-device benchmarks inform review and that the deterministic Reassure count
+is the gate that blocks. Questions 1, 2, 3 and 6 were addressed inside T03/T10's
+scope (`autolinking:check`, the stable-callback contract, `METRO_PORT` removed
+from the bench docs, AVD-name resolution).
+
+New, in rough order of consequence:
+
+1. **Canonical iOS device.** D9 names `ios27-sim-iphone17`; T02's brief assigns
+   an iPhone Air, and other tasks hold the iPhone 17 sim on this machine. Either
+   designate iPhone Air as canonical until CI exists (then one
+   `--update-baseline` run closes it), or accept that no one can `--check` iOS
+   locally and that only CI mints that file. Right now iOS has ratios and
+   `--compare` only.
+2. **A `nitro-ui` arm's first run cannot fail** (see the note above): a
+   regression needs a prior ratio. Fine as policy, or amend D9 with an absolute
+   ceiling versus `rn-core` for gated arms.
+3. **The device key cannot distinguish two machines with the same device class.**
+   `android35-emu-pixel9` is this desk AVD *and* CI's emulator, and the committed
+   baseline is one of them. Ratio-only baselines plus recorded load is what
+   mitigates it; `--force` is the only way to write one, and the `sha` inside says
+   who produced it.
+4. **T10's `Switch` sizing versus the bench.** `style={rowStyle}` fixes a
+   44 pt/48 dp row for every arm today, which hides D14's point that iOS 26+
+   renders a 61x28 Toggle. The first real `nitro-ui` numbers will be measured
+   inside that fixed box. Worth an explicit decision before T10's numbers get
+   quoted anywhere.
