@@ -109,6 +109,21 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   private var contentSizeNeedsMeasure = true
   /// Set by ``noteContentSizeMayHaveChanged()``, consumed by ``commit()``.
   private var contentMayHaveChangedSize = false
+  /// Whether a `model.objectWillChange.send()` is waiting for SwiftUI to render.
+  ///
+  /// `send()` only *invalidates* SwiftUI's graph: the body is re-evaluated in
+  /// SwiftUI's own update pass, which runs later. A measure taken in the same turn
+  /// as the commit that caused it therefore numbers the content *before* the prop
+  /// that triggered it - which is how a size-affecting prop could change the
+  /// control and never change the size Yoga was told. Set by ``commit()``, consumed
+  /// by ``measureFittingSize()``, which applies the update first.
+  ///
+  /// It survives a measure that could not apply the update: outside a window
+  /// SwiftUI has nothing to lay out, so ``refreshContentSize()`` waits for the next
+  /// measure point instead of caching a size that describes content which is on
+  /// screen no more. A wrong number is worse than a late one - the engine treats a
+  /// report as exact and stops asking.
+  private var contentUpdatePending = false
   /// The size the sizing engine already has from this host. Compared with an
   /// epsilon, so a measure that wobbles by a fraction of a point does not turn
   /// into a Fabric commit (risk R12).
@@ -164,6 +179,13 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     } else {
       markFirstFrameIfNeeded()
       attachToContainerIfNeeded()
+      // The other half of ``refreshContentSize()``'s rule: a content update whose
+      // host was not in a window yet could not be applied when ``commit()`` asked
+      // for a size, and a recycled host whose frame does not change gets no
+      // `layoutSubviews` after this one. Here it has a window, so the pending
+      // update can be applied and measured - and the guard in
+      // ``refreshContentSize()`` costs three bools when nothing is pending.
+      refreshContentSize()
     }
   }
 
@@ -217,6 +239,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     } else {
       model.objectWillChange.send()
     }
+    contentUpdatePending = true
 
     // Not a measure point: a commit usually changes pixels, not the control's
     // size, and `sizeThatFits` on every commit is a synchronous SwiftUI layout
@@ -245,6 +268,14 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     isDirty = true
     suppressesNextAnimation = true
     contentSizeNeedsMeasure = true
+    contentUpdatePending = false
+    // Drop the previous mount's size as well: until this host is measured again,
+    // `measureContent()` must answer "never measured" (0x0) rather than another
+    // instance's size, and the engine must not be handed a number that belongs to
+    // the view this one replaced.
+    sizeLock.lock()
+    _contentSize = nil
+    sizeLock.unlock()
     // The next mount is a new view as far as measurements go: a recycled host
     // that kept its flag would never report `firstFrame` again.
     hasMarkedFirstFrame = false
@@ -266,6 +297,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     _contentSize = nil
     sizeLock.unlock()
     contentSizeNeedsMeasure = true
+    contentUpdatePending = false
   }
 
   /// Tell the sizing engine this instance is finished, then forget its id.
@@ -313,6 +345,13 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
       // The hot path: three bools, no SwiftUI.
       return contentSize
     }
+    if contentUpdatePending, hostedView.window == nil {
+      // The content was just changed and cannot be laid out yet, so any number
+      // measured now belongs to the content this one replaced. Keep the measure
+      // pending: the first `layoutSubviews` after the mount is in a window, and
+      // `measureFittingSize()` applies the update there.
+      return contentSize
+    }
     contentSizeNeedsMeasure = false
     let size = measureFittingSize()
     sizeLock.lock()
@@ -351,6 +390,16 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   }
 
   private func measureFittingSize() -> CGSize {
+    // The number has to describe the content as it now is, and after a commit the
+    // `send()` above may not have been rendered yet. Laying the hosted view out
+    // here makes SwiftUI apply that update, so what follows is the new content's
+    // fitting size rather than the previous one's. Only a commit that can move the
+    // size gets this far: `refreshContentSize` returns early unless a measure is
+    // pending, so this is one layout per size-affecting change - not per commit.
+    if contentUpdatePending {
+      contentUpdatePending = false
+      hostedView.layoutIfNeeded()
+    }
     if #available(iOS 16.0, *) {
       // An unbounded proposal asks SwiftUI what the control wants to be, which is
       // the intrinsic size T11 needs; Yoga's box is a separate question.
