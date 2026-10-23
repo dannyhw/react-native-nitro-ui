@@ -168,8 +168,10 @@ namespace margelo::nitro::nitroui {
       /// both - measured sizes are exact integers there, so the tighter value
       /// costs nothing and keeps one rule instead of two (review N4).
       static constexpr float kEpsilon = 0.5f;
-      /// Immediate Fabric commits one flush may issue, like Expo's
+      /// Immediate Fabric commits one flush may issue by default, like Expo's
       /// `kImmediateSizeUpdateBudgetPerTurn`. The rest go out asynchronously.
+      /// A platform whose flush runs inside the frame it is about to cancel wants
+      /// fewer than this - see `flush(int32_t)`.
       static constexpr int32_t kImmediateBudgetPerTurn = 2;
 
       /// Trace stages: the engine laid an instance out with this size, the engine
@@ -299,10 +301,33 @@ namespace margelo::nitro::nitroui {
       void report(int64_t instanceId, float width, float height, uint32_t flags);
 
       /**
-       * Apply the queued reports as Fabric state updates. Returns `true` when at
-       * least one size changed, i.e. the layout about to be drawn is stale.
+       * Apply the queued reports as Fabric state updates, spending the default
+       * budget of synchronous ones. Returns `true` when at least one size
+       * changed, i.e. the layout about to be drawn is stale.
        */
       bool flush();
+
+      /**
+       * `flush` with the platform's own budget of synchronous state updates.
+       *
+       * A synchronous push is a Fabric commit run where `flush` was called, and
+       * what that is worth differs by platform. iOS flushes from a run-loop
+       * observer below Core Animation's commit observer, so the commit joins the
+       * turn that is already on its way: two of them cost 8.5ms for a batch of
+       * 200 (T11). Android flushes from an `OnPreDrawListener` that returns
+       * `false`, so each synchronous commit is a full re-layout bought inside a
+       * frame that never reaches the screen. One is still worth paying - it is the
+       * correction D17 asks for, and because it is shared by every instance with
+       * the same configuration it carries a whole batch at once - but a second is
+       * a re-layout of a tree that has just become correct: measured on that batch
+       * of 200, 36.2-38.5ms for two synchronous pushes and 36.6ms for one, while
+       * spending none costs 0.09ms and leaves every instance a wrong-size frame
+       * (T12 phase 2). The instance that reported is corrected before the
+       * cancelled frame either way, which is the rule D17 actually asks for.
+       *
+       * Clamped at zero: a platform may spend none.
+       */
+      bool flush(int32_t immediateBudget);
 
       /// Whether anything is waiting for `flush`. For the platform schedulers.
       bool hasPendingReports() const;
@@ -401,7 +426,7 @@ namespace margelo::nitro::nitroui {
       };
 
       /// Apply reports queued by `report`; takes the lock itself.
-      bool applyReports(std::vector<Report>& reports);
+      bool applyReports(std::vector<Report>& reports, int32_t immediateBudget);
       void recordTraceLocked(int64_t instanceId, int32_t stage, float width, float height);
 
       /// `needsCorrection_` helpers. Caller holds the lock; the id lists are the

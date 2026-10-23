@@ -49,6 +49,14 @@ namespace margelo::nitro::nitroui {
     static bool flush();
 
     /**
+     * `flush` with the platform's own budget of synchronous state updates, which
+     * is what a platform pays per one: on Android a synchronous push is a commit
+     * inside the pre-draw pass that this flush cancels anyway. The Android host
+     * spends one; iOS spends the default two (`docs/architecture/sizing.md` §3).
+     */
+    static bool flush(int32_t immediateBudget);
+
+    /**
      * The environment changed (dynamic type, bold text, font scale, density,
      * locale): drop every cached size so all controls measure again.
      */
