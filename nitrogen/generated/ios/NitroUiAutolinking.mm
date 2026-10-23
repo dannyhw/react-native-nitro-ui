@@ -14,6 +14,7 @@
 #include "HybridNitroUiButtonSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
 #include "HybridNitroUiSwitchSpecSwift.hpp"
+#include "HybridNitroUiSegmentedControlSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -51,6 +52,13 @@
     "NitroUiSwitch",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiSwitchSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiSwitch();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiSegmentedControl",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiSegmentedControlSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiSegmentedControl();
       return hybridObject;
     }
   );
