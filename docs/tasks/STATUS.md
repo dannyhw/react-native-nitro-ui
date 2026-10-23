@@ -14,6 +14,6 @@
 | FIX1 | iOS Slider disabled a11y probe (main iOS harness red since 381b1f2) | Apex | — | merged |
 | G3 | Progress | — | — | planned (after T02 + T11) |
 | G2 | Button (owns R3 sizing test) | Apex | Opus | fix round 1 queued (F1 stuck-at-fallback sizing bug in shared hosts, bench port to main shape, docs) — starts after T14 merges |
-| T15 | Real-input verification (OS taps/drags on Switch, Slider, Button) | Apex | — | in progress |
+| T15 | Real-input verification (OS taps/drags on Switch, Slider; Button added after G2 merges) | Apex | — | in progress (reset onto main) |
 | G4 | SegmentedControl (+ Picker only if time, D19) | — | — | planned (after G2) |
 | G5 | DatePicker | — | — | moved to 0.2 (D19) |
