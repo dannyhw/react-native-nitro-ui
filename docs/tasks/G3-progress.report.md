@@ -27,7 +27,8 @@ Round 1 (implementation). Branch `task/G3-progress`; `main` @ `52823a9` merged i
   reports the gate; `animating` is derived from what the drawing code was handed. On **Android** the
   mirror and the pixels cannot disagree. On iOS a circular `ProgressView` spins whatever it is handed
   — including a determinate fraction — so for that one configuration the mirror reports a rule the
-  pixels do not follow (F3, now documented in the component page).
+  pixels do not follow (F3, now documented in the component page). The disagreement is two-way there:
+  an iOS indeterminate **bar** reports `true` and measures as pixel-still (measured in fix round 1).
 - **Accessibility.** Android publishes `ProgressBarRangeInfo` semantics (the real progressbar role)
   plus the label; iOS has no public progressbar/busy trait, so it sets label + `accessibilityValue`
   (`"0%"`…`"100%"`, `nil` value while indeterminate) — documented in the component page.
@@ -241,3 +242,155 @@ UI CPU and memory.
    (b) raise the ms bars by a factor when `HARNESS_TEST_TIMEOUT` is raised (they already key off
    nothing); (c) move them to a "quiet machine only" tag. I would pick (c) and keep the structural
    gates (`immediate` counts) everywhere.
+
+## Fix round 1 (review F1–F7)
+
+`docs/tasks/G3-progress.review.md` verdict **MERGE-AFTER-SMALL-FIXES** on `7928021`. `main` merged
+in first (FIX2/D20, T15b, and R1 — R1's `expectTimingBudget()` now carries this suite's one
+wall-clock number). All seven findings are addressed: two native-code fixes (F1, F2), one measured
+rejection plus documentation (F3), two report corrections (F4, F7), two test corrections (F5, F6).
+Every claim below is a line from a log, not a recollection.
+
+### F1 — the Android linear bar fills its box now
+
+`android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiProgress.kt:301` — both
+`LinearProgressIndicator` branches take `semantics.fillMaxWidth()`. M3's own default modifier is
+`size(240.dp, 4.dp)` and the `fillWidth` question forwards `minWidth = 0`, so the indicator measured
+its preferred 240 dp and sat centred in the host's box; under an *unbounded* constraint
+`fillMaxWidth` is a no-op, which is why the intrinsic measurement path is untouched.
+
+- The first Progress test now asserts the **drawn** width, not only Yoga's box:
+  `expect(Math.abs(linearMeasured.width - 300)).toBeLessThan(1)`
+  (`example/__tests__/Progress.harness.tsx:293`).
+- **Red first**, Android: `expected 60 to be less than 1`. iOS was green before the change, exactly
+  as the review predicted — the bug was Android-only, and the old test's two lines (box width,
+  measured *height*) could not see it.
+- Green after: `progress sizes: linearBox=300.19x4.19 linearMeasured=300.19x4.19`.
+- Pixels moved, so `docs/tasks/G3-progress/android-light.png` and `android-dark.png` are re-shot.
+  iOS pixels did not change (F3), so the iOS pair is untouched.
+
+### F2 — each native mount gets its own sizing id
+
+`src/core/useSizingId.ts` now takes the configuration the native view is keyed on and mints a fresh
+id when it changes; `Progress.tsx` passes `variant`. Fabric orders Delete before Create, so the
+dropped view's `forget(id)` was erasing the ledger entry the new mount had just filed, and a
+configuration that was not already exact in the cache never got corrected.
+
+- New test `re-measures a variant change that starts from a poisoned guess`: seed `137x23` on the
+  circular key, invalidate the environment, mount a linear bar, `rerender` it circular, then poll
+  until the box equals `measureContent()`. The handle map is cleared before the rerender so the poll
+  cannot answer with the view that is going away.
+- **Red on both platforms** — Android `box=137.14x23.24 measured=40.00x40.00`, iOS
+  `box=137.00x23.00 measured=20.00x20.00`. The ring stayed in the poisoned guess. The brief's
+  "if it is green today on both platforms, drop the code change" therefore does not apply: the fix
+  stays, next to the test.
+- Green after: `variant poison: linear=300.19x4.19 box=40.00x40.00 measured=40.00x40.00 guess=137x23`.
+- This is a shared-core fix, not a Progress fix: any component that remounts its native view on a
+  prop needs the same argument. Noted below, outside the review's 13.
+
+### F3 — iOS draws a determinate ring as a spinner: tried, measured, documented
+
+`Gauge(value:in:)` + `.gaugeStyle(.accessoryCircularCapacity)` behind `if #available(iOS 16.0, *)`
+builds and runs — and was measured before being rejected. It lays out a **58 pt** circle where this
+control's rings are **20 pt on iOS / 40 dp on Android**, so four Progress tests went red
+(`expected 38 to be less than 1`): a ring that resizes the moment a value arrives is the box-moving
+D20 exists to prevent, and iOS 16 sits above this library's 15.1 floor. `ios/components/Progress/HybridNitroUiProgress.swift`
+is **unchanged**; a custom `ProgressViewStyle` stays a reviewer's decision.
+
+Documented instead, in `docs/components/progress.md` (API table, mapping table, gate section,
+Limits) and in both `value` JSDocs:
+
+- a `circular` indicator does not draw its value on iOS — the fraction reaches VoiceOver and the
+  handle, not the pixels;
+- the off-window gate swap is only *visible* on a linear bar, so for a ring it stops work without
+  changing a pixel;
+- the mirror reports what the drawing was handed, and on iOS that can disagree with the pixels;
+- **measured**, not inferred: an iOS indeterminate `linear` bar shows an empty track and does not
+  move. Rows 1024–1046 of three simulator screenshots taken 600 ms apart are byte-identical, while
+  the rows of the indeterminate ring directly below them differ in the same frames — so the method
+  detects motion where there is some. The likely cause is the same fight the thickness limit
+  describes: our bar is 4 pt tall and `UIProgressView`'s indeterminate stripes want more.
+- the report's Summary sentences about the mirror and the gate are corrected above.
+
+### F4 / F7 — report and page corrections
+
+- The Android update **"0.09×"** is retracted: the expo arm writes a shared-object state, still
+  declares `mountSignal: true`, and so waits out `awaitMountNs` + `awaitPresentedNs` **inside** the
+  CPU bracket (`missingMount=80` in both cells), while the two arms also draw different controls.
+  The Android update cells are not comparable and no factor is quoted for them.
+- Run A's iOS `mounted` **verdict** is retracted: that cell carries `presentedBeforeMount=25`, and
+  `mounted` is not a D15 target metric.
+- `mounts many instances at once` mounts **40** instances, not 200.
+- The memory explanation no longer bills "the window observer per control" to Android — Android has
+  no observer. 130.9 KiB/instance is the library's existing per-host floor (Switch measured
+  128.9–134.2 KiB in T12); a zero-frame `UIView` is ≈1 KiB, not 45.
+- `progress.md` no longer says "a hidden or pooled indicator costs no frames". The test measures
+  that the flag closes on drop and on recycle; the CPU measurement is follow-up 4 below.
+
+### F5 / F6 — test corrections
+
+- `commits once per update at 60 Hz` settles (500 ms) after the 20th write and asserts
+  `toBe(updates)` instead of `>=`. Red proof, JS-only mutation (a wrapper effect that re-sent a
+  changed internal prop once per update): `expected 40 to be 20` on **both** platforms. The mutation
+  is not in the tree.
+- The `beforeAll` warm-up is gone and the first test carries its own `{ timeout: 20000 }`, the way
+  `mounts many instances at once` does. That warm-up is also why F2 survived a round: it made the
+  circular configuration an exact cache hit before any test could see the missing correction.
+- R1 integration: the 40-instance duration now goes through `expectTimingBudget()`, so it is
+  reported on every run and judged only under `HARNESS_TIMING=1` — e.g. `timing: Progress stress:
+  mount 40 instances 83.9ms (limit 10000ms) - reported, not gated`. Both full suites below ran
+  **without** `HARNESS_TIMING`.
+
+### Gates (fix round 1)
+
+| Gate | Result |
+| ---- | ------ |
+| `bun run check` | exit 0 — jest 118/118, `test:native`, `perf:renders`, nitrogen/autolinking/`bob build`/api-extractor/publint, manifest 290 files |
+| iOS full suite, no `HARNESS_TIMING` | 6 suites, 85/85, 44.8 s |
+| Android full suite, no `HARNESS_TIMING` | 6 suites, 85/85, 45.2 s |
+| Progress suite alone | 13/13 on both platforms |
+| Android JVM tests (Kotlin changed) | BUILD SUCCESSFUL |
+| Screenshots | Android light + dark re-shot (F1); iOS unchanged (no pixel change) |
+
+One Android run went red before that green one, and **R1's new gate is what caught it**: my Metro
+was still on 8293, the harness auto-shifted to 8294, and the run refused with *"state.json was
+published for Metro port 8293, not this run's 8294 — an earlier run left it behind. Fix the run
+rather than removing the assertion."* The stale Metro went away and the rerun is green; the five
+collateral failures were mine, not the tree's.
+
+Bonus, no code change: the LogBox toast the review saw in the screenshots is the example app's own
+`SafeAreaView has been deprecated and will be removed in a future release` warning (visible in
+logcat at app start). That answers follow-up 12; the example app still needs the fix.
+
+### The review's 13 follow-ups — recorded here, not fixed
+
+1. Bench: give `update.progress:expo-ui-*` on Android `mountSignal: false` (or give the expo arm a
+   probe-visible signal) and re-run, so the update CPU bracket is not padded by two probe timeouts.
+2. iOS: a determinate circular ring — a custom `ProgressViewStyle`, since `Gauge` measures 58 pt here
+   — if the value ever has to be visible.
+3. Harness: a detach-without-drop and re-attach test for the animation gate (`removeClippedSubviews`
+   or a screen detach), on both platforms.
+4. Measure UI-thread CPU with N hidden indeterminate indicators on both platforms — the brief's CPU
+   check, still unmeasured (see F7).
+5. iOS: have the window observer call `refreshAnimationReport()` so the mirror does not depend on an
+   off-window body re-run.
+6. D20 cost of a cold-corrected ring at 60 Hz: declare per-configuration fallbacks, or document
+   `prewarm` with the `'circular'` key (today a cold ring is `answerChanged` for life).
+7. Android: read `model.value` inside the `progress` lambda (draw phase) and hoist the semantics
+   modifier, so a 60 Hz write skips recomposition and allocates nothing.
+8. iOS: cache the SwiftUI `Color` for the tint in the setter instead of building `Color(UIColor)` on
+   every body run.
+9. iOS: a fresh indeterminate mount draws one empty-determinate frame before `didMoveToWindow` flips
+   `inWindow` — check whether that frame is visible.
+10. `mounts many instances at once`: move the 10 s wall-clock bar behind `HARNESS_TIMING` — **closed
+    by this round**, which merged R1 and routed the number through `expectTimingBudget()`.
+11. `bench/src/implementations/shared.ts:22` says SwiftUI's circular is 32 pt; the docs and the
+    harness measure 20 pt. Reconcile.
+12. Identify the LogBox toast in the example screenshots — **answered by this round** (the example's
+    `SafeAreaView` deprecation warning); the warning itself is still there.
+13. Carry over from round 0: mint a quiet-machine `progress` baseline, and add a render-check control
+    kind to the real-input runner.
+
+One more, outside the 13, because F2's fix is in shared core: now that `useSizingId(configuration?)`
+exists, Switch, Slider and Button deserve an audit for any prop that remounts their native view —
+none is known to today, and none of their tests poisons a cache across such a change.
