@@ -4,6 +4,7 @@ README.md
 android/CMakeLists.txt
 android/build.gradle
 android/src/main/AndroidManifest.xml
+android/src/main/baseline-prof.txt
 android/src/main/cpp/NitroUiSizingJni.cpp
 android/src/main/cpp/NitroUiSizingJni.hpp
 android/src/main/cpp/cpp-adapter.cpp
