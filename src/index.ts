@@ -26,6 +26,10 @@ export type {
   NitroUiSizingTraceEvent,
 } from './NitroUiCore.nitro';
 
-export { Progress, type ProgressProps } from './components/Progress/Progress';
+export {
+  Progress,
+  type ProgressProps,
+  type ProgressVariant,
+} from './components/Progress/Progress';
 export { Slider, type SliderProps } from './components/Slider/Slider';
 export { Switch, type SwitchProps } from './components/Switch/Switch';
