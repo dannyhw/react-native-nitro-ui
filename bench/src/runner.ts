@@ -7,7 +7,7 @@ import {
   probe,
   settle,
 } from './probe';
-import type { BenchPlan, BenchRecord } from './types';
+import type { BenchPerfMark, BenchPlan, BenchRecord } from './types';
 
 /** Noise control protocol (docs/research/setup-decisions.md SS6). */
 export const WARMUP_ITERATIONS = 5;
@@ -28,6 +28,11 @@ export interface Engine {
     nextValue: boolean
   ): Promise<{ t0: number; tCommit: number }>;
   emit(record: BenchRecord): void;
+  /**
+   * The runtime's own native perf marks, or `null` when this arm has none or the
+   * launch did not ask for them (`bun bench --perf-marks`).
+   */
+  drainPerfMarks: (() => BenchPerfMark[] | null) | null;
 }
 
 interface IterationTarget {
@@ -44,11 +49,14 @@ interface IterationTarget {
  *
  * `mountedNs`/`presentedNs` are absolute D1 timestamps (`probe.now()` shares that
  * base), so each is reported as an offset from `t0` rather than a duration.
+ *
+ * Returns `t0` so the caller can put the runtime's own perf marks on this
+ * iteration's timeline.
  */
 async function measureLatency(
   engine: Engine,
   target: IterationTarget
-): Promise<void> {
+): Promise<number> {
   const { t0, tCommit } = await engine.commit(target.count, target.value);
 
   const mountedAt = await awaitMountNs();
@@ -66,6 +74,72 @@ async function measureLatency(
     mountedNs: mountedAt === null ? null : mountedAt - t0,
     presentedNs: presentedAt === null ? null : presentedAt - t0,
   });
+  return t0;
+}
+
+/**
+ * Fold one iteration's native perf marks into a `perf` record.
+ *
+ * Called **outside every CPU bracket**: `drainPerf()` crosses into native code,
+ * allocates per mark and hands an array to JS, so draining inside a bracket would
+ * charge the JS thread for reading the marks - and marking itself is already a
+ * mutex write on the UI thread. That is why a `--perf-marks` run is a diagnostic
+ * that explains a measured number rather than a second measurement.
+ *
+ * It answers: how many `updateState`s one flip really caused (`propsApplied` per
+ * instance), whether the hosted content drew at all (`firstFrame`), and how long
+ * the library's own props-to-pixels span took. Marks arrive oldest first, so the
+ * last of a kind is the newest.
+ */
+function emitPerfMarks(
+  engine: Engine,
+  target: IterationTarget,
+  t0: number
+): void {
+  const drain = engine.drainPerfMarks;
+  if (drain === null) {
+    return;
+  }
+  const marks = drain();
+  if (marks === null) {
+    return;
+  }
+
+  let propsApplied = 0;
+  let firstFrame = 0;
+  let lastPropsNs: number | null = null;
+  let lastFrameNs: number | null = null;
+  const instances = new Set<number>();
+  for (const mark of marks) {
+    if (mark.kind === 'propsApplied') {
+      propsApplied += 1;
+      lastPropsNs = mark.timeNs;
+    } else if (mark.kind === 'firstFrame') {
+      firstFrame += 1;
+      lastFrameNs = mark.timeNs;
+    } else {
+      continue;
+    }
+    instances.add(mark.instanceId);
+  }
+
+  engine.emit({
+    kind: 'perf',
+    scenario: target.plan.scenario,
+    implementation: target.plan.implementation,
+    n: target.plan.n,
+    launch: target.launch,
+    index: target.index,
+    propsApplied,
+    firstFrame,
+    instances: instances.size,
+    propsAppliedNs: lastPropsNs === null ? null : lastPropsNs - t0,
+    firstFrameNs: lastFrameNs === null ? null : lastFrameNs - t0,
+    drawLatencyNs:
+      lastPropsNs !== null && lastFrameNs !== null && lastFrameNs >= lastPropsNs
+        ? lastFrameNs - lastPropsNs
+        : null,
+  });
 }
 
 /**
@@ -81,6 +155,16 @@ async function teardown(
 ): Promise<void> {
   await engine.commit(0, target.value);
   await awaitMountNs();
+}
+
+/**
+ * Drop whatever the warmups recorded, so the first measured iteration's marks are
+ * its own. `setPerfEnabled(true)` clears the ring, but it runs before the warmups.
+ */
+function discardPerfMarks(engine: Engine): void {
+  if (engine.drainPerfMarks !== null) {
+    engine.drainPerfMarks();
+  }
 }
 
 /* ------------------------------------------------------------------ CPU ---- */
@@ -190,13 +274,15 @@ export async function runMountScenario(
     await nextFrameNs();
     await settle(20);
 
+    if (index === WARMUP_ITERATIONS) discardPerfMarks(engine);
     if (!warmup) mountBatch.start();
-    await measureLatency(engine, target);
+    const t0 = await measureLatency(engine, target);
     if (!warmup) mountBatch.stop();
 
     if (!warmup) unmountBatch.start();
     await teardown(engine, target);
     if (!warmup) unmountBatch.stop();
+    if (!warmup) emitPerfMarks(engine, target, t0);
   }
 
   mountBatch.emit(engine, plan, launch, 'mount');
@@ -228,16 +314,20 @@ export async function runUpdateScenario(
     const warmup = index < WARMUP_ITERATIONS;
     value = !value;
 
-    if (!warmup) opBatch.start();
-    await measureLatency(engine, {
+    const target: IterationTarget = {
       count: plan.n,
       value,
       plan,
       launch,
       index,
       warmup,
-    });
+    };
+
+    if (index === WARMUP_ITERATIONS) discardPerfMarks(engine);
+    if (!warmup) opBatch.start();
+    const t0 = await measureLatency(engine, target);
     if (!warmup) opBatch.stop();
+    if (!warmup) emitPerfMarks(engine, target, t0);
   }
 
   opBatch.emit(engine, plan, launch, 'mount');

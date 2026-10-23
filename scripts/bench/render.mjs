@@ -48,6 +48,11 @@ function formatMetric(metric, value) {
   return formatNs(value);
 }
 
+/** Mark counts are plain integers (or a small per-instance ratio), not nanoseconds. */
+function formatNumber(value, digits = 0) {
+  return isNumber(value) ? value.toFixed(digits) : 'n/a';
+}
+
 function cellSort(a, b) {
   const scenarioOrder = ['mount', 'update', 'memory', 'leak'];
   return (
@@ -251,6 +256,32 @@ export function detailSections(run) {
             .map(([name, count]) => `${name}=${String(count)}`)
             .join(', ')} - treat this cell's latency pair with care.\n`
     );
+    if (cell.marks != null) {
+      detail.push(
+        `Native perf marks (${String(cell.marks.iterations)} measured iterations across ${String(
+          cell.marks.launches
+        )} launches):\n\n${markdownTable(
+          [
+            'propsApplied/op',
+            'per instance',
+            'firstFrame/op',
+            'props landed',
+            'drew',
+            'props -> draw',
+          ],
+          [
+            [
+              formatNumber(cell.marks.propsApplied),
+              formatNumber(cell.marks.propsAppliedPerInstance, 2),
+              formatNumber(cell.marks.firstFrame),
+              formatNs(cell.marks.propsAppliedNs),
+              formatNs(cell.marks.firstFrameNs),
+              formatNs(cell.marks.drawLatencyNs),
+            ],
+          ]
+        )}\n\n> Instrumented: recording a mark is a UI-thread mutex write and the drain is JS\n> work, so this explains the numbers above instead of measuring them again. A\n> \`--perf-marks\` run can never mint a baseline.\n`
+      );
+    }
     if (cell.memory?.heapCollected === false) {
       detail.push(
         'Hermes `globalThis.gc()` is unavailable in this build, so footprint samples include uncollected JS heap.\n'
@@ -272,6 +303,11 @@ export function runHeader(run) {
     `- plan: \`${run.plan}\`, ${String(run.launches ?? '?')} launches per cell, ${String(protocol.warmup ?? '?')} warmup + ${String(protocol.measured ?? '?')} measured iterations`,
     `- clock: \`${run.clock ?? 'unknown'}\` (absolute, per D1)`,
   ];
+  if (run.perfMarks === true) {
+    lines.push(
+      '- native perf marks: **ON** - every iteration paid for instrumentation, so these numbers diagnose; they do not gate'
+    );
+  }
   if (machine.cpuCount != null) {
     lines.push(
       `- machine: \`${machine.hostname}\`, ${String(machine.cpuCount)} cores, load average ${machine.loadavg1?.toFixed(2)} / ${machine.loadavg5?.toFixed(2)}${machine.quiet === false ? ' **(busy)**' : ''}`

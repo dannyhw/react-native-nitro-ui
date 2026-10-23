@@ -40,6 +40,7 @@ import {
 } from './devices.mjs';
 import {
   LAUNCHES_PER_CELL,
+  MARK_CAPABLE_IMPLEMENTATIONS,
   PLANS,
   SCHEMA_VERSION,
   UNQUIET_LOAD_RATIO,
@@ -48,7 +49,7 @@ import {
   baselineTable,
   buildSchedule,
   isCompatibleBaseline,
-  planString,
+  launchPlanString,
   resultsFileName,
 } from './lib.mjs';
 import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
@@ -204,7 +205,7 @@ function iosTarget(device, appPath, bundleId) {
         device.udid,
         bundleId,
         '-benchPlan',
-        planString(entry.scenario, entry.implementation, entry.n),
+        launchPlanString(entry),
       ]);
       return file;
     },
@@ -290,7 +291,7 @@ function androidTarget(device, apkPath, packageName) {
         `${packageName}/.MainActivity`,
         '--es',
         'benchPlan',
-        planString(entry.scenario, entry.implementation, entry.n),
+        launchPlanString(entry),
       ]);
       return remote;
     },
@@ -434,7 +435,7 @@ async function drive({ target, schedule }) {
   const problems = [];
   for (let index = 0; index < schedule.length; index++) {
     const entry = schedule[index];
-    const label = `${planString(entry.scenario, entry.implementation, entry.n)} launch ${String(entry.launch + 1)}/${String(schedule.filter((other) => other.scenario === entry.scenario && other.implementation === entry.implementation && other.n === entry.n).length)}`;
+    const label = `${launchPlanString(entry)} launch ${String(entry.launch + 1)}/${String(schedule.filter((other) => other.scenario === entry.scenario && other.implementation === entry.implementation && other.n === entry.n).length)}`;
     process.stderr.write(
       `[${String(index + 1)}/${String(schedule.length)}] ${label} ... `
     );
@@ -473,7 +474,7 @@ export async function main(argv) {
     log(
       'usage: bun bench --platform ios|android [--plan quick|full] [--compare <ref|file>]\n' +
         '           [--check] [--update-baseline] [--force] [--skip-build] [--only <impl,impl>]\n' +
-        '           [--launches N] [--prebuild] [--shutdown]'
+        '           [--launches N] [--prebuild] [--shutdown] [--perf-marks]'
     );
     process.exitCode = 2;
     return;
@@ -512,6 +513,13 @@ export async function main(argv) {
     }
   });
 
+  const perfMarks = argv.includes('--perf-marks');
+  if (perfMarks) {
+    log(
+      `Perf marks: ON (${MARK_CAPABLE_IMPLEMENTATIONS.join(', ')} only) - diagnostics, not a gated measurement`
+    );
+  }
+
   const force = argv.includes('--force');
   const built = argv.includes('--skip-build')
     ? locateArtifact(platform)
@@ -525,6 +533,7 @@ export async function main(argv) {
     plan,
     launches,
     only: flag(argv, '--only'),
+    perfMarks,
   });
 
   // Counted from the schedule itself: `--only` narrows the implementation
@@ -549,7 +558,8 @@ export async function main(argv) {
     shortSha(),
     platform,
     new Date(started),
-    isGitDirty()
+    isGitDirty(),
+    perfMarks
   );
   // Persist the raw pull *before* aggregating: re-aggregating is free, another
   // device run is not, so a bug in the maths must not cost the measurement.
@@ -565,6 +575,7 @@ export async function main(argv) {
     deviceName: device.name,
     plan,
     launches,
+    perfMarks,
     clock: Object.values(cells)[0]?.clock ?? null,
     createdAt: new Date().toISOString(),
     durationMs: Date.now() - started,

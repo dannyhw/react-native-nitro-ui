@@ -1,109 +1,90 @@
-import type { ComponentType } from 'react';
-import { View, type ColorValue, type ViewProps } from 'react-native';
+import { Switch, nitroUiCore } from 'react-native-nitro-ui';
 
-import * as NitroUi from 'react-native-nitro-ui';
-
-import type { BenchListProps } from '../types';
+import type { BenchListProps, BenchPerfMark } from '../types';
 import { onValueChange, range, rowStyle } from './shared';
 
 /**
  * =====================================================================================
- *  THE ONE-FILE CHANGE - the `nitro-ui` arm (T10 owns the component)
+ *  THE ONE-FILE CHANGE - the `nitro-ui` arm
  * =====================================================================================
  *
- * This is the only file in the harness that knows how to talk to
- * `react-native-nitro-ui`. It resolves the library's `Switch` **at runtime**, so
- * the arm lights up by itself the moment the library exports one and the bench
- * app typechecks before that happens (T02 review B2). TypeScript reaches the
- * library through `paths` in bench/tsconfig.json (`react-native-nitro-ui` ->
- * `../src/index.ts`), which is the TS mirror of Metro's `extraNodeModules`.
+ * This is the only file in the harness that renders `react-native-nitro-ui`, plus
+ * the only place its native perf marks are read. Everything else (plan, runner,
+ * reporter) is runtime-agnostic.
  *
- * Two things to know:
+ * Adding a *second* component to the matrix means one entry in
+ * `bench/src/plan.ts`/`docs` scenario props and one `List` per platform here - see
+ * docs/architecture/benchmarks.md "Per-component checklist".
  *
- * 1. Once T10 lands, replace the lookup below with a named import to get
- *    compile-time prop checking:
+ * `Switch` is a **named import** from T10 onwards, so the props passed below are
+ * typechecked against the real component by `bun run bench:typecheck`
+ * (`paths: { "react-native-nitro-ui": ["../src/index.ts"] }` in
+ * `bench/tsconfig.json` is the TS mirror of Metro's `extraNodeModules`, which
+ * resolves the package to the repository root and asks for its
+ * `react-native-nitro-ui-source` export condition).
  *
- *        import { Switch } from 'react-native-nitro-ui';
- *
- *    - the props passed in `NitroUiList` are then checked against the real
- *    component, and nothing else in the file has to change.
- *
- * 2. To typecheck this arm against a component that is not merged yet, point
- *    `paths` at that branch's source for one run, e.g.
- *
- *        git archive task/T10-core-switch src | tar -x -C /tmp/nitro-ui-t10
- *
- *    then `"paths": { "react-native-nitro-ui": ["/tmp/nitro-ui-t10/src/index.ts"] }`
- *    and `bun run bench:typecheck`.
+ * Cost fairness: the arm passes what the reference arms pass - `value`, a stable
+ * no-op `onValueChange`, `testID`, and the shared `rowStyle`, so every arm lays
+ * out the same box and diffs the same JS props. `tintColor` and `disabled` stay
+ * unset: the comparison is each control's platform default. What the arm cannot
+ * avoid passing is what the library's own wrapper always sends
+ * (`defaultValue`, `mostRecentEventCount`, `nuiPerfId`, `null` for the rest,
+ * DECISIONS D7) - that is the library's props contract being measured, not bench
+ * bias, and it is the same cost a consumer pays.
  * =====================================================================================
  */
 
+/** `nitroUiCore.now()` and every perf mark are ms; the probe speaks ns (D1). */
+const MS_TO_NS = 1_000_000;
+
 /**
- * The props the bench passes, in the shape T10's `Switch` declares them (D7: no
- * optional Hybrid props on the native side, and the JS wrapper keeps every prop
- * optional so the bench can pass only what it needs).
+ * Whether this process turned marks on.
+ *
+ * `nuiPerfId` alone is not enough to record anything (a marked view with
+ * recording off pays one relaxed atomic load and writes nothing), and a drained
+ * buffer is JS work, so both halves stay behind this flag: a normal measured run
+ * of the `nitro-ui` arm is instrumented exactly as much as the reference arms
+ * are, i.e. not at all.
  */
-interface BenchSwitchProps extends ViewProps {
-  value?: boolean | undefined;
-  onValueChange?: ((value: boolean) => void) | undefined;
-  disabled?: boolean | undefined;
-  tintColor?: ColorValue | undefined;
-  testID?: string | undefined;
+let marksEnabled = false;
+
+/** Called by the runner for a `--perf-marks` launch, before the first commit. */
+export function enableNitroUiPerfMarks(): void {
+  nitroUiCore.setPerfEnabled(true);
+  marksEnabled = true;
 }
 
-type BenchSwitchComponent = ComponentType<BenchSwitchProps>;
-
-const library = NitroUi as unknown as Record<string, unknown>;
-const Switch = library.Switch as BenchSwitchComponent | undefined;
-
 /**
- * `false` means the library does not export a `Switch` yet, so the runner skips
- * the arm and says why instead of benchmarking a stand-in as if it were the
- * library.
+ * Every mark recorded since the last call, in the probe's nanosecond base.
+ *
+ * The library's ring is 4096 events and a 25-iteration x 50-instance run writes
+ * thousands, so the caller drains between iterations rather than once at the end
+ * - a full ring drops its oldest marks, which would silently under-count.
  */
-export const NITRO_UI_AVAILABLE = Switch !== undefined;
-
-export const NITRO_UI_SKIP_REASON: string | null = NITRO_UI_AVAILABLE
-  ? null
-  : 'react-native-nitro-ui does not export a Switch yet (lands with T10); ' +
-    'bench/src/implementations/nitroUi.tsx resolves it as soon as it exists';
-
-/**
- * The cheapest possible native leaf per instance, used only while the library has
- * no component. The runner never renders this arm when it is unavailable - it
- * emits a `skip` record - so this is a floor for the JSX contract, not a stub
- * that could silently be measured.
- */
-function Floor({ n }: { n: number }) {
-  if (n === 0) {
+export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
+  if (!marksEnabled) {
     return null;
   }
-  return (
-    <>
-      {range(n).map((index) => (
-        <View
-          key={index}
-          testID={`bench-nitro-ui-floor-${String(index)}`}
-          style={rowStyle}
-        />
-      ))}
-    </>
-  );
+  const marks: BenchPerfMark[] = [];
+  for (const event of nitroUiCore.drainPerf()) {
+    marks.push({
+      instanceId: event.instanceId,
+      kind: event.kind,
+      timeNs: Math.round(event.time * MS_TO_NS),
+    });
+  }
+  return marks;
 }
 
 /**
  * `n` real nitro-ui switches.
  *
- * Every prop the other arms get is passed here too: the shared `rowStyle` object
- * (same identity, same area), the stable no-op `onValueChange`, and a `testID`.
- * `tintColor` and `disabled` are deliberately *not* passed - the comparison is
- * against each control's platform default, and tinting only this arm would make
- * the arms draw different things.
+ * `nuiPerfId` is the library's own per-instance mark id, and it stays `null`
+ * unless the launch asked for marks: passing an id is nearly free but not
+ * literally free (one integer compare per mark site), and the numbers in the
+ * published tables should be the numbers a consumer gets.
  */
-export function NitroUiList({ n, value }: BenchListProps) {
-  if (Switch === undefined) {
-    return <Floor n={n} />;
-  }
+export function NitroUiList({ n, value, perfMarks }: BenchListProps) {
   if (n === 0) {
     return null;
   }
@@ -115,6 +96,7 @@ export function NitroUiList({ n, value }: BenchListProps) {
           testID={`bench-nitro-ui-${String(index)}`}
           value={value}
           onValueChange={onValueChange}
+          nuiPerfId={perfMarks ? index : null}
           style={rowStyle}
         />
       ))}

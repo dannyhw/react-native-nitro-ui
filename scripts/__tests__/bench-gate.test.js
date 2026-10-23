@@ -25,15 +25,22 @@ import {
   SCHEMA_VERSION,
   aggregateRecords,
   baselineBlockers,
+  buildSchedule,
+  cellKey,
   comparableMetrics,
   gate,
+  launchPlanString,
   noiseTable,
   ratioTable,
 } from '../bench/lib.mjs';
 // `comparisonSections()` lives in render.mjs rather than report.mjs so the gate
 // can be tested here: report.mjs is the filesystem CLI and resolves repo paths
 // through `import.meta`, which jest's CommonJS transform cannot represent.
-import { comparisonSections, renderMarkdown } from '../bench/render.mjs';
+import {
+  comparisonSections,
+  detailSections,
+  renderMarkdown,
+} from '../bench/render.mjs';
 
 const LAUNCHES = 4;
 const ITERATIONS = 20;
@@ -580,5 +587,104 @@ describe('a gated arm with no baseline value', () => {
     }).markdown;
     expect(markdown).toContain('new arm');
     expect(markdown).toContain('rn-core');
+  });
+});
+
+describe('native perf marks (--perf-marks)', () => {
+  /**
+   * The marks a `--perf-marks` launch writes: one `perf` record per measured
+   * iteration, folded per instance. `propsPerFlip = 2` is the interesting case -
+   * it is what a redundant commit looks like from the inside.
+   */
+  function markRecords({
+    implementation = 'nitro-ui',
+    scenario = 'mount',
+    n = 50,
+    propsPerFlip = 1,
+    firstFrame = 0,
+    launch = 0,
+  }) {
+    const records = [];
+    for (let index = 0; index < ITERATIONS; index++) {
+      records.push({
+        kind: 'perf',
+        scenario,
+        implementation,
+        n,
+        launch,
+        index,
+        propsApplied: n * propsPerFlip,
+        firstFrame,
+        instances: n,
+        propsAppliedNs: 90_000 + index,
+        firstFrameNs: firstFrame > 0 ? 120_000 + index : null,
+        drawLatencyNs: firstFrame > 0 ? 30_000 : null,
+      });
+    }
+    return records;
+  }
+
+  it('folds marks into a summary, including marks per instance', () => {
+    const cells = aggregateRecords([
+      ...cellRecords({ implementation: 'nitro-ui' }),
+      ...markRecords({ propsPerFlip: 2, firstFrame: 50 }),
+    ]);
+    const marks = cells['mount:nitro-ui:50'].marks;
+
+    expect(marks.iterations).toBe(ITERATIONS);
+    expect(marks.launches).toBe(1);
+    expect(marks.propsApplied).toBe(100);
+    // 100 propsApplied marks over 50 instances = two native commits per flip.
+    expect(marks.propsAppliedPerInstance).toBeCloseTo(2, 5);
+    expect(marks.firstFrame).toBe(50);
+    expect(marks.propsAppliedNs).toBeCloseTo(90_000, -2);
+    expect(marks.drawLatencyNs).toBe(30_000);
+  });
+
+  it('is null for a clean run, so a normal table says nothing about marks', () => {
+    const cells = aggregateRecords(cellRecords({ implementation: 'nitro-ui' }));
+    expect(cells['mount:nitro-ui:50'].marks).toBeNull();
+    expect(detailSections({ platform: 'ios', cells })).not.toContain(
+      'Native perf marks'
+    );
+  });
+
+  it('prints the marks table when a run has them', () => {
+    const cells = aggregateRecords([
+      ...cellRecords({ implementation: 'nitro-ui' }),
+      ...markRecords({ firstFrame: 50 }),
+    ]);
+    expect(detailSections({ platform: 'ios', cells })).toContain(
+      'Native perf marks'
+    );
+  });
+
+  it('never gates, so a marks run cannot mint a baseline', () => {
+    const reasons = baselineBlockers({
+      ...makeRun(),
+      dirty: false,
+      plan: 'full',
+      launches: 8,
+      problems: [],
+      machine: { loadavg1: 1, cpuCount: 14 },
+      perfMarks: true,
+    });
+    expect(reasons.some((reason) => reason.includes('perf marks'))).toBe(true);
+  });
+
+  it('narrows the schedule to the arm that has marks, and keeps :marks out of the cell key', () => {
+    const schedule = buildSchedule({ plan: 'quick', perfMarks: true });
+    expect([...new Set(schedule.map((entry) => entry.implementation))]).toEqual(
+      ['nitro-ui']
+    );
+    expect(launchPlanString(schedule[0])).toBe('mount:nitro-ui:50:marks');
+    expect(cellKey('mount', 'nitro-ui', 50)).toBe('mount:nitro-ui:50');
+    // A clean run's launch string carries no flag at all.
+    expect(launchPlanString({ ...schedule[0], perfMarks: false })).toBe(
+      'mount:nitro-ui:50'
+    );
+    expect(() =>
+      buildSchedule({ plan: 'quick', only: 'rn-core', perfMarks: true })
+    ).toThrow(/needs an implementation with marks/);
   });
 });

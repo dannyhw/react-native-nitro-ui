@@ -155,9 +155,20 @@ function BenchRunner({
 
       emit(meta(WARMUP_ITERATIONS, MEASURED_ITERATIONS));
 
+      const wantsMarks = plan.perfMarks;
+      if (wantsMarks) {
+        if (implementation.enablePerfMarks === null) {
+          throw new Error(
+            `NITRO_BENCH asked for perf marks on ${plan.implementation}, which has none`
+          );
+        }
+        implementation.enablePerfMarks();
+      }
+
       const engine: Engine = {
         commit,
         emit,
+        drainPerfMarks: wantsMarks ? implementation.drainPerfMarks : null,
       };
 
       switch (plan.scenario) {
@@ -224,7 +235,7 @@ function BenchRunner({
           React-side cost is measured directly instead - `jsCommitNs` brackets
           the commit, and `ReactFabric-profiling` can be aliased in
           bench/metro.config.js by whoever wants that metric for real. */}
-      <List n={count} value={value} />
+      <List n={count} value={value} perfMarks={plan.perfMarks} />
       {/* Keep React from unmounting the text while the list grows large. */}
       <View style={styles.spacer} />
     </View>
