@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import process from 'node:process';
 
 import {
   androidEmulator,
@@ -8,6 +10,17 @@ import {
   applePlatform,
   appleSimulator,
 } from '@react-native-harness/platform-apple';
+import { assertSupportedNode } from '../scripts/node-version.mjs';
+// CommonJS, because `example/metro.config.js` requires the same module to serve
+// the state this publishes.
+import harnessTimingGate from '../scripts/harness-timing-gate.js';
+
+const { publishTimingGate } = harnessTimingGate;
+
+// The harness transforms `.harness.tsx` with Jest on this machine, and that
+// transform breaks on Node 25/26 with an ESM error that reads like a bug in the
+// test file. Say so here, before any device work, rather than after a build.
+assertSupportedNode({ command: 'bun run harness:ios|android' });
 
 // react-native-harness does not build the app: build a Debug iOS .app or an
 // Android APK first and point HARNESS_APP_PATH at it (see CONTRIBUTING.md).
@@ -82,6 +95,21 @@ function avd() {
   return process.env.ANDROID_AVD ?? process.env.AVD ?? DEFAULT_AVD;
 }
 
+/**
+ * The machine state the wall-clock gates need (D21), published for the app to
+ * read. `example/` is Metro's project root, and Metro serves a file under it
+ * from disk per request, so an assertion reads a current load average instead
+ * of one frozen at bundle time. Structural counters stay gated everywhere; this
+ * only decides the duration gates, which run just under `HARNESS_TIMING=1`.
+ */
+const metroPort = Number(process.env.METRO_PORT ?? 8291);
+const stopTimingGate = publishTimingGate({
+  exampleDir: path.dirname(new URL(import.meta.url).pathname),
+  port: metroPort,
+  log: (message) => console.log(message),
+});
+process.once('exit', stopTimingGate);
+
 export default {
   entryPoint: './index.js',
   appRegistryComponentName: 'NitroUiExample',
@@ -89,7 +117,7 @@ export default {
   // several checkouts (and a stock `react-native start`) can share one machine.
   // Simulators/emulators learn the port from the harness at launch, so it is not
   // baked into the build. Every concurrent task must set its own METRO_PORT.
-  metroPort: Number(process.env.METRO_PORT ?? 8291),
+  metroPort,
   runners: [
     applePlatform({
       name: 'ios',

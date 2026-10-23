@@ -1038,12 +1038,15 @@ describe('the Button cells (--component button)', () => {
       true
     );
     // `null` stays "every component", which is what a plain `bun bench` runs.
+    // G3's Progress cells are the fourth component, so this list and the count
+    // grow with every component that lands - a cell missing from the plan shows
+    // up here as a shorter schedule, not a silent skip.
     const all = buildSchedule({ plan: 'quick' });
     expect(new Set(all.map((entry) => componentOf(entry.scenario)))).toEqual(
-      new Set(['switch', 'slider', 'button', 'segmented-control'])
+      new Set(['switch', 'slider', 'button', 'progress', 'segmented-control'])
     );
-    // Four components in the quick plan, each with the same three cells.
-    expect(all.length).toBe(button.length * 4);
+    // Five components in the quick plan, each with the same three cells.
+    expect(all.length).toBe(button.length * 5);
   });
 });
 
@@ -1054,7 +1057,7 @@ describe('the Button cells (--component button)', () => {
  * file: a gate that pairs an arm with a *different* component's `rn-core` control
  * still produces confident, meaningless numbers, and G4 is the first component
  * added since that rule was written - so it is the one that has to prove the rule
- * still holds with four components rather than two.
+ * still holds with five components in the plan rather than two.
  */
 describe('the SegmentedControl cells (--component segmented-control)', () => {
   /**

@@ -10,11 +10,12 @@ import {
   View,
 } from 'react-native';
 import ButtonScreen from './ButtonScreen';
+import ProgressScreen from './ProgressScreen';
 import SliderScreen from './SliderScreen';
 import SegmentedControlScreen from './SegmentedControlScreen';
 import SwitchScreen from './SwitchScreen';
 
-type Screen = 'switch' | 'slider' | 'button' | 'segmented';
+type Screen = 'switch' | 'slider' | 'button' | 'progress' | 'segmented';
 
 /**
  * Which screen a cold launch shows.
@@ -24,7 +25,7 @@ type Screen = 'switch' | 'slider' | 'button' | 'segmented';
  * developer convenience. Task screenshots are taken with this flipped (see the
  * task report), which needs no Metro change and no rebuild of anything else.
  */
-const DEFAULT_SCREEN: Screen = 'switch';
+const DEFAULT_SCREEN: Screen = 'progress';
 
 /**
  * The tab bar's top padding.
@@ -44,12 +45,13 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'switch', label: 'Switch' },
   { id: 'slider', label: 'Slider' },
   { id: 'button', label: 'Button' },
+  { id: 'progress', label: 'Progress' },
   { id: 'segmented', label: 'Segments' },
 ];
 
 /**
  * Playground for the library. T10 put the Switch tracer bullet here; G1 added
- * the Slider and G2 the Button, and every task adds a screen.
+ * the Slider, G2 the Button and G3 the Progress; every task adds a screen.
  *
  * The tabs are the only navigation: the harness renders its own UI, and a
  * screenshot of the example app is a screenshot of whichever screen is showing.
@@ -84,15 +86,11 @@ export default function App() {
         ))}
       </SafeAreaView>
       <View style={styles.body}>
-        {screen === 'switch' ? (
-          <SwitchScreen />
-        ) : screen === 'slider' ? (
-          <SliderScreen />
-        ) : screen === 'button' ? (
-          <ButtonScreen />
-        ) : (
-          <SegmentedControlScreen />
-        )}
+        {screen === 'switch' ? <SwitchScreen /> : null}
+        {screen === 'slider' ? <SliderScreen /> : null}
+        {screen === 'button' ? <ButtonScreen /> : null}
+        {screen === 'progress' ? <ProgressScreen /> : null}
+        {screen === 'segmented' ? <SegmentedControlScreen /> : null}
       </View>
     </View>
   );

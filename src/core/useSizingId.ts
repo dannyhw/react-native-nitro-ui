@@ -17,11 +17,26 @@ import { nitroUiCore } from '../NitroUiCore';
  * on every render, which would make native treat the view as a different
  * instance. `useRef` also keeps StrictMode's double render from matter - it may
  * burn one unused id, and that is all an unused id costs.
+ *
+ * @param configuration Pass the prop your component `key`s the *native view* on,
+ *   when it has one. The id belongs to a native mount, not to a React element:
+ *   when the view is replaced, Fabric orders Delete before Create
+ *   (`Differentiator.cpp`), and the dropped view's `onDropView` ends in
+ *   `NitroUiSizing.forget(id)` - which erases the ledger entry the new mount has
+ *   just filed if the two share an id, leaving a configuration that is not already
+ *   exact in the cache with nothing left to correct it. A new id per mount costs
+ *   one unused entry; a shared id costs the correction. Components whose native
+ *   view is never replaced omit it and get exactly the previous behaviour.
  */
-export function useSizingId(): number {
-  const idRef = useRef<number>(0);
-  if (idRef.current === 0) {
-    idRef.current = nitroUiCore.nextSizingId();
+export function useSizingId(configuration?: string): number {
+  const idRef = useRef<{
+    configuration: string | undefined;
+    id: number;
+  } | null>(null);
+  let entry = idRef.current;
+  if (entry === null || entry.configuration !== configuration) {
+    entry = { configuration, id: nitroUiCore.nextSizingId() };
+    idRef.current = entry;
   }
-  return idRef.current;
+  return entry.id;
 }

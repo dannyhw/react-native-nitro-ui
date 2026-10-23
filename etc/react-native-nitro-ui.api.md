@@ -120,6 +120,36 @@ export interface NitroUiSizingTraceEvent {
 export function prewarm(componentNames: readonly string[]): number;
 
 // @public
+export function Progress(input: ProgressProps): JSX.Element;
+
+// @public
+export interface ProgressProps extends ViewProps {
+    // @internal
+    hybridRef?: ((view: {
+        readonly variant: string;
+        readonly value: number | null;
+        readonly tintColor: number | null;
+        readonly trackColor: number | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestDisplayedValue(): string;
+        nuiTestIsAnimating(): boolean;
+    }) => void) | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    tintColor?: ColorValue | undefined;
+    trackColor?: ColorValue | undefined;
+    value?: number | null | undefined;
+    variant?: ProgressVariant | undefined;
+}
+
+// @public
+export type ProgressVariant = 'linear' | 'circular';
+
+// @public
 export function SegmentedControl(input: SegmentedControlProps): JSX.Element;
 
 // @public

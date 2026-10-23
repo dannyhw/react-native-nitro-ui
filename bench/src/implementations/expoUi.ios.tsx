@@ -2,6 +2,7 @@ import {
   Button,
   Host,
   Picker,
+  ProgressView,
   Slider,
   Text,
   Toggle,
@@ -11,6 +12,7 @@ import {
   buttonStyle,
   labelsHidden,
   pickerStyle,
+  progressViewStyle,
   tag,
 } from '@expo/ui/swift-ui/modifiers';
 
@@ -22,6 +24,7 @@ import {
   onSegmentChange,
   onSliderChange,
   onValueChange,
+  progressValue,
   range,
   rowStyle,
   segmentedOptions,
@@ -41,6 +44,16 @@ const LABELS_HIDDEN = [labelsHidden()];
  * same control.
  */
 const BORDERED_PROMINENT = [buttonStyle('borderedProminent')];
+
+/**
+ * Module-level for the same reason as `LABELS_HIDDEN`.
+ *
+ * `.linear` is spelled explicitly rather than left to `automatic`: outside a
+ * `Form`/`List` a SwiftUI `ProgressView` with a value is linear anyway, and the
+ * arm must not depend on the container it happens to sit in to be the control
+ * under test - nitro-ui's arm asks its toolkit the same explicit question.
+ */
+const LINEAR_STYLE = [progressViewStyle('linear')];
 
 /**
  * `.segmented`, which is the same native control nitro-ui hosts, reached through
@@ -132,6 +145,24 @@ function BenchSlider({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
+ * A SwiftUI `ProgressView` with no label.
+ *
+ * `children` is a label that renders as `Text` next to the bar - the same reason
+ * `BenchToggle` hides its label and `BenchSlider` has none: labelling this arm
+ * would inflate its mount, UI CPU and memory numbers in the comparison this
+ * project publishes (T02 review B3).
+ */
+function BenchProgress({ index, value }: { index: number; value: boolean }) {
+  return (
+    <ProgressView
+      testID={`bench-expo-progress-${String(index)}`}
+      value={progressValue(value)}
+      modifiers={LINEAR_STYLE}
+    />
+  );
+}
+
+/**
  * A segmented `Picker` whose options are the same three labels every other arm
  * draws, with the same one selected.
  */
@@ -181,6 +212,10 @@ export function ExpoUiHostPerControlList({
           <Host key={index} style={style}>
             <BenchSlider index={index} value={value} />
           </Host>
+        ) : component === 'progress' ? (
+          <Host key={index} style={style}>
+            <BenchProgress index={index} value={value} />
+          </Host>
         ) : (
           <Host key={index} style={style}>
             <BenchToggle index={index} value={value} />
@@ -222,6 +257,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
         {range(n).map((index) =>
           component === 'slider' ? (
             <BenchSlider key={index} index={index} value={value} />
+          ) : component === 'progress' ? (
+            <BenchProgress key={index} index={index} value={value} />
           ) : (
             <BenchToggle key={index} index={index} value={value} />
           )

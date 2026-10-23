@@ -12,7 +12,7 @@ export type ImplementationName =
  * (`mount.slider`). See `docs/architecture/benchmarks.md`.
  */
 export type ComponentName =
-  'switch' | 'slider' | 'button' | 'segmented-control';
+  'switch' | 'slider' | 'button' | 'progress' | 'segmented-control';
 
 /** What one launch does to the controls. */
 export type ScenarioAction = 'mount' | 'update' | 'memory' | 'leak';
@@ -26,6 +26,7 @@ export type ScenarioName =
   | ScenarioAction
   | `${ScenarioAction}.slider`
   | `${ScenarioAction}.button`
+  | `${ScenarioAction}.progress`
   | `${ScenarioAction}.segmented-control`;
 
 /**

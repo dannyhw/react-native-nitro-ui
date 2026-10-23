@@ -2,12 +2,15 @@ import {
   Button,
   Column,
   Host,
+  LoadingIndicator,
   SegmentedButton,
   SingleChoiceSegmentedButtonRow,
   Slider,
   Switch,
   Text,
+  useNativeState,
 } from '@expo/ui/jetpack-compose';
+import { useEffect } from 'react';
 
 import type { BenchListProps } from '../types';
 import {
@@ -16,6 +19,7 @@ import {
   onPress,
   onSliderChange,
   onValueChange,
+  progressValue,
   range,
   rowStyle,
   segmentedOptions,
@@ -42,7 +46,8 @@ export function ExpoUiHostPerControlList({
           // `matchContents` lets the host take the button's fitting size, which
           // is how a consumer ships a sized-to-content control here. It is part
           // of what this arm costs per control and is measured as such - and it
-          // stays out of the switch/slider arms, which are published numbers.
+          // stays out of the switch/slider/progress arms, which are published
+          // numbers.
           <Host key={index} matchContents style={style}>
             <BenchButton value={value} />
           </Host>
@@ -54,6 +59,8 @@ export function ExpoUiHostPerControlList({
           <Host key={index} style={style}>
             {component === 'slider' ? (
               <BenchSlider value={value} />
+            ) : component === 'progress' ? (
+              <BenchProgress value={value} />
             ) : (
               <Switch value={value} onCheckedChange={onValueChange} />
             )}
@@ -100,6 +107,37 @@ function BenchSlider({ value }: { value: boolean }) {
 }
 
 /**
+ * The closest thing `@expo/ui` has to a progress bar: its `LoadingIndicator`
+ * (Material 3's expressive `LoadingIndicator`), which is *indeterminate by
+ * default* and becomes determinate only when handed a `progress` **observable**.
+ *
+ * That is a different shape of update from every other arm's, and it is the Expo
+ * UI way of doing progress, so the arm renders what the library offers rather
+ * than something it is not:
+ *
+ * - one observable per control (`useNativeState` is a hook, so this has to be a
+ *   component per indicator - which is also what the host-per-control arm needs);
+ * - the runner's flipped bit reaches Compose through a **write to the state**,
+ *   not through a native prop diff: React re-renders the child, the effect writes
+ *   `state.value`, and Expo schedules that write to the UI thread.
+ *
+ * So on `update.progress` this arm measures "React render inside the host + one
+ * shared-object write" while `nitro-ui` measures "one prop commit over Nitro".
+ * Both are what their runtime costs; neither arm is shaped to look cheap.
+ *
+ * What this arm is *not*: M3's `LinearProgressIndicator`/`CircularProgressIndicator`
+ * are not exposed by `@expo/ui`, so this is the equivalent **API surface** for a
+ * progress value, not the same drawable as the other two arms. The table says so.
+ */
+function BenchProgress({ value }: { value: boolean }) {
+  const progress = useNativeState<number | null>(progressValue(value));
+  useEffect(() => {
+    progress.value = progressValue(value);
+  }, [progress, value]);
+  return <LoadingIndicator progress={progress} />;
+}
+
+/**
  * Material 3's single-choice segmented row - the same composable nitro-ui hosts,
  * reached through Expo's bridge instead of through Nitro.
  *
@@ -142,6 +180,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
             <BenchSegmented key={index} value={value} />
           ) : component === 'slider' ? (
             <BenchSlider key={index} value={value} />
+          ) : component === 'progress' ? (
+            <BenchProgress key={index} value={value} />
           ) : (
             <Switch key={index} value={value} onCheckedChange={onValueChange} />
           )

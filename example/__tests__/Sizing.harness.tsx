@@ -31,6 +31,7 @@ import {
   type NitroUiSizingStats,
   type NitroUiSizingTraceEvent,
 } from 'react-native-nitro-ui';
+import { expectTimingBudget } from './timingGate';
 
 /** The Switch's Fabric name - the key the sizing engine files its sizes under. */
 const COMPONENT = 'NitroUiSwitch';
@@ -649,8 +650,22 @@ describe('Sizing · intrinsic (T11)', () => {
     // because it cannot be tightened without turning this test red on a busy
     // machine. The structural guarantee - not N synchronous commits - is carried by
     // the `immediate` gate above, not by milliseconds.
-    expect(flushMs).toBeLessThan(mountedIn * 0.1);
-    expect(flushMs).toBeLessThan(Platform.OS === 'android' ? 250 : 40);
+    // Both bars are on a duration, so both are D21 gates: reported on every
+    // run, judged only under `HARNESS_TIMING=1` on a quiet machine. The
+    // structural guarantee this test is really about - one correction per
+    // instance, one flush for the batch - is gated above, on every run.
+    await expectTimingBudget({
+      label: 'cold batch of 200: one correction flush',
+      measuredMs: flushMs,
+      limitMs: mountedIn * 0.1,
+      note: 'the batch may not cost more than a tenth of its own mount',
+    });
+    await expectTimingBudget({
+      label: 'cold batch of 200: one correction flush',
+      measuredMs: flushMs,
+      limitMs: Platform.OS === 'android' ? 250 : 40,
+      note: 'bar placed by T11; T12 attributed the Android half to the pre-draw re-layout',
+    });
     unmount();
   });
 
@@ -1804,7 +1819,12 @@ describe('Sizing · intrinsic (T11)', () => {
         // one costs exactly one update per instance, and no more.
         expect(row.corrections).toBe(guess === 'wrongGuess' ? count : 0);
         expect(row.confirmed).toBe(guess === 'wrongGuess' ? 0 : count);
-        expect(row.mountedIn).toBeLessThan(count > 1 ? 12000 : 4000);
+        await expectTimingBudget({
+          label: `bench: mount a batch of ${String(count)}`,
+          measuredMs: row.mountedIn,
+          limitMs: count > 1 ? 12000 : 4000,
+          note: 'the batch below it, whatever the starting guess',
+        });
       }
     }
   });
