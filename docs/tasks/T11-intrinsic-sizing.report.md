@@ -191,7 +191,7 @@ not the earlier drafts of it.
 | `bun run test:native` | PASS — `sizing.test.cpp: 79 checks passed`, clock + handshake green |
 | `bun run nitrogen:check` | PASS — "no drift (53 generated files match, 4 view(s) patched)" |
 | `bun run autolinking:check` | PASS |
-| `bun run prepare` + `api-extractor:check` | PASS (no API drift report changes) |
+| `bun run prepare` + `api-extractor:check` | PASS — the emitted API report matches the committed one (which now includes `prewarm`) |
 | `bun run publint` | PASS — "All good!" |
 | `bun run manifest:check` | PASS — tarball matches, 148 files |
 
@@ -391,8 +391,9 @@ silently regress into a 0×0 first mount.
 | `d852851` | docs: record the nitrogen sizing hook as an upstream ask |
 | `8e589aa` | docs: describe sizes as measured now that the engine owns them |
 
-Branch total vs `main`: 67 files, +6189/−109 (P0: 53 files +4043/−96; P1 added the
-measurable surface, the drawn-box sample, the 609-line suite, and the docs).
+Branch total vs `main`: **72 files, +6622/−179** (P0 was 53 files, +4043/−96; P1
+added 19 files and +2579/−83 — the measurable surface, the drawn-box sample, the
+609-line suite, and the documentation).
 
 ## Risk status after P1
 
