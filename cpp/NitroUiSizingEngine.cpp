@@ -55,6 +55,18 @@ namespace margelo::nitro::nitroui {
       return std::fabs(a - b) <= NitroUiSizingEngine::kEpsilon;
     }
 
+    /**
+     * Same size, ignoring which configuration it belongs to.
+     *
+     * Used wherever the question is "would a push change what is on screen", and
+     * the key is deliberately not part of that: after an environment change the
+     * size on screen belongs to the old key, and a control whose size did not move
+     * must not be pushed a byte-identical second size just because the epoch did.
+     */
+    inline bool sameSizeIgnoringKey(const NitroUiMeasuredSize& a, const NitroUiMeasuredSize& b) {
+      return a.flags == b.flags && nearlyEqual(a.width, b.width) && nearlyEqual(a.height, b.height);
+    }
+
 #if defined(__APPLE__)
     /**
      * iOS: one observer on the main run loop, ordered *before* Core Animation's
@@ -93,8 +105,20 @@ namespace margelo::nitro::nitroui {
   }
 
   NitroUiSizingEngine& NitroUiSizingEngine::shared() {
-    static NitroUiSizingEngine engine;
-    return engine;
+    // Deliberately leaked (review N3): a function-local static is destroyed at
+    // process exit, and the run-loop observer, a layout thread or a host teardown
+    // can still be calling in at that point - the observer is never removed.
+    // The engine owns nothing that has to be released (no file handles, no JS
+    // references), so never running its destructor is the safe answer.
+    static auto* engine = new NitroUiSizingEngine();
+    return *engine;
+  }
+
+  int64_t NitroUiSizingEngine::nextInstanceId() {
+    // `std::atomic<int64_t>` of a trivially destructible type: no exit-order
+    // problem here either, and ids are never reused.
+    static std::atomic<int64_t> counter{0};
+    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
   }
 
   uint32_t NitroUiSizingEngine::componentHash(const char* componentName) {
@@ -134,14 +158,43 @@ namespace margelo::nitro::nitroui {
     return environmentEpoch_;
   }
 
+  uint64_t NitroUiSizingEngine::guessHash(const char* componentName, const std::string& sizingKey) {
+    // Epoch 0 is not a real epoch (`environmentEpoch_` starts at 1), so this can
+    // never collide with a live `NitroUiSizeKey`.
+    return keyFor(componentName, sizingKey, 0).hash;
+  }
+
+  void NitroUiSizingEngine::dropGuessesForLocked(uint32_t hash, const char* /*componentName*/) {
+    for (auto iterator = guesses_.begin(); iterator != guesses_.end();) {
+      if (NitroUiSizingEngine::componentHash(iterator->second.componentName.c_str()) == hash) {
+        iterator = guesses_.erase(iterator);
+      } else {
+        ++iterator;
+      }
+    }
+  }
+
   void NitroUiSizingEngine::invalidateEnvironment() {
     const std::lock_guard<std::shared_mutex> lock(mutex_);
     environmentEpoch_ += 1;
     cache_.clear();
-    // Every ledger entry was computed for an environment that no longer exists,
-    // so none of them may suppress a correction any more.
-    ledger_.clear();
-    lastLaidOut_.clear();
+    needsCorrection_.clear();
+    for (auto& entry: ledger_) {
+      LedgerEntry& ledger = entry.second;
+      if (ledger.componentName.empty()) {
+        continue;
+      }
+      // The key belonged to the environment that just went away; recompute it for
+      // this one and mark the entry inexact, so a mounted instance's next report
+      // finds something to correct instead of being dropped (review S2). An entry
+      // that was exact still has the old size on screen, which is exactly the
+      // thing the next report has to be measured against.
+      ledger.key = keyFor(ledger.componentName.c_str(), ledger.sizingKey, environmentEpoch_);
+      if (ledger.key) {
+        ledger.exact = false;
+        addNeedsCorrectionLocked(ledger.key, entry.first);
+      }
+    }
     // The fallbacks deliberately stay. A component declares its fallback once, at
     // process start, and nothing re-declares it - clearing it here would leave a
     // cache miss in the new environment with *no* guess at all, so the first
@@ -149,7 +202,22 @@ namespace margelo::nitro::nitroui {
     // from the old environment is not exact (it carries an empty key, so the
     // ledger still marks the instance inexact and the real measurement still
     // corrects it), it is just better than nothing.
-    needsCorrection_.clear();
+  }
+
+  void NitroUiSizingEngine::invalidateEnvironmentIfChanged(const std::string& signature) {
+    bool changed = false;
+    {
+      const std::shared_lock<std::shared_mutex> lock(mutex_);
+      changed = signature.empty() || signature != environmentSignature_;
+    }
+    if (!changed) {
+      return;
+    }
+    {
+      const std::lock_guard<std::shared_mutex> lock(mutex_);
+      environmentSignature_ = signature;
+    }
+    invalidateEnvironment();
   }
 
   void NitroUiSizingEngine::registerComponent(const char* componentName, NitroUiComponentBinding binding) {
@@ -185,6 +253,66 @@ namespace margelo::nitro::nitroui {
     registry_[instanceId] = BoundInstance{componentHash, push, state};
   }
 
+  void NitroUiSizingEngine::forget(int64_t instanceId) {
+    if (instanceId == NitroUiSizing::NO_INSTANCE) {
+      return;
+    }
+    const std::lock_guard<std::shared_mutex> lock(mutex_);
+    forgetLocked(instanceId);
+  }
+
+  void NitroUiSizingEngine::forgetLocked(int64_t instanceId) {
+    registry_.erase(instanceId);
+    auto ledger = ledger_.find(instanceId);
+    if (ledger != ledger_.end() && ledger->second.key) {
+      removeNeedsCorrectionLocked(ledger->second.key, instanceId);
+    }
+    ledger_.erase(instanceId);
+    // A correction on its way to an instance that is gone must not be applied
+    // later, when some other code may have taken over the id (`unboundTries`
+    // aside, the ledger check in `applyReports` is the second guard).
+    pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
+                                  [&](const Report& report) { return report.instanceId == instanceId; }),
+                   pending_.end());
+  }
+
+  void NitroUiSizingEngine::addNeedsCorrectionLocked(const NitroUiSizeKey& key, int64_t instanceId) {
+    std::vector<int64_t>& ids = needsCorrection_[key.hash];
+    if (std::find(ids.begin(), ids.end(), instanceId) == ids.end()) {
+      ids.push_back(instanceId);
+    }
+  }
+
+  void NitroUiSizingEngine::removeNeedsCorrectionLocked(const NitroUiSizeKey& key, int64_t instanceId) {
+    auto needs = needsCorrection_.find(key.hash);
+    if (needs == needsCorrection_.end()) {
+      return;
+    }
+    std::vector<int64_t>& ids = needs->second;
+    ids.erase(std::remove(ids.begin(), ids.end(), instanceId), ids.end());
+    if (ids.empty()) {
+      needsCorrection_.erase(needs);
+    }
+  }
+
+  void NitroUiSizingEngine::sweepExpiredLocked() {
+    // `forget` is the path that keeps these maps bounded; this walk is only there
+    // for a host that went away without calling it, so it costs nothing until the
+    // registry has grown by a full stride since the last walk.
+    if (registry_.size() < nextRegistrySweepAt_) {
+      return;
+    }
+    nextRegistrySweepAt_ = registry_.size() + kRegistrySweepStride;
+    for (auto iterator = registry_.begin(); iterator != registry_.end();) {
+      if (iterator->second.state.expired()) {
+        forgetLocked(iterator->first);
+        iterator = registry_.erase(iterator);
+      } else {
+        ++iterator;
+      }
+    }
+  }
+
   NitroUiMeasuredSize NitroUiSizingEngine::measure(const char* componentName, int64_t instanceId, const std::string& sizingKey,
                                                    const NitroUiMeasuredSize& fromState) {
     if (instanceId == NitroUiSizing::NO_INSTANCE) {
@@ -204,14 +332,32 @@ namespace margelo::nitro::nitroui {
     if (cached != cache_.end() && cached->second.key == key) {
       result = cached->second.size;
       result.key = key;
-      exact = true;
+      // A pre-warmed or seeded entry answers the layout - that is the point of
+      // pre-warming - but it is not an *answer* until a control confirmed it, so
+      // the instance stays inexact and its report either promotes the entry or
+      // replaces it (review B2).
+      exact = !cached->second.provisional;
     } else if (fromState.valid() && fromState.key == key) {
       // Native pushed this size into the state for *this* configuration.
       result = fromState;
       exact = true;
     } else {
-      auto fallback = fallbacks_.find(componentHash(componentName));
-      result = fallback != fallbacks_.end() ? fallback->second : NitroUiMeasuredSize{};
+      /**
+       * Cold for this configuration in this environment. The guess comes from what
+       * *this* configuration last measured (`guesses_`, which survives an epoch
+       * bump), and only falls back to the component's declared number when this
+       * configuration has never been measured at all. Filing the last measurement
+       * under the component instead is what let one variant's size become another's
+       * guess.
+       */
+      auto guess = guesses_.find(guessHash(componentName, sizingKey));
+      if (guess != guesses_.end() && guess->second.componentName == componentName &&
+          guess->second.sizingKey == sizingKey) {
+        result = guess->second.size;
+      } else {
+        auto fallback = fallbacks_.find(componentHash(componentName));
+        result = fallback != fallbacks_.end() ? fallback->second : NitroUiMeasuredSize{};
+      }
       // The fallback keeps an empty key on purpose: it is a *guess* for this
       // configuration, and `valid()` is how the rest of the code tells a guess
       // from an answer. The ledger still records the key, so the real size
@@ -221,30 +367,31 @@ namespace margelo::nitro::nitroui {
     // Record what this instance laid out with, and whether that is the answer we
     // already believe. `exact` instances never get a state push, which is what
     // makes a pre-warmed mount cost zero extra commits.
-    auto previous = ledger_.find(instanceId);
-    if (previous != ledger_.end() && previous->second.key) {
-      auto needs = needsCorrection_.find(previous->second.key.hash);
-      if (needs != needsCorrection_.end()) {
-        auto& ids = needs->second;
-        ids.erase(std::remove(ids.begin(), ids.end(), instanceId), ids.end());
-        if (ids.empty()) {
-          needsCorrection_.erase(needs);
-        }
-      }
+    LedgerEntry& ledger = ledger_[instanceId];
+    if (ledger.key) {
+      removeNeedsCorrectionLocked(ledger.key, instanceId);
     }
-    ledger_[instanceId] = LedgerEntry{key, exact};
-    if (!exact) {
-      needsCorrection_[key.hash].push_back(instanceId);
+    // The instance moved configuration (or the environment moved under it): what
+    // it is on screen with no longer belongs to this key.
+    const bool sameConfiguration = ledger.key == key;
+    if (!sameConfiguration) {
+      ledger.laidOut = NitroUiMeasuredSize{};
     }
+    ledger.key = key;
+    ledger.exact = exact;
+    ledger.componentName = componentName;
+    ledger.sizingKey = sizingKey;
 
     if (traceEnabled_.load(std::memory_order_relaxed)) {
       // Only when the answer for this instance changed: a control that is laid
       // out a hundred times at one size is not a hundred trace events.
-      auto previous = lastLaidOut_.find(instanceId);
-      if (previous == lastLaidOut_.end() || !(previous->second == result)) {
-        lastLaidOut_[instanceId] = result;
+      if (!(ledger.laidOut.width > 0 && sameSizeIgnoringKey(ledger.laidOut, result))) {
         recordTraceLocked(instanceId, kStageLaidOut, result.width, result.height);
       }
+    }
+    ledger.laidOut = result;
+    if (!exact) {
+      addNeedsCorrectionLocked(key, instanceId);
     }
     return result;
   }
@@ -255,6 +402,9 @@ namespace margelo::nitro::nitroui {
     }
     const std::lock_guard<std::shared_mutex> lock(mutex_);
     fallbacks_[componentHash(componentName)] = NitroUiMeasuredSize{width, height, NitroUiSizeKey{}, flags};
+    // A re-declaration means the history this component's configurations had is
+    // about the environment or build that this number replaces.
+    dropGuessesForLocked(componentHash(componentName), componentName);
   }
 
   void NitroUiSizingEngine::seedSize(const char* componentName, const std::string& sizingKey, float width, float height, uint32_t flags) {
@@ -263,9 +413,16 @@ namespace margelo::nitro::nitroui {
     }
     const std::lock_guard<std::shared_mutex> lock(mutex_);
     const NitroUiSizeKey key = keyFor(componentName, sizingKey, environmentEpoch_);
-    cache_[key.hash] = SizeEntry{key, NitroUiMeasuredSize{width, height, key, flags}};
+    // Provisional: nothing measured this, so a control that disagrees still wins
+    // (review B2). This is also what makes the on-device tests able to fail.
+    cache_[key.hash] = SizeEntry{key, NitroUiMeasuredSize{width, height, key, flags}, true};
     stats_.cachedSizes = static_cast<int64_t>(cache_.size());
     fallbacks_[componentHash(componentName)] = NitroUiMeasuredSize{width, height, NitroUiSizeKey{}, flags};
+    dropGuessesForLocked(componentHash(componentName), componentName);
+    // The seed is also this configuration's new history, so an epoch bump after it
+    // still guesses the seeded number rather than an older measurement.
+    guesses_[guessHash(componentName, sizingKey)] = GuessEntry{std::string(componentName), sizingKey,
+                                                               NitroUiMeasuredSize{width, height, NitroUiSizeKey{}, flags}};
   }
 
   void NitroUiSizingEngine::report(int64_t instanceId, float width, float height, uint32_t flags) {
@@ -273,36 +430,88 @@ namespace margelo::nitro::nitroui {
       // A control that measured nothing has not measured anything.
       return;
     }
+    bool needsFlush = false;
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
       auto ledger = ledger_.find(instanceId);
-      if (ledger != ledger_.end() && ledger->second.key && ledger->second.exact) {
-        stats_.reportsDropped += 1;
-      }
       if (ledger == ledger_.end() || !ledger->second.key) {
         // Nothing ever laid out for this instance, so there is nothing to correct.
+        // It gets its ledger entry from the next `measure`, and can report again
+        // then; that is the order a mount actually happens in.
         return;
       }
-      if (ledger->second.exact) {
-        // It already laid out with the size we now measured. The whole point of
-        // the ledger: this is where a pre-warmed mount stops costing anything.
-        return;
+      const NitroUiSizeKey& key = ledger->second.key;
+      const NitroUiMeasuredSize measured{width, height, key, flags};
+      // Does this agree with what the instance is already laid out with? (The key
+      // is not part of that question - see `sameSizeIgnoringKey`.)
+      const bool agrees = ledger->second.laidOut.width > 0 && sameSizeIgnoringKey(ledger->second.laidOut, measured);
+
+      if (agrees) {
+        bool othersPending = false;
+        auto needs = needsCorrection_.find(key.hash);
+        if (needs != needsCorrection_.end()) {
+          for (const int64_t other: needs->second) {
+            if (other != instanceId) {
+              othersPending = true;
+              break;
+            }
+          }
+        }
+        if (!othersPending) {
+          // Nothing on this instance needs a commit: neither does anything else
+          // with the same configuration. Confirm it and stop here - this is where
+          // a pre-warmed mount, and an environment change that did not move this
+          // control, stop costing anything at all.
+          stats_.reportsDropped += 1;
+          stats_.reportsConfirmed += 1;
+          ledger->second.exact = true;
+          removeNeedsCorrectionLocked(key, instanceId);
+          // The control confirmed a size for *this* configuration, so this
+          // configuration now has an authoritative answer - whether the cache had
+          // a provisional guess that agreed, a provisional guess that this control
+          // happens to match by luck, or nothing at all. Filling the entry here is
+          // what keeps the next mount from falling back to the component's declared
+          // guess again; only the guess being *wrong* may cost a correction (B2).
+          guesses_[guessHash(ledger->second.componentName.c_str(), ledger->second.sizingKey)] =
+              GuessEntry{ledger->second.componentName, ledger->second.sizingKey,
+                         NitroUiMeasuredSize{width, height, NitroUiSizeKey{}, flags}};
+          auto cached = cache_.find(key.hash);
+          if (cached != cache_.end() && cached->second.key == key && !cached->second.provisional) {
+            // Already authoritative: leave the recorded size alone.
+          } else if (cached == cache_.end() || cached->second.key != key) {
+            cache_[key.hash] = SizeEntry{key, measured, false};
+            stats_.cachedSizes = static_cast<int64_t>(cache_.size());
+          } else {
+            cached->second.provisional = false;
+            cached->second.size = measured;
+          }
+          return;
+        }
       }
-      auto cached = cache_.find(ledger->second.key.hash);
-      if (cached != cache_.end() && cached->second.key == ledger->second.key && nearlyEqual(cached->second.size.width, width) &&
-          nearlyEqual(cached->second.size.height, height) && (cached->second.size.flags & kFlagFillWidth) == (flags & kFlagFillWidth)) {
-        return;
-      }
+
+      // Something to correct - either this instance's size, or another instance of
+      // the same configuration waiting for the answer this control measured.
+      ledger->second.exact = false;
       // Last report of the turn wins for this instance.
       pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
                                     [&](const Report& existing) { return existing.instanceId == instanceId; }),
                      pending_.end());
-      pending_.push_back(Report{instanceId, width, height, flags});
+      pending_.push_back(Report{instanceId, width, height, flags, 0});
       stats_.reportsQueued += 1;
+      needsFlush = true;
     }
 #if defined(__APPLE__)
-    installFlushObserverIfNeeded();
+    if (needsFlush) {
+      installFlushObserverIfNeeded();
+      // The observer only runs when the run loop next gets to that point, and
+      // nothing else guarantees another pass: without this, a correction that
+      // lands at the end of a turn waits for the next touch. Waking the loop costs
+      // nothing when it is already awake, and a block on the main queue (the trace
+      // sample used to be the accidental reason this worked) is not a design.
+      CFRunLoopWakeUp(CFRunLoopGetMain());
+    }
 #else
+    (void) needsFlush;
     // Android flushes from an `OnPreDrawListener`, which returns `false` to skip
     // the frame the reports would have made wrong.
 #endif
@@ -336,6 +545,7 @@ namespace margelo::nitro::nitroui {
       stats_.lastFlushNs = elapsed;
       stats_.maxFlushNs = std::max(stats_.maxFlushNs, elapsed);
       if (changed) {
+        // Renamed for what it counts (DECISIONS D16).
         // What this counts is "a flush changed at least one size", and what that
         // is worth depends on the platform. Android's `OnPreDrawListener` returns
         // `false` on exactly these flushes, so here the count is also the number
@@ -346,8 +556,9 @@ namespace margelo::nitro::nitroui {
         // a later turn the frame the turn started with is already on screen. The
         // T11 harness measures that case (one stale frame in `poison`), so this is
         // not evidence of a skipped frame on iOS; the trace's `drew` samples are.
-        stats_.staleFramesSkipped += 1;
+        stats_.changedFlushes += 1;
       }
+      sweepExpiredLocked();
     }
     return changed;
   }
@@ -372,42 +583,66 @@ namespace margelo::nitro::nitroui {
       bool immediate;
     };
     std::vector<Pending> pending{};
+    // Reports whose instance has no state to push into yet, and instances that are
+    // waiting for this configuration but cannot be reached yet. Both mean "not
+    // now", and dropping them outright is how a control ends up stuck at the
+    // fallback size (review S7).
+    std::vector<Report> requeue{};
 
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
       for (const auto& report: reports) {
-        auto instance = registry_.find(report.instanceId);
-        if (instance == registry_.end()) {
-          // Never bound: the report arrived between `measure` and the mount that
-          // binds the state, or the view was dropped before it mounted. Drop the
-          // report but keep the ledger entry, so the *next* report of this
-          // instance can still correct it - guessing it is gone would be how a
-          // control gets stuck at the wrong size.
-          continue;
-        }
-        auto state = instance->second.state.lock();
-        if (state == nullptr) {
-          // The shadow tree let this node's state go: the instance is gone, so
-          // its ledger entry goes with it (that is what bounds the ledger).
-          dead.push_back(report.instanceId);
-          continue;
-        }
         auto ledger = ledger_.find(report.instanceId);
-        if (ledger == ledger_.end() || !ledger->second.key || ledger->second.exact) {
+        if (ledger == ledger_.end() || !ledger->second.key) {
+          // Never laid out, or forgotten: nothing to correct, and nothing will be.
           continue;
         }
         const NitroUiSizeKey key = ledger->second.key;
         const NitroUiMeasuredSize measured{report.width, report.height, key, report.flags};
 
-        // The cache entry is what makes the *next* mount of this configuration
-        // exact on its first layout, so it goes in before any push.
-        cache_[key.hash] = SizeEntry{key, measured};
-        stats_.cachedSizes = static_cast<int64_t>(cache_.size());
-        // A measured size is a better guess for the component than a declared
-        // default, and it is the only way a component's fallback stays honest on
-        // an OS whose control is a different size (D14).
-        fallbacks_[instance->second.componentHash] = NitroUiMeasuredSize{report.width, report.height, NitroUiSizeKey{}, report.flags};
+        auto instance = registry_.find(report.instanceId);
+        if (instance == registry_.end()) {
+          // Never bound: the report arrived between `measure` and the mount that
+          // binds the state. Try again for a bounded number of flushes; the ledger
+          // entry stays either way, so a later report works normally.
+          if (report.unboundTries < kUnboundReportRetries) {
+            Report retry = report;
+            retry.unboundTries += 1;
+            requeue.push_back(retry);
+          }
+          continue;
+        }
+        auto state = instance->second.state.lock();
+        if (state == nullptr) {
+          // The shadow tree let this node's state go and nobody called `forget`:
+          // the instance is gone, so everything filed under it goes with it.
+          dead.push_back(report.instanceId);
+          continue;
+        }
 
+        // The cache entry is what makes the *next* mount of this configuration
+        // exact on its first layout, so it goes in before any push. A size a
+        // control measured is authoritative: it replaces a provisional entry that
+        // disagreed, which is the other half of review B2.
+        cache_[key.hash] = SizeEntry{key, measured, false};
+        stats_.cachedSizes = static_cast<int64_t>(cache_.size());
+        // Same configuration, so it is this configuration's history - filed by
+        // (component, sizingKey), never by component alone.
+        const std::string& sizingKey = ledger->second.sizingKey;
+        guesses_[guessHash(ledger->second.componentName.c_str(), sizingKey)] =
+            GuessEntry{ledger->second.componentName, sizingKey,
+                       NitroUiMeasuredSize{report.width, report.height, NitroUiSizeKey{}, report.flags}};
+/**
+         * The measured size deliberately does **not** become the component's
+         * fallback. `fallbacks_` is keyed by component alone, so writing the last
+         * measurement into it lets one configuration become another one's guess:
+         * a 100-wide variant was measured, and the next cold mount of the default
+         * configuration was laid out 100 wide (reproduced on the host: a fresh
+         * default mount answered 100x28 after a wide variant reported). A guess
+         * belongs to the configuration it came from, which is what `cache_` is
+         * for; the declared fallback stays the only component-wide guess, and it
+         * is exactly the number the component declared for this OS (D14).
+         */
         // Every instance that laid out with a wrong size for this key gets the
         // same correction, not only the one that reported.
         auto needs = needsCorrection_.find(key.hash);
@@ -415,13 +650,17 @@ namespace margelo::nitro::nitroui {
         if (needs != needsCorrection_.end()) {
           targets.swap(needs->second);
           needsCorrection_.erase(needs);
-        } else {
+        }
+        if (std::find(targets.begin(), targets.end(), report.instanceId) == targets.end()) {
           targets.push_back(report.instanceId);
         }
 
+        std::vector<int64_t> waiting{};
         for (const int64_t target: targets) {
           auto targetInstance = registry_.find(target);
           if (targetInstance == registry_.end()) {
+            // Not bound yet - put it back rather than lose the correction (S7).
+            waiting.push_back(target);
             continue;
           }
           auto targetState = targetInstance->second.state.lock();
@@ -430,12 +669,25 @@ namespace margelo::nitro::nitroui {
             continue;
           }
           auto targetLedger = ledger_.find(target);
-          if (targetLedger == ledger_.end() || targetLedger->second.exact) {
+          if (targetLedger == ledger_.end() || targetLedger->second.exact || !(targetLedger->second.key == key)) {
             continue;
           }
           // Marked before the push: the new layout this push causes will re-enter
           // `measure`, find the cache full, and record `exact` itself.
           targetLedger->second.exact = true;
+          if (targetLedger->second.laidOut.width > 0 && sameSizeIgnoringKey(targetLedger->second.laidOut, measured)) {
+            // It is already on screen at this size (an environment change that
+            // moved the epoch and not the control). Confirming it must not cost a
+            // commit - or the epoch bump would push every mounted control a size it
+            // already has.
+            stats_.reportsConfirmed += 1;
+            continue;
+          }
+          // What the instance is now being told to lay out with. Recording it here
+          // (rather than only in `measure`, which runs when the commit lands) is
+          // what makes the host's next report of the same size a confirmation
+          // instead of a second correction.
+          targetLedger->second.laidOut = measured;
           changed = true;
           const bool immediate = remaining > 0;
           remaining -= 1;
@@ -449,11 +701,24 @@ namespace margelo::nitro::nitroui {
           }
           pending.push_back(Pending{targetInstance->second.push, targetState, measured, immediate});
         }
+        for (const int64_t target: waiting) {
+          addNeedsCorrectionLocked(key, target);
+        }
       }
       for (const int64_t instanceId: dead) {
-        registry_.erase(instanceId);
-        ledger_.erase(instanceId);
-        lastLaidOut_.erase(instanceId);
+        forgetLocked(instanceId);
+      }
+      for (const auto& report: requeue) {
+        bool duplicate = false;
+        for (const auto& existing: pending_) {
+          if (existing.instanceId == report.instanceId) {
+            duplicate = true;
+            break;
+          }
+        }
+        if (!duplicate) {
+          pending_.push_back(report);
+        }
       }
     }
 
@@ -476,8 +741,15 @@ namespace margelo::nitro::nitroui {
       return false;
     }
     const NitroUiSizeKey key = keyFor(componentName, "", environmentEpoch_);
+    // Provisional, never authoritative (review B2): this is the library's own
+    // guess at what the control is, not a measurement of it. An app that
+    // pre-warms must be able to be wrong without freezing a wrong layout for the
+    // session - the case that used to bite iOS 26 apps running with
+    // `UIDesignRequiresCompatibility`, where the declared 61x28 was laid over a
+    // 51x31 control and every Switch kept a box 3 pt too short.
     cache_[key.hash] = SizeEntry{key, NitroUiMeasuredSize{fallback->second.width, fallback->second.height, key,
-                                                         fallback->second.flags}};
+                                                         fallback->second.flags},
+                                 true};
     stats_.cachedSizes = static_cast<int64_t>(cache_.size());
     return true;
   }
@@ -487,6 +759,8 @@ namespace margelo::nitro::nitroui {
     NitroUiSizingCounters stats = stats_;
     stats.cachedSizes = static_cast<int64_t>(cache_.size());
     stats.environmentEpoch = static_cast<int64_t>(environmentEpoch_);
+    stats.ledgerEntries = static_cast<int64_t>(ledger_.size());
+    stats.registryEntries = static_cast<int64_t>(registry_.size());
     return stats;
   }
 
@@ -537,6 +811,10 @@ namespace margelo::nitro::nitroui {
     NitroUiSizingEngine::shared().invalidateEnvironment();
   }
 
+  void NitroUiSizing::invalidateEnvironmentIfChanged(const char* signature) {
+    NitroUiSizingEngine::shared().invalidateEnvironmentIfChanged(signature != nullptr ? std::string(signature) : std::string());
+  }
+
   void NitroUiSizing::setFallback(const char* componentName, double width, double height, int32_t policy) {
     NitroUiSizingEngine::shared().setFallback(componentName,
                                               static_cast<float>(width),
@@ -552,6 +830,10 @@ namespace margelo::nitro::nitroui {
 
   int64_t NitroUiSizing::cachedSizeCount() {
     return static_cast<int64_t>(NitroUiSizingEngine::shared().cachedSizeCount());
+  }
+
+  void NitroUiSizing::forget(int64_t instanceId) {
+    NitroUiSizingEngine::shared().forget(instanceId);
   }
 
 } // namespace margelo::nitro::nitroui

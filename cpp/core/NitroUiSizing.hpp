@@ -55,6 +55,20 @@ namespace margelo::nitro::nitroui {
     static void invalidateEnvironment();
 
     /**
+     * `invalidateEnvironment` only if the environment this signature describes is
+     * not the last one seen.
+     *
+     * Both platforms call this from a *per-view* callback (`traitCollectionDidChange`
+     * and `onConfigurationChanged` fire once per mounted view for one user action),
+     * and the signature is what makes one user action one epoch bump: pass
+     * something like `category=XL,legibility=0` or `fontScale=1.3,densityDpi=420,
+     * locale=en-US`, and an unchanged signature costs one string compare
+     * (review S2). A rotation, which is a configuration change that moves no size,
+     * therefore invalidates nothing. Pass `nullptr`/empty to force a bump.
+     */
+    static void invalidateEnvironmentIfChanged(const char* signature);
+
+    /**
      * Declare the size to lay a component's first instance out with, before
      * anything has been measured - the platform's documented control size.
      *
@@ -78,6 +92,18 @@ namespace margelo::nitro::nitroui {
 
     /// Number of cached sizes. For diagnostics and tests.
     static int64_t cachedSizeCount();
+
+    /**
+     * The instance is finished: its host is dropping or recycling the view.
+     *
+     * Both platforms call this from `onDropView`/`prepareForRecycle`, next to
+     * where they clear their own `sizingInstanceId`. It is what keeps the engine's
+     * per-instance maps from growing for the life of the process - a list that
+     * scrolls mounts and unmounts the same control hundreds of times, and waiting
+     * for the Fabric `State` to expire instead never notices an instance that was
+     * never pushed to (review S3). Idempotent, and `NO_INSTANCE` does nothing.
+     */
+    static void forget(int64_t instanceId);
   };
 
 } // namespace margelo::nitro::nitroui
