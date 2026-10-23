@@ -67,7 +67,42 @@ type SliderHandle = {
   readonly accessibilityLabel: string | null;
   measureContent(): { width: number; height: number };
   nuiTestDrag(to: number, steps: number, msPerStep: number): void;
+  /** Perform the platform's a11y increment (>0) / decrement (<0). */
+  nuiTestAccessibilityStep(direction: number): void;
+  /** What the last accessibility step did, one line. */
+  nuiTestAccessibilityStepReport(): string;
+  /** Whether the control's frame pump is still armed. */
+  nuiTestFramePumpArmed(): boolean;
 };
+
+/** Wait for the queued a11y action to have run, then read its report. */
+async function accessibilityStepReport(
+  handle: SliderHandle,
+  direction: number
+): Promise<string> {
+  handle.nuiTestAccessibilityStep(direction);
+  // The action runs in a turn of the UI thread's queue and the report is a plain
+  // field written there, so this waits for the report to change rather than for a
+  // guessed pause.
+  const before = handle.nuiTestAccessibilityStepReport();
+  return pollUntil(
+    () => {
+      const report = handle.nuiTestAccessibilityStepReport();
+      return report === before ? null : report;
+    },
+    () => new Error('The accessibility step probe never reported.'),
+    5000
+  );
+}
+
+/** The report must say the platform's own action ran, not that we gave up. */
+function expectPerformed(report: string, what: string): void {
+  if (!report.includes('performed ')) {
+    // Thrown rather than `expect(...).toMatch`: Jest shortens a long string in a
+    // matcher failure, and what the probe walked is the whole diagnosis.
+    throw new Error(`${what}: ${report}`);
+  }
+}
 
 /**
  * The `hybridRef` handles this test rendered, by `testID`.
@@ -550,6 +585,18 @@ describe('Slider', () => {
     expect(events.change[events.change.length - 1]).toBe(0.75);
     // Uncontrolled: JS never echoes, so nothing was written from React.
     expect(handle.value).toBeNull();
+    // The frame pump is what carries a drag's samples, so a finished drag has to
+    // give it back: on iOS a `CADisplayLink` that is not invalidated keeps
+    // ticking a hosted view that is idle (and one that is recycled), and on
+    // Android a `postFrameCallback` that is re-armed keeps a frame source alive
+    // for a control nobody is touching. `false` after the release is the only
+    // thing that says the callback is gone rather than merely quiet, and a few
+    // frames later says it stays gone.
+    const delivered = events.change.length;
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
+    await sleep(150);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
+    expect(events.change.length).toBe(delivered);
   });
 
   it('coalesces a drag to at most one onValueChange per frame', async () => {
@@ -737,6 +784,93 @@ describe('Slider', () => {
     await drag(handle, events, 0.9, 5, 0);
     console.log(`from JS: starts=${JSON.stringify(events.start)}`);
     expect(events.start).toEqual([0.6]);
+  });
+
+  it('finishes a drag that a write from JS lands inside', async () => {
+    // Review fix 1 asked for this case from JS, and the honest answer when it was
+    // written is that the JS stream cannot see the bug. The race was: a parent
+    // commit landing between a touch sample and the frame tick that emits it passed
+    // the handshake (the counts it compares only advance on emit), so the app's
+    // value was applied and then painted over by the dragged one - a one-frame snap
+    // on the screen, and no callback that reports it either way. What the first run
+    // of this test measured is exactly that: with the fix in place, a write that
+    // arrives while a sample is pending is refused and the release reports the drag;
+    // a write that arrives with nothing pending wins, which is the fight §11 already
+    // documents as the app taking the thumb. Both are legitimate, and both look the
+    // same from here.
+    //
+    // So this test asserts what must survive either outcome, five times over, with
+    // the write dropped into a different part of the drag each time: one start per
+    // end, the release value is one of the two values that were legitimately on the
+    // thumb, every value is on the step, the pump goes back to sleep, and - the one
+    // that would catch a half-applied write - the next drag begins from the value
+    // the last one reported. The fix itself is gated where it is visible:
+    // `scripts/native-tests/handshake.test.swift` and
+    // `android/src/test/java/com/margelo/nitro/nitroui/NitroUiControlledValueTest.kt`,
+    // which both go red without it.
+    const events = newEvents();
+    const props = (value: number) => (
+      <Slider
+        value={value}
+        step={0.1}
+        onValueChange={(v) => events.change.push(v)}
+        onSlidingStart={(v) => events.start.push(v)}
+        onSlidingComplete={(v) => events.complete.push(v)}
+        testID="mid-write"
+        hybridRef={captureFor('mid-write')}
+      />
+    );
+    const { rerender } = await render(props(0.2));
+    await waitForBox('mid-write');
+    const handle = await handleFor('mid-write');
+
+    const written = 0.5;
+    const target = 0.8;
+    const releases: number[] = [];
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const before = events.complete.length;
+      const beganFrom = before === 0 ? 0.2 : events.complete[before - 1]!;
+      // Eight moves ~55 ms apart, so one drag is eight frames of samples; the write
+      // is injected at a different offset into that each round, which is the only
+      // way to cross the pending-sample window more often than by luck.
+      handle.nuiTestDrag(target, 8, 55);
+      await sleep(30 + attempt * 60);
+      await rerender(props(written));
+      await pollUntil(
+        () => (events.complete.length > before ? events.complete.length : null),
+        () =>
+          new Error(
+            `Attempt ${String(attempt)}: no onSlidingComplete after a mid-drag ` +
+              `write (start=${JSON.stringify(events.start)} ` +
+              `change=${JSON.stringify(events.change)} ` +
+              `complete=${JSON.stringify(events.complete)}).`
+          ),
+        6000
+      );
+      await sleep(60);
+      const release = events.complete[before]!;
+      releases.push(release);
+      // One start per end, and this gesture began where the last one stopped.
+      expect(events.start.length).toBe(events.complete.length);
+      expect(events.start[before]).toBe(beganFrom);
+      // The thumb stopped on the app's write or on its own drag target - never on
+      // a third value, which is what a half-applied handshake produces.
+      expect([written, target]).toContain(release);
+      for (const value of events.change) {
+        // Every change is a value the thumb was showing, on the step.
+        const offGrid = Math.abs(value * 10 - Math.round(value * 10));
+        expect(offGrid).toBeLessThan(1e-9);
+      }
+      expect(handle.nuiTestFramePumpArmed()).toBe(false);
+    }
+    console.log(
+      `mid-drag write: 5 attempts, release values=${JSON.stringify(releases)} ` +
+        `(wrote ${written}, dragged to ${target})`
+    );
+    // And the control is still an ordinary control afterwards.
+    await drag(handle, events, 0.3, 4, 0);
+    expect(events.start[events.start.length - 1]).toBe(releases[4]);
+    expect(events.complete[events.complete.length - 1]).toBe(0.3);
   });
 
   it('keeps its own value when uncontrolled', async () => {
@@ -962,6 +1096,11 @@ describe('Slider', () => {
     const abandonedHandle = await handleFor('abandoned');
     abandonedHandle.nuiTestDrag(0.95, 5, 60);
     await sleep(120); // a couple of moves in, several still queued
+    // The gesture is genuinely in flight here - which is what makes the rest of
+    // this test worth running at all. `nuiTestFramePumpArmed` is the proof: the
+    // display link / Choreographer callback is live, so there is something for the
+    // recycle to cancel.
+    expect(abandonedHandle.nuiTestFramePumpArmed()).toBe(true);
     firstRender.unmount();
 
     const second = newEvents();
@@ -979,10 +1118,40 @@ describe('Slider', () => {
     const nextHandle = await handleFor('next-owner');
     // Long enough for every queued move and the queued release to have fired.
     await sleep(500);
+    // And the pump is gone with it: a cancelled drag that left its frame source
+    // running is a callback ticking a control nobody owns until the next drag
+    // adopts it.
+    expect(abandonedHandle.nuiTestFramePumpArmed()).toBe(false);
     expect(second.change).toEqual([]);
     expect(second.start).toEqual([]);
     expect(second.complete).toEqual([]);
     expect(nextHandle.mostRecentEventCount).toBe(0);
+    // Review fix 7: the assertions above would also pass if the dropped view were
+    // simply never reused, which would make this a test of garbage collection - so
+    // whether the instance came back is pinned, per platform, because the two do
+    // different things with a dropped view and only one of them can make this test
+    // mean what it looks like it means.
+    //
+    // iOS: Fabric's pool hands the same Hybrid View to the next `NitroUiSlider`, so
+    // the handle below *is* the abandoned one, and the no-leak assertions are about
+    // a control that really has two owners. That is the case `prepareForRecycle`
+    // exists for.
+    //
+    // Android: measured on `nitroui_t01`, a plain unmount/mount in the root does
+    // not go through the recycler (it is built for list children), so the new owner
+    // gets a fresh instance and the reuse risk is not reachable from here. What
+    // protects Android is `prepareForRecycle`'s cancel, and that is gated where it
+    // can be gated deterministically - `SliderModelTest`'s "a reset cancels the
+    // drag in flight" and "a late end after a cancel is silent", which go red
+    // without the guard.
+    console.log(
+      `abandoned drag: reused=${String(nextHandle === abandonedHandle)}`
+    );
+    if (Platform.OS === 'ios') {
+      expect(nextHandle).toBe(abandonedHandle);
+    } else {
+      expect(nextHandle).not.toBe(abandonedHandle);
+    }
 
     // And the new instance is clean in the deeper sense: its own drag starts from
     // its own seed, not from somewhere the abandoned drag reached.
@@ -1033,6 +1202,218 @@ describe('Slider', () => {
       expect(labelled).not.toBeNull();
       expect(Math.abs(labelled!.width - box.width)).toBeLessThan(2);
     }
+  });
+
+  it('steps to the next legal value when a screen reader asks', async () => {
+    // Review fix 3. The test that matters is not "the model can compute a next
+    // value" - the native unit vectors cover that - it is what the *platform's*
+    // adjust action does to this control, because that is the only path a screen
+    // reader has: VoiceOver performs `accessibilityIncrement` on the focused
+    // element, and TalkBack invokes the Compose `SetProgress` action on the focused
+    // semantics node. Both probes below do exactly that (see
+    // `nuiTestAccessibilityStep`), with no fallback: a control that does not
+    // expose the action fails the test rather than being quietly stepped by us.
+    //
+    // Two ranges are needed. `0…12 step 3` ends on a step, so the platform can
+    // stride its own track. `0…10 step 3` does not, and is the interesting one:
+    // handing the platform a continuous track and quantising afterwards means its
+    // increment lands on a fraction that snaps *back* to where it was - the reader
+    // presses and nothing moves.
+    const aligned = newEvents();
+    const uneven = newEvents();
+    const atTheTop = newEvents();
+    // What each of the three controls displays before a reader touches it, so the
+    // helper can check the first step's start argument.
+    const seeds = new Map<SlideEvents, number>([
+      [aligned, 0],
+      [uneven, 0],
+      [atTheTop, 12],
+    ]);
+    await render(
+      <View>
+        <Slider
+          minimumValue={0}
+          maximumValue={12}
+          step={3}
+          defaultValue={0}
+          onValueChange={(v) => aligned.change.push(v)}
+          onSlidingStart={(v) => aligned.start.push(v)}
+          onSlidingComplete={(v) => aligned.complete.push(v)}
+          testID="a11y-aligned"
+          hybridRef={captureFor('a11y-aligned')}
+        />
+        <Slider
+          minimumValue={0}
+          maximumValue={10}
+          step={3}
+          defaultValue={0}
+          onValueChange={(v) => uneven.change.push(v)}
+          onSlidingStart={(v) => uneven.start.push(v)}
+          onSlidingComplete={(v) => uneven.complete.push(v)}
+          testID="a11y-uneven"
+          hybridRef={captureFor('a11y-uneven')}
+        />
+        <Slider
+          minimumValue={0}
+          maximumValue={12}
+          step={3}
+          defaultValue={12}
+          onValueChange={(v) => atTheTop.change.push(v)}
+          onSlidingStart={(v) => atTheTop.start.push(v)}
+          onSlidingComplete={(v) => atTheTop.complete.push(v)}
+          testID="a11y-top"
+          hybridRef={captureFor('a11y-top')}
+        />
+      </View>
+    );
+    await waitForBox('a11y-aligned');
+    const alignedHandle = await handleFor('a11y-aligned');
+    const unevenHandle = await handleFor('a11y-uneven');
+    const topHandle = await handleFor('a11y-top');
+
+    // One gesture's worth of callbacks per step: a screen reader's increment is an
+    // interaction like a thumb release, and an app must not have to tell them
+    // apart. It is also the guard on the other half of review fix 3 - a write that
+    // opened a drag SwiftUI was never going to close would leave a start with no
+    // end (and the pump running), and the arrays below would stop matching.
+    const walkTo = async (
+      what: string,
+      handle: SliderHandle,
+      events: SlideEvents,
+      direction: number,
+      expected: number[]
+    ) => {
+      const seed = seeds.get(events)!;
+      const report = await accessibilityStepReport(handle, direction);
+      if (events.complete.length === 1) {
+        console.log(`a11y step: ${report}`);
+      }
+      expectPerformed(report, what);
+      const index = events.complete.length - 1;
+      expect(events.complete).toEqual(expected.slice(0, index + 1));
+      // The start of each step is the value it began from: the control's seed for
+      // the first, and each previously reported value after that. And never more
+      // starts than ends - the drag that never ends would show up here.
+      expect(events.start[index]).toEqual(
+        index === 0 ? seed : expected[index - 1]
+      );
+      expect(events.start.length).toBe(events.complete.length);
+      expect(handle.nuiTestFramePumpArmed()).toBe(false);
+    };
+
+    // 0…12 step 3: the grid is the platform's, and the top of the range is on it.
+    await walkTo('aligned +3', alignedHandle, aligned, 1, [3]);
+    await walkTo('aligned +6', alignedHandle, aligned, 1, [3, 6]);
+    await walkTo('aligned +9', alignedHandle, aligned, 1, [3, 6, 9]);
+    await walkTo('aligned +12', alignedHandle, aligned, 1, [3, 6, 9, 12]);
+    // At the top there is no next value. Emitting a triple for a value that did not
+    // move would report a gesture the reader never performed.
+    expectPerformed(
+      await accessibilityStepReport(alignedHandle, 1),
+      'aligned past the top'
+    );
+    expect(aligned.complete).toEqual([3, 6, 9, 12]);
+    await walkTo('aligned -9', alignedHandle, aligned, -1, [3, 6, 9, 12, 9]);
+    await walkTo('aligned -3', alignedHandle, aligned, -1, [3, 6, 9, 12, 9, 6]);
+    await walkTo(
+      'aligned +0',
+      alignedHandle,
+      aligned,
+      -1,
+      [3, 6, 9, 12, 9, 6, 3]
+    );
+    await walkTo(
+      'aligned to 0',
+      alignedHandle,
+      aligned,
+      -1,
+      [3, 6, 9, 12, 9, 6, 3, 0]
+    );
+
+    // 0…10 step 3: 0, 3, 6, 9 are the grid and 10 is the bound, which stays
+    // reachable. A reader stepping this range must see 3, 6, 9, 10 - not three
+    // presses and a fourth that does nothing.
+    await walkTo('uneven +3', unevenHandle, uneven, 1, [3]);
+    await walkTo('uneven +6', unevenHandle, uneven, 1, [3, 6]);
+    await walkTo('uneven +9', unevenHandle, uneven, 1, [3, 6, 9]);
+    await walkTo('uneven +10', unevenHandle, uneven, 1, [3, 6, 9, 10]);
+    expectPerformed(
+      await accessibilityStepReport(unevenHandle, 1),
+      'uneven past the top'
+    );
+    expect(uneven.complete).toEqual([3, 6, 9, 10]);
+
+    // Starting at the bound: forward does nothing, back steps.
+    expectPerformed(
+      await accessibilityStepReport(topHandle, 1),
+      'at the top, forward'
+    );
+    expect(atTheTop.complete).toEqual([]);
+    expect(atTheTop.start).toEqual([]);
+    await walkTo('at the top, back', topHandle, atTheTop, -1, [9]);
+
+    // A thumb drag after nine a11y steps still behaves like a drag: one start, one
+    // end, starting from where the reader left the value. Nothing in the a11y path
+    // may leave the gesture machine in a state a finger then has to clean up.
+    console.log(
+      `a11y walk: starts=${String(aligned.start.length)} ` +
+        `complete=${String(aligned.complete.length)}`
+    );
+    expect(aligned.start.length).toBe(aligned.complete.length);
+    await drag(alignedHandle, aligned, 6, 4, 0);
+    expect(aligned.start[aligned.start.length - 1]).toBe(0);
+    expect(aligned.complete[aligned.complete.length - 1]).toBe(6);
+    expect(aligned.start.length).toBe(aligned.complete.length);
+    expect(alignedHandle.nuiTestFramePumpArmed()).toBe(false);
+  });
+
+  it('renders a range whose two ends are the same value', async () => {
+    // Review fix 7: `min == max` was only ever covered by the native vectors, which
+    // is exactly the kind of case that traps a platform control - `ClosedRange` is
+    // fine with it and Compose's `FloatRange` is not, and the fix for one platform
+    // (widening the span the control is given) is invisible to the other. On device
+    // it also has to *lay out*: a control that throws here takes the whole tree with
+    // it, and an app that computes a range from data can easily produce this.
+    const events = newEvents();
+    await render(
+      <View style={{ width: 300 }}>
+        <Slider
+          minimumValue={5}
+          maximumValue={5}
+          defaultValue={5}
+          onValueChange={(v) => events.change.push(v)}
+          onSlidingStart={(v) => events.start.push(v)}
+          onSlidingComplete={(v) => events.complete.push(v)}
+          testID="flat-range"
+          hybridRef={captureFor('flat-range')}
+        />
+      </View>
+    );
+    const box = await waitForBox('flat-range');
+    const handle = await handleFor('flat-range');
+    expect(Math.abs(box.height - EXPECTED_HEIGHT)).toBeLessThan(1);
+    expect(box.width).toBeGreaterThan(100);
+
+    // A drag across the whole track still reports the one value the range has, in
+    // every callback, and closes itself.
+    await drag(handle, events, 9, 4, 0);
+    console.log(
+      `flat range: starts=${JSON.stringify(events.start)} ` +
+        `change=${JSON.stringify(events.change)} ` +
+        `complete=${JSON.stringify(events.complete)}`
+    );
+    expect(events.start).toEqual([5]);
+    expect(events.complete).toEqual([5]);
+    expect(events.change.every((value) => value === 5)).toBe(true);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
+
+    // And so does the reader: there is no other value to go to.
+    expectPerformed(
+      await accessibilityStepReport(handle, 1),
+      'flat range, forward'
+    );
+    expect(events.complete).toEqual([5]);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
   });
 
   it('survives mounting and unmounting repeatedly', async () => {
