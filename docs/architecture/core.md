@@ -124,13 +124,16 @@ both (`docs/tasks/T12-android-perf.report.md`, Phase 2):
 
 - **The colour scheme is process state, not composition state.** A dynamic M3 `ColorScheme` is about
   fifty framework resource reads plus a fresh object graph, and one `remember` per host was one per
-  control. `NitroComposeHost` now keeps one entry keyed on the context and the appearance, and drops
-  it on a configuration change - the event that can move those colours
-  (`android/.../core/NitroComposeHost.kt`, `colorSchemeFor`).
+  control. `NitroComposeHost` now keeps one entry keyed on the context, the dark flag and the live
+  `uiMode`, and drops it on a configuration change - the event that can move those colours
+  (`android/.../core/NitroComposeHost.kt`, `NitroUiColorSchemes.forContext`). The context half of that
+  key is a `WeakReference`: the cache outlives every control, so a strong key would pin a destroyed
+  `Activity` for the life of the process (`NitroComposeHost.kt`, `WeakKey`).
 - **Material's own factories allocate.** `SwitchDefaults.colors(...)` returns a fresh 18-colour
   `SwitchColors` per call, so a tinted control allocated one per recomposition - and because
-  `SwitchColors` is a plain class, Compose could not skip the `Switch` subtree either. Cache it on the
-  scheme's identity and the appearance (`HybridNitroUiSwitch.kt`, `switchColorsFor`). That cache only
+  in Material 1.4 `SwitchColors` is `@Immutable` with `equals`, so the cost was the allocation per
+  recomposition rather than a lost skip. Cache it on the scheme's identity and the tint
+  (`HybridNitroUiSwitch.kt`, `switchColors` / `SwitchColorsCache`). That cache only
   hits because of the rule above: Material memoises its untinted path on the `ColorScheme`, so handing
   out a new scheme per control makes every downstream cache miss as well.
 
