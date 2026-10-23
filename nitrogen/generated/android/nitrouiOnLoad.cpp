@@ -15,6 +15,9 @@
 #include <fbjni/fbjni.h>
 #include <NitroModules/HybridObjectRegistry.hpp>
 
+#include "JHybridNitroUiButtonSpec.hpp"
+#include "JFunc_void.hpp"
+#include "views/JHybridNitroUiButtonStateUpdater.hpp"
 #include "JHybridNitroUiSwitchSpec.hpp"
 #include "JFunc_void_bool_double.hpp"
 #include "views/JHybridNitroUiSwitchStateUpdater.hpp"
@@ -29,6 +32,14 @@ int initialize(JavaVM* vm) {
   });
 }
 
+struct JHybridNitroUiButtonSpecImpl: public jni::JavaClass<JHybridNitroUiButtonSpecImpl, JHybridNitroUiButtonSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiButton;";
+  static std::shared_ptr<JHybridNitroUiButtonSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiButtonSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiButtonSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiButtonSpec();
+  }
+};
 struct JHybridNitroUiSwitchSpecImpl: public jni::JavaClass<JHybridNitroUiSwitchSpecImpl, JHybridNitroUiSwitchSpec::JavaPart> {
   static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiSwitch;";
   static std::shared_ptr<JHybridNitroUiSwitchSpec> create() {
@@ -43,6 +54,9 @@ void registerAllNatives() {
   using namespace margelo::nitro::nitroui;
 
   // Register native JNI methods
+  margelo::nitro::nitroui::JHybridNitroUiButtonSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiButtonStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSwitchSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_bool_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSwitchStateUpdater::registerNatives();
@@ -55,6 +69,12 @@ void registerAllNatives() {
                     "The HybridObject \"HybridNitroUiCore\" is not default-constructible! "
                     "Create a public constructor that takes zero arguments to be able to autolink this HybridObject.");
       return std::make_shared<HybridNitroUiCore>();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiButton",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiButtonSpecImpl::create();
     }
   );
   HybridObjectRegistry::registerHybridObjectConstructor(

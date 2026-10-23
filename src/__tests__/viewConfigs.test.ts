@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from '@jest/globals';
 
+import { NitroUiButtonConfig } from '../components/Button/NitroUiButtonConfig';
 import { NitroUiSwitchConfig } from '../components/Switch/NitroUiSwitchConfig';
 
 const generatedDir = join(
@@ -20,6 +21,7 @@ const generatedDir = join(
  * nitrogen writes it to.
  */
 const copies: Record<string, unknown> = {
+  'NitroUiButtonConfig.json': NitroUiButtonConfig,
   'NitroUiSwitchConfig.json': NitroUiSwitchConfig,
 };
 

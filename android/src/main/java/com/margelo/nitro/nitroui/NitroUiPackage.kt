@@ -5,6 +5,7 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
+import com.margelo.nitro.nitroui.views.HybridNitroUiButtonManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSwitchManager
 
 /**
@@ -36,7 +37,8 @@ class NitroUiPackage : BaseReactPackage() {
 
   override fun createViewManagers(
     reactContext: ReactApplicationContext
-  ): List<ViewManager<*, *>> = listOf(HybridNitroUiSwitchManager())
+  ): List<ViewManager<*, *>> =
+    listOf(HybridNitroUiSwitchManager(), HybridNitroUiButtonManager())
 
   companion object {
     init {
