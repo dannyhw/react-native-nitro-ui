@@ -18,6 +18,16 @@
         "implementationClassName": "HybridNitroUiCore"
       }
     },
+    "NitroUiButton": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiButton"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiButton"
+      }
+    },
     "NitroUiProgress": {
       "ios": {
         "language": "swift",

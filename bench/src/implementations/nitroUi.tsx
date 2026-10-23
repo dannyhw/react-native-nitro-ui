@@ -1,7 +1,15 @@
-import { Progress, Slider, Switch, nitroUiCore } from 'react-native-nitro-ui';
+import {
+  Button,
+  Progress,
+  Slider,
+  Switch,
+  nitroUiCore,
+} from 'react-native-nitro-ui';
 
 import type { BenchListProps, BenchPerfMark } from '../types';
 import {
+  buttonTitle,
+  onPress,
   onSliderChange,
   onValueChange,
   progressValue,
@@ -101,6 +109,28 @@ export function NitroUiList({
     return null;
   }
   const style = rowStyle(component);
+  if (component === 'button') {
+    // `buttonTitle(value)` is the same string the other arms draw, so the
+    // `update` scenario is a real title change here: the sizing key changes, the
+    // control re-measures, and that cost is in the measured numbers.
+    // `variant`, `size`, `disabled` and `tintColor` stay at their defaults - the
+    // arms compare each control's platform default, and the size a default
+    // `filled`/`medium` button measures is part of what the arm costs.
+    return (
+      <>
+        {range(n).map((index) => (
+          <Button
+            key={index}
+            testID={`bench-nitro-ui-button-${String(index)}`}
+            title={buttonTitle(value)}
+            onPress={onPress}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
   if (component === 'slider') {
     return (
       <>

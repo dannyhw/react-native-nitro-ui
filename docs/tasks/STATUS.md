@@ -12,9 +12,10 @@
 | G1 | Slider | Apex | Opus | merged (1 impl + 2 fix rounds) |
 | T14 | Register declared fallbacks before first measure (cold fillWidth height-0 frame) | Apex | Opus | merged (1 impl + 1 fix round) |
 | FIX1 | iOS Slider disabled a11y probe (main iOS harness red since 381b1f2) | Apex | — | merged |
-| G3 | Progress | — | — | planned (after T02 + T11) |
-| G2 | Button (owns R3 sizing test) | Apex | Opus | fix round 1 (F1 stuck-at-fallback, bench port to main shape, docs) |
-| T15 | Real-input verification (OS taps/drags on Switch, Slider; Button added after G2 merges) | Apex | — | merged (runner); iOS Switch red → FIX2 |
-| FIX2 | iOS controlled Switch laid out at 0 width after a `value` update (found by T15) | Apex | Opus | in progress (blocks v0.1) |
-| G4 | SegmentedControl (+ Picker only if time, D19) | — | — | planned (after G2) |
+| G3 | Progress | Apex | Opus | in progress |
+| G2 | Button (owns R3 sizing test) | Apex | Opus | merged (1 impl + 1 fix round) |
+| T15 | Real-input verification (OS taps/drags on Switch, Slider; Button added after G2 merges) | Apex | — | merged (runner) |
+| FIX2 | Stale Yoga measurement after a correction (iOS Switch at 0 width after `value` update, found by T15) | Apex | Opus | fix round 1 (flag only on correction, cost/mechanism wording) |
+| G4 | SegmentedControl (Picker → 0.2, D19) | — | — | next free device slot |
+| T15b | Add Button to the real-input runner + fix the Android Slider drag/JS-write test (red on main) | Apex | — | merged (real input 3/3 both platforms) |
 | G5 | DatePicker | — | — | moved to 0.2 (D19) |

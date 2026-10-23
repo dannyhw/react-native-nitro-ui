@@ -11,6 +11,7 @@
 #import <type_traits>
 
 #include "HybridNitroUiCore.hpp"
+#include "HybridNitroUiButtonSpecSwift.hpp"
 #include "HybridNitroUiProgressSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
 #include "HybridNitroUiSwitchSpecSwift.hpp"
@@ -31,6 +32,13 @@
                     "The HybridObject \"HybridNitroUiCore\" is not default-constructible! "
                     "Create a public constructor that takes zero arguments to be able to autolink this HybridObject.");
       return std::make_shared<HybridNitroUiCore>();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiButton",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiButtonSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiButton();
+      return hybridObject;
     }
   );
   HybridObjectRegistry::registerHybridObjectConstructor(

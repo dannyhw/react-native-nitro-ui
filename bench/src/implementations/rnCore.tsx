@@ -1,7 +1,14 @@
-import { ActivityIndicator, Switch, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 
 import type { BenchListProps } from '../types';
-import { onValueChange, range, rowStyle } from './shared';
+import { buttonTitle, onValueChange, onPress, range, rowStyle } from './shared';
 
 /**
  * The control arm: what RN core itself offers for each component.
@@ -18,9 +25,34 @@ import { onValueChange, range, rowStyle } from './shared';
  *   ratio against it says "what does any native slider cost over drawing
  *   nothing", and the `@expo/ui` arms are what answer "what does it cost over
  *   another native slider".
+ * - `button`: RN core has no button widget either, so the idiomatic core
+ *   equivalent is a `Pressable` wrapping a `Text`. The label is a real child
+ *   `Text` because that is what the other arms pay too: SwiftUI draws the label
+ *   of `Button(label:)` and Material 3 composes a `Text` inside the button slot.
+ *   Padding and background are the minimum that makes it a button rather than
+ *   tappable text - RN core owns no theme, so anything richer would be this
+ *   arm's decoration, not the control's.
  */
 export function RnCoreList({ n, value, component }: BenchListProps) {
   const style = rowStyle(component);
+  if (component === 'button') {
+    return (
+      <>
+        {range(n).map((index) => (
+          <Pressable
+            key={index}
+            testID={`bench-rn-core-button-${String(index)}`}
+            onPress={onPress}
+            style={style}
+          >
+            <Text style={[buttonStyles.background, buttonStyles.label]}>
+              {buttonTitle(value)}
+            </Text>
+          </Pressable>
+        ))}
+      </>
+    );
+  }
   if (component === 'slider') {
     return (
       <>
@@ -70,3 +102,13 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
     </>
   );
 }
+
+const buttonStyles = StyleSheet.create({
+  background: {
+    backgroundColor: '#6750A4',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  label: { color: '#FFFFFF' },
+});

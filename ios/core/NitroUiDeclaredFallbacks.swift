@@ -29,6 +29,7 @@ enum NitroUiDeclaredFallbacks {
   private static let hasRegistered: Bool = {
     HybridNitroUiSwitch.declareFallback()
     HybridNitroUiSlider.declareFallback()
+    HybridNitroUiButton.declareFallback()
     HybridNitroUiProgress.declareFallback()
     return true
   }()

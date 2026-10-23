@@ -1,8 +1,21 @@
-import { Host, ProgressView, Slider, Toggle, VStack } from '@expo/ui/swift-ui';
-import { labelsHidden, progressViewStyle } from '@expo/ui/swift-ui/modifiers';
+import {
+  Button,
+  Host,
+  ProgressView,
+  Slider,
+  Toggle,
+  VStack,
+} from '@expo/ui/swift-ui';
+import {
+  buttonStyle,
+  labelsHidden,
+  progressViewStyle,
+} from '@expo/ui/swift-ui/modifiers';
 
 import type { BenchListProps } from '../types';
 import {
+  buttonTitle,
+  onPress,
   onSliderChange,
   onValueChange,
   progressValue,
@@ -13,10 +26,17 @@ import {
 } from './shared';
 
 /**
- * Module-level so the modifier array keeps one identity across renders, instead
+ * Module-level so each modifier array keeps one identity across renders, instead
  * of handing the host a fresh prop on every flip.
  */
 const LABELS_HIDDEN = [labelsHidden()];
+
+/**
+ * `.borderedProminent` is what a plain SwiftUI `Button` already is, so this only
+ * pins the style against a future default change: the arm must keep measuring the
+ * same control.
+ */
+const BORDERED_PROMINENT = [buttonStyle('borderedProminent')];
 
 /**
  * Module-level for the same reason as `LABELS_HIDDEN`.
@@ -57,6 +77,20 @@ function BenchToggle({ index, value }: { index: number; value: boolean }) {
  * and memory numbers in exactly the comparison this project publishes
  * (T02 review B3).
  */
+/**
+ * A SwiftUI `Button` whose label is a plain string.
+ */
+function BenchButton({ index, value }: { index: number; value: boolean }) {
+  return (
+    <Button
+      testID={`bench-expo-button-${String(index)}`}
+      label={buttonTitle(value)}
+      onPress={onPress}
+      modifiers={BORDERED_PROMINENT}
+    />
+  );
+}
+
 function BenchSlider({ index, value }: { index: number; value: boolean }) {
   return (
     <Slider
@@ -98,10 +132,17 @@ export function ExpoUiHostPerControlList({
   component,
 }: BenchListProps) {
   const style = rowStyle(component);
+  // `matchContents` is what lets a host take the button's fitting size, which is
+  // how a consumer ships a sized-to-content control here; it is also part of what
+  // this arm costs per control and is measured as such.
   return (
     <>
       {range(n).map((index) =>
-        component === 'slider' ? (
+        component === 'button' ? (
+          <Host key={index} matchContents style={style}>
+            <BenchButton index={index} value={value} />
+          </Host>
+        ) : component === 'slider' ? (
           <Host key={index} style={style}>
             <BenchSlider index={index} value={value} />
           </Host>
@@ -126,6 +167,19 @@ export function ExpoUiHostPerControlList({
 export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
   if (n === 0) {
     return null;
+  }
+  if (component === 'button') {
+    // `matchContents` for the batch's host too, for the same reason as the
+    // per-control arm; the switch/slider hosts stay exactly as published.
+    return (
+      <Host matchContents style={stackStyle(n, component)}>
+        <VStack spacing={0}>
+          {range(n).map((index) => (
+            <BenchButton key={index} index={index} value={value} />
+          ))}
+        </VStack>
+      </Host>
+    );
   }
   return (
     <Host style={stackStyle(n, component)}>
