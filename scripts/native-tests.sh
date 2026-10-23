@@ -53,6 +53,19 @@ run_case "handshake.test (Swift)" \
       -o '$OUT/handshake' && '$OUT/handshake'
   "
 
+# The intrinsic-sizing engine: cache, ledger and push decisions (T11). It links
+# the shipping C++ unchanged - `measureContent` is allowed to be a pure C++
+# lookup (core-architecture §1.4), which is what makes it testable here instead
+# of only on a device.
+run_case "sizing.test (C++)" \
+  bash -c "
+    clang++ -std=c++20 -Wall -Werror \
+      -I '$ROOT/cpp' \
+      -framework CoreFoundation \
+      '$ROOT/scripts/native-tests/sizing.test.cpp' \
+      '$ROOT/cpp/NitroUiSizingEngine.cpp' -o '$OUT/sizing' && '$OUT/sizing'
+  "
+
 if [ "$status" -eq 0 ]; then
   echo "test:native: PASS"
 else

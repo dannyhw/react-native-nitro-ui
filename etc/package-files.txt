@@ -12,9 +12,13 @@ android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
 cpp/HybridNitroUiCore.cpp
 cpp/HybridNitroUiCore.hpp
+cpp/NitroUiIntrinsic.hpp
 cpp/NitroUiPropsCompat.hpp
+cpp/NitroUiSizingEngine.cpp
+cpp/NitroUiSizingEngine.hpp
 cpp/core/NitroUiClock.hpp
 cpp/core/NitroUiPerf.hpp
+cpp/core/NitroUiSizing.hpp
 ios/components/Switch/HybridNitroUiSwitch.swift
 ios/core/NitroSwiftUIHost.swift
 ios/core/NitroUIContent.swift
@@ -67,7 +71,6 @@ lib/typescript/src/core/useStableCallback.d.ts
 lib/typescript/src/core/useStableCallback.d.ts.map
 lib/typescript/src/index.d.ts
 lib/typescript/src/index.d.ts.map
-lib/typescript/src/tsdoc-metadata.json
 nitro.json
 nitrogen/generated/android/c++/JFunc_void_bool_double.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.cpp
