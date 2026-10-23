@@ -521,6 +521,23 @@ abstract class NitroComposeHost<M : NitroUiModel>(
         }
       }
     )
+    // A pre-draw listener only runs when the window next traverses, and a quiet
+    // window never decides to do that on its own: the listener above is a request
+    // to be consulted at the next draw, not a request for one. A report that
+    // arrives after an idle window's last draw - measured with a control inside
+    // an RN `Modal`, whose dialog stops drawing once presented - would otherwise
+    // leave its correction queued until some unrelated redraw came along.
+    // `postInvalidateOnAnimation` is the cheapest traversal request that reaches
+    // the window this host actually lives in (a `Modal` host's observer is the
+    // dialog's, so anything rooted in the main window would miss it entirely):
+    // it is vsync-aligned, coalesces with any invalidation already pending, and
+    // its cost is usually cancelled outright, because a flush that applies a
+    // correction returns `false` from `onPreDraw` and this very frame is skipped.
+    // `requestLayout()` would also traverse, but re-measures the native subtree
+    // for a size the traversal is about to correct anyway; a bare
+    // `postOnAnimation` block runs without scheduling a traversal, so it does
+    // not guarantee the listener is ever reached.
+    postInvalidateOnAnimation()
   }
 
   /**
