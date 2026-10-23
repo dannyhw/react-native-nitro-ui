@@ -79,7 +79,6 @@ type ProgressHandle = {
  * also what the component declares as its sizing fallback. A fixture that equalled
  * the declared fallback would prove nothing on its own, so the sizing test poisons
  * the *cache* with a wrong number and asserts the correction.
- * MEASURED-PLACEHOLDER: replaced with the measured numbers below.
  */
 const LINEAR_HEIGHT = Platform.select({
   // MEASURED (nitroui_t01, API 35, 420 dpi): Material 3's 4 dp track is 11 whole
