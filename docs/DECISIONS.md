@@ -45,3 +45,10 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   through React (UI thread, batched). Imperative methods come later with explicit main-thread
   hopping + commit. iOS default sizes must match the running OS (iOS 26+ Toggle is 61×28 layout),
   until T11's measured sizing replaces defaults.
+- **D15 (T02)** Canonical iOS bench device = iPhone 17 simulator (iOS 27). The iOS baseline is
+  recorded by the first task that holds that device on an idle machine. A component's *first*
+  `nitro-ui` arm never blocks (no baseline yet); its report must show ratios vs both `@expo/ui`
+  arms and `rn-core`, and the target is **≤ 1.0× `expo-ui-shared-host` and well below
+  `expo-ui-host-per-control`** on mount presented, UI CPU and memory. Misses need an explanation
+  and a follow-up item; the reviewer decides. Same-class machines are distinguished by recording
+  the machine model/CPU in result metadata (keys stay class-level).
