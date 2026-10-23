@@ -1094,6 +1094,63 @@ namespace {
     check(std::fabs(pushes[0].width - 61) < 0.001f, "and it is the last size");
   }
 
+  /**
+   * FIX2 (T15 Finding 1). A shadow node answers layout from Yoga's per-node
+   * measurement cache, and a clone made for a props-only update is never dirtied
+   * (`shouldNewRevisionDirtyMeasurement`), so *every* answer that node was ever
+   * given stays a live entry - including one the engine has since superseded.
+   * Once an instance has been corrected, it must stop trusting that cache; this
+   * is the flag the shadow node asks for on a props turn.
+   */
+  void testACorrectedInstanceAsksForAFreshMeasure() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 40, 20, 0);
+    bind(91, 91);
+    bind(93, 93);
+
+    check(!engine().requiresFreshMeasure(91), "an instance that was never measured asks for nothing");
+    check(!engine().requiresFreshMeasure(NitroUiSizing::NO_INSTANCE), "and neither does a view sizing ignores");
+
+    measure(91, "Switch|");
+    check(!engine().requiresFreshMeasure(91), "a first answer is not a change, even a wrong one");
+
+    // Corrected without being measured again: the flag has to come from the
+    // report, because a props turn that never re-layouts is exactly the turn
+    // that would otherwise lay the control out at the superseded size.
+    engine().report(91, 61, 28, 0);
+    check(engine().flush(), "the correction commits");
+    check(engine().requiresFreshMeasure(91), "an instance whose answer moved must re-ask on a props turn");
+    check(!engine().requiresFreshMeasure(93), "and only that instance - another mount keeps the fast path");
+
+    measure(91, "Switch|");
+    check(engine().requiresFreshMeasure(91), "the flag is sticky: Yoga is still holding the old answer");
+
+    engine().forget(91);
+    check(!engine().requiresFreshMeasure(91), "a dropped instance carries nothing with it");
+  }
+
+  /**
+   * The other half of the fix: the exemption must not become a measure on every
+   * props turn. An instance that was never answered twice keeps review S1's
+   * promise that toggling a control costs no measure and no commit.
+   */
+  void testAnUncorrectedInstanceKeepsTheMeasurementCache() {
+    resetEngine();
+    engine().seedSize("NitroUiSwitch", "Switch|", 61, 28, 0);
+    bind(92, 92);
+    const NitroUiSizingCounters before = engine().stats();
+
+    for (int turn = 0; turn < 30; turn++) {
+      const NitroUiMeasuredSize size = measure(92, "Switch|");
+      checkSize(size, 61, 28, "a prop turn is laid out from what the engine believes");
+      check(!engine().requiresFreshMeasure(92), "and never has to re-ask");
+    }
+
+    const NitroUiSizingCounters after = engine().stats();
+    checkEquals(after.correctionsImmediate + after.correctionsBatched - (before.correctionsImmediate + before.correctionsBatched), int64_t{0},
+                "a control that agreed with the engine was never corrected");
+  }
+
   void testEpsilonTreatsTinyDifferencesAsEqual() {
     resetEngine();
     engine().seedSize("NitroUiSwitch", "Switch|", 61, 28, 0);
@@ -1148,6 +1205,8 @@ int main() {
   testForgetDuringPendingCorrection();
   testRepeatedReportsKeepTheLastOne();
   testEpsilonTreatsTinyDifferencesAsEqual();
+  testACorrectedInstanceAsksForAFreshMeasure();
+  testAnUncorrectedInstanceKeepsTheMeasurementCache();
 
   if (failures == 0) {
     std::printf("  %d checks passed\n", checks);

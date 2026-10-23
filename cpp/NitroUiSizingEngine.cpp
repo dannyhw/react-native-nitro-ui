@@ -433,11 +433,34 @@ namespace margelo::nitro::nitroui {
         recordTraceLocked(instanceId, kStageLaidOut, result.width, result.height);
       }
     }
+    /**
+     * The answer for this instance moved (FIX2). A node that was measured before
+     * and is now answered something else keeps *both* answers inside its Yoga node:
+     * a clean clone is never dirtied, and `canUseCachedMeasurement` reuses
+     * whichever entry fits the new question - and the superseded smaller one is
+     * the stickier, because a `MaxContent` answer stays "valid" for any
+     * `FitContent` question wide enough to hold it. From here the node has to
+     * re-ask on a props turn instead of trusting that cache; see
+     * `requiresFreshMeasure`.
+     */
+    if (ledger.hasMeasured && !sameSizeForPush(ledger.laidOut, result)) {
+      ledger.answerChanged = true;
+    }
+    ledger.hasMeasured = true;
     ledger.laidOut = result;
     if (!exact) {
       addNeedsCorrectionLocked(key, instanceId);
     }
     return result;
+  }
+
+  bool NitroUiSizingEngine::requiresFreshMeasure(int64_t instanceId) const {
+    if (instanceId == NitroUiSizing::NO_INSTANCE) {
+      return false;
+    }
+    const std::shared_lock<std::shared_mutex> lock(mutex_);
+    auto ledger = ledger_.find(instanceId);
+    return ledger != ledger_.end() && ledger->second.answerChanged;
   }
 
   void NitroUiSizingEngine::setFallback(const char* componentName, float width, float height, uint32_t flags) {
@@ -740,6 +763,10 @@ namespace margelo::nitro::nitroui {
           // what makes the host's next report of the same size a confirmation
           // instead of a second correction.
           targetLedger->second.laidOut = measured;
+          // An instance can be corrected without ever being measured again (its
+          // node may not lay out in this turn), so the answer moving is recorded
+          // here as well as in `measure`.
+          targetLedger->second.answerChanged = true;
           changed = true;
           const bool immediate = remaining > 0;
           remaining -= 1;

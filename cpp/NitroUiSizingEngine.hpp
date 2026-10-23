@@ -271,6 +271,24 @@ namespace margelo::nitro::nitroui {
        */
       NitroUiMeasuredSize measure(const char* componentName, int64_t instanceId, const std::string& sizingKey, const NitroUiMeasuredSize& fromState);
 
+      /**
+       * Whether this instance must be measured again on a props update that does
+       * not change its size.
+       *
+       * A shadow node answers layout from Yoga's per-node measurement cache, and
+       * Yoga keeps *every* answer it was ever given for a node it was never
+       * dirtied for (FIX2). Once the engine has corrected an instance, an answer
+       * from before that correction is a live entry in that cache: the next clean
+       * clone can be laid out at the superseded size, and `measure` is never
+       * reached again to notice. Such an instance therefore stops trusting the
+       * cache and re-asks on every props turn - one lock and one hash lookup,
+       * against a box that is wrong for the rest of the mount.
+       *
+       * An instance whose answer never moved keeps the fast path: a Switch that
+       * was laid out at the size the engine already believed costs nothing here.
+       */
+      bool requiresFreshMeasure(int64_t instanceId) const;
+
       // MARK: main / UI thread
 
       /**
@@ -411,6 +429,16 @@ namespace margelo::nitro::nitroui {
         /// `key` for the new epoch instead of dropping the entry (review S2).
         std::string componentName{};
         std::string sizingKey{};
+        /// Has this instance ever been answered for? The first answer is not a
+        /// change, whatever the previous `laidOut` looks like ("never measured").
+        bool hasMeasured = false;
+        /**
+         * The size this instance is laid out with has moved under it at least
+         * once, so an answer from before the move is still in play (FIX2).
+         * Sticky: the engine has no way to learn when Yoga is done with the
+         * superseded answer - see `requiresFreshMeasure`.
+         */
+        bool answerChanged = false;
       };
 
       struct BoundInstance final {
