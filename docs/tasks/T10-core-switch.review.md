@@ -157,3 +157,131 @@ unbounded proposal = 61×28 on iOS 27). 51×31 is wrong on the target OS.**
   instead of hard-coding.
 - Until T11 lands, make the JS default OS-versioned (B1). Then no layout jump happens when T11
   starts pushing the measured 61×28.
+
+---
+
+# Round 2 verification
+
+Re-review of `fad8e42..04b3f2b` (6 commits). `bun run check` re-run: **PASS**. That covers typecheck, lint,
+format, 72 jest tests in 7 suites, `test:native` (clock + Swift handshake, every check ok), nitrogen drift (51
+files), autolinking, bob, api-extractor (0 warnings), publint, and the manifest (133 files). No device run: the
+open question below is settled by Compose's layout contract, not by pixels.
+
+**Verdict: MERGE-AFTER-SMALL-FIXES.** Every BLOCKING item is genuinely fixed. Three small accuracy fixes remain
+(R2-1..R2-3). Two of them sit in the guide that Slider and Progress will copy.
+
+## BLOCKING items
+
+- **B1: fixed.** `Switch.tsx:69-104` parses `Platform.constants.osVersion`, which is a string on iOS. It gives
+  61×28 from iOS 26 and 51×31 before. Platform.Version is the fallback, and it only matters on the non-iOS branch.
+  The harness test (`Switch.harness.tsx:251-292`) has one real oracle on iOS: `measureContent()` (unbounded
+  `sizeThatFits`) ≤ box. The box check and the edge presses are weaker. `expectedBox` mirrors the same OS logic, and
+  a press 2 pt inside the box hits the control even when it overflows. Still enough. Follow-up for T11 or the docs:
+  an iOS 26 app with `UIDesignRequiresCompatibility` gets the old 51×31 control inside a 61×28 box, about 1.5 pt of
+  vertical overflow each side. Worth one line under "Limits" in `switch.md`.
+- **B2: fixed.** `cpp/core/NitroUiClock.hpp` uses `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` on Apple and
+  `CLOCK_MONOTONIC` elsewhere. `now()` and `NitroUiPerf::nowNs()` both go through it, and every Swift/Kotlin mark
+  enters through `NitroUiPerf::mark` (Swift interop, Kotlin JNI), so all marks share that base. `clock.test.mm` checks
+  against `CACurrentMediaTime` (0 µs), against `systemUptime` (7 µs), and directly against `CLOCK_UPTIME_RAW`.
+  Nit: the "is not `CLOCK_MONOTONIC_RAW`" check (`ours <= raw`) is vacuous, because it also holds for a regressed
+  `steady_clock` read first. The UPTIME_RAW `checkNear` is the real guard, and only on a host that has slept. A fresh
+  CI VM cannot tell the two clocks apart. **But see R2-2: the public doc comment still says `steady_clock`.**
+- **B3: fixed, and the evidence checks out.** I verified it in `node_modules`:
+  - `ReactNativeFeatureFlagsDefaults.kt:120` sets `enableViewRecycling() = false`, and I found no OSS override.
+  - `ViewManager.setupViewRecycling` allocates the pool only under that flag (`:67-71`).
+  - `onDropViewInstance` calls `prepareToRecycleView` only when there is a pool (`:263-272`).
+  - The generated manager calls `onDropView()` before `super` (`HybridNitroUiSwitchManager.kt:66-71`).
+
+  The kdoc, the `NitroUiModel.reset` doc, `core.md` §6 and the `switch.md` behaviour notes now all agree.
+  Keeping the dispose is the right call.
+- **B4: fixed.** `scripts/smoke/App.tsx` imports `Switch` and renders `<Switch testID="SMOKE-switch" defaultValue={true} />`.
+- **B5: fixed.** `docs/upstream.md` is good:
+  - a status table, then evidence, a paste-ready draft and a Removal line per entry;
+  - H1 and H2 match the two patch hunks, and H3 and H4 are the requested non-patched gaps;
+  - it adds H9/H10 (the Modal gaps), N1–N4 (nitro) and B1/B2 (bob).
+
+  D11 is satisfied.
+
+## SHOULD-FIX spot-checks
+
+- **SF1: fixed.** The iOS label setter now does guard, then store, then `markDirty()` (`HybridNitroUiSwitch.swift:183-197`).
+- **SF2: fixed.** The Android label is a `mutableStateOf` on the model and is applied as
+  `Modifier.semantics { contentDescription }` on the M3 `Switch` (`HybridNitroUiSwitch.kt:91-98`). It merges into the
+  `toggleable(Role.Switch)` node. The setter marks dirty, `reset()` clears it, and the container is no longer touched.
+  TalkBack is still unverified on a device. The code is right by construction.
+- **SF4: fixed.** `useControlled.ts`:
+  - `seenEvents` is recorded in both modes.
+  - The render-phase flip seeds `mostRecentEventCount`, and the setState-during-render is legal for own state.
+  - The echo now runs before the user handler.
+  - `__DEV__` warns in `useInsertionEffect`.
+  - Tests at `useControlled.test.tsx:139,165,192`, plus the Swift/Kotlin "mode switch" vectors.
+- **SF3/SF7/D14: fixed.** `src/index.ts` exports only `nitroUiCore`, `NitroUiCore`, `NitroUiPerfEvent`, `Switch` and
+  `SwitchProps`. The `exports` map blocks deep imports. `etc/…api.md` has no Hybrid View, hook or `NitroUiSize`, and 0
+  warnings. `hybridRef`/`nuiPerfId` are `@internal`, and the handle is read-only.
+  - Accepted caveat: `@internal` is not trimmed, because there is no dts rollup, so consumers still see `hybridRef` in
+    `lib/typescript`.
+  - Nit: the inline handle in `Switch.tsx:45-53` duplicates `NitroUiSwitchHandle` and can drift from it silently.
+- **SF5: fixed.** `refreshContentSize()` now runs only when `contentSizeNeedsMeasure` is set
+  (`NitroSwiftUIHost.swift:242`). The flag is set by:
+  - a bounds change (`:124`);
+  - a trait change, via `invalidateContentSize()`;
+  - recycle and drop;
+  - a commit only while `contentSize == nil` (`:190-192`).
+
+  A steady-state visual commit no longer calls `sizeThatFits`.
+- **SF6: not settled, and the new explanation is wrong (R2-1).**
+
+## R2 fixes required
+
+**R2-1. The Android recorded content size is always the Yoga box, not "intrinsic when the box is big enough."**
+`NitroComposeHost.kt:431-437` measures the child with the incoming `constraints`. Those constraints are *fixed*: the
+host measures the `ComposeContent` child `MATCH_PARENT` → `EXACTLY`, and `AndroidComposeView` turns `EXACTLY` into
+`minWidth == maxWidth`. A `Placeable`'s size is always coerced into its constraints, so `placeable.width/height` *is*
+the box, whatever the M3 Switch wants. The centring offset is always 0. (The Switch looks centred only because of its
+own `requiredSize`.)
+
+So `core.md` §7, the `NitroUiMeasuredRoot` kdoc, and `switch.md`'s "Content measures 52 × 48 dp" for Android are
+inaccurate. On Android, `measureContent()` just echoes the box, and the B1 "content ≤ box" assertion is tautological
+there. The `fabric=52.19x48 hosted=52.19x48` log cannot tell the two apart: 52 dp rounds to the same 137 px either way.
+
+The fix is still a single measure: `measurables.firstOrNull()?.measure(constraints.copy(minWidth = 0, minHeight = 0))`.
+That keeps the existing placement and gives the real size whenever the box is at least that big, which is what the
+docs already claim. If it is not changed now, correct the three docs instead. T11 must not build on the current
+description.
+
+**R2-2. `src/NitroUiCore.nitro.ts:17-21` still says "`std::chrono::steady_clock` maps to `CLOCK_UPTIME_RAW` on
+Apple".** This is the exact false claim B2 asked to correct, and it ships in `lib/typescript/src/NitroUiCore.nitro.d.ts`.
+Point it at `cpp/core/NitroUiClock.hpp`.
+
+**R2-3. `core.md` §11 "The handshake at 60 Hz" overstates staleness.** "Every JS `value` write stays stale until
+release" is only true while JS lags. Whenever JS echoes the latest count before the next emitted event
+(`jsEvents == nativeEvents`), `reconcile()` applies a differing parent `value` mid-drag. Clamping works, but a parent
+that writes an unrelated value fights the finger. Say that.
+
+Also make §11 explicit on two points:
+- The SwiftUI `Binding.get` must return the in-drag (coalesced) value, or the thumb lags until the next emitted event.
+- The platform hooks are `Slider(onEditingChanged:)` on SwiftUI and `onValueChangeFinished` on Compose, and per-frame
+  throttling needs a frame source (`CADisplayLink` / `withFrameNanos` or `Choreographer`).
+
+The §11 Android wording "an interaction write is already inside a snapshot" is loose (it is a global-snapshot write
+that the GlobalSnapshotManager applies on the next frame), but its conclusion holds.
+
+## core.md sufficiency (§11 Slider, §12 Progress)
+
+With R2-1 and R2-3 corrected, it is sufficient. I spot-checked about 30 `file:line` references against HEAD, and all
+of them land on the cited code. The §9 checklists (registration, api-extractor, smoke line, component doc, manifest,
+the three handshake twins, the barrier pattern) are complete. §12 correctly lists what Progress must not copy, and
+the recycle, a11y and animation rules carry over. §5's hybridRef/threading rule and §6 are accurate.
+
+## Regressions / new problems
+
+- **`react { jsRootDir }`.** No round-2 change was made. `android/build.gradle:42-46` has carried it since T01
+  (`3fe8c88`). The report's B4 wording ("It also needed `android/build.gradle` to set …") reads as if it were new.
+  The setting is right for consumers: the library applies the RN Gradle plugin for codegen, `src/` is in `files`, so
+  `../src/` resolves inside `node_modules/react-native-nitro-ui`, and the tarball smoke release build passed with it.
+- `android/src/test` is excluded from `files` and `junit` is `testImplementation`, so nothing leaks into the tarball,
+  and the manifest is unchanged apart from `NitroUiClock.hpp`.
+- `test:native:android` (Gradle) is not part of `check`. That is acceptable, but CI should run it.
+- This review file is now tracked (committed in `04b3f2b`), so this appended section shows up as a modification.
+
+I found no functional regressions.

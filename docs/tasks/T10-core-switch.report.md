@@ -370,10 +370,13 @@ platforms, and must never assume it was recycled.
 **B4 — smoke app.** `scripts/smoke/App.tsx` now imports `Switch` and renders
 `<Switch testID="SMOKE-switch" defaultValue={true} />` — one import, one line,
 per T03's contract. One smoke run executed (table above): a fresh RN 0.88.0 CLI
-consumer, release APK from the packed tarball, ready line, screenshot. It also
-needed `android/build.gradle` to set `react { jsRootDir }` — the template omits
-it and the release build then fails with duplicate `index.android.bundle`
-classes (recorded as B1 in `docs/upstream.md`).
+consumer, release APK from the packed tarball, ready line, screenshot. The build
+also depends on `android/build.gradle` setting `react { jsRootDir }` — the
+template omits it and the release build then fails with duplicate
+`index.android.bundle` classes (recorded as B1 in `docs/upstream.md`). That
+setting is not new here: `android/build.gradle:42-46` has carried it since the
+T01 scaffold (`3fe8c88`), and round 2 changed nothing about it — the smoke run is
+what exercised it as a consumer install.
 
 **B5 — `docs/upstream.md`.** Created, with a status table and a paste-ready
 issue draft per entry, and a **Removal** line saying what to delete when
@@ -504,9 +507,12 @@ the first value). D11 now has something to point at.
   to skip `disposeComposition()` when the call came from
   `onDropViewInstance` and the pool accepted the view — RN gives no such signal,
   so it would need a flag of our own plus a leak budget.
-- **Android intrinsic measure (SF6)**: left as-is with the reasoning in §7
-  because doing it properly is T11's shadow-node design, not a one-line
-  `Constraints()` swap; the record path is honest about which question it asks.
+- **Android intrinsic measure (SF6)**: **round 3 changed this** — the record
+  path now drops the constraint minimum and reports the control's intrinsic size
+  (`android/.../nitroui/core/NitroComposeHost.kt:443-465`). What is still T11's:
+  the truly *unbounded* question, asked outside the layout pass, for content that
+  can want more than its box. The old bullet's reasoning held only for the
+  second measure, which nobody was allowed to make.
 - **`wantsContentSize` stays on for Switch** rather than off-until-T11, because
   the harness test and `measureContent()` need a size and the measure is no
   longer per-commit. If T02's 200-row mount says otherwise, the flag is one
@@ -523,3 +529,49 @@ the word and the harness patches come out. Q3 (safe area in the example/bench
 apps) and Q5 (device contention) are still open, and Q5 got louder: this round
 lost ~15 min to a stale `nitroui_t01` APK and to background jobs dying with
 their shell, not to the code.
+
+# Round 3
+
+Round-2 review said MERGE-AFTER-SMALL-FIXES; all three fixes are in, plus the two
+accuracy corrections the review flagged in its own regressions section.
+
+- **R2-1 (Android content size)**: `NitroUiMeasuredRoot` measures with
+  `constraints.copy(minWidth = 0, minHeight = 0)` — still exactly one `measure()`
+  per pass, now the one question that was meant. `measureContent()` reports the
+  control's intrinsic size on Android instead of echoing the box, and the
+  centring offset became real. `NitroUiMeasuredRoot`'s kdoc, `core.md` §7 and
+  `switch.md`'s Sizing section now describe what actually happens, including the
+  asymmetry that stays: Android's answer is capped by the box maximum, iOS's is
+  the unbounded `sizeThatFits`. The new harness test
+  `reports the control size and not the box when the box is bigger`
+  (`example/__tests__/Switch.harness.tsx`) renders the Switch in a 90 × 50 box and
+  requires ~52 × 48 content with a 90 × 50 box — the assertion that fails on the
+  previous code.
+- **R2-2 (clock comment)**: `src/NitroUiCore.nitro.ts` points at
+  `cpp/core/NitroUiClock.hpp` and says what it reads — `CLOCK_UPTIME_RAW` via
+  `clock_gettime_nsec_np` on Apple, `CLOCK_MONOTONIC` on Android — and why not
+  `steady_clock`. No API report change (it carries signatures, not doc comments).
+- **R2-3 (§11 Slider guidance)**: the handshake paragraph now says JS writes are
+  ignored *only while JS lags* and that a parent write after
+  `jsEvents == nativeEvents` mid-drag does fight the finger. New subsection
+  "Where a drag ends, and what the read side returns" covers the SwiftUI
+  `Binding.get` = in-drag-value rule, the named hooks (`onEditingChanged` on
+  SwiftUI `Slider`, `onValueChangeFinished` on M3 `Slider`, with the note that
+  Compose has no start callback) and the frame source for coalescing
+  (`CADisplayLink` / `Choreographer.postFrameCallback` / `withFrameNanos`, never a
+  timer). §11's Android invalidation bullet now names the global snapshot and
+  `GlobalSnapshotManager` instead of "already inside a snapshot".
+- **Report accuracy**: the B4 `react { jsRootDir }` wording above (it predates
+  round 2 by nine commits, and the review was right that the sentence read as
+  new).
+
+Gates for this round:
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Full check | `bun run check` | PASS — typecheck, lint, prettier, 72 jest tests / 7 suites, `test:native`, nitrogen no drift (51 files), autolinking, bob, api-extractor (0 warnings, report unchanged), publint, manifest (133 files) |
+| Android harness | `ANDROID_AVD=nitroui_t01 ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 HARNESS_APP_PATH=… bun run harness:android` | PASS — 15/15 on AVD `nitroui_t01` (`emulator-5570`, API 35), APK rebuilt from this tree |
+| Negative control for R2-1 | same, with the measure temporarily reverted to `measure(constraints)` | FAIL as it must — `expected 89.9047619047619 to be less than 69.9047622680664`, i.e. the 90 dp box echoed back as the content width. The new assertion has teeth; the round-2 log line did not. |
+
+iOS was not touched, so no iOS run this round. The emulator started for this
+round was shut down afterwards.

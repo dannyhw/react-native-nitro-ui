@@ -260,14 +260,20 @@ Measurement cadence — this is where sizing costs performance:
   (`ios/core/NitroSwiftUIHost.swift:242`, `:190-193`, `:118-125`, `:140-148`). Content that can change size with neither
   (`Picker`'s longer selected title, a re-wrapped label) must call `invalidateContentSize()`
   (`ios/core/NitroSwiftUIHost.swift:225-234`) or the cache keeps the old size.
-- **Android**: the recorded size is the size the control got **inside the Yoga box** — its intrinsic size whenever the box
-  is big enough (the normal case, and the one `measureContent()` exists for), and the box itself when the box is smaller
-  (`android/.../nitroui/core/NitroComposeHost.kt:426-448`, one `measure()` call per pass and the control centred). It is
-  *not* the unbounded question iOS asks: a `Measurable` may be measured exactly once per pass
-  (`MeasurePassDelegate` throws "measure() may not be called multiple times"), so asking it twice inside one layout pass is
-  not available, and asking it outside the pass has to be T11's design (§11 of `docs/tasks/T11-intrinsic-sizing.md`).
-  Material's 48 dp touch target is inside the recorded size by design. iOS is asymmetric for the same reason it can ask at
-  all: `sizeThatFits` runs in a pass of its own.
+- **Android**: one `measure()` call per pass, asked with **the minimum dropped** —
+  `constraints.copy(minWidth = 0, minHeight = 0)` (`android/.../nitroui/core/NitroComposeHost.kt:443-465`, measure at
+  `:446-449`, record at `:364-373`). The recorded size is then the control's **intrinsic** size — 52 × 48 dp for the M3
+  Switch even inside a 90 × 50 box — and the control is centred with a real offset. Passing the incoming constraints
+  through does *not* work: the host lays the composition out `MATCH_PARENT`, Fabric measures the host `EXACTLY`,
+  `AndroidComposeView` turns `EXACTLY` into `minWidth == maxWidth`, and a `Placeable`'s size is always coerced into its
+  constraints — so that version reports the box back and the centring offset is always 0. Asking the question twice is
+  also not available: a `Measurable` may be measured exactly once per pass (`MeasurePassDelegate` throws
+  "measure() may not be called multiple times").
+  So the Android answer is intrinsic **up to the box maximum** (content can never be recorded bigger than its box), while
+  iOS asks the unbounded `sizeThatFits(in: .infinity)` in a pass of its own and can therefore report an oversized
+  control. Content whose intrinsic size may exceed its box (a re-wrapped label, a longer selected `Picker` title) still
+  needs the unbounded question asked outside this layout pass, which is T11's design
+  (§11 of `docs/tasks/T11-intrinsic-sizing.md`). Material's 48 dp touch target is inside the recorded size by design.
 - The cached size crosses threads, so it is immutable behind a lock/`@Volatile` (§5), and `measureContent()` never touches
   SwiftUI/Compose.
 
@@ -431,9 +437,35 @@ JS echoes the **latest** count it processed, not every count (`src/core/useContr
 so intermediate counts are legitimately skipped whenever JS is slower than native. Hence `reconcile` accepts a write as
 soon as `jsEvents >= nativeEvents` and must **not** require 1:1 agreement — which is what the twins do
 (`ios/core/NitroUiModel.swift:66`, `android/.../nitroui/core/NitroUiModel.kt:68`), and "rapid interaction applies the
-newest write" is already a vector in both native suites. Do not "fix" a skipped echo by waiting for equality: during a
-drag native is ahead by design, so every JS `value` write stays stale until release — intended, because native owns the
-drag and the parent's `value` must not fight the finger. After release the newest echo lands and writes apply again.
+newest write" is already a vector in both native suites. Do not "fix" a skipped echo by waiting for equality.
+
+What that costs during a drag, stated exactly: a parent's `value` write is ignored **only while JS lags**. While the
+finger keeps moving, native is ahead by design (`jsEvents < nativeEvents`), so `reconcile` rejects the write and the drag
+wins — the intended behaviour. But the instant JS has caught up (`jsEvents == nativeEvents`) and the finger is still
+down, the next props commit applies a differing `value` mid-drag. A parent that writes something else while the user is
+dragging (a value derived from elsewhere, a reset, an animation) therefore does fight the finger, and the thumb jumps
+under the hand. Clamping to the in-drag range only hides the fight; it does not decide who wins. If a component must be
+immune, gate its own writes while a drag is in flight — the end-of-drag hook below is the signal — and document that
+choice. After release the newest echo lands and writes apply normally.
+
+### Where a drag ends, and what the read side returns
+
+- **The read side must return the in-drag value (iOS).** SwiftUI re-reads `Binding.get` whenever the view is invalidated,
+  which under the manual publisher (§3) means every emitted frame of the drag. If `get` returns the props value instead
+  of the coalesced "value during this drag" field, the thumb renders the *previous* emitted value and trails the finger a
+  frame at the exact moment the user is watching. One field is both what `set` writes and what `get` reads — the Switch's
+  one-bit version is `ios/components/Switch/HybridNitroUiSwitch.swift:42-51`.
+- **The end-of-drag hooks are platform-named, not invented.** SwiftUI: `Slider(value:in:step:onEditingChanged:)`, whose
+  callback fires `true` at gesture start and `false` at release. Compose Material 3: `Slider`'s `onValueChangeFinished`,
+  which fires at release only — Compose has no start callback, so take "dragging" from the first value change (or
+  `pointerInput`). That hook, not a JS timeout (which drifts — §"Split the two callbacks"), is what flushes the final
+  value with the final event count, clears the in-drag fields (see §"Recomposition scoping" for the recycle angle), and
+  stops ignoring parent writes.
+- **Per-frame coalescing needs a real frame source.** Nothing in SwiftUI or Compose emits "at most once per frame" for
+  free. Use `CADisplayLink` on iOS (scheduled for the drag, invalidated when it ends and when the view leaves the window)
+  or `Choreographer.postFrameCallback` / Compose `withFrameNanos` in a coroutine scoped to the interaction on Android.
+  Never a timer: a timer is unrelated to the display, so it emits twice in one frame or skips one, and its values are not
+  comparable with frame timestamps in the D1 base (§8).
 
 ### Float equality in `reconcile`
 
@@ -462,8 +494,9 @@ differently on purpose.
   (`android/.../HybridNitroUiSwitch.kt:100-106`, write at `:104`). Do **not** call `Snapshot.sendApplyNotifications()`
   there: that call belongs to `commit()` only (`android/.../nitroui/core/NitroComposeHost.kt:207-214`), where its
   documented job is to make a *props* batch land inside the same UI-thread turn instead of waiting for Compose's own
-  global apply. An interaction write is already inside a snapshot, so Compose's apply pass recomposes it; calling it
-  yourself only moves a global apply into the gesture callback.
+  global apply. The interaction write lands in Compose's **global** snapshot, and the `GlobalSnapshotManager` applies it
+  on the next frame — so the control does invalidate without help, one frame later, which is what a drag wants anyway.
+  Calling `sendApplyNotifications()` yourself just moves a global apply into the gesture callback.
 - Both: emit the JS event **after** the local write, so the control repaints before JS starts work.
 
 ### Recomposition scoping

@@ -379,6 +379,39 @@ describe('Switch · core runtime', () => {
     expect(box!.height).toBeGreaterThan(10);
   });
 
+  it('reports the control size and not the box when the box is bigger', async () => {
+    // Round-2 review R2-1. At the default box this number cannot tell the two
+    // platforms' questions apart: the control's intrinsic size and Yoga's box
+    // are the same dp, so an implementation that echoes the box passes. Give it
+    // a bigger box and the difference is the whole point - `measureContent()`
+    // must keep reporting the control (52x48 dp of M3 Switch, 48 dp touch
+    // target included) while the box grows to 90x50.
+    await render(
+      <Switch
+        defaultValue
+        style={{ width: 90, height: 50 }}
+        testID="roomy"
+        hybridRef={captureHybrid}
+      />
+    );
+    await waitForTestId('roomy');
+    const content = hybrid?.measureContent() ?? null;
+    const box = harnessUi.queryByTestId('roomy');
+    console.log(
+      `Switch in a roomy box: measureContent=${content?.width}x${content?.height} box=${box?.width}x${box?.height}`
+    );
+
+    expect(content).not.toBeNull();
+    expect(box).not.toBeNull();
+    expect(Math.abs(box!.width - 90)).toBeLessThan(0.6);
+    expect(Math.abs(box!.height - 50)).toBeLessThan(0.6);
+    // The control did not grow into the space it was given.
+    expect(content!.width).toBeLessThan(box!.width - 20);
+    expect(content!.height).toBeLessThan(box!.height);
+    expect(Math.abs(content!.width - expectedBox!.width)).toBeLessThan(1.5);
+    expect(Math.abs(content!.height - expectedBox!.height)).toBeLessThan(1.5);
+  });
+
   it('round-trips an opaque tintColor', async () => {
     // A fully opaque colour is >= 0x80000000, which is above `Int32.max`. iOS
     // `processColor` returns it unsigned and Android's returns it signed, so a
