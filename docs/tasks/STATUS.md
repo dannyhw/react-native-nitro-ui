@@ -13,6 +13,7 @@
 | T14 | Register declared fallbacks before first measure (cold fillWidth height-0 frame) | Apex | Opus | fix round 1 (cold Switch assert, Modal redraw bug, docs) |
 | FIX1 | iOS Slider disabled a11y probe (main iOS harness red since 381b1f2) | Apex | — | merged |
 | G3 | Progress | — | — | planned (after T02 + T11) |
-| G2 | Button (owns R3 sizing test) | Apex | Opus | in progress |
+| G2 | Button (owns R3 sizing test) | Apex | Opus | reviewing (83c612d; harness 11/11 both; D15 memory miss) |
+| T15 | Real-input verification (OS taps/drags on Switch, Slider, Button) | Apex | — | in progress |
 | G4 | SegmentedControl (+ Picker only if time, D19) | — | — | planned (after G2) |
 | G5 | DatePicker | — | — | moved to 0.2 (D19) |
