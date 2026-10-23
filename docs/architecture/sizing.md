@@ -180,9 +180,18 @@ Five things, four of which a component already has reasons to write:
    nitrogen version that changes shape fails loudly rather than silently un-sizing a control.
 2. **Declare the fallback size**, once, from the component's own native type:
    `NitroUiSizing::setFallback("NitroUiSwitch", 61, 28, POLICY_INTRINSIC)`. Only the component knows
-   what it hosts, and on iOS which OS's control size applies. A real measurement overwrites it; it is
-   only ever the first frame's guess, and it has to be a good one (a box smaller than the control
-   makes SwiftUI paint outside it — T10's `docs/architecture/core.md` §7 has the hit-test story).
+   what it hosts, and on iOS which OS's control size applies. It has to be a good one (a box smaller than the
+   control makes SwiftUI paint outside it — T10's `docs/architecture/core.md` §7 has the hit-test story), and
+   **it has to be in the engine before the component's first measure**, which means it cannot be declared only
+   from the Hybrid View: Fabric measures a shadow node before it creates the view, so a fallback that waits for
+   its own first view arrives one measure too late and the first instance is laid out `0 × 0` (there is no engine
+   default size — a cache miss with neither a guess nor a fallback is no size at all). Each platform therefore has
+   one startup table that calls every component's `declareFallback()`: `ios/core/NitroUiDeclaredFallbacks.swift`
+   (from `+load`) and `.../nitroui/core/NitroUiDeclaredFallbacks.kt` (from `NitroUiPackage`'s static init, which is
+   earlier than the first view manager Fabric can ask for). The view still declares its own in `init` as the
+   backstop, both are once per process, and one line per component goes in the table (core.md §9). After the first
+   report a configuration's own measurement outranks the declaration, so the fallback is only ever the first
+   frame's guess.
 3. **Send the two props** from the JS wrapper: `nuiSizingKey` (the size-affecting props, variant
    only) and `nuiSizingId` (one id per mounted instance, from `useSizingId()` in `src/core`). They are declared in
    `src/core/NitroUiIntrinsicProps.ts` and are `@internal`: users never pass them (D14). The
@@ -290,10 +299,12 @@ The `fillWidth` measure must also not run while the box has no **width** — a z
 width — which is why `refreshContentSize()` refuses it there (`ios/core/NitroSwiftUIHost.swift:356`). Which
 half of the box gates it matters as much as the fact that something does: the **width** is the input a
 `fillWidth` control may not invent, so it gates; the **height** is the number being measured, so it must never
-gate. A cold first instance of a `fillWidth` control really can be laid out 0 tall — the fallback a component
-declares is registered by its first *view*, and Fabric creates that view after the shadow node's first
-measure — so a measure that waits for a non-zero height closes the loop the sizing engine exists to break: no
-measure, so no height, so no measure. On iOS the stalled host then paints SwiftUI's minimum content
+gate. A box really can arrive with no height — a caller's `height: 0`, a `maxHeight` squashed below the
+control, a parent that has not decided — and a measure that waits for a non-zero height then closes the loop the
+sizing engine exists to break: no measure, so no height, so no measure. (Until T14 a cold first instance supplied
+its own zero: the declared fallback arrived with the component's first *view*, and Fabric creates that view after
+the shadow node's first measure. `NitroUiDeclaredFallbacks` closes that gap (§5), but the rule stays, because the
+other ways a box has no height never went anywhere.) On iOS the stalled host then paints SwiftUI's minimum content
 (`clipsToBounds` is false), which looks like a working control that has lost its track.
 
 **What a `fillWidth` cache entry stores.** Only the height is the configuration's own answer. The
