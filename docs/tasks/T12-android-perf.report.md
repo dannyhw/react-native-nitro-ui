@@ -338,6 +338,13 @@ contained fixes (A, B) is expected to be that architecture gap, and the recommen
 
 ## Questions for the orchestrator
 
+All five were answered in `docs/tasks/T12-android-perf.md` ("Orchestrator answers to round 1"):
+sequence (a) then re-measure post-T11; do not patch nitrogen for N5, record it as
+quantified-negligible; fix `SwitchDefaults.colors()` first and measure it alone; ship a library
+`baseline-prof.txt` and compile every arm identically; write up the structural option without
+building it; a documented miss is acceptable. What each answer produced is in
+[Phase 2](#phase-2--measured-per-change).
+
 1. **T11 has not merged, and it is standing in both doors.** `git log main --oneline | grep -i T11`
    is docs-only; `main..task/T11-intrinsic-sizing` is 9 279 insertions across 148 files, including
    **251 lines in `core/NitroComposeHost.kt` and 90 in `HybridNitroUiSwitch.kt`** — the two files
