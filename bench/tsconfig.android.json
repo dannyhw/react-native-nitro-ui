@@ -1,0 +1,10 @@
+{
+  // Same program as tsconfig.json, resolved against the `.android` platform
+  // variants of `@expo/ui` instead of the `.ios` ones. `bun run bench:typecheck`
+  // runs both, because TypeScript only resolves one platform suffix per pass
+  // while Metro bundles the other.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "moduleSuffixes": [".android", ""]
+  }
+}

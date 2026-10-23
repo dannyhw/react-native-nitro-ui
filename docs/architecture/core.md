@@ -68,6 +68,18 @@ Fabric updateProps / updateState
   (`ios/core/NitroUiModel.swift:25-31`). Android's model uses `mutableStateOf` only for what renders and keeps logic-only
   fields plain (`android/.../HybridNitroUiSwitch.kt:33-59`). Never replace or rebuild the model.
 
+**Android calls `updateState` twice for every newly created view** (measured in T02 round 3: `propsApplied` = 2.00 per
+instance on `mount`, 1.00 on `update`; iOS is 1.00 everywhere). Both deliveries are RN Fabric's doing, not the
+component's: `ViewManager.createViewInstance` applies the state once (`ViewManager.java:231-236`), and
+`FabricMountingManager.cpp:760-766` then emits an `UpdateStateMountItem` for every **Insert** of a view that has state,
+so the generated `HybridNitroUi<Name>Manager.updateState` runs again with an unchanged props snapshot. Nitro's generated
+manager does not short-circuit that second call: it runs `beforeUpdate → updateViewProps → afterUpdate`, the props diff
+applies no setter (the old snapshot from `holder.lastState` equals the new one), and `afterUpdate` → `host.commit()`
+makes one unconditional mark plus one no-op `reconcile()`. Cost per mount: one extra JNI props diff, one `reconcile()`,
+one perf mark. **Read `propsApplied` = 2.00 on Android mount as the architecture's floor, never as a component
+regression** — every future Android component will show it. Upstream N5; a generator-side short-circuit (skip when the
+snapshot equals `lastState`) is the fix and belongs to whoever touches the generated path (T12), not to components.
+
 The JS side guarantees the batching preconditions:
 
 - **Callbacks keep one identity forever.** `useStableCallback` builds `{ f: … }` once per mounted view and swaps only the

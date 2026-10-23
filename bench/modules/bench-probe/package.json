@@ -1,0 +1,30 @@
+{
+  "name": "nitro-bench-probe",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Private, unpublished Nitro module used by the nitro-ui benchmark app for black-box native timing.",
+  "author": "Daniel Williams <me@dannyhw.com> (https://github.com/dannyhw)",
+  "license": "MIT",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "nitrogen": "nitrogen"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "react-native-nitro-modules": "^0.37.1"
+  },
+  "homepage": "https://github.com/dannyhw/react-native-nitro-ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dannyhw/react-native-nitro-ui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dannyhw/react-native-nitro-ui/issues"
+  }
+}
