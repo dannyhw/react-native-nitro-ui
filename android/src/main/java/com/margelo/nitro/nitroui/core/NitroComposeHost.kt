@@ -128,6 +128,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
   private var isDirty = true
   private var hasMarkedFirstFrame = false
+  private var firstFrameWatchRegistered = false
 
   /**
    * The size the sizing engine already has from this host, in dp. Compared with an
@@ -255,8 +256,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     isDirty = true
     isMeasurePending = true
     contentSize = null
-    // A recycled mount still paints its first frame for itself.
+    // A recycled mount still paints its first frame for itself, and has to watch
+    // for it again: the listener it registered for the previous mount is gone.
     hasMarkedFirstFrame = false
+    firstFrameWatchRegistered = false
     sizingInstanceId = NitroUiSizing.NO_INSTANCE
     lastReportedSize = null
   }
@@ -368,48 +371,59 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
   /**
    * Mark the first frame this mount draws. The pre-draw callback is the closest
-   * thing to a frame boundary available to a `ViewGroup` here; the listener
-   * removes itself after firing once.
+   * thing to a frame boundary available to a `ViewGroup` here, and the listener
+   * removes itself once it has marked - but only then: a pass that finds a size
+   * correction still queued is a frame about to be cancelled by
+   * [scheduleSizingFlush], so unregistering there would mean this mount never
+   * marks a first frame at all (measured: no `firstFrame`, no `drew` trace event).
+   * [firstFrameWatchRegistered] keeps one listener per mount, since attaching a
+   * view repeatedly would otherwise stack them and record the same box twice.
    */
   private fun watchForFirstFrame() {
-    if (hasMarkedFirstFrame) {
+    if (hasMarkedFirstFrame || firstFrameWatchRegistered) {
       return
     }
     val observer = viewTreeObserver
     if (!observer.isAlive) {
       return
     }
+    firstFrameWatchRegistered = true
     observer.addOnPreDrawListener(
       object : ViewTreeObserver.OnPreDrawListener {
         override fun onPreDraw(): Boolean {
+          if (NitroUiSizing.hasPendingReports()) {
+            // A size measured this turn has not reached Yoga yet, and this frame
+            // is the one [scheduleSizingFlush] cancels when it does flush. Staying
+            // registered is what makes "first frame" mean the first frame a user
+            // could have seen; the next pass decides again. Which of the two
+            // listeners the observer runs first is not something to rely on, so
+            // this does not: pending reports are enough either way.
+            return true
+          }
+          unregister()
+          hasMarkedFirstFrame = true
+          NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_FIRST_FRAME)
+          // What this frame actually drew into, for the sizing trace: the host
+          // is the RN view, so its size here is Yoga's box in px. `onPreDraw`
+          // runs after layout, so the box is final for this frame. dp, because
+          // that is the unit the engine and the JS side speak.
+          val density = resources.displayMetrics.density
+          if (density > 0f) {
+            NitroUiSizing.recordDrawnSize(
+              sizingInstanceId,
+              width.toDouble() / density,
+              height.toDouble() / density,
+            )
+          }
+          return true
+        }
+
+        private fun unregister() {
+          firstFrameWatchRegistered = false
           val current = viewTreeObserver
           if (current.isAlive) {
             current.removeOnPreDrawListener(this)
           }
-          if (NitroUiSizing.hasPendingReports()) {
-            // A size measured this turn has not reached Yoga yet, and the sizing
-            // listener (registered after this one, so it runs next) is about to
-            // cancel this draw. Staying armed is what makes "first frame" mean
-            // the first frame a user could have seen; this listener keeps its
-            // registration, so it fires on the next pass.
-            return true
-          }
-          if (!hasMarkedFirstFrame) {
-            hasMarkedFirstFrame = true
-            NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_FIRST_FRAME)
-            // What this frame actually drew into, for the sizing trace: the host
-            // is the RN view, so its size here is Yoga's box in px. `onPreDraw`
-            // runs after layout, so the box is final for this frame.
-            val density = resources.displayMetrics.density
-            if (density > 0f) {
-              NitroUiSizing.recordDrawnSize(
-                sizingInstanceId,
-                width.toDouble() / density,
-                height.toDouble() / density,
-              )
-            }
-          }
-          return true
         }
       }
     )
