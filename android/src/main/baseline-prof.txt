@@ -1,0 +1,26 @@
+# Baseline profile rules for react-native-nitro-ui
+# =================================================
+#
+# AGP's `merge*ArtProfile` task folds this file, plus the one from every other
+# library, into the host app's `assets/dexopt/baseline.prof`, which is what ART
+# compiles the app's dex from. `docs/architecture/core.md` §13 has the consumer
+# story (nothing to configure, and profileinstaller arrives on its own).
+#
+# Scoped to this library's own classes, and deliberately nothing else: Compose, RN
+# and Nitro Modules ship profiles in their own AARs and the merger combines those,
+# so the rules missing without this file are exactly the glue between them - which
+# is also the code a mount runs on the UI thread:
+#
+#   - `core.NitroComposeHost` and its nested classes - the host view, its
+#     composition, the measure pass and the sizing `OnPreDrawListener`;
+#   - `core.NitroUiModel` (props -> Compose state), `core.NitroUiSizing` (the JNI
+#     sizing bridge), `core.NitroUiPerf`;
+#   - `views.HybridNitroUiSwitchManager` and `HybridNitroUiSwitchStateUpdater`,
+#     which Fabric calls for every mount and every prop update;
+#   - `HybridNitroUiSwitch`, `NitroUiPackage`, and the generated `nitrouiOnLoad` and
+#     bridging types, which run once per process.
+#
+# Without these rules ART verifies the classes at install and interprets them until
+# it has collected a profile of its own, which for a control on a screenful of
+# controls can be every launch the user actually waits for.
+HSPLcom/margelo/nitro/nitroui/**->**(**)**
