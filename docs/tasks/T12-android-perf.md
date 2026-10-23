@@ -68,3 +68,8 @@ emulator, ratios: nitro-ui vs `@expo/ui` shared-host = **1.95× UI CPU, 2.67× m
   the retained views per control). Do not build the spike in this task; the human decides.
 - **D15 outcome:** a documented miss is acceptable for 0.1 if the residual is architectural,
   with an explanation and a follow-up item (D15 already allows this; the reviewer decides).
+- **Added scope (from T11 round 3):** Android's cold-batch sizing flush applying 200 corrections
+  takes 84–125 ms on the UI thread (iOS 8.5 ms) — several dropped frames on a cold 200-control
+  mount. Attribute it (per-instance cost of the JNI push / state update / measure) and reduce it,
+  or cap instances per flush so no single frame exceeds the budget while D17's rule still holds.
+  Measure before/after with the T11 cold-batch harness test (`lastFlushMs`).
