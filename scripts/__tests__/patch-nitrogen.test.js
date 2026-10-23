@@ -175,6 +175,10 @@ describe('patch-nitrogen: intrinsic sizing', () => {
   const KT =
     'nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSwitchManager.kt';
   const SIZED = [HPP, MM, KT];
+  // Kept in sync with SIZING_MARKER in scripts/patch-nitrogen.mjs. It is what a
+  // successful patch leaves behind, so its absence proves a refused patch wrote
+  // nothing.
+  const MARKER = '// nitro-ui: intrinsic sizing';
 
   it('repoints the state, shadow node and component descriptor aliases', () => {
     withFixture('sizing', (root) => {
@@ -267,6 +271,57 @@ describe('patch-nitrogen: intrinsic sizing', () => {
       expect(readFileSync(join(root, HPP), 'utf8')).not.toContain(
         'NitroUiIntrinsic'
       );
+    });
+  });
+
+  it('refuses to add updateState: when nitrogen already generates it', () => {
+    // A future nitrogen that generates the hook itself must not end up with two
+    // `updateState:oldState:` implementations in one @implementation: Objective-C++
+    // takes that, and which one wins is a link-order detail. Failing loudly is the
+    // only safe answer, because the wrong outcome is sizing silently not binding.
+    withFixture('sizing', (root) => {
+      const path = join(root, MM);
+      const source = readFileSync(path, 'utf8');
+      writeFileSync(
+        path,
+        source.replace(
+          '@end',
+          [
+            '- (void)updateState:(const facebook::react::State::Shared &)state',
+            '           oldState:(const facebook::react::State::Shared &)oldState {',
+            '  [super updateState:state oldState:oldState];',
+            '}',
+            '@end',
+          ].join('\n')
+        )
+      );
+      const result = runPatch(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('already defines updateState:oldState:');
+      expect(readFileSync(path, 'utf8')).not.toContain(
+        'NitroUiSizingEngine::shared().bind('
+      );
+    });
+  });
+
+  it('refuses to bind twice when the Kotlin hook is already generated', () => {
+    withFixture('sizing', (root) => {
+      const path = join(root, KT);
+      const source = readFileSync(path, 'utf8');
+      writeFileSync(
+        path,
+        source.replace(
+          'HybridNitroUiSwitchStateUpdater.updateViewProps(hybridView, newState, oldState)',
+          [
+            'NitroUiSizing.bind(getName(), newState)',
+            'HybridNitroUiSwitchStateUpdater.updateViewProps(hybridView, newState, oldState)',
+          ].join('\n')
+        )
+      );
+      const result = runPatch(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('already calls NitroUiSizing.bind()');
+      expect(readFileSync(path, 'utf8')).not.toContain(MARKER);
     });
   });
 
