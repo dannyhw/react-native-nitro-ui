@@ -212,8 +212,9 @@ correct implementation red. Those go through `expectTimingBudget`
 (`example/__tests__/timingGate.ts`), which:
 
 - **`HARNESS_TIMING` unset** (the default, and what CI and every gate run): logs
-  the measurement and skips the threshold. The number is in the log, so a
-  regression is visible; it is not a verdict.
+  the measurement from inside the app and skips the threshold — the same way the
+  stress tests beside it have always logged their timings, so the number is
+  there for whoever reads a failing suite's output. It is not a verdict.
 - **`HARNESS_TIMING=1`, quiet machine**: asserts the threshold and fails on the
   miss.
 - **`HARNESS_TIMING=1`, busy machine**: refuses. When the published 1-minute load
