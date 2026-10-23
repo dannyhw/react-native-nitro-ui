@@ -34,6 +34,10 @@ struct SliderValueTest {
     NitroUiSliderValue.quantize(raw: raw, minimum: min, maximum: max, step: step)
   }
 
+  private static func stepped(_ from: Double, _ up: Bool, _ min: Double, _ max: Double, _ step: Double) -> Double {
+    NitroUiSliderValue.stepped(from: from, up: up, minimum: min, maximum: max, step: step)
+  }
+
   static func main() {
     print("NitroUiSliderValue")
 
@@ -123,6 +127,63 @@ struct SliderValueTest {
           "step 0 is continuous")
     check(NitroUiSliderValue.division(minimum: 1, maximum: 1, step: 0.1) == nil,
           "an empty range is not stepped")
+
+    // The accessibility increment: the next legal value in one direction.
+    //
+    // `0...10 step 3` is the docs' own example and the range that breaks a
+    // platform's own increment - it does not end on a step, so the control is
+    // continuous, the platform moves by a fraction of the range, and quantising
+    // that fraction lands back on the value it started from. Every one of these
+    // is a value `quantize` accepts, and the ends must be reachable.
+    checkEquals(stepped(0, true, 0, 10, 3), 3, "0...10 step 3: up from the bottom")
+    checkEquals(stepped(3, true, 0, 10, 3), 6, "0...10 step 3: up again")
+    checkEquals(stepped(6, true, 0, 10, 3), 9, "0...10 step 3: up again")
+    checkEquals(stepped(9, true, 0, 10, 3), 10, "0...10 step 3: the last move is to the maximum")
+    checkEquals(stepped(10, true, 0, 10, 3), 10, "0...10 step 3: nothing above the maximum")
+    checkEquals(stepped(10, false, 0, 10, 3), 9, "0...10 step 3: down from the maximum")
+    checkEquals(stepped(9, false, 0, 10, 3), 6, "0...10 step 3: down again")
+    checkEquals(stepped(6, false, 0, 10, 3), 3, "0...10 step 3: down again")
+    checkEquals(stepped(3, false, 0, 10, 3), 0, "0...10 step 3: down to the bottom")
+    checkEquals(stepped(0, false, 0, 10, 3), 0, "0...10 step 3: nothing below the minimum")
+    checkEquals(stepped(0.5, true, 0, 10, 3), 3, "a step is always a whole step, whatever it starts from")
+
+    // A range that *does* end on a step, where the platform could have drawn the
+    // stops itself - the answer must be the same grid either way.
+    checkEquals(stepped(0, true, 0, 100, 25), 25, "0...100 step 25: up")
+    checkEquals(stepped(50, true, 0, 100, 25), 75, "0...100 step 25: up from the middle")
+    checkEquals(stepped(75, true, 0, 100, 25), 100, "0...100 step 25: up to the top")
+    checkEquals(stepped(100, true, 0, 100, 25), 100, "0...100 step 25: no overshoot")
+    checkEquals(stepped(100, false, 0, 100, 25), 75, "0...100 step 25: down")
+    checkEquals(stepped(0, false, 0, 100, 25), 0, "0...100 step 25: no undershoot")
+
+    // A fractional grid. `(0.3 - 0) / 0.1` is 2.9999999999999996, so without the
+    // tolerance an increment from 0.3 computes 0.30000000000000004 -> quantised
+    // back to 0.3, which is the stuck increment again.
+    checkEquals(stepped(0.3, true, 0, 1, 0.1), 0.4, "tenths: up from 0.3 clears the binary fraction")
+    checkEquals(stepped(0.3, false, 0, 1, 0.1), 0.2, "tenths: down from 0.3")
+    checkEquals(stepped(0.9, true, 0, 1, 0.1), 1, "tenths: up to the top")
+
+    // Continuous (step 0): a fraction of the range, and the bounds hold.
+    checkEquals(stepped(0, true, 0, 1, 0), 0.05, "continuous: one twentieth of the range up")
+    checkEquals(stepped(0.05, false, 0, 1, 0), 0, "continuous: back down to the bottom")
+    checkEquals(stepped(1, false, 0, 1, 0), 0.95, "continuous: down from the top")
+    checkEquals(stepped(1, true, 0, 1, 0), 1, "continuous: nothing above the top")
+    checkEquals(stepped(0, false, 0, 1, 0), 0, "continuous: nothing below the bottom")
+
+    // Degenerate ranges must not move, and a step larger than the range leaves
+    // exactly the two ends.
+    checkEquals(stepped(0, true, 0, 0, 1), 0, "an empty range cannot be incremented")
+    checkEquals(stepped(5, true, 5, 1, 1), 5, "an inverted range cannot be incremented")
+    checkEquals(stepped(0, true, 0, 1, 5), 1, "a step past the range has two stops: up")
+    checkEquals(stepped(1, false, 0, 1, 5), 0, "...and down")
+    checkEquals(stepped(1, true, 0, 1, 5), 1, "...and nothing past the top")
+
+    // A negative range: the grid is counted from the minimum here too.
+    checkEquals(stepped(-10, true, -10, -1, 3), -7, "-10...-1 step 3: up")
+    checkEquals(stepped(-4, true, -10, -1, 3), -1, "-10...-1 step 3: up to the maximum")
+    checkEquals(stepped(-1, false, -10, -1, 3), -4, "-10...-1 step 3: down")
+    checkEquals(stepped(-10, false, -10, -1, 3), -10, "-10...-1 step 3: nothing below")
+    checkEquals(stepped(-8.5, false, -10, -1, 3), -10, "a step down from off-grid lands on a stop, not between")
 
     if failures > 0 {
       print("slider-value.test: \(failures) failure(s)")

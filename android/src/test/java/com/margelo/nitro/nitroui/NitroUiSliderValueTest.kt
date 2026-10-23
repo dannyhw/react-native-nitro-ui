@@ -26,6 +26,14 @@ class NitroUiSliderValueTest {
     step: Double,
   ) = NitroUiSliderValue.quantize(raw, minimum, maximum, step)
 
+  private fun stepped(
+    from: Double,
+    up: Boolean,
+    minimum: Double,
+    maximum: Double,
+    step: Double,
+  ) = NitroUiSliderValue.stepped(from, up, minimum, maximum, step)
+
   private fun expect(
     actual: Double,
     expected: Double,
@@ -141,5 +149,72 @@ class NitroUiSliderValueTest {
     )
     assertNull("step 0 is continuous", NitroUiSliderValue.division(0.0, 1.0, 0.0))
     assertNull("an empty range is not stepped", NitroUiSliderValue.division(1.0, 1.0, 0.1))
+  }
+
+  /**
+   * The accessibility increment: the next legal value in one direction.
+   *
+   * 0..10 step 3 is the docs' own example and the range that breaks a platform's
+   * own increment - it does not end on a step, so the control is continuous, the
+   * platform moves by a fraction of the range, and quantising that fraction lands
+   * back on the value it started from. Every answer here is a value [quantize]
+   * accepts, and both ends must be reachable.
+   */
+  @Test
+  fun accessibilityStepGoesToTheNextLegalValueOnANonAlignedRange() {
+    expect(stepped(0.0, true, 0.0, 10.0, 3.0), 3.0, "0..10 step 3: up from the bottom")
+    expect(stepped(3.0, true, 0.0, 10.0, 3.0), 6.0, "0..10 step 3: up again")
+    expect(stepped(6.0, true, 0.0, 10.0, 3.0), 9.0, "0..10 step 3: up again")
+    expect(stepped(9.0, true, 0.0, 10.0, 3.0), 10.0, "0..10 step 3: the last move is to the maximum")
+    expect(stepped(10.0, true, 0.0, 10.0, 3.0), 10.0, "0..10 step 3: nothing above the maximum")
+    expect(stepped(10.0, false, 0.0, 10.0, 3.0), 9.0, "0..10 step 3: down from the maximum")
+    expect(stepped(9.0, false, 0.0, 10.0, 3.0), 6.0, "0..10 step 3: down again")
+    expect(stepped(6.0, false, 0.0, 10.0, 3.0), 3.0, "0..10 step 3: down again")
+    expect(stepped(3.0, false, 0.0, 10.0, 3.0), 0.0, "0..10 step 3: down to the bottom")
+    expect(stepped(0.0, false, 0.0, 10.0, 3.0), 0.0, "0..10 step 3: nothing below the minimum")
+    expect(stepped(0.5, true, 0.0, 10.0, 3.0), 3.0, "a step is always a whole step, whatever it starts from")
+  }
+
+  @Test
+  fun accessibilityStepFollowsTheSameGridTheControlDraws() {
+    expect(stepped(0.0, true, 0.0, 100.0, 25.0), 25.0, "0..100 step 25: up")
+    expect(stepped(50.0, true, 0.0, 100.0, 25.0), 75.0, "0..100 step 25: up from the middle")
+    expect(stepped(75.0, true, 0.0, 100.0, 25.0), 100.0, "0..100 step 25: up to the top")
+    expect(stepped(100.0, true, 0.0, 100.0, 25.0), 100.0, "0..100 step 25: no overshoot")
+    expect(stepped(100.0, false, 0.0, 100.0, 25.0), 75.0, "0..100 step 25: down")
+    expect(stepped(0.0, false, 0.0, 100.0, 25.0), 0.0, "0..100 step 25: no undershoot")
+    // A fractional grid: (0.3 - 0) / 0.1 is 2.9999999999999996, so without the
+    // tolerance an increment from 0.3 computes 0.30000000000000004 and quantises
+    // back to 0.3 - the stuck increment again.
+    expect(stepped(0.3, true, 0.0, 1.0, 0.1), 0.4, "tenths: up from 0.3 clears the binary fraction")
+    expect(stepped(0.3, false, 0.0, 1.0, 0.1), 0.2, "tenths: down from 0.3")
+    expect(stepped(0.9, true, 0.0, 1.0, 0.1), 1.0, "tenths: up to the top")
+  }
+
+  @Test
+  fun accessibilityStepOnAContinuousRangeMovesAFractionOfTheSpan() {
+    expect(stepped(0.0, true, 0.0, 1.0, 0.0), 0.05, "continuous: one twentieth of the range up")
+    expect(stepped(0.05, false, 0.0, 1.0, 0.0), 0.0, "continuous: back down to the bottom")
+    expect(stepped(1.0, false, 0.0, 1.0, 0.0), 0.95, "continuous: down from the top")
+    expect(stepped(1.0, true, 0.0, 1.0, 0.0), 1.0, "continuous: nothing above the top")
+    expect(stepped(0.0, false, 0.0, 1.0, 0.0), 0.0, "continuous: nothing below the bottom")
+  }
+
+  @Test
+  fun accessibilityStepCannotInventMovementInTheDegenerateRanges() {
+    expect(stepped(0.0, true, 0.0, 0.0, 1.0), 0.0, "an empty range cannot be incremented")
+    expect(stepped(5.0, true, 5.0, 1.0, 1.0), 5.0, "an inverted range cannot be incremented")
+    expect(stepped(0.0, true, 0.0, 1.0, 5.0), 1.0, "a step past the range has two stops: up")
+    expect(stepped(1.0, false, 0.0, 1.0, 5.0), 0.0, "...and down")
+    expect(stepped(1.0, true, 0.0, 1.0, 5.0), 1.0, "...and nothing past the top")
+    expect(stepped(-10.0, true, -10.0, -1.0, 3.0), -7.0, "-10..-1 step 3: up")
+    expect(stepped(-4.0, true, -10.0, -1.0, 3.0), -1.0, "-10..-1 step 3: up to the maximum")
+    expect(stepped(-1.0, false, -10.0, -1.0, 3.0), -4.0, "-10..-1 step 3: down")
+    expect(stepped(-10.0, false, -10.0, -1.0, 3.0), -10.0, "-10..-1 step 3: nothing below")
+    expect(
+      stepped(-8.5, false, -10.0, -1.0, 3.0),
+      -10.0,
+      "a step down from off-grid lands on a stop, not between",
+    )
   }
 }
