@@ -4,6 +4,8 @@ import android.app.Activity
 import android.view.Choreographer
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -245,6 +247,14 @@ internal class SliderModel(
    */
   @Volatile var accessibilityStepReport: String = ""
 
+  /**
+   * How many a11y step probes have reported, used to number their reports.
+   *
+   * Written on the UI thread, which is the only thread a probe runs on (the seam
+   * may not block for it), and read only to format the string above.
+   */
+  var accessibilityStepCount = 0
+
   /** A drag began. Reports the value it began from. */
   fun beginDrag() {
     if (dragging) {
@@ -449,6 +459,34 @@ private class SliderHost(
   activity: Activity?,
   model: SliderModel,
 ) : NitroComposeHost<SliderModel>(context, activity, model) {
+  /** The platform's own answer to "can a reader receive events right now?". */
+  private val systemAccessibility =
+    context.getSystemService(AccessibilityManager::class.java)
+
+  /**
+   * Hand an accessibility event to the platform only when it can accept one.
+   *
+   * [HybridNitroUiSlider.nuiTestAccessibilityStep] asks Compose to build its
+   * semantics tree with no reader connected - that is how a harness reaches the
+   * action a reader would use. Compose then announces every later semantics
+   * change up this view's parent chain, and [AccessibilityManager] answers an
+   * announcement it has no recipient for with
+   * `IllegalStateException: Accessibility off. Did you forget to check that?`
+   * rather than with a refusal, which takes the app down mid-test. Refusing here
+   * is the outcome the platform was reaching anyway - no reader, no recipient -
+   * without the exception, and it is inert when a reader really is connected,
+   * because then the check passes and [super] runs.
+   */
+  override fun requestSendAccessibilityEvent(
+    child: View,
+    event: AccessibilityEvent,
+  ): Boolean {
+    if (systemAccessibility?.isEnabled != true) {
+      return false
+    }
+    return super.requestSendAccessibilityEvent(child, event)
+  }
+
   @Composable
   override fun Component(model: SliderModel) {
     // Everything that decides what the control *is* is read in [SliderTrack],
@@ -943,10 +981,13 @@ class HybridNitroUiSlider(
       reportAccessibilityStep("no SemanticsOwner, even after forcing accessibility on")
       return
     }
-    // The unmerged tree, because that is the tree the accessibility delegate
-    // walks: it publishes node info from `unmergedRootSemanticsNode` and reads
-    // each node's own config, so this is the list TalkBack could reach.
-    val nodes = owner.getAllSemanticsNodes(mergingEnabled = false)
+    // The merged tree, because that is the tree a reader is given: a node whose
+    // subtree was cleared by `clearAndSetSemantics` is a merging boundary, so the
+    // merged walk stops at ours and never shows the wrapped M3 `Slider`'s own node.
+    // The unmerged walk shows both - two nodes publishing `SetProgress`, only one
+    // of them carrying this control's rule - which is exactly the ambiguity the
+    // check below reports when it appears.
+    val nodes = owner.getAllSemanticsNodes(mergingEnabled = true)
     val candidates = nodes.filter { it.config.contains(SemanticsActions.SetProgress) }
     val node = candidates.firstOrNull()
     if (node == null) {
@@ -995,7 +1036,12 @@ class HybridNitroUiSlider(
   }
 
   private fun reportAccessibilityStep(report: String) {
-    model.accessibilityStepReport = report
+    // The counter makes every report a new string. Without it, two steps that do
+    // the same thing - the no-op at a bound, or a step on a one-value range - are
+    // byte-identical, and a harness waiting for "the report changed" cannot tell
+    // "the probe ran and nothing moved" from "the probe has not run yet".
+    model.accessibilityStepCount += 1
+    model.accessibilityStepReport = "#${model.accessibilityStepCount} $report"
   }
 
   /**
