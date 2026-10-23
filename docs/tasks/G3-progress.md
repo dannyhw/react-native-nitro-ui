@@ -53,3 +53,18 @@ the RN `ActivityIndicator` look (`variant="circular"`, indeterminate).
 
 `bun run check` green; harness green on both platforms; bench tables in report; screenshots
 (iOS + Android, light + dark) in `docs/tasks/G3-progress/`.
+
+## Lessons from G1/G2/T14 (read before starting)
+
+- **D19:** one implementation round + at most two fix rounds; stay inside this brief, follow-ups
+  go in one line each.
+- Register your declared fallback in `NitroUiDeclaredFallbacks` (T14) — never only from the first view.
+- Cache `*Defaults.colors()` / colour schemes process-wide per core.md "Shared objects" (G1/G2/T12).
+- Size-affecting prop setters call `noteContentSizeMayHaveChanged()` (iOS); a `nuiSizingKey` change
+  must reset the host's last-reported size (G2 F1 hook) so a same-size new key still reports.
+- Bench: use main's `--component <name>` mechanism (`*.<name>` cells, arms switch on `component`);
+  ART-primed Android (D18); verdicts only where the runner allows (no `presentedBeforeMount`, ≤10%
+  spread).
+- Harness: no suite-local `beforeAll` warm-ups, no two live `render()` trees, run edited harness
+  files on both platforms. Add your control to the T15 real-input runner (one entry).
+- Never `pkill`/`killall` by name; shut down your own devices at the end.
