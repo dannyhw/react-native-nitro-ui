@@ -1,6 +1,7 @@
 {
   "$comment": "JS render counts recorded by `bun run perf:renders -- --update-baseline`. The gate is exact equality (every run must produce this count), plus Reassure `issues` checks: no render right after mount and no redundant commit. Re-run with --update-baseline and review the diff when a wrapper legitimately changes how often it renders.",
   "tests": {
+    "Progress: mount, 3 value changes, 2 unrelated parent renders, 1 variant change": 7,
     "Slider: mount, 3 value changes, 2 unrelated parent renders": 6,
     "Switch: mount, 3 flips, 2 unrelated parent renders": 6
   }

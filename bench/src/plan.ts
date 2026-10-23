@@ -20,6 +20,7 @@ const ACTIONS: readonly ScenarioAction[] = [
  */
 const SUFFIXED_COMPONENTS: readonly Exclude<ComponentName, 'switch'>[] = [
   'slider',
+  'progress',
 ];
 
 const IMPLEMENTATIONS: readonly ImplementationName[] = [
@@ -71,7 +72,13 @@ function isImplementation(value: string): value is ImplementationName {
  * same arm *does* signal on `mount.slider` (mounting 50 views is a transaction)
  * and `rn-core` signals on every `switch` cell.
  */
-const NO_MOUNT_SIGNAL: readonly string[] = ['update.slider:rn-core'];
+const NO_MOUNT_SIGNAL: readonly string[] = [
+  'update.slider:rn-core',
+  // The same shape for Progress: RN core's control arm is an `ActivityIndicator`
+  // (G3 brief), which has no value to flip, so a `update.progress` commit
+  // changes no native prop and creates no transaction.
+  'update.progress:rn-core',
+];
 
 /**
  * Parse the `scenario:implementation:N[:marks]` launch argument.
