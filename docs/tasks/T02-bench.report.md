@@ -595,3 +595,275 @@ New, in rough order of consequence:
    renders a 61x28 Toggle. The first real `nitro-ui` numbers will be measured
    inside that fixed box. Worth an explicit decision before T10's numbers get
    quoted anywhere.
+
+---
+
+# Round 3 — the first real `nitro-ui` numbers
+
+Rebased onto `main` after T10 landed the hosting runtime and the real `Switch`
+(`docs/architecture/core.md`, D10-D15). Two conflict files: `package.json` (the
+`check` chain keeps main's `autolinking:check`, `api-extractor:check` and
+`test:native` and adds this task's `bench:typecheck` and `perf:renders`) and
+`bun.lock` (regenerated with `bun install`). D15 sets a target, so this round
+ends with a verdict per platform rather than a table of firsts.
+
+**The arm went live.** `bench/src/implementations/nitroUi.tsx` is now a named
+`import { Switch, nitroUiCore } from 'react-native-nitro-ui'`; the runtime lookup
+and the `Floor` stub are deleted, so an arm for a component the library does not
+export is a build error instead of a skipped cell. The arm passes what the
+reference arms pass - `testID`, `value`, the shared stable `onValueChange`,
+`style={rowStyle}` - and `nuiPerfId` stays `null` unless the launch asked for
+marks, so a gated run instruments nitro-ui exactly as little as every other arm.
+No labels anywhere (round 2's B3 fix holds).
+
+**`--perf-marks` is new** (`docs/architecture/benchmarks.md` "Native perf
+marks"): a 4th plan token, `nuiPerfId` only when asked, marks drained *between*
+iterations outside every CPU bracket, a `-marks.json` name excluded from
+`--compare` and refused by `--update-baseline`. It is what lets this round
+explain a number instead of describing it.
+
+## Gate (round 3)
+
+`bun run check` on the rebased tree is green: `typecheck`, `bench:typecheck`
+(including `typecheck:android`, which now typechecks the real `Switch` props),
+`lint`, `format`, `test`, `test:native`, `perf:renders`, `nitrogen:check`,
+`autolinking:check`, `prepare`, `api-extractor:check`, `publint`,
+`manifest:check`. The bench suite is 19 tests, 5 of them the marks plumbing.
+
+## Results — iOS (iPhone Air sim, key `ios27-sim-iphoneair`, 4 launches)
+
+Absolute (median of launch medians):
+
+| Cell         | Implementation           | presented | mounted  | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| ------------ | ------------------------ | --------- | -------- | --------- | --------- | --------- | ---------- |
+| mount N=50   | rn-core                  | 15.94 ms  | 13.37 ms | 3.00 ms   | 3.09 ms   | 9.60 ms   | n/a        |
+| mount N=50   | expo-ui-host-per-control | 105.15 ms | 17.27 ms | 2.29 ms   | 2.47 ms   | 82.19 ms  | n/a        |
+| mount N=50   | expo-ui-shared-host      | 47.48 ms  | 4.68 ms  | 1.14 ms   | 1.28 ms   | 30.17 ms  | n/a        |
+| mount N=50   | nitro-ui                 | 16.04 ms  | 14.35 ms | 1.28 ms   | 1.41 ms   | 18.20 ms  | n/a        |
+| update N=50  | rn-core                  | 16.12 ms  | 4.93 ms  | 1.15 ms   | 1.35 ms   | 5.17 ms   | n/a        |
+| update N=50  | expo-ui-host-per-control | 16.11 ms  | 3.33 ms  | 1.61 ms   | 1.71 ms   | 9.16 ms   | n/a        |
+| update N=50  | expo-ui-shared-host      | 16.11 ms  | 2.54 ms  | 803.44 us | 929.10 us | 7.63 ms   | n/a        |
+| update N=50  | nitro-ui                 | 16.11 ms  | 1.46 ms  | 887.47 us | 1.03 ms   | 6.49 ms   | n/a        |
+| memory N=200 | rn-core                  | n/a       | n/a      | n/a       | n/a       | n/a       | 107.8 KiB  |
+| memory N=200 | expo-ui-host-per-control | n/a       | n/a      | n/a       | n/a       | n/a       | 390.6 KiB  |
+| memory N=200 | expo-ui-shared-host      | n/a       | n/a      | n/a       | n/a       | n/a       | 264.3 KiB  |
+| memory N=200 | nitro-ui                 | n/a       | n/a      | n/a       | n/a       | n/a       | 233.5 KiB  |
+
+Ratios to `rn-core`:
+
+| Cell         | Implementation           | presented | mounted | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| ------------ | ------------------------ | --------- | ------- | --------- | --------- | --------- | ---------- |
+| mount N=50   | expo-ui-host-per-control | 6.61x     | 1.27x   | 0.79x     | 0.81x     | 8.35x     | n/a        |
+| mount N=50   | expo-ui-shared-host      | 2.98x     | 0.35x   | 0.38x     | 0.42x     | 3.16x     | n/a        |
+| mount N=50   | nitro-ui                 | 1.00x     | 1.08x   | 0.43x     | 0.46x     | 1.89x     | n/a        |
+| update N=50  | expo-ui-host-per-control | 1.00x     | 0.67x   | 1.38x     | 1.27x     | 1.78x     | n/a        |
+| update N=50  | expo-ui-shared-host      | 1.00x     | 0.54x   | 0.72x     | 0.71x     | 1.56x     | n/a        |
+| update N=50  | nitro-ui                 | 1.00x     | 0.30x   | 0.77x     | 0.77x     | 1.25x     | n/a        |
+| memory N=200 | expo-ui-host-per-control | n/a       | n/a     | n/a       | n/a       | n/a       | 3.63x      |
+| memory N=200 | expo-ui-shared-host      | n/a       | n/a     | n/a       | n/a       | n/a       | 2.46x      |
+| memory N=200 | nitro-ui                 | n/a       | n/a     | n/a       | n/a       | n/a       | 2.17x      |
+
+`nitro-ui` against each Expo arm (same medians, divided):
+
+| Cell         | vs `expo-ui-host-per-control`                       | vs `expo-ui-shared-host`                             |
+| ------------ | --------------------------------------------------- | ---------------------------------------------------- |
+| mount N=50   | presented 0.15x, UI CPU 0.22x, JS CPU 0.57x, mem 0.60x | presented 0.34x, UI CPU 0.60x, mem 0.88x, mounted 3.07x, JS CPU 1.10x |
+| update N=50  | presented 1.00x, mounted 0.44x, JS commit 0.55x, UI CPU 0.71x | presented 1.00x, mounted 0.57x, JS commit 1.10x, UI CPU 0.85x |
+
+**D15 verdict (iOS): passes on all three named metrics.** mount `presented`
+0.34x the shared host / 0.15x one-host-per-control, `UI CPU/op` 0.60x / 0.22x,
+memory 0.88x / 0.60x - and `presented` is 1.00x `rn-core`, i.e. one 60 Hz frame,
+the same frame RN core's native switch reaches while both Expo arms need three
+to six.
+
+Where it is *not* the best arm, stated plainly: mount `mounted` is 3.07x the
+shared host (14.35 ms vs 4.68 ms) and its JS side is ~1.1x it, because 50
+`UIHostingController`s each apply their own props while a batched `Host` commits
+one tree for all 50. That cost sits inside the mount window and never reaches
+`presented`, and the marks show why: the SwiftUI pass itself is 225 us of the
+16 ms op.
+
+## Results — Android (AVD `nitroui_t02`, API 35, 4 launches)
+
+Absolute (median of launch medians):
+
+| Cell         | Implementation           | presented | mounted   | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| ------------ | ------------------------ | --------- | --------- | --------- | --------- | --------- | ---------- |
+| mount N=50   | rn-core                  | 166.26 ms | 54.77 ms  | 6.34 ms   | 6.81 ms   | 33.03 ms  | n/a        |
+| mount N=50   | expo-ui-host-per-control | n/a       | 111.39 ms | 42.63 ms  | 45.26 ms  | 100.02 ms | n/a        |
+| mount N=50   | expo-ui-shared-host      | 178.16 ms | 57.47 ms  | 6.21 ms   | 7.52 ms   | 29.47 ms  | n/a        |
+| mount N=50   | nitro-ui                 | n/a       | 83.11 ms  | 7.22 ms   | 8.26 ms   | 57.52 ms  | n/a        |
+| update N=50  | rn-core                  | 126.70 ms | 52.54 ms  | 4.71 ms   | 5.61 ms   | 10.23 ms  | n/a        |
+| update N=50  | expo-ui-host-per-control | 127.86 ms | 57.77 ms  | 13.32 ms  | 13.13 ms  | 48.61 ms  | n/a        |
+| update N=50  | expo-ui-shared-host      | 115.32 ms | 48.81 ms  | 7.18 ms   | 7.11 ms   | 32.40 ms  | n/a        |
+| update N=50  | nitro-ui                 | 115.49 ms | 52.89 ms  | 7.07 ms   | 7.44 ms   | 48.84 ms  | n/a        |
+| memory N=200 | rn-core                  | n/a       | n/a       | n/a       | n/a       | n/a       | 53.8 KiB   |
+| memory N=200 | expo-ui-host-per-control | n/a       | n/a       | n/a       | n/a       | n/a       | 49.1 KiB   |
+| memory N=200 | expo-ui-shared-host      | n/a       | n/a       | n/a       | n/a       | n/a       | 50.0 KiB   |
+| memory N=200 | nitro-ui                 | n/a       | n/a       | n/a       | n/a       | n/a       | 133.4 KiB  |
+
+Ratios to `rn-core`:
+
+| Cell         | Implementation           | presented | mounted | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| ------------ | ------------------------ | --------- | ------- | --------- | --------- | --------- | ---------- |
+| mount N=50   | expo-ui-host-per-control | n/a       | 1.97x   | 6.91x     | 5.97x     | 2.77x     | n/a        |
+| mount N=50   | expo-ui-shared-host      | 1.15x     | 1.11x   | 0.97x     | 1.06x     | 0.87x     | n/a        |
+| mount N=50   | nitro-ui                 | n/a       | 1.54x   | 1.20x     | 1.15x     | 1.69x     | n/a        |
+| update N=50  | expo-ui-host-per-control | 1.00x     | 1.17x   | 2.85x     | 2.41x     | 4.50x     | n/a        |
+| update N=50  | expo-ui-shared-host      | 0.91x     | 0.91x   | 1.56x     | 1.39x     | 3.09x     | n/a        |
+| update N=50  | nitro-ui                 | 0.93x     | 1.14x   | 1.41x     | 1.21x     | 5.16x     | n/a        |
+| memory N=200 | expo-ui-host-per-control | n/a       | n/a     | n/a       | n/a       | n/a       | 0.91x      |
+| memory N=200 | expo-ui-shared-host      | n/a       | n/a     | n/a       | n/a       | n/a       | 0.92x      |
+| memory N=200 | nitro-ui                 | n/a       | n/a     | n/a       | n/a       | n/a       | 2.47x      |
+
+`nitro-ui` against each Expo arm:
+
+| Cell        | vs `expo-ui-host-per-control`                          | vs `expo-ui-shared-host`                                |
+| ----------- | ------------------------------------------------------ | -------------------------------------------------------- |
+| mount N=50  | UI CPU 0.58x, JS CPU 0.18x, JS commit 0.17x, mounted 0.75x, presented n/a | UI CPU 1.95x, JS CPU 1.10x, JS commit 1.16x, mounted 1.45x, presented n/a |
+| update N=50 | presented 0.90x, mounted 0.92x, JS commit 0.53x, UI CPU 1.00x | presented 1.00x, mounted 1.08x, JS commit 0.98x, UI CPU 1.51x |
+| memory      | bytes 2.72x                                             | bytes 2.67x                                               |
+
+**D15 verdict (Android): misses on `UI CPU/op` and memory; mount `presented`
+could not be measured** (next subsection). mount UI CPU is 1.95x the shared host
+and memory 2.67x it - over the 1.0x target - while `update presented` 0.93x
+`rn-core` / 1.00x the shared host passes, and against one-host-per-control the
+library wins every metric (JS commit 0.17x, JS CPU 0.18x, UI CPU 0.58x). The
+Android `@expo/ui` memory ratios stay below `rn-core` for the reason round 2
+gave (`smaps_rollup` PSS attribution on shared Compose/runtime pages), so
+"nitro-ui costs 2.7x a shared host" is the honest read, not "Expo is free".
+
+### Android `mount presented`: why two cells are `n/a`
+
+`missingPresented` in this run: mount rn-core 45/80, shared-host 67/80,
+one-host-per-control 80/80, nitro-ui 80/80; `update` cells 0. The same shape
+appears in an earlier Android run this round (45 -> 47, 67, 80, 80), so it is a
+property of the machine, not of one arm or one run.
+
+Three emulators were live for most of the round (this task, T01's
+`nitroui_t01`, and `PR1505_Pixel`), and logcat shows the emulator drawing frames
+of 700-1600 ms (`HWUI: Davey! duration=1595ms`). The probe gives a mount 2 s to
+be latched by a frame (`FRAME_TIMEOUT_MS`), so the metric goes selective
+precisely where a cell keeps the UI thread busy longer than the emulator's frame
+pipeline: the two arms with one hosting view per control. `update` cells, whose
+iterations are 5x shorter, are intact. The fix is bench-side and not trivial -
+widen the window, or attribute presenting frames across iterations instead of
+rejecting a metric whose vsync predates the current mount - so it is a follow-up,
+and the Android D15 read above leans on `UI CPU/op`, memory and the marks
+instead. No arm was advantaged by it: the metric is missing for the two arms that
+would have had the most to gain from it.
+
+One dead end recorded so nobody repeats it: the AVD's `config.ini` had
+`hw.gpu.enabled=no`, and the runner does not boot Android devices, so the first
+two Android runs went out with a software frame path and 35-63 s mount launches.
+Re-booting with `-gpu host` (and `hw.gpu.enabled=yes`) is the right setup and is
+now in the benchmarks troubleshooting table, but it did **not** change the
+`missingPresented` pattern - the frame-window explanation above is the live one.
+
+## What the library's own marks say
+
+`bun bench --platform <p> --plan quick --perf-marks` (nitro-ui only, 80 measured
+iterations per cell):
+
+| Run            | propsApplied/op | per instance | firstFrame/op | props landed | drew     | props -> draw |
+| -------------- | --------------- | ------------ | ------------- | ------------ | -------- | ------------- |
+| iOS mount      | 50              | 1.00         | 50            | 14.06 ms     | 14.28 ms | 224.90 us     |
+| iOS update     | 50              | 1.00         | 0             | 1.52 ms      | n/a      | n/a           |
+| Android mount  | 100             | **2.00**     | 50            | 65.19 ms     | 74.43 ms | 9.88 ms       |
+| Android update | 50              | 1.00         | 0             | 45.27 ms     | n/a      | n/a           |
+
+- **iOS mount, 1.89x `rn-core` UI CPU:** 50 marks for 50 instances (no redundant
+  native commit) and a 225 us props-to-draw span - 1.4 % of a 16 ms op. The UI
+  thread is not drawing, it is *hosting*: one `UIHostingController` per control
+  (`docs/architecture/core.md` S2) plus the Fabric/Nitro plumbing around 50
+  views. Same reason the memory number is 2.17x `rn-core` (233.5 KiB per
+  instance) while still being cheaper than either Expo arm.
+- **Android mount, `propsApplied` 2.00 per instance:** on Android the generated
+  manager calls `afterUpdate()` -> `host.commit()` twice per Switch per mount
+  (iOS: once). The second `commit()` normally finds nothing dirty and returns
+  after the mark, so it is not a second composition - but it is one extra
+  UI-thread entry plus a mutex write per control per mount, and it turns
+  expensive the moment a prop differs between the two batches. Library-side
+  follow-up for T10, not a bench fix.
+- **Android update, UI CPU 5.16x `rn-core` / 1.51x the shared host:** `props
+  landed` is 45.27 ms inside a 46.87 ms UI CPU op, at 1.00 mark per instance. The
+  cost is entirely inside the library's own apply path: 50 independent Compose
+  compositions each taking a snapshot apply + recomposition per flip, against one
+  tree for `@expo/ui`'s shared host and one setter per platform switch for RN
+  core. Android mount is the same story with composition creation on top
+  (`props landed` 65.19 ms of a 76.75 ms op, props-to-draw 9.88 ms vs iOS' 0.225
+  ms - Compose's first composition is ~40x a SwiftUI pass here).
+- **Marking is free enough to keep diagnostic-only:** the iOS marks run reads
+  16.00 ms presented / 18.29 ms UI CPU / 235.2 KiB against the clean run's 16.04
+  / 18.20 / 233.5. Nothing measurable was paid for the instrumentation.
+
+## Machine conditions (round 3)
+
+| Run | Load avg (1m / 5m) | Cores | Duration | Problems |
+| --- | --- | --- | --- | --- |
+| iOS quick (reported) | 3.37 / 17.35 | 14 | 261 s | none |
+| iOS quick `--perf-marks` | 2.06 / 13.68 | 14 | 62 s | none |
+| Android quick (discarded: software frame path, external NDK build) | 7.50 / 9.78 **(busy)** | 14 | 1216 s | none recorded |
+| Android quick (discarded: stopped at 27/48 once the AVD config was found) | ~3 / ~5 | 14 | aborted | - |
+| Android quick (reported) | 3.85 / 3.90 | 14 | 1115 s | none |
+| Android quick `--perf-marks` | 2.59 / 3.56 | 14 | 306 s | none |
+| `bun run check` | 2.7 - 4.7 | 14 | ~3 min | green |
+
+The 5-minute iOS load (17.35) is the honest caveat on those absolute numbers:
+another device task was building during the run. It does not move the verdicts -
+every column is a launch-paired ratio inside one process run - and the marks run
+reproduced the clean numbers to within 1 %. The Android run's wall clock (1115 s
+for a plan that took 225 s in round 2) is what three emulators plus another
+agent's builds look like, which is the same caveat in stronger form.
+
+Stability across the two Android runs of this round, where both exist: rn-core
+memory 53.8 vs 53.7 KiB, nitro-ui memory 133.4 vs 133.7 KiB, nitro-ui mount UI
+CPU 1.69x vs 1.81x. The 1-minute load gate passed and `problems: none` in every
+reported run, so none of these may mint a baseline anyway (dirty tree).
+
+## Follow-ups (round 3)
+
+1. **Android's cost centre is one Compose composition per control** (mount UI CPU
+   1.95x and memory 2.67x a shared host). Both candidate fixes are design
+   changes, not quick wins: share one composition across a list (which is what
+   `@expo/ui`'s shared host is, and it collides with the one-host-per-view
+   contract in `core.md` S2), or batch `Snapshot.sendApplyNotifications()` once
+   per Fabric transaction instead of per host. T10/T11 decision, D15 numbers as
+   the input.
+2. **Android applies props twice per instance on mount** (marks `2.00` vs iOS
+   `1.00`). Cheap today, wrong-shaped tomorrow; worth finding which two batches
+   Fabric is delivering and whether the wrapper can land props in one.
+3. **iOS memory 2.17x `rn-core`** (233.5 KiB/instance) before anyone quotes
+   per-control memory in a README. Cheaper than both Expo arms, but it is hosting
+   weight, and T11's sizing work should keep it in view.
+4. **Bench: Android mount `presented` needs frame attribution that survives a
+   slow frame clock** (see the `n/a` subsection). Until then Android D15 reads
+   are UI CPU + memory + marks, and the report should say so.
+5. `presentedBeforeMount=2/3` on three iOS mount cells (rn-core, per-control,
+   nitro-ui): the frame stamp landed before the mount stamp on 2-3 of 80 samples.
+   Counted, printed, and the pair is labelled "treat with care" rather than
+   silently averaged - no action unless it grows.
+6. `test:native:android` exists but is outside the `check` chain (only
+   `test:native`, which is the iOS script). Deliberate (no emulator on `check`) or
+   an oversight? Worth one line in DECISIONS either way.
+7. **D15's machine-model recording is now in the runner** (`cpuModel` in result
+   metadata, printed in the report header). Runs before this commit recorded
+   hostname + cores only, including every table above.
+
+## Round 2's open questions, closed against D15
+
+1. *Canonical iOS device* - D15 chose the iPhone 17 simulator. T02's brief
+   assigns an iPhone Air (`ios27-sim-iphoneair`), so this task's iOS numbers are
+   `--compare`-only and cannot mint the baseline; whoever holds the iPhone 17 sim
+   on an idle machine runs one `--plan full --launches 8 --update-baseline`.
+2. *A first `nitro-ui` arm cannot fail a gate* - D15 confirms, and requires
+   exactly the two ratio tables per platform printed above. Both are here.
+3. *Device keys cannot tell two same-class machines apart* - mitigated further:
+   metadata now carries the CPU model (follow-up 7).
+4. *T10's sizing versus the bench* - confirmed and worth restating before these
+   numbers get quoted: every arm is pinned to a fixed 34 pt/dp row
+   (`bench/src/implementations/shared.ts:4`), which is what makes the comparison
+   fair and also what means **no number in this file measures D14's default
+   sizing** (a 61x28 iOS 26+ Toggle box, or nitro-ui's own defaults). When T11
+   replaces the defaults with measured sizing, the mount and memory cells need a
+   re-baseline, because layout area is part of what they measure.
