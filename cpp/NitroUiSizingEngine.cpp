@@ -336,9 +336,16 @@ namespace margelo::nitro::nitroui {
       stats_.lastFlushNs = elapsed;
       stats_.maxFlushNs = std::max(stats_.maxFlushNs, elapsed);
       if (changed) {
-        // On Android this is the frame the caller skipped by returning `false`
-        // from `OnPreDrawListener`; on iOS the run-loop observer means the stale
-        // layout was never committed in the first place.
+        // What this counts is "a flush changed at least one size", and what that
+        // is worth depends on the platform. Android's `OnPreDrawListener` returns
+        // `false` on exactly these flushes, so here the count is also the number
+        // of frames that never reached the screen. iOS flushes from a run-loop
+        // observer below Core Animation's commit observer, so a correction that
+        // arrives *within* a turn is committed in that same turn - but a size can
+        // only be corrected once the native side has measured it, and when that is
+        // a later turn the frame the turn started with is already on screen. The
+        // T11 harness measures that case (one stale frame in `poison`), so this is
+        // not evidence of a skipped frame on iOS; the trace's `drew` samples are.
         stats_.staleFramesSkipped += 1;
       }
     }
