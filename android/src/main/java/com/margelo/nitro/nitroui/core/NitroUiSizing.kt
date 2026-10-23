@@ -32,6 +32,10 @@ object NitroUiSizing {
 
   private external fun nInvalidateEnvironment()
 
+  private external fun nInvalidateEnvironmentIfChanged(signature: String)
+
+  private external fun nForget(instanceId: Long)
+
   private external fun nCachedSizeCount(): Long
 
   private external fun nRecordDrawnSize(instanceId: Long, width: Double, height: Double)
@@ -96,6 +100,38 @@ object NitroUiSizing {
     }
     try {
       nSetFallback(componentName, width, height, policy)
+    } catch (_: UnsatisfiedLinkError) {
+      unavailable = true
+    }
+  }
+
+  /**
+   * The instance is finished (its host is dropping or recycling the view), so the
+   * engine can drop its ledger and registry entries (review S3).
+   */
+  fun forget(instanceId: Long) {
+    if (unavailable || instanceId == NO_INSTANCE) {
+      return
+    }
+    try {
+      nForget(instanceId)
+    } catch (_: UnsatisfiedLinkError) {
+      unavailable = true
+    }
+  }
+
+  /**
+   * `invalidateEnvironment`, but only if `signature` differs from the last one
+   * seen. Called from a per-view `onConfigurationChanged`, which fires once per
+   * mounted view for one user action - the signature is what makes a rotation cost
+   * nothing and a font-scale change cost one epoch (review S2).
+   */
+  fun invalidateEnvironmentIfChanged(signature: String) {
+    if (unavailable) {
+      return
+    }
+    try {
+      nInvalidateEnvironmentIfChanged(signature)
     } catch (_: UnsatisfiedLinkError) {
       unavailable = true
     }

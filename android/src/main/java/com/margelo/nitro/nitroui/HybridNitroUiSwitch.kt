@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
@@ -54,6 +55,12 @@ internal class SwitchModel : NitroUiModel() {
    * state itself, so nothing native looks at this.
    */
   var sizingKey = ""
+
+  /**
+   * Test-only control width, in dp: see `nuiTestWidth`. Observed, because a
+   * change to it has to recompose the control for its size to move.
+   */
+  var testWidth by mutableStateOf<Double?>(null)
 
   /** Event-count handshake. Not observed: it drives [displayed], never renders. */
   val state = NitroUiControlledValue<Boolean>(false)
@@ -103,8 +110,13 @@ private class SwitchHost(
     // instead would put a second, focusable empty box around it.
     val labelModifier =
       if (label != null) Modifier.semantics { contentDescription = label } else Modifier
+    // Test-only: give the control a wider *intrinsic* size so a test can watch a
+    // sizing-key change re-measure (see `nuiTestWidth`). Nothing in a real
+    // app sets it, and `null` - the default - adds no modifier at all.
+    val widthModifier =
+      model.testWidth?.let { Modifier.width(it.dp) } ?: Modifier
     Switch(
-      modifier = labelModifier,
+      modifier = labelModifier.then(widthModifier),
       checked = model.displayed,
       onCheckedChange = { requested ->
         // Native is optimistic: show the new value now, before React has seen the
@@ -287,6 +299,18 @@ class HybridNitroUiSwitch(
       model.sizingKey = next
     }
 
+  override var nuiTestWidth: Variant_NullType_Double
+    get() =
+      model.testWidth?.let { Variant_NullType_Double.Second(it) }
+        ?: Variant_NullType_Double.First(NullType.NULL)
+    set(next) {
+      // A real size change: the composable recomposes (the model field is observed)
+      // and Compose's own measure pass reports the new intrinsic size, which the
+      // host hands to the sizing engine. No `invalidateContentSize` here - Compose
+      // is the one that measures.
+      model.testWidth = next.asSecondOrNull()
+    }
+
   override var nuiSizingId: Double
     get() = host.sizingInstanceId.toDouble()
     set(next) {
@@ -314,7 +338,8 @@ class HybridNitroUiSwitch(
   override fun prepareForRecycle() {
     host.tag = null
     host.perfInstanceId = NitroUiPerf.NO_INSTANCE
-    host.sizingInstanceId = NitroUiSizing.NO_INSTANCE
+    // Not cleared here: `host.prepareForRecycle()` releases the sizing instance
+    // (which needs the id to tell the engine), and `onDropView` has already run.
     // Resets the model. The composition does not survive a recycle: Nitro's
     // generated manager calls `onDropView()` (-> [onDropView] below, which
     // disposes it) before `prepareToRecycleView`, and `AbstractComposeView`

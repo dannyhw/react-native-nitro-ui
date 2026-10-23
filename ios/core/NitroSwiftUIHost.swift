@@ -107,6 +107,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// ``invalidateContentSize()`` - never on a plain visual commit, which is what
   /// keeps `sizeThatFits` off the hot path.
   private var contentSizeNeedsMeasure = true
+  /// Set by ``noteContentSizeMayHaveChanged()``, consumed by ``commit()``.
+  private var contentMayHaveChangedSize = false
   /// The size the sizing engine already has from this host. Compared with an
   /// epsilon, so a measure that wobbles by a fraction of a point does not turn
   /// into a Fabric commit (risk R12).
@@ -173,7 +175,9 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
       || previousTraitCollection?.legibilityWeight != traitCollection.legibilityWeight {
       // Every cached size was measured under the old environment, so all of them
       // are suspect now - not just this view's (docs/architecture/sizing.md).
-      NitroUiSizing.invalidateEnvironment()
+      // This fires once per mounted view for one Dynamic Type change, so the
+      // engine decides whether the *environment* actually moved (review S2).
+      NitroUiSizing.invalidateEnvironmentIfChanged(environmentSignature)
       invalidateContentSize()
     }
   }
@@ -218,10 +222,21 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     // size, and `sizeThatFits` on every commit is a synchronous SwiftUI layout
     // right after the invalidation (review SF5). The one commit that can be the
     // first chance we get at a size is the first one, so ask for that.
-    if contentSize == nil {
+    if contentSize == nil || contentMayHaveChangedSize {
+      contentMayHaveChangedSize = false
       contentSizeNeedsMeasure = true
     }
     refreshContentSize()
+  }
+
+  /// Say "what this hosts can now be a different size", without measuring yet.
+  ///
+  /// For a component whose props changed in a way that can move the control's
+  /// size, where no bounds or trait change would notice. Like ``markDirty()``, it
+  /// only sets a flag: the measure happens once, in ``commit()``.
+  func noteContentSizeMayHaveChanged() {
+    nitroUiAssertMainThread()
+    contentMayHaveChangedSize = true
   }
 
   /// Reset for reuse. Keeps the hosting controller and its SwiftUI state.
@@ -233,8 +248,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     // The next mount is a new view as far as measurements go: a recycled host
     // that kept its flag would never report `firstFrame` again.
     hasMarkedFirstFrame = false
-    sizingInstanceId = nitroUiSizingNoInstance
-    lastReportedSize = nil
+    releaseSizingInstance()
     detachFromContainer()
   }
 
@@ -247,12 +261,26 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     nitroUiAssertMainThread()
     detachFromContainer()
     hasMarkedFirstFrame = false
-    sizingInstanceId = nitroUiSizingNoInstance
-    lastReportedSize = nil
+    releaseSizingInstance()
     sizeLock.lock()
     _contentSize = nil
     sizeLock.unlock()
     contentSizeNeedsMeasure = true
+  }
+
+  /// Tell the sizing engine this instance is finished, then forget its id.
+  ///
+  /// The engine's per-instance maps otherwise keep an entry for every mount the
+  /// process ever made, which is a leak in any list that scrolls: expiry of the
+  /// Fabric `State` is not a signal the engine can wait for (review S3). Called
+  /// from both teardown paths, and idempotent.
+  private func releaseSizingInstance() {
+    let instanceId = sizingInstanceId
+    sizingInstanceId = nitroUiSizingNoInstance
+    lastReportedSize = nil
+    if instanceId != nitroUiSizingNoInstance {
+      NitroUiSizing.forget(instanceId)
+    }
   }
 
   // MARK: - Measuring
@@ -274,8 +302,15 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// `measureContent()` and the harness read the same cached number.
   @discardableResult
   private func refreshContentSize() -> CGSize? {
-    guard wantsContentSize, hasCommitted, !bounds.isEmpty, contentSizeNeedsMeasure else {
-      // The hot path: two bools, no SwiftUI.
+    // An *intrinsic* control's fitting size does not depend on the box at all
+    // (`sizeThatFits(.infinity)`), and waiting for a non-empty `bounds` means the
+    // first measure happens in `layoutSubviews` - inside Core Animation's commit,
+    // after the sizing flusher - so the first frame is always drawn at the
+    // fallback (review S5). Measuring in the first `commit()` instead puts the
+    // report in the same turn as the mount.
+    let boundsIndependent = sizingPolicy == .intrinsic
+    guard wantsContentSize, hasCommitted, boundsIndependent || !bounds.isEmpty, contentSizeNeedsMeasure else {
+      // The hot path: three bools, no SwiftUI.
       return contentSize
     }
     contentSizeNeedsMeasure = false
@@ -304,6 +339,15 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     }
     lastReportedSize = size
     NitroUiSizing.report(sizingInstanceId, Double(size.width), Double(size.height), sizingPolicy.rawValue)
+  }
+
+  /// What this view can observe about the environment, as one short string.
+  ///
+  /// Dynamic Type (bold text included) is what moves a control's size, and the
+  /// legibility weight can move on its own; density and locale are iOS-nonexistent
+  /// concepts here, so the trait collection is the whole story.
+  private var environmentSignature: String {
+    "\(traitCollection.preferredContentSizeCategory.rawValue),\(traitCollection.legibilityWeight.rawValue)"
   }
 
   private func measureFittingSize() -> CGSize {
@@ -335,7 +379,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     // changes - reading `bounds` here, mid-layout, would report a box that had
     // not been committed yet. It is a sample of the committed frame, not a
     // per-frame tap: what it cannot see is a correction applied inside the same
-    // turn after the commit, and `staleFramesSkipped` covers that on Android.
+    // turn after the commit, and `changedFlushes` covers that on Android.
     let instanceId = sizingInstanceId
     if instanceId != nitroUiSizingNoInstance {
       DispatchQueue.main.async { [weak self] in
