@@ -657,6 +657,13 @@ final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
     return true
   }()
 
+  /// See `HybridNitroUiSwitch.declareFallback` - same once-per-process static,
+  /// and the same reason it cannot wait for the first view: a cold first Slider
+  /// measured with no fallback is laid out 0 tall (T14, D17).
+  static func declareFallback() {
+    _ = Self.declaresFallback
+  }
+
   override init() {
     host = NitroSwiftUIHost(model: SliderModel())
     super.init()
@@ -667,7 +674,8 @@ final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
     // comment for why this is not left to SwiftUI's modifiers.
     host.accessibilityElements = [a11yElement]
     host.model.a11yElement = a11yElement
-    _ = Self.declaresFallback
+    // The backstop; ``NitroUiDeclaredFallbacks`` registers this at startup.
+    Self.declareFallback()
   }
 
   var view: NitroSwiftUIHost<SliderContent> {
