@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.setProgress
@@ -538,6 +539,14 @@ private fun SliderTrack(
         }
         progressBarRangeInfo = ProgressBarRangeInfo(displayed.toFloat(), range, ticks)
         setProgress { target -> model.accessibilityStepToward(target.toDouble()) }
+        // M3's `sliderSemantics` is where `disabled()` lived, and the line above
+        // clears that subtree, so a disabled Slider has to restate it. Without it
+        // TalkBack reads an inert control - the action is refused - as a live,
+        // adjustable one. iOS marks the same element `.notEnabled`
+        // (`HybridNitroUiSlider.swift`).
+        if (!enabled) {
+          disabled()
+        }
       },
   ) {
     Slider(
@@ -1004,14 +1013,24 @@ class HybridNitroUiSlider(
       reportAccessibilityStep("ambiguous: ${candidates.size} nodes publish SetProgress")
       return
     }
+    // Whether the node the reader is handed carries the `Disabled` flag. `SliderTrack`
+    // owns this via `if (!enabled) disabled()`; `clearAndSetSemantics` clears M3's own
+    // `sliderSemantics` (where that flag used to come from), so this is the one place
+    // the harness can see whether a disabled Slider still tells a reader it is
+    // disabled rather than looking like a live, adjustable control.
+    val nodeDisabled = node.config.contains(SemanticsProperties.Disabled)
     val range = node.config.getOrElseNullable(SemanticsProperties.ProgressBarRangeInfo) { null }
     if (range == null) {
-      reportAccessibilityStep("#${node.id} has SetProgress but no range to move along")
+      reportAccessibilityStep(
+        "#${node.id} has SetProgress but no range to move along; disabled=$nodeDisabled",
+      )
       return
     }
     val action = node.config.getOrElseNullable(SemanticsActions.SetProgress) { null }
     if (action == null) {
-      reportAccessibilityStep("#${node.id} lost its action between looking and acting")
+      reportAccessibilityStep(
+        "#${node.id} lost its action between looking and acting; disabled=$nodeDisabled",
+      )
       return
     }
     // The delegate's own stride for a scroll forward/back, from
@@ -1031,7 +1050,7 @@ class HybridNitroUiSlider(
     reportAccessibilityStep(
       "performed SetProgress($target) on #${node.id} " +
         "range=${range.range.start}..${range.range.endInclusive}@${range.current} " +
-        "$from->${model.displayed}",
+        "$from->${model.displayed} disabled=$nodeDisabled",
     )
   }
 

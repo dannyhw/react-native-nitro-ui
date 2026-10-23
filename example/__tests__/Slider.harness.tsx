@@ -1008,6 +1008,12 @@ describe('Slider', () => {
     expect(events.change).toEqual([]);
     expect(events.complete).toEqual([]);
     expect(handle.mostRecentEventCount).toBe(0);
+    // Inert is not the same as announced. `clearAndSetSemantics` clears M3's
+    // `sliderSemantics`, and `disabled()` lived there, so the merged node the
+    // reader is handed only carries the flag if this control restates it. The probe
+    // walks the real a11y tree, so `disabled=true` here is the thing TalkBack reads -
+    // without it a disabled Slider is a live, adjustable control that does nothing.
+    expect(await accessibilityStepReport(handle, 1)).toContain('disabled=true');
 
     // Same instance, new flag: interaction returns without a remount. Asserted by
     // identity as well as behaviour, because "the flag came back on the control
@@ -1018,6 +1024,10 @@ describe('Slider', () => {
     await drag(handle, events, 0.9, 4, 0);
     expect(events.start).toEqual([0.6]);
     expect(events.complete).toEqual([0.9]);
+    // The flag the reader sees follows the prop back off, on the same node.
+    expect(await accessibilityStepReport(handle, 1)).toContain(
+      'disabled=false'
+    );
   });
 
   it('follows a new range and tint on the same instance', async () => {
