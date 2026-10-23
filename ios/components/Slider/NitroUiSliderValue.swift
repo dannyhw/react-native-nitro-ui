@@ -194,7 +194,7 @@ enum NitroUiSliderValue {
     // nonsense input or a widthless range means, so neither branch below has to
     // repeat those rules.
     let start = quantize(raw: from, minimum: minimum, maximum: maximum, step: step)
-    guard let division = division(minimum: minimum, maximum: maximum, step: step) else {
+    guard division(minimum: minimum, maximum: maximum, step: step) != nil else {
       // Continuous (no usable step, or a range with no width to move along).
       guard maximum > minimum else {
         return start
