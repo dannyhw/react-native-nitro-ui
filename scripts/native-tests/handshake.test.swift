@@ -114,6 +114,43 @@ struct HandshakeTest {
       check(value.reconcile() == true, "a different double is a change")
     }
 
+    // A continuous control holds the newest input sample until the frame tick
+    // emits it (Slider, §11). The counts cannot see that: `nativeEvents` only
+    // advances when we emit, so a parent commit in that window looks
+    // fully-echoed while native is actually ahead by an unreported value.
+    // Accepting it paints the app's number for a frame and then emits the
+    // interaction's own value under it - the thumb jumping back mid-drag.
+    do {
+      var value = NitroUiControlledValue<Double>(displayed: 0)
+      value.js = 0
+      check(value.user(0.4) == 1, "a drag emits its first change")
+      value.unreported = 0.45
+      value.js = 0.2
+      value.jsEvents = 1
+      check(value.jsEvents >= value.nativeEvents, "the counts look caught up")
+      check(value.reconcile() == false,
+            "a write is refused while native holds an un-emitted sample")
+      check(value.displayed == 0.4, "what was last emitted is still what is shown")
+      value.unreported = nil
+      check(value.reconcile() == true && value.displayed == 0.2,
+            "once the sample is emitted, the write is judged by the count alone")
+    }
+
+    // The guard is narrow, not a drag-mode switch: an un-emitted sample does
+    // not make a *newer* uncontrolled interaction or a reset behave differently.
+    do {
+      var value = NitroUiControlledValue<Double>(displayed: 0)
+      value.unreported = 5
+      check(value.user(7) == 1 && value.displayed == 7,
+            "an interaction is not blocked by an un-emitted sample")
+      check(value.reconcile() == false, "with nothing from React there is still nothing to apply")
+      value.js = 9
+      value.jsEvents = 1
+      check(value.reconcile() == false, "an un-emitted sample still refuses the write")
+      value.unreported = nil
+      check(value.reconcile() == true && value.displayed == 9, "and clearing it lets the write through")
+    }
+
     if failures > 0 {
       print("FAILED: \(failures) check(s)")
       exit(1)

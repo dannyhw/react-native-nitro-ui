@@ -4,7 +4,24 @@ import type { ComponentType } from 'react';
 export type ImplementationName =
   'rn-core' | 'expo-ui-host-per-control' | 'expo-ui-shared-host' | 'nitro-ui';
 
-export type ScenarioName = 'mount' | 'update' | 'memory' | 'leak';
+/**
+ * Which control a launch renders. `switch` was the only component until G1 and
+ * keeps the bare scenario names (`mount`, `update`, …) so every results file,
+ * baseline and `--compare` base recorded before then still lines up; from the
+ * second component on, the component is part of the scenario cell
+ * (`mount.slider`). See `docs/architecture/benchmarks.md`.
+ */
+export type ComponentName = 'switch' | 'slider';
+
+/** What one launch does to the controls. */
+export type ScenarioAction = 'mount' | 'update' | 'memory' | 'leak';
+
+/**
+ * The cell name as it travels: on the launch argument, in every NDJSON record,
+ * and in every results cell key. `parsePlan` splits it into `action` and
+ * `component`, so nothing downstream has to know the encoding.
+ */
+export type ScenarioName = ScenarioAction | `${ScenarioAction}.slider`;
 
 /**
  * A control set the harness can mount, update and unmount.
@@ -46,6 +63,16 @@ export interface BenchListProps {
   /** The controlled value flipped by the `update` scenario. */
   value: boolean;
   /**
+   * Which control to render.
+   *
+   * `value` stays a `boolean` for every component: the runner flips a bit and
+   * each arm maps it onto that control's own value (`shared.ts`'s
+   * `sliderValue`). Flipping a number instead would let one arm flip 0.25→0.75
+   * while another flips 0→1, and the magnitude of a flip is not something arms
+   * may differ on.
+   */
+  component: ComponentName;
+  /**
    * Whether this launch wants native perf marks (`--perf-marks`). Only the
    * `nitro-ui` arm reads it: it tags instances with `nuiPerfId` so the library
    * records marks for them. `false` keeps the arm byte-identical in cost to the
@@ -69,8 +96,20 @@ export interface BenchPerfMark {
 
 export interface BenchPlan {
   scenario: ScenarioName;
+  /** `scenario` without its component suffix - what the launch does. */
+  action: ScenarioAction;
+  /** The control the launch renders. */
+  component: ComponentName;
   implementation: ImplementationName;
   n: number;
+  /**
+   * `false` for a cell whose arm cannot produce the native transaction the probe
+   * timestamps, so waiting for the mount/presented signals can only end in a
+   * timeout. The runner then records both as `null` without waiting, and the
+   * report says the pair is absent by construction rather than suspicious.
+   * See `NO_MOUNT_SIGNAL` in `plan.ts`.
+   */
+  mountSignal: boolean;
   /**
    * `true` when the launch argument asked for native perf marks
    * (`scenario:implementation:N:marks`). Diagnostic only: it is not part of a
@@ -92,6 +131,12 @@ export type BenchRecord =
       /** Platform/os summary, so a results file is self-describing. */
       platform: string;
       probeClock: 'CLOCK_UPTIME_RAW' | 'System.nanoTime';
+      /**
+       * Echoed from the plan so a results file says whether this cell's latency
+       * pair was ever measurable: `false` means the nulls in every `iter` record
+       * are by construction, not a lost signal.
+       */
+      mountSignal: boolean;
     }
   | {
       kind: 'iter';

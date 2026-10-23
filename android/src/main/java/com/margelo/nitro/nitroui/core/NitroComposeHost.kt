@@ -702,8 +702,17 @@ internal object NitroUiColorSchemes {
  *   still the box, so the control is centred in what Yoga gave it and a
  *   user-specified width or height still wins.
  * - `false` (policy `fillWidth` - a Slider, whose width *is* the box): keep the
- *   maximum and drop only the minimum, which is one call and asks for the height
- *   the control wants at the width it was given.
+ *   width maximum, unbind the height. The width maximum is the question - a
+ *   Slider's height is what it is at *that* width. The height maximum must go for
+ *   the same reason the width minimum goes: a box that is temporarily the wrong
+ *   height (a `seedSize`-style guess, a stale cache, a correction still in flight)
+ *   would otherwise clamp the answer to itself, and the wrong height would
+ *   confirm itself forever - the report agrees with the layout, so the engine is
+ *   never told and never corrects. iOS asks the same question the same way
+ *   (`NitroSwiftUIHost.fittingSizeProposal`: box width, unbounded height).
+ *
+ *   The `else` arm covers a `fillWidth` control in a genuinely unbounded parent:
+ *   with no width to fill there is nothing to ask but the unbounded question.
  *
  * Material's `minimumInteractiveComponentSize` (a 48 dp touch target) is part of
  * the size by design, and only [NitroComposeHost.wantsContentSize] pays for
@@ -722,10 +731,15 @@ internal fun NitroUiMeasuredRoot(
         // The unbounded question. See the kdoc: this is what makes the recorded
         // size the control's, not the box's.
         Constraints()
+      } else if (constraints.hasBoundedWidth) {
+        // The fill-width question: measure at the box's width, at any height.
+        constraints.copy(
+          minWidth = 0,
+          minHeight = 0,
+          maxHeight = Constraints.Infinity,
+        )
       } else {
-        // The minimum as it arrives equals the maximum, which would make this
-        // report the box; the maximum is the width a fill-width control wants.
-        constraints.copy(minWidth = 0, minHeight = 0)
+        Constraints()
       }
     val placeable = measurables.firstOrNull()?.measure(childConstraints)
     val measuredWidth = placeable?.width ?: 0
