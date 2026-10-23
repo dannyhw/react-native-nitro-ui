@@ -1,6 +1,6 @@
 # Follow-ups (not blocking v0.1, see D19)
 
-- Android D15 gap (UI CPU 1.35×, memory 2.52× vs expo-ui-shared-host): per-control composition cost; options in T12 report §P2f; decision with the human after T13.
+- Android D15 gap (UI CPU 1.35×, memory 2.52× vs expo-ui-shared-host): per-control composition cost; options in T12 report §P2f; T13 showed Compose owner services are already shared per window (one context for 50 controls), so the residual is each control's Composition + AndroidComposeView tree; the only remaining lever is an opt-in Expo-style `<Host>` container (public API, 0.2+).
 - iOS Slider memory 1.42× expo-ui-shared-host (same one-host-per-control cost).
 - Primed Android + iOS (iPhone 17) latency baselines (D18) — Phase 4.
 - One-off check of declared fallbacks on an iOS < 26 runtime (none installed; D8).
