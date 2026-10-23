@@ -537,7 +537,9 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     // cache another control had just filled (review S2). Compose re-measures the
     // content by itself after a real change, and the new measure arrives as a
     // report; the engine decides whether the epoch moves.
-    val locales = newConfig?.locales?.joinToString(",") { it.toLanguageTag() } ?: ""
+    // `LocaleList` is not an `Iterable`, so the tags come out as the platform
+    // already renders them: one comma-separated string, in priority order.
+    val locales = newConfig?.locales?.toLanguageTags() ?: ""
     NitroUiSizing.invalidateEnvironmentIfChanged(
       "${newConfig?.fontScale}|${newConfig?.densityDpi}|$locales",
     )
