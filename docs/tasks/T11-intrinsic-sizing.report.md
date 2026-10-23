@@ -399,7 +399,7 @@ added 19 files and +2579/−83 — the measurable surface, the drawn-box sample,
 
 | Risk | Status | Evidence |
 | --- | --- | --- |
-| R1 nitrogen coupling | **Open by design, mitigated as far as it can be here.** Patch applies to nitro 0.37.1, both platforms build, `nitrogen:check` fails on drift (53 files, 4 patched views), 17 patch tests assert idempotency and hard-fail. Upstream draft recorded (`docs/upstream.md` N5) — filing it is not a task-branch action. | P0 report + `bun run check` above |
+| R1 nitrogen coupling | **Open by design, mitigated as far as it can be here.** Patch applies to nitro 0.37.1, both platforms build, `nitrogen:check` fails on drift (53 files, 4 patched views), 17 patch tests assert idempotency and hard-fail. Upstream draft recorded (`docs/upstream.md` N6) — filing it is not a task-branch action. | P0 report + `bun run check` above |
 | R2 same-turn immediate commits | **Measured, bounded, no loops/crashes.** Cold mount: 1 immediate push in 1 flush. Poisoned cache: corrected, 1 stale frame on iOS / 0 on Android, no re-layout loop across 25 tests × 2 platforms × repeated runs. | `poison` + `cold` lines above |
 | R3 `sizeThatFits` reflects the pending update / right traits | **Partly answered — and only partly answerable today.** Cold mount measures correctly on both platforms (R3's mechanism), and traits are right (Dynamic Type XL and 1.3× leave the size correct). But the *pending-update* half needs a prop that changes size, and no component in the library has one: a Switch's `value` moves the thumb, not the box. What exists instead is the contract — a bounds change re-measures, everything else must call `invalidateContentSize()` (`docs/architecture/core.md` §7), deliberately not per-commit (T10 review SF5). Keying is exercised off-device (distinct keys cannot share a cache slot). → **question (a)**. | a11y + font-scale runs; `sizing.test.cpp` key checks |
 | R4 N commits from N cache misses | **Bounded, and cheaper than feared — with one qualifier.** 200 cold instances → **one** flush, 2 immediate + 198 batched: 4.85 ms iOS / 8.54 ms Android quiet, 17.9–24.2 ms Android under machine load. Under the brief's ~16 ms at rest; over it under load, where the cost is one pre-draw pass plus the frame Android already cancelled. `cloneMultiple` (§1.5) is the lever if it ever matters, and a 200-cold-mount screen is a benchmark case for T02, not a reason to build it now. | `200 cold` lines above |
@@ -424,7 +424,12 @@ added 19 files and +2579/−83 — the measurable surface, the drawn-box sample,
   grows only the axis flex controls. Deliberate, measured, documented
   (`sizing.md` §6); stock RN's `Switch` differs.
 
-## Questions for orchestrator
+## Questions for orchestrator — all answered
+
+Answered in Round 3 by D16, D17 and the work there; each letter's outcome is in that
+round's "Answers" table. Kept verbatim below as the record of what was asked. (a)–(e) and
+(g)–(h) are decided; only (f), the `Modal` perf-mark gap, is still open, and it belongs
+to T10's attribution rather than to sizing.
 
 None of these block merging T11 as it stands; (a) and (b) are scope decisions, (c)–(e)
 are product/API calls worth making before 0.1 while there are no users.
@@ -580,6 +585,11 @@ comment says the missing class is survivable only because Kotlin catches the lin
 
 ## What is not green, and the next experiment
 
+> **Corrected in Round 3.** The diagnosis below is wrong: the key does vary, and the
+> cheap check it proposes (`delta(before).cachedSizes`) returns a new configuration. Both
+> failures were the iOS host measuring content it had not yet rendered, plus a recycled
+> host handing on the previous instance's size - see "The first-commit bug" in Round 3.
+
 Two of the three iOS failures are one symptom, and I could not close them: the
 `nuiSizingKey` does not appear to vary on device. The evidence:
 
@@ -597,7 +607,16 @@ means Fabric is not varying `nuiSizingKey` and the trail goes to the generated p
 plumbing (`ReactProp<std::string>` with an empty-string default for the base variant).
 The third failure is `lastSampleIsRight` on a cold iOS mount — S5's residual frame, above.
 
-## Questions for orchestrator
+## Questions for orchestrator — all answered in Round 3
+
+1. Accepted as **D17** - one declared frame for the first instance of a configuration,
+   zero for anything already exact, no "hide until measured", and the harness now asserts
+   exactly that on both platforms.
+2. Chased, and the premise was wrong: the key and `nuiTestWidth` arrive correctly on
+   mount and on update on both platforms. The remaining failures were the iOS host
+   measuring content it had not yet rendered, plus a recycled host handing on the
+   previous instance's size. No nitrogen patch, no new upstream entry.
+3. The immediate budget stays at **2** - the documented number is the rule (D17).
 
 1. **D16's assumption for cold mounts does not hold.** "One stale iOS frame after an
    environment change, accepted" also implies a cold mount, and even with S5's first-commit
@@ -611,3 +630,235 @@ The third failure is `lastSampleIsRight` on a cold iOS mount — S5's residual f
 3. **S6's number.** "Up to `kImmediateBudgetPerTurn` (2) instances per frame get a
    correction before the redraw" is now the documented claim on Android. Do you want the
    budget raised instead, given 198 of 200 is the realistic cold-batch number?
+
+---
+
+# Round 3
+
+Asked for three things: encode D17 in the harness, chase the `nuiSizingKey` plumbing to
+its root because Button's key will vary, and run the Android harness, which round 2 had
+not run. The headline is that **the key plumbing is innocent** - props and keys arrive
+correctly on mount and on update - and round 2's diagnosis pointed at the wrong layer.
+The bug is in the iOS host's measure timing, it is fixed, and both platforms' suites are
+green.
+
+## Gate status this round (exact commands)
+
+| Gate | Result |
+| --- | --- |
+| `bun run check` | **PASS** (exit 0 - all 13 steps, incl. `test:native`, `perf:renders`, `nitrogen:check`, `api-extractor:check`, `manifest:check`) |
+| Unit tests (`jest`, inside check) | **PASS** - 109 tests, 8 suites |
+| `bun run test:native` (inside check) | **PASS** |
+| iOS harness, iPhone 17 `F08675D3`, `METRO_PORT=8293` | **PASS - 33/33**, 2 suites |
+| Android harness, AVD `nitroui_t01` (`emulator-5570`), `ANDROID_ADB_SERVER_PORT=5041` | **PASS - 33/33**, 2 suites - incl. D17's `stale == 0` |
+| New first-commit gate, **before** the fix | **RED** (evidence below) |
+| `bun run perf:renders` | **PASS** - 6 commits vs baseline 6, no redundant render |
+
+Commands, from `example/`:
+
+```sh
+# iOS
+HARNESS_APP_PATH="…/DerivedData/…/Debug-iphonesimulator/NitroUiExample.app" \
+  IOS_SIM_UDID=F08675D3-A32B-4F88-BC81-02D7E0CB797E METRO_PORT=8293 \
+  bunx react-native-harness --harnessRunner ios
+# Android (APK from `./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a`)
+HARNESS_APP_PATH="…/outputs/apk/debug/app-debug.apk" ANDROID_AVD=nitroui_t01 \
+  ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 \
+  bunx react-native-harness --harnessRunner android
+```
+
+## The first-commit bug: what it actually was
+
+The symptom survived round 2's S1 fix: a `nuiTestWidth` that arrives **with the view's
+first props** changes the control and never changes the size Yoga is told. Round 2 read
+that as the key not moving, because a default-configuration mount came back at the wide
+variant's size. That reading was wrong in both directions: the key was fine, and the
+default mount was not reading the wide variant's cache entry - it was reading **the
+previous instance's size off a recycled host**.
+
+What was actually happening, on iOS only, in two layers:
+
+1. **`commit()` measured in the same turn as the update it triggered.**
+   `model.objectWillChange.send()` only *invalidates* SwiftUI's graph; the body is
+   re-evaluated in a later pass. `measureFittingSize()` in the same turn therefore
+   numbers the content the commit had just replaced - the plain 61x28 Toggle - and the
+   engine files a report as exact and stops asking. A size-affecting prop that arrives
+   after the first commit still gets a later measure pass and recovers; one that arrives
+   *with* the first commit never does.
+2. **The first commit runs while the host has no window**, where a forced
+   `layoutIfNeeded()` has nothing to lay out. `refreshContentSize()` guarded on
+   `hasCommitted`, so no layout pass ever preceded the measure either.
+
+The fix is one flag, `contentUpdatePending`, that carries the update to a measure point
+that can apply it: `measureFittingSize()` lays the hosted view out first;
+`refreshContentSize()` refuses to answer while the host is outside a window rather than
+cache a number describing content that is on screen no more ("a wrong number is worse
+than a late one", since the engine treats a report as final); `didMoveToWindow()` is the
+deferred measure point, because a recycled host whose frame does not change gets no
+later `layoutSubviews`. `prepareForRecycle()` now also clears `_contentSize`, which is
+what leaked a wide size onto the next instance - round 2's "100-wide default Switch".
+
+### Evidence
+
+On-device probes, before the fix (JS facts carried in a thrown error, native facts in
+`NSLog`):
+
+```
+FACTS::B wide key:"|w100" tw:100 content:61x28 box:[61,28] corr:0   <- key AND width arrived; size did not
+FACTS::C after content:61x28 box:[61,28]
+```
+
+After the fix, the same probes: `B wide content:100x28 box:[100,28]`, plain-after-mount
+`61x28 corr:0`, `C after content:100x28 box:[100,28] corr:1`, `A 61x28 corr:0`. The key
+string was correct in every one of them, which is the answer to round 2's question 2:
+**no `scripts/patch-nitrogen.mjs` change was needed and `docs/upstream.md` gained no
+entry**, because Nitro's generated props were never the problem.
+
+Gate, before the fix (host reverted to `HEAD`, rebuilt):
+
+```
+● Sizing · intrinsic (T11) › measures the width that arrived with the first commit
+  testID "first-commit-wide" (a control whose width arrived with its first props)
+  never reached 100 wide - last box 61.00x28.00.
+Tests: 1 failed, 17 passed        # the same suite, all 18
+```
+
+After the fix: 18/18 on iOS, 18/18 on Android, and 33/33 for the whole suite on both.
+
+An intermediate attempt is worth recording: applying only `layoutIfNeeded()` (no window
+guard, no `didMoveToWindow()`) left a *fresh* wide mount at 61 while the update was
+already lost - the probe reported `content:0x0` for a mount that had never been measured
+- which is what pointed at the window guard as the second half of the fix.
+
+### The fixture is the test
+
+The gate seeds the **accurate declared size**, not a poisoned one, and that choice is
+what makes it able to fail. With a poisoned (wrong) starting guess, the correction moves
+the box, and on iOS *a moving box is what triggers the re-measure* that then finds the
+real content - so the stale number survives one frame, is corrected, and the test passes
+with the bug in. Seeded at the declared 61x28, the stale number equals the guess, the
+box never moves, and nothing but a measure of the actual content can reach 100. It is
+also the case a real control hits: its declared fallback is right for the library and
+wrong for it.
+
+Android is unaffected by the race - `NitroComposeHost` uses `NitroUiMeasuredRoot(onMeasured:)`,
+so Compose reports its own size rather than being asked for one - and the Android run
+this round is what confirms that, rather than the reasoning.
+
+## D17, encoded
+
+`lastSampleIsRight` cannot express D17 and is gone. `markFirstFrameIfNeeded` samples the
+frame a host first commits and disarms until its next recycle, so there is exactly **one
+`drew` sample per mounted instance** and "the last sample" is decided by a race, not by
+the engine. What the cold tests now assert is D17 as written: at most one stale frame on
+iOS, **zero on Android**, every sample either the declared fallback or the control's own
+size, and the box that stays up.
+
+Three tests that assert settled boxes inherited the process-global fallback and needed
+their own accurate declaration: `prewarm()` seeds from the *declared* number, which
+measurements never overwrite, so a poisoned test running first used to leave them
+reading it.
+
+## Android: run for the first time since round 2
+
+Two of round 2's Android edits had never been compiled - the APK the suite was tested
+against was built at 02:36 and the commits landed at 03:55 - and `assembleDebug` failed
+on both:
+
+```
+HybridNitroUiSwitch.kt:117:39  Unresolved reference 'width'.        # Modifier.width, no import
+NitroComposeHost.kt:540:39     Unresolved reference 'joinToString'. # android.os.LocaleList is not Iterable
+NitroComposeHost.kt:540:59     Unresolved reference 'it'.
+```
+
+Fixed in `517230a` (`toLanguageTags()` is the platform's own rendering of the same
+list). Nothing else failed to compile, and the rest of the suite passed on the first
+Android run - one failure, below.
+
+### The cold-batch gate was measuring the wrong thing
+
+`expected 105.297667 to be less than 64`. `maxFlushMs` is a **process-wide high-water
+mark** that `delta()` passes through un-differenced: every test in the run logged the
+identical `maxFlushMs=100.503`, including tests that logged `flushes=0`. It cannot
+support a per-batch assertion at all.
+
+`lastFlushMs`, sampled while the batch is still the most recent work, is the batch's own
+flush. Measured with it, debug build:
+
+| Platform | Flush that applies 200 corrections | Mount of the same 200 |
+| --- | --- | --- |
+| iOS | 8.5 ms (1 flush) | 4546 ms |
+| Android, cold | 125 ms | 4295 ms |
+| Android, warm (second identical batch) | 84 ms | 2177 ms |
+
+The Android gap is not one-time initialisation - a second, warm batch still cost 84 ms -
+and it is not the engine's bookkeeping: it is the re-layout that 200 pushes trigger
+inside the pre-draw pass, which is the same pass that cancels the wrong-size frame
+(D17), so the frame it spends is the frame it replaces. Round 2's comment claimed
+"about 18 ms on Android", a number this tree does not produce. The bound is now the
+flush's own duration against a fraction of the mount plus an absolute ceiling, both
+documented with these measurements.
+
+The test's 200-box sweep had its own race, seen red on iOS with the test run alone: a
+flush may push only two synchronous updates, so a cold batch reaches its control's size
+on a later frame than the one that mounted it, while `mountMany` waits for the last view
+to *exist*, not to be sized. `waitForAllBoxes` polls all 200 and names the rows that
+never arrive. The warm-batch sweep is left immediate on purpose - nothing corrects it, so
+its boxes are set by its own mount frame.
+
+## `perf:renders` after the merge
+
+The T02 render contract went red: rendering a `Switch` now asks native for its sizing id
+(`useSizingId`), and the perf test had no `NitroUiCore` mock. It needed the mock, not a
+new baseline: the hook answers **once per mounted instance and keeps the id in a ref**,
+which is not a render. Measured after adding the mock: **6 commits against a baseline of
+6**, no redundant update, so `bench/baselines/renders.json` is untouched.
+
+## Answers, and the two earlier question blocks
+
+Round 1's (a)-(h) and round 2's three questions are answered by D16, D17 and this
+round's work; the blocks are marked resolved in place and the answers are:
+
+| Question | Where it went |
+| --- | --- |
+| (a) R3 has no size-affecting subject | D16 - G2 Button owns the real test; `nuiTestWidth` stays test-only. Round 3's gate covers the mechanism for a prop arriving at mount *and* on update. |
+| (b) `prewarmKeys` | D16 - deferred past 0.1. |
+| (c) cross-axis fill is opt-in | D16 - documented difference. |
+| (d) one stale iOS frame | D17 - generalised to the first instance per configuration per epoch; zero on Android. |
+| (e) `staleFramesSkipped` | D16 - renamed `changedFlushes`, in the stats above. |
+| (f) Modal instances get trace events but no perf marks | **Still open**, T10/bench area, unchanged by this round. Flagged again in "Still open". |
+| (g) timings are not benchmarks | T02 merged. Its bench now owns benchmarks; the 200-instance cold-cache flush this question asked about is measured above, with an instrument that reports it per batch. |
+| (h) D14's "until T11" sentence | D16 records the clause as fulfilled. |
+| R2 Q1 cold-mount frame | **Accepted as D17**, harness re-encoded, no "hide until measured". |
+| R2 Q2 chase the key? | Chased. The key arrives correctly on both platforms; the bug was measure timing plus a recycled host's stale size. No nitrogen patch, no new upstream entry. |
+| R2 Q3 immediate budget | Kept at 2 - the documented number is the rule (D17). |
+
+## Docs corrected
+
+`docs/upstream.md` renumbered this task's entry to **N6** when main's N5 landed in the
+merge; the P1 table above still cited it as N5 and now reads N6. (`docs/architecture/core.md`'s
+"Upstream N5" is main's and is left alone.)
+
+## Round 3 commits
+
+| Commit | What |
+| --- | --- |
+| `1d3fff9` | Merge `main` (T02 bench, D17, AGENTS' fail-proof rule) into the branch |
+| `517230a` | `fix(sizing)` - compile the Android host's test width and environment signature |
+| `c8895af` | `fix(sizing)` - measure the content a commit changed, not the one before it |
+| `9bbbf46` | `test(sizing)` - gate the size a first commit brings, and assert D17's budget |
+| `cfc15f9` | `test(sizing)` - make the cold-batch gate measure the flush and frame it owns |
+| `bd390e1` | `test(perf)` - give the Switch render contract the core it now needs |
+
+## Still open
+
+- **Android's batch flush is ~10x iOS's** (84-125 ms vs 8.5 ms for the same 200). It is
+  bounded by the instances in a turn, and the knob is a per-flush instance cap. Not
+  wrong, but it is the sizing cost that grows with a cold list, so it belongs in a
+  benchmark before anyone ships a 500-row cold mount.
+- **(f) from round 1**: a `Modal` instance gets sizing trace events but no perf marks -
+  the first-frame watch does not attribute marks across the second surface. Sizing is
+  correct there (the Modal test passes); the gap is in T10's perf attribution.
+- **G2 Button's real R3 test** (D16), and `prewarmKeys` past 0.1.
+- The warm-batch and frame-counting sweeps are still immediate reads, deliberately: one
+  has nothing to correct, the other exists to sample frames as they land.
