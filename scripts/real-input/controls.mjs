@@ -25,7 +25,9 @@
  * @property {string} id Lower-case identifier, also the name of the check on
  *   both platforms (`switch` -> `testRealInputSwitch` / `CHECKS.switch`).
  * @property {string} title What the check proves, for the report line.
- * @property {'switch' | 'slider'} screen The example app's tab to be on.
+ * @property {'switch' | 'slider' | 'button'} screen The example app's tab to be
+ *   on. Must be a tab `example/src/App.tsx` actually renders, and the screen
+ *   behind it has to render the on-screen `Text` the checks read.
  */
 
 /** @type {ReadonlyArray<RealInputControl>} */
@@ -39,6 +41,11 @@ export const REAL_INPUT_CONTROLS = Object.freeze([
     id: 'slider',
     title: 'real drag moves the Slider and fires start, change and complete',
     screen: 'slider',
+  },
+  {
+    id: 'button',
+    title: 'real tap presses the Button, and a disabled one stays pressed-out',
+    screen: 'button',
   },
 ]);
 

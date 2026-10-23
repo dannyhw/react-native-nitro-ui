@@ -38,15 +38,17 @@ import XCTest
 /// node, and React Native stores `testID` as a view tag, which is not part of
 /// the accessibility tree. See `scripts/real-input/uiautomator.mjs`.)
 final class RealInputTests: XCTestCase {
-  /// The example app's two tabs.
+  /// The example app's three tabs.
   private enum Tab {
     static let switchTab = "tab-switch"
     static let sliderTab = "tab-slider"
+    static let buttonTab = "tab-button"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
   private enum Echo {
     static let switchValue = "switch-controlled-value"
+    static let buttonCount = "real-input-count"
     static let sliderStart = "slider-start-count"
     static let sliderChange = "slider-change-count"
     static let sliderComplete = "slider-complete-count"
@@ -192,6 +194,50 @@ final class RealInputTests: XCTestCase {
     )
   }
 
+  /// A real tap must reach the hosted SwiftUI `Button`'s `onPress`, and a real
+  /// tap on a disabled one must not.
+  ///
+  /// This is the case the harness could never show: G2 found a SwiftUI `Button`
+  /// that ignored `react-native-harness`'s HID-less touch entirely, so the only
+  /// witness that counts is one the app renders after a touch that started
+  /// outside it. The two Buttons share one counter and both are given `onPress`,
+  /// so the disabled half says something: a library that let a disabled control
+  /// fire would move the number, and a counter that simply stopped rendering
+  /// would be caught by the tap that follows.
+  func testRealInputButton() throws {
+    try goToTab(Tab.buttonTab, showing: Echo.buttonCount)
+    let control = try required("real-input-enabled", as: "the enabled Button")
+    let disabled = try required("real-input-disabled", as: "the disabled Button")
+    XCTAssertEqual(
+      try read(Echo.buttonCount),
+      "0",
+      "the Button should start with no presses recorded"
+    )
+
+    control.centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.buttonCount) { $0 == "1" },
+      "1",
+      "one real tap on the enabled Button should reach onPress and React should render 1 - the hierarchy dump above shows what was on screen instead"
+    )
+
+    disabled.centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.buttonCount, timeout: 1.5) { $0 != "1" },
+      "1",
+      "a real tap on the disabled Button should be refused: onPress was passed to it too, so a count that moves proves the touch was not refused"
+    )
+
+    control.centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.buttonCount) { $0 == "2" },
+      "2",
+      "a second real tap should press the enabled Button again - which is also what proves the line above measured a refusal and not a screen that had stopped rendering"
+    )
+    XCTAssert(control.isHittable, "the enabled Button should still be touchable")
+    XCTAssert(disabled.isHittable, "the disabled Button should still be on screen")
+  }
+
   // MARK: - Reading the screen
 
   /// The element React Native gave this `testID`, waiting for it to exist.
@@ -215,7 +261,7 @@ final class RealInputTests: XCTestCase {
     return node
   }
 
-  /// Switch to one of the example's two tabs and wait for its screen.
+  /// Switch to one of the example's tabs and wait for its screen.
   ///
   /// The example mounts one screen at a time, so a control on the other screen
   /// is not in the tree at all rather than merely off-screen.
