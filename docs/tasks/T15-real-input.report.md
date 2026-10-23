@@ -1,8 +1,9 @@
 # T15 — Real-input verification: report
 
-**Branch:** `task/T15-real-input` from `main` (`9c66f7c`) · **Rounds:** 2 of 1+2
-**Devices used:** iPhone Air `331EF109-…` (shut down at the end) · `nitroui_t02` /
-`emulator-5572` on adb server 5042 (shut down at the end) · Metro 8294
+**Branch:** `task/T15-real-input` (from `main` at `9c66f7c`) · **Devices:** iPhone Air
+`331EF109-21DD-422B-AEF8-DFFFC6998DC3`, AVD `nitroui_t02` (adb server 5042,
+`emulator-5572`), Metro 8294 — all booted by hand and shut down at the end ·
+**Platforms:** both.
 
 ## Verdict
 
@@ -255,3 +256,10 @@ Started and stopped by this task: `nitroui_t02` (`emulator-5572`, adb server
 5042), iPhone Air `331EF109-…`, Metro on 8294, and the `adb reverse` for 8294.
 `emulator-5560` / `PR1505_Pixel` and T14's iPhone 17 / `nitroui_t01` were never
 touched.
+
+## Commits
+
+| Commit | What |
+| --- | --- |
+| `afc4642` | the suite: one control table, two runners, the iOS UI-test target, the Slider phase echoes, the two findings |
+| this commit | the report header, and this list |
