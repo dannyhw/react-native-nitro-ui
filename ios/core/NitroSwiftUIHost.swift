@@ -49,8 +49,10 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// Switch, Slider, Button, Progress and SegmentedControl do not.
   var needsContainment = false
   /// Set `true` by components that want ``contentSize`` maintained (T11's sizing,
-  /// plus `measureContent()`). It costs a `sizeThatFits` per commit, so it is off
-  /// by default.
+  /// plus `measureContent()`). Off by default: the measure is a synchronous
+  /// SwiftUI layout pass, so it runs once per bounds or trait change - not per
+  /// commit. A component whose content changes size without either of those
+  /// (a new selection, a shorter label) says so with ``invalidateContentSize()``.
   var wantsContentSize = false
   /// `nuiPerfId` of the owning view, or ``nitroUiPerfNoInstance``.
   var perfInstanceId: Int32 = nitroUiPerfNoInstance
@@ -61,7 +63,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// `measureContent()` runs on JS, which must never call into SwiftUI
   /// (docs/research/core-architecture.md §1.4). A `CGSize?` is not read atomically
   /// on its own, so the lock is what makes that legal. It is only ever taken by
-  /// components with ``wantsContentSize``, once per commit.
+  /// components with ``wantsContentSize``: once per bounds or trait change, plus
+  /// each ``invalidateContentSize()``.
   var contentSize: CGSize? {
     sizeLock.lock()
     defer { sizeLock.unlock() }
@@ -75,7 +78,11 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   private var hasCommitted = false
   private var suppressesNextAnimation = true
   private var hasMarkedFirstFrame = false
-  private var measuredSize: CGSize = .zero
+  /// Whether the hosted content needs a measure pass. Starts `true`, and becomes
+  /// `true` again on a bounds change, a size-affecting trait change, a recycle, or
+  /// ``invalidateContentSize()`` - never on a plain visual commit, which is what
+  /// keeps `sizeThatFits` off the hot path.
+  private var contentSizeNeedsMeasure = true
   private weak var containerViewController: UIViewController?
 
   init(model: Content.Model) {
@@ -113,6 +120,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     if hostedView.frame != bounds, bounds.width > 0, bounds.height > 0 {
       // Frame, not Auto Layout constraints: RN already decided our size in Yoga.
       hostedView.frame = bounds
+      // A different box can produce a different fitting size for the content.
+      contentSizeNeedsMeasure = true
     }
     markFirstFrameIfNeeded()
     refreshContentSize()
@@ -134,8 +143,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     if previousTraitCollection?.preferredContentSizeCategory
       != traitCollection.preferredContentSizeCategory
       || previousTraitCollection?.legibilityWeight != traitCollection.legibilityWeight {
-      measuredSize = .zero
-      refreshContentSize()
+      invalidateContentSize()
     }
   }
 
@@ -175,9 +183,13 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
       model.objectWillChange.send()
     }
 
-    // The content itself may have changed size (a shorter label, a new selection),
-    // so a visual commit always re-measures rather than trusting the last frame.
-    measuredSize = .zero
+    // Not a measure point: a commit usually changes pixels, not the control's
+    // size, and `sizeThatFits` on every commit is a synchronous SwiftUI layout
+    // right after the invalidation (review SF5). The one commit that can be the
+    // first chance we get at a size is the first one, so ask for that.
+    if contentSize == nil {
+      contentSizeNeedsMeasure = true
+    }
     refreshContentSize()
   }
 
@@ -186,7 +198,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     nitroUiAssertMainThread()
     isDirty = true
     suppressesNextAnimation = true
-    measuredSize = .zero
+    contentSizeNeedsMeasure = true
     // The next mount is a new view as far as measurements go: a recycled host
     // that kept its flag would never report `firstFrame` again.
     hasMarkedFirstFrame = false
@@ -205,10 +217,21 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     sizeLock.lock()
     _contentSize = nil
     sizeLock.unlock()
-    measuredSize = .zero
+    contentSizeNeedsMeasure = true
   }
 
   // MARK: - Measuring
+
+  /// Throw away the cached ``contentSize`` and measure again, right now.
+  ///
+  /// For content that changed size with no bounds or trait change to notice -
+  /// a `Picker` whose selected title got longer, a label that wrapped
+  /// differently. Components that never change size never call this.
+  func invalidateContentSize() {
+    nitroUiAssertMainThread()
+    contentSizeNeedsMeasure = true
+    refreshContentSize()
+  }
 
   /// The fitting size of the hosted content, measured on the main thread.
   ///
@@ -216,13 +239,11 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// `measureContent()` and the harness read it.
   @discardableResult
   private func refreshContentSize() -> CGSize? {
-    guard wantsContentSize, hasCommitted, !bounds.isEmpty else {
+    guard wantsContentSize, hasCommitted, !bounds.isEmpty, contentSizeNeedsMeasure else {
+      // The hot path: two bools, no SwiftUI.
       return contentSize
     }
-    guard measuredSize != bounds.size || contentSize == nil else {
-      return contentSize
-    }
-    measuredSize = bounds.size
+    contentSizeNeedsMeasure = false
     let size = measureFittingSize()
     sizeLock.lock()
     _contentSize = size
