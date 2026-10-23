@@ -14,3 +14,4 @@
 - `Slider › ignores a drag while disabled, and follows the flag back` is red on iOS on `main` since 381b1f2 (merged): the assertion tests Android-only probe text (`disabled=true`), and the iOS element's traits were `4096` = `.adjustable` with no `.notEnabled`, so the iOS half of that announcement may be missing rather than just unasserted. Gate it by platform and check the flag; found by T14.
 - Harness fails on Node 26 with a misleading ESM error; `.nvmrc` pins 24 — document in CONTRIBUTING or fix.
 - G1 Slider verifier follow-ups (8 items) are listed in docs/tasks/G1-slider.report.md "Follow-ups".
+- Transient iOS harness `app heartbeat timed out` on Sizing.harness (FIX1, re-run green).
