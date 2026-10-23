@@ -8,9 +8,9 @@
 | T10 | Core hosting runtime + Switch tracer bullet | Apex | Opus | merged (3 rounds) |
 | T11 | Intrinsic sizing shadow node (P0/P1) | Apex | Opus | merged (4 rounds) |
 | T12 | Android Compose host performance | Apex | Opus | merged (3 rounds; D15 Android miss on UI CPU/memory, see §P2f) |
-| T13 | Shared Compose owner services (`ComposeViewContext`) spike | Apex | Opus | in progress |
+| T13 | Shared Compose owner services (`ComposeViewContext`) spike | Apex | — | in progress — single round, no fix rounds (D19) |
 | G1 | Slider | Apex | Opus | reviewing (9b583d8; iOS+Android harness 51/51) |
 | G3 | Progress | — | — | planned (after T02 + T11) |
 | G2 | Button (owns R3 sizing test) | — | — | planned (after T11) |
-| G4 | SegmentedControl + Picker | — | — | planned (after G2) |
-| G5 | DatePicker | — | — | planned (after G4) |
+| G4 | SegmentedControl (+ Picker only if time, D19) | — | — | planned (after G2) |
+| G5 | DatePicker | — | — | moved to 0.2 (D19) |
