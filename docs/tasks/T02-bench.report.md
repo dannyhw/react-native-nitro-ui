@@ -690,6 +690,13 @@ one tree for all 50. That cost sits inside the mount window and never reaches
 
 ## Results — Android (AVD `nitroui_t02`, API 35, 4 launches)
 
+> **Regime note (2026-10-23, T12).** Every Android number in rounds 3 and 4 was measured with the
+> bench app at ART `status=verify` — interpreter + JIT, no baseline profile in force. T12 found this
+> and the bench primes the profile for every arm now (`docs/architecture/benchmarks.md`). Priming is
+> a comparability break for the ratios as well as the absolutes, so **these Android numbers compare
+> only with other `verify` runs** and are superseded for Android by T12 phase 2
+> (`docs/tasks/T12-android-perf.report.md`). The iOS numbers are unaffected.
+
 Absolute (median of launch medians):
 
 | Cell         | Implementation           | presented | mounted   | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
@@ -953,6 +960,9 @@ Tests: the bench suite is 27 (`sample completeness (round 4)` ×5,
 path is now a test — plus `summaryTable`/`detailSections` n/a assertions).
 
 ## 3. One Android re-run with the fix (AVD `nitroui_t02`, idle machine)
+
+> Same regime note as round 3's Android table (2026-10-23, T12): measured at ART `verify`, superseded
+> for Android by T12 phase 2, comparable only with other `verify` runs.
 
 `bun bench --platform android --plan quick` at `7929130`-dirty, `-gpu host`,
 load average 1.99 over 14 cores, 434 s wall (round 3's 1115 s was three
