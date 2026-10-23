@@ -4,7 +4,6 @@ import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
-import kotlin.math.round
 
 /*
  * The value rules of a Slider: clamp to the range, snap to the step, and shed the
@@ -79,7 +78,7 @@ internal object NitroUiSliderValue {
       return null
     }
     val intervals = (maximum - minimum) / step
-    val nearest = round(intervals)
+    val nearest = roundHalfAway(intervals)
     val tolerance = maxOf(DIVISION_TOLERANCE, abs(intervals) * DIVISION_TOLERANCE)
     // A range shorter than a hair of one step is not "exactly one step wide", and
     // calling it that would make the minimum unreachable.
@@ -88,6 +87,20 @@ internal object NitroUiSliderValue {
     }
     return Division(maxOf(0.0, floor(intervals)), false)
   }
+
+  /**
+   * Rounds to the nearest integer with a tie going **away from zero**.
+   *
+   * This exists because Kotlin's [round] is `Math.rint`, which sends a tie to the
+   * **even** neighbour, while Swift's `Double.rounded()` goes away from zero. Every
+   * quantity this library rounds is a count of steps measured from
+   * `minimumValue`, and "the thumb goes to the next stop" has to be the same stop on
+   * both OSes: with [round], `quantize(2.5, 0..10, step 1)` answered 2 on Android and
+   * 3 on iOS, so a controlled `value={2.5}` put the thumb on different stops per
+   * platform.
+   */
+  fun roundHalfAway(x: Double): Double =
+    if (x < 0.0) -floor(-x + 0.5) else floor(x + 0.5)
 
   /**
    * The value a Slider shows and reports for [raw]: clamped into the range, and
@@ -129,7 +142,7 @@ internal object NitroUiSliderValue {
     val clamped = minOf(maxOf(raw, minimum), maximum)
     val division = division(minimum, maximum, step) ?: return tidy(clamped)
 
-    val stepsFromMinimum = round((clamped - minimum) / step)
+    val stepsFromMinimum = roundHalfAway((clamped - minimum) / step)
     if (stepsFromMinimum < division.wholeSteps) {
       return tidy(minimum + stepsFromMinimum * step)
     }
@@ -161,6 +174,6 @@ internal object NitroUiSliderValue {
     if (!scaled.isFinite()) {
       return value
     }
-    return round(scaled) / scale
+    return roundHalfAway(scaled) / scale
   }
 }

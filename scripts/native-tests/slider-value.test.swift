@@ -87,6 +87,25 @@ struct SliderValueTest {
                 "a 16th significant digit is the one shed")
     checkEquals(NitroUiSliderValue.tidy(1e20), 1e20, "tidying leaves a clean huge value alone")
 
+    // Ties. Kotlin's `round` is `Math.rint`, which rounds a tie to the **even**
+    // neighbour; Swift's `.rounded()` goes away from zero. The rule is
+    // `roundHalfAway`, spelled the same on both platforms — see that function's
+    // comment — and these are the vectors that caught the divergence.
+    checkEquals(NitroUiSliderValue.roundHalfAway(0.5), 1, "0.5 goes to 1, not to the even 0")
+    checkEquals(NitroUiSliderValue.roundHalfAway(2.5), 3, "2.5 goes to 3, not to the even 2")
+    checkEquals(NitroUiSliderValue.roundHalfAway(-0.5), -1, "a negative tie goes away from zero")
+    checkEquals(NitroUiSliderValue.roundHalfAway(-2.5), -3, "...all the way down")
+    checkEquals(NitroUiSliderValue.roundHalfAway(0.4), 0, "a non-tie still rounds to nearest")
+    checkEquals(NitroUiSliderValue.roundHalfAway(0.6), 1, "...in either direction")
+    checkEquals(NitroUiSliderValue.roundHalfAway(-0.6), -1, "...including below zero")
+    checkEquals(quantize(0.5, 0, 2, 1), 1, "a mid-range tie goes up")
+    checkEquals(quantize(2.5, 0, 10, 1), 3, "a mid-range tie goes up, not to the even 2")
+    // The steps are counted *up from the minimum*, so -2.5 in -5...5 is 2.5 steps
+    // in: the tie is in the step count, and it goes up (old Kotlin answered -3).
+    checkEquals(quantize(-2.5, -5, 5, 1), -2, "a tie in a negative range counts steps up from the minimum")
+    checkEquals(quantize(0.25, 0, 1, 0.5), 0.5, "a tie in a fraction goes up to the next stop")
+    checkEquals(quantize(1.5, 0, 3, 1), 2, "an integer-valued tie is the same either way")
+
     // Which ranges a platform's own stepped control can draw.
     let tenths = NitroUiSliderValue.division(minimum: 0, maximum: 1, step: 0.1)
     check(tenths?.wholeSteps == 10 && tenths?.endsOnStep == true, "0...1 by tenths ends on a step")
