@@ -65,3 +65,9 @@ Write `docs/tasks/<ID>.report.md` on your branch with: summary, files changed, d
 (and why), gate results (exact commands + pass/fail), benchmark numbers if applicable, known
 issues / follow-ups, questions for orchestrator. Your final message should be a concise version
 of the report plus the branch name and final commit SHA.
+
+## Scope discipline (D19)
+
+Stay inside your brief. Anything you find that is not a correctness bug in your scope, a failing
+gate, or a false claim: write one line in your report's "Follow-ups" section and move on — do not
+fix it, investigate it further, or widen the task. Tasks have a hard round cap (D19).
