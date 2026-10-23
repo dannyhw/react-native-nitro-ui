@@ -76,6 +76,12 @@ abstract class HybridNitroUiSwitchSpec: HybridView() {
   @set:Keep
   abstract var nuiPerfId: Variant_NullType_Double
   
+  @get:DoNotStrip
+  @get:Keep
+  @set:DoNotStrip
+  @set:Keep
+  abstract var nuiTestWidth: Variant_NullType_Double
+  
   abstract var onValueChange: ((value: Boolean, eventCount: Double) -> Unit)?
   
   private var onValueChange_cxx: Func_void_bool_double?

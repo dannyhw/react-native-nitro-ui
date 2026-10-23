@@ -55,13 +55,20 @@ namespace margelo::nitro::nitroui {
     stats.correctionsImmediate = static_cast<double>(engine.correctionsImmediate);
     stats.correctionsBatched = static_cast<double>(engine.correctionsBatched);
     stats.flushes = static_cast<double>(engine.flushes);
-    stats.staleFramesSkipped = static_cast<double>(engine.staleFramesSkipped);
+    stats.changedFlushes = static_cast<double>(engine.changedFlushes);
+    stats.reportsConfirmed = static_cast<double>(engine.reportsConfirmed);
     // Nanoseconds in, milliseconds out: the same unit `now()` reports, so a test
     // can compare a flush with a mount duration without converting.
     stats.lastFlushMs = static_cast<double>(engine.lastFlushNs) / 1000000.0;
     stats.maxFlushMs = static_cast<double>(engine.maxFlushNs) / 1000000.0;
     stats.traceDropped = static_cast<double>(engine.traceDropped);
+    stats.ledgerEntries = static_cast<double>(engine.ledgerEntries);
+    stats.registryEntries = static_cast<double>(engine.registryEntries);
     return stats;
+  }
+
+  double HybridNitroUiCore::nextSizingId() {
+    return static_cast<double>(NitroUiSizingEngine::nextInstanceId());
   }
 
   void HybridNitroUiCore::seedSizingSize(const std::string& componentName, const std::string& sizingKey, double width,

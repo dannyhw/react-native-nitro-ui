@@ -44,17 +44,20 @@ namespace margelo::nitro::nitroui {
     double measurements     SWIFT_PRIVATE;
     double reportsQueued     SWIFT_PRIVATE;
     double reportsDropped     SWIFT_PRIVATE;
+    double reportsConfirmed     SWIFT_PRIVATE;
     double correctionsImmediate     SWIFT_PRIVATE;
     double correctionsBatched     SWIFT_PRIVATE;
     double flushes     SWIFT_PRIVATE;
-    double staleFramesSkipped     SWIFT_PRIVATE;
+    double changedFlushes     SWIFT_PRIVATE;
     double lastFlushMs     SWIFT_PRIVATE;
     double maxFlushMs     SWIFT_PRIVATE;
     double traceDropped     SWIFT_PRIVATE;
+    double ledgerEntries     SWIFT_PRIVATE;
+    double registryEntries     SWIFT_PRIVATE;
 
   public:
     NitroUiSizingStats() = default;
-    explicit NitroUiSizingStats(double cachedSizes, double environmentEpoch, double measurements, double reportsQueued, double reportsDropped, double correctionsImmediate, double correctionsBatched, double flushes, double staleFramesSkipped, double lastFlushMs, double maxFlushMs, double traceDropped): cachedSizes(cachedSizes), environmentEpoch(environmentEpoch), measurements(measurements), reportsQueued(reportsQueued), reportsDropped(reportsDropped), correctionsImmediate(correctionsImmediate), correctionsBatched(correctionsBatched), flushes(flushes), staleFramesSkipped(staleFramesSkipped), lastFlushMs(lastFlushMs), maxFlushMs(maxFlushMs), traceDropped(traceDropped) {}
+    explicit NitroUiSizingStats(double cachedSizes, double environmentEpoch, double measurements, double reportsQueued, double reportsDropped, double reportsConfirmed, double correctionsImmediate, double correctionsBatched, double flushes, double changedFlushes, double lastFlushMs, double maxFlushMs, double traceDropped, double ledgerEntries, double registryEntries): cachedSizes(cachedSizes), environmentEpoch(environmentEpoch), measurements(measurements), reportsQueued(reportsQueued), reportsDropped(reportsDropped), reportsConfirmed(reportsConfirmed), correctionsImmediate(correctionsImmediate), correctionsBatched(correctionsBatched), flushes(flushes), changedFlushes(changedFlushes), lastFlushMs(lastFlushMs), maxFlushMs(maxFlushMs), traceDropped(traceDropped), ledgerEntries(ledgerEntries), registryEntries(registryEntries) {}
 
   public:
     friend bool operator==(const NitroUiSizingStats& lhs, const NitroUiSizingStats& rhs) = default;
@@ -75,13 +78,16 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "measurements"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "reportsQueued"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "reportsDropped"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "reportsConfirmed"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "correctionsImmediate"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "correctionsBatched"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "flushes"))),
-        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "staleFramesSkipped"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedFlushes"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lastFlushMs"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "maxFlushMs"))),
-        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "traceDropped")))
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "traceDropped"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "ledgerEntries"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "registryEntries")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::nitroui::NitroUiSizingStats& arg) {
@@ -91,13 +97,16 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "measurements"), JSIConverter<double>::toJSI(runtime, arg.measurements));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "reportsQueued"), JSIConverter<double>::toJSI(runtime, arg.reportsQueued));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "reportsDropped"), JSIConverter<double>::toJSI(runtime, arg.reportsDropped));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "reportsConfirmed"), JSIConverter<double>::toJSI(runtime, arg.reportsConfirmed));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "correctionsImmediate"), JSIConverter<double>::toJSI(runtime, arg.correctionsImmediate));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "correctionsBatched"), JSIConverter<double>::toJSI(runtime, arg.correctionsBatched));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "flushes"), JSIConverter<double>::toJSI(runtime, arg.flushes));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "staleFramesSkipped"), JSIConverter<double>::toJSI(runtime, arg.staleFramesSkipped));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "changedFlushes"), JSIConverter<double>::toJSI(runtime, arg.changedFlushes));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "lastFlushMs"), JSIConverter<double>::toJSI(runtime, arg.lastFlushMs));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "maxFlushMs"), JSIConverter<double>::toJSI(runtime, arg.maxFlushMs));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "traceDropped"), JSIConverter<double>::toJSI(runtime, arg.traceDropped));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "ledgerEntries"), JSIConverter<double>::toJSI(runtime, arg.ledgerEntries));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "registryEntries"), JSIConverter<double>::toJSI(runtime, arg.registryEntries));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -113,13 +122,16 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "measurements")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "reportsQueued")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "reportsDropped")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "reportsConfirmed")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "correctionsImmediate")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "correctionsBatched")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "flushes")))) return false;
-      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "staleFramesSkipped")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedFlushes")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lastFlushMs")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "maxFlushMs")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "traceDropped")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "ledgerEntries")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "registryEntries")))) return false;
       return true;
     }
   };

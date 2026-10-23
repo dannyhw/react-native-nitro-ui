@@ -66,6 +66,8 @@ namespace margelo::nitro::nitroui {
       virtual void setAccessibilityLabel(const std::variant<nitro::NullType, std::string>& accessibilityLabel) = 0;
       virtual std::variant<nitro::NullType, double> getNuiPerfId() = 0;
       virtual void setNuiPerfId(const std::variant<nitro::NullType, double>& nuiPerfId) = 0;
+      virtual std::variant<nitro::NullType, double> getNuiTestWidth() = 0;
+      virtual void setNuiTestWidth(const std::variant<nitro::NullType, double>& nuiTestWidth) = 0;
       virtual std::optional<std::function<void(bool /* value */, double /* eventCount */)>> getOnValueChange() = 0;
       virtual void setOnValueChange(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& onValueChange) = 0;
       virtual std::string getNuiSizingKey() = 0;

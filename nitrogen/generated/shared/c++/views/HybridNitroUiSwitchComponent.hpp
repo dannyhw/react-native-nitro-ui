@@ -54,6 +54,7 @@ namespace margelo::nitro::nitroui::views {
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> testID;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> accessibilityLabel;
     nitro::ReactProp<std::variant<nitro::NullType, double>> nuiPerfId;
+    nitro::ReactProp<std::variant<nitro::NullType, double>> nuiTestWidth;
     nitro::ReactProp<std::optional<std::function<void(bool /* value */, double /* eventCount */)>>> onValueChange;
     nitro::ReactProp<std::string> nuiSizingKey;
     nitro::ReactProp<double> nuiSizingId;
@@ -69,6 +70,7 @@ namespace margelo::nitro::nitroui::views {
              testID.hasSameValue(other.testID) &&
              accessibilityLabel.hasSameValue(other.accessibilityLabel) &&
              nuiPerfId.hasSameValue(other.nuiPerfId) &&
+             nuiTestWidth.hasSameValue(other.nuiTestWidth) &&
              onValueChange.hasSameValue(other.onValueChange) &&
              nuiSizingKey.hasSameValue(other.nuiSizingKey) &&
              nuiSizingId.hasSameValue(other.nuiSizingId) &&
@@ -85,6 +87,7 @@ namespace margelo::nitro::nitroui::views {
              testID.isProvided() ||
              accessibilityLabel.isProvided() ||
              nuiPerfId.isProvided() ||
+             nuiTestWidth.isProvided() ||
              onValueChange.isProvided() ||
              nuiSizingKey.isProvided() ||
              nuiSizingId.isProvided() ||

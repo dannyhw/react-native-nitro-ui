@@ -122,6 +122,13 @@ namespace margelo::nitro::nitroui {
     inline void setNuiPerfId(const std::variant<nitro::NullType, double>& nuiPerfId) noexcept override {
       _swiftPart.setNuiPerfId(nuiPerfId);
     }
+    inline std::variant<nitro::NullType, double> getNuiTestWidth() noexcept override {
+      auto __result = _swiftPart.getNuiTestWidth();
+      return __result;
+    }
+    inline void setNuiTestWidth(const std::variant<nitro::NullType, double>& nuiTestWidth) noexcept override {
+      _swiftPart.setNuiTestWidth(nuiTestWidth);
+    }
     inline std::optional<std::function<void(bool /* value */, double /* eventCount */)>> getOnValueChange() noexcept override {
       auto __result = _swiftPart.getOnValueChange();
       return __result;

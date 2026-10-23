@@ -1,6 +1,6 @@
 import { type ColorValue, type ViewProps } from 'react-native';
-import { useRef } from 'react';
 
+import { useSizingId } from '../../core/useSizingId';
 import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useStableCallback } from '../../core/useStableCallback';
@@ -60,6 +60,15 @@ export interface SwitchProps extends ViewProps {
    * @internal Benchmark and diagnostics only - not app API.
    */
   nuiPerfId?: number | null | undefined;
+  /**
+   * TEMPORARY, test-only: the control's width in platform units, so a harness can
+   * drive a real size change through a prop and prove that a `nuiSizingKey` change
+   * re-measures (review S1). A Switch has no size-affecting public prop, and
+   * DECISIONS D16 gives the real R3 test to the G2 Button.
+   *
+   * @internal Not app API. Deleted once the G2 Button test exists.
+   */
+  nuiTestWidth?: number | null | undefined;
 }
 
 /**
@@ -77,6 +86,17 @@ export interface SwitchProps extends ViewProps {
 const SIZING_VARIANT = '';
 
 /**
+ * The sizing variant for one Switch, given the temporary test width. Setting a
+ * width makes it a different configuration, which is the point: two instances
+ * that are laid out at different sizes must never share one cache entry.
+ */
+function sizingVariantFor(testWidth: number | null | undefined): string {
+  return testWidth == null
+    ? SIZING_VARIANT
+    : `${SIZING_VARIANT}|w${String(testWidth)}`;
+}
+
+/**
  * What a self-sizing control is laid out with, before any `style`.
  *
  * `alignItems: stretch` (the default in a column) otherwise decides a control's
@@ -89,13 +109,6 @@ const SIZING_VARIANT = '';
  * applied after this.
  */
 const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
-/**
- * Source of `nuiSizingId`s. Module-level, so ids are unique among the mounted
- * Switches of this app run - the engine reports a measured size back to one
- * instance, and a shared id would correct the wrong view.
- */
-let nextSizingId = 1;
 
 /**
  * The platform Switch: SwiftUI `Toggle` with `.switch` style on iOS, Material 3
@@ -116,20 +129,14 @@ export function Switch({
   accessibilityLabel,
   hybridRef,
   nuiPerfId = null,
+  nuiTestWidth = null,
   style,
   ...restProps
 }: SwitchProps) {
   const controlled = useControlled(value, defaultValue, onValueChange);
   const processedTint = useProcessedColor(tintColor);
   const hybridRefCallback = useStableCallback(hybridRef);
-  // Lazily, once per mounted instance: the id a measured size comes back to.
-  // `useRef` rather than a render-time increment, because StrictMode's double
-  // render would otherwise burn an id per mount and - worse - a re-render would
-  // send a new one, making native re-measure a view that had not changed.
-  const sizingIdRef = useRef<number>(0);
-  if (sizingIdRef.current === 0) {
-    sizingIdRef.current = nextSizingId++;
-  }
+  const sizingId = useSizingId();
 
   return (
     <NativeNitroUiSwitch
@@ -143,8 +150,9 @@ export function Switch({
       accessibilityLabel={accessibilityLabel ?? null}
       nuiPerfId={nuiPerfId}
       onValueChange={controlled.onNativeChange}
-      nuiSizingKey={SIZING_VARIANT}
-      nuiSizingId={sizingIdRef.current}
+      nuiSizingKey={sizingVariantFor(nuiTestWidth)}
+      nuiSizingId={sizingId}
+      nuiTestWidth={nuiTestWidth}
       hybridRef={hybridRefCallback ?? undefined}
       style={[SELF_SIZING_BASE_STYLE, style]}
     />

@@ -29,17 +29,34 @@ export interface NitroUiSizingStats {
   /** Reports queued for correction, and reports dropped as already matching. */
   reportsQueued: number;
   reportsDropped: number;
+  /**
+   * Reports that confirmed the size the instance was already laid out with, so
+   * they needed nothing: the pre-warmed case, and the case where the environment
+   * moved and this control's size did not.
+   */
+  reportsConfirmed: number;
   /** Fabric state updates issued: inside the per-turn budget, and batched. */
   correctionsImmediate: number;
   correctionsBatched: number;
-  /** Flushes that changed a size = frames skipped as stale. */
+  /** Flushes that ran at all. */
   flushes: number;
-  staleFramesSkipped: number;
+  /**
+   * Flushes that changed a size. On Android this is also exactly the number of
+   * frames skipped as stale; on iOS it is not (docs/architecture/sizing.md).
+   */
+  changedFlushes: number;
   /** Engine time of the last and worst flush, ms (excludes the re-layout). */
   lastFlushMs: number;
   maxFlushMs: number;
   /** Trace events dropped because the ring wrapped. */
   traceDropped: number;
+  /**
+   * Live engine bookkeeping: one entry per instance the engine knows about.
+   * Mount/unmount churn must keep these flat - a scrolling list must not grow
+   * the engine for the life of the process.
+   */
+  ledgerEntries: number;
+  registryEntries: number;
 }
 
 /**
@@ -104,9 +121,18 @@ export interface NitroUiCore extends HybridObject<{
   sizingStats(): NitroUiSizingStats;
 
   /**
+   * Next instance id for the sizing engine. One process-global counter, so ids
+   * are unique across components, across JS runtimes in the process, and across
+   * a JS reload - the engine keys its ledger by id alone, so a collision would
+   * send a correction to the wrong view.
+   */
+  nextSizingId(): number;
+
+  /**
    * Put a measured size in the cache for one configuration, as if a control had
    * measured it: the cold/warm seam for tests and for a pre-warm that knows a
-   * size ahead of time. Also adopts it as the component's cache-miss size.
+   * size ahead of time. The entry is provisional: it is used as the first guess,
+   * and the first control that really measures that configuration replaces it.
    * A non-positive size is ignored.
    */
   seedSizingSize(
@@ -118,16 +144,19 @@ export interface NitroUiCore extends HybridObject<{
 
   /**
    * Declare the environment changed (text size, density, locale): every cached
-   * size is dropped, so controls measure again. Native hosts call this
-   * themselves - this is the seam for tests and for environments native cannot
-   * observe.
+   * size is dropped and every mounted instance is asked to measure again, so
+   * controls already on screen can be corrected. Native hosts call this
+   * themselves when they observe a change - this is the unconditional seam for
+   * tests and for environments native cannot observe.
    */
   invalidateSizingEnvironment(): void;
 
   /**
    * Adopt a component's declared size as this environment's cached answer for its
-   * default configuration, so the first instance mounted after this costs no
-   * correction. Takes the component's Fabric name (`'NitroUiSwitch'`). Returns
+   * default configuration, so the first instance mounted after this is laid out
+   * at the declared size and, if that size is right, costs no correction. Takes
+   * the component's Fabric name (`'NitroUiSwitch'`). The entry is provisional: a
+   * control whose real size differs corrects it like a cold mount would. Returns
    * how many of the names were pre-warmable - a component that declared no size
    * (not loaded, or not self-sizing) is not, and that is not an error.
    */

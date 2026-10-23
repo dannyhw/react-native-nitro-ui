@@ -45,6 +45,15 @@ export interface NitroUiSwitchProps
   /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
   /**
+   * TEMPORARY, test-only: the control's width in platform units, so a harness can
+   * make a self-sizing control genuinely change size through a prop and prove that
+   * a `nuiSizingKey` change re-measures (review S1). The
+   * Switch has no size-affecting public prop, and per DECISIONS D16 the real
+   * test belongs to the G2 Button; this is the seam until that lands. Not a
+   * feature: no wrapper prop exposes it, and it is deleted with the G2 test.
+   */
+  nuiTestWidth: number | null;
+  /**
    * Called on every user interaction with the value native now displays, plus
    * native's event count (the JS wrapper echoes it back as
    * `mostRecentEventCount`).

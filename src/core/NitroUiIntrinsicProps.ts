@@ -29,9 +29,14 @@ export interface NitroUiIntrinsicProps {
    */
   nuiSizingKey: string;
   /**
-   * Stable id of this mounted instance, assigned by the JS wrapper from a
-   * module-level counter. The native host reports its measured size against it,
-   * and only the instance that asked gets a Fabric state update.
+   * Stable id of this mounted instance, taken from `useSizingId()` (`src/core`).
+   * The native host reports its measured size against it, and only the instance
+   * that asked gets a Fabric state update.
+   *
+   * It must come from that hook and not from a counter of the component's own:
+   * the engine is process-global and keyed by this number alone, so a per-module
+   * counter would collide with every other self-sizing component, with a second
+   * JS runtime, and with the previous run after a reload.
    *
    * `0` means "sizing off for this view" (`NitroUiSizing.NO_INSTANCE`), which is
    * what a recycled or not-yet-mounted native view holds.

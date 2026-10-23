@@ -30,6 +30,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("accessibilityLabel", &HybridNitroUiSwitchSpec::setAccessibilityLabel);
       prototype.registerHybridGetter("nuiPerfId", &HybridNitroUiSwitchSpec::getNuiPerfId);
       prototype.registerHybridSetter("nuiPerfId", &HybridNitroUiSwitchSpec::setNuiPerfId);
+      prototype.registerHybridGetter("nuiTestWidth", &HybridNitroUiSwitchSpec::getNuiTestWidth);
+      prototype.registerHybridSetter("nuiTestWidth", &HybridNitroUiSwitchSpec::setNuiTestWidth);
       prototype.registerHybridGetter("onValueChange", &HybridNitroUiSwitchSpec::getOnValueChange);
       prototype.registerHybridSetter("onValueChange", &HybridNitroUiSwitchSpec::setOnValueChange);
       prototype.registerHybridGetter("nuiSizingKey", &HybridNitroUiSwitchSpec::getNuiSizingKey);

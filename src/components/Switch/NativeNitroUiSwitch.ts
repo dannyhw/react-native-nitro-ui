@@ -63,6 +63,8 @@ export interface NativeNitroUiSwitchProps
   testID: string | null;
   accessibilityLabel: string | null;
   nuiPerfId: number | null;
+  /** TEMPORARY, test-only size-affecting prop - see `SwitchProps.nuiTestWidth`. */
+  nuiTestWidth: number | null;
   onValueChange: NitroCallbackProp<ValueChangeHandler>;
   hybridRef?: NitroCallbackProp<HybridRefHandler>;
 }
