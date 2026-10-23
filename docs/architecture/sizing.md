@@ -89,27 +89,39 @@ A cold Switch on iOS, counters as deltas (`example/__tests__/Sizing.harness.tsx`
 1. JS mounts with `nuiSizingKey=""`, `nuiSizingId=n`, and no size.
 2. `measure` finds nothing cached and answers the declared fallback (61×28). Ledger: inexact, so this
    instance is now on the list of things to correct for this configuration.
-3. The host's first `commit()` measures the real `Toggle(.switch)`: 61×28. An `intrinsic` control is
-   measured there regardless of its current bounds — `sizeThatFits(.infinity)` does not depend on
-   them — which is what puts this report in the *same* turn as the mount instead of in
-   `layoutSubviews`, inside Core Animation's commit and after the flush observer. It reports.
-4. `report()` sees an inexact ledger → queues one report, and wakes the run loop so the turn really
-   does end (`CFRunLoopWakeUp`) rather than waiting for the next touch.
-5. `flush()` corrects the ledger's instances to 61×28 — the same numbers, and that is the point. One
-   state update, immediate, and the node is now **exact**, so every later instance of that
-   configuration costs nothing. "End of turn" is literal here: iOS flushes from an observer below
-   Core Animation's commit observer, and Android flushes from a pre-draw listener that cancels the
-   frame. A correction queued *after* the immediate budget is not in this turn — see §3 for what
-   that costs on each platform.
+3. The host's first `commit()` deliberately does **not** measure. Fabric runs a `Create` mutation's
+   props, state, layout metrics and `finalizeUpdates` (→ `commit()`) *before* the `Insert` that puts
+   the view in a window, and SwiftUI has nothing to lay out while its view has none — a number taken
+   there describes the content being replaced, not the content being mounted. So
+   `refreshContentSize()` refuses while a content update is pending and the host is off-window, and
+   keeps the measure pending (`ios/core/NitroSwiftUIHost.swift:348`).
+4. `didMoveToWindow()` is the deferred measure point (`NitroSwiftUIHost.swift:175`), and it lands in
+   the `Insert` of the **same** transaction. The pending update is applied (`layoutIfNeeded()`), then
+   `sizeThatFits(.infinity)` says 61×28. An `intrinsic` control is measured regardless of its current
+   bounds, which is what keeps this out of `layoutSubviews` — where a report would land inside Core
+   Animation's commit, after the flush observer. Still the same turn as the mount, so the number is in
+   front of the frame rather than behind it. It reports.
+5. `report()` compares the report with the size *this instance* laid out with, not with the cache:
+   - **matches** (the declared number was right): the entry is **confirmed**. The cache entry becomes
+     authoritative, the ledger entry goes exact, and there is no state update at all — a Switch
+     mounted on the OS whose control size it declares costs zero commits, which is why the harness
+     seeds a wrong guess to be able to see a correction at all.
+   - **differs** (the harness's `seedWrongGuess` case, and every genuinely new variant): one report is
+     queued, the run loop is woken so the turn really does end (`CFRunLoopWakeUp`) rather than waiting
+     for the next touch, and `flush()` corrects every inexact instance of the configuration — the
+     first two immediate, the rest enqueued. "End of turn" is literal here: iOS flushes from an
+     observer below Core Animation's commit observer, and Android flushes from a pre-draw listener
+     that cancels the frame. A correction queued *after* the immediate budget is not in this turn —
+     see §3 for what that costs on each platform.
 
-The first instance of a configuration pays exactly one state update per environment even when the
-guess was right, because the state has to learn the size. Every later one is free: pre-warmed or
-already-measured, `report()` either drops it or confirms a provisional entry without pushing
-(measured: 200 warm Switches = 0 corrections, 200 dropped reports).
+So the first instance of a configuration costs a commit only when the guess was wrong, and a right
+guess costs nothing: the confirmation writes the answer into the cache, which is what the next instance
+reads. Every later instance is free either way: `report()` drops it or confirms a provisional entry
+without pushing (measured: 200 warm Switches = 0 corrections, 200 dropped reports).
 
 ## 5. Opting in
 
-Four things, all of which a component already has reasons to write:
+Five things, four of which a component already has reasons to write:
 
 1. **Declare the policy.** Add the Hybrid View to `nitro-ui.sizing.json`
    (`{ "HybridNitroUiSwitch": "intrinsic" }`). `scripts/patch-nitrogen.mjs` reads it and repoints
@@ -137,6 +149,22 @@ Four things, all of which a component already has reasons to write:
    about the environment (iOS: content size category + legibility weight; Android:
    `fontScale|densityDpi|locales`); the engine bumps the epoch only when it actually moved, so the
    notification that fires once per mounted view costs one invalidation per real change.
+5. **Say when a prop can change the size (iOS).** The host does not watch `nuiSizingKey`: the key is
+   the engine's identity for a configuration, not a native signal, and `set { model.sizingKey = … }` is
+   a plain store (`ios/components/Switch/HybridNitroUiSwitch.swift:254`). Nor is a commit a measure
+   point — most props change pixels, not size, and a `sizeThatFits` on every one of them is a
+   synchronous SwiftUI layout after every invalidation (review SF5). `commit()` re-measures after the
+   first commit, a bounds change, a trait change, **or a component that said so**: a prop setter whose
+   value can move the control's size must call `host.noteContentSizeMayHaveChanged()` next to
+   `host.markDirty()`, as `nuiTestWidth` does
+   (`ios/components/Switch/HybridNitroUiSwitch.swift:275` — the only prop a Switch has that moves its
+   size, which is why nothing else calls it today). The flag costs one bool per prop write and one
+   `layoutIfNeeded` + `sizeThatFits` per size-affecting commit, and it is the only thing that makes the
+   report reach the engine after such a change: without it the control re-renders at its new size
+   inside a box that still belongs to the old one, and nothing ever reports the difference — the engine
+   cannot correct a size it is never told about. Android needs no such call: Compose observes the model,
+   recomposes, and its own measure pass reports the new size by itself. A Button's `label`, `variant`
+   and `size` are all size-affecting, so every one of them has to say so.
 
 Then drop any default-size style: `SELF_SIZING_BASE_STYLE` in
 `src/components/Switch/Switch.tsx:91` is only `{ alignSelf: 'flex-start' }`. See the trap in §6.
@@ -331,12 +359,16 @@ Limits, stated plainly:
   AccessibilityLarge. The epoch path is exercised mechanically (`invalidateSizingEnvironment`,
   `traitCollectionDidChange`/`onConfigurationChanged`), and the first component with a text-derived
   size will exercise it for real.
-- It cannot know a trait environment that is not on screen yet. iOS measures a detached host
-  (a `Modal`'s content before presentation) with `sizeThatFits` under the **default** traits, and the
-  size it gets is cached under the *current* epoch. Harmless for Switch, which does not resize with
-  Dynamic Type; wrong for the first text-sized control mounted in a `Modal`, and the wrong number then
-  serves other instances of that configuration. A control that knows its size is trait-dependent
-  should call `invalidateContentSize()` when it is presented (or its host should defer reporting until
-  `window != nil`) — that is the first such component's job, and this is the note saying so.
+- It cannot know a trait environment that is not on screen yet, in the one case that still asks for it:
+  `invalidateContentSize()` called on a host that has no window. The mount path no longer has this
+  problem — a commit does not measure a detached host at all, it leaves the measure pending until
+  `didMoveToWindow` (§4), so a `Modal`'s content before presentation keeps the guess and is measured
+  when it appears. An explicit invalidate is different: with no content update pending it goes straight
+  to `sizeThatFits`, which answers under the **default** traits, and the number it gets is cached under
+  the *current* epoch. Harmless for Switch, which does not resize with Dynamic Type; wrong for the
+  first text-sized control whose component invalidates before presentation, and the wrong number then
+  serves other instances of that configuration. Such a control should call `invalidateContentSize()`
+  when it is presented, not before — that is the first such component's job, and this is the note
+  saying so.
 - It does not shrink a control into a smaller box on request. Yoga still owns layout: a caller's
   `width`, `height` or `flex` wins, unchanged (`example/__tests__/Sizing.harness.tsx`).
