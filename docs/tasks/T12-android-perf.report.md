@@ -1,13 +1,35 @@
 # T12 — Android Compose host performance: report
 
-**Status: Phase 1 (profile + breakdown) done. Phase 2 (optimising) not started — it needs host/core
-edits and T11 has not merged yet. See [Questions for the orchestrator](#questions-for-the-orchestrator).**
+**Status: both phases done.** Phase 1 (below) is the profile and the breakdown, written before
+optimising; [Phase 2](#phase-2--measured-per-change) is the optimising, measured one change at a time
+on post-T11 code, with the final D15 verdict at the end. Phase 1's verdict is superseded by phase 2's;
+phase 1 is kept unchanged as the record of what was measured when.
 
-No library or core file is changed by this report. It adds profiling tooling under
-`bench/tools/` and writes down where the Android UI-thread time and the per-instance bytes go,
-which is what the brief asks for before optimising.
+Phase 1 changed no library or core file: it added profiling tooling under `bench/tools/` and wrote
+down where the Android UI-thread time and the per-instance bytes go. Phase 2 changes the library.
 
-## Summary
+## Outcome (phase 2, in five bullets)
+
+- **Half the gap was the bench measuring the ART interpreter.** No Android number this project
+  published had the app's baseline profile in force (`status=verify`, and `-m speed-profile -f` before
+  the first launch falls back to `verify`). The bench now primes it for every arm and reads the status
+  back: mount UI CPU 14.85 → 8.92 ms, mount `presented` 39.53 → 32.60 ms, and mount `presented`
+  against the shared host goes 1.22x → **1.01x** ([P1](#p1-the-change-that-was-hiding-all-the-others-art-was-interpreting-the-library)).
+- **Kept: four changes**, each measured separately. The `SwitchColors` cache and the library baseline
+  profile measure ≈0 at this plan's resolution and stay for the reasons given in
+  [P2a](#p2a-change-a--switchcolors-once-per-scheme-and-tint) and [P2d](#p2d-change-b--the-library-baseline-profile-as-its-own-row);
+  the process-wide `ColorScheme` is worth -1.1 KiB per instance; the Android synchronous correction
+  budget of 1 cuts the cold-batch flush by 32% at 200 rows and 37% at 500, in 6 of 6 rounds.
+- **The cold-batch flush is one Fabric commit**, not engine work: 0.086 ms of engine around a 38 ms
+  commit for 200 rows. D17's floor is one commit, and at zero the batch draws `stale=100`. Coalescing
+  the 199 batched pushes is not reachable from a Hybrid View - RN commits one `StateUpdate` at a time.
+- **Not reachable at all: fewer views per control.** `AbstractComposeView.onMeasure`/`onLayout` are
+  `final`, so the RN host cannot also be the Compose view; the four `View`s per control stay.
+- **D15 is still missed on mount UI CPU (1.35x) and memory (2.52x)**, with `presented` at parity,
+  against a shared host that has one composition where we have N. Both are the architecture, and
+  [P2f](#p2f-structural-option-with-the-measured-residual) is the write-up of what would remove them.
+
+## Summary (phase 1)
 
 - **D15 is not met on Android, and the gap has a single shape: one Compose composition per
   control.** On a quiet-ish machine, `nitro-ui` at 50 Switches is **1.47× the shared host on mount
@@ -296,7 +318,7 @@ are contained, A is a genuine bug, and if A+B+T11's sizing work leave memory or 
 1.0× then the residual is architectural and the shared-composition proposal should go to the
 reviewer as its own decision with these traces attached.
 
-## D15 verdict
+## D15 verdict (phase 1 — superseded by [phase 2](#d15-verdict-phase-2-final))
 
 **Not met on Android.** Against `expo-ui-shared-host`, at `c5be9af` on `nitroui_t02`:
 
@@ -349,7 +371,7 @@ contained fixes (A, B) is expected to be that architecture gap, and the recommen
    and a follow-up item; the reviewer decides". §5 and §7 are that explanation. Confirm that is the
    intended path rather than a required rewrite inside T12.
 
-## Repro
+## Repro (phase 1)
 
 ```sh
 # 1. Boot the assigned AVD on the assigned private adb server (keep it in a live shell).
@@ -372,3 +394,318 @@ ANDROID_ADB_SERVER_PORT=5042 adb -s emulator-5572 emu kill
 `android-trace.sh` takes `<scenario>:<implementation>:<n>` — the same string the bench's `--cell`
 takes — and force-stops the app first so every capture starts cold. Traces are ~20-55 MB and are not
 committed; the tables above are the durable output.
+
+---
+
+# Phase 2 — measured, per change
+
+**Rebased on `main` at `26d335f` (T11 merged).** Everything in the phase-1 breakdown above is a
+profile of code T11 then rewrote, so phase 2 re-took the "before" numbers on post-T11 code
+(`f99efb9`, clean tree, load 2.80 / 14 cores) and measures one change per bench run after that.
+
+## P0. What the "before" row became
+
+Post-T11, pre-optimisation, quick plan, 4 launches (`f99efb9`), ratios nitro-ui ÷ arm:
+
+| Cell               | metric      | nitro-ui   | ÷ rn-core | ÷ host-per-control | ÷ shared-host |
+| ------------------ | ----------- | ---------- | --------- | ------------------ | ------------- |
+| mount N=50         | presented   | 35.96 ms   | 1.10x     | 1.01x              | 1.11x         |
+| mount N=50         | UI CPU/op   | 15.03 ms   | 1.94x     | 0.72x              | 1.52x         |
+| update N=50        | presented   | 29.88 ms   | 0.93x     | 1.00x              | 0.99x         |
+| update N=50        | UI CPU/op   | 8.21 ms    | 3.77x     | 1.01x              | 1.40x         |
+| memory N=200       | bytes/inst  | 130.2 KiB  | 2.46x     | 0.67x              | 2.40x         |
+
+Every ratio column in this section is launch-paired (`bench/tools/arm-ratios.mjs` pairs each arm's
+median with nitro-ui's from the same launch order), which is why they survive machine load better than
+the absolutes do; the absolutes are medians of launch medians. `node bench/tools/arm-ratios.mjs
+bench/results/<run>.json` prints the full three-arm table for any run named here.
+
+**Noise floor, measured across the runs below:** `presented` moves ±10 per cent run to run (its MAD
+in a single run is ~0.5 ms at N=50, so this is machine state, not sampling), UI CPU ±2 per cent,
+`bytes/inst` ±0.3 per cent inside one build and ±4 per cent across builds. So: a `presented` change
+under ~3 ms at N=50 is not a result, a UI CPU change under ~0.3 ms is not a result, and only the
+memory column can carry a small claim.
+
+## P1. The change that was hiding all the others: ART was interpreting the library
+
+**This is the row the whole phase turns on, so it is reported first.** The bench had never put the
+ART profile in force: `dumpsys package dexopt` reads `status=verify` after `adb install -r` on the
+bench APK, `cmd package bg-dexopt-job` leaves it at `verify`, and `-m speed-profile -f` before the
+first launch *also* leaves it at `verify` — the compiler reads the app's *profile file*, which
+profileinstaller only writes a few seconds after process start (all four steps measured;
+`docs/architecture/core.md` §13). Every Android number this project has published — T02, T10, T11,
+phase 1 of this task — therefore measured **the interpreter**.
+
+`scripts/bench/run.mjs` now primes through profileinstaller's own `INSTALL_PROFILE` hook, waits for
+the status to become `speed-profile`, and logs it. **The same priming is applied to every arm**, so
+the ratios compare compiled with compiled.
+
+| Run | Library code                  | ART state        | load | mount presented | mount UI CPU | update UI CPU | bytes/inst |
+| --- | ----------------------------- | ---------------- | ---- | --------------- | ------------ | ------------- | ---------- |
+| P0  | A + G + H (`b7b6acb`)         | `verify`         | 4.06 | 39.53 ms        | 14.85 ms     | 8.17 ms       | 130.2 KiB  |
+| P1  | A + G + H (`5ea41eb`)         | `speed-profile`  | 3.01 | 32.23 ms        | 9.16 ms      | 6.02 ms       | 135.7 KiB  |
+| P2  | A + G + H + our rules (`ed620cb`) | `speed-profile` | 3.05 | 32.60 ms      | 8.92 ms      | 5.58 ms       | 134.2 KiB  |
+
+Same library code in P0 and P1: **mount presented −18 per cent, mount UI CPU −38 per cent, update UI
+CPU −26 per cent.** The arms move too (shared-host UI CPU 10.48 → 6.25 ms), so what matters is the
+ratio, and the ratio moves in our favour:
+
+| Ratio vs shared-host   | verify (P0) | speed-profile (P1) | speed-profile + our rules (P2) |
+| ---------------------- | ----------- | ------------------ | ------------------------------ |
+| mount presented        | 1.22x       | 0.99x              | **1.01x**                      |
+| mount UI CPU           | 1.40x       | 1.42x              | **1.35x**                      |
+| update UI CPU          | 1.36x       | 1.41x              | **1.24x**                      |
+| memory                 | 2.28x       | 2.45x              | **2.52x**                      |
+| mount presented vs host-per-control | 1.09x | 0.98x         | **0.99x**                      |
+| mount UI CPU vs host-per-control    | 0.70x | 0.62x         | **0.59x**                      |
+
+**Interpretation.** One third of the gap this task was sent to close was a build-configuration
+artefact: our host view, its composition and the generated `HybridView` manager were being
+*interpreted*, while `expo-ui`'s Compose code and `rn-core`'s Java were partly covered by the
+profiles their AARs ship. With the profile in force, mount `presented` is at parity with the shared
+host (1.01x, 32.60 ms against 32.38 ms) and we are 41 per cent *cheaper* than the per-control arm on
+mount UI CPU. `rn-core`'s own UI CPU is the noisiest column here (6.0–7.9 ms across three runs), so
+the `÷ rn-core` ratios (1.15x–1.45x for the same code) are not a signal worth reading; the D15 gate
+is vs the shared host.
+
+**Consequence for the repo:** no committed latency baselines exist (`bench/baselines/README.md`), so
+default-on priming breaks no gate — and it invalidates every historical Android latency number as an
+absolute. This is worth an orchestrator decision of its own: either re-record the Android numbers
+that any doc cites, or keep D15's ratios (which stay comparable because all four arms are primed).
+
+## P2a. Change A — `SwitchColors` once per scheme and tint
+
+`SwitchDefaults.colors(checkedTrackColor = …)` returns a fresh 18-colour object per call, so a tinted
+`Switch` allocated one per recomposition per instance, and Compose could not skip the subtree
+(`SwitchColors` is a plain class). Cost centre 3 in §5, and the one thing phase 1 called a bug.
+Measured alone, on top of the post-T11 "before", in the `verify` state the rest of the phase had not
+yet changed:
+
+| Metric          | before (`f99efb9`) | A (`990e66a`) | change        | noise floor |
+| --------------- | ------------------ | ------------- | ------------- | ----------- |
+| mount presented | 35.96 ms           | 40.81 ms      | +13.5%        | ±10%        |
+| mount UI CPU    | 15.03 ms           | 14.73 ms      | -2.0%         | ±2%         |
+| update UI CPU   | 8.21 ms            | 8.18 ms       | -0.4%         | ±2%         |
+| mount ÷ shared  | 1.11x              | 1.25x         | -             | -           |
+| bytes/inst      | 130.2 KiB          | 130.3 KiB     | +0.1%         | ±0.3%       |
+
+**Kept, with an honest "measured ≈ 0".** The bench's `update` cell changes one prop, which is the
+path where a fresh `SwitchColors` hurts least; the allocation lands on the recomposition path the
+quick plan barely exercises, so this run cannot see it either way. It stays because (i) it is a real
+per-recomposition allocation on the UI thread, (ii) skipping the `Switch` subtree is now possible,
+and (iii) the process-wide colour-scheme cache in change G only hits because Material memoises its
+untinted path on the `ColorScheme` the theme hands out. The `presented` swing is the noise floor, and
+P0–P2 above (which all include A) is where its cost really shows up: it is not measurable at this
+plan's resolution.
+
+## P2b. Change G — the Material colour scheme once per process
+
+A `remember` lives in one composition and every hosted control is its own composition, so the dynamic
+M3 `ColorScheme` — about fifty framework resource reads plus a fresh object graph — was built once
+per mounted control. `NitroComposeHost.colorSchemeFor` keys one process-wide entry on the context and
+the appearance, and drops it on a configuration change (`NitroComposeHost.kt`). Measured on top of A,
+still `verify`:
+
+| Metric          | A (`990e66a`) | G (`77c4437`) | change   | noise floor |
+| --------------- | ------------- | ------------- | -------- | ----------- |
+| mount presented | 40.81 ms      | 39.90 ms      | -2.2%    | ±10%        |
+| mount UI CPU    | 14.73 ms      | 14.74 ms      | +0.1%    | ±2%         |
+| update UI CPU   | 8.18 ms       | 8.14 ms       | -0.5%    | ±2%         |
+| bytes/inst      | 130.3 KiB     | 129.1 KiB     | **-0.9%** | ±0.3%      |
+| mount ÷ shared  | 1.25x         | 1.26x         | -        | -           |
+
+**Kept.** The only number that clears its noise floor is memory: **-1.1 KiB per instance** (≈1%),
+which is the retained object graph, and it is the right kind of win for a metric D15 gates at 2.4x.
+Time-wise it is invisible at N=50 — the mount builds one scheme instead of fifty, and fifty resource
+reads are microseconds — and the *reason* to keep it is not in this table: it is per-control work that
+grows with the number of mounted controls and with how expensive the theme is, and it is the
+prerequisite for A's cache. Rule recorded in `docs/architecture/core.md` §3 ("Shared objects").
+
+## P2c. Change H — the synchronous correction budget, per platform
+
+The added scope from T11 round 3: Android's cold-batch flush costs 84–125 ms for 200 corrections on a
+loaded machine (iOS 8.5 ms). Attributed on the T11 harness test, debug build, `nitroui_t02`:
+
+| One cold batch of 200, `lastFlushMs`         | Cost          |
+| -------------------------------------------- | ------------- |
+| Engine only - budget 0: 200 reports, 1 correction, 199 async enqueues, no synchronous commit | **0.086 ms** |
+| The same batch with one synchronous commit (budget 1) | **38.05 ms** |
+| What budget 0 costs elsewhere                | `stale=100` over 100 instances, and the harness's own cold-control test fails |
+
+T11's 84-125 ms on a loaded machine is the same 38 ms waiting for CPU. So the flush is **one
+synchronous Fabric commit** and the engine is 0.2 per cent of it: capping instances per flush would
+keep the milliseconds and lose the correction, because the engine's work is already nothing. The knob
+is how many commits, which is what `flush(immediateBudget)` (31438d5) makes settable. Before/after,
+three rounds each, same probe, budget 2 rebuilt from the same tree as budget 1:
+
+| N   | Budget 2 (before) | Budget 1 (after) | Per round            | Median      |
+| --- | ----------------- | ---------------- | -------------------- | ----------- |
+| 200 | 38.80 / 18.88 / 14.08 ms | 36.76 / 12.84 / 9.57 ms | 3 of 3 lower | **-32%** |
+| 500 | 75.38 / 42.51 / 38.03 ms | 53.97 / 26.77 / 25.11 ms | 3 of 3 lower | **-37%** |
+
+**Kept.** Every one of the six pairs is lower at budget 1, and the effect is bigger at 500 rows,
+which is what "cost scales with tree size, not correction count" predicts: the second synchronous
+push re-lays out a tree the first commit just made correct. D17 still holds — `stale=0` for a
+100-instance cold batch at budget 1 (the same batch shows `stale=100` at budget 0, and the harness's
+own cold-control test goes red there), because one correction carries the answer for the whole
+configuration. The remaining 25–54 ms is one commit of a 200–500-host tree spent inside a pre-draw
+pass that then cancels the frame: it is the price of D17's `stale=0` on Android, not slack.
+
+**Not kept: coalescing the batched pushes into one commit.** Unreachable from a Hybrid View. RN's
+`EventQueue::enqueueStateUpdate` flushes per `StateUpdate` and `UIManager::updateState` does one
+`shadowTree.commit` each (`node_modules/react-native/ReactCommon/react/renderer/uimanager/UIManager.cpp:406`);
+`ShadowNode::cloneMultiple` exists but no caller in UIManager or Scheduler uses it. This is an
+upstream API question (worth an N-entry if the orchestrator wants it pursued), not a library change.
+
+**Not kept: "all-async above a batch size".** At budget 0 the flush is 0.086 ms and the same batch
+draws `stale=100` — D17's rule, broken. Rejected by the gate, and shown to break it (§Gate evidence).
+
+**Attribution of the O(N × tree) JS-thread commits.** Warm-vs-cold, same process, N=500: warm (no
+corrections) 771.8 ms vs cold 768.8 ms, and 572.0 vs 608.2 ms in the second round. The 499 batched
+pushes are real work on the JS thread but they are **off the measured mount path**: `mountedIn` ends
+when the last host appears, and the corrections land afterwards. What is *not* noise is first touch:
+the first cold 500-row mount in a process measured 1.4–4.6 s against 0.41–0.68 s for the same batch
+in later rounds. A cold list's cost in a real app is the first one, and that is ART interpreting the
+host, not our bookkeeping — which is the same finding as P1, seen from the harness.
+
+## P2d. Change B — the library baseline profile, as its own row
+
+`android/src/main/baseline-prof.txt`: `HSPLcom/margelo/nitro/nitroui/**->**(**)**`, scoped to our own
+classes so no other arm's code is affected. AGP merges it into the bench APK's
+`assets/dexopt/baseline.prof` (10825 → 10885 bytes, `baseline.profm` 1566 → 1606: 60 bytes of merged rules,
+because ART rules for a wildcard are compact).
+
+| Run                        | ART state       | mount presented | mount UI CPU | update UI CPU | bytes/inst |
+| -------------------------- | --------------- | --------------- | ------------ | ------------- | ---------- |
+| P1 (upstream profile only) | `speed-profile` | 32.23 ms        | 9.16 ms      | 6.02 ms       | 135.7 KiB  |
+| P2 (+ our rules)           | `speed-profile` | 32.60 ms        | 8.92 ms      | 5.58 ms       | 134.2 KiB  |
+
+**Kept, with an honest "measured ≈ 0".** Every P1 → P2 delta here is inside the noise floor
+(presented ±10%, UI CPU ±2%, memory ±1%). The reason is visible in the mechanism: by the time our
+rules are merged, the *upstream* profile has already compiled Compose and RN, which is where the
+time is; our glue is thin and mostly calls into code that was already compiled. It is kept because
+it is 60 bytes with no runtime cost, because it is the only route to AOT for classes no other profile
+mentions (`NitroUiSizing`'s JNI bridge, the generated managers, `NitroUiPerf`), and because without it
+those classes are only compiled if the app happens to collect a runtime profile. A generated profile
+for the whole APK would do more and is explicitly not this change: it would move every arm's numbers
+and the ratios with them.
+
+Consumers get the file for free (no new dependency, `profileinstaller` already arrives through
+Compose) — `docs/architecture/core.md` §13 records what does and does not happen on its own.
+
+## P2e. What was measured and rejected, or could not be measured
+
+| Candidate                              | Outcome |
+| -------------------------------------- | ------- |
+| Fewer retained views per control (phase-1 candidates C/D) | **Impossible, shown by the framework.** `javap -p` on `androidx.compose.ui.platform.AbstractComposeView` (both 1.11.4 and 1.12.1) shows `protected final void onMeasure(int, int)` and `protected final void onLayout(boolean, int, int, int, int)`, and `addView(View, int, LayoutParams)` rejects children. The RN host cannot *be* the Compose view — it must intercept measure and layout to feed `contentSize` and Fabric — so the four `View`s per control (host, `AbstractComposeView`, `AndroidComposeView`, `RelayoutWatcher`) cannot be collapsed from outside, and the last two are `internal`. Cost centre 2 stands. |
+| Java heap per control by trimming retained objects (D) | Not attempted as a blind trim: §4 attributes 68.8 KiB of Java heap per control to the composition, the slot table and `CompositionLocals`, all of which Compose owns. The two measurable wins in this phase (G: -1.1 KiB; A: 0) are the parts we allocate. |
+| Per-transaction `sendApplyNotifications` (E) | Unchanged from phase 1: the traces show sublinear recompose per control, not the O(N²) a per-control global apply would produce. Still not supported by data; not built. |
+| Tighter `lastFlushMs` bar in the harness | **Deliberately not tightened** — kept at T11's 250 ms Android bar. The flush is load-bound (36–38 ms quiet, 84–125 ms loaded per T11, and 9.6–75.4 ms across the probes in this phase), so a tighter bar is a flaky test, not a guarantee. The structural guarantee — "not N synchronous commits" — is carried by the `immediate` gates, which *can* be shown to fail. |
+
+### Gate evidence (every new test shown to fail)
+
+| Gate | Mutation | Result |
+| ---- | -------- | ------ |
+| Native: `flush(budget)` obeys the budget it is handed | engine ignores the passed budget | **5 of 172 checks fail**: `one correction was synchronous (got 2, want 1)`, `the other five are batched (got 4, want 5)`, `and the push flags agree with the budget it was given (got 2, want 1)`, `and none of its pushes claims a synchronous commit (got 2, want 0)`, `which means none synchronous (got 2, want 0)`. Mutant reverted; 172 pass, ASan included. |
+| Harness: `immediate ≤ budget × flushes` | build with Android budget 2 | `expected 2 to be less than or equal to 1` |
+| Harness: `immediate ≥ 1` (D17 floor) | build with budget 0 | `expected 0 to be greater than or equal to 1`, and the existing D17 cold-control test fails too: `expected false to be true` at `boxMatches(…)` — a real stale frame, not just a counter |
+
+## P2f. Structural option, with the measured residual
+
+§7's analysis stands and nothing in phase 2 changes its shape: after T11 + A + G + H + the profile,
+what remains vs the shared host is **mount UI CPU 1.35x** (8.92 ms against 6.54 ms at N=50) and
+**memory 2.52x** (134.2 KiB against 53.1 KiB per instance), with `presented` at parity. Both are
+counting N: N compositions, N recomposers, N frame loops, N native view trees. The contained fixes
+took mount `presented` from 1.22x to 1.01x and update UI CPU from 1.36x to 1.24x; they did not and
+cannot take memory below ~2.4x, because the shared host's advantage is that it has one of everything.
+
+Intermediate step worth naming, cheaper than a rewrite, **not built**: share the `CompositionContext`
+parent (or a `CompositionLocalProvider` stack and the `Snapshot` handling) across hosts while keeping
+one composition per control. That attacks the per-host `initializeView` (3.21 ms against 0.49 ms in
+§3) partially, keeps `core.md` §2's one-host-per-view contract, and does not touch recycling or
+hit-testing. Expected size: a fraction of cost centre 1, not all of it — the recomposer, the frame
+loop and the slot table are per-composition and stay per-composition. Unknown until measured, and
+`AbstractComposeView` does not expose a `CompositionContext` seam, so it likely means not extending
+`AbstractComposeView` at all — which is the same wall as the view-tree collapse above.
+
+Full shared composition (one host per window, controls as virtual nodes) remains the only option that
+plausibly reaches ≤1.0x on all three D15 metrics, and remains a rewrite: it deletes the Fabric node
+per control (that is where the 50.1 KiB of native heap per control lives), so it changes §2's contract,
+recycling, hit-testing and accessibility ordering, and every component's host. **Recommendation
+unchanged: do not build it in T12; if 0.1 must clear memory, it becomes its own decision with these
+traces and this residual attached.**
+
+## P2g. N5 closed as quantified-negligible
+
+Per §2 and the post-T11 absolutes: our `jsCommitNs` on `mount:50` is 1.60 ms against the shared host's
+1.89 ms and rn-core's 1.37 ms, while the same cell's gap is 14.85 ms of UI CPU against 10.48 ms. The
+second `updateState` is one perf mark and one JNI diff; no generator patch was spent on it. Recorded
+in `docs/upstream.md` (N5) and `docs/architecture/core.md` §3.
+
+## D15 verdict (phase 2, final)
+
+**Not met on Android — but the remaining gap is narrower than phase 1 measured, and it is one thing:
+N compositions and N view trees.**
+
+Against `expo-ui-shared-host`, on `nitroui_t02`, quick plan, 4 launches, all arms primed
+(`ed620cb`, load 3.05 — this is the state a user gets after the app has been opened once):
+
+| Metric          | measured | target  | verdict |
+| --------------- | -------- | ------- | ------- |
+| mount presented | 1.01x    | ≤ 1.0x  | **parity** (32.60 ms vs 32.38 ms; inside the ±10% floor) |
+| mount UI CPU    | 1.35x    | ≤ 1.0x  | **miss** (8.92 ms vs 6.54 ms) |
+| memory          | 2.52x    | ≤ 1.0x  | **miss** (134.2 KiB vs 53.1 KiB per instance) |
+| update presented| 0.88x    | —       | better than the shared host |
+| update UI CPU   | 1.24x    | —       | reported |
+
+Against `expo-ui-host-per-control` we are below on every gated metric — mount presented 0.99x, mount
+UI CPU 0.59x, memory 0.74x — so D15's "well below the per-control arm" half is met, and clearly so.
+
+In the state this project measured before today (ART `verify`, `f99efb9` post-T11): 1.11x presented,
+1.51x mount UI CPU, 2.40x memory. Phase 1's 1.47x / 1.48x / 2.33x was that state on a loaded machine.
+
+**Plainly:** the library is as fast as the shared host at getting 50 Switches on screen and cheaper
+than the arm that does what `@expo/ui` does, but every control still carries its own Compose
+composition, recomposer and native view tree — about 134 KiB and 0.18 ms of UI CPU per control at
+N=50, against 53 KiB and 0.13 ms for a host that shares one of everything. That is the whole miss.
+It is architectural (option F in §6), it is not fixable by trimming our own allocations, and the
+contained fixes plus a one-line build change took mount `presented` from 1.22x to parity and update UI
+CPU from 1.36x to 1.24x. Per D15, this is an explanation plus a follow-up item: §P2f and §7, for the
+reviewer to decide.
+
+**Follow-up items, in the order I would do them:**
+1. Re-record or re-label the historical Android latency numbers now that the bench primes by default
+   (ratios stay comparable; absolutes do not).
+2. Decide on shared composition (§P2f) as its own decision if 0.1 must clear memory. Nothing else on
+   the list can.
+3. Spike the shared-`CompositionContext` step first if anything is to be built — it keeps §2, and its
+   ceiling is small but it is the only cheap thing left.
+4. Upstream: a batch API for coalescing `updateState` commits would make the batched half of a cold
+   list one commit instead of N (see P2c).
+
+## Repro (phase 2)
+
+```sh
+# Device (D13): AVD nitroui_t02 on adb server 5042. Never the default adb port.
+export ANDROID_ADB_SERVER_PORT=5042 ANDROID_HOME=$HOME/Library/Android/sdk
+export ANDROID_SERIAL=emulator-5572 METRO_PORT=8294
+emulator -avd nitroui_t02 -port 5572 -gpu host -no-snapshot-save -no-audio \
+  -no-boot-anim -no-window > /dev/null 2>&1 &
+
+# 1. Bench. The run primes the ART profile and logs `ART: … -> speed-profile`;
+#    a run that ends at `verify` measured the interpreter and must not be cited.
+bun bench --platform android --plan quick
+node bench/tools/arm-ratios.mjs bench/results/<run>.json   # ratios vs all three arms
+
+# 2. Is the profile really in force?
+adb -s emulator-5572 shell dumpsys package dexopt | grep -A2 com.nitroui.bench
+
+# 3. Cold-batch flush (lastFlushMs). Debug build; jest is silent, so print from a
+#    test and read it out of the failure, or run the cold-batch test alone:
+cd example
+HARNESS_APP_PATH=$PWD/android/app/build/outputs/apk/debug/app-debug.apk \
+  bunx react-native-harness --harnessRunner android -t "cold batch of 200"
+
+# 4. Done.
+adb -s emulator-5572 emu kill
+```
