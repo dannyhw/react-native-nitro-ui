@@ -320,3 +320,30 @@ loosening someone else's assertion" is the wrong way to spend a fix round.
 - the one after it — `docs(sizing)`: the superseded-measurement trap and the measured prop-turn rows in
   `docs/architecture/sizing.md`, this report, and the STATUS / FOLLOWUPS lines. It changes no behaviour,
   so the gates above stand: `prettier --check .` is the only step of `bun run check` that reads them.
+
+## Fix round 1
+
+Implemented by Apex (code, tests, wording); the session died on a provider rate limit (429) before
+committing, so the orchestrator verified and committed the same tree.
+
+- **Flag only on a real correction:** `cpp/NitroUiSizingEngine.cpp` sets `answerChanged` only when
+  `sameConfiguration`; a re-key (even to a cached key of the same size) no longer puts an instance on
+  the paying path. New host checks in `scripts/native-tests/sizing.test.cpp`:
+  - guard removed → `FAIL: moving to another configuration of the same size is not a correction`
+    (1 of 262 checks);
+  - flag assignment commented out → `FAIL: the same configuration answered a different size, so it
+    must re-ask` (1 of 262 checks); restored → 262/262 plain and ASan.
+- **Cost and mechanism wording** in `NitroUiSizingEngine.{hpp,cpp}`, `NitroUiIntrinsic.hpp` and
+  `sizing.md` now match D20 (React clones from its pre-correction revision; `adopt` mints a fresh
+  State so `progressState` never re-dirties; flagged cost = lookup + measure + Yoga pass up the
+  dirtied ancestors, 8–48 µs on host for 35–316 nodes).
+- **Gates:** `bun run check` exit 0; Sizing harness iOS 24/24 (iPhone Air) and Android 24/24
+  (`nitroui_t02`); real input iOS 3/3 and Android 3/3 (switch, slider, button).
+
+### Follow-ups (from the review, not done)
+
+- Non-sticky alternative: dirty on obsolete state (`getMostRecentStateIfObsolete() != nullptr`).
+- Build the new State in `adopt` from the most recent one.
+- Take `requiresFreshMeasure` off the shared engine lock.
+- Move the Slider harness case's restore into `finally`.
+- Check G3 Progress's 60 Hz path against the flagged cost.
