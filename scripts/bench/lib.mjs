@@ -98,12 +98,20 @@ export const GATE_METRICS = [
  * Plans are lists of `scenario:N` cells. The implementation dimension is crossed
  * with these by `buildSchedule`; `nitro-ui` self-skips until a component
  * registers itself (bench/src/implementations/nitroUi.tsx).
+ *
+ * A cell's scenario carries its component: the bare name is the first component
+ * (Switch, kept so pre-G1 results files and baselines still line up) and
+ * `<action>.<component>` is every component after it. `componentOf` is the one
+ * place that reads the encoding; `--component` filters on it.
  */
 export const PLANS = {
   quick: [
     { scenario: 'mount', n: 50 },
     { scenario: 'update', n: 50 },
     { scenario: 'memory', n: 200 },
+    { scenario: 'mount.slider', n: 50 },
+    { scenario: 'update.slider', n: 50 },
+    { scenario: 'memory.slider', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -113,8 +121,39 @@ export const PLANS = {
     { scenario: 'update', n: 50 },
     { scenario: 'memory', n: 200 },
     { scenario: 'leak', n: 200 },
+    { scenario: 'mount.slider', n: 1 },
+    { scenario: 'mount.slider', n: 50 },
+    { scenario: 'mount.slider', n: 200 },
+    { scenario: 'update.slider', n: 1 },
+    { scenario: 'update.slider', n: 50 },
+    { scenario: 'memory.slider', n: 200 },
+    { scenario: 'leak.slider', n: 200 },
   ],
 };
+
+/**
+ * The component a scenario cell belongs to.
+ *
+ * The one reader of the `action.component` encoding, so the runner, the
+ * reporter and the gate all treat a component as a dimension rather than
+ * string-matching scenario names in three places.
+ */
+export function componentOf(scenario) {
+  const dot = String(scenario).indexOf('.');
+  return dot === -1 ? 'switch' : String(scenario).slice(dot + 1);
+}
+
+/** The action half of a scenario cell: `mount.slider` -> `mount`. */
+export function scenarioActionOf(scenario) {
+  const value = String(scenario);
+  const dot = value.indexOf('.');
+  return dot === -1 ? value : value.slice(0, dot);
+}
+
+/** The scenario cell for one component and action: `mount` + `slider` -> `mount.slider`. */
+export function scenarioFor(action, component) {
+  return component === 'switch' ? action : `${action}.${component}`;
+}
 
 /** `mount:rn-core:50` - the string one app launch is driven with. */
 export function planString(scenario, implementation, n) {
@@ -156,11 +195,27 @@ export function buildSchedule({
   launches = LAUNCHES_PER_CELL,
   only = null,
   perfMarks = false,
+  component = null,
 } = {}) {
   const cells = PLANS[plan];
   if (cells == null) {
     throw new Error(
       `Unknown plan "${String(plan)}" (expected ${Object.keys(PLANS).join(' or ')})`
+    );
+  }
+  // The component dimension is crossed here too, and *before* the
+  // implementation one: a plan now holds several components' cells, and running
+  // a component's cells is the unit of work a task or a review asks for
+  // (`--component slider`). `null` keeps the historical behaviour of measuring
+  // every component the plan knows about.
+  const wantedCells =
+    component == null
+      ? cells
+      : cells.filter((cell) => componentOf(cell.scenario) === component);
+  if (wantedCells.length === 0) {
+    throw new Error(
+      `--component ${String(component)} matched no cell in plan "${String(plan)}" ` +
+        `(components here: ${[...new Set(cells.map((cell) => componentOf(cell.scenario)))].join(', ')})`
     );
   }
   let wanted =
@@ -189,7 +244,7 @@ export function buildSchedule({
   const schedule = [];
   for (let launch = 0; launch < launches; launch++) {
     const order = launch % 2 === 0 ? wanted : [...wanted].reverse();
-    for (const cell of cells) {
+    for (const cell of wantedCells) {
       for (const implementation of order) {
         schedule.push({
           scenario: cell.scenario,

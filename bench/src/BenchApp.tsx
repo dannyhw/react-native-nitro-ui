@@ -171,7 +171,10 @@ function BenchRunner({
         drainPerfMarks: wantsMarks ? implementation.drainPerfMarks : null,
       };
 
-      switch (plan.scenario) {
+      // The component is not part of this switch: every scenario is the same
+      // sequence of commits, and which control a commit mounts is the arm's
+      // business (`BenchListProps.component`).
+      switch (plan.action) {
         case 'mount':
           await runMountScenario(engine, plan, 0);
           break;
@@ -235,7 +238,12 @@ function BenchRunner({
           React-side cost is measured directly instead - `jsCommitNs` brackets
           the commit, and `ReactFabric-profiling` can be aliased in
           bench/metro.config.js by whoever wants that metric for real. */}
-      <List n={count} value={value} perfMarks={plan.perfMarks} />
+      <List
+        n={count}
+        value={value}
+        component={plan.component}
+        perfMarks={plan.perfMarks}
+      />
       {/* Keep React from unmounting the text while the list grows large. */}
       <View style={styles.spacer} />
     </View>
