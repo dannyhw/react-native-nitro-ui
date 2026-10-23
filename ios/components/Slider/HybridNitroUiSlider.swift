@@ -46,6 +46,14 @@ private final class NitroUiFramePump {
 
   private var link: CADisplayLink?
   private var proxy: NitroUiFrameProxy?
+  /// Mirror of ``isArmed``'s answer, so it may be read off the main thread.
+  ///
+  /// `link` itself is main-thread-only and a probe arriving on JS cannot read it;
+  /// `NitroSwiftUIHost.contentSize`'s reasoning and its lock are the pattern this
+  /// copies. The lock is only ever taken by ``start()`` and ``stop()``, which is
+  /// twice per drag - never per touch sample.
+  private var armed = false
+  private let armedLock = NSLock()
 
   func start() {
     guard link == nil else { return }
@@ -54,16 +62,40 @@ private final class NitroUiFramePump {
     link.add(to: .main, forMode: .common)
     self.proxy = proxy
     self.link = link
+    setArmed(true)
+  }
+
+  /// Whether a display link is scheduled for this control.
+  ///
+  /// A pump that outlived its drag emits nothing (`deliverUnreported` is a no-op
+  /// with nothing pending), so nothing in the event stream can show the leak -
+  /// only this can, and the harness asserts it goes false when the drag ends.
+  ///
+  /// The link is kept for the whole drag rather than armed per sample: the last
+  /// sample of a drag is emitted by `endDrag()` itself, so an arm that stopped
+  /// with the last sample would be unarmed for the one thing it would be armed
+  /// for - and `docs/components/slider.md` used to claim exactly that.
+  var isArmed: Bool {
+    armedLock.lock()
+    defer { armedLock.unlock() }
+    return armed
   }
 
   func stop() {
     link?.invalidate()
     link = nil
     proxy = nil
+    setArmed(false)
   }
 
   fileprivate func deliverFrame() {
     onFrame?()
+  }
+
+  private func setArmed(_ value: Bool) {
+    armedLock.lock()
+    defer { armedLock.unlock() }
+    armed = value
   }
 
   deinit {
@@ -85,6 +117,19 @@ final class SliderModel: NitroUiModel {
   var tint: UIColor?
   var testID: String?
   var accessibilityLabel: String?
+  /// What VoiceOver reads as this control's value.
+  ///
+  /// The number itself, not a percentage: `minimumValue`/`maximumValue` are the
+  /// app's units (volume, opacity, a year), and a screen-reader user who is told
+  /// "72 percent" of a year has learned nothing. An integer loses its decimal
+  /// point so "0" is announced rather than "0 point 0".
+  var accessibilityValueText: String {
+    let value = state.displayed
+    if value.isFinite, value == value.rounded(), abs(value) < 1e15 {
+      return String(Int(value))
+    }
+    return String(value)
+  }
   /// The size configuration React sent. Nothing native reads it; see
   /// `HybridNitroUiSwitch`'s copy of this field.
   var sizingKey = ""
@@ -109,6 +154,14 @@ final class SliderModel: NitroUiModel {
   private(set) var dragGeneration = 0
 
   private let pump = NitroUiFramePump()
+  /// What the last `nuiTestAccessibilityStep` did, as one line.
+  ///
+  /// The probe cannot answer synchronously: it must run on main, and a Nitro
+  /// method may not block for main (`NitroUiMainThread`'s rule). So it writes
+  /// what happened here and the harness reads it back from JS, which needs the
+  /// same lock as ``NitroUiFramePump/isArmed``.
+  private var a11yStepReport = ""
+  private let a11yStepReportLock = NSLock()
 
   override init() {
     super.init()
@@ -211,6 +264,60 @@ extension SliderModel {
     dragGeneration += 1
   }
 
+  /// The next legal value above (or below) the one on screen.
+  func stepped(from value: Double, up: Bool) -> Double {
+    return NitroUiSliderValue.stepped(
+      from: value,
+      up: up,
+      minimum: minimumValue,
+      maximum: maximumValue,
+      step: step
+    )
+  }
+
+  /// A screen reader asked for the next value up (or below).
+  ///
+  /// One gesture's worth of callbacks - start, one change, complete - because an
+  /// app cannot tell an increment from a thumb release and must not have to. The
+  /// drag is opened and closed *here* rather than left to SwiftUI: the platform
+  /// has no idea that a value it was handed came from a screen reader, and the
+  /// `Binding` write of such a change is not required to arrive with an
+  /// `onEditingChanged(true)`/`(false)` pair around it.
+  ///
+  /// Only the direction is the platform's. At a bound there is no next value, and
+  /// emitting a triple for a value that did not change is a gesture that never
+  /// happened - so nothing is emitted. (Android has the same rule, in
+  /// `SliderModel.accessibilityStepToward`.)
+  func accessibilityStep(up: Bool) {
+    guard !disabled else { return }
+    let from = state.displayed
+    let to = stepped(from: from, up: up)
+    guard to != from else { return }
+    beginDrag()
+    drag(to: to)
+    endDrag()
+  }
+
+  /// Whether the frame pump is alive. Readable from any thread.
+  var isFramePumpArmed: Bool {
+    return pump.isArmed
+  }
+
+  /// What the last a11y step probe did. Readable from any thread.
+  var accessibilityStepReport: String {
+    a11yStepReportLock.lock()
+    defer { a11yStepReportLock.unlock() }
+    return a11yStepReport
+  }
+
+  /// Record what an a11y step probe did. Main thread, next to the probe.
+  func noteAccessibilityStepReport(_ report: String) {
+    nitroUiAssertMainThread()
+    a11yStepReportLock.lock()
+    defer { a11yStepReportLock.unlock() }
+    a11yStepReport = report
+  }
+
   /// The frame tick: one event for everything the finger did since the last one.
   private func deliverUnreported() {
     guard let value = state.unreported else { return }
@@ -265,6 +372,24 @@ struct SliderContent: NitroUIContent {
     }
     .disabled(model.disabled)
     .modifier(OptionalTint(color: model.tint))
+    // One accessibility element for the control, whose steps native owns.
+    //
+    // `children: .ignore` is not cosmetic. SwiftUI's `Slider` is an adjustable
+    // element whose increment is a fraction of its range, and on a range that does
+    // not end on a step - `0...10 step 3`, the docs' own example - native
+    // quantises that fraction back to the value it started from: the gesture
+    // reports success and the thumb stays where it was. It is also what closes the
+    // hole where VoiceOver adjusted the `Binding` directly: such a write can start
+    // a drag (`drag(to:)` opens one) without an `onEditingChanged(false)` ever
+    // arriving to end it, which leaves the display link ticking until recycle, no
+    // `onSlidingComplete`, and the next real drag's `onSlidingStart` suppressed.
+    // With the children hidden there is no element left that can write the
+    // Binding, and the one element that remains moves by ``SliderModel/stepped(from:up:)``.
+    .accessibilityElement(children: .ignore)
+    .accessibilityValue(Text(model.accessibilityValueText))
+    .accessibilityAdjustableAction { direction in
+      model.accessibilityStep(up: direction == .increment)
+    }
     .modifier(OptionalAccessibility(label: model.accessibilityLabel))
   }
 }
@@ -299,6 +424,64 @@ private struct OptionalAccessibility: ViewModifier {
       content
     }
   }
+}
+
+/// The hosted element a screen reader would adjust, or nil.
+///
+/// Breadth-first, and over *both* kinds of node: SwiftUI vends its accessibility
+/// elements as `UIAccessibilityElement`s in a view's `accessibilityElements`
+/// rather than as subviews, so a walk of `subviews` alone finds nothing.
+///
+/// `.adjustable` is the gate, not `responds(to:)`: `accessibilityIncrement` is an
+/// `NSObject` category method, so *every* node responds to it and a probe gated
+/// on that would "find" the root view and pass for the wrong reason.
+///
+/// `dump` collects what was walked so the caller can report why it failed; the
+/// probe is fire-and-forget on main and cannot answer synchronously, so this
+/// subtree listing is the only thing a red test can show.
+private func nitroUiFindAdjustableElement(in root: UIView, dump: inout [String]) -> AnyObject? {
+  var queue: [AnyObject] = [root]
+  while !queue.isEmpty, dump.count < 64 {
+    let node = queue.removeFirst()
+    dump.append(nitroUiDescribeAccessibilityNode(node))
+    if nitroUiAccessibilityTraits(of: node)?.contains(.adjustable) == true {
+      return node
+    }
+    if let view = node as? UIView {
+      queue.append(contentsOf: view.subviews)
+      if let elements = view.accessibilityElements {
+        queue.append(contentsOf: elements.compactMap { $0 as AnyObject? })
+      }
+    }
+  }
+  return nil
+}
+
+/// Both kinds of node spell their traits `accessibilityTraits` - `UIView` and
+/// `UIAccessibilityElement` declare the property separately, so this is the one
+/// place that knows both. Anything else in the tree has no traits to read.
+private func nitroUiAccessibilityTraits(of node: AnyObject) -> UIAccessibilityTraits? {
+  if let view = node as? UIView {
+    return view.accessibilityTraits
+  }
+  if let element = node as? UIAccessibilityElement {
+    return element.accessibilityTraits
+  }
+  return nil
+}
+
+private func nitroUiDescribeAccessibilityNode(_ node: AnyObject) -> String {
+  let name = String(describing: Swift.type(of: node))
+  guard let traits = nitroUiAccessibilityTraits(of: node) else {
+    return "\(name)[no traits]"
+  }
+  return "\(name)[\(traits.rawValue)]"
+}
+
+/// Reports go to a test's failure line, so they stay one line.
+private func nitroUiReport(_ text: String) -> String {
+  guard text.count > 320 else { return text }
+  return String(text.prefix(320)) + "…"
 }
 
 /// The Hybrid View React renders as `NitroUiSlider`.
@@ -636,6 +819,59 @@ final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
     } else {
       model.endDrag()
     }
+  }
+
+  /// Perform the platform's own adjust action - the selector VoiceOver performs
+  /// on an adjustable element - on the hosted element. Test-only; see the spec.
+  ///
+  /// There is deliberately **no fallback**: if no adjustable element is found the
+  /// probe does nothing and says so in the report. Falling back to
+  /// ``SliderModel/accessibilityStep(up:)`` would move the value either way and
+  /// prove nothing about the path a screen reader actually takes, which is the
+  /// whole thing under test.
+  func nuiTestAccessibilityStep(direction: Double) throws {
+    let up = direction >= 0
+    let run = { [weak self] in self?.runTestAccessibilityStep(up: up) }
+    if Thread.isMainThread {
+      run()
+    } else {
+      DispatchQueue.main.async { run() }
+    }
+  }
+
+  func nuiTestAccessibilityStepReport() throws -> String {
+    return model.accessibilityStepReport
+  }
+
+  func nuiTestFramePumpArmed() throws -> Bool {
+    return model.isFramePumpArmed
+  }
+
+  private func runTestAccessibilityStep(up: Bool) {
+    nitroUiAssertMainThread()
+    let action = up ? "accessibilityIncrement" : "accessibilityDecrement"
+    var dump: [String] = []
+    guard let element = nitroUiFindAdjustableElement(in: host, dump: &dump) else {
+      model.noteAccessibilityStepReport(
+        nitroUiReport("no adjustable element; walked \(dump.joined(separator: " "))")
+      )
+      return
+    }
+    let selector = NSSelectorFromString(action)
+    guard element.responds(to: selector) else {
+      model.noteAccessibilityStepReport(
+        nitroUiReport("\(nitroUiDescribeAccessibilityNode(element)) does not respond to \(action)")
+      )
+      return
+    }
+    let from = model.state.displayed
+    element.perform(selector)
+    let to = model.state.displayed
+    // The report answers both halves of "did the platform move my value": that an
+    // adjustable element was found, and what the value did when it was acted on.
+    model.noteAccessibilityStepReport(
+      nitroUiReport("performed \(action) on \(nitroUiDescribeAccessibilityNode(element)) \(from)->\(to)")
+    )
   }
 
   private var model: SliderModel {

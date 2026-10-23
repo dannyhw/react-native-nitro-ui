@@ -102,6 +102,9 @@ export interface SliderProps extends ViewProps {
             height: number;
         };
         nuiTestDrag(to: number, steps: number, msPerStep: number): void;
+        nuiTestAccessibilityStep(direction: number): void;
+        nuiTestAccessibilityStepReport(): string;
+        nuiTestFramePumpArmed(): boolean;
     }) => void) | undefined;
     maximumValue?: number | undefined;
     minimumValue?: number | undefined;

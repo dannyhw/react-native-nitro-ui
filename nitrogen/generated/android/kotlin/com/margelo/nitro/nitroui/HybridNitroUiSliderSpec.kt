@@ -156,6 +156,18 @@ abstract class HybridNitroUiSliderSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun nuiTestDrag(to: Double, steps: Double, msPerStep: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestAccessibilityStep(direction: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestAccessibilityStepReport(): String
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestFramePumpArmed(): Boolean
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

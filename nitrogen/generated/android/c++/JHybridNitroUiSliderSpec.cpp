@@ -232,5 +232,19 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(double /* to */, double /* steps */, double /* msPerStep */)>("nuiTestDrag");
     method(_javaPart, to, steps, msPerStep);
   }
+  void JHybridNitroUiSliderSpec::nuiTestAccessibilityStep(double direction) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(double /* direction */)>("nuiTestAccessibilityStep");
+    method(_javaPart, direction);
+  }
+  std::string JHybridNitroUiSliderSpec::nuiTestAccessibilityStepReport() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("nuiTestAccessibilityStepReport");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
+  bool JHybridNitroUiSliderSpec::nuiTestFramePumpArmed() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jboolean()>("nuiTestFramePumpArmed");
+    auto __result = method(_javaPart);
+    return static_cast<bool>(__result);
+  }
 
 } // namespace margelo::nitro::nitroui

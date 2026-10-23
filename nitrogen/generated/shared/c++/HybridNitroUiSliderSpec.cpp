@@ -48,6 +48,9 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("nuiSizingId", &HybridNitroUiSliderSpec::setNuiSizingId);
       prototype.registerHybridMethod("measureContent", &HybridNitroUiSliderSpec::measureContent);
       prototype.registerHybridMethod("nuiTestDrag", &HybridNitroUiSliderSpec::nuiTestDrag);
+      prototype.registerHybridMethod("nuiTestAccessibilityStep", &HybridNitroUiSliderSpec::nuiTestAccessibilityStep);
+      prototype.registerHybridMethod("nuiTestAccessibilityStepReport", &HybridNitroUiSliderSpec::nuiTestAccessibilityStepReport);
+      prototype.registerHybridMethod("nuiTestFramePumpArmed", &HybridNitroUiSliderSpec::nuiTestFramePumpArmed);
     });
   }
 

@@ -105,6 +105,60 @@ export interface NitroUiSliderMethods extends HybridViewMethods {
    * @internal Not app API (DECISIONS D14). Deleted when the harness can drag.
    */
   nuiTestDrag(to: number, steps: number, msPerStep: number): void;
+
+  /**
+   * TEMPORARY, test-only: perform one accessibility increment (`direction` > 0)
+   * or decrement (`direction` < 0) through the **platform's** a11y action, not by
+   * calling the component's step rule.
+   *
+   * On iOS that is `accessibilityIncrement()` / `accessibilityDecrement()` - the
+   * selector VoiceOver performs on an adjustable element - invoked on the hosted
+   * element the control vends. On Android it is the `SetProgress` semantics
+   * action, performed on the node M3 publishes, with the target an a11y service
+   * sends for a scroll forward/back on a progress node: one twentieth of the range
+   * away from the current value. The action is the real one either way; the
+   * stride is only what the seam supplies, because the rule under test is
+   * directional and must not depend on the size of the step.
+   *
+   * Observe the result through the three callbacks, as with `nuiTestDrag`, and
+   * read ``nuiTestAccessibilityStepReport`` for whether the platform action was
+   * found at all - a value that did not move is otherwise ambiguous between
+   * "the control has no adjustable action" and "it has one and it is wrong".
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can drive a
+   * screen reader.
+   */
+  nuiTestAccessibilityStep(direction: number): void;
+
+  /**
+   * TEMPORARY, test-only: what the last ``nuiTestAccessibilityStep`` did, as one
+   * short line - the class and traits of the element the platform action was
+   * performed on, or a dump of the hosted subtree when no adjustable element was
+   * found.
+   *
+   * It is a separate method because the action has to run on the platform's UI
+   * thread, and a synchronous Nitro method may not block for it
+   * (`ios/core/NitroUiMainThread.swift`: never `main.sync`). The action stores a
+   * one-line report on the main thread; this reads it from any thread.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestAccessibilityStepReport(): string;
+
+  /**
+   * TEMPORARY, test-only: whether this control's frame pump is armed - a
+   * `CADisplayLink` scheduled on iOS, a `Choreographer` callback posted on
+   * Android. "Armed" means started for a drag and not stopped: iOS keeps one link
+   * alive for a whole drag, while Android's callback is one-shot and re-posts
+   * itself per sample, so only this says whether either is still alive.
+   *
+   * Nothing else can see a pump that outlived its drag: it emits nothing once
+   * nothing is pending, so a leak is invisible in the event stream while it burns
+   * a frame callback 60 times a second for the life of the view.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestFramePumpArmed(): boolean;
 }
 
 /**

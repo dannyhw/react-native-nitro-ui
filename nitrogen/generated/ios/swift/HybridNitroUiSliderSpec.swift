@@ -30,6 +30,9 @@ public protocol HybridNitroUiSliderSpec_protocol: HybridObject, HybridView {
   // Methods
   func measureContent() throws -> NitroUiSliderSize
   func nuiTestDrag(to: Double, steps: Double, msPerStep: Double) throws -> Void
+  func nuiTestAccessibilityStep(direction: Double) throws -> Void
+  func nuiTestAccessibilityStepReport() throws -> String
+  func nuiTestFramePumpArmed() throws -> Bool
 }
 
 public extension HybridNitroUiSliderSpec_protocol {

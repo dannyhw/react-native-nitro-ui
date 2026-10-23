@@ -87,6 +87,9 @@ namespace margelo::nitro::nitroui {
     // Methods
     NitroUiSliderSize measureContent() override;
     void nuiTestDrag(double to, double steps, double msPerStep) override;
+    void nuiTestAccessibilityStep(double direction) override;
+    std::string nuiTestAccessibilityStepReport() override;
+    bool nuiTestFramePumpArmed() override;
 
   private:
     jni::global_ref<JHybridNitroUiSliderSpec::JavaPart> _javaPart;

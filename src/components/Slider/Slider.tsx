@@ -73,7 +73,8 @@ export interface SliderProps extends ViewProps {
    * @internal Not app API (DECISIONS D14): props must flow through React, so a
    * direct write here runs the native setter off the UI thread and never commits.
    * Reading props and calling `measureContent()` is all it is for (plus the
-   * test-only `nuiTestDrag`), and the callback runs once, when the view mounts —
+   * test-only `nuiTestDrag` and the accessibility/frame-pump probes), and the
+   * callback runs once, when the view mounts —
    * a new function does not re-run it.
    *
    * The shape is written inline rather than named: it is the same read-only
@@ -90,6 +91,9 @@ export interface SliderProps extends ViewProps {
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
         nuiTestDrag(to: number, steps: number, msPerStep: number): void;
+        nuiTestAccessibilityStep(direction: number): void;
+        nuiTestAccessibilityStepReport(): string;
+        nuiTestFramePumpArmed(): boolean;
       }) => void)
     | undefined;
   /**
