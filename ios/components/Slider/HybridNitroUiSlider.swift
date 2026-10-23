@@ -994,10 +994,17 @@ final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
       )
       return
     }
+    // Whether the element the reader is handed carries `.notEnabled`. The Slider
+    // vends that trait on the same adjustable element (`refresh()`), so this is the
+    // iOS side of the flag Android reads off the merged semantics node's `Disabled`
+    // property: without it a disabled Slider is a live, adjustable control that does
+    // nothing, and the harness has no way to see the reader is being told otherwise.
+    // Reported in Android's `disabled=` format so the same assertion is real on both.
+    let elementDisabled = nitroUiAccessibilityTraits(of: element)?.contains(.notEnabled) == true
     let selector = NSSelectorFromString(action)
     guard element.responds(to: selector) else {
       model.noteAccessibilityStepReport(
-        nitroUiReport("\(nitroUiDescribeAccessibilityNode(element)) does not respond to \(action)")
+        nitroUiReport("\(nitroUiDescribeAccessibilityNode(element)) does not respond to \(action); disabled=\(elementDisabled)")
       )
       return
     }
@@ -1007,7 +1014,7 @@ final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
     // The report answers both halves of "did the platform move my value": that an
     // adjustable element was found, and what the value did when it was acted on.
     model.noteAccessibilityStepReport(
-      nitroUiReport("performed \(action) on \(nitroUiDescribeAccessibilityNode(element)) \(from)->\(to)")
+      nitroUiReport("performed \(action) on \(nitroUiDescribeAccessibilityNode(element)) \(from)->\(to) disabled=\(elementDisabled)")
     )
   }
 
