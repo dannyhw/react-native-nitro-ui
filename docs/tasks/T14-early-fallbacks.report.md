@@ -124,10 +124,15 @@ hard way while writing this:
   suite *checks* the condition instead of assuming it: the engine's cumulative `measurements` counter is
   `0` only in a process nothing has measured in (the harness does not mount the example app's screens —
   that was checked too, and the app's own testIDs are not reachable through `HarnessUI.queryByTestId`).
-- In a cold process the two cold tests assert the full claim (first frame **at the declared size**). In a
-  whole-suite run they log `NOT COLD`, drop to the weaker claim that still holds there (the first frame is
-  *some* size, never 0) and the two poisoned tests keep asserting the correction. `harness:cold:ios` /
-  `harness:cold:android` are the discriminating invocation, and are what the red/green table above cites.
+- In a cold process the two cold tests assert the full claim (first frame **at the declared size**). Coldness
+  is therefore captured once — in the first cold test, before anything in this file has mounted — and both
+  cold tests use that one value: `measurements` is a process-wide running total that never resets, so a
+  re-read in the third test had already counted this file's own two Slider mounts and the Switch test's
+  declared-size assertion could never run (review; fixed in fix round 1, which also re-ran both
+  `harness:cold:*`). In a whole-suite run the captured value is false, the log says `NOT COLD`, the two
+  cold tests drop to the weaker claim that still holds there (the first frame is *some* size, never 0) and
+  the two poisoned tests keep asserting the correction. `harness:cold:ios` / `harness:cold:android` are the
+  discriminating invocation, and are what the red/green table above cites.
 
 ## Proposed D17 wording (orchestrator edits DECISIONS.md)
 
@@ -139,7 +144,9 @@ with:
 
 > (registered at startup — `NitroUiDeclaredFallbacks`, T14 — so what that frame shows is the component's
 > declared size and never 0: a cold first `fillWidth` instance gets its real height with the declared width,
-> a cold first `intrinsic` instance its declared box, which on both platforms today *is* the control, so a
+> a cold first `intrinsic` instance its declared box, which on both platforms today *is* the control — the
+> one exception being an iOS 26+ app that sets `UIDesignRequiresCompatibility`, which gets the declared
+> 61×28 laid over its 51×31 control and pays one correction (`docs/architecture/sizing.md` §8) — so a
 > correctly declared fallback costs 0 corrections)
 
 Full bullet as it would read:
@@ -148,7 +155,9 @@ Full bullet as it would read:
 > sizing configuration per environment epoch** (no exact cache entry yet) may show the declared fallback
 > (registered at startup — `NitroUiDeclaredFallbacks`, T14 — so what that frame shows is the component's
 > declared size and never 0: a cold first `fillWidth` instance gets its real height with the declared width,
-> a cold first `intrinsic` instance its declared box, which on both platforms today *is* the control, so a
+> a cold first `intrinsic` instance its declared box, which on both platforms today *is* the control — the
+> one exception being an iOS 26+ app that sets `UIDesignRequiresCompatibility`, which gets the declared
+> 61×28 laid over its 51×31 control and pays one correction (`docs/architecture/sizing.md` §8) — so a
 > correctly declared fallback costs 0 corrections) for one frame before its correction lands; every instance
 > whose configuration is already exact in the cache must lay out exact on its first frame (0 stale). …
 > (unchanged from here: the immediate-per-flush budgets, the gated/not-gated lists, no budget increase, no
@@ -192,10 +201,14 @@ modal: content=52.19x48.00 trace=["laidOut:511:40.0x20.0","drew:511:40.0x20.2"]
 
 The dialog's Switch laid out from the seeded `40 × 20`, **drew** it, and its report was queued with no
 flush in the window the test collects. So it is FOLLOWUPS's `corrections=0`, caught one assertion earlier:
-the correction never arrived *in time*, not never. Two things it says that are worth more than the flake —
-RN's Modal is a second window, and on that surface Android's pre-draw cancellation did not suppress the
-stale frame (`docs/architecture/sizing.md` §3 says it does), and a `queued` correction is waiting for a
-commit this test never performs.
+the correction never arrived *in time*, not never. What the trace shows, precisely (review; the first
+wording here over-claimed a cause): the first-frame watcher records `drew` only when the engine has no
+report queued, so at the frame that drew there was nothing queued for a pre-draw cancellation to cancel —
+the report arrived *after* that draw, and nothing in the dialog's window requested another one. An
+idle second window plus a late report is all that is observed; the cause of the lateness was not chased
+(D19). Fixed in fix round 1 from the other side: `scheduleSizingFlush` now requests the draw its flush
+listener needs (`invalidate()`), and the test waits for its own instance's `corrected`, so it goes red
+when the queued report is not pumped instead of passing on someone else's redraw.
 
 T14 does not move the cause: the guess that control mounted from is the one the test seeds, so the
 startup table's number was never consulted, and the file's own change here is the *evidence rule* in
@@ -248,11 +261,20 @@ Android runs all passed, so it is a low-rate race and it is routed below rather 
 ## Follow-ups
 
 - The iOS half of `Slider › ignores a drag while disabled` (above) — route to G1's owner.
-- The Android Modal flake (above): on RN's second surface a stale first frame *is* drawn, and the
-  correction that follows it sits `queued` until some later commit pumps it. Both halves contradict
-  `docs/architecture/sizing.md` §3 as written for normal hosts, and the test's oracle
-  (`collectTrace(hasDrawnSample, …)` stops at the first drawn sample) is on the wrong side of that race.
-  Worth its own task, with the log line above.
+- The Android Modal stuck report (above): fixed in fix round 1 — the host requests a draw when it queues a
+  flush, and the test waits for its own instance's `corrected`. Not chased (deliberately): why Compose's
+  first report can land after a settled dialog's last draw at all.
+- `Sizing.harness.tsx`'s per-instance cold check waits with `collectTrace(hasDrawnSample)`, which stops at
+  *any* instance's `drew` — it could stop before this instance's `corrected` and become the next flake
+  (review).
+- `docs/architecture/core.md:295` cites `HybridNitroUiSwitch.swift:104-113`; the code is now at `:131-136`
+  (already stale on `main`, found by the review).
+- The iOS Switch fallback could read `Bundle.main`'s `UIDesignRequiresCompatibility` at `+load` and declare
+  51×31 for those apps instead of 61×28 (`HybridNitroUiSwitch.swift:131-136`; the D17 exception above).
+- Nothing runs the new `+load` under `use_frameworks!` (dynamic or static) or an Expo prebuild; reasoned
+  safe in the review, `smoke:expo` would confirm it.
+- The startup cost of loading the `HybridNitroUi*` Kotlin classes from `NitroUiPackage.<clinit>` was not
+  measured (expected negligible; review).
 - `react-native-harness` prints a suite's `console.log` only when **that suite fails** — measured: the iOS
   whole-suite run has a red `Slider` suite and prints none of the green `ColdSizing` suite's lines, and a
   green single-file run prints nothing either. A task that wants frame evidence out of a green run has to
