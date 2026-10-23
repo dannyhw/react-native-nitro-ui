@@ -130,6 +130,23 @@ final class SliderModel: NitroUiModel {
     }
     return String(value)
   }
+  /// The element UIKit vends to a screen reader for this control.
+  ///
+  /// Weak: the element is owned by the view's `accessibilityElements` array and
+  /// the model is owned by that same view, so a strong reference here would be a
+  /// cycle that outlives the recycle. See ``NitroUiSliderAccessibilityElement``.
+  weak var a11yElement: NitroUiSliderAccessibilityElement?
+
+  /// Re-copy what a reader announces into that element.
+  ///
+  /// `UIAccessibilityElement` *stores* its label, value and traits instead of
+  /// asking for them, so each of the three has to be pushed when it changes. The
+  /// call sites below are exactly the moments at which it can: a value that moved
+  /// (an emitted sample, a cancelled drag), or a prop batch that moved the label,
+  /// the enabled state or the value.
+  func refreshAccessibility() {
+    a11yElement?.refresh()
+  }
   /// The size configuration React sent. Nothing native reads it; see
   /// `HybridNitroUiSwitch`'s copy of this field.
   var sizingKey = ""
@@ -137,14 +154,16 @@ final class SliderModel: NitroUiModel {
   var onSlidingStart: ((Double, Double) -> Void)?
   var onSlidingComplete: ((Double, Double) -> Void)?
 
-  /// The un-emitted drag sample is `state.unreported` - part of the handshake
-  /// itself, not a Slider field, so "a React write may not overtake a sample JS
-  /// has not been told about" is one rule for every control (§4, §11).
-  /// What the `Binding` reads is `state.displayed`, which an interaction also
-  /// writes at sample time, so a re-render mid-drag cannot show an older value.
+  // A drag's samples live in `state`, not in Slider fields: the un-emitted one is
+  // `state.unreported`, which is part of the handshake itself, so "a React write
+  // may not overtake a sample JS has not been told about" is one rule for every
+  // control (§4, §11). What the `Binding` reads is `state.displayed`, which an
+  // interaction also writes at sample time, so a re-render mid-drag cannot show
+  // an older value.
+
   /// Whether a drag is in flight.
   var dragging = false
-  ///
+
   /// Bumped whenever an in-flight drag is abandoned, so work that was queued for
   /// that drag can recognise itself and stop. A real touch stream cannot outlive
   /// its view; `nuiTestDrag` queues its moves on the run loop and
@@ -161,6 +180,8 @@ final class SliderModel: NitroUiModel {
   /// what happened here and the harness reads it back from JS, which needs the
   /// same lock as ``NitroUiFramePump/isArmed``.
   private var a11yStepReport = ""
+  /// How many reports have been made, used to number them. Same lock.
+  private var a11yStepCount = 0
   private let a11yStepReportLock = NSLock()
 
   override init() {
@@ -232,6 +253,7 @@ extension SliderModel {
     }
     state.displayed = quantize(raw)
     state.unreported = state.displayed
+    refreshAccessibility()
     pump.start()
   }
 
@@ -262,6 +284,7 @@ extension SliderModel {
     dragging = false
     pump.stop()
     dragGeneration += 1
+    refreshAccessibility()
   }
 
   /// The next legal value above (or below) the one on screen.
@@ -315,13 +338,19 @@ extension SliderModel {
     nitroUiAssertMainThread()
     a11yStepReportLock.lock()
     defer { a11yStepReportLock.unlock() }
-    a11yStepReport = report
+    a11yStepCount += 1
+    // The number makes every report a new string. Without it, two steps that do
+    // the same thing - the no-op at a bound, or a step on a one-value range - are
+    // byte-identical, and a harness waiting for "the report changed" cannot tell
+    // "the probe ran and nothing moved" from "the probe has not run yet".
+    a11yStepReport = "#\(a11yStepCount) \(report)"
   }
 
   /// The frame tick: one event for everything the finger did since the last one.
   private func deliverUnreported() {
     guard let value = state.unreported else { return }
     state.unreported = nil
+    refreshAccessibility()
     // The invalidation is on the same frame budget as the emit. `displayed` was
     // written when the finger moved, and SwiftUI's own control renders that
     // write; this is the rest of the hosted body, and at touch-sample rate it
@@ -372,19 +401,28 @@ struct SliderContent: NitroUIContent {
     }
     .disabled(model.disabled)
     .modifier(OptionalTint(color: model.tint))
-    // One accessibility element for the control, whose steps native owns.
+    // The SwiftUI half of the control's accessibility. The authoritative element is
+    // ``NitroUiSliderAccessibilityElement``, vended by the view; these modifiers are
+    // the same statement made in SwiftUI's language, and they are kept because they
+    // cost nothing and because they cover the case UIKit's array does not: if a
+    // runtime ever builds its reader tree past `accessibilityElements`, the element
+    // it builds is still one element (`children: .ignore` hides the wrapped
+    // Slider's own) and still steps by ``SliderModel/stepped(from:up:)`` rather than
+    // by the platform's stride.
     //
-    // `children: .ignore` is not cosmetic. SwiftUI's `Slider` is an adjustable
-    // element whose increment is a fraction of its range, and on a range that does
-    // not end on a step - `0...10 step 3`, the docs' own example - native
-    // quantises that fraction back to the value it started from: the gesture
-    // reports success and the thumb stays where it was. It is also what closes the
-    // hole where VoiceOver adjusted the `Binding` directly: such a write can start
-    // a drag (`drag(to:)` opens one) without an `onEditingChanged(false)` ever
-    // arriving to end it, which leaves the display link ticking until recycle, no
-    // `onSlidingComplete`, and the next real drag's `onSlidingStart` suppressed.
-    // With the children hidden there is no element left that can write the
-    // Binding, and the one element that remains moves by ``SliderModel/stepped(from:up:)``.
+    // Both halves matter for the same two reasons:
+    //
+    // - SwiftUI's `Slider` is an adjustable element whose increment is a fraction of
+    //   its range, and on a range that does not end on a step - `0...10 step 3`, the
+    //   docs' own example - native quantises that fraction back to the value it
+    //   started from: the gesture reports success and the thumb stays put.
+    // - It closes the hole where VoiceOver adjusted the `Binding` directly: such a
+    //   write opens a drag (`drag(to:)` starts one) with no
+    //   `onEditingChanged(false)` guaranteed to follow, which would leave the
+    //   display link ticking until recycle, no `onSlidingComplete`, and the next
+    //   real drag's `onSlidingStart` suppressed. With the children hidden there is
+    //   no element left that can write the Binding; the reader's gesture arrives at
+    //   `accessibilityStep`, which opens and closes the drag in the same turn.
     .accessibilityElement(children: .ignore)
     .accessibilityValue(Text(model.accessibilityValueText))
     .accessibilityAdjustableAction { direction in
@@ -484,9 +522,92 @@ private func nitroUiReport(_ text: String) -> String {
   return String(text.prefix(320)) + "…"
 }
 
+/// The accessibility element this control answers a screen reader with.
+///
+/// Vended by the component view (`accessibilityElements`), and the reason is
+/// measured rather than stylistic. On iOS 27 the SwiftUI hosting view answers
+/// `accessibilityElements == []` to anything that is not an accessibility client -
+/// SwiftUI materialises its a11y tree when a reader asks for it - so an element
+/// built out of `.accessibility*` modifiers cannot be found, performed or tested
+/// from outside VoiceOver. `nuiTestAccessibilityStep` walks the real view tree
+/// looking for it and gets `_UIHostingView[0]` with nothing in it, which is a
+/// control whose accessibility is only real while a reader happens to be running.
+/// Vending the element here makes it a fact about the view at all times, and it is
+/// the same object VoiceOver's up/down gesture reaches: UIKit calls
+/// `accessibilityIncrement` / `accessibilityDecrement` on the focused element.
+///
+/// Two things follow from being the element rather than decorating one:
+///
+/// - **One focus stop.** UIKit does not descend into a view that answers with its
+///   own elements, so the wrapped control's element is not a second stop.
+/// - **Our steps, not the platform's.** The increment moves by
+///   ``SliderModel/accessibilityStep(up:)`` - this Slider's own grid - instead of
+///   the platform's stride, which is a fraction of the range and on a range that
+///   does not end on a step (`0...10 step 3`, the docs' example) quantises back to
+///   where it started. That is what this class is for.
+///
+/// What this does *not* prove is what a reader says out loud: the label wording,
+/// whether the value is re-read after an increment, and the rotor. Those need
+/// VoiceOver running and are recorded as a follow-up.
+final class NitroUiSliderAccessibilityElement: UIAccessibilityElement {
+  private weak var model: SliderModel?
+  private weak var anchor: UIView?
+
+  init(model: SliderModel, anchor: UIView) {
+    self.model = model
+    super.init(accessibilityContainer: anchor)
+    // In the anchor's space, so UIKit converts it through the container and the
+    // element follows the control when it moves or resizes.
+    self.anchor = anchor
+    refresh()
+  }
+
+  /// The control's box, in screen coordinates - computed rather than stored so the
+  /// element follows the control when the layout moves it.
+  override var accessibilityFrame: CGRect {
+    get {
+      guard let anchor, let window = anchor.window else { return .zero }
+      return anchor.convert(anchor.bounds, to: window)
+    }
+    set {}
+  }
+
+  /// Copy the three things a reader announces out of the model.
+  ///
+  /// Pushed rather than overridden because `UIAccessibilityElement` *stores* these
+  /// (`null_resettable` properties, awkward to override) - so the model calls this
+  /// at the moments they change instead.
+  func refresh() {
+    guard let model else { return }
+    accessibilityLabel = model.accessibilityLabel
+    accessibilityValue = model.accessibilityValueText
+    accessibilityTraits = model.disabled ? [.adjustable, .notEnabled] : .adjustable
+  }
+
+  /// VoiceOver's swipe-up on the focused control.
+  override func accessibilityIncrement() {
+    model?.accessibilityStep(up: true)
+  }
+
+  /// VoiceOver's swipe-down on the focused control.
+  override func accessibilityDecrement() {
+    model?.accessibilityStep(up: false)
+  }
+}
+
 /// The Hybrid View React renders as `NitroUiSlider`.
 final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
   private let host: NitroSwiftUIHost<SliderContent>
+
+  /// The element a screen reader focuses, vended by the component view.
+  ///
+  /// Created once per instance and never replaced: it reads through to the model,
+  /// which is the same object for the life of this view including across a
+  /// recycle, and ``prepareForRecycle`` leaves the array alone for that reason.
+  private lazy var a11yElement = NitroUiSliderAccessibilityElement(
+    model: host.model,
+    anchor: host
+  )
 
   /// The width half of the fallback, for the unbounded-parent case.
   ///
@@ -542,6 +663,10 @@ final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
     host.needsContainment = false
     host.wantsContentSize = true
     host.sizingPolicy = .fillWidth
+    // One focus stop for the control, and it is ours. See the element's own
+    // comment for why this is not left to SwiftUI's modifiers.
+    host.accessibilityElements = [a11yElement]
+    host.model.a11yElement = a11yElement
     _ = Self.declaresFallback
   }
 
@@ -719,6 +844,10 @@ final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
       model.state.displayed = shown
       host.markDirty()
     }
+    // The label, the enabled state and the value are props, and this is the one
+    // place a batch of them is finished - so it is the one place the element a
+    // reader is looking at has to be told what they now say.
+    model.refreshAccessibility()
     host.commit()
   }
 
