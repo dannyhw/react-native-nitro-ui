@@ -30,6 +30,16 @@ export const CONTROL_NOTE_THRESHOLD = 0.1;
  */
 export const NOISE_REL_SPREAD = 0.1;
 /**
+ * Above this share of a cell's samples, a metric is **not reportable** (round
+ * 4): it prints `n/a`, and it is dropped from `comparableMetrics()`, so it
+ * enters no ratio table and cannot be gated. A median over "the 35 of 80
+ * iterations whose signal happened to arrive" is not a slow cell - it is a
+ * survivor-biased sample of a broken signal, and printing it is worse than
+ * printing nothing (round 3's Android mount `presented` read 166 ms / 178 ms
+ * that way, at 44 % and 84 % missing).
+ */
+export const MAX_MISSING_SAMPLE_RATIO = 0.1;
+/**
  * A machine is "unquiet" above 0.5 x core count (D9): a busy laptop may produce
  * readable same-run ratios but must never mint a committed baseline.
  */
@@ -393,6 +403,24 @@ function emptyCell(record) {
       presentedBeforeMount: 0,
       mountBeforeCommit: 0,
     },
+    /**
+     * Denominators for the completeness rule, counted from the records that
+     * arrived: what each metric should have produced. Without them a metric
+     * that produced 35 of 80 samples is indistinguishable from one that
+     * produced 80 of 80, which is how round 3 shipped survivor-biased numbers.
+     */
+    universe: {
+      /** Measured (non-warmup) `iter` records: the latency denominator. */
+      iterations: 0,
+      /** Launches that produced a mount-phase CPU bracket. */
+      cpuMountLaunches: new Set(),
+      /** Launches that produced an unmount-phase CPU bracket. */
+      cpuUnmountLaunches: new Set(),
+      /** Launches that produced a footprint sample. */
+      memoryLaunches: new Set(),
+      /** Launches that produced at least one `leak<N>` sample. */
+      leakLaunches: new Set(),
+    },
   };
 }
 
@@ -423,6 +451,21 @@ function distinctLaunches(cell) {
  */
 function summariseCell(key, cell) {
   const metrics = {};
+  /**
+   * How complete each metric is (round 4). `expected` is what the cell's own
+   * records said it should produce - measured iterations for a latency metric,
+   * launches for a per-launch one - and `reportable` is false once more than
+   * `MAX_MISSING_SAMPLE_RATIO` of it is missing. A partial median is a
+   * survivor-biased number, so it must not be printed, ratioed, or gated.
+   */
+  const completeness = {};
+  const judge = (samples, expected) => ({
+    samples,
+    expected,
+    reportable:
+      expected <= 0 ||
+      samples >= Math.ceil(expected * (1 - MAX_MISSING_SAMPLE_RATIO)),
+  });
   for (const metric of LATENCY_METRICS) {
     const perLaunch = [...cell.latency[metric].entries()].sort(
       (a, b) => a[0] - b[0]
@@ -436,8 +479,11 @@ function summariseCell(key, cell) {
       min: values.length === 0 ? null : Math.min(...values),
       max: values.length === 0 ? null : Math.max(...values),
       samples: values.length,
+      expected: cell.universe.iterations,
+      reportable: judge(values.length, cell.universe.iterations).reportable,
       launchMedians,
     };
+    completeness[metric] = judge(values.length, cell.universe.iterations);
   }
 
   const cpuPhase = (samples) => {
@@ -464,6 +510,18 @@ function summariseCell(key, cell) {
     unmountMainNsPerOp: unmount.mainNsPerOp,
     launchUnmountMainNsPerOp: unmount.launchMainNsPerOp,
   };
+  completeness.jsNsPerOp = judge(
+    mount.launchJsNsPerOp.length,
+    cell.universe.cpuMountLaunches.size
+  );
+  completeness.mainNsPerOp = judge(
+    mount.launchMainNsPerOp.length,
+    cell.universe.cpuMountLaunches.size
+  );
+  completeness.unmountMainNsPerOp = judge(
+    unmount.launchMainNsPerOp.length,
+    cell.universe.cpuUnmountLaunches.size
+  );
 
   const perLaunchBytes = [];
   const slopes = [];
@@ -523,6 +581,14 @@ function summariseCell(key, cell) {
    * span inside what the probe measures as `UI CPU/op`.
    */
   const markRecords = [...cell.marks.values()].flat();
+  completeness.bytesPerInstance = judge(
+    perLaunchBytes.length,
+    cell.universe.memoryLaunches.size
+  );
+  completeness.leakSlopeBytesPerCycle = judge(
+    slopes.length,
+    cell.universe.leakLaunches.size
+  );
   const markMedians = (pick) => median(markRecords.map(pick).filter(isNumber));
   const marks =
     markRecords.length === 0
@@ -555,6 +621,12 @@ function summariseCell(key, cell) {
     launches: distinctLaunches(cell),
     metrics,
     cpu,
+    /**
+     * `{ samples, expected, reportable }` per metric: the denominator rule
+     * behind every `n/a` in the tables, and the reason a cell with a 44 %-missing
+     * column cannot carry a verdict (round 4).
+     */
+    completeness,
     memory: {
       bytesPerInstance: median(perLaunchBytes),
       bytesPerInstanceLaunches: perLaunchBytes.length,
@@ -618,6 +690,7 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       }
       cell.skipReason = cell.skipReasons[0] ?? 'unavailable';
     } else if (record.kind === 'iter' && !record.warmup) {
+      cell.universe.iterations += 1;
       for (const metric of LATENCY_METRICS) {
         const value = record[metric];
         if (isNumber(value)) {
@@ -648,6 +721,10 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       }
     } else if (record.kind === 'cpu') {
       const phase = record.phase === 'unmount' ? 'unmount' : 'mount';
+      (phase === 'unmount'
+        ? cell.universe.cpuUnmountLaunches
+        : cell.universe.cpuMountLaunches
+      ).add(record.launch);
       const perUpdate = (value) =>
         isNumber(value) && record.iterations > 0
           ? value / record.iterations
@@ -661,6 +738,10 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       marks.push(record);
       cell.marks.set(record.launch, marks);
     } else if (record.kind === 'mem') {
+      cell.universe.memoryLaunches.add(record.launch);
+      if (typeof record.phase === 'string' && record.phase.startsWith('leak')) {
+        cell.universe.leakLaunches.add(record.launch);
+      }
       const phases = cell.memory.get(record.launch) ?? {};
       phases[record.phase] = record.footprintBytes;
       if (typeof record.heapCollected === 'boolean') {
@@ -709,11 +790,62 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
  * a wobbling series is not an increase (T02 review S8 - it used to be printed
  * and never gated).
  */
+/**
+ * Whether one metric of one cell has enough samples to be printed at all
+ * (round 4, `MAX_MISSING_SAMPLE_RATIO`).
+ *
+ * New runs carry `cell.completeness` with the exact denominator. Results files
+ * written before round 4 do not, so their denominators are rebuilt from the
+ * sanity counters: a pre-fix file that recorded `missingPresented: 45` of 80
+ * iterations gets the same `n/a` when it is re-reported today, which is the
+ * only way round 3's Android mount table stops quoting a 166 ms survivor.
+ */
+export function metricIsReportable(cell, metric) {
+  const declared = cell?.completeness?.[metric];
+  if (declared != null) {
+    return declared.reportable !== false;
+  }
+  if (LATENCY_METRICS.includes(metric)) {
+    const samples = cell?.metrics?.[metric]?.samples;
+    if (!isNumber(samples)) {
+      return true;
+    }
+    const missing =
+      metric === 'presentedNs'
+        ? (cell?.sanity?.missingPresented ?? 0)
+        : metric === 'mountedNs'
+          ? (cell?.sanity?.missingMount ?? 0)
+          : 0;
+    return (
+      samples >= Math.ceil((samples + missing) * (1 - MAX_MISSING_SAMPLE_RATIO))
+    );
+  }
+  const launchSamples = {
+    jsNsPerOp: cell?.cpu?.launchJsNsPerOp,
+    mainNsPerOp: cell?.cpu?.launchMainNsPerOp,
+    unmountMainNsPerOp: cell?.cpu?.launchUnmountMainNsPerOp,
+    bytesPerInstance: cell?.memory?.launchBytesPerInstance,
+    leakSlopeBytesPerCycle: cell?.memory?.launchLeakSlopeBytesPerCycle,
+  }[metric];
+  const launches = cell?.launches;
+  if (!Array.isArray(launchSamples) || !isNumber(launches)) {
+    return true;
+  }
+  return (
+    launchSamples.length >= Math.ceil(launches * (1 - MAX_MISSING_SAMPLE_RATIO))
+  );
+}
+
+/**
+ * The metrics this cell may be *quoted* on: positive, and complete enough to
+ * mean anything. `ratioTable`, the absolute table, `--compare` and the gate all
+ * go through here, so an incomplete metric is absent everywhere at once.
+ */
 export function comparableMetrics(cell) {
   const metrics = {};
   for (const metric of LATENCY_METRICS) {
     const value = cell.metrics?.[metric]?.median;
-    if (isNumber(value) && value > 0) {
+    if (isNumber(value) && value > 0 && metricIsReportable(cell, metric)) {
       metrics[metric] = value;
     }
   }
@@ -733,9 +865,45 @@ export function comparableMetrics(cell) {
     ) {
       continue;
     }
+    if (!metricIsReportable(cell, metric)) {
+      continue;
+    }
     metrics[metric] = value;
   }
   return metrics;
+}
+
+/**
+ * Metrics this cell did measure but too few times to quote, with their
+ * denominators: the reason a table says `n/a` instead of a number, printed so a
+ * reader can tell "the signal never arrived" from "the arm is slow".
+ */
+export function incompleteMetrics(cell) {
+  const found = [];
+  for (const metric of GATE_METRICS) {
+    const hasValue =
+      isNumber(cell?.metrics?.[metric]?.median) ||
+      isNumber(cell?.cpu?.[metric]) ||
+      isNumber(cell?.memory?.[metric]);
+    if (!hasValue || metricIsReportable(cell, metric)) {
+      continue;
+    }
+    const declared = cell?.completeness?.[metric];
+    if (declared != null) {
+      found.push({
+        metric,
+        samples: declared.samples,
+        expected: declared.expected,
+      });
+      continue;
+    }
+    found.push({
+      metric,
+      samples: cell?.metrics?.[metric]?.samples ?? null,
+      expected: null,
+    });
+  }
+  return found;
 }
 
 /**
@@ -827,7 +995,16 @@ export function ratioTable(source) {
     if (control == null) {
       continue;
     }
+    const controlMetrics = comparableMetrics(control);
     for (const metric of Object.keys(comparableMetrics(cell))) {
+      // A ratio is only as whole as its denominator: in round 3 the Android
+      // `expo-ui-shared-host` mount cell had 80 of 80 presenting frames while
+      // `rn-core` had 13, and 1.15x was the survivor over the survivor. If the
+      // control's metric is incomplete, the arm's ratio for it is meaningless
+      // too - n/a, and ungated.
+      if (!(metric in controlMetrics)) {
+        continue;
+      }
       if (cell.implementation === 'rn-core') {
         entry.metrics[metric] = {
           ratio: 1,
@@ -1108,6 +1285,25 @@ export function baselineBlockers(run) {
   if (Array.isArray(run.problems) && run.problems.length > 0) {
     reasons.push(
       `${String(run.problems.length)} launch(es) did not complete in this run`
+    );
+  }
+  // A baseline is a table of ratios, so it can only be minted while every
+  // gated metric is actually being measured. If any cell has a metric that is
+  // n/a because too few samples arrived (round 4 completeness rule), the
+  // ratios that survive are survivor-biased and the baseline is not sound.
+  const incomplete = Object.entries(cellsFrom(run.cells ?? run)).flatMap(
+    ([key, cell]) => incompleteMetrics(cell).map((entry) => ({ key, ...entry }))
+  );
+  if (incomplete.length > 0) {
+    const where = incomplete
+      .slice(0, 3)
+      .map(
+        (entry) =>
+          `${entry.key} ${entry.metric} (${String(entry.samples ?? '?')} of ${String(entry.expected ?? '?')} samples)`
+      )
+      .join(', ');
+    reasons.push(
+      `${String(incomplete.length)} metric(s) are n/a because too few samples arrived: ${where}`
     );
   }
   const machine = run.machine ?? {};
