@@ -44,6 +44,19 @@ class NitroUiControlledValue<T>(displayed: T) {
   /** The last `value` React sent, or `null` while uncontrolled. */
   var js: T? = null
 
+  /**
+   * The newest value a native interaction reached that has **not** been emitted.
+   *
+   * A continuous control sets this on every input sample and clears it when the
+   * frame tick emits it (`docs/architecture/core.md` §11). It belongs to the
+   * handshake rather than to the component because it is the one case where
+   * `jsEvents >= nativeEvents` is not enough: the count only advances when we
+   * emit, so while this is set native is ahead by a value JS cannot have seen -
+   * and accepting a write in that window paints the app's number for a frame
+   * before the interaction's own value is emitted under it.
+   */
+  var unreported: T? = null
+
   /** How many changes native emitted. */
   var nativeEvents: Int = 0
 
@@ -60,12 +73,13 @@ class NitroUiControlledValue<T>(displayed: T) {
   /**
    * Apply a pending React write. Returns whether [displayed] changed.
    *
-   * Writes with `jsEvents < nativeEvents` are stale (JS has not seen our newest
-   * event yet) and are dropped.
+   * A write is dropped when `jsEvents < nativeEvents` (stale: JS has not seen our
+   * newest event yet) and while [unreported] is set (native holds a value JS has
+   * not been told about). Neither is *queued*: the next commit decides again.
    */
   fun reconcile(): Boolean {
     val pending = js ?: return false
-    if (jsEvents < nativeEvents || pending == displayed) {
+    if (unreported != null || jsEvents < nativeEvents || pending == displayed) {
       return false
     }
     displayed = pending

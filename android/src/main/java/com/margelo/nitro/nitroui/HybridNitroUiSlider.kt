@@ -69,12 +69,11 @@ internal class SliderModel : NitroUiModel() {
   var onSlidingStart: ((Double, Double) -> Unit)? = null
   var onSlidingComplete: ((Double, Double) -> Unit)? = null
 
-  /**
-   * The newest value reached during this drag that has not been emitted. Plain
-   * and unobserved on purpose: nothing renders it, and observing it would pay a
-   * snapshot write per touch sample for a field no composable reads.
-   */
-  var pending: Double? = null
+  // The un-emitted drag sample is NitroUiControlledValue.unreported - part of the
+  // handshake itself rather than a Slider field, so "a React write may not
+  // overtake a sample JS has not been told about" is one rule for every control
+  // (core.md §4, §11). It stays unobserved because nothing renders it: what the
+  // composable reads is [displayed], which [dragTo] also writes at sample time.
 
   /** Whether a drag is in flight. */
   var dragging = false
@@ -90,7 +89,7 @@ internal class SliderModel : NitroUiModel() {
   var dragGeneration = 0
     private set
 
-  private val frameCallback = Choreographer.FrameCallback { deliverPending() }
+  private val frameCallback = Choreographer.FrameCallback { deliverUnreported() }
 
   /** The value rule of [NitroUiSliderValue], applied to this Slider's range. */
   fun quantize(raw: Double): Double =
@@ -138,13 +137,13 @@ internal class SliderModel : NitroUiModel() {
     }
     val value = quantize(raw)
     displayed = value
-    pending = value
+    state.unreported = value
     startFramePump()
   }
 
   /** The finger lifted. The final value always reaches JS. */
   fun endDrag() {
-    deliverPending()
+    deliverUnreported()
     dragging = false
     stopFramePump()
     onSlidingComplete?.invoke(displayed, state.nativeEvents.toDouble())
@@ -156,7 +155,7 @@ internal class SliderModel : NitroUiModel() {
    * callback delivered to the wrong app.
    */
   fun cancelDrag() {
-    pending = null
+    state.unreported = null
     dragging = false
     stopFramePump()
     dragGeneration++
@@ -173,17 +172,18 @@ internal class SliderModel : NitroUiModel() {
   /**
    * The frame tick: one event for everything the finger did since the last one.
    *
-   * At most one post per tick and the callback removes itself when it runs, so
-   * this is a heartbeat only while a drag has something to report. It writes
-   * [state] and calls into JS, and writes no observed state: [displayed] already
-   * holds this value, written when the finger moved. Calling
+   * The callback removes itself when it runs, so this is a heartbeat only while a
+   * drag keeps sampling. It writes [state] and calls into JS, and writes no
+   * observed state: [displayed] already holds this value, written when the finger
+   * moved, and it can only hold it because no React write was applied in the
+   * meantime - [NitroUiControlledValue.unreported] refuses those. Calling
    * `Snapshot.sendApplyNotifications()` here would be wrong twice over - it
    * belongs to the props path ([NitroComposeHost.commit]), and there is nothing
    * in this batch for anyone to see.
    */
-  private fun deliverPending() {
-    val value = pending ?: return
-    pending = null
+  private fun deliverUnreported() {
+    val value = state.unreported ?: return
+    state.unreported = null
     // Exactly once per emitted event: this is what increments `nativeEvents`, and
     // JS echoes the count back, so an increment nobody emitted would leave the
     // handshake permanently behind and freeze every later `value` write.
@@ -203,6 +203,7 @@ internal class SliderModel : NitroUiModel() {
     sizingKey = ""
     state.displayed = 0.0
     state.js = null
+    state.unreported = null
     state.nativeEvents = 0
     state.jsEvents = 0
     defaultValue = null

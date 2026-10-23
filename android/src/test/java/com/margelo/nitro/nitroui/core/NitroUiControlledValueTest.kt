@@ -104,4 +104,47 @@ class NitroUiControlledValueTest {
     assertTrue(value.reconcile())
     assertEquals(0.5, value.displayed, 0.0)
   }
+
+  /**
+   * A continuous control holds the newest input sample until the frame tick emits
+   * it (Slider, `core.md` §11). The counts cannot see that: [nativeEvents] only
+   * advances when we emit, so a parent commit in that window looks fully echoed
+   * while native is actually ahead by an unreported value. Accepting it paints the
+   * app's number for a frame and then emits the interaction's own value under it -
+   * the thumb jumping back mid-drag, found on iOS and closed on both platforms.
+   */
+  @Test
+  fun writeIsRefusedWhileNativeHasAnUnreportedSample() {
+    val value = NitroUiControlledValue(0.0)
+    value.js = 0.0
+    assertEquals("a drag emits its first change", 1, value.user(0.4))
+    value.unreported = 0.45
+    value.js = 0.2
+    value.jsEvents = 1
+    assertTrue("the counts look caught up", value.jsEvents >= value.nativeEvents)
+    assertFalse("a write is refused while native holds an un-emitted sample", value.reconcile())
+    assertEquals("what was last emitted is still what is shown", 0.4, value.displayed, 0.0)
+    value.unreported = null
+    assertTrue("once the sample is emitted, the write is judged by the count alone", value.reconcile())
+    assertEquals(0.2, value.displayed, 0.0)
+  }
+
+  /**
+   * The guard is narrow, not a drag-mode switch: an un-emitted sample does not
+   * stop an interaction from taking effect, it only defers React's write.
+   */
+  @Test
+  fun unreportedSampleRefusesWritesAndNothingElse() {
+    val value = NitroUiControlledValue(0.0)
+    value.unreported = 5.0
+    assertEquals(1, value.user(7.0))
+    assertEquals("an interaction is not blocked by an un-emitted sample", 7.0, value.displayed, 0.0)
+    assertFalse("with nothing from React there is still nothing to apply", value.reconcile())
+    value.js = 9.0
+    value.jsEvents = 1
+    assertFalse("an un-emitted sample still refuses the write", value.reconcile())
+    value.unreported = null
+    assertTrue("and clearing it lets the write through", value.reconcile())
+    assertEquals(9.0, value.displayed, 0.0)
+  }
 }

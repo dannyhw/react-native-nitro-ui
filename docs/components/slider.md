@@ -147,8 +147,11 @@ only (`docs/architecture/sizing.md` §5), asserted on both platforms by
   written while a drag is in flight goes through the event-count handshake
   (core.md §4): writes newer than the last event native emitted are applied — they
   are the app deliberately taking control — and stale ones are dropped so they
-  cannot yank the thumb out from under the finger. Release always hands the final
-  value back.
+  cannot yank the thumb out from under the finger. A write is dropped during the
+  fraction of a frame in which native holds a touch sample it has not emitted yet:
+  JS cannot have seen that value, so accepting a write there would paint the app's
+  number and then put the dragged value back under it. Release always hands the
+  final value back.
 - **A rejected change reverts.** If `onValueChange` does not update state, the
   event count still advanced, so a commit happens and native repaints the value
   React kept.
