@@ -97,10 +97,17 @@ export async function ensureMetro({ port, logFile }) {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, RCT_METRO_PORT: String(port) },
   });
-  child.stdout.pipe(out);
-  child.stderr.pipe(out);
+  // `end: false` matters: `pipe()` closes the destination when the source ends,
+  // and Metro's death (the cleanup below SIGTERMs it) ends both sources. Left to
+  // default, the exit handler below then writes to an ended stream, the
+  // WriteStream emits 'error' with no listener, and the whole suite exits 1
+  // *after* printing its verdict - a passing run looks like a failed one.
+  child.stdout.pipe(out, { end: false });
+  child.stderr.pipe(out, { end: false });
   child.on('exit', (code) => {
-    out.write(`\nmetro exited with code ${String(code)}\n`);
+    if (!out.writableEnded) {
+      out.write(`\nmetro exited with code ${String(code)}\n`);
+    }
     out.end();
   });
 
