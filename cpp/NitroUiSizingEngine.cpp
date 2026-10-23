@@ -312,6 +312,21 @@ namespace margelo::nitro::nitroui {
     // Registry entries whose state has died (an unmounted or recycled node).
     std::vector<int64_t> dead{};
     int32_t remaining = kImmediateBudgetPerTurn;
+    /**
+     * The pushes to issue, collected under the lock and run after it is dropped.
+     *
+     * A push is a Fabric state update, and a state update can reach this file
+     * again on the same thread: the resulting commit re-layouts, `measureContent`
+     * calls `measure`, and `std::shared_mutex` is not recursive - holding the lock
+     * across a push is a deadlock waiting for the layout to be synchronous.
+     */
+    struct Pending {
+      NitroUiPushFn push;
+      NitroUiStateRef state;
+      NitroUiMeasuredSize measured;
+      bool immediate;
+    };
+    std::vector<Pending> pending{};
 
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
@@ -378,13 +393,17 @@ namespace margelo::nitro::nitroui {
           changed = true;
           const bool immediate = remaining > 0;
           remaining -= 1;
-          targetInstance->second.push(targetState, measured, immediate);
+          pending.push_back(Pending{targetInstance->second.push, targetState, measured, immediate});
         }
       }
       for (const int64_t instanceId: dead) {
         registry_.erase(instanceId);
         ledger_.erase(instanceId);
       }
+    }
+
+    for (const auto& entry: pending) {
+      entry.push(entry.state, entry.measured, entry.immediate);
     }
     return changed;
   }
