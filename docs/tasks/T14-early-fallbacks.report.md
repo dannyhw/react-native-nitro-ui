@@ -224,9 +224,11 @@ Android runs all passed, so it is a low-rate race and it is routed below rather 
 - So "harness green on both platforms" is met by T14 and not by `main`: the one red is G1's iOS assertion,
   and it is theirs to fix.
 - No bench run (correctness fix; the harness frame evidence above is the evidence).
-- Two edits landed after the device runs and change no behaviour: this file, and one comment line in
-  `ios/core/NitroUiDeclaredFallbacksLoader.m` whose `nitrogen/generated/...` reference named a line that
-  moved.
+- What landed after the device runs changes no behaviour: the extra cold-evidence run above, this file, one
+  comment line in `ios/core/NitroUiDeclaredFallbacksLoader.m` whose `nitrogen/generated/...` reference named
+  a line that moved (`9d2f63c`, after which `bun run check` is green — `/tmp/t14-f3-check-final.log`), and
+  the `STATUS.md` / `FOLLOWUPS.md` lines, which are markdown: `prettier --check .` is the only step of the
+  gate that reads them.
 
 ## Files changed
 
