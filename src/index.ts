@@ -35,3 +35,9 @@ export {
   type ButtonSize,
   type ButtonVariant,
 } from './components/Button/Button';
+
+export {
+  Progress,
+  type ProgressProps,
+  type ProgressVariant,
+} from './components/Progress/Progress';

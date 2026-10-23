@@ -1,4 +1,11 @@
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 
 import type { BenchListProps } from '../types';
 import { buttonTitle, onValueChange, onPress, range, rowStyle } from './shared';
@@ -53,6 +60,28 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
           <View
             key={index}
             testID={`bench-rn-core-slider-${String(index)}`}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'progress') {
+    // RN core has no progress bar. What it does have is `ActivityIndicator`,
+    // the control every RN app reaches for when something is loading, and the
+    // G3 brief asks for it as the floor. Two honest consequences, both reported:
+    // it is *indeterminate and circular* while the other arms render a linear
+    // determinate bar, and it has no value, so `update.progress` flips nothing
+    // on it (`NO_MOUNT_SIGNAL` in `plan.ts`). A ratio against it therefore reads
+    // "what does a native progress bar cost over an RN spinner", not "over a
+    // peer progress bar" - the `@expo/ui` arms answer the peer question.
+    return (
+      <>
+        {range(n).map((index) => (
+          <ActivityIndicator
+            key={index}
+            testID={`bench-rn-core-progress-${String(index)}`}
+            animating={true}
             style={style}
           />
         ))}
