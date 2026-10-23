@@ -17,6 +17,7 @@ export interface NitroUiCore extends HybridObject<{
     drainPerf(): NitroUiPerfEvent[];
     drainSizingTrace(): NitroUiSizingTraceEvent[];
     invalidateSizingEnvironment(): void;
+    nextSizingId(): number;
     now(): number;
     prewarmSizing(componentNames: string[]): number;
     seedSizingSize(componentName: string, sizingKey: string, width: number, height: number): void;
@@ -31,6 +32,7 @@ export const nitroUiCore: {
     setPerfEnabled(enabled: boolean): void;
     drainPerf(): NitroUiPerfEvent[];
     sizingStats(): NitroUiSizingStats;
+    nextSizingId(): number;
     seedSizingSize(componentName: string, sizingKey: string, width: number, height: number): void;
     invalidateSizingEnvironment(): void;
     prewarmSizing(componentNames: readonly string[]): number;
@@ -48,20 +50,23 @@ export interface NitroUiPerfEvent {
 // @public
 export interface NitroUiSizingStats {
     cachedSizes: number;
+    changedFlushes: number;
     // (undocumented)
     correctionsBatched: number;
     correctionsImmediate: number;
     environmentEpoch: number;
     flushes: number;
     lastFlushMs: number;
+    ledgerEntries: number;
     // (undocumented)
     maxFlushMs: number;
     measurements: number;
     // (undocumented)
+    registryEntries: number;
+    reportsConfirmed: number;
+    // (undocumented)
     reportsDropped: number;
     reportsQueued: number;
-    // (undocumented)
-    staleFramesSkipped: number;
     traceDropped: number;
 }
 
@@ -99,6 +104,8 @@ export interface SwitchProps extends ViewProps {
     }) => void) | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;
+    // @internal
+    nuiTestWidth?: number | null | undefined;
     onValueChange?: ((value: boolean) => void) | undefined;
     tintColor?: ColorValue | undefined;
     value?: boolean | undefined;
