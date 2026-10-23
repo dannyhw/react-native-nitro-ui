@@ -239,3 +239,108 @@ of main's `NitroSwiftUIHost.swift`.
 - Re-measure the iOS `mounted`/UI CPU gap with `sizingStats()` deltas per launch to confirm F2's
   mechanism.
 - Per-(variant,size) fallbacks once T14 or `prewarmKeys` land.
+
+## Fix round 1 verification
+
+Tip `4b1cabf`. I read `449524f` (F1), `4b1cabf` (docs), `c186e3c` (merge resolution only) and
+`fbafb2d` (manifest). No devices were used. The harness claims (iOS 70/70, Android 70/70, and the
+red/literal/no-token runs) agree with the implementer's `/tmp/G2r1-*.log` files, and the four
+native files in `/tmp/G2r1-final-shape/` are byte-identical to the tip.
+
+### Verdict: **MERGE-AFTER-SMALL-FIXES** (doc only, so per D19 no re-review is needed)
+
+1. `G2-button.report.md:482` (the Bench row in "Gates on the final tip") is false. It says
+   "F1 changes the report path only for a key the engine cannot answer, and no bench cell changes
+   a configuration mid-iteration". But `update.button` toggles `title` between `'Save'` and
+   `'Saved'` (`shared.ts:136`), and `title` is in the key, so every measured update is a key change
+   that moves the box. The armed reset fires on **warm** key changes too, whenever the box moves.
+   On every update, each instance then sends one more report that the dedupe would otherwise have
+   skipped. On iOS that is one extra engine call. On Android it is one extra JNI report plus a
+   `scheduleSizingFlush()` (a pre-draw listener and `postInvalidateOnAnimation()`). The engine
+   drops the report, so no correction results. Fix: reword the row to say this, and say the
+   `update.button` numbers predate it.
+2. `G2-button.report.md:439` says iOS clears `sizingKeyChangePending` in `prepareForRecycle()`.
+   The code clears it in `drop()` (`NitroSwiftUIHost.swift:337`). The behaviour is right, because
+   the generated `.mm` runs `notifyOnDropView` before every `prepareForRecycle`. Fix: correct the
+   sentence.
+
+### F1: correct on both platforms
+
+- **iOS.** The setter arms the flag. `commit()` measures, and for a same-size change the dedupe
+  correctly skips that report. The engine then lays the new key out at the fallback, which moves
+  the bounds. In `layoutSubviews`, the bounds-change branch consumes the flag, clears
+  `lastReportedSize`, and runs the measure that `contentSizeNeedsMeasure` already requested. The
+  report then goes out and the box is corrected.
+- **Android.** `onLayout(changed)` resets the dedupe and bumps `remeasureToken`, which marks the
+  measure block dirty. The next measure is unbounded for `intrinsic`, so it reports the real size
+  even inside the fallback box. That rules out the warm prop-time report the literal fix produced,
+  and `literal-android.log` (`expected 4 to be +0` ×2) supports the reason given for deviating.
+- **Hot path (Switch, Slider): no extra work.** Only `HybridNitroUiButton` calls
+  `noteSizingKeyChanged()`, on both platforms, so for other controls the flag never arms and the
+  token is never written. Reading a state that is never written invalidates nothing. What remains
+  is one snapshot-read observation per measure, which is negligible. `IntState` is the same object
+  across recompositions, so the new parameter of `NitroUiMeasuredRoot` adds no recomposition.
+- **Recycle and drop.** On Android the flag is cleared in `prepareForRecycle()`; `drop()` disposes
+  the composition, and a dropped host is either dead or recycled next. On iOS it is cleared in
+  `drop()`, which always runs first. `releaseSizingInstance()` clears `lastReportedSize` on both
+  platforms. The `contentSize == nil` guard keeps a fresh or recycled mount from arming.
+- **No stuck state at the fallback.** A key change whose box does not move leaves the flag armed
+  until the next bounds change (iOS) or the next size or position change (Android). The cost is
+  one later report that the engine drops. For the fallback to be stuck, the box must have moved,
+  and any move consumes the flag. One edge case: the old size equals the fallback exactly. Then
+  nothing moves, the box is already right, and the only loss is that this instance does not seed
+  the new key's cache entry.
+
+### F5: merge resolution is right
+
+- Button uses main's scenario encoding: `mount.button`, `update.button` and `memory.button` in
+  `quick`, plus the full-plan cells and `leak.button`. `'button'` is in `ComponentName` and in the
+  `ScenarioName` template.
+- The four arms dispatch on `component`. `git grep` finds no `controlImplementation`,
+  `isControlImplementation`, `COMPONENTS` or `-button` arm names outside docs and the untracked
+  results.
+- All 5 gate tests are ported to the scenario form (`bench-gate.test.js:915-1045`).
+- `NitroUiDeclaredFallbacks.registerAll()` registers `HybridNitroUiButton.declareFallback()` on
+  both platforms with the right per-OS numbers: iOS `77×35` pt and Android `91×48` dp, both
+  `intrinsic` and both named `"NitroUiButton"`. `init` stays as the backstop, the Android
+  `AtomicBoolean` and the Swift lazy static make the call idempotent, and the stale "0×0 first
+  Button" comments are gone.
+- `nitro-ui.sizing.json` has all three components.
+- **Manifest (`fbafb2d`):** `etc/package-files.txt` is a strict superset of main's. Nothing of
+  main's is missing, and every extra line is a Button source or a generated Button output.
+- Against main, G2 touches `ios/core`, `android/.../core` and `cpp` only for F1 and the
+  registration line.
+
+### F2–F4: done and true
+
+- **F2:** rewritten as a hypothesis, with a `sizingStats()` follow-up, and the "this is where
+  3.1–3.45× goes" claim is gone.
+- **F3:** the three cells are labelled `probe-suspect`, and the report says "no gate metric is
+  demonstrably met".
+- **F4:** the title row is reworded and `button.md` is restated per configuration. The line refs
+  `Button.tsx:126-133`, `:215` and `:146` match the source.
+
+### Gate
+
+`bun run check` on `4b1cabf`: **exit 0**. That includes 117/117 jest (33 `bench-gate`), native
+plus ASan, `perf:renders`, no nitrogen drift and the manifest (251 files). The tree was clean
+afterwards.
+
+### FIX2 (iOS controlled Switch at 0 width after a `value` update)
+
+- **No conflict.** G2's iOS change only acts when the flag is armed, and only Button arms it.
+  Switch's behaviour is unchanged.
+- **Related family.** Both problems are a box that disagrees with the control while the host stays
+  silent. A Switch box at width 0 fails `layoutSubviews`' `bounds.width > 0` guard, so it never
+  re-measures, and the same-size dedupe would swallow a repeat report anyway.
+- **Textual overlap only.** If FIX2 resets `lastReportedSize` or reports again whenever the box
+  diverges, it edits the same `layoutSubviews` branch, and a general rule like that could replace
+  G2's key-change flag. Whichever lands second should rebase on the other.
+
+### Follow-ups (one line each)
+
+- `G2-button.report.md:262` cites `NitroSwiftUIHost.swift:165-172`, which is now `:166-181`.
+- Android: a warm key change that moves the box costs one redundant report and flush schedule per
+  instance. Could skip when the new box already equals the last report.
+- Android `HybridNitroUiButton.kt` fallback KDoc says "five-letter title" but measured "Cancel"
+  (six), and says `nitroui_t02`, while the iOS comment says six-letter.

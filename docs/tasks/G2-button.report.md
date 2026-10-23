@@ -433,6 +433,7 @@ so the hosts share one rule; iOS is not obliged to, and is measured to pass eith
   (guarded: an instance that has never measured has reported nothing to reset), and
   `layoutSubviews()` consumes it inside the existing `hostedView.frame != bounds` branch,
   where the measure is already armed, clearing `lastReportedSize` alongside it. Cleared in
+  `drop()` (`ios/core/NitroSwiftUIHost.swift:337`), which the generated `.mm` always calls before
   `prepareForRecycle()`.
 - **Android** — the same flag, consumed in `onLayout` under `changed`. `changed` matters
   twice: it proves the engine answered, and a key change that moved no box has nothing to
@@ -479,7 +480,7 @@ configuration, which is precisely what makes the dedupe apply.
 | `bun run test:native:android` | **36 tests, 0 failures** — `NitroUiSliderValueTest` 12, `SliderModelTest` 12, `NitroUiControlledValueTest` 9, `NitroUiWeakKeyTest` 3 |
 | iOS harness | **70 passed, 5 suites** (Button 12, Switch, Slider, Sizing, ColdSizing) on iPhone 17, app 16:30 — newer than every iOS source, and carrying the fix (`/tmp/G2r1-final-ios-full.log`); the same 70 also passed on an earlier rebuild (`/tmp/G2r1-ios-full.log`) |
 | Android harness | **70 passed, 5 suites** on `nitroui_t01`, APK 16:30 — newer than every Android source (`/tmp/G2r1-final-android-full.log`); also 70 on an earlier build (`/tmp/G2r1-android-full.log`) |
-| Bench | not re-run — F1 changes the report path only for a key the engine cannot answer, and no bench cell changes a configuration mid-iteration; numbers stay labelled pre-merge harness |
+| Bench | not re-run. Correction (verifier): `update.button` toggles `title` `'Save'`↔`'Saved'` (`bench/src/implementations/shared.ts:136`), so every measured update is a key change and F1 now adds one extra report per instance per update (iOS: one engine call; Android: one JNI report + a scheduled flush; the engine drops it, no correction). The `update.button` numbers were measured before F1 and do not include that cost |
 
 One iOS `Sizing` run in this round went red — `intrinsic (T11) › lays a cold Switch out at
 the size the control measures`, `expect(content).not.toBeNull()` at
