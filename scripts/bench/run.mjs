@@ -139,6 +139,10 @@ function collectMachine(platform, device) {
     osVersion: os.version(),
     arch: os.arch(),
     cpuCount,
+    // D15: device keys stay class-level, so the CPU model is what tells two
+    // machines claiming the same `android35-emu-pixel9` / `ios27-sim-iphone17`
+    // key apart when a baseline is being compared across desks or with CI.
+    cpuModel: os.cpus()[0]?.model ?? null,
     loadavg1: loadavg[0] ?? null,
     loadavg5: loadavg[1] ?? null,
     totalMemoryGb: Math.round((os.totalmem() / 1024 ** 3) * 10) / 10,

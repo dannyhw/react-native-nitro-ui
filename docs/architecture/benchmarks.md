@@ -72,6 +72,7 @@ Useful flags:
 | `--update-baseline`   | Record this run as the baseline (refuses dirty/broken/busy runs) |
 | `--force`             | Override a `--update-baseline` refusal (local experiments only)  |
 | `--shutdown`          | Shut down a device the runner itself booted when it finishes     |
+| `--perf-marks`        | Diagnostic run: turn on the library's own native perf marks    |
 
 The runner restores Android animation scales it reset, and `--shutdown` covers
 the "I booted it, I clean it up" case; a device that was already up is left
@@ -84,7 +85,7 @@ device.
 Results files are named `<sha>[-dirty]-<platform>-<utc-stamp>.json`, so two runs
 of one commit do not overwrite each other and a dirty-tree run can never be
 mistaken for the clean commit's data. `--compare <sha>` resolves to the newest
-**clean** file for that sha.
+**clean** file for that sha (never a `-marks.json`, see below).
 
 ## What is measured
 
@@ -114,6 +115,39 @@ Scenarios: `mount` (N = 1/50/200), `update` (N = 1/50, K flips awaited per
 frame), `memory` (N = 200, after GC), `leak` (repeated mount/unmount of N = 200).
 Plans: `quick` = `mount:50`, `update:50`, `memory:200`; `full` adds N = 1/200 and
 the leak slope.
+
+### Native perf marks (`--perf-marks`)
+
+`BenchProbe` measures the black box. The library additionally reports what it
+knows about itself: a host with `nuiPerfId >= 0` records `propsApplied` (props
+landed on the UI thread) and `firstFrame` (the hosted content drew), in the same
+D1 clock base, and `nitroUiCore.drainPerf()` takes them
+(`docs/architecture/core.md` SS8). Neither mark is a GPU-completed frame, so they
+explain a `UI CPU/op` or `presented` number rather than replacing one.
+
+```sh
+bun bench --platform ios --plan quick --perf-marks --only nitro-ui
+```
+
+That launch prints a **Native perf marks** row per cell: marks per op, marks per
+instance, whether anything drew, when props landed, when it drew, and the
+props-to-draw span. Reading it:
+
+- `propsApplied per instance` **should be 1.00** per React commit. Two means
+  something commits twice per flip, and the fix is in the wrapper, not the bench.
+- `props -> draw` is the hosted runtime's own render cost. If it is most of the
+  gap to `rn-core`, the hosting layer is the cost; if it is small, the cost is in
+  Fabric/Nitro plumbing around it.
+- `firstFrame` in `mount` is expected; in `update` it is 0, because the content
+  already drew.
+
+It is **opt-in and never gated**, because it is not free: a mark is a
+mutex-guarded ring write on the UI thread and `drainPerf()` allocates on the JS
+thread. The bench therefore (a) only passes `nuiPerfId` when the launch asked for
+marks, and (b) drains **between** iterations, outside every CPU bracket. Such a
+run is named `-marks.json`, is excluded as a `--compare` base, and
+`--update-baseline` refuses it. Only `nitro-ui` has marks; the flag narrows the
+matrix to that arm rather than burning launches that report nothing.
 
 ## Reading the numbers honestly
 
@@ -205,6 +239,11 @@ clean tree and an idle machine; `--update-baseline` refuses otherwise and prints
 why (dirty tree, `problems`, load average over 0.5 x cores, missing load
 average).
 
+Every run also records what machine produced it - hostname, core count, CPU
+model (`os.cpus()[0].model`), load averages, RAM, Xcode version or Android image
+- because D15 keeps device *keys* class-level (`android35-emu-pixel9` is this
+desk's AVD and CI's) and uses the recorded CPU to tell same-class machines apart.
+
 ## Render counts (hard gate)
 
 `bun run perf:renders` runs Reassure over `src/**/*.perf-test.tsx`, inside
@@ -290,13 +329,20 @@ instance of both.)
 4. Add `src/<Component>.perf-test.tsx` per the scenario contract above and commit
    the recorded render baseline.
 5. Do not gate on absolute milliseconds. Report and compare ratios to `rn-core`.
+6. A component's **first** `nitro-ui` arm cannot fail a gate - there is no prior
+   ratio to regress against (D15). Its report must show ratios to `rn-core` *and*
+   to both `expo-ui-*` arms on `mount presented`, UI CPU and memory, and a miss
+   against the D15 target (`<= 1.0x expo-ui-shared-host`, well below
+   `expo-ui-host-per-control`) needs an explanation - a `--perf-marks` run is how
+   to write one - plus a follow-up item.
 
-The `nitro-ui` arm is live: `bench/src/implementations/nitroUi.tsx` imports from
-`react-native-nitro-ui` through `bench/tsconfig.json`'s `paths` (and
-`bench/metro.config.js`'s `extraNodeModules`), and reports itself *skipped* with a
-reason while the package does not export the component yet, so nobody benchmarks
-a stub by accident. When T10's `Switch` ships, deleting the runtime lookup in
-favour of `import { Switch } from 'react-native-nitro-ui'` is the whole change.
+The `nitro-ui` arm is live: `bench/src/implementations/nitroUi.tsx` is the only
+file that renders the library (a named `import { Switch } from
+'react-native-nitro-ui'`, typechecked by `bun run bench:typecheck` through
+`bench/tsconfig.json`'s `paths`, which mirrors Metro's `extraNodeModules`). Before
+T10 exported a component the arm resolved `Switch` at runtime and reported itself
+*skipped* with a reason, so nobody benchmarked a stub; that lookup is gone, and an
+arm for a component the library does not export is now a build error instead.
 Every arm must do **equivalent work**: RN core `Switch`, `@expo/ui` `Toggle`
 (`labelsHidden()`, no label text) and the nitro-ui `Switch` are all a bare
 switch, because a SwiftUI `Text` next to the control is a real cost that belongs
@@ -326,7 +372,8 @@ Raw results are uploaded as artifacts instead of going into git.
 | `new com.margelo.nitro.nitroui.<word>()` in `PackageList.java` | autolinking regex-matches the ReactPackage declaration in `android/src/main/.../NitroUiPackage.kt`; prose that reads like a class declaration gets picked up. Delete the generated `bench/android` (`--prebuild`) after fixing the wording. `bun run autolinking:check` covers it. |
 | `cmd: Can't find service: settings` right after boot | The runner retries; if it persists, the emulator is still booting. |
 | `mount` crashes on iOS with a promise mutex abort | A freed frame-context; contexts are `shared_ptr` captured by both the display-link and fallback timers. |
-| `presented` missing on most samples (`missingPresented` high) | The native capture did not fire: the frame-metrics listener needs a focused window, and both platforms time out to `-1` after 2 s. Check the app was in the foreground, then re-run - the sanity counters tell you the metric is broken rather than slow. |
+| `presented` missing on most samples (`missingPresented` high) | The native capture did not fire: the frame-metrics listener needs a focused window, and both platforms give up after 2 s (`FRAME_TIMEOUT_MS` in the Android probe) and answer `-1`. Check the app was in the foreground, then re-run - the sanity counters tell you the metric is broken rather than slow. If the machine is running several emulators at once, the emulator's own frames can exceed that window (`HWUI: Davey! duration=1500ms` in logcat), and then the loss is *selective*: `mount` cells lose it for the arms with the heaviest per-iteration UI work, `update` cells keep it. Read such a run on `UI CPU/op` + a `--perf-marks` pass. |
+| Android launch ~5-10x slower than usual, frame signals missing | The AVD may be booting without a host GPU (`hw.gpu.enabled=no` in `~/.android/avd/<name>.avd/config.ini` - `avdmanager create` can leave it, and the runner does not boot Android devices, so nothing corrects it). Boot it yourself with `emulator -avd <name> -port <port> -gpu host`. |
 | `--update-baseline` refused | The tree was dirty, the run had `problems`, or `loadavg1` was over 0.5 x the core count. Wait for a quiet machine; `--force` is for experiments only. |
 | `--check` says no baseline | Baselines are per canonical device (`bench/baselines/README.md`). Use `--compare <ref>` on other hardware. |
 | Stale native code despite editing sources | `build.mjs` rebuilds when any source is newer than the artifact; `--prebuild` forces a full CNG regen. |
