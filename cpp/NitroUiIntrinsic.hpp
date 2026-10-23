@@ -218,6 +218,18 @@ namespace margelo::nitro::nitroui {
      * a Switch was merely toggled. Without this, every props update would dirty
      * Yoga's measurement of every instance (`YogaLayoutableShadowNode` returns
      * `true` by default) and throw away the cached answer.
+     *
+     * One prop turn is exempt: an instance the engine has already corrected
+     * (FIX2, D20, review S1 against `requiresFreshMeasure`). The correction commits
+     * as a new `State`, but React builds its next props clone without `.state` and
+     * copies the state of *its own* revision - the one made before the correction -
+     * which still carries the old size in both its Yoga measurement cache and its
+     * `layoutMetrics_`. RN would normally heal that through `progressState`, and our
+     * `adopt` defeats it: it mints a fresh, never-obsolete `State` on every props
+     * change, so the stale one is committed as the family's most recent. A clean
+     * clone is therefore committed at the superseded size with `measureContent`
+     * never reached to notice. Trusting React's revision there is what put a
+     * controlled Switch's `Toggle` outside the window (T15 Finding 1).
      */
     bool shouldNewRevisionDirtyMeasurement(const ShadowNode& /*sourceShadowNode*/, const ShadowNodeFragment& fragment) const override {
       if (fragment.state != nullptr) {
@@ -246,8 +258,10 @@ namespace margelo::nitro::nitroui {
       if (previous == nullptr || incoming == nullptr) {
         return true;
       }
-      return detail::sizingIdOf(incoming->nuiSizingId.get()) != detail::sizingIdOf(previous->nuiSizingId.get()) ||
+      const int64_t instanceId = detail::sizingIdOf(incoming->nuiSizingId.get());
+      const bool newConfiguration = instanceId != detail::sizingIdOf(previous->nuiSizingId.get()) ||
           detail::sizingKeyOf(incoming->nuiSizingKey.get()) != detail::sizingKeyOf(previous->nuiSizingKey.get());
+      return newConfiguration || NitroUiSizingEngine::shared().requiresFreshMeasure(instanceId);
     }
   };
 
