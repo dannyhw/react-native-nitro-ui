@@ -34,13 +34,17 @@ target_sources(
   ../nitrogen/generated/android/nitrouiOnLoad.cpp
   # Shared Nitrogen C++ sources
   ../nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
   # Android-specific Nitrogen C++ sources
-  ../nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.cpp
-  ../nitrogen/generated/android/c++/JVariant_Boolean_NullType.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_Double.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_String.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.cpp
+  ../nitrogen/generated/android/c++/JVariant_Boolean_NullType.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.cpp
 )
 

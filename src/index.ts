@@ -27,3 +27,10 @@ export type {
 } from './NitroUiCore.nitro';
 
 export { Switch, type SwitchProps } from './components/Switch/Switch';
+
+export {
+  Button,
+  type ButtonProps,
+  type ButtonSize,
+  type ButtonVariant,
+} from './components/Button/Button';

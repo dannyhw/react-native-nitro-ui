@@ -1,0 +1,21 @@
+{
+  "uiViewClassName": "NitroUiButton",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "title": true,
+    "variant": true,
+    "size": true,
+    "disabled": true,
+    "tintColor": true,
+    "systemImage": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onPress": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}
