@@ -11,9 +11,10 @@ import {
 } from 'react-native';
 import ButtonScreen from './ButtonScreen';
 import SliderScreen from './SliderScreen';
+import SegmentedControlScreen from './SegmentedControlScreen';
 import SwitchScreen from './SwitchScreen';
 
-type Screen = 'switch' | 'slider' | 'button';
+type Screen = 'switch' | 'slider' | 'button' | 'segmented';
 
 /**
  * Which screen a cold launch shows.
@@ -43,6 +44,7 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'switch', label: 'Switch' },
   { id: 'slider', label: 'Slider' },
   { id: 'button', label: 'Button' },
+  { id: 'segmented', label: 'Segments' },
 ];
 
 /**
@@ -86,8 +88,10 @@ export default function App() {
           <SwitchScreen />
         ) : screen === 'slider' ? (
           <SliderScreen />
-        ) : (
+        ) : screen === 'button' ? (
           <ButtonScreen />
+        ) : (
+          <SegmentedControlScreen />
         )}
       </View>
     </View>
