@@ -71,6 +71,18 @@ run_case "sizing.test (C++)" \
       '$ROOT/cpp/NitroUiSizingEngine.cpp' -o '$OUT/sizing' && '$OUT/sizing'
   "
 
+# The Slider's value rule: clamping, step snapping and the float tidying that
+# keeps native's displayed value bit-for-bit equal to React's. Same reason the
+# handshake is here rather than only on a device - it is pure arithmetic that an
+# on-device test would only catch by accident, and it is duplicated in Kotlin.
+run_case "slider-value.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/ios/components/Slider/NitroUiSliderValue.swift' \
+      '$ROOT/scripts/native-tests/slider-value.test.swift' \
+      -o '$OUT/slider-value' && '$OUT/slider-value'
+  "
+
 # The same test again under the sanitizers, because the properties worth checking
 # here are lifetime and UB rather than arithmetic: a correction is handed to a
 # push that may run it later, and the engine's maps are walked while being
