@@ -89,6 +89,18 @@ abstract class HybridNitroUiSwitchSpec: HybridView() {
     set(value) {
       onValueChange = value?.let { it }
     }
+  
+  @get:DoNotStrip
+  @get:Keep
+  @set:DoNotStrip
+  @set:Keep
+  abstract var nuiSizingKey: String
+  
+  @get:DoNotStrip
+  @get:Keep
+  @set:DoNotStrip
+  @set:Keep
+  abstract var nuiSizingId: Double
 
   // Methods
   @DoNotStrip

@@ -19,6 +19,10 @@ final class SwitchModel: NitroUiModel {
   var tint: UIColor?
   var testID: String?
   var accessibilityLabel: String?
+  /// The size configuration React sent (empty for a Switch today). Stored for
+  /// symmetry with the other props; the sizing engine reads the key out of Fabric
+  /// state itself, so nothing native looks at this.
+  var sizingKey = ""
   /// `onValueChange`, wired through a stable JS callback.
   var onChange: ((_ value: Bool, _ eventCount: Double) -> Void)?
 
@@ -92,6 +96,24 @@ private struct OptionalAccessibility: ViewModifier {
 final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
   private let host: NitroSwiftUIHost<SwitchContent>
 
+  /// This component's name in the sizing engine: `HybridNitroUiSwitchComponentName`
+  /// in the generated C++, and `getName()` in the generated Kotlin.
+  private static let sizingComponentName = "NitroUiSwitch"
+
+  /// The size to lay a Switch out with before anything has been measured, in
+  /// points - the first Switch of an app's first launch. A measurement replaces
+  /// it on the first report, and a Switch has one configuration, so this is a
+  /// one-frame thing; it still has to be close, because SwiftUI paints outside a
+  /// box that is too small and leaves dead touch zones (docs/components/switch.md).
+  /// A `.switch` Toggle is 61x28 pt from iOS 26 and 51x31 pt before it - the same
+  /// OS check the JS wrapper carried until sizing became native.
+  private static let declaresFallback: Bool = {
+    let modern = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
+    let size = modern ? (width: 61.0, height: 28.0) : (width: 51.0, height: 31.0)
+    NitroUiSizing.setFallback(sizingComponentName, size.width, size.height, NitroUiSizingPolicy.intrinsic.rawValue)
+    return true
+  }()
+
   /// The Nitro `view` - created once here and never replaced.
   override init() {
     host = NitroSwiftUIHost(model: SwitchModel())
@@ -103,6 +125,10 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     // `sizeThatFits` per bounds or trait change, not per commit, and nothing for
     // components that opt out.
     host.wantsContentSize = true
+    host.sizingPolicy = .intrinsic
+    // A Swift static is lazy and thread-safe, so this runs once - on the first
+    // Switch, before any of them can be measured.
+    _ = Self.declaresFallback
   }
 
   var view: NitroSwiftUIHost<SwitchContent> {
@@ -204,6 +230,16 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     set { host.perfInstanceId = newValue.asType(Double.self).map { Int32($0) } ?? nitroUiPerfNoInstance }
   }
 
+  var nuiSizingKey: String {
+    get { model.sizingKey }
+    set { model.sizingKey = newValue }
+  }
+
+  var nuiSizingId: Double {
+    get { Double(host.sizingInstanceId) }
+    set { host.sizingInstanceId = Int64(newValue) }
+  }
+
   var onValueChange: ((Bool, Double) -> Void)? {
     get { model.onChange }
     set { model.onChange = newValue }
@@ -228,6 +264,7 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     model.tint = nil
     model.testID = nil
     model.accessibilityLabel = nil
+    model.sizingKey = ""
     model.onChange = nil
     host.prepareForRecycle()
   }

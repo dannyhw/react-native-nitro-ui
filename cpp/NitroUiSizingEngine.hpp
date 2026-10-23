@@ -33,14 +33,15 @@ namespace margelo::nitro::nitroui {
   /**
    * A Fabric `State`, type-erased.
    *
-   * The engine never dereferences it: it keeps a weak reference and hands it back
-   * to the component's own typed push function. `void` instead of
+   * `const` all the way through: the engine never dereferences it, it keeps a weak
+   * reference and hands it back to the component's own typed push function, which
+   * casts to a `shared_ptr<const ConcreteState>`. `void` instead of
    * `react::State` is what keeps this header free of React Native headers, so the
    * engine compiles - and is tested - on the host (`bun run test:native`) and
    * never drags Fabric into a header Swift parses.
    */
-  using NitroUiStateRef = std::shared_ptr<void>;
-  using NitroUiWeakState = std::weak_ptr<void>;
+  using NitroUiStateRef = std::shared_ptr<const void>;
+  using NitroUiWeakState = std::weak_ptr<const void>;
 
   /**
    * Identity of one sizing configuration: (component, sizingKey, environment).

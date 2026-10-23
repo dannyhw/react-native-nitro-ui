@@ -129,6 +129,19 @@ namespace margelo::nitro::nitroui {
     inline void setOnValueChange(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& onValueChange) noexcept override {
       _swiftPart.setOnValueChange(onValueChange);
     }
+    inline std::string getNuiSizingKey() noexcept override {
+      auto __result = _swiftPart.getNuiSizingKey();
+      return __result;
+    }
+    inline void setNuiSizingKey(const std::string& nuiSizingKey) noexcept override {
+      _swiftPart.setNuiSizingKey(nuiSizingKey);
+    }
+    inline double getNuiSizingId() noexcept override {
+      return _swiftPart.getNuiSizingId();
+    }
+    inline void setNuiSizingId(double nuiSizingId) noexcept override {
+      _swiftPart.setNuiSizingId(std::forward<decltype(nuiSizingId)>(nuiSizingId));
+    }
 
   public:
     // Methods

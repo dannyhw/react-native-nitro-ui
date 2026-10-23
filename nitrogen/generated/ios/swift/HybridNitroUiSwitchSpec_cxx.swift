@@ -354,6 +354,28 @@ open class HybridNitroUiSwitchSpec_cxx {
       }()
     }
   }
+  
+  public final var nuiSizingKey: std.string {
+    @inline(__always)
+    get {
+      return std.string(self.__implementation.nuiSizingKey)
+    }
+    @inline(__always)
+    set {
+      self.__implementation.nuiSizingKey = String(newValue)
+    }
+  }
+  
+  public final var nuiSizingId: Double {
+    @inline(__always)
+    get {
+      return self.__implementation.nuiSizingId
+    }
+    @inline(__always)
+    set {
+      self.__implementation.nuiSizingId = newValue
+    }
+  }
 
   // Methods
   @inline(__always)

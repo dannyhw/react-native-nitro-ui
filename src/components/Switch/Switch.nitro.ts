@@ -4,6 +4,8 @@ import type {
   HybridViewProps,
 } from 'react-native-nitro-modules';
 
+import type { NitroUiIntrinsicProps } from '../../core/sizing.nitro';
+
 /**
  * Native props of the `NitroUiSwitch` Hybrid View.
  *
@@ -15,7 +17,8 @@ import type {
  * All props are applied in one batch between `beforeUpdate()` and
  * `afterUpdate()`; setters only store + mark dirty.
  */
-export interface NitroUiSwitchProps extends HybridViewProps {
+export interface NitroUiSwitchProps
+  extends HybridViewProps, NitroUiIntrinsicProps {
   /**
    * Controlled selected state, or `null` for an uncontrolled Switch - in which
    * case native keeps the displayed value and `defaultValue` seeded it.

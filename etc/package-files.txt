@@ -4,12 +4,15 @@ README.md
 android/CMakeLists.txt
 android/build.gradle
 android/src/main/AndroidManifest.xml
+android/src/main/cpp/NitroUiSizingJni.cpp
+android/src/main/cpp/NitroUiSizingJni.hpp
 android/src/main/cpp/cpp-adapter.cpp
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
+android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
 cpp/HybridNitroUiCore.cpp
 cpp/HybridNitroUiCore.hpp
 cpp/NitroUiIntrinsic.hpp
@@ -71,6 +74,7 @@ lib/typescript/src/core/useStableCallback.d.ts
 lib/typescript/src/core/useStableCallback.d.ts.map
 lib/typescript/src/index.d.ts
 lib/typescript/src/index.d.ts.map
+lib/typescript/src/tsdoc-metadata.json
 nitro-ui.sizing.json
 nitro.json
 nitrogen/generated/android/c++/JFunc_void_bool_double.hpp
@@ -131,6 +135,7 @@ src/components/Switch/NitroUiSwitchConfig.ts
 src/components/Switch/Switch.nitro.ts
 src/components/Switch/Switch.tsx
 src/core/index.ts
+src/core/sizing.nitro.ts
 src/core/useControlled.ts
 src/core/useProcessedColor.ts
 src/core/useStableCallback.ts

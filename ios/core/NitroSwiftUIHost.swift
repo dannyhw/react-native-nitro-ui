@@ -13,6 +13,10 @@ import UIKit
 
 // Perf ring buffer, shared with C++/Kotlin (cpp/core/NitroUiPerf.hpp).
 private typealias NitroUiPerf = margelo.nitro.nitroui.NitroUiPerf
+// Intrinsic sizing, shared with C++/Kotlin (cpp/core/NitroUiSizing.hpp).
+// Not `private`: a component needs it too, to declare its cache-miss
+// fallback.
+typealias NitroUiSizing = margelo.nitro.nitroui.NitroUiSizing
 
 /// Perf mark kinds, mirroring `NitroUiPerf::KIND_*`.
 enum NitroUiPerfKind: Int32 {
@@ -22,6 +26,17 @@ enum NitroUiPerfKind: Int32 {
 
 /// `nuiPerfId` of a view that never set one.
 let nitroUiPerfNoInstance: Int32 = -1
+
+/// How a component decides its size, mirroring `NitroUiSizing::POLICY_*`.
+enum NitroUiSizingPolicy: Int32 {
+  /// The control's fitting size *is* its size: Switch, Button, SegmentedControl.
+  case intrinsic = 0
+  /// Height is intrinsic, width is Yoga's box: Slider, linear Progress.
+  case fillWidth = 1
+}
+
+/// `nuiSizingId` of a view that never set one; mirrors `NitroUiSizing::NO_INSTANCE`.
+let nitroUiSizingNoInstance: Int64 = 0
 
 /// A `UIView` that hosts one concrete SwiftUI `Content` and applies React props to
 /// it in batches.
@@ -56,6 +71,15 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   var wantsContentSize = false
   /// `nuiPerfId` of the owning view, or ``nitroUiPerfNoInstance``.
   var perfInstanceId: Int32 = nitroUiPerfNoInstance
+  /// `nuiSizingId` of the owning view, or ``nitroUiSizingNoInstance``.
+  ///
+  /// The other half of ``wantsContentSize``: measuring is only useful if the
+  /// result can be pushed somewhere, and this says which Fabric node it belongs
+  /// to (`docs/architecture/sizing.md`). Reset on every recycle, so a reused host
+  /// can never report a size into a dead instance's state.
+  var sizingInstanceId: Int64 = nitroUiSizingNoInstance
+  /// Declared by the component: whether the width comes from Yoga's box.
+  var sizingPolicy: NitroUiSizingPolicy = .intrinsic
 
   /// Last measured content size, in points, or `nil` if never measured.
   ///
@@ -83,6 +107,10 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// ``invalidateContentSize()`` - never on a plain visual commit, which is what
   /// keeps `sizeThatFits` off the hot path.
   private var contentSizeNeedsMeasure = true
+  /// The size the sizing engine already has from this host. Compared with an
+  /// epsilon, so a measure that wobbles by a fraction of a point does not turn
+  /// into a Fabric commit (risk R12).
+  private var lastReportedSize: CGSize?
   private weak var containerViewController: UIViewController?
 
   init(model: Content.Model) {
@@ -143,6 +171,9 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     if previousTraitCollection?.preferredContentSizeCategory
       != traitCollection.preferredContentSizeCategory
       || previousTraitCollection?.legibilityWeight != traitCollection.legibilityWeight {
+      // Every cached size was measured under the old environment, so all of them
+      // are suspect now - not just this view's (docs/architecture/sizing.md).
+      NitroUiSizing.invalidateEnvironment()
       invalidateContentSize()
     }
   }
@@ -202,6 +233,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     // The next mount is a new view as far as measurements go: a recycled host
     // that kept its flag would never report `firstFrame` again.
     hasMarkedFirstFrame = false
+    sizingInstanceId = nitroUiSizingNoInstance
+    lastReportedSize = nil
     detachFromContainer()
   }
 
@@ -214,6 +247,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     nitroUiAssertMainThread()
     detachFromContainer()
     hasMarkedFirstFrame = false
+    sizingInstanceId = nitroUiSizingNoInstance
+    lastReportedSize = nil
     sizeLock.lock()
     _contentSize = nil
     sizeLock.unlock()
@@ -235,8 +270,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
 
   /// The fitting size of the hosted content, measured on the main thread.
   ///
-  /// This is the hook T11 will push into Fabric state; today only
-  /// `measureContent()` and the harness read it.
+  /// This is what gets pushed into Fabric state (see ``reportToSizingEngine``);
+  /// `measureContent()` and the harness read the same cached number.
   @discardableResult
   private func refreshContentSize() -> CGSize? {
     guard wantsContentSize, hasCommitted, !bounds.isEmpty, contentSizeNeedsMeasure else {
@@ -248,7 +283,27 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     sizeLock.lock()
     _contentSize = size
     sizeLock.unlock()
+    reportToSizingEngine(size)
     return size
+  }
+
+  /// Hand the measured size to the sizing engine, which is what decides whether
+  /// it deserves a Fabric state update at all.
+  ///
+  /// Cheap to call: the engine drops a report that agrees with its cache, so a
+  /// pre-warmed mount costs nothing. The epsilon here only skips the call.
+  private func reportToSizingEngine(_ size: CGSize) {
+    guard sizingInstanceId != nitroUiSizingNoInstance else {
+      return
+    }
+    if let last = lastReportedSize,
+      abs(last.width - size.width) < 0.5,
+      abs(last.height - size.height) < 0.5
+    {
+      return
+    }
+    lastReportedSize = size
+    NitroUiSizing.report(sizingInstanceId, Double(size.width), Double(size.height), sizingPolicy.rawValue)
   }
 
   private func measureFittingSize() -> CGSize {
