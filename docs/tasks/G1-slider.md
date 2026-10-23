@@ -2,7 +2,7 @@
 
 **Worktree:** `~/Developer/oss/nitro-ui-worktrees/G1` (branch `task/G1-slider`, from `main`)
 **Devices / env:** assigned in the delegation message (D13).
-**Depends on:** T10 (core + Switch) and T02 (bench) merged. Follow `docs/architecture/core.md`
+**Depends on:** T10 (core + Switch), T02 (bench) and T11 (intrinsic sizing) merged. Follow `docs/architecture/core.md`
 (the component guide) and copy Switch's structure. Read `docs/DECISIONS.md`.
 
 ## Goal
@@ -36,8 +36,10 @@ Mirror `@react-native-community/slider` naming where it doesn't conflict with pl
   per core rules — document the behaviour).
 - Continuous events: coalesce to at most one `onValueChange` per frame natively; always deliver
   the final value in `onSlidingComplete`.
-- Sizing: `fillWidth` policy — width from layout (default `alignSelf: 'stretch'` behaviour),
-  height = platform default (measure real values per OS; see D14). T11 will later replace defaults.
+- Sizing: opt in per `docs/architecture/sizing.md` §5 with the `fillWidth` policy — width from the
+  Yoga box (wrapper style defaults to `alignSelf: 'stretch'`), height measured; declare an
+  OS-specific fallback height with `setFallback`. `nuiSizingKey` = `""` unless a prop changes the
+  height.
 - Accessibility: adjustable role, value announced, a11y increment/decrement works on both platforms.
 - Recycling + `onDropView` per core.md; no per-update hosting recreation.
 
