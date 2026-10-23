@@ -347,6 +347,35 @@ there is no box width to use. Two consequences a component author must know:
   are only *queued* by `EventQueue::enqueueStateUpdate`. Round 1 captured `[&measured]`, a reference
   into a local vector in `applyReports`, so every batched correction read freed memory; ASan caught it
   in seconds once a host test deferred the push instead of running it inline. Capture by value.
+- **A correction does not reach React's revision.** A correction is committed as a new `State` on the
+  instance's family, but React's next props update is cloned *without* `.state` (`UIManager.cpp`) and
+  copies the state of React's own previous revision — the one made before the correction. That
+  revision carries the superseded size twice over: in its Yoga measurement cache and in its
+  `layoutMetrics_`. RN normally heals exactly this — an obsolete state is re-cloned with `.state` by
+  `ShadowTree::progressState` — and our `adopt` defeats it, because a props change mints a brand-new,
+  never-obsolete `State` from the stale one every single turn, and the stale one is committed as the
+  family's most recent. So `shouldNewRevisionDirtyMeasurement` (`cpp/NitroUiIntrinsic.hpp`), which
+  keeps a props-only clone clean on purpose (a Switch being toggled must not re-size), lets a clone be
+  committed at the superseded box with `measureContent` never reached to notice. The engine meanwhile
+  learned the right size, so the host's next report is dropped as agreement and the wrong box is
+  permanent for that instance — only another instance's correction, which is per configuration, healed
+  it. On iOS that is what put a controlled Switch's `Toggle` outside the window and out of the a11y
+  tree, its row's `flex: 1` label grown by exactly the 61 pt that went missing (FIX2, T15 Finding 1; it
+  reproduces on Android once the first answer is wrong). An earlier draft of this bullet blamed Yoga's
+  cache holding *both* answers and `canUseCachedMeasurement` picking the older one. That is what
+  happens when something else dirties the tree in the same turn — not in the failing case, where
+  nothing else is dirty and the box is simply the copied `layoutMetrics_`. The ledger therefore
+  records whether an instance's answer ever moved (`answerChanged`), and `requiresFreshMeasure` makes a
+  props turn dirty the measurement of *that* instance and nobody else: the dirty leaf forces the Yoga
+  pass a clean tree skips, and `needToVisitNode` drops the stale cache entry with it. A control the
+  engine never had to correct still costs no measure per prop turn — and a re-key alone does not flag
+  one, because a key is a JS prop and the turn that changes it is already dirty for that reason. A
+  control it *did* correct pays the real cost on every turn of its mount: the lookup (11.4 ns on host,
+  and every sized instance pays that flagged or not), a measure (32.5 ns warm), and a Yoga pass from
+  the root up the dirtied ancestors — 8.4 µs for a 35-node tree, 18.3 µs for 99, 47.8 µs for 316
+  (RN 0.88's Yoga, host, `-O2`; excluding RN's layout-metrics walk and diff, so expect 1–3× on a
+  phone) — where a clean tree pays 0. That is the price of a box that stays right; the cheaper
+  non-sticky signal is a follow-up (D20).
 - **An instance's id is owned by the JS side and its memory by the native side.** `forget(id)` from
   `drop()`/`prepareForRecycle()` is what keeps the ledger and registry bounded; pruning on weak
   expiry alone leaks one entry per mount for the life of the process, and a recycled Android host
@@ -407,7 +436,12 @@ without a commit.
 | 200 mounts, warm / cold        | 295–329 ms / 137–155 ms          | 899–2310 ms / 830–3469 ms     |
 | 50 mounts, warm / cold         | 0.66–0.71 / 0.76–0.83 ms ea.     | 5.7–12.0 / 7.5–12.1 ms ea.    |
 | 30 rapid prop turns            | 0 measures, 0 corrections        | same                          |
+| One further prop turn on an instance that *was* corrected | 1 measure, 0 corrections (§6, FIX2) | 1 measure, 0 corrections |
 | font scale 1.3 / Dynamic Type XL | unchanged size                 | unchanged size                |
+
+The two prop-turn rows are the same fast path read two ways: the storm test's Switch is answered at the size the
+engine already believed, so 30 turns cost 0 measures; an instance the engine had to correct re-asks once per turn
+and still costs no correction (§6).
 
 Ranges are the spread across the runs in the report. The Android ones are wide because another
 task's device work shares this machine (D13): its cold-batch flush measured 8.5 ms on a quiet
