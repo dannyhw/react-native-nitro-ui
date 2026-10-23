@@ -2,6 +2,7 @@ package com.margelo.nitro.nitroui
 
 import android.app.Activity
 import android.view.View
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ProgressIndicatorDefaults
@@ -290,12 +291,20 @@ private fun ProgressContent(model: ProgressModel) {
     val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.linearColor
     val trackTint =
       track?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.linearTrackColor
+    // `fillMaxWidth` is what makes the M3 bar mean "the width is the box"
+    // (`docs/architecture/sizing.md` §5): the modifier's own default is
+    // `size(240.dp, 4.dp)`, so without it the indicator measures its preferred
+    // 240 dp and is centred in whatever box the host was given. With it, the bar
+    // takes the constraint the `fillWidth` question forwarded, and under an
+    // *unbounded* constraint `fillMaxWidth` is a no-op, which is why the intrinsic
+    // measurement path is unaffected.
+    val width = semantics.fillMaxWidth()
     if (drawn == null) {
-      LinearProgressIndicator(modifier = semantics, color = color, trackColor = trackTint)
+      LinearProgressIndicator(modifier = width, color = color, trackColor = trackTint)
     } else {
       LinearProgressIndicator(
         progress = { drawn.toFloat() },
-        modifier = semantics,
+        modifier = width,
         color = color,
         trackColor = trackTint,
       )
