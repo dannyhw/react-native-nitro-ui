@@ -128,6 +128,9 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// epsilon, so a measure that wobbles by a fraction of a point does not turn
   /// into a Fabric commit (risk R12).
   private var lastReportedSize: CGSize?
+  /// Whether a sizing key has arrived whose box the engine has not answered yet.
+  /// Set by ``noteSizingKeyChanged()``, consumed by ``layoutSubviews()``.
+  private var sizingKeyChangePending = false
   private weak var containerViewController: UIViewController?
 
   init(model: Content.Model) {
@@ -167,6 +170,14 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
       hostedView.frame = bounds
       // A different box can produce a different fitting size for the content.
       contentSizeNeedsMeasure = true
+      if sizingKeyChangePending {
+        // This box is the engine's answer for the key that just arrived, so what the
+        // content measures now describes the right configuration - and the epsilon
+        // must not compare it with the size reported for the previous one. The
+        // measure itself is already armed above, so all that is owed is the reset.
+        sizingKeyChangePending = false
+        lastReportedSize = nil
+      }
     }
     markFirstFrameIfNeeded()
     refreshContentSize()
@@ -262,6 +273,31 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     contentMayHaveChangedSize = true
   }
 
+  /// Forget the size the engine already has from this host, so the next measure is
+  /// reported even when it matches the last one.
+  ///
+  /// For a component whose *configuration* changed, where the new configuration may
+  /// measure the same size as the old one. The engine has no answer for a key it has
+  /// not seen, so it lays the instance out at the component's declared fallback, and
+  /// this instance's own report is the only thing that can move the box back. The
+  /// epsilon above compares with the size last reported - which belongs to the
+  /// configuration being replaced - so without this the correcting report is the one
+  /// it skips and the instance stays at the fallback, control centred inside it
+  /// (review F1: `filled` -> `elevated` measures the same size on iOS).
+  ///
+  /// Both halves wait for the `layoutSubviews` that carries the new box. The
+  /// measure ``commit()`` runs happens while the engine still holds the *previous*
+  /// configuration's box, and reporting into that re-arms the epsilon with the size
+  /// the correcting report is going to match again - which is how the fallback stays
+  /// stuck. An instance that has never measured has reported nothing, so there is
+  /// nothing to reset and its own first measure covers it: that is why the first key
+  /// of a mount does not arm this.
+  func noteSizingKeyChanged() {
+    nitroUiAssertMainThread()
+    guard contentSize != nil else { return }
+    sizingKeyChangePending = true
+  }
+
   /// Reset for reuse. Keeps the hosting controller and its SwiftUI state.
   func prepareForRecycle() {
     nitroUiAssertMainThread()
@@ -298,6 +334,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     sizeLock.unlock()
     contentSizeNeedsMeasure = true
     contentUpdatePending = false
+    sizingKeyChangePending = false
   }
 
   /// Tell the sizing engine this instance is finished, then forget its id.

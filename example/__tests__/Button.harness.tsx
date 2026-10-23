@@ -630,6 +630,84 @@ describe('Button · G2', () => {
     unmount();
   });
 
+  it('re-reports a key change that keeps the size (R3)', async () => {
+    // Review F1: the third R3 shape, where the size does *not* move. Every test
+    // above changes a size, so each one is corrected by a report the host's
+    // epsilon lets through. Here the new configuration measures what the old one
+    // did, and each host skips a report within 0.5 of the size it reported last
+    // (`NitroSwiftUIHost.swift:385-391`, `NitroComposeHost.kt:480-486`). The engine
+    // has no answer for the new key, so the box goes to the poisoned guess, and
+    // the only thing that can move it back is the very report that gets skipped:
+    // the instance stays at `12.5x71.5` with the real control centred inside it.
+    //
+    // Both repros keep the *size* and change only the configuration, which is what
+    // makes the dedupe apply:
+    //  - iOS: `filled` and `elevated` are the same control (both
+    //    `.borderedProminent`, `HybridNitroUiButton.swift:90-91`/`:113`), so the
+    //    new key measures the size the host already reported;
+    //  - Android: `systemImage` is in the key and never rendered, and its setter
+    //    does not even mark the host dirty (`HybridNitroUiButton.kt:575-583`), so
+    //    the control cannot change size and nothing asks Compose to measure.
+    // The second is the reviewer's Android repro; the variant change works there
+    // too (`filled` -> `tonal` shares its padding and minimums), which is the other
+    // half of what the review listed.
+    poisonConfigurations([
+      sizingKey('filled', 'medium', 'Sticky'),
+      sizingKey('elevated', 'medium', 'Sticky'),
+      sizingKey('filled', 'medium', 'Sticky', 'star'),
+    ]);
+    const before = stats();
+    const { rerender, unmount } = await render(
+      <Button
+        title="Sticky"
+        testID="sticky"
+        hybridRef={captureHybrid('sticky')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('sticky');
+    const size = await waitForMeasured('sticky', 'the first configuration');
+    await waitForBox('sticky', size, 'the first configuration');
+    expect(sameSize(sizeOf('sticky'), WRONG_SIZE)).toBe(false);
+    expect(delta(before, stats()).corrections).toBeGreaterThanOrEqual(1);
+
+    await settle(150);
+    const changed = stats();
+    await rerender(
+      Platform.OS === 'ios' ? (
+        <Button
+          title="Sticky"
+          variant="elevated"
+          testID="sticky"
+          hybridRef={captureHybrid('sticky')}
+        />
+      ) : (
+        <Button
+          title="Sticky"
+          systemImage="star"
+          testID="sticky"
+          hybridRef={captureHybrid('sticky')}
+        />
+      )
+    );
+    // No `waitForRemeasure` here: the control still measures `size`, so the box and
+    // the engine's counters are the only readings that can show the fix. The settle
+    // gives the correction, its flush and the re-layout one turn to land.
+    await settle(500);
+    const box = sizeOf('sticky');
+    const after = delta(changed, stats());
+    console.log(
+      `same-size key change (${Platform.OS}): box=${describeSize(box)} ` +
+        `measured=${describeSize(measured('sticky'))} delta=${JSON.stringify(after)}`
+    );
+    // The visible bug first: the box is the guess, not the control.
+    expect(sameSize(box, WRONG_SIZE)).toBe(false);
+    expect(sameSize(box, size)).toBe(true);
+    // ...and the round-trip that has to have happened to get there.
+    expect(after.corrections).toBeGreaterThanOrEqual(1);
+    unmount();
+  });
+
   it('re-measures a title change the engine has an answer for already', async () => {
     // The `noteContentSizeMayHaveChanged()` test, and the only one that can see
     // it. The other R3 tests re-measure through a different door: their poisoned
