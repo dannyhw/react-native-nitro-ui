@@ -29,6 +29,7 @@
     "!android/gradlew.bat",
     "!android/local.properties",
     "!**/__tests__",
+    "!android/src/test",
     "!**/__fixtures__",
     "!**/__mocks__",
     "!**/.*"
@@ -47,16 +48,20 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "test": "jest",
+    "test:native": "bash scripts/native-tests.sh",
+    "test:native:android": "bash scripts/native-tests-android.sh",
     "publint": "publint --strict",
     "manifest:check": "node scripts/package-files.mjs",
     "manifest:update": "node scripts/package-files.mjs --update",
-    "check": "bun run typecheck && bun run lint && bun run format && bun run test && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run publint && bun run manifest:check",
+    "check": "bun run typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check",
     "harness:ios": "bun --cwd example harness:ios",
     "harness:android": "bun --cwd example harness:android",
     "smoke:pack": "bash scripts/smoke/pack.sh",
     "smoke:expo": "bash scripts/smoke/expo.sh",
     "smoke:rn-cli": "bash scripts/smoke/rn-cli.sh",
-    "release": "release-it --only-version"
+    "release": "release-it --only-version",
+    "api-extractor": "api-extractor run --local --config etc/api-extractor.json",
+    "api-extractor:check": "api-extractor run --config etc/api-extractor.json"
   },
   "keywords": [
     "react-native",
@@ -83,12 +88,15 @@
     "@eslint/eslintrc": "^3.3.7",
     "@eslint/js": "^9.39.5",
     "@jest/globals": "^29.7.0",
+    "@microsoft/api-extractor": "^7.59.4",
     "@react-native/babel-preset": "0.88.0",
     "@react-native/eslint-config": "0.88.0",
     "@react-native/jest-preset": "0.88.0",
     "@release-it/conventional-changelog": "^12.0.2",
     "@types/react": "^19.2.0",
+    "@types/react-test-renderer": "^19.3.0",
     "@typescript-eslint/parser": "^8.72.0",
+    "ajv": "^8.17.1",
     "commitlint": "^21.2.4",
     "del-cli": "^8.0.1",
     "eslint": "^9.39.5",
@@ -104,6 +112,7 @@
     "react-native": "0.88.0",
     "react-native-builder-bob": "^0.44.1",
     "react-native-nitro-modules": "^0.37.1",
+    "react-test-renderer": "19.3.0",
     "release-it": "^21.1.1",
     "turbo": "^2.11.10",
     "typescript": "^6.0.3"
@@ -166,6 +175,9 @@
       "<rootDir>/example/",
       "<rootDir>/bench/",
       "<rootDir>/lib/"
+    ],
+    "testMatch": [
+      "**/*.test.[jt]s?(x)"
     ]
   },
   "commitlint": {

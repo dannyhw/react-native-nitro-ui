@@ -1,0 +1,18 @@
+{
+  "uiViewClassName": "NitroUiSwitch",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "value": true,
+    "defaultValue": true,
+    "mostRecentEventCount": true,
+    "disabled": true,
+    "tintColor": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onValueChange": true,
+    "hybridRef": true
+  }
+}

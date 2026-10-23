@@ -1,4 +1,4 @@
-import { nitroUiCore } from 'react-native-nitro-ui';
+import { nitroUiCore, Switch } from 'react-native-nitro-ui';
 import * as React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -59,8 +59,10 @@ export default function App(): React.ReactElement {
           NitroUiCore.now(): {coreNow == null ? 'pending' : coreNow}
         </Text>
 
-        {/* ── One line per exported component goes here. Example: ───────────
-        <NitroUiSwitch testID="SMOKE-switch" value={true} /> */}
+        {/* ── One line per exported component goes here. ─────────────────────
+            Keep each line bare: the point is that a packed library renders in an
+            app we did not build. */}
+        <Switch testID="SMOKE-switch" defaultValue={true} />
       </ScrollView>
     </View>
   );

@@ -1,3 +1,22 @@
+diff --git a/dist/instance.js b/dist/instance.js
+index a3591428fe6ce8c6bb1edff556f2b8d8582c1721..d133074136800b5b2f46707f1801f57a3f5b136f 100644
+--- a/dist/instance.js
++++ b/dist/instance.js
+@@ -67,8 +67,12 @@ export const getAppleSimulatorPlatformInstance = async (config, harnessConfig, i
+             iosInstanceLogger.debug('waiting for iOS simulator %s to finish booting', udid);
+             await simctl.waitForBoot(udid, init.signal);
+         }
+-        const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);
+-        if (!isInstalled) {
++        // nitro-ui patch: an install check only proves *some* build is present.
++        // This repo reuses long-lived simulators, and JS comes from Metro while
++        // native code does not, so skipping the install silently runs an old
++        // binary against new JS. Always install the app this run was asked to
++        // test; `simctl install` is fast and keeps the app container.
++        {
+             const appPath = getHarnessAppPath();
+             await simctl.installApp(udid, appPath);
+         }
 diff --git a/dist/xcrun/simctl.js b/dist/xcrun/simctl.js
 index 1c2f32ffb2c72f83c39f32fca389dde394fb0a94..3b32740853fc7416e0e65d967fe14c0d6a091945 100644
 --- a/dist/xcrun/simctl.js
