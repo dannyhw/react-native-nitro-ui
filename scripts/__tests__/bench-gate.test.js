@@ -550,3 +550,35 @@ describe('memory aggregation', () => {
     expect(memory.javaBytesPerInstance).toBeNull();
   });
 });
+
+describe('a gated arm with no baseline value', () => {
+  /**
+   * The first run after a component lands has ratios to `rn-core` but no ratio to
+   * regress against, because the baseline cell was skipped. Silently reporting
+   * that as `ok` reads like a pass, so the gate labels it and prints how the arm
+   * compares to the control.
+   */
+  it('is labelled, not silently passed', () => {
+    const base = makeRun();
+    base.cells['mount:nitro-ui:50'].skipReason = 'no Switch yet';
+    base.cells['mount:nitro-ui:50'].metrics = {};
+    const result = gate({ head: makeRun(), base });
+    const row = result.rows.find(
+      (entry) =>
+        entry.implementation === 'nitro-ui' &&
+        entry.key !== 'memory:nitro-ui:200'
+    );
+    expect(row?.status).toBe('new-arm');
+    expect(row.gated).toBe(true);
+    expect(result.conclusiveFailure).toBe(false);
+
+    const markdown = comparisonSections({
+      run: { platform: 'ios', cells: makeRun().cells },
+      base: { platform: 'ios', cells: base.cells },
+      mode: 'check',
+      label: 'baseline',
+    }).markdown;
+    expect(markdown).toContain('new arm');
+    expect(markdown).toContain('rn-core');
+  });
+});
