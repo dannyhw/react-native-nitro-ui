@@ -103,6 +103,14 @@ export interface BenchPlan {
   implementation: ImplementationName;
   n: number;
   /**
+   * `false` for a cell whose arm cannot produce the native transaction the probe
+   * timestamps, so waiting for the mount/presented signals can only end in a
+   * timeout. The runner then records both as `null` without waiting, and the
+   * report says the pair is absent by construction rather than suspicious.
+   * See `NO_MOUNT_SIGNAL` in `plan.ts`.
+   */
+  mountSignal: boolean;
+  /**
    * `true` when the launch argument asked for native perf marks
    * (`scenario:implementation:N:marks`). Diagnostic only: it is not part of a
    * results cell key.
@@ -123,6 +131,12 @@ export type BenchRecord =
       /** Platform/os summary, so a results file is self-describing. */
       platform: string;
       probeClock: 'CLOCK_UPTIME_RAW' | 'System.nanoTime';
+      /**
+       * Echoed from the plan so a results file says whether this cell's latency
+       * pair was ever measurable: `false` means the nulls in every `iter` record
+       * are by construction, not a lost signal.
+       */
+      mountSignal: boolean;
     }
   | {
       kind: 'iter';

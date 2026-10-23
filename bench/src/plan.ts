@@ -60,6 +60,20 @@ function isImplementation(value: string): value is ImplementationName {
 }
 
 /**
+ * Cells whose arm cannot produce a mounting transaction, so the probe's mount
+ * hook has nothing to stamp: `update.slider:rn-core` flips a value the floor
+ * `View` does not take (`implementations/rnCore.tsx`), which means the commit
+ * changes no props on any native node, so no transaction is created and both
+ * signals time out - 1.5 s + 2 s per iteration, about 95 s per launch, for two
+ * numbers that are `n/a` in the table either way.
+ *
+ * Keyed `scenario:implementation`, because it is a property of the pair: the
+ * same arm *does* signal on `mount.slider` (mounting 50 views is a transaction)
+ * and `rn-core` signals on every `switch` cell.
+ */
+const NO_MOUNT_SIGNAL: readonly string[] = ['update.slider:rn-core'];
+
+/**
  * Parse the `scenario:implementation:N[:marks]` launch argument.
  * Returns null for an unconfigured launch, which renders the idle screen.
  *
@@ -110,6 +124,7 @@ export function parsePlan(raw: string): BenchPlan | null {
     component,
     implementation,
     n,
+    mountSignal: !NO_MOUNT_SIGNAL.includes(`${scenario}:${implementation}`),
     perfMarks: flags === 'marks',
   };
 }
