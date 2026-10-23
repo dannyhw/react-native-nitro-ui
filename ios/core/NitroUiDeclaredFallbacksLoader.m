@@ -7,8 +7,8 @@
 //  through its `@_cdecl` entry point (`ios/core/NitroUiDeclaredFallbacks.swift`).
 //
 //  Same pattern as the generated component files, which use `+load` to register
-//  their `RCTComponentViewClass` (e.g.
-//  `nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm:45`).
+//  their `RCTComponentViewClass` (e.g. the `+load` in
+//  `nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm`).
 //  Nothing React-owned is touched here: the call only writes two numbers into
 //  the sizing engine, whose shared state initialises on first use.
 //
