@@ -442,6 +442,13 @@ function emptyCell(record) {
     platform: null,
     warmup: 0,
     measured: 0,
+    /**
+     * `false` when the arm told the runner its latency pair cannot exist
+     * (`bench/src/plan.ts` `NO_MOUNT_SIGNAL`). Turned on by the launch's `meta`
+     * record; changes no number, only whether a cell full of nulls is called a
+     * lost signal or an absent one.
+     */
+    mountSignal: true,
     latency: {
       jsCommitNs: new Map(),
       mountedNs: new Map(),
@@ -712,6 +719,7 @@ function summariseCell(key, cell) {
      */
     marks,
     sanity: cell.sanity,
+    mountSignal: cell.mountSignal,
   };
 }
 
@@ -739,6 +747,9 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       cell.measured = Math.max(cell.measured, record.measured);
       cell.clock = record.probeClock;
       cell.platform = record.platform;
+      if (record.mountSignal === false) {
+        cell.mountSignal = false;
+      }
     } else if (record.kind === 'skip') {
       if (!cell.skipReasons.includes(record.reason)) {
         cell.skipReasons.push(record.reason);

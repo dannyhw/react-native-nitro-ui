@@ -276,13 +276,26 @@ export function detailSections(run) {
     const sanity = cell.sanity ?? {};
     const bad = Object.entries(sanity).filter(([, count]) => count > 0);
     detail.push(
-      bad.length === 0
-        ? `Signal sanity: no out-of-order samples (${String(
-            cell.launches ?? 0
-          )} launches x ${String(cell.protocol?.measured ?? 0)} iterations).\n`
-        : `Signal sanity: ${bad
-            .map(([name, count]) => `${name}=${String(count)}`)
-            .join(', ')} - treat this cell's latency pair with care.\n`
+      cell.mountSignal === false
+        ? // The nulls here are the arm, not the rig: this cell's control has no
+          // native transaction to timestamp, so the pair is absent by design and
+          // the runner was told not to wait for it.
+          `Signal sanity: this cell declares \`mountSignal: false\` - no mount or ` +
+            `presentation transaction can exist for this arm, so its latency pair is ` +
+            `n/a and ungated by design (${String(
+              sanity.missingMount ?? 0
+            )} iterations absent by construction, and none of them waited). ${
+              bad.length > 1
+                ? `Other samples out of order: ${bad.map(([name, count]) => `${name}=${String(count)}`).join(', ')}.`
+                : ''
+            }\n`
+        : bad.length === 0
+          ? `Signal sanity: no out-of-order samples (${String(
+              cell.launches ?? 0
+            )} launches x ${String(cell.protocol?.measured ?? 0)} iterations).\n`
+          : `Signal sanity: ${bad
+              .map(([name, count]) => `${name}=${String(count)}`)
+              .join(', ')} - treat this cell's latency pair with care.\n`
     );
     const incomplete = incompleteMetrics(cell);
     if (incomplete.length > 0) {
