@@ -71,3 +71,6 @@ of the report plus the branch name and final commit SHA.
 Stay inside your brief. Anything you find that is not a correctness bug in your scope, a failing
 gate, or a false claim: write one line in your report's "Follow-ups" section and move on — do not
 fix it, investigate it further, or widen the task. Tasks have a hard round cap (D19).
+
+**Any change to a harness test file must be run on both platforms before you report**, even in a
+"small" final round — a test edited for one platform can break the other (G1 round 2 did).
