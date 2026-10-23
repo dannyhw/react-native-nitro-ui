@@ -17,7 +17,7 @@
  * Usage (devices and ports come from the environment, as everywhere else here):
  *
  *   IOS_UDID=<simulator udid> METRO_PORT=<port> \
- *     bun run test:real-input:ios [--control switch|slider]
+ *     bun run test:real-input:ios [--control switch|slider|button]
  *
  * The simulator must already be booted: AGENTS.md says only touch devices you
  * started, so this script boots nothing and shuts nothing down.

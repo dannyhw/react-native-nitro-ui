@@ -794,22 +794,35 @@ describe('Slider', () => {
     // commit landing between a touch sample and the frame tick that emits it passed
     // the handshake (the counts it compares only advance on emit), so the app's
     // value was applied and then painted over by the dragged one - a one-frame snap
-    // on the screen, and no callback that reports it either way. What the first run
-    // of this test measured is exactly that: with the fix in place, a write that
-    // arrives while a sample is pending is refused and the release reports the drag;
-    // a write that arrives with nothing pending wins, which is the fight §11 already
-    // documents as the app taking the thumb. Both are legitimate, and both look the
-    // same from here.
+    // on the screen, and no callback that reports it either way.
     //
-    // So this test asserts what must survive either outcome, five times over, with
-    // the write dropped into a different part of the drag each time: one start per
-    // end, the release value is one of the two values that were legitimately on the
-    // thumb, every value is on the step, the pump goes back to sleep, and - the one
-    // that would catch a half-applied write - the next drag begins from the value
-    // the last one reported. The fix itself is gated where it is visible:
-    // `scripts/native-tests/handshake.test.swift` and
-    // `android/src/test/java/com/margelo/nitro/nitroui/NitroUiControlledValueTest.kt`,
-    // which both go red without it.
+    // So this is a liveness check, and it has to assert what the contract actually
+    // promises rather than one outcome of the race. The race has three legitimate
+    // endings, all of them documented (`docs/architecture/core.md` §11, and pinned
+    // where they are visible: `scripts/native-tests/handshake.test.swift:117-151`
+    // and
+    // `android/src/test/java/com/margelo/nitro/nitroui/core/NitroUiControlledValueTest.kt:116-147`,
+    // which both go red without the fix):
+    //
+    // - the write arrives while a sample is pending, is refused, and the release
+    //   reports the drag;
+    // - the write arrives with nothing pending and wins - §11's "the app takes the
+    //   thumb" - so the release reports the app's number; and
+    // - the write is refused mid-drag and then lands anyway, because a refused
+    //   write is not dropped ("once the sample is emitted, the write is judged by
+    //   the count alone"), so it can arrive *after* the release was reported.
+    //
+    // Measured on the iPhone Air and on `nitroui_t02` for this task: a gesture that
+    // reported one value began the *next* gesture from the written value, and a
+    // commit delivered after the release left the release reporting the value React
+    // last committed. Both are the shapes above. What must survive every one of
+    // them, five times over with the write dropped into a different part of the
+    // drag each round, is: the gesture ends, with exactly one `onSlidingComplete`;
+    // one start per end; the value a gesture began from and the value it stopped on
+    // are each one of the values that could legitimately have been on the thumb at
+    // that moment; every change is on the step; and the pump goes back to sleep.
+    // A value outside those sets - or a gesture that never reports an end - is the
+    // half-applied write, and still goes red here.
     const events = newEvents();
     const props = (value: number) => (
       <Slider
@@ -826,12 +839,13 @@ describe('Slider', () => {
     await waitForBox('mid-write');
     const handle = await handleFor('mid-write');
 
+    const mounted = 0.2;
     const written = 0.5;
     const target = 0.8;
     const releases: number[] = [];
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const before = events.complete.length;
-      const beganFrom = before === 0 ? 0.2 : events.complete[before - 1]!;
+      const beganFrom = before === 0 ? mounted : events.complete[before - 1]!;
       // Eight moves ~55 ms apart, so one drag is eight frames of samples; the write
       // is injected at a different offset into that each round, which is the only
       // way to cross the pending-sample window more often than by luck.
@@ -850,14 +864,28 @@ describe('Slider', () => {
         6000
       );
       await sleep(60);
+      // Whichever shape the race took, the gesture is over and it ended with one
+      // release - not none, and not two.
+      expect(events.complete.length).toBe(before + 1);
       const release = events.complete[before]!;
       releases.push(release);
-      // One start per end, and this gesture began where the last one stopped.
+      // One start per end.
       expect(events.start.length).toBe(events.complete.length);
-      expect(events.start[before]).toBe(beganFrom);
-      // The thumb stopped on the app's write or on its own drag target - never on
-      // a third value, which is what a half-applied handshake produces.
-      expect([written, target]).toContain(release);
+      // What the control was showing when the gesture began, read back from
+      // `onSlidingStart`: the value the last gesture reported, or the app's write
+      // (the third shape above lands it after a release). The first gesture begins
+      // before any write exists, so it has one answer. Anything else - a value no
+      // participant ever had - is the half-applied write.
+      const atStart = attempt === 0 ? [mounted] : [beganFrom, written];
+      expect(atStart).toContain(events.start[before]);
+      // Where the thumb stopped: the drag's own target, or the value React had
+      // committed by then. In the first round a commit can arrive after the
+      // release, and then the value React had committed is still the one it mounted
+      // with; from the second round on, React's committed value is `written` and
+      // `mounted` is no longer anybody's answer.
+      const atEnd =
+        attempt === 0 ? [target, written, mounted] : [target, written];
+      expect(atEnd).toContain(release);
       for (const value of events.change) {
         // Every change is a value the thumb was showing, on the step.
         const offGrid = Math.abs(value * 10 - Math.round(value * 10));
@@ -869,9 +897,13 @@ describe('Slider', () => {
       `mid-drag write: 5 attempts, release values=${JSON.stringify(releases)} ` +
         `(wrote ${written}, dragged to ${target})`
     );
-    // And the control is still an ordinary control afterwards.
+    // And the control is still an ordinary control afterwards: it begins from one
+    // of the two values the last round could have left on the thumb, and a clean
+    // drag - no write in it - ends where it was dragged to.
     await drag(handle, events, 0.3, 4, 0);
-    expect(events.start[events.start.length - 1]).toBe(releases[4]);
+    expect([releases[4]!, written]).toContain(
+      events.start[events.start.length - 1]
+    );
     expect(events.complete[events.complete.length - 1]).toBe(0.3);
   });
 

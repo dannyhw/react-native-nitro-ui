@@ -61,6 +61,7 @@ export default function ButtonScreen() {
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
   const [presses, setPresses] = useState(0);
+  const [realInputPresses, setRealInputPresses] = useState(0);
   const [ticker, setTicker] = useState(0);
 
   useEffect(() => {
@@ -74,6 +75,13 @@ export default function ButtonScreen() {
 
   const countPress = useCallback(() => {
     setPresses((current) => current + 1);
+  }, []);
+
+  // Shared by the enabled *and* the disabled Button in the "Real input" block
+  // below, so a stray press on the disabled one is a number on screen rather
+  // than the absence of a callback (`scripts/real-input`, T15b).
+  const countRealInputPress = useCallback(() => {
+    setRealInputPresses((current) => current + 1);
   }, []);
 
   // 200 buttons, cycling variants and sizes, so a recycled row is a different
@@ -107,6 +115,42 @@ export default function ButtonScreen() {
           FilledTonalButton / OutlinedButton / TextButton / ElevatedButton on
           Android.
         </Text>
+
+        {/*
+          The real-input suite's pair (`scripts/real-input`, T15b): one enabled
+          Button and one disabled Button, both wired to the same counter, so the
+          suite can prove two things from the screen alone - an OS tap on the
+          enabled one arrives, and an OS tap on the disabled one does not. It is
+          first on the page on purpose: `uiautomator dump` lists no off-screen
+          nodes, so a control near the bottom would have nothing to aim a tap at.
+        */}
+        <Text style={[styles.section, { color: ink.ink }]}>Real input</Text>
+        <View style={styles.stack}>
+          <Button
+            title="Real input"
+            onPress={countRealInputPress}
+            accessibilityLabel="Real-input button"
+            testID="real-input-enabled"
+          />
+          <Button
+            title="Real input, disabled"
+            disabled
+            onPress={countRealInputPress}
+            accessibilityLabel="Real-input disabled button"
+            testID="real-input-disabled"
+          />
+          <View style={styles.row}>
+            <Text style={[styles.label, { color: ink.muted }]}>
+              real-input taps counted (both buttons above share this)
+            </Text>
+            <Text
+              testID="real-input-count"
+              style={[styles.value, { color: ink.ink }]}
+            >
+              {realInputPresses}
+            </Text>
+          </View>
+        </View>
 
         <Text style={[styles.section, { color: ink.ink }]}>Variants</Text>
         <View style={styles.stack}>
