@@ -396,3 +396,214 @@ teach `renders.mjs` to read `issues`.
      `--update-baseline` on an unquiet run.
    - PLAN.md should say plainly that device benchmarks inform review and only the
      static/Reassure gates block.
+
+---
+
+# Rounds 2–3 verification
+
+Reviewer: focused re-review of `task/T02-bench` at `7929130` (merge-base with
+`main` = `main` = `9484a30`). No device time.
+
+Ran:
+- `bun run check`: exit 0. The chain is main's
+  `typecheck → lint → format → test → test:native → nitrogen:check → autolinking:check → prepare → api-extractor:check → publint → manifest:check`,
+  with `bench:typecheck` inserted after `typecheck` and `perf:renders` after
+  `test:native`. Jest ran 91 tests; `test:native` passed.
+- `jest scripts/__tests__/bench-gate.test.js`: 19/19 pass.
+- An untracked probe file in `bench/src` passing `value={'nope'}` to the real
+  `Switch` import. `bench:typecheck` rejected it with `TS2322`, and I deleted the file.
+- A throwaway `/tmp` script that ran the `--check` path: `buildBaseline` →
+  `baselineTable`/`baselineNoise` → `gate`, with nitro-ui 2x. That path is not in
+  the test file. Result: conclusive FAIL, ratio 2.00, CI low 2.00. The unchanged
+  case was not a failure.
+
+**Verdict: MERGE-AFTER-SMALL-FIXES.** B1–B4 are really fixed, and the
+measurement SHOULD-FIXes hold up. Two things should not merge as they are: the
+Android `presented` explanation and data, and three `bench.yml` defects.
+
+## 1. BLOCKING items: verified fixed
+
+- **B1**
+  - `gate()` is one function, ratio-based, per (scenario, N, metric).
+  - Within-run noise comes from the MAD/median of the launch-paired ratios. It
+    suppresses only its own cell.
+  - `GATED_IMPLEMENTATIONS = ['nitro-ui']`. Control drift is informational only.
+  - `run.mjs` and `report.mjs` both go through `render.mjs#comparisonSections`.
+  - The tests do prove failure:
+    - nitro-ui 2x gives a conclusive failure;
+    - drift plus a real 2x still fails;
+    - the noisy cell is suppressed alone;
+    - an unmount-only regression fails;
+    - a monotonic leak fails;
+    - `spawnSync(report.mjs --compare)` exits 1.
+  - Small gap: there is no test of `--check` against a baseline file. My script
+    above covers it, and it should become a test.
+- **B2**: the `paths` mapping works, and the slot is a named import that really
+  typechecks against `src/`. The negative probe above confirms it.
+- **B3**: both iOS Expo arms use `modifiers={[labelsHidden()]}` (hoisted) and
+  pass no `label`.
+- **B4**:
+  - `git diff main -- android src ios cpp` is empty, so `NitroUiPackage.kt` is
+    main's.
+  - The `check` chain is as listed above.
+
+## 2. Measurement SHOULD-FIX spot checks: all present
+
+- **S1/S2 (no JS polling)**: `awaitMount`/`awaitPresented` are promises resolved
+  natively. Frame capture is armed inside the mount hook, with a `CADisplayLink`
+  on iOS and `OnFrameMetricsAvailableListener` on Android.
+- **S3**: Android CPU comes from `schedstat` field 0, with `stat` as the fallback.
+  The JS thread uses `Debug.threadCpuTimeNanos`.
+- **S5**: mount and unmount have separate brackets, and the pacing is outside
+  both.
+- **S6**: `median(launchMedians)` plus the MAD of the launch medians. The
+  bootstrap is hierarchical and launch-paired.
+- **S7**: absolute `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` and
+  `System.nanoTime()`, with no offset.
+- **S8**:
+  - `globalThis.gc?.()` runs before every footprint sample, and all round-3
+    `mem` records have `heapCollected: true`.
+  - The leak slope is gated only when the climb is monotonic.
+- **S10**: `baselineBlockers` checks for marks, a dirty tree, a non-`full` plan,
+  fewer than 8 launches, problems, and load above 0.5 × cores.
+- **S12**: result files are unique: `<sha>[-dirty]-<platform>-<utc>[-marks]`.
+- **Re-render gate**: requires an exact count, all runs equal,
+  `initialUpdateCount === 0` and no `redundantUpdates`, and it runs in `check`.
+  "Scenario-driven" is documented but not enforced, which is acceptable.
+
+## 3. Round 3 analysis
+
+### Android mount `presented`: n/a is right for the empty cells, but the cause is a probe bug
+`HybridBenchProbe.kt#frameMetricsEndNs` rejects any frame with
+`INTENDED_VSYNC_TIMESTAMP <= mountNs`. That rejects the very frame that draws the
+mount:
+- Fabric dispatches mount items from `DispatchUIFrameCallback.doFrameGuarded`.
+  That is a Choreographer frame callback (RN 0.88 `FabricUIManager.java:1615-1660`),
+  and `didMountItems` fires there.
+- The invalidated views are traversed and drawn in the same `doFrame`, whose
+  intended vsync is necessarily before `mountNs`.
+
+So the probe records the first frame drawn *after* the presenting frame. That
+frame exists only if something invalidates again within 2 s:
+- Switch thumb animations make one in `update`, which is why every update cell
+  is complete. Those numbers are therefore "first animation frame after
+  presentation", not presentation.
+- In `mount`, a static screen often draws nothing more, so the sample times out.
+
+The evidence fits this better than the Davey/2-second-window story:
+- per-control and nitro-ui are missing on 80/80 samples, which is deterministic,
+  not "selective";
+- the surviving rn-core and shared-host samples have random `presented − mounted`
+  gaps of 21–254 ms (`0ab033e-dirty-android-20261023T011945Z.ndjson`);
+- the round-2 runs had a steady ~29 ms gap, which suggests that environment
+  happened to produce a second frame;
+- 272 timed-out samples × 2 s (plus warmups) accounts for most of the
+  1115 s vs 225 s wall clock.
+
+Consequences:
+- n/a is honest for the 100 %-missing cells.
+- The rn-core (35/80) and shared-host (13/80) medians are survivor-biased and
+  meaningless. The report still prints them (166 / 178 ms, "1.15x").
+- There is no completeness rule: `comparableMetrics` gates any cell with at
+  least one sample.
+- The committed Android baseline's `presentedNs` ratios measure "a later frame"
+  too.
+
+Fix:
+1. Accept a frame when
+   `INTENDED_VSYNC + UNKNOWN_DELAY + INPUT_HANDLING + ANIMATION_DURATION >= mountNs`,
+   meaning the mount ran no later than the frame's animation phase. Keep the
+   end stamp as `INTENDED_VSYNC + TOTAL_DURATION`.
+2. Make a latency metric n/a and ungated when `missing > 10 %` of the cell's
+   samples.
+3. Correct the report and the `benchmarks.md` troubleshooting row.
+
+### Android `propsApplied = 2.00` on mount: real, but not a props double-apply. Root cause is in RN Fabric.
+- RN calls `updateState` twice for every newly created Nitro view:
+  1. `ViewManager.createViewInstance(tag, ctx, props, stateWrapper)` calls
+     `updateState` when the view is created (`ViewManager.java:231-236`).
+  2. `FabricMountingManager.cpp:760-766` emits an `UpdateStateMountItem` for every
+     **Insert** of a view that has state. That reaches the generated
+     `HybridNitroUiSwitchManager.updateState` a second time.
+- The generated manager does not short-circuit, and runs
+  `beforeUpdate → updateViewProps → afterUpdate`.
+- The second call's `oldProps` (from `holder.lastState`) equal `newProps`, so
+  `JHybridNitroUiSwitchStateUpdater` calls no setters.
+- `afterUpdate()` → `host.commit()` marks unconditionally and then returns early
+  because nothing is dirty.
+
+Net cost: one extra JNI props diff, one `reconcile()` and one mark per instance
+per mount. Every future Android component will read 2.00 on mount, so it must not
+be read as a component regression.
+
+Follow-up (T10/T11, or upstream in Nitro's generator): skip in `updateState` when
+the props snapshot is the same as `lastState`'s, or count `updateState` and
+"applied" marks separately.
+
+## 4. `bench.yml`
+
+Fixed as claimed:
+- `gh pr checkout`;
+- the `OWNER/MEMBER/COLLABORATOR` gate;
+- the anchored `^/bench` trigger plus the label;
+- concurrency keyed on the PR;
+- `xcode-27`;
+- `android-emulator-runner`;
+- `--prebuild` on both runs;
+- the nightly labelled as a noise sample.
+
+New defects:
+- **Concurrency cancels real runs.** The group is set at workflow level with
+  `cancel-in-progress: true`. Any later human comment on the PR, or any unrelated
+  label, starts a run in the same group and cancels the in-flight bench *before*
+  the `trigger` job filters it out. **Fix:** move `concurrency` onto the
+  `bench-ios`/`bench-android` jobs.
+- **KVM is never enabled.** `ubuntu-latest` needs the
+  `/etc/udev/rules.d/99-kvm4all.rules` step from the emulator-runner README. The
+  report's "system image + KVM" is only half true.
+- **The PR token is exposed to PR code.** `actions/checkout` persists the
+  `pull-requests: write` token in `.git/config`, and the job then runs
+  `bun install` and Gradle from PR code. **Fix:**
+  - set `persist-credentials: false`;
+  - ideally, post the comment from a separate job that downloads the artifact
+    and runs no PR code.
+- **The simulator shutdown step is misplaced (NIT).** "Shut the simulator down"
+  (`if: always()`) runs straight after boot, not at the end. `devices.mjs`
+  re-boots by UDID, so it is harmless but wrong.
+- **`-gpu swiftshader_indirect`** is the software path the round-3 report itself
+  warns about. That is acceptable for report-only use once the `presented` fix
+  above lands.
+
+## 5. Things that would mislead future component tasks
+
+1. **Android `presented`** (section 3). Fix it before anyone quotes Android
+   `presented`.
+2. **`--check` gates nothing today.**
+   - `bench/baselines/android35-emu-pixel9.json` was recorded when nitro-ui
+     self-skipped: all 7 nitro-ui cells are `skipReason` with 0 metrics, and the
+     skip text is stale. Every check therefore returns `new-arm`.
+   - There is no iOS baseline.
+   - Say this in `bench/baselines/README.md`, and re-mint the Android baseline
+     after fix 1 on an idle machine.
+3. **The Reassure gate passes with "nothing to measure" while a real `Switch`
+   ships.** Adding `Switch.perf-test.tsx` is the T10 follow-up that turns the
+   only blocking perf gate on.
+4. **iOS `presented` is a proxy.** It is the `targetTimestamp` of the first
+   display-link callback the main thread reaches after the mount: "main thread
+   free by the next vsync", not render-server presentation. D15's iOS
+   `presented` wins are fair relative reads, but they should carry that label.
+5. **`propsApplied` counts `updateState` calls,** not prop work (section 3).
+
+## Required before merge (small)
+
+1. Add the completeness rule: a latency metric is n/a and ungated when more than
+   10 % of its samples are missing.
+2. Correct the round-3 Android `presented` text and table: mark the rn-core and
+   shared-host mount cells n/a, and give the root cause above.
+3. `bench.yml`: job-level concurrency, the KVM step, and
+   `persist-credentials: false`.
+4. Mark the Android baseline as gating nothing (README note), or delete it.
+
+Recommended, can be a follow-up: the `frameMetricsEndNs` acceptance fix plus one
+Android quick run, a `--check`-against-baseline unit test, and the Android
+`updateState` double-delivery follow-up for T10/T11.

@@ -156,6 +156,15 @@ matrix to that arm rather than burning launches that report nothing.
   same run-loop turn and records `link.timestamp`; Android registers a one-shot
   `Window.OnFrameMetricsAvailableListener` and records
   `INTENDED_VSYNC_TIMESTAMP + TOTAL_DURATION` for the first frame after the mount.
+  "The first frame after the mount" needs care on Android: Fabric mounts inside
+  a Choreographer animation callback, and **that same frame** draws the change,
+  so a frame qualifies when its animation phase ended no earlier than the mount
+  (`INTENDED_VSYNC + UNKNOWN_DELAY_DURATION + INPUT_HANDLING_DURATION +
+  ANIMATION_DURATION >= mountNs`) - filtering on the vsync alone rejects the
+  presenting frame itself (T02 round 3's bug, fixed in round 4). On iOS the
+  stamp is the `targetTimestamp` of the first display-link callback the main
+  thread reaches after the mount: "main thread free by the next vsync", not
+  render-server presentation.
   `presented` is that stamp minus the cell's `t0`. It is still frame-quantised
   (~16.7 ms at 60 Hz, often ~33 ms when the commit lands just after a vsync), so
   a real 2 ms regression is invisible in it and it stays the noisiest column. The
@@ -163,6 +172,9 @@ matrix to that arm rather than burning launches that report nothing.
   platforms. Every detail table prints sanity counters - `missingMount`,
   `missingPresented`, `presentedBeforeMount`, `mountBeforeCommit` - and a column
   whose counters are not zero is a broken probe, not a regression.
+  A metric that lost more than 10 % of its samples to those counters
+  (`MAX_MISSING_SAMPLE_RATIO`) prints `n/a` and is not gated at all: a median
+  over the survivors says nothing about the cell (round 4).
 - **Android CPU is read in nanoseconds.** `/proc/self/task/<tid>/schedstat`
   field 0 is ns of run time; `/proc/.../stat` (100 Hz jiffies) is only the
   fallback, and the JS thread uses `Debug.threadCpuTimeNanos()` when the bracket
@@ -207,6 +219,12 @@ matrix to that arm rather than burning launches that report nothing.
 new file, and anything that is not the canonical device for its platform uses
 same-run ratio tables and `--compare`, never `--check`. Baselines are
 **ratio-only** - see `bench/baselines/README.md`.
+
+**As of T02 round 4 no latency baseline is committed on either platform** - the
+one Android file that existed was recorded while nitro-ui self-skipped and
+gated nothing, so it was deleted; `--check` reports `no baseline at …` and is
+inert until a clean `--plan full --launches 8` run mints one. The
+`renders.json` gate is separate, live, and committed.
 
 The gate exists once (`gate()` in `scripts/bench/lib.mjs`) and is used identically
 by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:
@@ -271,19 +289,25 @@ A bare mount measures one render, so there is nothing redundant to find: drive a
 
 ```tsx
 // src/components/Switch/Switch.perf-test.tsx
-import { measureRenders } from '@callstack/reassure/measurement';
+import { test } from '@jest/globals';
 import { fireEvent, screen } from '@testing-library/react-native';
+import { measureRenders } from 'reassure';
 import { useState } from 'react';
-import { Pressable } from 'react-native';
-import { Switch } from '../Switch';
+import { Pressable, Text } from 'react-native';
+
+import { Switch } from './Switch';
 
 function Harness() {
   const [value, setValue] = useState(false);
-  const [, bump] = useState(0);
+  const [bumps, setBumps] = useState(0);
   return (
     <>
-      <Pressable testID="flip" onPress={() => setValue((current) => !current)} />
-      <Pressable testID="parent" onPress={() => bump((count) => count + 1)} />
+      <Pressable testID="flip" onPress={() => setValue((current) => !current)}>
+        <Text>flip</Text>
+      </Pressable>
+      <Pressable testID="bump" onPress={() => setBumps((count) => count + 1)}>
+        <Text>{`bumped ${bumps}`}</Text>
+      </Pressable>
       <Switch value={value} onValueChange={setValue} />
     </>
   );
@@ -293,10 +317,10 @@ test('Switch: mount, 3 flips, 2 unrelated parent renders', async () => {
   await measureRenders(<Harness />, {
     scenario: async () => {
       for (let index = 0; index < 3; index += 1) {
-        fireEvent.press(screen.getByTestId('flip'));
+        await fireEvent.press(screen.getByTestId('flip'));
       }
       for (let index = 0; index < 2; index += 1) {
-        fireEvent.press(screen.getByTestId('parent'));
+        await fireEvent.press(screen.getByTestId('bump'));
       }
     },
   });
@@ -304,9 +328,22 @@ test('Switch: mount, 3 flips, 2 unrelated parent renders', async () => {
 ```
 
 Flipping the control proves the wrapper re-renders **when told**; rendering an
-unrelated parent proves it does **not** re-render when it should not. Pick a
+unrelated parent proves it does **not** re-render when it should not. Two
+details are load-bearing, both learned from the first real test (T02 round 4):
+
+- the bumped counter is **drawn** (`<Text>{bumps}</Text>`). Reassure's
+  redundancy check compares whole rendered trees per commit, so a parent
+  commit that changed nothing visible is itself flagged as a redundant
+  update - true of the harness, not the wrapper, and impossible to tell apart;
+- `fireEvent.press` is awaited (RNTL 14 returns a promise; an unawaited press
+  leaves the act() queue to flush inside the next leg).
+
+`measureRenders` is imported from `reassure` itself - the old
+`@callstack/reassure/measurement` path does not exist in reassure 1.6. Pick a
 scenario where you can state the exact expected count, then
 `bun run perf:renders -- --update-baseline` and review the one-line diff.
+`src/components/Switch/Switch.perf-test.tsx` is the live instance (count 6:
+mount, 3 flips, 2 parent renders).
 
 A root Profiler cannot see a `React.memo` bail-out inside the tree, nor prop
 churn going into the native host. Pair every perf-test with a deterministic Jest
@@ -372,7 +409,7 @@ Raw results are uploaded as artifacts instead of going into git.
 | `new com.margelo.nitro.nitroui.<word>()` in `PackageList.java` | autolinking regex-matches the ReactPackage declaration in `android/src/main/.../NitroUiPackage.kt`; prose that reads like a class declaration gets picked up. Delete the generated `bench/android` (`--prebuild`) after fixing the wording. `bun run autolinking:check` covers it. |
 | `cmd: Can't find service: settings` right after boot | The runner retries; if it persists, the emulator is still booting. |
 | `mount` crashes on iOS with a promise mutex abort | A freed frame-context; contexts are `shared_ptr` captured by both the display-link and fallback timers. |
-| `presented` missing on most samples (`missingPresented` high) | The native capture did not fire: the frame-metrics listener needs a focused window, and both platforms give up after 2 s (`FRAME_TIMEOUT_MS` in the Android probe) and answer `-1`. Check the app was in the foreground, then re-run - the sanity counters tell you the metric is broken rather than slow. If the machine is running several emulators at once, the emulator's own frames can exceed that window (`HWUI: Davey! duration=1500ms` in logcat), and then the loss is *selective*: `mount` cells lose it for the arms with the heaviest per-iteration UI work, `update` cells keep it. Read such a run on `UI CPU/op` + a `--perf-marks` pass. |
+| `presented` missing on most samples (`missingPresented` high) | A metric over 10 % missing prints `n/a` and is ungated, so this row means "go look", not "read the survivors". Until T02 round 4 the dominant cause was the Android probe itself: its vsync filter rejected the very frame that presents a Fabric mount, and only cells whose screen invalidated *again* (the Switch's thumb animation on `update`) ever produced a sample - static `mount` cells timed out at ~80/80 on every arm, which is deterministic, not selective. Check the build predates that fix before chasing machine causes: the listener needs a focused window, and both platforms give up after 2 s (`FRAME_TIMEOUT_MS`) and answer `-1`, so confirm the app was in the foreground and re-run. |
 | Android launch ~5-10x slower than usual, frame signals missing | The AVD may be booting without a host GPU (`hw.gpu.enabled=no` in `~/.android/avd/<name>.avd/config.ini` - `avdmanager create` can leave it, and the runner does not boot Android devices, so nothing corrects it). Boot it yourself with `emulator -avd <name> -port <port> -gpu host`. |
 | `--update-baseline` refused | The tree was dirty, the run had `problems`, or `loadavg1` was over 0.5 x the core count. Wait for a quiet machine; `--force` is for experiments only. |
 | `--check` says no baseline | Baselines are per canonical device (`bench/baselines/README.md`). Use `--compare <ref>` on other hardware. |
