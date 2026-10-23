@@ -21,9 +21,11 @@ import {
   formatSpread,
   gate,
   IMPLEMENTATIONS,
+  incompleteMetrics,
   isNumber,
   LATENCY_METRICS,
   markdownTable,
+  MAX_MISSING_SAMPLE_RATIO,
   NOISE_REL_SPREAD,
   noiseTable,
   RATIO_FAIL_THRESHOLD,
@@ -139,6 +141,18 @@ export function detailSections(run) {
     const rows = LATENCY_METRICS.map((metric) => {
       const stats = cell.metrics?.[metric] ?? {};
       const ratio = table[cell.key]?.metrics?.[metric];
+      // Too few samples arrived to quote a number: `n/a` beats a median over
+      // the iterations whose signal happened to show up (round 4).
+      if (stats.reportable === false) {
+        return [
+          metric,
+          'n/a',
+          `of ${String(stats.expected ?? 0)} samples`,
+          'n/a',
+          String(stats.samples ?? 0),
+          'n/a',
+        ];
+      }
       return [
         metric,
         formatMetric(metric, stats.median),
@@ -256,6 +270,21 @@ export function detailSections(run) {
             .map(([name, count]) => `${name}=${String(count)}`)
             .join(', ')} - treat this cell's latency pair with care.\n`
     );
+    const incomplete = incompleteMetrics(cell);
+    if (incomplete.length > 0) {
+      detail.push(
+        `Not reportable (over ${String(
+          Math.round(MAX_MISSING_SAMPLE_RATIO * 100)
+        )}% of its samples missing, so it is n/a and ungated - a median here would describe only the iterations whose signal arrived): ${incomplete
+          .map(
+            (entry) =>
+              `${METRIC_LABELS[entry.metric] ?? entry.metric} ${String(
+                entry.samples ?? '?'
+              )}${entry.expected == null ? '' : ` of ${String(entry.expected)}`}`
+          )
+          .join(', ')}.\n`
+      );
+    }
     if (cell.marks != null) {
       detail.push(
         `Native perf marks (${String(cell.marks.iterations)} measured iterations across ${String(

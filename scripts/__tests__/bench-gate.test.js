@@ -25,11 +25,16 @@ import {
   SCHEMA_VERSION,
   aggregateRecords,
   baselineBlockers,
+  baselineNoise,
+  baselineTable,
   buildSchedule,
+  buildBaseline,
   cellKey,
   comparableMetrics,
   gate,
+  incompleteMetrics,
   launchPlanString,
+  MAX_MISSING_SAMPLE_RATIO,
   noiseTable,
   ratioTable,
 } from '../bench/lib.mjs';
@@ -40,6 +45,7 @@ import {
   comparisonSections,
   detailSections,
   renderMarkdown,
+  summaryTable,
 } from '../bench/render.mjs';
 
 const LAUNCHES = 4;
@@ -70,6 +76,8 @@ function cellRecords({
   mainCpuPerOp = 15_000,
   unmountMainCpuPerOp = 8_000,
   spread = false,
+  /** Per launch, how many measured iterations never got a presenting frame. */
+  missingPresented = 0,
 }) {
   const factors = spread ? LOUD : QUIET;
   const records = [
@@ -100,7 +108,10 @@ function cellRecords({
         warmup: false,
         jsCommitNs: jsCommit * factor * wiggle,
         mountedNs: mounted * factor * wiggle,
-        presentedNs: presented * factor * wiggle,
+        // The Android probe answers `-1` when no frame arrived in time, which
+        // the app records as a missing sample (round 4).
+        presentedNs:
+          index < missingPresented ? null : presented * factor * wiggle,
       });
     }
     records.push({
@@ -235,6 +246,27 @@ function leakRun({ rnCore, nitroUi }) {
   return {
     platform: 'ios',
     cells: aggregateRecords(records, { keepRaw: true }),
+  };
+}
+
+/**
+ * `makeRun` plus the metadata `--check` and `--update-baseline` read: a whole
+ * run object that is allowed to mint a baseline (clean tree, `full` plan, 8
+ * launches, quiet machine).
+ */
+function baselineRun(overrides = {}) {
+  return {
+    ...makeRun(overrides),
+    platform: 'ios',
+    deviceKey: 'ios27-sim-testdevice',
+    sha: 'abc1234',
+    dirty: false,
+    plan: 'full',
+    launches: 8,
+    perfMarks: false,
+    createdAt: '2026-10-23T00:00:00.000Z',
+    machine: { loadavg1: 1.5, cpuCount: 14 },
+    problems: [],
   };
 }
 
@@ -686,5 +718,128 @@ describe('native perf marks (--perf-marks)', () => {
     expect(() =>
       buildSchedule({ plan: 'quick', only: 'rn-core', perfMarks: true })
     ).toThrow(/needs an implementation with marks/);
+  });
+});
+
+describe('sample completeness (round 4)', () => {
+  /**
+   * Round 3's Android mount table printed `presented` medians built from 35 of
+   * 80 iterations (`rn-core`) and 13 of 80 (`expo-ui-shared-host`), and quoted
+   * "1.15x" from them. A signal that arrives on a third of the iterations is
+   * broken, not slow, and the survivors are not a sample of the cell (review
+   * rounds 2-3, fix 2). Such a metric is now `n/a` everywhere and ungated.
+   */
+  it('drops a latency metric whose samples are mostly missing', () => {
+    const run = makeRun({ 'nitro-ui': { missingPresented: 12 } });
+    const cell = run.cells['mount:nitro-ui:50'];
+    expect(cell.metrics.presentedNs.reportable).toBe(false);
+    expect(comparableMetrics(cell)).not.toHaveProperty('presentedNs');
+    expect(ratioTable(run)['mount:nitro-ui:50'].metrics).not.toHaveProperty(
+      'presentedNs'
+    );
+    expect(incompleteMetrics(cell)).toEqual([
+      { metric: 'presentedNs', samples: 32, expected: 80 },
+    ]);
+    // Doubling what is left must not fail the gate: those iterations are not a
+    // sample of the cell, they are the ones the probe happened to catch.
+    const doubled = makeRun({
+      'nitro-ui': { presented: 260_000, missingPresented: 12 },
+    });
+    const result = gate({ head: doubled, base: makeRun() });
+    expect(
+      result.conclusiveFailures.some(
+        (failure) => failure.metric === 'presentedNs'
+      )
+    ).toBe(false);
+  });
+
+  it('keeps a latency metric that lost only a tenth of its samples', () => {
+    const run = makeRun({ 'nitro-ui': { missingPresented: 2 } });
+    const cell = run.cells['mount:nitro-ui:50'];
+    expect(cell.metrics.presentedNs.samples).toBe(72);
+    expect(cell.metrics.presentedNs.reportable).toBe(true);
+    expect(comparableMetrics(cell)).toHaveProperty('presentedNs');
+    expect(incompleteMetrics(cell)).toEqual([]);
+  });
+
+  it('will not divide an arm by an incomplete control', () => {
+    // The exact round-3 shape: the arm drew 80 of 80 presenting frames while
+    // `rn-core` drew 13, so the ratio was a survivor over a survivor.
+    const run = makeRun({ 'rn-core': { missingPresented: 20 } });
+    expect(ratioTable(run)['mount:nitro-ui:50'].metrics).not.toHaveProperty(
+      'presentedNs'
+    );
+    expect(ratioTable(run)['mount:nitro-ui:50'].metrics).toHaveProperty(
+      'mountedNs'
+    );
+  });
+
+  it('says why a column is n/a instead of leaving the reader guessing', () => {
+    const run = makeRun({ 'nitro-ui': { missingPresented: 12 } });
+    const detail = detailSections(run);
+    expect(detail).toContain('Not reportable');
+    expect(detail).toContain('32 of 80');
+    // The summary table prints the withheld column as `n/a` too - a reader who
+    // never scrolls to the detail cells still cannot mistake it for a number.
+    expect(summaryTable(run)).toContain('n/a');
+    expect(MAX_MISSING_SAMPLE_RATIO).toBe(0.1);
+  });
+
+  it('never mints a baseline from a cell with an unreportable metric', () => {
+    const blockers = baselineBlockers(
+      baselineRun({ 'nitro-ui': { missingPresented: 12 } })
+    );
+    expect(
+      blockers.some((reason) => reason.includes('n/a because too few'))
+    ).toBe(true);
+  });
+});
+
+describe('--check against a committed baseline', () => {
+  // `--check` reads `bench/baselines/<deviceKey>.json` through
+  // `baselineTable()`/`baselineNoise()` rather than a run, and until round 4 no
+  // test went down that path - the reviewer had to script it by hand to prove
+  // the gate fires there at all.
+
+  it('mints a ratio-only baseline from a clean full-plan run', () => {
+    const baseline = buildBaseline(baselineRun());
+    expect(baseline.platform).toBe('ios');
+    expect(baseline.deviceKey).toBe('ios27-sim-testdevice');
+    const cell = baseline.cells['mount:nitro-ui:50'];
+    expect(cell.metrics.mountedNs.ratio).toBeCloseTo(1.1, 1);
+    // Ratio-only (D9): a baseline stores no absolute nanoseconds at all.
+    expect(JSON.stringify(baseline)).not.toContain('launchMedians');
+    expect(baselineBlockers(baselineRun())).toEqual([]);
+  });
+
+  it('fails a 2x nitro-ui regression against that baseline', () => {
+    const baseTable = baselineTable(buildBaseline(baselineRun()));
+    const baseNoise = baselineNoise(buildBaseline(baselineRun()));
+    const result = gate({
+      head: baselineRun({
+        'nitro-ui': { mounted: 220_000, presented: 260_000 },
+      }),
+      base: { cells: {} },
+      baseTable,
+      baseNoise,
+    });
+    expect(result.conclusiveFailure).toBe(true);
+    const failure = result.conclusiveFailures.find(
+      (entry) => entry.metric === 'mountedNs'
+    );
+    expect(failure.implementation).toBe('nitro-ui');
+    expect(failure.ratio).toBeCloseTo(2, 1);
+  });
+
+  it('passes the same baseline when nothing moved', () => {
+    const baseline = buildBaseline(baselineRun());
+    const result = gate({
+      head: baselineRun(),
+      base: { cells: {} },
+      baseTable: baselineTable(baseline),
+      baseNoise: baselineNoise(baseline),
+    });
+    expect(result.conclusiveFailures).toEqual([]);
+    expect(result.failures).toEqual([]);
   });
 });
