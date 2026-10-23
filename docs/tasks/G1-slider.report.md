@@ -734,7 +734,7 @@ binding *is* read, and `bun run check` died with `value of type … has no membe
 | `bun run check` | **exit 0** — typecheck, bench typecheck, lint, format, 111 Jest tests (8 suites), `test:native` (187 C++ checks ×2 under ASan/UBSan, `handshake.test`, `slider-value.test`), `perf:renders` (baseline 6, both components), nitrogen no drift (77 generated files), autolinking, bob build, api-extractor, publint, manifest (202 files). **No source warnings** — `498f3fe` removed the one this round introduced. |
 | `bun run test:native:android` | **36 tests, 0 failures** — `NitroUiSliderValueTest` 12, `SliderModelTest` 12, `NitroUiControlledValueTest` 9, `NitroUiWeakKeyTest` 3 |
 | iOS harness | **54 passed, 3 suites** against an app rebuilt from this tree (`xcodebuild -derivedDataPath build`, app 11:33, no source newer than it) |
-| Android harness | **54 passed, 3 suites** against the 11:22 APK — and no Android source is newer than that APK, which is gotcha 1 checked instead of assumed |
+| Android harness | **54 passed, 3 suites, twice**, against an APK built in the same session (gradle exit 0, no Android source newer than the artifact) |
 | Bench load | iOS run 3.36 / 5.15 (263 s), marks run 4.40 / 4.83 (64 s), Android 6.44 / 6.67 (206 s) — all under the D13 ceiling, all recorded in the artifacts |
 
 Gotcha 2 cost another 10 minutes here in a new way: the harness's Jest transform
@@ -742,6 +742,22 @@ breaks on Node 26, and this shell's default is Node 26 while `.nvmrc` pins 24. A
 harness run that *fails* with `Must use import to load ES Module …
 react-native/index.js` is the Node version, not the code — re-run under Node 24
 and the same binary gives 54/54.
+
+One Android run did go red and stayed red while I looked at it: an earlier run
+against the 11:22 APK failed T11's `Sizing › sizes a control inside a Modal` —
+twice, including in isolation — with `corrections=0` in the trace where the test
+expects a `corrected` stage. It is a Switch inside a `Modal`, so not this
+component's code path, and the diff that could plausibly reach it
+(`sameSizeForPush` in `cpp/NitroUiSizingEngine.cpp`) is provably inert for an
+`intrinsic` control: for anything without the `fillWidth` flag it is the same
+expression as before. Rebuilding the APK from this same tree made it pass — in
+isolation three times and in the full suite twice — and `main`'s own tip passes it
+as well. So the honest statement is: **not reproducible, therefore undiagnosed**.
+The likeliest difference is the artifact I could not prove the provenance of
+(gotcha 1 again, on the Android side this time); the suspects, if it returns, are
+T12's synchronous correction budget of 1 and the `wrongGuess` sizing test that
+runs immediately before it (`corrections=50 confirmed=0` in that test's own line).
+Recorded below rather than explained away.
 
 ### Answers received, and what happened
 
@@ -769,6 +785,10 @@ and the same binary gives 54/54.
   for the tie proofs; it is deleted rather than published, and this line is its
   tombstone. The stale-bundle run `7b6015e-ios-20261023T094459Z*` is **kept** as
   the evidence for the `8812717` fix.
+- One Android run failed T11's `Sizing › sizes a control inside a Modal` with
+  `corrections=0`, against an APK whose provenance I could not prove; unreproducible
+  after a clean rebuild, and green at `main` — worth a look by whoever owns the
+  Android correction budget before G2 inherits it.
 
 ### Round 1 commits
 
