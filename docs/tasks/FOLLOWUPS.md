@@ -16,3 +16,4 @@
 - G1 Slider verifier follow-ups (8 items) are listed in docs/tasks/G1-slider.report.md "Follow-ups".
 - Transient iOS harness `app heartbeat timed out` on Sizing.harness (FIX1, re-run green).
 - Android: re-laying out an already-mounted control at a wrong guess produces no report (Compose doesn't re-measure when only the box moves); sizing.md's "every mounted instance is asked to measure again" is prospective there (T14).
+- iOS Slider only answers drags that start on the thumb (T15); matches UISlider behaviour — document in slider.md, not a bug.
