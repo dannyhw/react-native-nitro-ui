@@ -9,14 +9,19 @@
 //  Header-only and deliberately primitive: Swift reaches it through C++ interop
 //  (`margelo.nitro.nitroui.NitroUiPerf`) and Kotlin through JNI, so every entry
 //  point takes plain integers. When marks are disabled - the default - a host
-//  pays one relaxed atomic load per mark site and nothing else.
+//  pays one relaxed atomic load per mark site and nothing else. When enabled it
+//  is a plain mutex, not a lock-free queue: marks are diagnostics (a benchmark
+//  turns them on for one run), a mark site is a handful per commit at most, and
+//  a lock-free ring would buy nothing measurable while being much harder to
+//  prove correct. Disabled hosts never touch it.
 //
 
 #pragma once
 
+#include "NitroUiClock.hpp"
+
 #include <array>
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <vector>
@@ -82,10 +87,11 @@ namespace margelo::nitro::nitroui {
         // oldest marks fall out instead of the buffer growing.
       }
 
-      /// Monotonic nanoseconds, the same base as `HybridNitroUiCore::now()`.
+      /// Monotonic nanoseconds, the same base as `HybridNitroUiCore::now()`
+      /// (`CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, DECISIONS D1 - so marks are
+      /// directly comparable with `CADisplayLink` and `Choreographer` times).
       static inline int64_t nowNs() {
-        const auto sinceEpoch = std::chrono::steady_clock::now().time_since_epoch();
-        return std::chrono::duration_cast<std::chrono::nanoseconds>(sinceEpoch).count();
+        return NitroUiClock::nowNs();
       }
 
       /// Take every buffered mark, oldest first, and clear the buffer.

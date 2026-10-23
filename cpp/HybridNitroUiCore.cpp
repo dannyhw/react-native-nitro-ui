@@ -5,17 +5,17 @@
 
 #include "HybridNitroUiCore.hpp"
 
+#include "core/NitroUiClock.hpp"
 #include "core/NitroUiPerf.hpp"
 
 #include <string>
-#include <chrono>
 
 namespace margelo::nitro::nitroui {
 
   double HybridNitroUiCore::now() {
-    const auto sinceEpoch = std::chrono::steady_clock::now().time_since_epoch();
-    // Nanosecond precision, reported in milliseconds (docs: src/NitroUiCore.nitro.ts).
-    return std::chrono::duration<double, std::milli>(sinceEpoch).count();
+    // Nanosecond resolution, reported in milliseconds, in the D1 time base
+    // (docs: src/NitroUiCore.nitro.ts and cpp/core/NitroUiClock.hpp).
+    return NitroUiClock::nowMs();
   }
 
   void HybridNitroUiCore::setPerfEnabled(bool enabled) {
