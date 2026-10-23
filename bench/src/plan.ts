@@ -20,6 +20,7 @@ const ACTIONS: readonly ScenarioAction[] = [
  */
 const SUFFIXED_COMPONENTS: readonly Exclude<ComponentName, 'switch'>[] = [
   'slider',
+  'button',
 ];
 
 const IMPLEMENTATIONS: readonly ImplementationName[] = [
