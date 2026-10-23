@@ -106,7 +106,8 @@ owns the R3 verification of `docs/architecture/sizing.md` (D16):
 control's own measurement after every `title` and `size` change.
 
 The sizing key is `variant|size|systemImage|title`
-(`src/components/Button/Button.tsx:136`) — everything that moves the control's
+(`src/components/Button/Button.tsx:126-133`, passed as `nuiSizingKey` at
+`src/components/Button/Button.tsx:215`) — everything that moves the control's
 size, nothing that only repaints it (`disabled`, `tintColor`) and no environment
 inputs, which native folds in through the epoch. Free-form values come last so a
 `|` inside one cannot shift a fixed field.
@@ -145,11 +146,22 @@ configuration may show that fallback for one frame and is then corrected; every
 instance whose configuration is already exact in the cache must be exact on its
 first frame. `prewarmKeys` is the way to make even the first mount exact.
 
-Android's answer is never stale for a prop change; iOS may show one stale frame
-after an **environment** change (D16) and none for a prop change, because every
-size-affecting setter there calls `host.noteContentSizeMayHaveChanged()` next to
-`markDirty()` — a setter that forgot it would keep the old box, since
-`NitroSwiftUIHost` only re-measures when its bounds or traits move.
+Whether a prop change is stale is about the *configuration*, not the platform:
+changing to one the engine has not measured for this epoch is a cold change on either
+platform, and its box may show the declared fallback for one frame before the
+correction lands (D17). Changing to a configuration already exact in the cache shows no
+stale frame on either platform. iOS may show one further stale frame after an
+**environment** change (D16).
+
+What neither platform may do is *keep* the fallback. Both hosts compare a report with
+the last size they reported for this instance, so a change whose new configuration
+measures the same size as the old one would have its correcting report skipped and the
+box left at the fallback; each host therefore resets that comparison when
+`nuiSizingKey` changes, and Android additionally asks Compose for a fresh measure,
+which nothing else does when only the box moved. On iOS every size-affecting setter
+also calls `host.noteContentSizeMayHaveChanged()` next to `markDirty()` — a setter that
+forgot it would keep the old box, since `NitroSwiftUIHost` only re-measures when its
+bounds or traits move.
 
 A user `style` still wins: `width`, `height` or `flex` fixes the box and the
 control centres inside it, and a `width` narrower than the label truncates it
@@ -157,7 +169,7 @@ control centres inside it, and a `width` narrower than the label truncates it
 difference from stock RN: once the engine has written a size, Yoga has nothing
 left to stretch, so a parent's `alignItems: 'stretch'` does not widen a Button —
 ask for it with `alignSelf: 'stretch'`. The base style is `alignSelf:
-'flex-start'` (`src/components/Button/Button.tsx:150`) for the same reason RN's
+'flex-start'` (`src/components/Button/Button.tsx:146`) for the same reason RN's
 own `Switch` has one: in a column, stretch would decide the width for us and the
 measurement would never be asked for.
 
