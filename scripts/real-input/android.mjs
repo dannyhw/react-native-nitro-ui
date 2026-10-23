@@ -16,7 +16,7 @@
  * Usage (devices and ports come from the environment, as everywhere else here):
  *
  *   ANDROID_AVD=<avd> ANDROID_ADB_SERVER_PORT=<port> METRO_PORT=<port> \
- *     bun run test:real-input:android [--control switch|slider|button]
+ *     bun run test:real-input:android [--control switch|slider|button|segmented-control]
  *
  * The emulator must already be booted: AGENTS.md says only touch devices you
  * started, so this script boots nothing and shuts nothing down.
@@ -57,6 +57,10 @@ const ECHO = {
   sliderComplete: 'slider-complete-count',
   sliderValue: 'slider-phase-value',
   sliderControlledValue: 'slider-controlled-value',
+  segmentedIndex: 'real-input-segmented-index',
+  segmentedEvents: 'real-input-segmented-events',
+  rejectEvents: 'real-input-reject-events',
+  rejectValue: 'real-input-reject-value',
 };
 
 /** How long a control gets to react to a gesture it should have answered. */
@@ -82,7 +86,7 @@ const CHECKS = {
    *
    * @param {ReturnType<typeof makeContext>} t
    */
-  switch: async (t) => {
+  'switch': async (t) => {
     const control = await t.requireControl('Controlled switch');
     const before = t.requireEcho(ECHO.switchValue);
     t.log.checkEquals('the Switch starts off', before, 'off');
@@ -123,7 +127,7 @@ const CHECKS = {
    *
    * @param {ReturnType<typeof makeContext>} t
    */
-  slider: async (t) => {
+  'slider': async (t) => {
     const phases = await t.requireControl('Phases slider');
     t.log.checkEquals(
       'no gesture has been reported yet',
@@ -201,7 +205,7 @@ const CHECKS = {
    *
    * @param {ReturnType<typeof makeContext>} t
    */
-  button: async (t) => {
+  'button': async (t) => {
     const control = await t.requireControl('Real-input button');
     const disabled = await t.requireControl('Real-input disabled button');
     t.log.checkEquals(
@@ -249,6 +253,120 @@ const CHECKS = {
       'a second real tap presses the enabled Button again',
       second,
       '2'
+    );
+  },
+
+  /**
+   * A real tap must select the segment under the finger, and a selection the app
+   * refuses must go back.
+   *
+   * The uncontrolled half is the plain claim: a touch at the middle of the second
+   * segment makes React render `1`, and one at the first makes it render `0`.
+   * `SingleChoiceSegmentedButtonRow` gives every segment an equal share of the
+   * row, and the options are single digits, so a fraction of the row is a
+   * fraction of a segment on both platforms. Both echoes are React's own text, so
+   * they only move if the touch reached Compose, Compose told Nitro, and Nitro
+   * told JS.
+   *
+   * The controlled half is the harder one, and its witness is a count. The parent
+   * keeps sending `selectedIndex={0}`, so after a tap on segment 2 the control
+   * must snap back to segment 1 - and a snapshot of the screen cannot prove that,
+   * because the screen looks identical before and after a snap. So the check taps
+   * segment 2 *twice*: a control that had stayed on segment 2 would treat the
+   * second tap as a tap on the segment that is already chosen and report nothing
+   * (Material 3's `SegmentedButton` only calls `onClick` for a change of
+   * selection). Two reported changes with the parent's value never moving is
+   * therefore the snap-back. This is `RealInputTests.testRealInputSegmentedControl`
+   * on the other platform, assertion for assertion.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'segmented-control': async (t) => {
+    const control = await t.requireControl('Real-input segmented control');
+    const startedAt = t.boundsText(control);
+    t.log.checkEquals(
+      'the SegmentedControl has reported no index before a touch',
+      t.requireEcho(ECHO.segmentedIndex),
+      '-'
+    );
+    t.log.checkEquals(
+      'no change has been reported before a touch',
+      t.requireEcho(ECHO.segmentedEvents),
+      '0'
+    );
+
+    await t.tapControlAt(control, 0.5);
+    t.log.checkEquals(
+      'a real tap on the second segment reaches JS as index 1',
+      t.waitForEcho(ECHO.segmentedIndex, '1', 'a real tap to register'),
+      '1'
+    );
+    t.log.checkEquals(
+      'one tap reports one change',
+      t.requireEcho(ECHO.segmentedEvents),
+      '1'
+    );
+
+    const moved = await t.requireControl('Real-input segmented control');
+    t.log.checkEquals(
+      'the control did not move out from under the finger',
+      t.boundsText(moved),
+      startedAt
+    );
+
+    // A different segment, so a second change is owed: a control that reported the
+    // same index twice would also satisfy the line above by echoing once.
+    await t.tapControlAt(moved, 0.12);
+    t.log.checkEquals(
+      'a real tap on the first segment reaches JS as index 0',
+      t.waitForEcho(ECHO.segmentedIndex, '0', 'a second real tap to register'),
+      '0'
+    );
+    t.log.checkEquals(
+      'two taps report two changes',
+      t.requireEcho(ECHO.segmentedEvents),
+      '2'
+    );
+
+    // The refusing parent.
+    const rejecting = await t.requireControl(
+      'Real-input rejecting segmented control'
+    );
+    t.log.checkEquals(
+      'the refusing parent pins its SegmentedControl at index 0',
+      t.requireEcho(ECHO.rejectValue),
+      '0'
+    );
+    t.log.checkEquals(
+      'nothing has been reported on the controlled control yet',
+      t.requireEcho(ECHO.rejectEvents),
+      '0'
+    );
+
+    await t.tapControlAt(rejecting, 0.5);
+    t.log.checkEquals(
+      'a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4)',
+      t.waitForEcho(ECHO.rejectEvents, '1', 'the controlled tap to register'),
+      '1'
+    );
+    t.log.checkEquals(
+      'the parent never accepted the change, so the index it sends is still 0',
+      t.requireEcho(ECHO.rejectValue),
+      '0'
+    );
+
+    // The snap-back oracle, explained above: this tap can only be reported if the
+    // selection went back to the first segment.
+    await t.tapControlAt(rejecting, 0.5);
+    t.log.checkEquals(
+      'a second tap on segment 2 is a fresh selection, which is only true if the refused one was rolled back',
+      t.waitForEcho(ECHO.rejectEvents, '2', 'the repeated tap to register'),
+      '2'
+    );
+    t.log.checkEquals(
+      'and the parent should still be refusing',
+      t.requireEcho(ECHO.rejectValue),
+      '0'
     );
   },
 };
@@ -525,16 +643,20 @@ class DeviceHarness {
   /**
    * The example's three tabs are its only navigation.
    *
-   * @param {'switch' | 'slider' | 'button'} screen
+   * @param {'switch' | 'slider' | 'button' | 'segmented'} screen
    */
   async goToScreen(screen) {
-    const label = { switch: 'Switch', slider: 'Slider', button: 'Button' }[
-      screen
-    ];
+    const label = {
+      switch: 'Switch',
+      slider: 'Slider',
+      button: 'Button',
+      segmented: 'Segments',
+    }[screen];
     const anchor = {
       switch: ECHO.switchValue,
       slider: ECHO.sliderStart,
       button: ECHO.buttonCount,
+      segmented: ECHO.segmentedIndex,
     }[screen];
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
@@ -596,9 +718,15 @@ class DeviceHarness {
    * @param {import('./uiautomator.mjs').UiautomatorNode} node
    */
   tap(node) {
-    this.shell(
-      `input tap ${String(Math.round(node.bounds.cx))} ${String(Math.round(node.bounds.cy))}`
-    );
+    this.tapAt(node.bounds.cx, node.bounds.cy);
+  }
+
+  /**
+   * @param {number} x
+   * @param {number} y
+   */
+  tapAt(x, y) {
+    this.shell(`input tap ${String(Math.round(x))} ${String(Math.round(y))}`);
   }
 
   /**
@@ -707,6 +835,37 @@ function makeContext(harness, log) {
      */
     async tapNode(node) {
       harness.tap(node);
+      await sleep(250);
+    },
+
+    /**
+     * Bounds as one comparable string, so a check can say "this control did not
+     * move" without the report line printing four numbers twice.
+     *
+     * @param {import('./uiautomator.mjs').UiautomatorNode} node
+     */
+    boundsText(node) {
+      const { x1, y1, x2, y2 } = node.bounds;
+      return `${String(x1)},${String(y1)} → ${String(x2)},${String(y2)}`;
+    },
+
+    /**
+     * Tap a control a fraction of the way across its own width.
+     *
+     * A segmented control needs it: the centre is always the middle segment, and
+     * proving that a segment *other* than the middle one answers a touch is half
+     * of what the check is for. Fractions stay away from the edges, where the
+     * rounded end caps and the dividers between segments live. Mirrors iOS's
+     * `XCUIElement.atFraction(_:)`.
+     *
+     * @param {import('./uiautomator.mjs').UiautomatorNode} node
+     * @param {number} fraction
+     */
+    async tapControlAt(node, fraction) {
+      harness.tapAt(
+        node.bounds.x1 + node.bounds.width * fraction,
+        node.bounds.cy
+      );
       await sleep(250);
     },
 

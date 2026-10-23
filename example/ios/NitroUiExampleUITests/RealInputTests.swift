@@ -38,11 +38,12 @@ import XCTest
 /// node, and React Native stores `testID` as a view tag, which is not part of
 /// the accessibility tree. See `scripts/real-input/uiautomator.mjs`.)
 final class RealInputTests: XCTestCase {
-  /// The example app's three tabs.
+  /// The example app's four tabs.
   private enum Tab {
     static let switchTab = "tab-switch"
     static let sliderTab = "tab-slider"
     static let buttonTab = "tab-button"
+    static let segmentedTab = "tab-segmented"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -54,6 +55,10 @@ final class RealInputTests: XCTestCase {
     static let sliderComplete = "slider-complete-count"
     static let sliderValue = "slider-phase-value"
     static let sliderControlledValue = "slider-controlled-value"
+    static let segmentedIndex = "real-input-segmented-index"
+    static let segmentedEvents = "real-input-segmented-events"
+    static let rejectEvents = "real-input-reject-events"
+    static let rejectValue = "real-input-reject-value"
   }
 
   /// How far the Slider's thumb sits from each end of the track at the extremes,
@@ -238,6 +243,99 @@ final class RealInputTests: XCTestCase {
     XCTAssert(disabled.isHittable, "the disabled Button should still be on screen")
   }
 
+  /// A real tap must select the segment under the finger, and a selection the
+  /// app refuses must go back.
+  ///
+  /// The uncontrolled half is the plain claim: a touch at the middle of the
+  /// second segment makes React render `1`, and one at the first makes it render
+  /// `0`. Both echoes are React's own text, so they only move if the touch
+  /// reached SwiftUI's segmented `Picker`, SwiftUI told Nitro, and Nitro told JS.
+  ///
+  /// The controlled half is the harder one, and its witness is a count. The
+  /// parent keeps sending `selectedIndex={0}`, so after a tap on segment 2 the
+  /// control must snap back to segment 1 - and a snapshot of the screen cannot
+  /// prove that, because the screen looks identical before and after a snap. So
+  /// the check taps segment 2 *twice*: a control that had stayed on segment 2
+  /// would treat the second tap as a tap on the segment that is already chosen
+  /// and report nothing (that is the `Picker` binding's own rule, and the rule
+  /// Material 3's segment is given on Android). Two reported changes with the
+  /// parent's value never moving is therefore the snap-back.
+  func testRealInputSegmentedControl() throws {
+    try goToTab(Tab.segmentedTab, showing: Echo.segmentedIndex)
+    let control = try required("real-input-segmented", as: "the uncontrolled SegmentedControl")
+    let whereItStarted = control.frame
+    // A dash, not a `0`: the control is uncontrolled, so nothing has told JS its
+    // index and nothing should have. That is the claim worth making here, and the
+    // one both platforms can make the same way.
+    XCTAssertEqual(
+      try read(Echo.segmentedIndex),
+      "-",
+      "the SegmentedControl should not have reported an index before a touch"
+    )
+    XCTAssertEqual(try read(Echo.segmentedEvents), "0", "no change should be reported before a touch")
+
+    // The three options are single digits, so the segments are the same width and
+    // the middle of the control is the middle segment on both platforms.
+    control.atFraction(0.5).tap()
+    XCTAssertEqual(
+      readUntil(Echo.segmentedIndex) { $0 == "1" },
+      "1",
+      "a real tap on the second segment should reach JS as index 1"
+    )
+    XCTAssertEqual(try read(Echo.segmentedEvents), "1", "one tap should report one change")
+
+    try assertStillInPlace("real-input-segmented", startedAt: whereItStarted, after: "the first real tap")
+
+    // A different segment, so a second change is owed: a control that reported the
+    // same index twice would also satisfy the line above by echoing once.
+    try required("real-input-segmented", as: "the uncontrolled SegmentedControl")
+      .atFraction(0.12)
+      .tap()
+    XCTAssertEqual(
+      readUntil(Echo.segmentedIndex) { $0 == "0" },
+      "0",
+      "a real tap on the first segment should reach JS as index 0"
+    )
+    XCTAssertEqual(try read(Echo.segmentedEvents), "2", "two taps should report two changes")
+
+    // The refusing parent.
+    let rejecting = try required("real-input-segmented-reject", as: "the controlled SegmentedControl")
+    XCTAssertEqual(
+      try read(Echo.rejectValue),
+      "0",
+      "the refusing parent pins its SegmentedControl at index 0"
+    )
+    XCTAssertEqual(try read(Echo.rejectEvents), "0", "no change should be reported before a touch")
+
+    rejecting.atFraction(0.5).tap()
+    XCTAssertEqual(
+      readUntil(Echo.rejectEvents) { $0 == "1" },
+      "1",
+      "a real tap on the controlled control's second segment should still reach JS - native paints optimistically (core.md section 4)"
+    )
+    XCTAssertEqual(
+      try read(Echo.rejectValue),
+      "0",
+      "the parent never accepted the change, so the index it sends is still 0"
+    )
+
+    // The snap-back oracle, explained above: this tap can only be reported if the
+    // selection went back to the first segment.
+    try required("real-input-segmented-reject", as: "the controlled SegmentedControl")
+      .atFraction(0.5)
+      .tap()
+    XCTAssertEqual(
+      readUntil(Echo.rejectEvents) { $0 == "2" },
+      "2",
+      "a second tap on segment 2 should be a fresh selection, which is only true if the refused one was rolled back"
+    )
+    XCTAssertEqual(
+      try read(Echo.rejectValue),
+      "0",
+      "and the parent should still be refusing"
+    )
+  }
+
   // MARK: - Reading the screen
 
   /// The element React Native gave this `testID`, waiting for it to exist.
@@ -381,6 +479,16 @@ extension XCUIElement {
   /// The middle of this element, as a point the system can touch.
   var centre: XCUICoordinate {
     coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+  }
+
+  /// A point a fraction of the way across this element, vertically centred.
+  ///
+  /// A segmented control needs it: `centre` is always the middle segment, and
+  /// proving that a segment *other* than the middle one answers a touch is half
+  /// of what the check is for. Fractions stay away from the edges, where the
+  /// rounded end caps and a possible 1 pt divider between segments live.
+  func atFraction(_ dx: CGFloat, dy: CGFloat = 0.5) -> XCUICoordinate {
+    coordinate(withNormalizedOffset: CGVector(dx: dx, dy: dy))
   }
 
   /// Press on the thumb and drag it along the track to a fraction of it.
