@@ -87,6 +87,10 @@ internal class SwitchModel : NitroUiModel() {
     defaultValue = null
     didApplyDefault = false
     onChange = null
+    // iOS clears this in `prepareForRecycle` (`HybridNitroUiSwitch.swift:309`), and a
+    // test-only prop surviving a recycle would make the next mount of this host
+    // render at the previous test's width while JS believes it sent nothing.
+    testWidth = null
   }
 }
 
