@@ -676,6 +676,11 @@ memory 0.88x / 0.60x - and `presented` is 1.00x `rn-core`, i.e. one 60 Hz frame,
 the same frame RN core's native switch reaches while both Expo arms need three
 to six.
 
+*Round 4 label (review §5.4): iOS `presented` is the `targetTimestamp` of the
+first display-link callback the main thread reaches after the mount - "main
+thread free by the next vsync", not render-server presentation. The wins above
+are fair relative reads with that label attached.*
+
 Where it is *not* the best arm, stated plainly: mount `mounted` is 3.07x the
 shared host (14.35 ms vs 4.68 ms) and its JS side is ~1.1x it, because 50
 `UIHostingController`s each apply their own props while a batched `Host` commits
@@ -689,9 +694,9 @@ Absolute (median of launch medians):
 
 | Cell         | Implementation           | presented | mounted   | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
 | ------------ | ------------------------ | --------- | --------- | --------- | --------- | --------- | ---------- |
-| mount N=50   | rn-core                  | 166.26 ms | 54.77 ms  | 6.34 ms   | 6.81 ms   | 33.03 ms  | n/a        |
+| mount N=50   | rn-core                  | n/a — 35/80 survivors, round 4 | 54.77 ms  | 6.34 ms   | 6.81 ms   | 33.03 ms  | n/a        |
 | mount N=50   | expo-ui-host-per-control | n/a       | 111.39 ms | 42.63 ms  | 45.26 ms  | 100.02 ms | n/a        |
-| mount N=50   | expo-ui-shared-host      | 178.16 ms | 57.47 ms  | 6.21 ms   | 7.52 ms   | 29.47 ms  | n/a        |
+| mount N=50   | expo-ui-shared-host      | n/a — 13/80 survivors, round 4 | 57.47 ms  | 6.21 ms   | 7.52 ms   | 29.47 ms  | n/a        |
 | mount N=50   | nitro-ui                 | n/a       | 83.11 ms  | 7.22 ms   | 8.26 ms   | 57.52 ms  | n/a        |
 | update N=50  | rn-core                  | 126.70 ms | 52.54 ms  | 4.71 ms   | 5.61 ms   | 10.23 ms  | n/a        |
 | update N=50  | expo-ui-host-per-control | 127.86 ms | 57.77 ms  | 13.32 ms  | 13.13 ms  | 48.61 ms  | n/a        |
@@ -707,7 +712,7 @@ Ratios to `rn-core`:
 | Cell         | Implementation           | presented | mounted | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
 | ------------ | ------------------------ | --------- | ------- | --------- | --------- | --------- | ---------- |
 | mount N=50   | expo-ui-host-per-control | n/a       | 1.97x   | 6.91x     | 5.97x     | 2.77x     | n/a        |
-| mount N=50   | expo-ui-shared-host      | 1.15x     | 1.11x   | 0.97x     | 1.06x     | 0.87x     | n/a        |
+| mount N=50   | expo-ui-shared-host      | n/a       | 1.11x   | 0.97x     | 1.06x     | 0.87x     | n/a        |
 | mount N=50   | nitro-ui                 | n/a       | 1.54x   | 1.20x     | 1.15x     | 1.69x     | n/a        |
 | update N=50  | expo-ui-host-per-control | 1.00x     | 1.17x   | 2.85x     | 2.41x     | 4.50x     | n/a        |
 | update N=50  | expo-ui-shared-host      | 0.91x     | 0.91x   | 1.56x     | 1.39x     | 3.09x     | n/a        |
@@ -733,32 +738,51 @@ Android `@expo/ui` memory ratios stay below `rn-core` for the reason round 2
 gave (`smaps_rollup` PSS attribution on shared Compose/runtime pages), so
 "nitro-ui costs 2.7x a shared host" is the honest read, not "Expo is free".
 
-### Android `mount presented`: why two cells are `n/a`
+**Round 4 correction:** with the probe fixed and `presented` measured for real
+(Round 4 section), the `update presented` pass above does not survive - that
+metric had read a *later animation frame*, not the presenting one. Android
+`presented` is a **miss on both cells** in the corrected measurement, joining
+UI CPU and memory.
 
-`missingPresented` in this run: mount rn-core 45/80, shared-host 67/80,
-one-host-per-control 80/80, nitro-ui 80/80; `update` cells 0. The same shape
-appears in an earlier Android run this round (45 -> 47, 67, 80, 80), so it is a
-property of the machine, not of one arm or one run.
+### Android `mount presented`: corrected in round 4 — the probe rejected the presenting frame
 
-Three emulators were live for most of the round (this task, T01's
-`nitroui_t01`, and `PR1505_Pixel`), and logcat shows the emulator drawing frames
-of 700-1600 ms (`HWUI: Davey! duration=1595ms`). The probe gives a mount 2 s to
-be latched by a frame (`FRAME_TIMEOUT_MS`), so the metric goes selective
-precisely where a cell keeps the UI thread busy longer than the emulator's frame
-pipeline: the two arms with one hosting view per control. `update` cells, whose
-iterations are 5x shorter, are intact. The fix is bench-side and not trivial -
-widen the window, or attribute presenting frames across iterations instead of
-rejecting a metric whose vsync predates the current mount - so it is a follow-up,
-and the Android D15 read above leans on `UI CPU/op`, memory and the marks
-instead. No arm was advantaged by it: the metric is missing for the two arms that
-would have had the most to gain from it.
+**Round 4 note: everything after this heading was wrong when written, and is
+kept only to show how the wrong story survived one round.** The real cause was
+in the probe: `frameMetricsEndNs` rejected every frame whose
+`INTENDED_VSYNC_TIMESTAMP <= mountNs`. But Fabric dispatches mount items from
+`DispatchUIFrameCallback.doFrame` — a Choreographer animation-phase callback —
+and the invalidated views are traversed and drawn in **that same frame**, whose
+intended vsync is necessarily before the stamp `didMountItems` writes. The probe
+was therefore recording the first frame drawn *after* the presenting frame,
+which exists only if something invalidates again within the 2 s window: the
+Switch's thumb animation does during `update` (hence the intact `update` cells
+— they measured "first animation frame after presentation", not presentation),
+while a static `mount` screen usually draws nothing more, so those samples timed
+out. That fits the data exactly — per-control and nitro-ui missing on 80/80
+*every* launch (deterministic, not "selective"), and surviving rn-core /
+shared-host samples with random 21–254 ms `presented − mounted` gaps. The
+round-2 run's steady ~29 ms gap was that environment happening to draw a second
+frame; the 272 timed-out samples × 2 s also explain most of that round's 1115 s
+wall clock. And "the Davey! frames from the other three live emulators exceed
+the window" was never the mechanism — the loss did not move with emulator
+count, GPU mode, or run.
+
+Consequences at the time: the 100 %-missing cells were honestly `n/a`, but the
+surviving rn-core (35/80) and shared-host (13/80) medians — 166 / 178 ms and
+the `1.15x` — were **survivor-biased and meaningless**, and no rule stopped the
+table printing them. Round 4 fixed the filter (accept the frame whose animation
+phase ended no earlier than the mount), added the >10 %-missing ⇒ `n/a` +
+ungated rule, and re-measured Android `presented` properly (Round 4 section).
+The `1.15x` and both absolute medians are struck from the record: the table
+above now prints `n/a` for all four round-3 mount cells.
 
 One dead end recorded so nobody repeats it: the AVD's `config.ini` had
 `hw.gpu.enabled=no`, and the runner does not boot Android devices, so the first
 two Android runs went out with a software frame path and 35-63 s mount launches.
 Re-booting with `-gpu host` (and `hw.gpu.enabled=yes`) is the right setup and is
-now in the benchmarks troubleshooting table, but it did **not** change the
-`missingPresented` pattern - the frame-window explanation above is the live one.
+now in the benchmarks troubleshooting table — but it did **not** change the
+`missingPresented` pattern, which is what should have flagged the probe filter
+as the real cause.
 
 ## What the library's own marks say
 
@@ -833,12 +857,18 @@ reported run, so none of these may mint a baseline anyway (dirty tree).
 2. **Android applies props twice per instance on mount** (marks `2.00` vs iOS
    `1.00`). Cheap today, wrong-shaped tomorrow; worth finding which two batches
    Fabric is delivering and whether the wrapper can land props in one.
+   *Closed in round 4: both deliveries are identified (`ViewManager.createViewInstance`
+   + `FabricMountingManager`'s `UpdateStateMountItem` on every Insert), the finding is
+   documented in `docs/architecture/core.md` §3 and recorded as upstream **N5**; the
+   generator short-circuit belongs to T12.*
 3. **iOS memory 2.17x `rn-core`** (233.5 KiB/instance) before anyone quotes
    per-control memory in a README. Cheaper than both Expo arms, but it is hosting
    weight, and T11's sizing work should keep it in view.
 4. **Bench: Android mount `presented` needs frame attribution that survives a
    slow frame clock** (see the `n/a` subsection). Until then Android D15 reads
    are UI CPU + memory + marks, and the report should say so.
+   *Closed in round 4: the cause was the probe's vsync filter, not the frame
+   clock. Fixed, re-run, and paired with a >10 %-missing ⇒ `n/a` rule (Round 4).*
 5. `presentedBeforeMount=2/3` on three iOS mount cells (rn-core, per-control,
    nitro-ui): the frame stamp landed before the mount stamp on 2-3 of 80 samples.
    Counted, printed, and the pair is labelled "treat with care" rather than
@@ -867,3 +897,217 @@ reported run, so none of these may mint a baseline anyway (dirty tree).
    sizing** (a 61x28 iOS 26+ Toggle box, or nitro-ui's own defaults). When T11
    replaces the defaults with measured sizing, the mount and memory cells need a
    re-baseline, because layout area is part of what they measure.
+
+---
+
+# Round 4 — small fixes before merge
+
+The round 2–3 verification (`docs/tasks/T02-bench.review.md`, "Rounds 2–3
+verification") returned **MERGE-AFTER-SMALL-FIXES**. This round implements its
+"Required before merge" list plus the recommended probe fix and one Android
+re-run: the `presented` attribution bug, a sample-completeness rule, the four
+`bench.yml` defects, the baseline that gated nothing, the missing
+`Switch.perf-test.tsx`, and the `propsApplied = 2.00` finding. No library
+native code changed (T12 owns that).
+
+## 1. Android `presented`: the probe now accepts the frame that presents a mount
+
+`frameMetricsEndNs` (the old `INTENDED_VSYNC >= mountNs` filter and its
+Davey/window story) is corrected in the round-3 section above. The new
+acceptance condition is the reviewer's:
+
+```
+INTENDED_VSYNC + UNKNOWN_DELAY_DURATION + INPUT_HANDLING_DURATION + ANIMATION_DURATION >= mountNs
+```
+
+— accept a frame when its animation phase ran no later than the mount (the
+phase `didMountItems` stamps inside), reject frames whose animation phase
+ended before it. The reported stamp stays `INTENDED_VSYNC + TOTAL_DURATION`.
+One deviation worth knowing: the constant named `UNKNOWN_DELAY` in the review
+was renamed `UNKNOWN_DELAY_DURATION` and is **public** (API 24), so the
+condition composes from public metrics — no `@hide` access. The API-26
+`DEADLINE` metric is a *budget duration*, not a timestamp, so it was tried and
+dropped; the three-duration sum is the real condition.
+
+## 2. Completeness rule: >10 % missing ⇒ `n/a`, ungated
+
+Round 3 printed a 166 ms median from 35 of 80 samples and gated a ratio built
+from survivors. Now (`MAX_MISSING_SAMPLE_RATIO` in `scripts/bench/lib.mjs`):
+
+- every gated metric carries a `completeness` record (samples vs expected,
+  where expected is the cell's iteration count or launch count, and a launch's
+  presence counts once — 20 iterations missing on one launch is 20, a whole
+  missing launch is 80);
+- a metric missing more than 10 % prints `n/a` in every table, comes with a
+  "Not reportable (over 10 % of samples missing): presented 35 of 80" line in
+  the detail sections, is absent from `ratioTable` — so it cannot gate and
+  cannot be compared — and old results files without `completeness` fall back
+  to their `sanity.missing*` counters;
+- a ratio is additionally withheld when the **control** lacks the metric
+  (survivor-over-survivor was round 3's `1.15x`);
+- `baselineBlockers()` refuses to mint a baseline from any run with an
+  unreportable metric, next to the dirty/plan/launches/load blockers.
+
+Tests: the bench suite is 27 (`sample completeness (round 4)` ×5,
+`--check` against a committed baseline ×3 — the reviewer's scripted `--check`
+path is now a test — plus `summaryTable`/`detailSections` n/a assertions).
+
+## 3. One Android re-run with the fix (AVD `nitroui_t02`, idle machine)
+
+`bun bench --platform android --plan quick` at `7929130`-dirty, `-gpu host`,
+load average 1.99 over 14 cores, 434 s wall (round 3's 1115 s was three
+emulators plus builds), `problems: none`, results
+`7929130-dirty-android-20261023T021818Z`. **`missingPresented` is 0 on every
+cell (80/80 everywhere)** — the probe fix, not the machine, is what made
+Android `presented` measurable. No cell tripped the 10 % rule, so no `n/a`
+this run. Absolute values are not comparable to round 3's (different machine
+load, and round 3's surviving `presented` numbers measured a later frame);
+ratios are.
+
+Absolute (median of launch medians):
+
+| Cell         | Implementation           | presented | mounted   | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| ------------ | ------------------------ | --------- | --------- | --------- | --------- | --------- | ---------- |
+| mount N=50   | rn-core                  | 70.06 ms  | 53.76 ms  | 6.66 ms   | 8.40 ms   | 29.08 ms  | n/a        |
+| mount N=50   | expo-ui-host-per-control | 148.51 ms | 111.99 ms | 43.90 ms  | 43.29 ms  | 91.39 ms  | n/a        |
+| mount N=50   | expo-ui-shared-host      | 70.47 ms  | 57.63 ms  | 8.09 ms   | 9.79 ms   | 28.88 ms  | n/a        |
+| mount N=50   | nitro-ui                 | 139.32 ms | 73.38 ms  | 8.20 ms   | 9.16 ms   | 52.22 ms  | n/a        |
+| update N=50  | rn-core                  | 77.31 ms  | 50.04 ms  | 8.90 ms   | 8.15 ms   | 12.02 ms  | n/a        |
+| update N=50  | expo-ui-host-per-control | 130.05 ms | 71.15 ms  | 15.40 ms  | 14.34 ms  | 50.17 ms  | n/a        |
+| update N=50  | expo-ui-shared-host      | 96.61 ms  | 44.90 ms  | 7.77 ms   | 8.24 ms   | 36.55 ms  | n/a        |
+| update N=50  | nitro-ui                 | 116.05 ms | 57.50 ms  | 8.23 ms   | 8.24 ms   | 50.16 ms  | n/a        |
+| memory N=200 | rn-core                  | n/a       | n/a       | n/a       | n/a       | n/a       | 53.4 KiB   |
+| memory N=200 | expo-ui-host-per-control | n/a       | n/a       | n/a       | n/a       | n/a       | 2.5 KiB — unreliable, footnote |
+| memory N=200 | expo-ui-shared-host      | n/a       | n/a       | n/a       | n/a       | n/a       | 50.5 KiB   |
+| memory N=200 | nitro-ui                 | n/a       | n/a       | n/a       | n/a       | n/a       | 133.4 KiB  |
+
+Ratio to `rn-core`:
+
+| Cell         | Implementation           | presented | mounted | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| ------------ | ------------------------ | --------- | ------- | --------- | --------- | --------- | ---------- |
+| mount N=50   | expo-ui-host-per-control | 2.00x     | 1.96x   | 6.65x     | 5.01x     | 3.13x     | n/a        |
+| mount N=50   | expo-ui-shared-host      | 0.96x     | 1.00x   | 1.20x     | 1.13x     | 1.00x     | n/a        |
+| mount N=50   | nitro-ui                 | 1.80x     | 1.42x   | 1.22x     | 1.09x     | 1.80x     | n/a        |
+| update N=50  | expo-ui-host-per-control | 1.70x     | 1.34x   | 1.77x     | 1.79x     | 4.11x     | n/a        |
+| update N=50  | expo-ui-shared-host      | 1.31x     | 0.90x   | 0.89x     | 1.01x     | 3.04x     | n/a        |
+| update N=50  | nitro-ui                 | 1.50x     | 1.24x   | 0.93x     | 1.00x     | 4.11x     | n/a        |
+| memory N=200 | expo-ui-host-per-control | n/a       | n/a     | n/a       | n/a       | n/a       | 0.05x — unreliable, footnote |
+| memory N=200 | expo-ui-shared-host      | n/a       | n/a     | n/a       | n/a       | n/a       | 0.94x      |
+| memory N=200 | nitro-ui                 | n/a       | n/a     | n/a       | n/a       | n/a       | 2.51x      |
+
+**What `presented` now says.** The gap to `mounted` behaves like frame
+latency, not like round 3's 21–254 ms scatter: rn-core 16.3 ms (one 60 Hz
+frame), shared-host 12.8 ms, per-control 36.5 ms, nitro-ui **65.9 ms** on
+`mount` — the presenting frame is long because the same frame's UI thread is
+doing the arm's Compose work (nitro-ui 52.2 ms/op vs shared host 28.9), which
+is round 3's marks finding read through a now-working metric.
+
+**D15 verdict (Android), corrected by measurement rather than by absence:
+mount `presented` 1.88x and `update presented` 1.14x the shared host — both
+miss the ≤1.0x target — joining the round-3 misses on UI CPU (1.80x) and
+memory (2.64x).** Against one-host-per-control the library still wins
+(`mount presented` 0.90x it, UI CPU 0.58x). Round 3's "update presented 0.93x
+passes" was the broken metric reading each arm's thumb-animation frame; with
+the presenting frame it reads 1.50x rn-core / 1.14x shared host. The D15
+explanation (per benchmarks.md item 6) is the marks run already in this
+report — one Compose composition per control on the UI thread — and the
+follow-up is unchanged and now load-bearing: T12's shared-composition or
+per-transaction `sendApplyNotifications` batching. No arm was advantaged or
+penalized by measurement again: `presented` is now complete on all eight cells.
+
+*Footnote — the per-control `bytes/inst` is this run's one unreliable cell,
+and the completeness rule cannot see it: all 4 samples arrived, but 2 of the
+4 per-launch PSS diffs were **negative** (launch values 56.7, −49.8, −34.0,
+39.1 KiB — process memory attributed away while mounting 200 per-control
+hosts, the shared-`smaps_rollup` attribution round 2 described, taken to
+absurd). The median, 2.5 KiB / 0.05x, is meaningless; round 3 read 49.1 KiB
+for this arm and `bytesPerInstance` is deliberately ungated, so nothing fails
+— do not quote it. A rule to discard negative per-launch diffs (or take
+max(0, ·) and flag) is a new follow-up.*
+
+## 4. `bench.yml`: four defects fixed
+
+- **Concurrency moved onto the jobs**, keyed per platform
+  (`…-ios` / `…-android` suffix): the workflow-level group let any later
+  comment or label start a run that cancelled the in-flight bench *before* the
+  `trigger` job filtered it out, and both platform jobs of one run shared the
+  group.
+- **KVM enabled** for the emulator runner (`99-kvm4all.rules` udev step +
+  `ls /dev/kvm` guard) — without it the hosted runner had no usable `/dev/kvm`.
+- **`persist-credentials: false` on both checkouts**: the job holds a
+  `pull-requests: write` token and then runs `bun install` and Gradle from PR
+  code; `gh pr checkout`/`gh pr comment` authenticate with `GH_TOKEN` from
+  their step environment instead of `.git/config`.
+- **`Shut the simulator down` moved to the end** of the iOS job (`if:
+  always()`), and `--shutdown` dropped from the two bench invocations — the
+  head run now reuses the simulator the base run booted, and the step is the
+  failure safety net it was meant to be. (Android needs none: the
+  emulator-runner owns that lifecycle.)
+
+## 5. The baseline that gated nothing is deleted
+
+`bench/baselines/android35-emu-pixel9.json` (`bb41d00`) was recorded while
+nitro-ui self-skipped — all seven nitro-ui cells were `skipReason` with zero
+metrics — so every `--check` degraded to `new-arm` and could never fail, and
+its `presentedNs` ratios were measured through the probe bug. Deleted; the
+README now states that **no latency baseline exists on either platform and
+`--check` is inert until one is recorded**. This round could not mint one:
+D9 (`baselineBlockers`) requires a clean tree, `--plan full`, ≥8 launches,
+completed launches and an idle machine — a dirty-tree quick run is
+local-feedback material by design, and forcing it through `--force` is exactly
+what the gate exists to stop.
+
+## 6. `Switch.perf-test.tsx`: the render gate now measures the real wrapper
+
+`src/components/Switch/Switch.perf-test.tsx` is the scenario contract from
+benchmarks.md, live: mount, 3 flips (the wrapper must re-render when told), 2
+parent renders (it must not churn), baseline `bench/baselines/renders.json`
+committed at **count 6 with `initialUpdateCount = 0` and zero redundant
+updates**, verified equal across all Reassure runs. Two findings folded back
+into the docs example: the bumped counter must be **drawn** (Reassure compares
+whole trees per commit — an invisible parent commit is itself a "redundant
+update" of the harness, indistinguishable from a wrapper defect), and
+`measureRenders` imports from `reassure` (the old
+`@callstack/reassure/measurement` path does not exist in reassure 1.6). Test
+globals come from `@jest/globals` like every other test here, and
+`!**/*.perf-test.*` was added to `files` so neither the test nor its build
+output ships (manifest unchanged, 133 files). `bun run perf:renders` passing
+is now the gate actually gating something, inside `bun run check`.
+
+## 7. The Android double `updateState` delivery is recorded, not fixed here
+
+Round 3's `propsApplied = 2.00` is explained (both RN Fabric deliveries named),
+written into `docs/architecture/core.md` §3 as a perf note every component
+author must read, and recorded as upstream **N5** in `docs/upstream.md`: the
+fix is a nitrogen generator short-circuit (skip `updateState` when the props
+snapshot equals `holder.lastState`), owned by T12. No native library code
+changed this round.
+
+## Gate (round 4)
+
+`bun run check` green, now carrying the completeness tests: Jest 99 tests /
+8 suites (bench suite 19 → 27), `perf:renders` 1 wrapper exact-count PASS,
+`test:native`, `nitrogen:check`, `autolinking:check`, `api-extractor:check`,
+`publint`, `manifest:check` (133 files, unchanged) all green. `jest
+scripts/__tests__/bench-gate.test.js`: 27/27.
+
+## Machine conditions (round 4)
+
+Idle at run start (load 1.99 / 14 cores, `vm.loadavg` { 1.09 … } before boot);
+the emulator boot and Gradle build dominate the 434 s run; `bun run check`
+followed on the same quiet machine. `nitroui_t02` was shut down afterwards;
+`emulator-5560` and the other agents' devices were not touched.
+
+## Follow-ups (round 4)
+
+1. **Record a real baseline**: one clean `--plan full --launches 8` run per
+   platform on the canonical devices (or CI's runner, the workflow's stated
+   environment) in a dedicated commit — until then `--check` is inert and the
+   only blocking bench gate is `perf:renders`.
+2. **`bytesPerInstance` negative-launch discard rule** (see the §3 footnote):
+   a launch whose PSS diff is negative is not a 2.5 KiB sample, and one such
+   launch in four was enough to move a cell's median by 20x.
+3. **T12**: nitrogen generator `updateState` short-circuit (upstream N5) and
+   the Android composition-batching work D15's corrected miss now hangs on.
+4. **iOS `presented` label** (review §5.4) is now in benchmarks.md; any future
+   iOS D15 read should carry it.
