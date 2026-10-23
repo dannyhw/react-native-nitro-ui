@@ -31,7 +31,7 @@ second component to add:
 | Prop                 | Type                          | Default  | Maps to                                                        |
 | -------------------- | ----------------------------- | -------- | -------------------------------------------------------------- |
 | `variant`            | `'linear' \| 'circular'`      | `'linear'` | SwiftUI `.progressViewStyle()` / which M3 composable is built.  |
-| `value`              | `number \| null \| undefined` | `null`   | The fraction shown, `0…1`. `null`/`undefined` = **indeterminate**. |
+| `value`              | `number \| null \| undefined` | `null`   | The fraction shown, `0…1`. `null`/`undefined` = **indeterminate**. On iOS a **circular** indicator does not draw it — see Limits. |
 | `tintColor`          | `ColorValue \| undefined`     | platform | SwiftUI `.tint()` / M3 `color`.                                 |
 | `trackColor`         | `ColorValue \| undefined`     | platform | M3 `trackColor`. **Android only today** — see Limits.            |
 | `style`              | `ViewStyle`                   | —        | Overrides the default box (see Sizing).                          |
@@ -59,8 +59,8 @@ notes), so a flag would have nothing to switch.
 | ----------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
 | Control           | `ProgressView(value:)` + `.progressViewStyle(.linear/.circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3)      |
 | Host              | `UIHostingController` inside `NitroSwiftUIHost`                 | `NitroComposeHost<M>: AbstractComposeView`                        |
-| Indeterminate     | `ProgressView()` with no value                                  | the overload without `progress`                                   |
-| Determinate value | the `Double`, clamped at the draw site                          | `progress = { Float }` lambda, read by M3's own composition        |
+| Indeterminate     | `ProgressView()` with no value — a **bar** stays an empty track (Limits) | the overload without `progress`                                   |
+| Determinate value | the `Double`, clamped at the draw site — **drawn by the bar only**; a ring keeps spinning (Limits) | `progress = { Float }` lambda, read by M3's own composition        |
 | Indicator colour  | `.tint(_:)`                                                     | `color:` (`ProgressIndicatorDefaults.*Color` when untinted)        |
 | Track colour      | **nothing addresses the track**                                 | `trackColor:` (`…linearTrackColor` / `…circular*TrackColor`)       |
 | Value animation   | the toolkit's; ours is "draw what arrived"                      | M3 draws the lambda's value; it does not interpolate               |
@@ -143,14 +143,28 @@ forever, so both platforms gate it on window membership:
 - iOS: a zero-size sibling observer (`NitroUiProgressWindowObserver`) reports
   `didMoveToWindow`; off-window the model draws an **empty determinate**
   indicator in the same style — same style so the measured size does not move,
-  empty because that is the one determinate state that needs no motion.
+  empty because that is the one determinate state that needs no motion. That
+  swap is only *visible* on a **linear** bar: the circular style looks the same
+  with a value and without one (Limits), so for a ring the gate stops work
+  without changing a pixel.
 - Android: the same rule on the same flag, driven by the host's attach/detach
   callbacks, plus the recycle path.
 
 `nuiTestIsAnimating()` is the shared invariant the harness asserts: *indeterminate
-and on screen*. Recycling and `onDropView` reset the flag, so a hidden or pooled
-indicator costs no frames (the harness test is
-`animates while it is on screen and stops when it is gone`).
+and on screen*. What the test
+(`animates while it is on screen and stops when it is gone`) measures is that the
+flag closes: it is `false` for a control whose view has been dropped, and false
+again after a recycle. Whether a screen full of hidden indicators then costs fewer
+frames is a CPU claim nobody has measured on this repo, so this page does not make
+it — the mechanism (an off-window control is composed as determinate, so M3's
+`rememberInfiniteTransition` leaves the composition) is the argument, and the
+measurement is a follow-up.
+
+The flag is *what the view was asked to do*, which on Android is what the pixels
+do and on iOS is not always: SwiftUI ignores it in both directions, once for each
+kind of circular/linear limit above. A determinate ring reports `false` and spins
+anyway; an indeterminate bar reports `true` and does not move (next bullet). The
+harness asserts the flag, never the motion, and no test here watches pixels move.
 
 ### What we do not do
 
@@ -190,6 +204,31 @@ that says so.
   on iOS the prop is accepted, stored, round-trips through the handle and paints
   nothing. It is a prop on both platforms anyway so the JS API means one thing
   rather than two.
+- **A determinate `circular` indicator does not show its value on iOS.** SwiftUI's
+  `.circular` `ProgressView` keeps spinning whatever fraction it is handed, so on
+  iOS `variant="circular"` with a `value` looks exactly like the indeterminate
+  ring: the number reaches VoiceOver (`accessibilityValue`) and the handle, not the
+  pixels. Android does draw it — Material 3 has a determinate
+  `CircularProgressIndicator`. This is a SwiftUI surface limit, not a plumbing bug:
+  `value` arrives, is clamped, and is handed to the view.
+  - `Gauge(value:in:)` with `.gaugeStyle(.accessoryCircularCapacity)` (the platform's
+    own determinate ring) was built and measured here, and rejected on the numbers:
+    it lays out a **58 pt** circle where this control's rings are 20 pt on iOS and
+    40 dp on Android, so a ring would resize the moment a value arrived — the exact
+    box-moving behaviour `docs/architecture/sizing.md` §5 and DECISIONS D20 exist to
+    prevent — and it needs iOS 16 while this library builds for 15.1. Forcing it back
+    to 20 pt costs the `frame()`/`controlSize` tricks the next bullet rules out.
+  - What is left is our own drawing: a `ProgressViewStyle` or an arc we render. That
+    buys a real determinate ring at the price of "the drawing is the platform's", so
+    it is a decision for a reviewer, not a fix for a fix round.
+- **On iOS an indeterminate `linear` bar shows an empty track and does not
+  visibly animate.** It is pixel-identical to the same bar at `value={0}`: rows
+  `1024`–`1046` of three simulator screenshots taken 600 ms apart are
+  byte-identical, while the rows of the ring below them differ — so this is
+  measured, not inferred. The likely cause is the same fight the next bullet
+  describes: our bar is 4 pt tall, and `UIProgressView`'s indeterminate stripes
+  need more height than that to draw. Use a ring (or a `linear` bar on Android)
+  where indeterminate motion carries meaning.
 - **No size or thickness control.** Neither toolkit lets us set a
   `ProgressView`'s thickness or ring diameter through an API we consider stable
   (`controlSize` and `frame()` fight the control's own measurement here), so the
