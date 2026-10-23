@@ -76,6 +76,11 @@ android/generated
 # nitrogen/generated IS committed on purpose (docs/research/setup-decisions.md §1):
 # generated code must be reviewable, and `bun run nitrogen:check` guards drift.
 
+# real-input suite evidence: the xcodebuild/adb logs, hierarchy dumps and
+# screenshots a failing run leaves behind. Nothing in it is reviewable, and the
+# run itself is the report.
+.real-input/
+
 # react-native-harness artifacts
 example/**/__image_snapshots__/*.bak
 **/harness-*.log
