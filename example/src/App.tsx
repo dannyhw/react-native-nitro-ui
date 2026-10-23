@@ -9,10 +9,11 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
+import ProgressScreen from './ProgressScreen';
 import SliderScreen from './SliderScreen';
 import SwitchScreen from './SwitchScreen';
 
-type Screen = 'switch' | 'slider';
+type Screen = 'switch' | 'slider' | 'progress';
 
 /**
  * Which screen a cold launch shows.
@@ -22,7 +23,7 @@ type Screen = 'switch' | 'slider';
  * developer convenience. Task screenshots are taken with this flipped (see the
  * task report), which needs no Metro change and no rebuild of anything else.
  */
-const DEFAULT_SCREEN: Screen = 'switch';
+const DEFAULT_SCREEN: Screen = 'progress';
 
 /**
  * The tab bar's top padding.
@@ -41,6 +42,7 @@ const topInset =
 const TABS: { id: Screen; label: string }[] = [
   { id: 'switch', label: 'Switch' },
   { id: 'slider', label: 'Slider' },
+  { id: 'progress', label: 'Progress' },
 ];
 
 /**
@@ -80,7 +82,9 @@ export default function App() {
         ))}
       </SafeAreaView>
       <View style={styles.body}>
-        {screen === 'switch' ? <SwitchScreen /> : <SliderScreen />}
+        {screen === 'switch' ? <SwitchScreen /> : null}
+        {screen === 'slider' ? <SliderScreen /> : null}
+        {screen === 'progress' ? <ProgressScreen /> : null}
       </View>
     </View>
   );
