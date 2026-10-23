@@ -9,10 +9,11 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
+import ButtonScreen from './ButtonScreen';
 import SliderScreen from './SliderScreen';
 import SwitchScreen from './SwitchScreen';
 
-type Screen = 'switch' | 'slider';
+type Screen = 'switch' | 'slider' | 'button';
 
 /**
  * Which screen a cold launch shows.
@@ -41,11 +42,12 @@ const topInset =
 const TABS: { id: Screen; label: string }[] = [
   { id: 'switch', label: 'Switch' },
   { id: 'slider', label: 'Slider' },
+  { id: 'button', label: 'Button' },
 ];
 
 /**
  * Playground for the library. T10 put the Switch tracer bullet here; G1 added
- * the Slider, and every task adds a screen.
+ * the Slider and G2 the Button, and every task adds a screen.
  *
  * The tabs are the only navigation: the harness renders its own UI, and a
  * screenshot of the example app is a screenshot of whichever screen is showing.
@@ -80,7 +82,13 @@ export default function App() {
         ))}
       </SafeAreaView>
       <View style={styles.body}>
-        {screen === 'switch' ? <SwitchScreen /> : <SliderScreen />}
+        {screen === 'switch' ? (
+          <SwitchScreen />
+        ) : screen === 'slider' ? (
+          <SliderScreen />
+        ) : (
+          <ButtonScreen />
+        )}
       </View>
     </View>
   );

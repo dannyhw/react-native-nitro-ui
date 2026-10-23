@@ -13,6 +13,8 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.IntState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
@@ -139,6 +141,28 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    */
   private var lastReportedSize: NitroUiDpSize? = null
 
+  /**
+   * Whether a sizing key has arrived whose box the engine has not been asked about
+   * yet. Set by [noteSizingKeyChanged], consumed by [onLayout].
+   */
+  private var sizingKeyChangePending = false
+
+  /**
+   * Bumped when an armed sizing key change lands ([onLayout]) and read by
+   * [NitroUiMeasuredRoot]'s measure block. A measure block observes the snapshot
+   * state it reads, so writing this marks that node measure-dirty - which is the
+   * only way this host can ask a *mounted* Compose control to measure again:
+   * Compose leaves it alone when only the box moved (measured by T14 on a mounted
+   * control re-laid-out at a wrong guess), and a report only ever comes out of a
+   * measure.
+   *
+   * It is written at the layout, not at the prop: reporting a size while the engine
+   * still has the *previous* configuration's box is a correction on a box that this
+   * same transaction was already going to fix, which breaks D17's rule that a warm
+   * configuration costs nothing.
+   */
+  private val remeasureToken = mutableIntStateOf(0)
+
   /** Whether a pre-draw flush is already queued for this host. */
   private var flushScheduled = false
 
@@ -194,6 +218,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       NitroUiMeasuredRoot(
         record = wantsContentSize,
         unbounded = wantsContentSize && sizingPolicy == NitroUiSizing.POLICY_INTRINSIC,
+        remeasureToken = remeasureToken,
         onMeasured = ::recordMeasuredSize,
       ) {
         Component(model)
@@ -256,6 +281,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     model.reset()
     isDirty = true
     isMeasurePending = true
+    sizingKeyChangePending = false
     contentSize = null
     // A recycled mount still paints its first frame for itself, and has to watch
     // for it again: the listener it registered for the previous mount is gone.
@@ -361,6 +387,16 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       measureNow(right - left, bottom - top)
     }
     super.onLayout(changed, left, top, right, bottom)
+    if (changed && sizingKeyChangePending) {
+      // This frame is the engine's answer for the new key, so whatever the control
+      // now measures is a report about the right configuration: reset the dedupe and
+      // ask for the measure that produces it (review F1). `changed` matters twice -
+      // it proves the engine has answered, and a key change that moved no box has
+      // nothing to correct.
+      sizingKeyChangePending = false
+      lastReportedSize = null
+      remeasureToken.intValue += 1
+    }
   }
 
   /**
@@ -448,6 +484,32 @@ abstract class NitroComposeHost<M : NitroUiModel>(
         }
       }
     )
+  }
+
+  /**
+   * Forget the size the engine already has from this host, so the next measure is
+   * reported even when it matches the last one, and ask for that measure.
+   *
+   * For a component whose *configuration* changed, where the new configuration may
+   * measure the same size as the old one. The engine has no answer for a key it has
+   * not seen, so it lays the instance out at the component's declared fallback, and
+   * this instance's own report is the only thing that can move the box back. The
+   * epsilon in [reportToSizingEngine] compares with the size last reported - which
+   * belongs to the configuration being replaced - so without this the correcting
+   * report is the one it skips and the instance stays at the fallback, control
+   * centred inside it (review F1: setting `systemImage` on Android measures the same
+   * size, and its setter does not even recompose anything).
+   *
+   * Both halves wait for the layout that carries the new box, for the reason on
+   * [remeasureToken]. An instance that has never measured has reported nothing, so
+   * there is nothing to reset and its own first measure covers it - that is why the
+   * first key of a mount does not arm this.
+   */
+  fun noteSizingKeyChanged() {
+    if (contentSize == null) {
+      return
+    }
+    sizingKeyChangePending = true
   }
 
   private fun recordMeasuredSize(widthPx: Int, heightPx: Int) {
@@ -739,6 +801,7 @@ internal object NitroUiColorSchemes {
 internal fun NitroUiMeasuredRoot(
   record: Boolean,
   unbounded: Boolean,
+  remeasureToken: IntState,
   onMeasured: (Int, Int) -> Unit,
   content: @Composable () -> Unit,
 ) {
@@ -761,7 +824,13 @@ internal fun NitroUiMeasuredRoot(
     val placeable = measurables.firstOrNull()?.measure(childConstraints)
     val measuredWidth = placeable?.width ?: 0
     val measuredHeight = placeable?.height ?: 0
-    if (record && placeable != null) {
+    // Reading the token is the whole reason it is passed: measure blocks run under
+    // `Snapshot.observeMeasure`, so a write to what they read marks *this* node
+    // measure-dirty. That is the host's only lever to ask a mounted control to
+    // measure again (see [NitroComposeHost.remeasureToken]), and a fresh measure is
+    // the only thing that can produce the report a new sizing key is waiting for.
+    val remeasureRequested = remeasureToken.value >= 0
+    if (record && remeasureRequested && placeable != null) {
       onMeasured(measuredWidth, measuredHeight)
     }
     // What this returns is Yoga's box, not the control's size - the control gets
