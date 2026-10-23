@@ -16,7 +16,7 @@
  * Usage (devices and ports come from the environment, as everywhere else here):
  *
  *   ANDROID_AVD=<avd> ANDROID_ADB_SERVER_PORT=<port> METRO_PORT=<port> \
- *     bun run test:real-input:android [--control switch|slider]
+ *     bun run test:real-input:android [--control switch|slider|button]
  *
  * The emulator must already be booted: AGENTS.md says only touch devices you
  * started, so this script boots nothing and shuts nothing down.
@@ -51,6 +51,7 @@ const ACTIVITY = `${BUNDLE_ID}/.MainActivity`;
 /** The on-screen echoes the checks read (testIDs from `example/src`). */
 const ECHO = {
   switchValue: 'switch-controlled-value',
+  buttonCount: 'real-input-count',
   sliderStart: 'slider-start-count',
   sliderChange: 'slider-change-count',
   sliderComplete: 'slider-complete-count',
@@ -185,6 +186,69 @@ const CHECKS = {
     t.log.check(
       `the controlled value echo follows the real drag (${String(before)} → ${String(after)})`,
       after != null && after > before + 0.2
+    );
+  },
+
+  /**
+   * A real tap must reach the hosted Button's `onPress`, and a real tap on a
+   * disabled one must not.
+   *
+   * The two Buttons share one counter, which is what makes the disabled half
+   * mean something: `onPress` is passed to it as well, so a library that let a
+   * disabled control fire would move the number. The counter is React's own
+   * render, so it only moves if the touch reached Compose, Compose told Nitro,
+   * and Nitro told JS.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  button: async (t) => {
+    const control = await t.requireControl('Real-input button');
+    const disabled = await t.requireControl('Real-input disabled button');
+    t.log.checkEquals(
+      'the Button starts with no presses recorded',
+      t.requireEcho(ECHO.buttonCount),
+      '0'
+    );
+
+    await t.tapNode(control);
+    const first = t.waitForEcho(
+      ECHO.buttonCount,
+      '1',
+      'a real tap to reach onPress'
+    );
+    t.log.checkEquals(
+      'one real tap on the enabled Button reaches onPress',
+      first,
+      '1'
+    );
+
+    // The disabled one gets the same tap. Nothing should happen, and the way to
+    // say that is to keep watching the same number the enabled Button moves.
+    await t.tapNode(disabled);
+    const afterDisabled = t.requireEchoToStay(
+      ECHO.buttonCount,
+      '1',
+      'a tap on the disabled Button to be refused'
+    );
+    t.log.checkEquals(
+      'a real tap on the disabled Button does not press it',
+      afterDisabled,
+      '1'
+    );
+
+    // And the counter is still live: without this, the line above could have
+    // passed because the app stopped rendering rather than because the disabled
+    // Button refused the touch.
+    await t.tapNode(control);
+    const second = t.waitForEcho(
+      ECHO.buttonCount,
+      '2',
+      'a second real tap to reach onPress'
+    );
+    t.log.checkEquals(
+      'a second real tap presses the enabled Button again',
+      second,
+      '2'
     );
   },
 };
@@ -459,13 +523,19 @@ class DeviceHarness {
   }
 
   /**
-   * The example has two tabs and no other navigation.
+   * The example's three tabs are its only navigation.
    *
-   * @param {'switch' | 'slider'} screen
+   * @param {'switch' | 'slider' | 'button'} screen
    */
   async goToScreen(screen) {
-    const label = screen === 'switch' ? 'Switch' : 'Slider';
-    const anchor = screen === 'switch' ? ECHO.switchValue : ECHO.sliderStart;
+    const label = { switch: 'Switch', slider: 'Slider', button: 'Button' }[
+      screen
+    ];
+    const anchor = {
+      switch: ECHO.switchValue,
+      slider: ECHO.sliderStart,
+      button: ECHO.buttonCount,
+    }[screen];
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
     }
@@ -684,6 +754,40 @@ function makeContext(harness, log) {
         const shown = echo(testID);
         return shown !== null && shown !== previous;
       }, `${description} (${testID} away from "${previous}")`);
+      return echo(testID);
+    },
+
+    /**
+     * Read an echo for `settleMs` and require that it never moved. The button
+     * check needs the negative: "the disabled control did not answer" is a claim
+     * about a period, not about one instant, and a single read could have been
+     * taken before the touch was processed.
+     *
+     * @param {string} testID
+     * @param {string} expected
+     * @param {string} description
+     * @param {number} [settleMs]
+     */
+    requireEchoToStay(testID, expected, description, settleMs = 1500) {
+      const deadline = Date.now() + settleMs;
+      /** @type {string | null} */
+      let moved = null;
+      for (;;) {
+        const shown = echo(testID);
+        if (shown !== expected && moved == null) {
+          moved = shown;
+        }
+        if (moved != null || Date.now() >= deadline) {
+          break;
+        }
+        blockMs(200);
+      }
+      if (moved != null) {
+        log.abort(
+          `${description}: ${testID} went to "${String(moved)}" when it should ` +
+            `have stayed "${expected}"`
+        );
+      }
       return echo(testID);
     },
 
