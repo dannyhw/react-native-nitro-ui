@@ -10,10 +10,10 @@
 | T12 | Android Compose host performance | Apex | Opus | merged (3 rounds; D15 Android miss on UI CPU/memory, see §P2f) |
 | T13 | Shared Compose owner services (`ComposeViewContext`) spike | Apex | — | done — not shipped: services are already shared per window; report only merged, code kept on branch `task/T13-compose-view-context` (0a7e8a2) |
 | G1 | Slider | Apex | Opus | merged (1 impl + 2 fix rounds) |
-| T14 | Register declared fallbacks before first measure (cold fillWidth height-0 frame) | Apex | Opus | fix round 1 (cold Switch assert, Modal redraw bug, docs) |
+| T14 | Register declared fallbacks before first measure (cold fillWidth height-0 frame) | Apex | Opus | merged (1 impl + 1 fix round) |
 | FIX1 | iOS Slider disabled a11y probe (main iOS harness red since 381b1f2) | Apex | — | merged |
 | G3 | Progress | — | — | planned (after T02 + T11) |
-| G2 | Button (owns R3 sizing test) | Apex | Opus | fix round 1 queued (F1 stuck-at-fallback sizing bug in shared hosts, bench port to main shape, docs) — starts after T14 merges |
+| G2 | Button (owns R3 sizing test) | Apex | Opus | fix round 1 (F1 stuck-at-fallback, bench port to main shape, docs) |
 | T15 | Real-input verification (OS taps/drags on Switch, Slider; Button added after G2 merges) | Apex | — | in progress (reset onto main) |
 | G4 | SegmentedControl (+ Picker only if time, D19) | — | — | planned (after G2) |
 | G5 | DatePicker | — | — | moved to 0.2 (D19) |
