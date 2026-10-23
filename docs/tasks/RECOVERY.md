@@ -15,7 +15,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 
 | Task | Worktree / branch | Last commit | State | Next step |
 |---|---|---|---|---|
-| G3 Progress | `nitro-ui-worktrees/G3` · `task/G3-progress` | `9e939a7` (tree clean) | Fix round 1 done (F1–F7; F3 Gauge rejected + documented); devices shut down | Narrow Opus re-review → `/tmp/G3-progress.rereview.md`; if lost, re-run it. Then merge (1 fix round left if needed). |
+| G3 Progress | — | merged into main (`7b91e95`) | Done | — |
 | G4 SegmentedControl | `nitro-ui-worktrees/G4` · `task/G4-segmented-control` | `415afb3` (9 commits, tree clean) | Implementation round done (used fix round 1 of 2 on the `real-input/support.mjs` teardown bug); devices shut down | Opus full review (no devices) → review lands at `/tmp/G4-segmented-control.review.md`; if lost, re-run it. Then ≤1 fix round left; after merge re-run G4 harness on both platforms (FIX2 touched its measure path). |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
