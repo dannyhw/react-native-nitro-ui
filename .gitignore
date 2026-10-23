@@ -85,6 +85,9 @@ android/generated
 example/**/__image_snapshots__/*.bak
 **/harness-*.log
 **/.harness/
+# Machine state a harness run publishes for its own wall-clock gates (D21): a
+# load average a running test may read, never evidence anyone reviews.
+**/harness-timing/
 
 # T02 bench app
 # `bench/ios` and `bench/android` are CNG output: `expo prebuild --clean`

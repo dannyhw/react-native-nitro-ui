@@ -76,6 +76,12 @@ export function artifactsDir(platform) {
  * already-running Metro is reused rather than restarted: on this machine another
  * task may own it, and killing it would be worse than sharing it.
  *
+ * Metro's output goes to `logFile` through a descriptor the child writes to
+ * directly. Piping stdout and stderr into one write stream was the T15b crash:
+ * both pipes end the shared stream as soon as either one closes, and the exit
+ * handler then wrote to a finished stream, which killed the runner *after* the
+ * suite had passed. A descriptor has no such lifecycle to lose.
+ *
  * @param {object} options
  * @param {number} options.port
  * @param {string} options.logFile
@@ -91,31 +97,40 @@ export async function ensureMetro({ port, logFile }) {
     path.dirname(new URL(import.meta.url).pathname),
     '../../example'
   );
-  const out = fs.createWriteStream(logFile, { flags: 'w' });
-  const child = spawn('bun', ['run', 'start', '--port', String(port)], {
-    cwd: exampleDir,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, RCT_METRO_PORT: String(port) },
-  });
-  child.stdout.pipe(out);
-  child.stderr.pipe(out);
+  const fd = fs.openSync(logFile, 'w');
+  let child;
+  try {
+    child = spawn('bun', ['run', 'start', '--port', String(port)], {
+      cwd: exampleDir,
+      stdio: ['ignore', fd, fd],
+      env: { ...process.env, RCT_METRO_PORT: String(port) },
+    });
+  } finally {
+    // The child took its own reference at spawn, so this side can let go.
+    fs.closeSync(fd);
+  }
   child.on('exit', (code) => {
-    out.write(`\nmetro exited with code ${String(code)}\n`);
-    out.end();
+    // Append, never a held-open stream: this fires after the suite may be over.
+    fs.appendFileSync(logFile, `\nmetro exited with code ${String(code)}\n`);
   });
+
+  let stopped = false;
+  const stopMetro = () => {
+    if (stopped) return;
+    stopped = true;
+    child.kill('SIGTERM');
+  };
 
   const deadline = Date.now() + 60000;
   while (Date.now() < deadline) {
     if (await metroIsUp(port)) {
       console.log(`metro: started on ${port} (log: ${logFile})`);
-      return () => {
-        child.kill('SIGTERM');
-      };
+      return stopMetro;
     }
     await sleep(500);
   }
 
-  child.kill('SIGTERM');
+  stopMetro();
   throw new Error(
     `real-input: Metro did not come up on port ${port}. See ${logFile}.`
   );
