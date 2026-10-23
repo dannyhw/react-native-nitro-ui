@@ -114,7 +114,11 @@ internal class SwitchModel : NitroUiModel() {
  * `@DisallowComposableCalls` and building the colours needs a composable read of
  * the scheme. So a cache with the miss in the composable - and it only pays
  * across instances while the *scheme identity* is shared, which is what
- * `NitroUiTheme`'s process-wide scheme is for (see `NitroComposeHost.kt`).
+ * `NitroUiTheme`'s process-wide scheme is for (see `NitroComposeHost.kt`). A
+ * per-host `remember` is not impossible (read `SwitchDefaults.colors()` in the
+ * composable, then `remember(base, tint) { base.copy(checkedTrackColor = …) }`,
+ * since `SwitchColors.copy` is public and not composable), but it is one object
+ * per mounted control, which is the shape this cache exists to remove.
  *
  * Bounded and self-clearing: one scheme at a time (identity is the key because
  * identity is what the memo and `SwitchDefaults` both read), at most

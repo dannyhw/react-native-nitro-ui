@@ -67,14 +67,17 @@ object NitroUiSizing {
    * One, on Android: a synchronous correction is a Fabric commit run inside the
    * `OnPreDrawListener` that called `flush`, and that listener is about to return
    * `false` and cancel the frame the commit would have drawn. One is what D17 asks
-   * for there, and one is also enough for a batch - the correction is shared by
-   * every instance with the same configuration, so a cold batch still shows no
-   * wrong-size frame at a budget of one (T12 phase 2 measured `stale=0` over 100
-   * instances). A second synchronous push in the same flush re-lays out a tree
-   * that has just become correct: on a cold batch of 200, debug build, the flush
-   * costs 36.2-38.5 ms with two and 36.6 ms with one. iOS keeps two, because its
-   * flush runs at the end of a turn whose commit has not happened yet, so the
-   * pushes ride along with it (8.5 ms for the same batch).
+   * for there. It is not known to be enough for a whole batch: the synchronous
+   * push clones one family, so the siblings ride a commit that only carries the
+   * first instance's answer. What T12 measured is that a 100-instance cold batch
+   * drew `stale=0` at budget 1 on one device - a measurement, not a guarantee, and
+   * the harness logs the count rather than gating on it. A second synchronous push
+   * in the same flush buys nothing measured: on a cold batch of 200, debug build,
+   * the first batch in a process cost 38.80 ms with two pushes and 36.76 ms with
+   * one, and the median of three rounds 18.88 ms against 12.84 ms (-32%; at 500
+   * rows, 42.51 against 26.77, -37%). iOS keeps two, because its flush runs at the
+   * end of a turn whose commit has not happened yet, so the pushes ride along with
+   * it (8.5 ms for the same batch).
    */
   private const val IMMEDIATE_BUDGET_PER_FLUSH = 1
 

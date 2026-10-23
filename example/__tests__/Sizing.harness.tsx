@@ -502,11 +502,14 @@ describe('Sizing · intrinsic (T11)', () => {
     // is allowed to spend per flush: 2 on iOS, where `flush` runs at the end of a
     // turn whose commit has not happened yet (T11 measured 8.5ms for this batch),
     // and 1 on Android, whose flush runs inside the pre-draw pass it is about to
-    // cancel. One is enough there because the correction is shared by every
-    // instance with this configuration, so the other 199 ride the same commit -
-    // the stale-frame test below measures `stale=0` with the budget at 1 - while a
-    // second synchronous commit re-lays out a tree that just became correct
-    // (T12 phase 2: 36.2-38.5ms for two pushes, 36.6ms for one).
+    // cancel. One is the floor D17 asks for, not a known way to correct a whole
+    // batch: the synchronous push clones one family, so the other 199 keep the
+    // measurement they cached until their own update arrives. What T12 measured at
+    // budget 1 is that this batch drew `stale=0` on one device (the test below logs
+    // it and does not assert it). A second push buys nothing measured: first batch
+    // in a process, 38.80ms with two pushes against 36.76ms with one; median of
+    // three rounds, 18.88ms against 12.84ms - and at 500 rows 42.51ms against
+    // 26.77ms (-32% / -37%).
     const immediateBudget = Platform.OS === 'android' ? 1 : 2;
     expect(d.corrections).toBe(200);
     expect(d.immediate).toBeLessThanOrEqual(
@@ -534,11 +537,12 @@ describe('Sizing · intrinsic (T11)', () => {
     // spends is the frame it replaces. T12 phase 2 attributed that re-layout: it is
     // the single Fabric commit, and the engine's own work around it (200 reports,
     // one correction, 199 async enqueues) is 0.09ms. One commit of a 200-host tree
-    // costs 36.2-38.5ms on a quiet emulator and T11 measured 84-125ms for the same
-    // batch on a loaded one, so this is the load-bound number, not a target: the
-    // bar stays where T11 put it because it cannot be tightened without turning
-    // this test red on a busy machine. The structural guarantee - not N synchronous
-    // commits - is carried by the `immediate` gate above, not by milliseconds.
+    // cost 38.80ms as the first batch in a process and 14.08-18.88ms in the rounds
+    // after it, and T11 measured 84-125ms for the same batch on a loaded one, so
+    // this is the load-bound number, not a target: the bar stays where T11 put it
+    // because it cannot be tightened without turning this test red on a busy
+    // machine. The structural guarantee - not N synchronous commits - is carried by
+    // the `immediate` gate above, not by milliseconds.
     expect(flushMs).toBeLessThan(mountedIn * 0.1);
     expect(flushMs).toBeLessThan(Platform.OS === 'android' ? 250 : 40);
     unmount();
@@ -549,11 +553,17 @@ describe('Sizing · intrinsic (T11)', () => {
      * The number review S6 asked for, and the one the round-1 report did not have.
      *
      * A flush cancels the frame whose layout it is about to fix on Android, but
-     * only `kImmediateBudgetPerTurn` (2) of a batch's corrections are issued
-     * synchronously: the rest are `Asynchronous` state updates that reach the JS
-     * thread after the cancelled frame has been redrawn. So "Android never shows a
-     * wrong box" is true per instance whose correction was in budget, and false for
-     * the batch. This test measures it instead of arguing about it: 100 instances
+     * only the platform's budget of them is issued synchronously - 1 on Android
+     * since T12, 2 on iOS - and one synchronous push clones one family, so an
+     * untouched sibling is not corrected by it at all. The rest are `Asynchronous`
+     * state updates that reach the JS thread some time later. So "Android never
+     * shows a wrong box" is guaranteed only for the instance that reported, and for
+     * the rest it is a question of when the batch's commits land relative to the
+     * redraw. T12 measured `stale=0` for this batch at budget 1 on `nitroui_t02`,
+     * against `stale=100` at budget 0 - a timing result on one device, not a
+     * property of the budget, which is why the count below stays a log.
+     *
+     * This test measures it instead of arguing about it: 100 instances
      * (few enough that the 512-event trace ring holds every stage: three events per
      * instance), all mounted from the same wrong guess in one turn.
      *
