@@ -15,13 +15,18 @@
 
 #include "HybridNitroUiCoreSpec.hpp"
 
+#include <string>
+#include <vector>
+
 namespace margelo::nitro::nitroui {
 
   /**
    * Cross-platform core object. `now()` is implemented in C++ so that both
-   * platforms share one monotonic time base: `std::chrono::steady_clock` is
-   * `CLOCK_UPTIME_RAW` on Apple (same base as `CACurrentMediaTime()`) and
-   * `CLOCK_MONOTONIC` on Android (same base as `System.nanoTime()`).
+   * platforms share one monotonic time base (DECISIONS D1):
+   * `CLOCK_UPTIME_RAW` on Apple (the base of `CACurrentMediaTime()`,
+   * `CADisplayLink` and `NSProcessInfo.systemUptime`) and `CLOCK_MONOTONIC` on
+   * Android (the base of `System.nanoTime()` and `Choreographer` frame times).
+   * See `cpp/core/NitroUiClock.hpp` for why this is not `steady_clock`.
    */
   class HybridNitroUiCore: public HybridNitroUiCoreSpec {
     public:
@@ -29,6 +34,8 @@ namespace margelo::nitro::nitroui {
       HybridNitroUiCore(): HybridObject(TAG) { }
 
       double now() override;
+      void setPerfEnabled(bool enabled) override;
+      std::vector<NitroUiPerfEvent> drainPerf() override;
   };
 
 } // namespace margelo::nitro::nitroui

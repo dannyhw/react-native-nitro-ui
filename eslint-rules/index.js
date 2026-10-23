@@ -311,6 +311,10 @@ const noOptionalViewProps = {
     messages: {
       optionalProp:
         'Fabric sends `null` for removed props and Nitro only maps `undefined` to "unset" (margelo/nitro#1184), so an optional prop crashes when removed. Use `T | null`, default it in JS, and always pass it.',
+      callbackPropNotNullable:
+        'RN sends callbacks as `{ f: fn }` and Nitro only unwraps `f` for props typed as a function. `fn | null` generates a variant (no unwrap) and throws while converting the prop, so declare callbacks as `fn?` (`std::optional<std::function>`) instead.',
+      callbackPropMustBeOptional:
+        'Declare a callback prop as `fn?` (`std::optional<std::function>`): a required one gives native a non-optional closure that cannot represent "no handler", and `fn | null` generates a variant Nitro cannot unwrap.',
     },
   },
   create: reportInSpecs((context) => ({
@@ -321,6 +325,32 @@ const noOptionalViewProps = {
       /** @type {Map<import('estree').Node, boolean>} */
       const propsCache = new Map();
 
+      /** Is this a callback type - `(..) => T`, or a union containing one? */
+      const isFunctionType = (node) => {
+        if (node == null || typeof node !== 'object') {
+          return false;
+        }
+        if (node.type === 'TSFunctionType') {
+          return true;
+        }
+        if (node.type === 'TSUnionType') {
+          return node.types.some((type) => isFunctionType(type));
+        }
+        return false;
+      };
+
+      /** Does a union type mention `null` (Nitro's `NullType`)? */
+      const includesNull = (node) =>
+        node?.type === 'TSNullKeyword' ||
+        (node?.type === 'TSUnionType' &&
+          node.types.some((type) => includesNull(type)));
+
+      /** Does a union type mention `undefined` (which `?` already implies)? */
+      const includesUndefined = (node) =>
+        node?.type === 'TSUndefinedKeyword' ||
+        (node?.type === 'TSUnionType' &&
+          node.types.some((type) => includesUndefined(type)));
+
       const reportOptionalMembers = (container) => {
         if (container == null || reported.has(container)) {
           return;
@@ -328,10 +358,27 @@ const noOptionalViewProps = {
         reported.add(container);
         // TSInterfaceBody uses `body`, TSTypeLiteral uses `members`.
         for (const member of container.body ?? container.members ?? []) {
-          if (
-            member.type === 'TSPropertySignature' &&
-            member.optional === true
-          ) {
+          if (member.type !== 'TSPropertySignature') {
+            continue;
+          }
+          const type = member.typeAnnotation?.typeAnnotation;
+          if (isFunctionType(type)) {
+            // Callbacks are the one exception to the rule below: see the
+            // `callbackProp*` messages.
+            if (includesNull(type)) {
+              context.report({
+                node: member,
+                messageId: 'callbackPropNotNullable',
+              });
+            } else if (member.optional !== true && !includesUndefined(type)) {
+              context.report({
+                node: member,
+                messageId: 'callbackPropMustBeOptional',
+              });
+            }
+            continue;
+          }
+          if (member.optional === true) {
             context.report({ node: member, messageId: 'optionalProp' });
           }
         }

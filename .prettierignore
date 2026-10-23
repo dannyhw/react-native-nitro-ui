@@ -26,3 +26,9 @@ bench/.expo
 example/vendor
 **/Pods
 **/.expo
+
+# api-extractor writes this report itself; prettier would restyle its tables.
+etc/*.api.md
+
+# nitrogen rewrites nitro.json; formatting it would make `nitrogen:check` see drift.
+nitro.json

@@ -12,5 +12,15 @@ import NitroModules
 public final class NitroUiAutolinking {
   public typealias bridge = margelo.nitro.nitroui.bridge.swift
 
+  public static func createNitroUiSwitch() -> bridge.std__shared_ptr_HybridNitroUiSwitchSpec_ {
+    let hybridObject = HybridNitroUiSwitch()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiSwitchSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
   
+  public static func isNitroUiSwitchRecyclable() -> Bool {
+    return HybridNitroUiSwitch.self is any RecyclableView.Type
+  }
 }

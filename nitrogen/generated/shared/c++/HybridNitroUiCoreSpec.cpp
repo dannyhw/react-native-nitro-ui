@@ -15,6 +15,8 @@ namespace margelo::nitro::nitroui {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("now", &HybridNitroUiCoreSpec::now);
+      prototype.registerHybridMethod("setPerfEnabled", &HybridNitroUiCoreSpec::setPerfEnabled);
+      prototype.registerHybridMethod("drainPerf", &HybridNitroUiCoreSpec::drainPerf);
     });
   }
 

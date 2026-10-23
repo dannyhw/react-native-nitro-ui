@@ -15,7 +15,11 @@
 #include <fbjni/fbjni.h>
 #include <NitroModules/HybridObjectRegistry.hpp>
 
+#include "JHybridNitroUiSwitchSpec.hpp"
+#include "JFunc_void_bool_double.hpp"
+#include "views/JHybridNitroUiSwitchStateUpdater.hpp"
 #include "HybridNitroUiCore.hpp"
+#include <NitroModules/DefaultConstructableObject.hpp>
 
 namespace margelo::nitro::nitroui {
 
@@ -25,14 +29,23 @@ int initialize(JavaVM* vm) {
   });
 }
 
-
+struct JHybridNitroUiSwitchSpecImpl: public jni::JavaClass<JHybridNitroUiSwitchSpecImpl, JHybridNitroUiSwitchSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiSwitch;";
+  static std::shared_ptr<JHybridNitroUiSwitchSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiSwitchSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiSwitchSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiSwitchSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
   using namespace margelo::nitro::nitroui;
 
   // Register native JNI methods
-  
+  margelo::nitro::nitroui::JHybridNitroUiSwitchSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_bool_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiSwitchStateUpdater::registerNatives();
 
   // Register Nitro Hybrid Objects
   HybridObjectRegistry::registerHybridObjectConstructor(
@@ -42,6 +55,12 @@ void registerAllNatives() {
                     "The HybridObject \"HybridNitroUiCore\" is not default-constructible! "
                     "Create a public constructor that takes zero arguments to be able to autolink this HybridObject.");
       return std::make_shared<HybridNitroUiCore>();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiSwitch",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiSwitchSpecImpl::create();
     }
   );
 }

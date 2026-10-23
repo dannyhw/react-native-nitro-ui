@@ -5,15 +5,18 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
+import com.margelo.nitro.nitroui.views.HybridNitroUiSwitchManager
 
 /**
- * Intentionally empty React Package.
+ * The React package of `react-native-nitro-ui`.
  *
- * Our HybridObjects are implemented in C++ and registered by Nitro's own
- * autolinking (nitrogen/generated/android/nitrouiOnLoad.cpp), so there are no
- * modules or view managers to declare here. Autolinking instantiates this
- * type, and loading it is what pulls `libnitroui.so` - and with it the Hybrid
- * Object registrations - into the app process.
+ * It declares no modules of its own: our HybridObjects are implemented in C++
+ * and registered by Nitro's autolinking
+ * (nitrogen/generated/android/nitrouiOnLoad.cpp). What it does declare is view
+ * managers, which Fabric needs before any Nitro Hybrid View can be created.
+ * Autolinking instantiates this type, and loading it is what pulls
+ * `libnitroui.so` - and with it the Hybrid Object registrations - into the app
+ * process.
  *
  * Wording note: consumer autolinkers (Expo SDK 58's `androidResolver`, and the
  * same family of regexes in the RN CLI) detect this type's name by regex over
@@ -33,7 +36,7 @@ class NitroUiPackage : BaseReactPackage() {
 
   override fun createViewManagers(
     reactContext: ReactApplicationContext
-  ): List<ViewManager<*, *>> = emptyList()
+  ): List<ViewManager<*, *>> = listOf(HybridNitroUiSwitchManager())
 
   companion object {
     init {
