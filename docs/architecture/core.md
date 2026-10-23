@@ -292,7 +292,9 @@ The mechanism — shadow node, size cache, corrections — is `docs/architecture
 host side of it: when a host is allowed to ask its content for a size, and how each platform asks. A Nitro Hybrid View is
 a plain Yoga leaf: with no style it is 0×0, so the first layout of a component uses the **fallback** the component
 declares (`NitroUiSizing.setFallback`), and that must be the control's real layout size — on iOS **OS-versioned**
-(`ios/components/Switch/HybridNitroUiSwitch.swift:104-113`, D14):
+(`ios/components/Switch/HybridNitroUiSwitch.swift:104-113`, D14). It is registered at startup, by
+`NitroUiDeclaredFallbacks` on each platform, and not by the component's first view: Fabric measures a shadow node
+before it creates a view, so a fallback that waits for one is a measure too late for the first instance (T14):
 
 | Platform | Default box | Why                                                              |
 | -------- | ----------- | ---------------------------------------------------------------- |
@@ -385,6 +387,10 @@ measurable while being much harder to prove correct (`cpp/core/NitroUiPerf.hpp:9
 4. `ios/components/<Name>/HybridNitroUi<Name>.swift` — model, `NitroUIContent` view, Hybrid View (`Hybrid…Spec,
    RecyclableView`).
 5. `android/.../nitroui/HybridNitroUi<Name>.kt` — the same three pieces on Compose, in the package named in §1.
+   Both platforms also get **one line in the declared-fallbacks startup table**
+   (`ios/core/NitroUiDeclaredFallbacks.swift`, `android/.../nitroui/core/NitroUiDeclaredFallbacks.kt`) next to the
+   `declareFallback()` the Hybrid View calls in `init` — the table is what makes the fallback arrive before the
+   first measure (sizing.md §5).
 
 ### Register
 

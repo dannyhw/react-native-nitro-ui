@@ -424,10 +424,12 @@ describe('Slider', () => {
   });
 
   it('answers its own height even when the box has none', async () => {
-    // The box can have no height for a perfectly ordinary reason: it is the
-    // first instance of a configuration, and a `fillWidth` control's height is
-    // something nobody knows yet. One frame at zero is survivable; what is not
-    // survivable is a measure that refuses to *run* until the box has a height,
+    // The box can have no height for a perfectly ordinary reason: the caller
+    // asked for one (`height: 0`, or a `maxHeight` squashed below the control).
+    // Until T14 a cold first instance supplied its own zero as well, because the
+    // declared fallback arrived with the view rather than before the first
+    // measure. One frame at zero is survivable; what is not survivable is a
+    // measure that refuses to *run* until the box has a height,
     // because the report is the only thing that gives the box one. That is a
     // closed loop, and on iOS it was a whole broken screen: every Slider on it
     // drew a ~28 pt thumb at the origin, because a `UIHostingController` whose

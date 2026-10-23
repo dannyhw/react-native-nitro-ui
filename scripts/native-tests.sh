@@ -38,6 +38,15 @@ run_case() {
 run_case "sizing state-update captures by value" \
   bash "$ROOT/scripts/check-sizing-capture.sh"
 
+# Review T14/1: Android's flush registers a pre-draw listener, which is a request
+# to be consulted at the next draw and not a request for one - so it must ask for
+# the draw too, or a size measured against a window that has stopped drawing (an
+# RN `Modal`) stays queued. The reason is the same as B1's: the race is between
+# a report and a window's last traversal, and no on-device test can produce it
+# on demand. See scripts/check-sizing-flush-draw-request.sh.
+run_case "sizing flush requests its draw" \
+  bash "$ROOT/scripts/check-sizing-flush-draw-request.sh"
+
 echo "compiling (host clang/swiftc, into $OUT)"
 
 # The clock + perf ring: the shipping C++ headers, compiled as-is.

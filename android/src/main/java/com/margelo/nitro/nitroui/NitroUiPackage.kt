@@ -5,6 +5,7 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
+import com.margelo.nitro.nitroui.core.NitroUiDeclaredFallbacks
 import com.margelo.nitro.nitroui.views.HybridNitroUiSliderManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSwitchManager
 
@@ -45,6 +46,11 @@ class NitroUiPackage : BaseReactPackage() {
   companion object {
     init {
       nitrouiOnLoad.initializeNative()
+      // After `initializeNative()`, because a declared fallback is a JNI call.
+      // Both lines run before Fabric is handed any view manager from this
+      // package, so the sizing engine knows every component's declared size
+      // before its first measure (`NitroUiDeclaredFallbacks`, T14).
+      NitroUiDeclaredFallbacks.registerAll()
     }
   }
 }
