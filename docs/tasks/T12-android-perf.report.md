@@ -651,9 +651,9 @@ in `docs/upstream.md` (N5) and `docs/architecture/core.md` §3.
 N compositions and N view trees.**
 
 Against `expo-ui-shared-host`, on `nitroui_t02`, quick plan, 4 launches, all arms primed
-(`ed620cb`, load 3.05 — this is the state a user gets after the app has been opened once). The five
-commits after it are docs, a tool-format fix and the package manifest, so this row is HEAD's code;
-nothing was re-run for them.
+(`ed620cb`, load 3.05 — this is the state a user gets after the app has been opened once). The eight
+commits after it change docs, the tool's formatting and the package manifest - no Kotlin, C++ or
+TypeScript that the APK contains - so this row is HEAD's code.
 
 | Metric          | measured | target  | verdict |
 | --------------- | -------- | ------- | ------- |
