@@ -44,7 +44,7 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
 - **D14 (T10 review)** v0.1 does not expose `hybridRef`/native view types publicly; all props flow
   through React (UI thread, batched). Imperative methods come later with explicit main-thread
   hopping + commit. iOS default sizes must match the running OS (iOS 26+ Toggle is 61×28 layout),
-  until T11's measured sizing replaces defaults.
+  until T11's measured sizing replaces defaults (done: defaults are now only the cache-miss fallback, D16).
 - **D15 (T02)** Canonical iOS bench device = iPhone 17 simulator (iOS 27). The iOS baseline is
   recorded by the first task that holds that device on an idle machine. A component's *first*
   `nitro-ui` arm never blocks (no baseline yet); its report must show ratios vs both `@expo/ui`
@@ -58,3 +58,12 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   `alignSelf: 'stretch'` (documented difference from RN `Switch`); one stale iOS frame after an
   environment change is accepted; rename `staleFramesSkipped` → `changedFlushes` before 0.1.
   D14's "until T11" clause is fulfilled: defaults are now only the cache-miss fallback.
+- **D17 (T11 round 2)** Sizing frame budget, both platforms: the **first instance of a sizing
+  configuration per environment epoch** (no exact cache entry yet) may show the declared fallback
+  for one frame before its correction lands; every instance whose configuration is already exact
+  in the cache must lay out exact on its first frame (0 stale). On Android a cold batch corrects
+  up to the immediate budget (2) inside the cancelled frame and the rest on the next frame — same
+  rule, documented; no budget increase (synchronous pushes risk re-entering `measureContent`).
+  No "hide until measured" mode in 0.1. Declared fallbacks must be accurate per OS (D14), and
+  `prewarm` is the recommended way to make first mounts exact. Harness tests assert exactly this
+  rule, with poisoned (wrong) fallbacks so a failed correction is visible.

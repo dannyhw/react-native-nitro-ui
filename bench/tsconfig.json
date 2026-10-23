@@ -1,0 +1,30 @@
+{
+  "extends": "expo/tsconfig.base",
+  "include": ["index.ts", "src/**/*.ts", "src/**/*.tsx", "modules/**/*.ts"],
+  "exclude": ["node_modules", "../node_modules", "ios", "android", ".expo"],
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "jsx": "react-jsx",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext",
+    "types": ["react"],
+    "skipLibCheck": true,
+    "moduleSuffixes": [".ios", ""],
+    "noEmit": true,
+    // The library under test is the sibling checkout, not an installed package:
+    // the bench app is never `bun install`ed into the root's node_modules, and
+    // Metro reaches it through `extraNodeModules` (bench/metro.config.js). This
+    // mapping gives TypeScript the same view, so
+    // `bun run bench:typecheck` really typechecks the bench app against the
+    // library's source (T02 review B2). Point it at another worktree's `src`
+    // temporarily to typecheck the bench app against an unmerged branch.
+    "paths": {
+      "react-native-nitro-ui": ["../src/index.ts"]
+    }
+  }
+}
