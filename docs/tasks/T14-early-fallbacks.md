@@ -27,3 +27,9 @@ until a report). No JS-visible API change.
   proving the correction still lands. Show the test fails on main.
 - Update D17's wording proposal in the report (orchestrator edits DECISIONS), sizing.md §5.
 - `bun run check` green; harness green on both platforms.
+
+## Also (from G1 fix round 1)
+
+Try to reproduce the flaky Android `Sizing › sizes a control inside a Modal` failure
+(`corrections=0`, FOLLOWUPS.md). If T14's change touches the cause, fix it; otherwise one line in the
+report — don't chase it past one attempt (D19).
