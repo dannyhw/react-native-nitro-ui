@@ -37,6 +37,7 @@ import {
 } from 'react-native-harness';
 import { screen } from '@react-native-harness/ui';
 import { Slider, nitroUiCore } from 'react-native-nitro-ui';
+import { expectTimingBudget } from './timingGate';
 
 /**
  * Bounds of a rendered view, read straight from the harness native module.
@@ -1508,7 +1509,15 @@ describe('Slider', () => {
     console.log(
       `Slider stress: 40 hosted controls mounted in ${mountedIn.toFixed(1)}ms last=${describeBox(last)}`
     );
-    expect(mountedIn).toBeLessThan(15000);
+    // How long 40 hosted controls took is a duration, so D21 reports it here
+    // and judges it only under `HARNESS_TIMING=1` on a quiet machine. What this
+    // test gates on every run is that they all reached the right box.
+    await expectTimingBudget({
+      label: 'Slider stress: mount 40 instances',
+      measuredMs: mountedIn,
+      limitMs: 15000,
+      note: 'the bar is headroom for a debug build, not a target',
+    });
     expect(Math.abs(last.height - EXPECTED_HEIGHT)).toBeLessThan(1);
   });
 });

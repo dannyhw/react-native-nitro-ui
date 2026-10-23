@@ -31,6 +31,7 @@ import {
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
 import { Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { expectTimingBudget } from './timingGate';
 
 /**
  * Bounds of a rendered view, read straight from the harness native module.
@@ -664,7 +665,15 @@ describe('Switch · core runtime', () => {
     console.log(
       `Switch stress: 40 hosted controls mounted in ${mountedIn.toFixed(1)}ms`
     );
-    expect(mountedIn).toBeLessThan(10000);
+    // A duration, so D21 reports it on every run and judges it only under
+    // `HARNESS_TIMING=1` on a quiet machine. The gate that runs everywhere is
+    // the one below: all 40 boxes reached the tree.
+    await expectTimingBudget({
+      label: 'Switch stress: mount 40 instances',
+      measuredMs: mountedIn,
+      limitMs: 10000,
+      note: 'the bar is headroom for a debug build, not a target',
+    });
     await waitForTestId('many-39');
     expect(harnessUi.queryByTestId('many-39')).not.toBeNull();
   });
