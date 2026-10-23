@@ -3,6 +3,10 @@ package com.margelo.nitro.nitroui
 import android.app.Activity
 import android.view.Choreographer
 import android.view.View
+import android.view.ViewGroup
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
@@ -12,8 +16,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsOwner
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
@@ -33,8 +45,67 @@ import com.margelo.nitro.views.RecyclableView
  * import of exactly that package. Core helpers live in `...nitroui.core`.
  */
 
+/**
+ * The frame ticker one Slider's drag borrows: at most one emitted
+ * `onValueChange` per frame (`docs/architecture/core.md` §11).
+ *
+ * An interface for two reasons. The probe has to be able to say whether a pump
+ * outlived its drag, which [ChoreographerFramePump.isArmed] answers and nothing
+ * in the event stream can - a pump with nothing pending emits nothing while it
+ * ticks - and `SliderModelTest` has to drive a drag without a `Choreographer`,
+ * which does not exist on the JVM.
+ */
+internal interface NitroUiFramePump {
+  /** Ask for the next frame. Calling it twice is one callback, not two. */
+  fun start(
+    onFrame: () -> Unit,
+  )
+
+  /** Stop asking. After this, [isArmed] is false and no callback is outstanding. */
+  fun stop()
+
+  /** Whether [start] has run without a [stop]. Readable from any thread. */
+  val isArmed: Boolean
+}
+
+/**
+ * The Android pump: a `Choreographer` frame callback, which is one-shot - so a
+ * drag re-posts it per sample ([SliderModel.dragTo]) and it goes away when the
+ * samples do.
+ *
+ * [isArmed] is the pump's own lifecycle rather than a peek at the looper's queue:
+ * between one callback firing and the next sample re-posting it, nothing is
+ * queued, but the drag is still being served - and the question the probe exists
+ * to answer is "did this outlive its drag", which reads the same either way.
+ */
+internal class ChoreographerFramePump : NitroUiFramePump {
+  private val frameCallback = Choreographer.FrameCallback { onFrame?.invoke() }
+
+  private var onFrame: (() -> Unit)? = null
+
+  @Volatile private var armed = false
+
+  override val isArmed: Boolean
+    get() = armed
+
+  override fun start(
+    onFrame: () -> Unit,
+  ) {
+    this.onFrame = onFrame
+    armed = true
+    Choreographer.getInstance().postFrameCallback(frameCallback)
+  }
+
+  override fun stop() {
+    armed = false
+    Choreographer.getInstance().removeFrameCallback(frameCallback)
+  }
+}
+
 /** State of one Slider. See [NitroUiModel] for the shape this has to have. */
-internal class SliderModel : NitroUiModel() {
+internal class SliderModel(
+  private val pump: NitroUiFramePump = ChoreographerFramePump(),
+) : NitroUiModel() {
   /** What the Slider shows. Snapshot-observed, so writing it recomposes. */
   var displayed by mutableStateOf(0.0)
 
@@ -89,7 +160,8 @@ internal class SliderModel : NitroUiModel() {
   var dragGeneration = 0
     private set
 
-  private val frameCallback = Choreographer.FrameCallback { deliverUnreported() }
+  /** Made once: [dragTo] hands it to the pump on every sample. */
+  private val onFrame: () -> Unit = { deliverUnreported() }
 
   /** The value rule of [NitroUiSliderValue], applied to this Slider's range. */
   fun quantize(raw: Double): Double =
@@ -112,6 +184,66 @@ internal class SliderModel : NitroUiModel() {
     }
     return maxOf(0, division.wholeSteps.toInt() - 1)
   }
+
+  /** The next legal value above (or below) the one on screen. */
+  fun stepped(
+    from: Double,
+    up: Boolean,
+  ): Double = NitroUiSliderValue.stepped(from, up, minimumValue, maximumValue, step)
+
+  /**
+   * A screen reader asked for a value *toward* [target] - one gesture's worth of
+   * callbacks (start, one change, complete), because an app cannot tell an
+   * increment from a thumb release and must not have to.
+   *
+   * Only the *direction* comes from the platform. The destination is [stepped],
+   * and that is the fix: M3's own action moves by a twentieth of the range, which
+   * on a range that does not end on a step - `0..10 step 3`, the docs' own
+   * example - quantises back to where it started, so the action reports success
+   * and the thumb never moves while a start/change/complete triple is emitted for
+   * nothing.
+   *
+   * The drag is opened and closed here rather than left to Compose: nothing
+   * promises that an a11y write arrives with the pair of gesture callbacks a
+   * finger produces, and on iOS a write that opened a drag without a matching end
+   * left the frame pump running for the life of the view.
+   *
+   * Returns whether anything moved. At a bound there is no next value, and
+   * emitting a triple for a value that did not change is the bug above wearing a
+   * different hat.
+   */
+  fun accessibilityStepToward(target: Double): Boolean {
+    if (!enabled) {
+      return false
+    }
+    val from = displayed
+    val up =
+      when {
+        target > from -> true
+        target < from -> false
+        else -> return false
+      }
+    val to = stepped(from, up)
+    if (to == from) {
+      return false
+    }
+    beginDrag()
+    dragTo(to)
+    endDrag()
+    return true
+  }
+
+  /** Whether the frame pump is alive. Readable from any thread. */
+  val isFramePumpArmed: Boolean
+    get() = pump.isArmed
+
+  /**
+   * What the last a11y step probe did, as one line. The probe cannot answer
+   * synchronously - it has to run on the UI thread, and a Nitro method may not
+   * block for it - so it writes what happened here and JS reads it back, hence
+   * `@Volatile`.
+   */
+  @Volatile var accessibilityStepReport: String = ""
 
   /** A drag began. Reports the value it began from. */
   fun beginDrag() {
@@ -173,11 +305,11 @@ internal class SliderModel : NitroUiModel() {
   }
 
   private fun startFramePump() {
-    Choreographer.getInstance().postFrameCallback(frameCallback)
+    pump.start(onFrame)
   }
 
   private fun stopFramePump() {
-    Choreographer.getInstance().removeFrameCallback(frameCallback)
+    pump.stop()
   }
 
   /**
@@ -231,6 +363,87 @@ internal class SliderModel : NitroUiModel() {
  * [Component] is fixed for the lifetime of the view, which is why it lives in a
  * subclass rather than being handed in as a lambda.
  */
+/**
+ * The library's `SliderColors`, so a tinted Slider costs one object per
+ * (colour scheme, tint) instead of one per recomposition.
+ *
+ * A copy of `SwitchColorsCache` for the rule main added to
+ * `docs/architecture/core.md` ("Shared objects"): a hosted control is its own
+ * composition, so `remember` shares nothing between controls, and
+ * `SliderDefaults.colors(...)` is a factory that builds a fresh object per call -
+ * once per recomposition per mounted Slider, on the UI thread, in the middle of
+ * what D15 measures. `SliderColors` is an interface in Material 3 1.4 with no
+ * `equals`, so there is not even a cheap comparison to fall back on.
+ */
+private object SliderColorsCache {
+  /** Tints to remember before starting over. See the Switch's cache. */
+  private const val MAX_TINTED_ENTRIES = 8
+
+  private var scheme: ColorScheme? = null
+  private var untinted: SliderColors? = null
+  private var tinted: HashMap<Int, SliderColors>? = null
+
+  @Synchronized
+  fun get(
+    scheme: ColorScheme,
+    tint: Int?,
+  ): SliderColors? {
+    adopt(scheme)
+    return if (tint == null) untinted else tinted?.get(tint)
+  }
+
+  @Synchronized
+  fun put(
+    scheme: ColorScheme,
+    tint: Int?,
+    colors: SliderColors,
+  ) {
+    adopt(scheme)
+    if (tint == null) {
+      untinted = colors
+      return
+    }
+    val entries = tinted ?: HashMap<Int, SliderColors>().also { tinted = it }
+    if (entries.size >= MAX_TINTED_ENTRIES) {
+      entries.clear()
+    }
+    entries[tint] = colors
+  }
+
+  /** Drop what a different scheme invalidates. Called with the lock held. */
+  private fun adopt(scheme: ColorScheme) {
+    if (this.scheme === scheme) {
+      return
+    }
+    this.scheme = scheme
+    untinted = null
+    tinted?.clear()
+  }
+}
+
+/**
+ * The Slider's colours for [tint] (an ARGB int, or `null` for the scheme's own),
+ * served by [SliderColorsCache]; the Switch's copy of this reasoning is in
+ * `HybridNitroUiSwitch.kt`, including why the composable call stays on the miss.
+ */
+@Composable
+private fun sliderColors(tint: Int?): SliderColors {
+  val scheme = MaterialTheme.colorScheme
+  SliderColorsCache.get(scheme, tint)?.let { cached -> return cached }
+  val built =
+    if (tint != null) {
+      // The thumb and filled track are the closest analogue of iOS `.tint()`.
+      SliderDefaults.colors(
+        thumbColor = ComposeColor(tint),
+        activeTrackColor = ComposeColor(tint),
+      )
+    } else {
+      SliderDefaults.colors()
+    }
+  SliderColorsCache.put(scheme, tint, built)
+  return built
+}
+
 private class SliderHost(
   context: ThemedReactContext,
   activity: Activity?,
@@ -238,31 +451,14 @@ private class SliderHost(
 ) : NitroComposeHost<SliderModel>(context, activity, model) {
   @Composable
   override fun Component(model: SliderModel) {
-    // The release-time props are read here, the drag-time value in [SliderTrack],
-    // so a drag frame invalidates one composable rather than everything around it
-    // (`docs/architecture/core.md`, §11 Recomposition scoping).
-    val label = model.accessibilityLabel
-    val tint = model.tintColor
-    // The label goes on the control, which is the node TalkBack focuses (M3's
-    // `sliderSemantics` gives it the progress semantics and the increase/decrease
-    // actions). Putting a `contentDescription` on the host View instead would wrap
-    // a second, focusable empty box around it.
-    val labelModifier =
-      if (label != null) Modifier.semantics { contentDescription = label } else Modifier
+    // Everything that decides what the control *is* is read in [SliderTrack],
+    // including the value a drag moves, so a drag frame invalidates one
+    // composable rather than everything around it (`docs/architecture/core.md`,
+    // §11 Recomposition scoping).
     SliderTrack(
       model = model,
-      modifier = labelModifier,
       enabled = model.enabled,
-      colors =
-        if (tint != null) {
-          // The thumb and filled track are the closest analogue of iOS `.tint()`.
-          SliderDefaults.colors(
-            thumbColor = ComposeColor(tint),
-            activeTrackColor = ComposeColor(tint),
-          )
-        } else {
-          SliderDefaults.colors()
-        },
+      colors = sliderColors(model.tintColor),
     )
   }
 }
@@ -274,22 +470,50 @@ private class SliderHost(
 @Composable
 private fun SliderTrack(
   model: SliderModel,
-  modifier: Modifier,
   enabled: Boolean,
   colors: SliderColors,
 ) {
-  Slider(
-    modifier = modifier,
-    value = model.displayed.toFloat(),
-    onValueChange = { position -> model.dragTo(position.toDouble()) },
-    enabled = enabled,
-    valueRange = trackRange(model.minimumValue, model.maximumValue),
-    steps = model.steppedTicks(),
-    // Compose has no drag-start callback, so the first value change is the start
-    // (`docs/architecture/core.md` §11) - `SliderModel.dragTo` opens the drag.
-    onValueChangeFinished = { model.endDrag() },
-    colors = colors,
-  )
+  val displayed = model.displayed
+  val label = model.accessibilityLabel
+  val range = trackRange(model.minimumValue, model.maximumValue)
+  val ticks = model.steppedTicks()
+  // One accessibility node, whose progress action belongs to native.
+  //
+  // `clearAndSetSemantics` rather than an extra `semantics { }` beside M3's own:
+  // M3's `sliderSemantics` publishes a `setProgress` that moves by a twentieth of
+  // the range, and two nodes offering that action on one control is an
+  // ambiguity - plus, on a range that does not end on a step, M3's version
+  // quantises back to where it started (`SliderModel.accessibilityStepToward`).
+  // Clearing the subtree leaves exactly one node, publishing exactly one rule.
+  //
+  // It has to *say* what it is, too. M3 1.4's Slider publishes a `setProgress`,
+  // a `contentDescription` and a percentage `stateDescription`, but no progress
+  // range - so clearing takes away the action and leaves the range to be stated
+  // here. The range is what the accessibility delegate reads to decide where a
+  // scroll forward lands (`performActionHelper` divides it into strides), so it
+  // has to be this Slider's real range and current value.
+  Box(
+    modifier =
+      Modifier.clearAndSetSemantics {
+        if (label != null) {
+          contentDescription = label
+        }
+        progressBarRangeInfo = ProgressBarRangeInfo(displayed.toFloat(), range, ticks)
+        setProgress { target -> model.accessibilityStepToward(target.toDouble()) }
+      },
+  ) {
+    Slider(
+      value = displayed.toFloat(),
+      onValueChange = { position -> model.dragTo(position.toDouble()) },
+      enabled = enabled,
+      valueRange = range,
+      steps = ticks,
+      // Compose has no drag-start callback, so the first value change is the start
+      // (`docs/architecture/core.md` §11) - `SliderModel.dragTo` opens the drag.
+      onValueChangeFinished = { model.endDrag() },
+      colors = colors,
+    )
+  }
 }
 
 /**
@@ -672,5 +896,128 @@ class HybridNitroUiSlider(
     } else {
       model.endDrag()
     }
+  }
+
+  /**
+   * Perform the platform's own adjust action on the node this control publishes:
+   * the `SetProgress` semantics action an a11y service reaches through
+   * `ACTION_SCROLL_FORWARD`/`BACKWARD`, with the target the Compose accessibility
+   * delegate computes for that gesture - the current progress plus or minus a
+   * twentieth of the published range. Test-only; see the spec's doc comment.
+   *
+   * There is deliberately **no fallback**: with no node offering the action, this
+   * does nothing and says so in the report. Calling
+   * [SliderModel.accessibilityStepToward] directly would move the value either way
+   * and prove nothing about the path TalkBack actually takes, which is the thing
+   * under test.
+   */
+  override fun nuiTestAccessibilityStep(
+    direction: Double,
+  ) {
+    val up = direction >= 0.0
+    android.os.Handler(android.os.Looper.getMainLooper()).post {
+      runTestAccessibilityStep(up)
+    }
+  }
+
+  override fun nuiTestAccessibilityStepReport(): String = model.accessibilityStepReport
+
+  override fun nuiTestFramePumpArmed(): Boolean = model.isFramePumpArmed
+
+  private fun runTestAccessibilityStep(up: Boolean) {
+    val root = findComposeRoot(host)
+    if (root == null) {
+      reportAccessibilityStep("no Compose root (RootForTest) under the host")
+      return
+    }
+    // Compose builds its semantics tree only while an accessibility service is
+    // connected, and a harness run has none. This is how Compose's own tests ask
+    // for the tree; it stays on for this view afterwards, which a test-only seam
+    // may do. It has to come first: the owner is a field that only exists once
+    // semantics are enabled, so reading it before this reads null.
+    root.forceAccessibilityForTesting(true)
+    // Declared non-null, nullable in fact - the field behind it is null until
+    // semantics exist - so it is read into a nullable val rather than compared.
+    val owner: SemanticsOwner? = root.semanticsOwner
+    if (owner == null) {
+      reportAccessibilityStep("no SemanticsOwner, even after forcing accessibility on")
+      return
+    }
+    // The unmerged tree, because that is the tree the accessibility delegate
+    // walks: it publishes node info from `unmergedRootSemanticsNode` and reads
+    // each node's own config, so this is the list TalkBack could reach.
+    val nodes = owner.getAllSemanticsNodes(mergingEnabled = false)
+    val candidates = nodes.filter { it.config.contains(SemanticsActions.SetProgress) }
+    val node = candidates.firstOrNull()
+    if (node == null) {
+      reportAccessibilityStep(
+        "no node publishes SetProgress; nodes=" +
+          nodes.joinToString(" ") { "#${it.id}[${it.config.joinToString(",") { e -> e.key.name }}]" },
+      )
+      return
+    }
+    if (candidates.size > 1) {
+      // Two nodes offering one action is the ambiguity `clearAndSetSemantics`
+      // exists to remove; saying so here is what stops a passing test from hiding
+      // a control whose *other* action is the wrong rule.
+      reportAccessibilityStep("ambiguous: ${candidates.size} nodes publish SetProgress")
+      return
+    }
+    val range = node.config.getOrElseNullable(SemanticsProperties.ProgressBarRangeInfo) { null }
+    if (range == null) {
+      reportAccessibilityStep("#${node.id} has SetProgress but no range to move along")
+      return
+    }
+    val action = node.config.getOrElseNullable(SemanticsActions.SetProgress) { null }
+    if (action == null) {
+      reportAccessibilityStep("#${node.id} lost its action between looking and acting")
+      return
+    }
+    // The delegate's own stride for a scroll forward/back, from
+    // `performActionHelper`: the range divided by the tick count plus the two
+    // ends, or into twenty when there are no ticks. Sent from the progress the
+    // node publishes - the delegate's start, not the model's.
+    val width = range.range.endInclusive - range.range.start
+    val stride =
+      if (range.steps > 0) {
+        width / (range.steps + 1)
+      } else {
+        width / 20f
+      }
+    val target = range.current + if (up) stride else -stride
+    val from = model.displayed
+    action.action?.invoke(target)
+    reportAccessibilityStep(
+      "performed SetProgress($target) on #${node.id} " +
+        "range=${range.range.start}..${range.range.endInclusive}@${range.current} " +
+        "$from->${model.displayed}",
+    )
+  }
+
+  private fun reportAccessibilityStep(report: String) {
+    model.accessibilityStepReport = report
+  }
+
+  /**
+   * The Compose view under [root], found as [RootForTest] rather than as
+   * `AndroidComposeView`: that class is internal to Compose's own module, so the
+   * public interface it implements is the only legal handle on it - which is also
+   * the one that carries [RootForTest.getSemanticsOwner].
+   */
+  private fun findComposeRoot(root: View): RootForTest? {
+    val queue = ArrayDeque<View>()
+    queue.add(root)
+    while (queue.isNotEmpty()) {
+      val node = queue.removeFirst()
+      if (node is RootForTest) {
+        return node
+      }
+      if (node is ViewGroup) {
+        for (index in 0 until node.childCount) {
+          queue.add(node.getChildAt(index))
+        }
+      }
+    }
+    return null
   }
 }

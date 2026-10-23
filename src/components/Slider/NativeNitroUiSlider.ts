@@ -42,6 +42,12 @@ export interface NitroUiSliderHandle {
   measureContent(): NitroUiSliderSize;
   /** Test-only drag - see `NitroUiSliderMethods.nuiTestDrag`. */
   nuiTestDrag(to: number, steps: number, msPerStep: number): void;
+  /** Test-only accessibility step - see `NitroUiSliderMethods.nuiTestAccessibilityStep`. */
+  nuiTestAccessibilityStep(direction: number): void;
+  /** What the last accessibility step did - see `NitroUiSliderMethods.nuiTestAccessibilityStepReport`. */
+  nuiTestAccessibilityStepReport(): string;
+  /** Whether the drag's frame pump is still armed - see `NitroUiSliderMethods.nuiTestFramePumpArmed`. */
+  nuiTestFramePumpArmed(): boolean;
 }
 
 /**

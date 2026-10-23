@@ -87,6 +87,9 @@ namespace margelo::nitro::nitroui {
       // Methods
       virtual NitroUiSliderSize measureContent() = 0;
       virtual void nuiTestDrag(double to, double steps, double msPerStep) = 0;
+      virtual void nuiTestAccessibilityStep(double direction) = 0;
+      virtual std::string nuiTestAccessibilityStepReport() = 0;
+      virtual bool nuiTestFramePumpArmed() = 0;
 
     protected:
       // Hybrid Setup
