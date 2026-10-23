@@ -14,7 +14,7 @@
  * Counters are process-global and monotonic (the engine outlives a runtime
  * reset), so every assertion is a delta over a snapshot taken in the test.
  */
-import { Modal, Platform, TurboModuleRegistry, View } from 'react-native';
+import { Modal, Platform, Text, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
   beforeAll,
@@ -26,6 +26,7 @@ import {
 } from 'react-native-harness';
 import {
   nitroUiCore,
+  Slider,
   Switch,
   type NitroUiSizingStats,
   type NitroUiSizingTraceEvent,
@@ -74,6 +75,21 @@ const expectedBox = Platform.select({
       : { width: 51, height: 31 },
 });
 
+/**
+ * The library's other self-sizing control, for the rule in FIX2: `fillWidth`, a
+ * different host, and a height of its own (48 dp on Android, 31 pt on iOS -
+ * D14, the same numbers `ColdSizing.harness.tsx` and `Slider.harness.tsx` use).
+ */
+const SLIDER_COMPONENT = 'NitroUiSlider';
+const SLIDER_HEIGHT = Platform.select({ android: 48, default: 31 })!;
+/** What the Slider declares on this platform, restored after poisoning it. */
+const SLIDER_FALLBACK = Platform.select({
+  android: { width: 328, height: 48 },
+  default: { width: 351, height: 31 },
+})!;
+/** A height that belongs to no control, to make the next Slider cold-wrong. */
+const WRONG_SLIDER = { width: 100, height: 13 };
+
 /** Yoga's box, the size a host measured, or the size a test wants: all the same. */
 type Size = { width: number; height: number };
 
@@ -83,6 +99,31 @@ function boxMatches(box: Size | null, size: Size) {
     box != null &&
     Math.abs(box.width - size.width) < 0.6 &&
     Math.abs(box.height - size.height) < 0.6
+  );
+}
+
+/**
+ * The row `example/src/SwitchScreen.tsx` puts a Switch in: a `flex: 1` label that
+ * swallows whatever width the control does not take. That is what turns "the
+ * control lost its measurement" into something a person can see (FIX2).
+ */
+const ROW_STYLE = {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+} as const;
+const ROW_LABEL = { flex: 1 } as const;
+
+/** Whether two Yoga boxes are the same frame, position included. */
+function sameFrame(a: ViewInfo | null, b: ViewInfo | null) {
+  if (a == null || b == null) {
+    return a === b;
+  }
+  return (
+    Math.abs(a.x - b.x) < 0.6 &&
+    Math.abs(a.y - b.y) < 0.6 &&
+    boxMatches(a, { width: b.width, height: b.height })
   );
 }
 
@@ -165,6 +206,15 @@ const hasDrawnSample = (events: NitroUiSizingTraceEvent[]) =>
 let hybrid: SwitchHandle | null = null;
 const captureHybrid = (view: SwitchHandle) => {
   hybrid = view;
+};
+
+/** Only `value` is read here; see `NitroUiSliderHandle` for the rest. */
+type SliderHandle = {
+  readonly value: number | null;
+};
+let sliderHybrid: SliderHandle | null = null;
+const captureSliderHybrid = (view: SliderHandle) => {
+  sliderHybrid = view;
 };
 
 const stats = () => nitroUiCore.sizingStats();
@@ -279,6 +329,7 @@ async function settle(ms = 250) {
 afterEach(() => {
   cleanup();
   hybrid = null;
+  sliderHybrid = null;
   nitroUiCore.setSizingTraceEnabled(false);
 });
 
@@ -1037,6 +1088,182 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(d.corrections).toBe(0);
     expect(stats().cachedSizes).toBe(cached);
     unmount();
+  });
+
+  /**
+   * Wait for the box of `testID` to be `size`, so a size is asserted once the
+   * correction has actually reached the layout.
+   */
+  async function waitForBoxSize(testId: string, size: Size, what: string) {
+    return await pollUntil(
+      () => {
+        const box = harnessUi.queryByTestId(testId);
+        return boxMatches(box, size) ? box : null;
+      },
+      () =>
+        new Error(
+          `testID "${testId}" (${what}) never reached ${String(
+            size.width
+          )}x${String(size.height)} - last box ${describeBox(
+            harnessUi.queryByTestId(testId)
+          )}.`
+        ),
+      8000
+    );
+  }
+
+  /**
+   * Wait for the box of `testID` to be `height` tall. A `fillWidth` control's
+   * width belongs to its container, so its height is the half a test can name.
+   */
+  async function waitForBoxHeight(
+    testId: string,
+    height: number,
+    what: string
+  ) {
+    return await pollUntil(
+      () => {
+        const box = harnessUi.queryByTestId(testId);
+        return box != null && Math.abs(box.height - height) < 0.6 ? box : null;
+      },
+      () =>
+        new Error(
+          `testID "${testId}" (${what}) never reached ${String(
+            height
+          )} tall - last box ${describeBox(harnessUi.queryByTestId(testId))}.`
+        ),
+      8000
+    );
+  }
+
+  /**
+   * FIX2 (found by T15's real-input runner, and it reproduces with no touch).
+   *
+   * A controlled `Switch` re-rendered with a new `value` was laid out as though it
+   * had no width at all: the row's label grew by exactly the Switch's 61 pt, and
+   * SwiftUI drew the `Toggle` at its intrinsic size past the right edge of the
+   * window, out of the accessibility tree. `value` changes no size, so the turn may
+   * cost no measure of the control and no state update - the box has to stay the
+   * one the control already earned.
+   *
+   * It starts from `seedWrongGuess`, because that is the state the bug needs: an
+   * instance the engine had to *correct*. That is an ordinary cold mount (a first
+   * answer that is not the control's size - the pre-T14 first frame, a control
+   * whose real size differs from the number it declares, the first mount after an
+   * environment change), and it is the only state in which Yoga can still be
+   * holding the superseded answer for a node it was never dirtied for: with the
+   * bug the box below comes back 40x20, the seeded guess, and stays there for the
+   * rest of the mount, because `measureContent` is never reached again to notice.
+   * Mounting a second Switch heals it - that correction is for every instance of
+   * the configuration - which is how T15 saw a box that only broke once.
+   */
+  it('keeps a mounted Switch laid out when only its value changes', async () => {
+    seedWrongGuess();
+    const row = (value: boolean) => (
+      <View style={ROW_STYLE}>
+        <Text style={ROW_LABEL} testID="value-label">
+          Label
+        </Text>
+        <Switch value={value} testID="value-switch" hybridRef={captureHybrid} />
+      </View>
+    );
+    const { rerender, unmount } = await render(row(false));
+    // The correction has to have landed first, or this box is just the guess.
+    const startSwitch = await waitForBoxSize(
+      'value-switch',
+      expectedBox!,
+      'the controlled Switch after its correction'
+    );
+    const startLabel = harnessUi.queryByTestId('value-label');
+    expect(startLabel).not.toBeNull();
+    const before = stats();
+
+    await rerender(row(true));
+    await settle();
+
+    // The turn must actually have reached the control: an update that never
+    // happened would keep every box below green for the wrong reason.
+    expect(hybrid?.value).toBe(true);
+    const box = harnessUi.queryByTestId('value-switch');
+    const label = harnessUi.queryByTestId('value-label');
+    const d = delta(before, stats());
+    console.log(
+      `value change: switch=${describeBox(box)} at x=${String(
+        (box?.x ?? 0).toFixed(1)
+      )} label=${describeBox(label)} measured=${describeBox(
+        hybrid?.measureContent() ?? null
+      )} d=${String(JSON.stringify(d))}`
+    );
+    // Both halves: the control's own box is the bug, and the sibling's is what a
+    // person sees - Yoga gave the row's other child the width that went missing.
+    expect(boxMatches(box, expectedBox!)).toBe(true);
+    expect(sameFrame(box, startSwitch)).toBe(true);
+    expect(sameFrame(label, startLabel)).toBe(true);
+    // The turn costs a re-ask, not another commit: fixing this by pushing state on
+    // every prop change would show up here.
+    expect(d.corrections).toBe(0);
+    unmount();
+  });
+
+  /**
+   * The same turn for the other self-sizing control, so the rule is tested as a
+   * rule and not as a Switch workaround: `fillWidth`, a different host, and a
+   * sibling stacked above it instead of beside it. A Slider's `value` never moves
+   * its size, so its box and its sibling's both have to stand still - and, as for
+   * the Switch, without a state update to make them.
+   */
+  it('keeps a mounted Slider laid out when only its value changes', async () => {
+    nitroUiCore.seedSizingSize(
+      SLIDER_COMPONENT,
+      '',
+      WRONG_SLIDER.width,
+      WRONG_SLIDER.height
+    );
+    nitroUiCore.invalidateSizingEnvironment();
+    const column = (value: number) => (
+      <View>
+        <Text testID="value-slider-label">Slider label</Text>
+        <Slider
+          value={value}
+          testID="value-slider"
+          hybridRef={captureSliderHybrid}
+        />
+      </View>
+    );
+    const { rerender, unmount } = await render(column(0.5));
+    const startSlider = await waitForBoxHeight(
+      'value-slider',
+      SLIDER_HEIGHT,
+      'the controlled Slider after its correction'
+    );
+    const startLabel = harnessUi.queryByTestId('value-slider-label');
+    expect(startLabel).not.toBeNull();
+    const before = stats();
+
+    await rerender(column(0.75));
+    await settle();
+
+    expect(sliderHybrid?.value).toBe(0.75);
+    const box = harnessUi.queryByTestId('value-slider');
+    const label = harnessUi.queryByTestId('value-slider-label');
+    const d = delta(before, stats());
+    console.log(
+      `slider value change: box=${describeBox(box)} label=${describeBox(
+        label
+      )} d=${String(JSON.stringify(d))}`
+    );
+    expect(sameFrame(box, startSlider)).toBe(true);
+    expect(sameFrame(label, startLabel)).toBe(true);
+    expect(d.corrections).toBe(0);
+    unmount();
+    // Seeding overwrites the declaration for this process, so the accurate one
+    // goes back on the way out (the rule `ColdSizing.harness.tsx` follows).
+    nitroUiCore.seedSizingSize(
+      SLIDER_COMPONENT,
+      '',
+      SLIDER_FALLBACK.width,
+      SLIDER_FALLBACK.height
+    );
   });
 
   /**
