@@ -401,15 +401,52 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
       hostedView.layoutIfNeeded()
     }
     if #available(iOS 16.0, *) {
-      // An unbounded proposal asks SwiftUI what the control wants to be, which is
-      // the intrinsic size T11 needs; Yoga's box is a separate question.
-      let size = hostingController.sizeThatFits(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity))
+      let proposal = fittingSizeProposal
+      let size = hostingController.sizeThatFits(in: proposal)
       if size.width > 0, size.height > 0 {
+        if sizingPolicy == .fillWidth {
+          // A `fillWidth` control's width *is* the box; what it was asked for is
+          // the answer, not whatever SwiftUI settled on inside it. This is the
+          // same thing Android's `NitroUiMeasuredRoot` reports, because a
+          // `Placeable`'s size is coerced into its (bounded) constraints.
+          return CGSize(width: proposal.width, height: size.height)
+        }
         return size
       }
     }
-    // iOS 15, or a content view that refused the unbounded proposal.
+    // iOS 15, or a content view that refused the proposal. Note this answers the
+    // *intrinsic* question for both policies - a `fillWidth` control reaching
+    // here gets a width the shadow node overrides anyway (its `fillWidth` flag
+    // replaces the width with the box's), so the only number that can be wrong
+    // is a width nobody uses.
     return hostedView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+  }
+
+  /// The size proposal ``measureFittingSize()`` hands SwiftUI, per sizing policy.
+  ///
+  /// The two policies ask two different questions, and one proposal cannot ask
+  /// both. `intrinsic` asks the unbounded one - what does this control want to
+  /// be? - which is the only useful answer when the control's own size *is* its
+  /// size (`docs/architecture/sizing.md`). `fillWidth` has to ask what the control
+  /// wants to be **at the width it was given**: proposed unbounded width, a
+  /// control like a Slider reports a preferred width nobody asked for, and the
+  /// height a *different* width implies.
+  ///
+  /// The height stays unbounded for both: that is the half a `fillWidth` control
+  /// still measures for itself. A caller's `width`/`height`/`flex` still wins
+  /// regardless, because the shadow node clamps its answer to the layout
+  /// constraints it was given (`cpp/NitroUiIntrinsic.hpp`).
+  ///
+  /// `bounds` is only usable here because ``refreshContentSize()`` refuses to
+  /// measure a `fillWidth` host with empty bounds; for `intrinsic` it is never
+  /// read, so a Switch keeps the exact question it always asked.
+  private var fittingSizeProposal: CGSize {
+    switch sizingPolicy {
+    case .intrinsic:
+      return CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+    case .fillWidth:
+      return CGSize(width: bounds.width, height: CGFloat.infinity)
+    }
   }
 
   // MARK: - Perf
