@@ -862,3 +862,82 @@ merge; the P1 table above still cited it as N5 and now reads N6. (`docs/architec
 - **G2 Button's real R3 test** (D16), and `prewarmKeys` past 0.1.
 - The warm-batch and frame-counting sweeps are still immediate reads, deliberately: one
   has nothing to correct, the other exists to sample frames as they land.
+
+## Follow-ups from the round-4 review (one line each)
+
+- **The initial environment signature.** `environmentSignature_` starts empty, so the first signature
+  callback in a process always bumps the epoch (an Android rotation, the first trait delivery on iOS);
+  seed it from the first attached host. Traced: no commits result, so the waste is one cleared cache.
+- **Ledger entries for instances that never mounted.** A revision Yoga laid out before it was
+  superseded has a ledger entry and no registry entry, so no `forget` and no sweep ever reaches it.
+- **A report before any measure.** `report()` returns early with no ledger entry while the host has
+  already recorded `lastReportedSize`, so that instance keeps its guess until a sibling of the same
+  configuration reports.
+- **The O(N x tree) commits of a cold batch.** Each of the ~198 asynchronous pushes in a 200-row cold
+  flush becomes its own commit on the JS thread; benchmark it before a 500-row cold list, and **T12
+  owns this one** - the flush itself is not the scaling problem.
+
+## Round 4 (verification review: small fixes before merge)
+
+Reviewer verdict on `0955c10` was MERGE-AFTER-SMALL-FIXES: B1, B2 and S1-S8 fixed in code, one new
+memory-safety bug and two test/doc gaps. All three, plus four items from the optional list, are done
+here. No behaviour change outside the F1 fix.
+
+**F1 - heap use-after-free in the expired sweep** (`cpp/NitroUiSizingEngine.cpp`).
+`sweepExpiredLocked` called `forgetLocked(id)`, which erases the registry node, and then erased the
+iterator that had just been freed. It now collects the expired ids and forgets each one. The shipped
+`testExpiredStatesAreSweptWithoutForget` never got there: its dead instances shared the reporting key,
+so `applyReports` found them dead and forgot them first, and the sweep walked a clean registry. They
+are now measured under their own key, and the assertions are exact (1 registry entry and 1 ledger entry
+survive, the live one). Proved, not argued:
+
+| Build | `test:native` ASan | Plain |
+| --- | --- | --- |
+| old sweep + **old** test | 147 checks pass - the bug is invisible | pass |
+| old sweep + new test | **`heap-use-after-free`, READ of 8 in `sweepExpiredLocked` (`:309`), freed by `forgetLocked` (`:265`)** | SIGSEGV (exit 139) |
+| new sweep + new test | 162 checks pass | pass |
+
+The `scripts/native-tests.sh` comment that claimed ASan covered the expired sweep now says what
+actually makes it reachable, and why.
+
+**F2 - S2 had no regression test.** `testEnvironmentChangeCorrectsAReportWithNoMeasure`
+(`scripts/native-tests/sizing.test.cpp`) is the case the reviewer described: bump the epoch, let the
+host report a new size, and never call `measure` in between - which is the order a real trait change
+happens in, because a mounted control believed exact is not asked for a number again. Restoring round
+1's `ledger_.clear()` makes it fail 3 checks ("the report is still believed without a re-measure", got
+0 pushes want 1); it passes at HEAD. The harness comment at
+`example/__tests__/Sizing.harness.tsx:1059` that promised a timeout was wrong and is replaced with what
+that step does and does not pin - the `nuiTestWidth` re-render changes the key, S1 dirties the
+measurement, and `measure` rebuilds the entry the bump would have dropped, so round 1's code passes
+there too. The claim at the end of that test ("this is the proof the report was not dropped") went the
+same way.
+
+**F3 - docs round 3 made stale** (`docs/architecture/sizing.md`).
+- §4 steps 3-5: the first iOS `commit()` does not measure - Fabric runs `Create`'s `finalizeUpdates`
+  before the `Insert`, so the host has no window and SwiftUI has nothing to lay out; `didMoveToWindow`
+  is the deferred measure point and lands in the same transaction, so the report is still in front of
+  the frame. And a first report that matches the declared size is **confirmed** - cache entry made
+  authoritative, ledger entry exact, no state update at all - rather than costing "one state update,
+  immediate". The paragraph below the list said the first instance always pays a commit; it does not.
+- §9 N8 narrowed to what is left: `invalidateContentSize()` called off-window. A detached host no
+  longer measures after a commit at all, so the `Modal` framing was obsolete.
+- §5 gained item 5, the contract G2 Button writes against: the iOS host does not watch `nuiSizingKey`
+  and does not measure on a plain commit, so every prop setter whose value can move the control's size
+  must call `host.noteContentSizeMayHaveChanged()` next to `markDirty()`, and what each half costs.
+
+**From the optional list.** Two mutation-proof tests, each under 30 lines:
+`testAPrewarmLeavesEveryInstanceInexact` (prewarm provisional - flipping the flag to authoritative
+fails it, 1 push instead of 2) and `testAnUnboundTargetIsCorrectedByALaterReport` (the S7 re-queue -
+deleting it fails 2 checks). `SwitchModel.reset()` now clears `testWidth`, as iOS's
+`prepareForRecycle` does.
+
+### Gate evidence, round 4
+
+| Command | Result |
+| --- | --- |
+| `bun run check` | **PASS**, exit 0 - all 13 steps: jest 109/109, `test:native`, `perf:renders`, nitrogen/api/autolinking/manifest checks, tree clean afterwards |
+| `bun run test:native` | **PASS** - 162 checks plain, **162 checks under ASan + UBSan** (was 147: +1 sweep, +7 F2, +7 for the B2 and S7 cases), clock and handshake green, `test:native: PASS` |
+| `./gradlew :react-native-nitro-ui:compileDebugKotlin` | **BUILD SUCCESSFUL** - the task executed, not `UP-TO-DATE`, so the `reset()` line really compiled |
+
+No iOS device was run and no Android harness was run: the only Kotlin change is the `reset()` line, so
+`compileDebugKotlin` is the agreed bar. No emulator or Metro instance was started by this round.
