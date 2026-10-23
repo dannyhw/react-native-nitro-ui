@@ -141,8 +141,19 @@ internal class SliderModel : NitroUiModel() {
     startFramePump()
   }
 
-  /** The finger lifted. The final value always reaches JS. */
+  /**
+   * The finger lifted. The final value always reaches JS.
+   *
+   * Idempotent, and the guard is the event contract: only a drag that started may
+   * end. Material 3 calls [onValueChangeFinished] for a tap that changed nothing
+   * and Compose infers the start from the first value change ([dragTo]), so
+   * without this a complete can arrive with no start; a late end after a
+   * [cancelDrag] would deliver one to the next owner of a recycled instance.
+   */
   fun endDrag() {
+    if (!dragging) {
+      return
+    }
     deliverUnreported()
     dragging = false
     stopFramePump()
