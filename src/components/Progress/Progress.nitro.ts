@@ -38,6 +38,11 @@ export interface NitroUiProgressProps
    * arrives from a download callback overshoots, and an indicator that vanished
    * because of it is worse than one that looked full for a frame. `NaN` counts as
    * out of range (to 0), because it is what an unfinished division produces.
+   *
+   * iOS draws it for a `linear` bar only: a circular `ProgressView` spins whatever
+   * value it is handed, so the fraction reaches accessibility and not the ring
+   * (`docs/components/progress.md`, Limits). It is sent either way - clamping and
+   * the a11y value depend on it.
    */
   value: number | null;
   /**

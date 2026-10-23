@@ -40,6 +40,13 @@ export interface ProgressProps extends ViewProps {
    * callback overshoots, and an indicator that vanished because of it is worse
    * than one that looked full for a frame.
    *
+   * **A `circular` indicator does not draw it on iOS.** SwiftUI's `.circular`
+   * `ProgressView` keeps spinning whatever fraction it is handed, so
+   * `variant="circular" value={0.4}` looks like the indeterminate ring there - the
+   * number reaches VoiceOver (`accessibilityValue`) and the handle, and only a
+   * `linear` bar fills on both platforms. Android draws the fraction either way.
+   * `docs/components/progress.md` (Limits) says what was tried about it.
+   *
    * A plain `value`, not a controlled one: nothing on a Progress can be changed
    * by the user, so React always owns it and no `onValueChange` is needed
    * (`docs/architecture/core.md` §12). Writing it at 60 Hz costs one `number`
@@ -154,7 +161,11 @@ export function Progress({
   const processedTint = useProcessedColor(tintColor);
   const processedTrack = useProcessedColor(trackColor);
   const hybridRefCallback = useStableCallback(hybridRef);
-  const sizingId = useSizingId();
+  // The id is minted per *native mount*: `key` below is the variant, so a variant
+  // change drops the old view, and the drop must not take the new mount's sizing
+  // ledger entry with it (`useSizingId`'s `configuration` contract; the harness's
+  // `re-measures a variant change that starts from a poisoned guess` is the oracle).
+  const sizingId = useSizingId(variant);
   const isCircular = variant === 'circular';
 
   return (
