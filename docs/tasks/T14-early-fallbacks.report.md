@@ -207,8 +207,10 @@ report queued, so at the frame that drew there was nothing queued for a pre-draw
 the report arrived *after* that draw, and nothing in the dialog's window requested another one. An
 idle second window plus a late report is all that is observed; the cause of the lateness was not chased
 (D19). Fixed in fix round 1 from the other side: `scheduleSizingFlush` now requests the draw its flush
-listener needs (`invalidate()`), and the test waits for its own instance's `corrected`, so it goes red
-when the queued report is not pumped instead of passing on someone else's redraw.
+listener needs (`postInvalidateOnAnimation()` on the host, whose observer is the window the correction has
+to reach), and the test waits for its own instance's `corrected` so unrelated activity cannot carry it
+green. The request itself is pinned by `scripts/check-sizing-flush-draw-request.sh`, which is the only
+check that goes red on demand — the measured reason is in "Fix round 1" below.
 
 T14 does not move the cause: the guess that control mounted from is the one the test seeds, so the
 startup table's number was never consulted, and the file's own change here is the *evidence rule* in
@@ -262,8 +264,17 @@ Android runs all passed, so it is a low-rate race and it is routed below rather 
 
 - The iOS half of `Slider › ignores a drag while disabled` (above) — route to G1's owner.
 - The Android Modal stuck report (above): fixed in fix round 1 — the host requests a draw when it queues a
-  flush, and the test waits for its own instance's `corrected`. Not chased (deliberately): why Compose's
-  first report can land after a settled dialog's last draw at all.
+  flush, the test waits for its own instance's `corrected`, and `scripts/check-sizing-flush-draw-request.sh`
+  guards the request. Not chased (deliberately): why Compose's first report can land after a settled
+  dialog's last draw at all.
+- Re-laying out an *already mounted* control at a wrong guess produces no report on Android at all
+  (measured in fix round 1: `marginTop: 0` → `1` on a mounted dialog Switch moved its box to the seeded
+  `40 × 20` — `laidOut:2:40.0x20.0`, ledger inexact — and Compose never re-measured, so nothing was
+  queued and the control stayed clipped at the guess until something recomposed it). `sizing.md`'s claim
+  that an environment bump means "every mounted instance is asked to measure again" is therefore
+  prospective on Android: nothing asks, and a configuration change that only moves the box relies on the
+  composition re-measuring to notice. Worth a task of its own (it is the same seam as the two
+  `nuiTestWidth`-based tests, which change the content and so do recompose).
 - `Sizing.harness.tsx`'s per-instance cold check waits with `collectTrace(hasDrawnSample)`, which stops at
   *any* instance's `drew` — it could stop before this instance's `corrected` and become the next flake
   (review).
@@ -293,3 +304,110 @@ Android runs all passed, so it is a low-rate race and it is routed below rather 
 | `fb3f1c5` | `sizing.md`, `core.md`, `slider.md` |
 | `9d2f63c` | the one stale line reference in `…Loader.m`'s comment |
 | this report's commit | this file |
+
+## Fix round 1
+
+Verdict: merge-after-small-fixes, three items. All three are in; one of them needed a different kind of
+check than the review assumed, and that is measured below rather than argued.
+
+### 1. The cold tests read their own coldness after it had gone
+
+`measurements` is a process-wide total that never goes down, and the first cold test measures a control, so
+the `coldProcessStats()` each cold test called was reporting how much of this file had already run. The
+declared-size assertion in `lays a cold Switch out at the size the control measures` therefore had never
+run anywhere — not on this branch, not on `main`, and not in either `harness:cold:*` run. The header's
+ordering contract and the note under it said otherwise; both now say what is measured. The witness is
+captured once, on the first call, which the first cold test makes before anything here mounts
+(`coldOnEntry`, `ColdSizing.harness.tsx:170-181`), and both cold tests assert against that one value
+(`:330`, `:430`). Verified that the branch is now *taken* rather than skipped: with a `throw` inside it,
+`harness:cold:android` reports `laidOut=52x48` against a declared `52x48` and `harness:cold:ios` reports
+`61x28` against `61x28` — the declared-size assertion runs, and on a cold process the first frame really is
+the declared box.
+
+The same file's review note: it restored the Slider's declared fallback with Android's width on both
+platforms. iOS declares 351 (D14), so every test after the poisoning one ran against `328 × 48` on iOS.
+`SLIDER_FALLBACK` is a `Platform.select` now (`:121-125`), so poison and restore agree per platform.
+
+### 2. Android's flush asked to be consulted, not for the draw
+
+`scheduleSizingFlush` registers a `ViewTreeObserver.OnPreDrawListener` — a request to be consulted at the
+next draw, not a request for one — so a report arriving after a quiet window's last draw waited for an
+unrelated redraw. It now requests the traversal too (`NitroComposeHost.kt:503-540`).
+
+Why `postInvalidateOnAnimation()` is the cheapest correct request:
+
+- It has to come from this host: a `Modal` host's `ViewTreeObserver` is the dialog's, so anything rooted in
+  the main window (`decorView`, the content view) would wake the window that is not waiting.
+- It is vsync-aligned and coalesces with any invalidation already pending, and when the flush does apply a
+  correction it returns `false` from `onPreDraw` — so the frame it asked for is the one that gets skipped.
+  The common case (a report inside a live frame) costs nothing at all.
+- `requestLayout()` also traverses, but re-measures the native subtree for a size that same traversal is
+  about to correct; a bare `postOnAnimation { }` block runs without scheduling a traversal, so it does not
+  guarantee the listener is ever reached.
+
+### 3. The Modal test, and the red that could not be forced
+
+The test has two phases now (`Sizing.harness.tsx:829`), both judged on this instance's own trace events:
+
+| Phase | What it does | Measured on `nitroui_t01` |
+| --- | --- | --- |
+| cold mount in the dialog | poisoned `40 × 20` guess, control mounted into a presenting dialog | `laidOut 40.0x20.0` → `drew 40.0x20.2` → `corrected 52.2x48.0`; 1 correction, 1 flush, 1 changed flush |
+| size that arrives late | the same control asked for a genuinely different size (`nuiTestWidth`) after the dialog has presented, drawn and gone quiet — no presenting draw left to carry a correction | `laidOut 40.0x20.0` → `corrected 100.2x48.0`; 1 correction, 1 flush |
+
+`/tmp/T14r1-logcat-final.log`; three green runs on Android in `/tmp/T14r1-modal-fix3-r1.log` … `-r3.log`, and
+green inside the iOS whole-suite run.
+
+**What it does not do is go red without the fix, and no version of it can.** The host was instrumented
+(`Log` in `onMeasure`, `measureNow`, `reportToSizingEngine` and both pre-draw listeners) and four
+arrangements were run against a build with `postInvalidateOnAnimation()` commented out: the committed
+fresh-dialog mount; a dialog presented and settled 1.5 s before the control mounts into it; that again with
+the control inside an invisible wrapper; and a mounted control asked for a new size once the dialog had
+settled. Nine runs, nine passes (`/tmp/T14r1-modal-nofix-r1..6.log`, `/tmp/T14r1-modal-nofix-run1..3.log`).
+The instrumented reason: a report is only ever produced by a measure — Compose's `Layout` block is the only
+caller of `reportToSizingEngine` — so a report always arrives *inside* a traversal, and an RN dialog always
+has at least one more after it (report at `t`; dialog traversals at `t+4 ms` and `t+11 ms`). The stuck run
+of round 0 (`queued=1, flushes=0`) is the rare ordering in which the composition's invalidations and
+Fabric's layout pass collapse into a single traversal; nothing arrangeable from JS reproduced it. The oracle
+was still tightened, so a lost correction now fails this test instead of riding along on someone else's
+redraw — but the honest check for the mechanism is static, and the repo already has the pattern (review B1's
+`scripts/check-sizing-capture.sh`): `scripts/check-sizing-flush-draw-request.sh`, run by `bun run check` as
+`── sizing flush requests its draw`. Red on 3 runs out of 3 with the request removed, green with it, and it
+explains itself when it fires.
+
+### 4. Docs
+
+- The Modal cause, in this report and in `docs/tasks/FOLLOWUPS.md`, is now what the trace shows — the
+  first-frame watcher records `drew` only when no report is queued, so the report arrived after that
+  window's last draw — plus the fix, named as `postInvalidateOnAnimation()`. `invalidate()` appeared in
+  prose written before the code settled; the code always said this.
+- The proposed D17 wording above carries the exception `docs/architecture/sizing.md:438` records: an iOS 26+
+  app that sets `UIDesignRequiresCompatibility` really is `51 × 31`, which is why the declared `61 × 28` is
+  a declared number and not an answer.
+- One new follow-up, from the instrumentation: re-laying out an *already mounted* control at a wrong guess
+  produces no report on Android at all, so `sizing.md`'s "asked to measure again" is prospective there. In
+  Follow-ups, unfixed (D19).
+
+### Gates, fix round 1
+
+| Gate | Result |
+| --- | --- |
+| `bun run check` | green on the committed tree (`/tmp/T14r1-check.log`, `/tmp/T14r1-check-final.log` after the doc commits), new guard line included, ending `package-files: tarball matches … (205 files)` |
+| `harness:ios` | 58 / 58 (`/tmp/T14r1-ios-suite.log`) — round 0's lone red, `Slider › ignores a drag while disabled`, is green since FIX1 |
+| `harness:android` | 58 / 58 (`/tmp/T14r1-android-suite.log`) |
+| `harness:cold:ios` | 4 / 4 (`/tmp/T14r1-ios-cold.log`) |
+| `harness:cold:android` | 4 / 4 (`/tmp/T14r1-android-cold.log`) |
+| Modal test | 3 / 3 Android; green in the iOS suite; its guard red 3 / 3 without the fix |
+| Devices | iPhone 17 `F08675D3…`, `nitroui_t01` (adb server 5041, `emulator-5570`), Metro 8293; G2's iPhone Air / `nitroui_t02` and `emulator-5560` untouched; both devices shut down afterwards |
+
+### Commits, fix round 1
+
+| Commit | What |
+| --- | --- |
+| `b173065` | the review, committed as the round started |
+| `25a1e60` | `main` merged in: FIX1's iOS Slider a11y probe (which retires round 0's iOS red) and its doc updates |
+| `b016aa4` | coldness captured once, and `SLIDER_FALLBACK` per platform |
+| `eb90728` | the flush's draw request, and the Modal test's per-instance oracle |
+| `8042f24` | the Modal cause reworded, the D17 exception, the review's other follow-ups as lines |
+| `0dbb4ad` | `scripts/check-sizing-flush-draw-request.sh`, wired into `test:native` |
+| `2ca01e3` | the Modal test's two phases, with the measured determinism note |
+| this section's commit | this section, and the two places that said `invalidate()` |
