@@ -31,12 +31,12 @@ import {
   buildBaseline,
   cellKey,
   comparableMetrics,
-  COMPONENTS,
-  BUTTON_IMPLEMENTATIONS,
-  controlImplementation,
+  componentOf,
   gate,
+  IMPLEMENTATIONS,
   incompleteMetrics,
   launchPlanString,
+  scenarioActionOf,
   MAX_MISSING_SAMPLE_RATIO,
   noiseTable,
   ratioTable,
@@ -128,7 +128,7 @@ function cellRecords({
       jsCpuNs: jsCpuPerOp * factor * ITERATIONS,
       mainCpuNs: mainCpuPerOp * factor * ITERATIONS,
     });
-    if (scenario === 'mount') {
+    if (scenarioActionOf(scenario) === 'mount') {
       records.push({
         kind: 'cpu',
         scenario,
@@ -190,7 +190,7 @@ function memoryRecords({
     });
   };
   for (let launch = 0; launch < LAUNCHES; launch++) {
-    if (scenario === 'memory') {
+    if (scenarioActionOf(scenario) === 'memory') {
       sample(launch, 'empty', empty);
       sample(launch, 'full', empty + perInstance * n);
     } else {
@@ -763,25 +763,10 @@ describe('native perf marks (--perf-marks)', () => {
   });
 
   it('narrows the schedule to the arm that has marks, and keeps :marks out of the cell key', () => {
-    // One component at a time: the arm names carry the component (G2), so the
-    // narrowing is per arm set — `--perf-marks` alone still means "only the
-    // arm we can put marks on", whatever component is being measured.
-    const schedule = buildSchedule({
-      plan: 'quick',
-      perfMarks: true,
-      implementations: COMPONENTS.switch,
-    });
+    const schedule = buildSchedule({ plan: 'quick', perfMarks: true });
     expect([...new Set(schedule.map((entry) => entry.implementation))]).toEqual(
       ['nitro-ui']
     );
-    const buttonSchedule = buildSchedule({
-      plan: 'quick',
-      perfMarks: true,
-      implementations: COMPONENTS.button,
-    });
-    expect([
-      ...new Set(buttonSchedule.map((entry) => entry.implementation)),
-    ]).toEqual(['nitro-ui-button']);
     expect(launchPlanString(schedule[0])).toBe('mount:nitro-ui:50:marks');
     expect(cellKey('mount', 'nitro-ui', 50)).toBe('mount:nitro-ui:50');
     // A clean run's launch string carries no flag at all.
@@ -918,29 +903,53 @@ describe('--check against a committed baseline', () => {
 });
 
 /**
- * The Button arm set (`bun bench --component button`, task G2).
+ * The Button cells (`bun bench --component button`, task G2).
  *
- * The `--component` dimension is a second value in the arm *name* — an arm set is
- * `rn-core-button` / `expo-ui-*-button` / `nitro-ui-button` — so the one thing a
- * reviewer cannot see from the schedule alone is whether the gate still pairs an
- * arm with the control of its **own** component. Cross that and every Button ratio
- * is computed against a Switch, which is a number, a confident one, and meaningless.
- * These fixtures are the case that must not silently happen, and the reason the
- * Button arms are gated at all (D15's targets are per `nitro-ui` arm).
+ * A component is part of the scenario cell (`mount.button`), so the one thing a
+ * reviewer cannot see from the schedule alone is whether the gate still pairs a
+ * cell with the `rn-core` control of the **same cell**. Cross that wire and every
+ * Button ratio is computed against a Switch: a number, a confident one, and
+ * meaningless. These fixtures are the case that must not silently happen, and the
+ * reason the Button cells are gated at all (D15's targets are per `nitro-ui` arm).
  */
-describe('the Button arm set (--component button)', () => {
-  function makeButtonRun(overrides = {}) {
+describe('the Button cells (--component button)', () => {
+  /**
+   * A Button run, plus a Switch run mixed into the same file.
+   *
+   * Both are here on purpose, and their controls are deliberately far apart
+   * (`mount` 100 us, `mount.button` 200 us): a gate that paired a Button arm with
+   * the Switch control would read 2.2x or 0.55x instead of 1.1x, so the ratios
+   * below are only reachable through the correct pairing.
+   */
+  function makeMixedRun(overrides = {}) {
     const arms = {
-      'rn-core-button': {},
-      'expo-ui-host-per-control-button': { mounted: 210_000 },
-      'expo-ui-shared-host-button': { mounted: 80_000 },
-      'nitro-ui-button': { mounted: 110_000 },
-      ...Object.fromEntries(Object.entries(overrides)),
+      'rn-core': {},
+      'expo-ui-host-per-control': { mounted: 210_000 },
+      'expo-ui-shared-host': { mounted: 80_000 },
+      'nitro-ui': { mounted: 110_000 },
+      ...overrides,
     };
     const records = [];
     for (const [implementation, values] of Object.entries(arms)) {
-      records.push(...cellRecords({ implementation, ...values }));
+      for (const scenario of ['mount', 'mount.button']) {
+        const scale = scenario === 'mount' ? 1 : 2;
+        records.push(
+          ...cellRecords({
+            scenario,
+            implementation,
+            mounted: (values.mounted ?? 100_000) * scale,
+            presented: (values.presented ?? 130_000) * scale,
+          })
+        );
+      }
       records.push(...memoryRecords({ implementation, ...values }));
+      records.push(
+        ...memoryRecords({
+          scenario: 'memory.button',
+          implementation,
+          ...values,
+        })
+      );
     }
     return {
       platform: 'ios',
@@ -948,18 +957,33 @@ describe('the Button arm set (--component button)', () => {
     };
   }
 
-  it('pairs each Button arm with rn-core-button', () => {
-    // `nitro-ui-button` is 110 000 ns against a 100 000 ns control: 1.1x, and only
-    // if the control it was divided by is the Button one. An `rn-core` denominator
-    // is not in this run at all, which would leave the cell with no ratios.
-    const table = ratioTable(makeButtonRun());
-    const row = table['mount:nitro-ui-button:50'];
-    expect(row.metrics.mountedNs.ratio).toBeCloseTo(1.1, 4);
-    expect(table['mount:rn-core-button:50'].metrics.mountedNs.control).toBe(
+  /** `makeMixedRun` restricted to the Button component, as `--component button` runs it. */
+  function makeButtonRun(overrides = {}) {
+    const run = makeMixedRun(overrides);
+    return {
+      platform: 'ios',
+      cells: Object.fromEntries(
+        Object.entries(run.cells).filter(
+          ([key, cell]) => componentOf(cell.scenario ?? key) === 'button'
+        )
+      ),
+    };
+  }
+
+  it('divides a Button arm by the Button control, never the Switch control', () => {
+    const table = ratioTable(makeMixedRun());
+    // 220 us over a 200 us control. The Switch arm is also 1.1x over its own
+    // control, so a crossed wire shows up as 2.2x / 0.55x on one of these rows.
+    expect(
+      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
+    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
+      1.1,
+      4
+    );
+    expect(table['mount.button:rn-core:50'].metrics.mountedNs.control).toBe(
       true
     );
-    expect(controlImplementation('nitro-ui-button')).toBe('rn-core-button');
-    expect(controlImplementation('nitro-ui')).toBe('rn-core');
   });
 
   it('is silent when nothing changed', () => {
@@ -970,55 +994,54 @@ describe('the Button arm set (--component button)', () => {
   it('fails conclusively when the Button arm doubles', () => {
     const result = gate({
       head: makeButtonRun({
-        'nitro-ui-button': { mounted: 220_000, presented: 260_000 },
+        'nitro-ui': { mounted: 440_000, presented: 520_000 },
       }),
       base: makeButtonRun(),
     });
     const mounted = result.failures.find(
-      (failure) =>
-        failure.implementation === 'nitro-ui-button' &&
-        failure.metric === 'mountedNs'
+      (failure) => failure.metric === 'mountedNs'
     );
     expect(mounted).toBeDefined();
-    expect(mounted.key).toBe('mount:nitro-ui-button:50');
+    expect(mounted.implementation).toBe('nitro-ui');
+    // The Button cell is the one that moved; the Switch cell of the same arm is
+    // absent from a `--component button` run rather than quietly passing.
+    expect(mounted.key).toBe('mount.button:nitro-ui:50');
   });
 
   it('never gates a Button reference arm', () => {
     const result = gate({
       head: makeButtonRun({
-        'expo-ui-shared-host-button': {
-          mounted: 640_000,
-          presented: 780_000,
-        },
+        'expo-ui-shared-host': { mounted: 640_000, presented: 780_000 },
       }),
       base: makeButtonRun(),
     });
     expect(
-      result.failures.filter(
-        (failure) => failure.implementation === 'nitro-ui-button'
-      )
+      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
     ).toEqual([]);
   });
 
-  it('schedules one complete arm set per component, never a mix', () => {
-    const button = buildSchedule({
-      plan: 'quick',
-      implementations: COMPONENTS.button,
-    });
+  it('schedules one complete component per --component, never a mix', () => {
+    const button = buildSchedule({ plan: 'quick', component: 'button' });
+    // Every cell is a Button cell, and all four arms are there - including the
+    // control, or the ratios would be computed against an arm that is never
+    // measured.
+    expect([...new Set(button.map((entry) => entry.scenario))]).toEqual([
+      'mount.button',
+      'update.button',
+      'memory.button',
+    ]);
     expect(new Set(button.map((entry) => entry.implementation))).toEqual(
-      new Set(BUTTON_IMPLEMENTATIONS)
+      new Set(IMPLEMENTATIONS)
     );
-    const sw = buildSchedule({
-      plan: 'quick',
-      implementations: COMPONENTS.switch,
-    });
-    expect(sw.some((entry) => entry.implementation.endsWith('-button'))).toBe(
-      false
+    const sw = buildSchedule({ plan: 'quick', component: 'switch' });
+    expect(sw.every((entry) => componentOf(entry.scenario) === 'switch')).toBe(
+      true
     );
-    // Every set carries its own control, or its ratios would be computed against
-    // an arm that is never measured.
-    for (const arms of Object.values(COMPONENTS)) {
-      expect(arms).toContain(controlImplementation(arms[arms.length - 1]));
-    }
+    // `null` stays "every component", which is what a plain `bun bench` runs.
+    const all = buildSchedule({ plan: 'quick' });
+    expect(new Set(all.map((entry) => componentOf(entry.scenario)))).toEqual(
+      new Set(['switch', 'slider', 'button'])
+    );
+    expect(all.length).toBe(button.length * 3);
   });
 });

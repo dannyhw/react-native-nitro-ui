@@ -1,13 +1,14 @@
-import { Button, Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { Button, Slider, Switch, nitroUiCore } from 'react-native-nitro-ui';
 
 import type { BenchListProps, BenchPerfMark } from '../types';
 import {
-  buttonRowStyle,
   buttonTitle,
   onPress,
+  onSliderChange,
   onValueChange,
   range,
   rowStyle,
+  sliderValue,
 } from './shared';
 
 /**
@@ -91,9 +92,53 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
  * literally free (one integer compare per mark site), and the numbers in the
  * published tables should be the numbers a consumer gets.
  */
-export function NitroUiList({ n, value, perfMarks }: BenchListProps) {
+export function NitroUiList({
+  n,
+  value,
+  perfMarks,
+  component,
+}: BenchListProps) {
   if (n === 0) {
     return null;
+  }
+  const style = rowStyle(component);
+  if (component === 'button') {
+    // `buttonTitle(value)` is the same string the other arms draw, so the
+    // `update` scenario is a real title change here: the sizing key changes, the
+    // control re-measures, and that cost is in the measured numbers.
+    // `variant`, `size`, `disabled` and `tintColor` stay at their defaults - the
+    // arms compare each control's platform default, and the size a default
+    // `filled`/`medium` button measures is part of what the arm costs.
+    return (
+      <>
+        {range(n).map((index) => (
+          <Button
+            key={index}
+            testID={`bench-nitro-ui-button-${String(index)}`}
+            title={buttonTitle(value)}
+            onPress={onPress}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'slider') {
+    return (
+      <>
+        {range(n).map((index) => (
+          <Slider
+            key={index}
+            testID={`bench-nitro-ui-slider-${String(index)}`}
+            value={sliderValue(value)}
+            onValueChange={onSliderChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
   }
   return (
     <>
@@ -104,40 +149,7 @@ export function NitroUiList({ n, value, perfMarks }: BenchListProps) {
           value={value}
           onValueChange={onValueChange}
           nuiPerfId={perfMarks ? index : null}
-          style={rowStyle}
-        />
-      ))}
-    </>
-  );
-}
-
-/**
- * `n` real nitro-ui buttons.
- *
- * Props are the same set the reference arms pass - a title, a stable no-op press
- * handler, `testID`, and the button row style - plus what the library's wrapper
- * always sends. `variant`, `size`, `disabled` and `tintColor` stay at their
- * defaults: the arms compare each control's platform default, and the size a
- * default `filled`/`medium` button measures is part of what the arm costs.
- *
- * `buttonTitle(value)` is the same string the other arms draw, so the `update`
- * scenario is a real title change here: the sizing key changes, the control
- * re-measures, and that cost is in the measured `mountedNs`/CPU numbers.
- */
-export function NitroUiButtonList({ n, value, perfMarks }: BenchListProps) {
-  if (n === 0) {
-    return null;
-  }
-  return (
-    <>
-      {range(n).map((index) => (
-        <Button
-          key={index}
-          testID={`bench-nitro-ui-button-${String(index)}`}
-          title={buttonTitle(value)}
-          onPress={onPress}
-          nuiPerfId={perfMarks ? index : null}
-          style={buttonRowStyle}
+          style={style}
         />
       ))}
     </>

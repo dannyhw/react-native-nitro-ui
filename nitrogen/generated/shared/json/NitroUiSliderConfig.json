@@ -1,0 +1,25 @@
+{
+  "uiViewClassName": "NitroUiSlider",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "value": true,
+    "defaultValue": true,
+    "mostRecentEventCount": true,
+    "minimumValue": true,
+    "maximumValue": true,
+    "step": true,
+    "disabled": true,
+    "tintColor": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onValueChange": true,
+    "onSlidingStart": true,
+    "onSlidingComplete": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}

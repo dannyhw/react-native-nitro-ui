@@ -59,8 +59,13 @@ async function measureLatency(
 ): Promise<number> {
   const { t0, tCommit } = await engine.commit(target.count, target.value);
 
-  const mountedAt = await awaitMountNs();
-  const presentedAt = await awaitPresentedNs();
+  // A cell that declares `mountSignal: false` has no transaction to stamp, so
+  // both waits can only end in a timeout - 3.5 s per iteration of nothing, and
+  // the pair is reported as `n/a` afterwards regardless. Skip the wait; the
+  // nulls below are the same nulls, reached without the delay.
+  const expectsSignal = target.plan.mountSignal;
+  const mountedAt = expectsSignal ? await awaitMountNs() : null;
+  const presentedAt = expectsSignal ? await awaitPresentedNs() : null;
 
   engine.emit({
     kind: 'iter',

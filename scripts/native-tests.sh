@@ -38,6 +38,15 @@ run_case() {
 run_case "sizing state-update captures by value" \
   bash "$ROOT/scripts/check-sizing-capture.sh"
 
+# Review T14/1: Android's flush registers a pre-draw listener, which is a request
+# to be consulted at the next draw and not a request for one - so it must ask for
+# the draw too, or a size measured against a window that has stopped drawing (an
+# RN `Modal`) stays queued. The reason is the same as B1's: the race is between
+# a report and a window's last traversal, and no on-device test can produce it
+# on demand. See scripts/check-sizing-flush-draw-request.sh.
+run_case "sizing flush requests its draw" \
+  bash "$ROOT/scripts/check-sizing-flush-draw-request.sh"
+
 echo "compiling (host clang/swiftc, into $OUT)"
 
 # The clock + perf ring: the shipping C++ headers, compiled as-is.
@@ -69,6 +78,18 @@ run_case "sizing.test (C++)" \
       -framework CoreFoundation \
       '$ROOT/scripts/native-tests/sizing.test.cpp' \
       '$ROOT/cpp/NitroUiSizingEngine.cpp' -o '$OUT/sizing' && '$OUT/sizing'
+  "
+
+# The Slider's value rule: clamping, step snapping and the float tidying that
+# keeps native's displayed value bit-for-bit equal to React's. Same reason the
+# handshake is here rather than only on a device - it is pure arithmetic that an
+# on-device test would only catch by accident, and it is duplicated in Kotlin.
+run_case "slider-value.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/ios/components/Slider/NitroUiSliderValue.swift' \
+      '$ROOT/scripts/native-tests/slider-value.test.swift' \
+      -o '$OUT/slider-value' && '$OUT/slider-value'
   "
 
 # The same test again under the sanitizers, because the properties worth checking

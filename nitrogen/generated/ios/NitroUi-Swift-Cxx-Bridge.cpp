@@ -9,6 +9,7 @@
 
 // Include C++ implementation defined types
 #include "HybridNitroUiButtonSpecSwift.hpp"
+#include "HybridNitroUiSliderSpecSwift.hpp"
 #include "HybridNitroUiSwitchSpecSwift.hpp"
 #include "NitroUi-Swift-Cxx-Umbrella.hpp"
 #include <NitroModules/NitroDefines.hpp>
@@ -36,6 +37,30 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiButtonSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::function<void(double /* value */, double /* eventCount */)>
+  Func_void_double_double create_Func_void_double_double(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroUi::Func_void_double_double::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](double value, double eventCount) mutable -> void {
+      swiftClosure.call(value, eventCount);
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiSliderSpec>
+  std::shared_ptr<HybridNitroUiSliderSpec> create_std__shared_ptr_HybridNitroUiSliderSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiSliderSpec_cxx swiftPart = NitroUi::HybridNitroUiSliderSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiSliderSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiSliderSpec_(std__shared_ptr_HybridNitroUiSliderSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiSliderSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiSliderSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiSliderSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiSliderSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
   

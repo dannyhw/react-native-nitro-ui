@@ -341,7 +341,19 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     // fallback (review S5). Measuring in the first `commit()` instead puts the
     // report in the same turn as the mount.
     let boundsIndependent = sizingPolicy == .intrinsic
-    guard wantsContentSize, hasCommitted, boundsIndependent || !bounds.isEmpty, contentSizeNeedsMeasure else {
+    // What a `fillWidth` measure may not run without is the box's **width**: it
+    // is the half the control is not allowed to invent, and proposing 0 of it
+    // asks SwiftUI about a control nobody is laying out. The *height* must not
+    // gate it. A `fillWidth` control's height starts out unknown to Yoga - a
+    // cold first instance is laid out at 0 tall, because the fallback a
+    // component declares lives in its first view, which Fabric creates after
+    // that view's shadow node was measured. Refusing to measure at height 0
+    // therefore closes the loop the sizing engine exists to break: the report is
+    // what turns the 0 into a height, and a measure that waits for a height can
+    // never make one. (`docs/architecture/sizing.md` §5; the on-device test is
+    // `answers its own height even when the box has none`, which Android
+    // answered correctly from the start.)
+    guard wantsContentSize, hasCommitted, boundsIndependent || bounds.width > 0, contentSizeNeedsMeasure else {
       // The hot path: three bools, no SwiftUI.
       return contentSize
     }
@@ -401,15 +413,54 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
       hostedView.layoutIfNeeded()
     }
     if #available(iOS 16.0, *) {
-      // An unbounded proposal asks SwiftUI what the control wants to be, which is
-      // the intrinsic size T11 needs; Yoga's box is a separate question.
-      let size = hostingController.sizeThatFits(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity))
+      let proposal = fittingSizeProposal
+      let size = hostingController.sizeThatFits(in: proposal)
       if size.width > 0, size.height > 0 {
+        if sizingPolicy == .fillWidth {
+          // A `fillWidth` control's width *is* the box; what it was asked for is
+          // the answer, not whatever SwiftUI settled on inside it. This is the
+          // same thing Android's `NitroUiMeasuredRoot` reports, because a
+          // `Placeable`'s size is coerced into its (bounded) constraints.
+          return CGSize(width: proposal.width, height: size.height)
+        }
         return size
       }
     }
-    // iOS 15, or a content view that refused the unbounded proposal.
+    // iOS 15, or a content view that refused the proposal. Note this answers the
+    // *intrinsic* question for both policies - a `fillWidth` control reaching
+    // here gets a width the shadow node overrides anyway (its `fillWidth` flag
+    // replaces the width with the box's), so the only number that can be wrong
+    // is a width nobody uses.
     return hostedView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+  }
+
+  /// The size proposal ``measureFittingSize()`` hands SwiftUI, per sizing policy.
+  ///
+  /// The two policies ask two different questions, and one proposal cannot ask
+  /// both. `intrinsic` asks the unbounded one - what does this control want to
+  /// be? - which is the only useful answer when the control's own size *is* its
+  /// size (`docs/architecture/sizing.md`). `fillWidth` has to ask what the control
+  /// wants to be **at the width it was given**: proposed unbounded width, a
+  /// control like a Slider reports a preferred width nobody asked for, and the
+  /// height a *different* width implies.
+  ///
+  /// The height stays unbounded for both: that is the half a `fillWidth` control
+  /// still measures for itself. A caller's `width`/`height`/`flex` still wins
+  /// regardless, because the shadow node clamps its answer to the layout
+  /// constraints it was given (`cpp/NitroUiIntrinsic.hpp`).
+  ///
+  /// `bounds` is only usable here because ``refreshContentSize()`` refuses to
+  /// measure a `fillWidth` host that has no width yet; the height half of
+  /// `bounds` is deliberately not consulted - it is the number being measured.
+  /// For `intrinsic` the proposal is never read, so a Switch keeps the exact
+  /// question it always asked.
+  private var fittingSizeProposal: CGSize {
+    switch sizingPolicy {
+    case .intrinsic:
+      return CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+    case .fillWidth:
+      return CGSize(width: bounds.width, height: CGFloat.infinity)
+    }
   }
 
   // MARK: - Perf

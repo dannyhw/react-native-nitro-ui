@@ -42,6 +42,16 @@ struct NitroUiControlledValue<Value: Equatable> {
   var displayed: Value
   /// The last `value` React sent, or `nil` while uncontrolled.
   var js: Value?
+  /// The newest value a native interaction reached that has **not** been emitted.
+  ///
+  /// A continuous control sets this on every input sample and clears it when the
+  /// frame tick emits it (`docs/architecture/core.md` §11). It belongs to the
+  /// handshake rather than to the component because it is the one case where
+  /// `jsEvents >= nativeEvents` is not enough: the count only advances when we
+  /// emit, so while this is set native is ahead by a value JS cannot have seen -
+  /// and accepting a write in that window paints the app's number for a frame
+  /// before the interaction's own value is emitted under it.
+  var unreported: Value?
   /// How many changes native emitted.
   var nativeEvents: Int = 0
   /// How many of those changes JS confirmed it processed.
@@ -60,10 +70,12 @@ struct NitroUiControlledValue<Value: Equatable> {
 
   /// Apply a pending React write. Returns whether `displayed` changed.
   ///
-  /// Writes with `jsEvents < nativeEvents` are stale (JS has not seen our newest
-  /// event yet) and are dropped.
+  /// A write is dropped when `jsEvents < nativeEvents` (stale: JS has not seen
+  /// our newest event yet) and while ``unreported`` is set (native holds a value
+  /// JS has not been told about). Neither is *queued*: the next commit decides
+  /// again.
   mutating func reconcile() -> Bool {
-    guard let js, jsEvents >= nativeEvents, js != displayed else {
+    guard let js, unreported == nil, jsEvents >= nativeEvents, js != displayed else {
       return false
     }
     displayed = js

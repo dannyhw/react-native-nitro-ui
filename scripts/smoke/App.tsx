@@ -1,4 +1,4 @@
-import { Button, nitroUiCore, Switch } from 'react-native-nitro-ui';
+import { Button, nitroUiCore, Slider, Switch } from 'react-native-nitro-ui';
 import * as React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -63,6 +63,7 @@ export default function App(): React.ReactElement {
             Keep each line bare: the point is that a packed library renders in an
             app we did not build. */}
         <Switch testID="SMOKE-switch" defaultValue={true} />
+        <Slider testID="SMOKE-slider" defaultValue={0.5} />
         <Button testID="SMOKE-button" title="Save" />
       </ScrollView>
     </View>
