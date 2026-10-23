@@ -39,15 +39,6 @@ permissions:
   contents: read
   pull-requests: write
 
-concurrency:
-  # Keyed on the pull request. `issue_comment` events all carry the same
-  # `github.ref` (the default branch), so keying on the ref let one PR's `/bench`
-  # cancel another PR's run, and both cancel the nightly (T02 review S14).
-  group: >-
-    bench-${{ github.workflow }}-${{
-      github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   trigger:
     name: Should benchmarks run?
@@ -108,6 +99,16 @@ jobs:
     name: Bench iOS
     needs: trigger
     if: needs.trigger.outputs.run == 'true'
+    concurrency:
+      # On the job, not the workflow: a workflow-level group cancelled the
+      # in-flight bench from the *trigger* job's early exit or from a comment
+      # that the trigger would have filtered out anyway, and it cancelled the
+      # sibling platform job of the same run. The job name keeps iOS and
+      # Android from cancelling each other (T02 round-4 review).
+      group: >-
+        bench-${{ github.workflow }}-${{
+          github.event.pull_request.number || github.event.issue.number || github.ref }}-ios
+      cancel-in-progress: true
     # D2: the Xcode 27 label, not a macOS image name. Xcode 16 cannot build
     # against the SDK Expo SDK 58 / RN 0.88 need.
     runs-on: xcode-27
@@ -118,6 +119,12 @@ jobs:
         with:
           # The head/base comparison needs history.
           fetch-depth: 0
+          # The job has a `pull-requests: write` token and then runs `bun
+          # install` and xcodebuild from pull-request code. Persisting that
+          # token into `.git/config` hands PR code a write-PR credential;
+          # `gh pr checkout` and `gh pr comment` authenticate with `GH_TOKEN`
+          # from their step environment instead (T02 round-4 review).
+          persist-credentials: false
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -142,12 +149,6 @@ jobs:
           echo "IOS_SIM_UDID=$UDID" >> "$GITHUB_ENV"
           xcrun simctl boot "$UDID"
 
-      - name: Shut the simulator down
-        if: always()
-        # Only what this job created; `--shutdown` would be wrong for a device we
-        # did not boot.
-        run: xcrun simctl shutdown "$IOS_SIM_UDID" || true
-
       - name: Resolve revisions
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -166,14 +167,14 @@ jobs:
         run: |
           git checkout -f "$BASE_SHA"
           bun install
-          bun bench --platform ios --plan quick --prebuild --shutdown
+          bun bench --platform ios --plan quick --prebuild
 
       - name: Build and run head
         continue-on-error: true
         run: |
           git checkout -f "$HEAD_SHA"
           bun install
-          bun bench --platform ios --plan quick --prebuild --shutdown
+          bun bench --platform ios --plan quick --prebuild
 
       - name: Report
         run: |
@@ -230,10 +231,24 @@ jobs:
           path: bench/results/
           if-no-files-found: ignore
 
+      - name: Shut the simulator down
+        if: always()
+        # Last, not right after boot. The bench runs deliberately leave the
+        # simulator up (`--shutdown` is not passed: the head run must reuse the
+        # warm simulator the base run booted); this is the safety net for a
+        # failed step in between. Only what this job created.
+        run: xcrun simctl shutdown "$IOS_SIM_UDID" || true
+
   bench-android:
     name: Bench Android
     needs: trigger
     if: needs.trigger.outputs.run == 'true'
+    concurrency:
+      # See the iOS job: keyed per platform so the two never cancel each other.
+      group: >-
+        bench-${{ github.workflow }}-${{
+          github.event.pull_request.number || github.event.issue.number || github.ref }}-android
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -246,6 +261,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # See the iOS job: no PR token survives into `.git/config`.
+          persist-credentials: false
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -264,6 +281,17 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
+
+      # The hosted ubuntu runners ship /dev/kvm owned by root, so an emulator
+      # either refuses to start or crawls in translation mode without this udev
+      # rule from the emulator-runner README (T02 round-4 review).
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls /dev/kvm
 
       - name: Accept Android SDK licenses
         run: /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
