@@ -21,6 +21,7 @@
     "cpp",
     "nitrogen",
     "nitro.json",
+    "nitro-ui.sizing.json",
     "*.podspec",
     "!ios/build",
     "!android/build",

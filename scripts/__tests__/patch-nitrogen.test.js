@@ -11,6 +11,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -165,5 +166,141 @@ describe('patch-nitrogen', () => {
     } finally {
       rmSync(workDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('patch-nitrogen: intrinsic sizing', () => {
+  const HPP = `${VIEWS}/HybridNitroUiSwitchComponent.hpp`;
+  const MM = 'nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm';
+  const KT =
+    'nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSwitchManager.kt';
+  const SIZED = [HPP, MM, KT];
+
+  it('repoints the state, shadow node and component descriptor aliases', () => {
+    withFixture('sizing', (root) => {
+      const result = runPatch(root);
+      expect(result.status).toBe(0);
+      const patched = readFileSync(join(root, HPP), 'utf8');
+      expect(patched).toContain('#include "NitroUiIntrinsic.hpp"');
+      expect(patched).toContain(
+        'using HybridNitroUiSwitchState = ::margelo::nitro::nitroui::IntrinsicViewState<HybridNitroUiSwitchProps>;'
+      );
+      expect(patched).toContain(
+        '::margelo::nitro::nitroui::IntrinsicShadowNode<'
+      );
+      expect(patched).toContain(
+        '::margelo::nitro::nitroui::IntrinsicComponentDescriptor<HybridNitroUiSwitchShadowNode>'
+      );
+      // The aliases are what the rest of the generated code uses, so the names
+      // themselves must survive.
+      for (const alias of [
+        'HybridNitroUiSwitchState',
+        'HybridNitroUiSwitchShadowNode',
+        'HybridNitroUiSwitchComponentDescriptor',
+      ]) {
+        expect(patched).toContain(`using ${alias} =`);
+      }
+      // ...and the old targets must be gone, or the swap did not happen.
+      expect(patched).not.toContain('nitro::ViewPropsHolderState<');
+      expect(patched).not.toContain('nitro::ViewComponentDescriptor<');
+      expect(patched).not.toContain('react::ConcreteViewShadowNode<');
+    });
+  });
+
+  it('teaches the generated iOS component view about Fabric state', () => {
+    withFixture('sizing', (root) => {
+      runPatch(root);
+      const patched = readFileSync(join(root, MM), 'utf8');
+      expect(patched).toContain('- (void)updateState:');
+      expect(patched).toContain('NitroUiSizingEngine::shared().bind(');
+      expect(patched).toContain(
+        'HybridNitroUiSwitchComponentName, sizingState)'
+      );
+      expect(patched).toContain('[super updateState:state oldState:oldState];');
+      // Must be inside the @implementation, not after the file's last @end.
+      expect(
+        patched.lastIndexOf('updateState:state oldState:oldState]')
+      ).toBeLessThan(
+        patched.indexOf('@end', patched.indexOf('@implementation'))
+      );
+    });
+  });
+
+  it('binds the generated Android manager to the sizing engine', () => {
+    withFixture('sizing', (root) => {
+      runPatch(root);
+      const patched = readFileSync(join(root, KT), 'utf8');
+      expect(patched).toContain(
+        'import com.margelo.nitro.nitroui.core.NitroUiSizing'
+      );
+      expect(patched).toContain('NitroUiSizing.bind(getName(), newState)');
+      // Binding before the props are applied would be useless; it must be after
+      // the generated state updater.
+      expect(patched.indexOf('NitroUiSizing.bind(')).toBeGreaterThan(
+        patched.indexOf('StateUpdater.updateViewProps(')
+      );
+    });
+  });
+
+  it('is idempotent on all three files', () => {
+    withFixture('sizing', (root) => {
+      expect(runPatch(root).status).toBe(0);
+      const once = SIZED.map((f) => readFileSync(join(root, f), 'utf8'));
+      const second = runPatch(root);
+      expect(second.status).toBe(0);
+      expect(second.stdout).toContain(
+        `already-patched ${HPP.split('/').pop()}`
+      );
+      SIZED.forEach((f, i) =>
+        expect(readFileSync(join(root, f), 'utf8')).toBe(once[i])
+      );
+    });
+  });
+
+  it('fails when nitrogen stops using the shadow node template', () => {
+    withFixture('sizing-changed-shape', (root) => {
+      const result = runPatch(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'HybridNitroUiSwitchShadowNode alias not found'
+      );
+      expect(readFileSync(join(root, HPP), 'utf8')).not.toContain(
+        'NitroUiIntrinsic'
+      );
+    });
+  });
+
+  it('fails when the config lists a view that is not generated', () => {
+    withFixture('sizing-missing-view', (root) => {
+      const result = runPatch(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('is the view generated?');
+    });
+  });
+
+  it('fails on a policy it does not know', () => {
+    withFixture('sizing', (root) => {
+      writeFileSync(
+        join(root, 'nitro-ui.sizing.json'),
+        JSON.stringify({ HybridNitroUiSwitch: 'heightForWidth' })
+      );
+      const result = runPatch(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('heightForWidth');
+      expect(readFileSync(join(root, HPP), 'utf8')).not.toContain(
+        'NitroUiIntrinsic'
+      );
+    });
+  });
+
+  it('leaves sized-looking views alone without the config', () => {
+    withFixture('sizing', (root) => {
+      rmSync(join(root, 'nitro-ui.sizing.json'));
+      const before = SIZED.map((f) => readFileSync(join(root, f), 'utf8'));
+      expect(runPatch(root).status).toBe(0);
+      SIZED.forEach((f, i) =>
+        expect(readFileSync(join(root, f), 'utf8')).toBe(before[i])
+      );
+    });
   });
 });

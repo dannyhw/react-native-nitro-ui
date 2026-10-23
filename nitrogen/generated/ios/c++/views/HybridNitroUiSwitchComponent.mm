@@ -189,4 +189,17 @@ using namespace margelo::nitro::nitroui::views;
 }
 #endif
 
+// nitro-ui: intrinsic sizing (docs/architecture/sizing.md)
+//
+// The hosted control can only be measured on the main thread, so its size has
+// to reach the shadow tree through Fabric state. Bind this instance here:
+// `updateState:oldState:` runs on mount and on every state change, including
+// the ones our own push causes - which is what keeps the binding alive.
+- (void)updateState:(const facebook::react::State::Shared &)state
+           oldState:(const facebook::react::State::Shared &)oldState {
+  const auto sizingState = ::margelo::nitro::nitroui::eraseFabricState(state);
+  ::margelo::nitro::nitroui::NitroUiSizingEngine::shared().bind(
+      HybridNitroUiSwitchComponentName, sizingState);
+  [super updateState:state oldState:oldState];
+}
 @end

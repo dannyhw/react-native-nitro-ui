@@ -9,6 +9,7 @@
 
 #include <NitroModules/ReactProp.hpp>
 #include <NitroModules/ViewComponentDescriptor.hpp>
+#include "NitroUiIntrinsic.hpp"
 #include <NitroModules/ViewPropsHolderState.hpp>
 #include <react/renderer/components/view/ConcreteViewShadowNode.h>
 #include <react/renderer/components/view/ViewProps.h>
@@ -91,20 +92,19 @@ namespace margelo::nitro::nitroui::views {
   /**
    * State for the "NitroUiSwitch" View.
    */
-  using HybridNitroUiSwitchState = nitro::ViewPropsHolderState<HybridNitroUiSwitchProps>;
+  // nitro-ui: intrinsic sizing (policy: intrinsic, see docs/architecture/sizing.md):
+  using HybridNitroUiSwitchState = ::margelo::nitro::nitroui::IntrinsicViewState<HybridNitroUiSwitchProps>;
 
   /**
    * The Shadow Node for the "NitroUiSwitch" View.
    */
-  using HybridNitroUiSwitchShadowNode = react::ConcreteViewShadowNode<HybridNitroUiSwitchComponentName /* "HybridNitroUiSwitch" */,
-                                                                      HybridNitroUiSwitchProps /* custom props */,
-                                                                      react::ViewEventEmitter /* default */,
-                                                                      HybridNitroUiSwitchState /* custom state */>;
+  using HybridNitroUiSwitchShadowNode =
+      ::margelo::nitro::nitroui::IntrinsicShadowNode<HybridNitroUiSwitchComponentName, HybridNitroUiSwitchProps>;
 
   /**
    * The Component Descriptor for the "NitroUiSwitch" View.
    */
-  using HybridNitroUiSwitchComponentDescriptor = nitro::ViewComponentDescriptor<HybridNitroUiSwitchShadowNode>;
+  using HybridNitroUiSwitchComponentDescriptor = ::margelo::nitro::nitroui::IntrinsicComponentDescriptor<HybridNitroUiSwitchShadowNode>;
 
   /* The actual view for "NitroUiSwitch" needs to be implemented in platform-specific code. */
 
