@@ -150,7 +150,7 @@ function collectMachine(platform, device) {
     machine.simRuntime = device.runtime ?? null;
   } else {
     machine.avd = device.avd ?? null;
-    machine.androidApi = device.sdkInt ?? null;
+    machine.androidApi = device.sdk ?? null;
     machine.androidImage = device.image ?? null;
   }
   return machine;
