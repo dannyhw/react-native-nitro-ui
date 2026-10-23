@@ -1150,8 +1150,9 @@ describe('Sizing · intrinsic (T11)', () => {
    * instance the engine had to *correct*. That is an ordinary cold mount (a first
    * answer that is not the control's size - the pre-T14 first frame, a control
    * whose real size differs from the number it declares, the first mount after an
-   * environment change), and it is the only state in which Yoga can still be
-   * holding the superseded answer for a node it was never dirtied for: with the
+   * environment change), and it is the only state in which React's own revision can
+   * still be carrying the superseded box - its Yoga cache and `layoutMetrics_` both
+   * predate the correction, and nothing re-dirties them (D20): with the
    * bug the box below comes back 40x20, the seeded guess, and stays there for the
    * rest of the mount, because `measureContent` is never reached again to notice.
    * Mounting a second Switch heals it - that correction is for every instance of

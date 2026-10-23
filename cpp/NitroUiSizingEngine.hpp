@@ -275,17 +275,31 @@ namespace margelo::nitro::nitroui {
        * Whether this instance must be measured again on a props update that does
        * not change its size.
        *
-       * A shadow node answers layout from Yoga's per-node measurement cache, and
-       * Yoga keeps *every* answer it was ever given for a node it was never
-       * dirtied for (FIX2). Once the engine has corrected an instance, an answer
-       * from before that correction is a live entry in that cache: the next clean
-       * clone can be laid out at the superseded size, and `measure` is never
-       * reached again to notice. Such an instance therefore stops trusting the
-       * cache and re-asks on every props turn - one lock and one hash lookup,
+       * A correction lands as a new `State`, but React's next props clone is made
+       * without `.state` and copies the *previous revision's* state - the one from
+       * before the correction, whose Yoga measurement cache and `layoutMetrics_`
+       * still hold the old size (FIX2, D20). Our `adopt` mints a fresh,
+       * never-obsolete `State` from it on every props change, so RN's
+       * `progressState` never re-dirties the node and a clean clone is committed at
+       * the superseded size with `measure` never reached to notice. Such an instance
+       * therefore stops trusting React's revision and re-asks on every props turn,
        * against a box that is wrong for the rest of the mount.
+       *
+       * What a flagged props turn pays is not a lookup. It is: this lookup (one
+       * shared lock and hash - 11.4 ns on host, and every props turn of every sized
+       * instance pays it, flagged or not); `setDirty` on the leaf, which dirties
+       * every cloned ancestor through `updateYogaChildren`; a Yoga pass from the
+       * root, which RN skips entirely while nothing is dirty (host, RN 0.88's Yoga,
+       * -O2: 8.4 us for a 35-node/deep-4 tree, 18.3 us for 99/8, 47.8 us for
+       * 316/15 - excluding RN's layout-metrics walk and diff, so 1-3x on a phone);
+       * one `measure` (32.5 ns warm); and RN's post-layout walk. A clean tree pays
+       * 0 of that last group.
        *
        * An instance whose answer never moved keeps the fast path: a Switch that
        * was laid out at the size the engine already believed costs nothing here.
+       * Neither does a re-key by itself raise this flag - only a correction does
+       * (see `measure`), and a configuration change dirties the measurement through
+       * `shouldNewRevisionDirtyMeasurement` anyway.
        */
       bool requiresFreshMeasure(int64_t instanceId) const;
 

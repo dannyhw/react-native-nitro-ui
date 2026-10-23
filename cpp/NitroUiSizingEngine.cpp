@@ -434,16 +434,25 @@ namespace margelo::nitro::nitroui {
       }
     }
     /**
-     * The answer for this instance moved (FIX2). A node that was measured before
-     * and is now answered something else keeps *both* answers inside its Yoga node:
-     * a clean clone is never dirtied, and `canUseCachedMeasurement` reuses
-     * whichever entry fits the new question - and the superseded smaller one is
-     * the stickier, because a `MaxContent` answer stays "valid" for any
-     * `FitContent` question wide enough to hold it. From here the node has to
-     * re-ask on a props turn instead of trusting that cache; see
-     * `requiresFreshMeasure`.
+     * The answer for this instance moved (FIX2, D20). A correction lands as a new
+     * `State` on the family, but React's next props clone is made without `.state`
+     * and copies the *previous revision's* state, so it still carries the size from
+     * before the correction - in its Yoga measurement cache and in its
+     * `layoutMetrics_`. Our `adopt` then mints a fresh, never-obsolete `State` from
+     * that revision on every props change, so RN's `progressState` never re-dirties
+     * the node and the next clean clone is committed at the superseded size. From
+     * here the node has to re-ask on a props turn instead of trusting that
+     * revision; see `requiresFreshMeasure`.
+     *
+     * Only a correction raises this, never a configuration change. A key is a JS
+     * prop, so the turn that re-keys is already dirty for another reason
+     * (`shouldNewRevisionDirtyMeasurement` answers `newConfiguration`) and receives
+     * the fresh answer in that same turn's layout. If that answer then moves, the
+     * correction raises the flag in `applyReports`. Flagging on a re-key instead
+     * would put every re-keyed control - warm keys of the identical size included -
+     * on the paying path for the rest of its mount.
      */
-    if (ledger.hasMeasured && !sameSizeForPush(ledger.laidOut, result)) {
+    if (ledger.hasMeasured && sameConfiguration && !sameSizeForPush(ledger.laidOut, result)) {
       ledger.answerChanged = true;
     }
     ledger.hasMeasured = true;

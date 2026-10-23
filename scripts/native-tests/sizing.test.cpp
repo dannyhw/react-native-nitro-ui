@@ -1095,12 +1095,13 @@ namespace {
   }
 
   /**
-   * FIX2 (T15 Finding 1). A shadow node answers layout from Yoga's per-node
-   * measurement cache, and a clone made for a props-only update is never dirtied
-   * (`shouldNewRevisionDirtyMeasurement`), so *every* answer that node was ever
-   * given stays a live entry - including one the engine has since superseded.
-   * Once an instance has been corrected, it must stop trusting that cache; this
-   * is the flag the shadow node asks for on a props turn.
+   * FIX2 (T15 Finding 1, D20). The correction lands as a new `State`, but React's
+   * next props clone copies the state of *its own* pre-correction revision, and our
+   * `adopt` mints a fresh `State` from it on every props change - so RN's
+   * `progressState` never re-dirties the node and a props-only clone stays clean
+   * (`shouldNewRevisionDirtyMeasurement`) with that revision's superseded size. Once
+   * an instance has been corrected it must stop trusting that revision; this is the
+   * flag the shadow node asks for on a props turn.
    */
   void testACorrectedInstanceAsksForAFreshMeasure() {
     resetEngine();
@@ -1149,6 +1150,52 @@ namespace {
     const NitroUiSizingCounters after = engine().stats();
     checkEquals(after.correctionsImmediate + after.correctionsBatched - (before.correctionsImmediate + before.correctionsBatched), int64_t{0},
                 "a control that agreed with the engine was never corrected");
+  }
+
+  /**
+   * FIX2 fix round 1 (review finding 1). A configuration change is not a
+   * correction. `measure` deliberately clears what the instance was last laid out
+   * at when its key moves, so comparing the new answer against that cleared size
+   * flags *every* re-key - warm keys of the identical size included - and a control
+   * whose size never moved is on the paying path for the rest of its mount. Both
+   * halves are pinned: a re-key costs nothing, and an answer that really moved
+   * under an unchanged configuration still raises the flag. Without the second
+   * half the line could simply be deleted.
+   */
+  void testARekeyIsNotACorrectionButAMovedAnswerIs() {
+    // A re-key between two configurations that happen to be the same size: a
+    // Button going from "Save" to "Edit". Both answers are warm, nothing was ever
+    // corrected, so nothing may be flagged and nothing may be committed.
+    resetEngine();
+    engine().seedSize("NitroUiSwitch", "Switch|Save", 80, 35, 0);
+    engine().seedSize("NitroUiSwitch", "Switch|Edit", 80, 35, 0);
+    bind(94, 94);
+    const NitroUiSizingCounters beforeRekey = engine().stats();
+
+    measure(94, "Switch|Save");
+    check(!engine().requiresFreshMeasure(94), "the first answer flags nothing");
+    measure(94, "Switch|Edit");
+    check(!engine().requiresFreshMeasure(94), "moving to another configuration of the same size is not a correction");
+
+    const NitroUiSizingCounters afterRekey = engine().stats();
+    checkEquals(afterRekey.correctionsImmediate + afterRekey.correctionsBatched -
+                    (beforeRekey.correctionsImmediate + beforeRekey.correctionsBatched),
+                int64_t{0}, "and it corrected nothing");
+    checkEquals(pushes.size(), size_t{0}, "and it committed nothing");
+
+    // The other half: with the configuration unchanged, an answer that moves is
+    // still a correction, and this is the line that has to notice it. The instance
+    // is laid out before the component's declared size arrives (T14's ordering), so
+    // the same key is later answered something else with no report in between - only
+    // `measure` can see that.
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 40, 20, 0);
+    bind(95, 95);
+    measure(95, "Switch|");
+    check(!engine().requiresFreshMeasure(95), "a first answer is not a change");
+    engine().setFallback("NitroUiSwitch", 61, 28, 0);
+    measure(95, "Switch|");
+    check(engine().requiresFreshMeasure(95), "the same configuration answered a different size, so it must re-ask");
   }
 
   void testEpsilonTreatsTinyDifferencesAsEqual() {
@@ -1207,6 +1254,7 @@ int main() {
   testEpsilonTreatsTinyDifferencesAsEqual();
   testACorrectedInstanceAsksForAFreshMeasure();
   testAnUncorrectedInstanceKeepsTheMeasurementCache();
+  testARekeyIsNotACorrectionButAMovedAnswerIs();
 
   if (failures == 0) {
     std::printf("  %d checks passed\n", checks);
