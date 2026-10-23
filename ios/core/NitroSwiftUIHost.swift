@@ -341,7 +341,19 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     // fallback (review S5). Measuring in the first `commit()` instead puts the
     // report in the same turn as the mount.
     let boundsIndependent = sizingPolicy == .intrinsic
-    guard wantsContentSize, hasCommitted, boundsIndependent || !bounds.isEmpty, contentSizeNeedsMeasure else {
+    // What a `fillWidth` measure may not run without is the box's **width**: it
+    // is the half the control is not allowed to invent, and proposing 0 of it
+    // asks SwiftUI about a control nobody is laying out. The *height* must not
+    // gate it. A `fillWidth` control's height starts out unknown to Yoga - a
+    // cold first instance is laid out at 0 tall, because the fallback a
+    // component declares lives in its first view, which Fabric creates after
+    // that view's shadow node was measured. Refusing to measure at height 0
+    // therefore closes the loop the sizing engine exists to break: the report is
+    // what turns the 0 into a height, and a measure that waits for a height can
+    // never make one. (`docs/architecture/sizing.md` §5; the on-device test is
+    // `answers its own height even when the box has none`, which Android
+    // answered correctly from the start.)
+    guard wantsContentSize, hasCommitted, boundsIndependent || bounds.width > 0, contentSizeNeedsMeasure else {
       // The hot path: three bools, no SwiftUI.
       return contentSize
     }
@@ -438,8 +450,10 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// constraints it was given (`cpp/NitroUiIntrinsic.hpp`).
   ///
   /// `bounds` is only usable here because ``refreshContentSize()`` refuses to
-  /// measure a `fillWidth` host with empty bounds; for `intrinsic` it is never
-  /// read, so a Switch keeps the exact question it always asked.
+  /// measure a `fillWidth` host that has no width yet; the height half of
+  /// `bounds` is deliberately not consulted - it is the number being measured.
+  /// For `intrinsic` the proposal is never read, so a Switch keeps the exact
+  /// question it always asked.
   private var fittingSizeProposal: CGSize {
     switch sizingPolicy {
     case .intrinsic:
