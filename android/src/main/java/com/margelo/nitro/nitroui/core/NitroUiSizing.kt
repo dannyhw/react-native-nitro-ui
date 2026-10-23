@@ -24,7 +24,7 @@ object NitroUiSizing {
 
   private external fun nBind(componentName: String, stateWrapper: StateWrapper?)
 
-  private external fun nFlush(): Boolean
+  private external fun nFlush(immediateBudget: Int): Boolean
 
   private external fun nReport(instanceId: Long, width: Double, height: Double, policy: Int)
 
@@ -62,6 +62,26 @@ object NitroUiSizing {
   }
 
   /**
+   * How many of a flush's corrections this platform pays for synchronously.
+   *
+   * One, on Android: a synchronous correction is a Fabric commit run inside the
+   * `OnPreDrawListener` that called `flush`, and that listener is about to return
+   * `false` and cancel the frame the commit would have drawn. One is what D17 asks
+   * for there. It is not known to be enough for a whole batch: the synchronous
+   * push clones one family, so the siblings ride a commit that only carries the
+   * first instance's answer. What T12 measured is that a 100-instance cold batch
+   * drew `stale=0` at budget 1 on one device - a measurement, not a guarantee, and
+   * the harness logs the count rather than gating on it. A second synchronous push
+   * in the same flush buys nothing measured: on a cold batch of 200, debug build,
+   * the first batch in a process cost 38.80 ms with two pushes and 36.76 ms with
+   * one, and the median of three rounds 18.88 ms against 12.84 ms (-32%; at 500
+   * rows, 42.51 against 26.77, -37%). iOS keeps two, because its flush runs at the
+   * end of a turn whose commit has not happened yet, so the pushes ride along with
+   * it (8.5 ms for the same batch).
+   */
+  private const val IMMEDIATE_BUDGET_PER_FLUSH = 1
+
+  /**
    * Apply queued size corrections as one batch of Fabric state updates.
    * Returns `true` when at least one size changed, i.e. the frame about to be
    * drawn is stale and the caller should skip drawing it.
@@ -71,7 +91,7 @@ object NitroUiSizing {
       return false
     }
     return try {
-      nFlush()
+      nFlush(IMMEDIATE_BUDGET_PER_FLUSH)
     } catch (_: UnsatisfiedLinkError) {
       unavailable = true
       false

@@ -85,7 +85,10 @@ applies no setter (the old snapshot from `holder.lastState` equals the new one),
 makes one unconditional mark plus one no-op `reconcile()`. Cost per mount: one extra JNI props diff, one `reconcile()`,
 one perf mark. **Read `propsApplied` = 2.00 on Android mount as the architecture's floor, never as a component
 regression** — every future Android component will show it. Upstream N5; a generator-side short-circuit (skip when the
-snapshot equals `lastState`) is the fix and belongs to whoever touches the generated path (T12), not to components.
+snapshot equals `lastState`) is the fix and belongs to whoever touches the generated path, not to
+components. T12 measured it instead of patching it: one perf mark plus one diff against an unchanged
+snapshot, next to a 4 ms UI-thread gap in the same cell, so it is recorded as **quantified-negligible**
+(`docs/upstream.md`, N5) and no nitrogen patch surface was spent on it.
 
 The JS side guarantees the batching preconditions:
 
@@ -118,6 +121,34 @@ just a wrong colour.
   with read (`example/__tests__/Switch.harness.tsx:304-321`).
 - A colour with no integer form (iOS dynamic provider) becomes `null` in JS with a dev warning
   (`src/core/useProcessedColor.ts:19-34`). Do not try to rescue it natively.
+
+### Shared objects: never build a theme or colour object per instance
+
+**A hosted control is its own composition, so `remember` cannot share anything between controls.**
+Anything built in a composable, or remembered in one host, is built again for every mounted control:
+N times, on the UI thread, in the middle of the mount D15 measures. T12 found two of these and fixed
+both (`docs/tasks/T12-android-perf.report.md`, Phase 2):
+
+- **The colour scheme is process state, not composition state.** A dynamic M3 `ColorScheme` is about
+  fifty framework resource reads plus a fresh object graph, and one `remember` per host was one per
+  control. `NitroComposeHost` now keeps one entry keyed on the context, the dark flag and the live
+  `uiMode`, and drops it on a configuration change - the event that can move those colours
+  (`android/.../core/NitroComposeHost.kt`, `NitroUiColorSchemes.forContext`). The context half of that
+  key is a `WeakReference`: the cache outlives every control, so a strong key would pin a destroyed
+  `Activity` for the life of the process (`NitroComposeHost.kt`, `WeakKey`).
+- **Material's own factories allocate.** `SwitchDefaults.colors(...)` returns a fresh 18-colour
+  `SwitchColors` per call, so a tinted control allocated one per recomposition - and because
+  in Material 1.4 `SwitchColors` is `@Immutable` with `equals`, so the cost was the allocation per
+  recomposition rather than a lost skip. Cache it on the scheme's identity and the tint
+  (`HybridNitroUiSwitch.kt`, `switchColors` / `SwitchColorsCache`). That cache only
+  hits because of the rule above: Material memoises its untinted path on the `ColorScheme`, so handing
+  out a new scheme per control makes every downstream cache miss as well.
+
+The rule for a new component: objects derived from the theme, a colour, or a defaults factory are
+**shared** - a process-wide keyed cache, invalidated with the configuration - or `@Immutable` and
+hoisted out of the composable. Never `remember`-only, and never constructed inline in `Content()`. A
+`remember` is right for state that belongs to *this* control (a pressed flag, a
+`TransitionScope.AnimatedValue`); it is wrong for anything two controls could agree on.
 
 ### testID and accessibility
 
@@ -581,3 +612,38 @@ What you still need, unchanged from §2-§8:
   Compose, a phase/`TimelineView` animator on SwiftUI) and needs no JS round trip. If a props write starts an animation,
   note that the host suppresses animation on the first commit and the first commit after a recycle
   (`ios/core/NitroSwiftUIHost.swift:170-184`) — so a recycled row does not animate from the previous row's value.
+
+## 13. The Android baseline profile
+
+`android/src/main/baseline-prof.txt` holds ART rules for this library's own classes
+(`HSPLcom/margelo/nitro/nitroui/**->**(**)**`). AGP's `merge*ArtProfile` task folds it, plus the file
+from every other library, into the host app's `assets/dexopt/baseline.prof`; ART then compiles the
+app's dex from that profile instead of interpreting our host view, its composition and the generated
+`HybridView` manager on the first launches. The bench measures what that is worth
+(`docs/tasks/T12-android-perf.report.md`, Phase 2) and `scripts/bench/run.mjs` makes sure the profile
+is actually in force before it measures.
+
+**Consumer defaults - nothing to add.** The merge needs no configuration, and the runtime piece
+arrives on its own: `androidx.profileinstaller` is a *runtime* dependency of Compose
+(`ui-android-1.11.4.pom` -> `profileinstaller:1.4.0`), which this library requires, so any app that can
+mount a nitro-ui control already ships it. On API 29+ ART also consumes the profile in its own
+background dex-opt pass; API 24-28 are covered by profileinstaller writing it at first launch. The
+library therefore does not declare the dependency itself - it would be a second path to the same
+artifact for every consumer, for a file the consumer may never use.
+
+**What does not happen on its own** (all measured on an API 35 emulator, where a library author would
+reasonably expect it to):
+
+| Step                                                               | `dumpsys package dexopt`   |
+| ------------------------------------------------------------------ | -------------------------- |
+| `adb install -r`                                                    | `status=verify`            |
+| `cmd package bg-dexopt-job` (job finished)                          | `status=verify`            |
+| `cmd package compile -m speed-profile -f`, before any launch        | `status=verify`            |
+| start the app once, then `cmd package compile -m speed-profile -f`  | `status=speed-profile`     |
+
+A stored profile is not a compiled app: the compiler reads the app's *profile file*, which
+profileinstaller writes a few seconds after process start, so `-m speed-profile` before the first
+launch has nothing to read and quietly falls back to `verify`. That fallback is why the bench reads the
+status back and logs it, and why it retries - a run that measured the interpreter must not be able to
+report a profile result. It is also why the bench primes through profileinstaller's own
+`INSTALL_PROFILE` hook rather than by hand: that is the path a consumer's app takes.

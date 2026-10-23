@@ -60,10 +60,31 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   D14's "until T11" clause is fulfilled: defaults are now only the cache-miss fallback.
 - **D17 (T11 round 2)** Sizing frame budget, both platforms: the **first instance of a sizing
   configuration per environment epoch** (no exact cache entry yet) may show the declared fallback
-  for one frame before its correction lands; every instance whose configuration is already exact
-  in the cache must lay out exact on its first frame (0 stale). On Android a cold batch corrects
-  up to the immediate budget (2) inside the cancelled frame and the rest on the next frame — same
-  rule, documented; no budget increase (synchronous pushes risk re-entering `measureContent`).
+  (today: height 0 for a cold first `fillWidth` instance, until T14 registers fallbacks before
+  the first measure) for one frame before its correction lands; every instance whose configuration is already exact
+  in the cache must lay out exact on its first frame (0 stale). The immediate (synchronous) budget
+  per flush is platform-set: iOS 2, Android 1 (T12; measured −32/−37 % flush time at 200/500 rows).
+  The rest of a cold batch lands on a later frame. Gated: the synchronous-push count and the
+  never-stale exact-cache instance; **not** gated: a whole cold batch's stale count (logged; T12
+  measured 0 for 100 instances at budget 1 on one emulator, no mechanism claimed). No budget
+  increase (synchronous pushes risk re-entering `measureContent`).
   No "hide until measured" mode in 0.1. Declared fallbacks must be accurate per OS (D14), and
   `prewarm` is the recommended way to make first mounts exact. Harness tests assert exactly this
   rule, with poisoned (wrong) fallbacks so a failed correction is visible.
+- **D18 (T12)** Android bench numbers are only comparable within one ART compilation state.
+  Runs record it (`art`); baselines are minted only from `speed-profile` runs. Android numbers
+  published before T12 (T02 rounds 3–4, T11, T12 phase 1) were measured at `verify` — ratios and
+  absolutes both differ. Primed Android baselines are recorded during release readiness (Phase 4).
+- **D19 (human: "we can't spin on this forever")** Hard stops.
+  - **Rounds:** each task gets at most **one implementation round + two fix rounds**. Fix rounds
+    only for correctness bugs, failing gates or false claims in docs. Anything else becomes a
+    one-line follow-up in `docs/tasks/FOLLOWUPS.md`. After the second fix round the orchestrator
+    either merges (with follow-ups) or cuts the task. No third fix round.
+  - **Re-verification:** an Opus re-review only after an implementation round or when a fix
+    round changed native/C++ code; doc/test-only fix rounds are merged on green gates.
+  - **Spikes/experiments** (T13 and later): one round, no fix rounds. Whatever the first report
+    says decides it; "inconclusive" means flag off / not shipped, recorded as a follow-up.
+  - **v0.1 scope is fixed:** Switch, Slider, Progress, Button, SegmentedControl. Picker and
+    DatePicker move to 0.2 unless they are already merged when the others are done. No new
+    infrastructure tasks before release readiness unless a component is blocked by a bug.
+  - **Perf:** a D15 miss after one optimisation task is documented (with follow-up), not chased.
