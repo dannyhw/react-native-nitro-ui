@@ -5,7 +5,7 @@ import {
   type HybridViewProps,
 } from 'react-native-nitro-modules';
 
-import type { NitroUiIntrinsicProps } from '../../core/sizing.nitro';
+import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
 import { NitroUiSwitchConfig } from './NitroUiSwitchConfig';
 import type { NitroUiSize, NitroUiSwitchMethods } from './Switch.nitro';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
@@ -50,7 +50,7 @@ export interface NitroUiSwitchHandle {
  */
 /**
  * The two sizing props (`nuiSizingKey`, `nuiSizingId`) come from
- * [NitroUiIntrinsicProps](../../core/sizing.nitro.ts), like every other
+ * [NitroUiIntrinsicProps](../../core/NitroUiIntrinsicProps.ts), like every other
  * self-sizing component's native props.
  */
 export interface NativeNitroUiSwitchProps

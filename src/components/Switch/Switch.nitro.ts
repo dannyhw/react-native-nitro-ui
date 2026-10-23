@@ -4,7 +4,7 @@ import type {
   HybridViewProps,
 } from 'react-native-nitro-modules';
 
-import type { NitroUiIntrinsicProps } from '../../core/sizing.nitro';
+import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
 
 /**
  * Native props of the `NitroUiSwitch` Hybrid View.

@@ -65,15 +65,16 @@ export interface SwitchProps extends ViewProps {
 /**
  * The size configuration of a Switch, as the sizing engine sees it.
  *
- * Every prop that can change a Switch's size has to appear in this key
+ * Every prop that can change a Switch's size has to appear in this variant
  * (`docs/architecture/sizing.md`). A Switch has none: `value`, `disabled` and
  * `tintColor` repaint, they do not resize - the only thing that changes a
- * control's size on iOS is the OS's own control size, and native folds the
- * environment into the key itself. So the key is a constant, which is also the
- * cheapest possible answer: one string, shared by every instance, one cache
- * entry for the whole app.
+ * control's size is the environment (the OS's control size, the text size), and
+ * native folds that in itself through the environment epoch. So the variant is
+ * empty, which is the cheapest possible answer - one configuration, one cached
+ * size for the whole app - and the one `prewarmSizing(['NitroUiSwitch'])` can
+ * pre-warm, because an empty variant *is* the default configuration.
  */
-const SIZING_KEY = 'Switch|';
+const SIZING_VARIANT = '';
 
 /**
  * What a self-sizing control is laid out with, before any `style`.
@@ -142,7 +143,7 @@ export function Switch({
       accessibilityLabel={accessibilityLabel ?? null}
       nuiPerfId={nuiPerfId}
       onValueChange={controlled.onNativeChange}
-      nuiSizingKey={SIZING_KEY}
+      nuiSizingKey={SIZING_VARIANT}
       nuiSizingId={sizingIdRef.current}
       hybridRef={hybridRefCallback ?? undefined}
       style={[SELF_SIZING_BASE_STYLE, style]}
