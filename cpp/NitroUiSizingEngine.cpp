@@ -533,6 +533,10 @@ namespace margelo::nitro::nitroui {
   }
 
   bool NitroUiSizingEngine::flush() {
+    return flush(kImmediateBudgetPerTurn);
+  }
+
+  bool NitroUiSizingEngine::flush(int32_t immediateBudget) {
     std::vector<Report> reports{};
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
@@ -543,7 +547,7 @@ namespace margelo::nitro::nitroui {
       stats_.flushes += 1;
     }
     const int64_t startedAt = NitroUiClock::nowNs();
-    const bool changed = applyReports(reports);
+    const bool changed = applyReports(reports, immediateBudget);
     const int64_t elapsed = NitroUiClock::nowNs() - startedAt;
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
@@ -568,11 +572,13 @@ namespace margelo::nitro::nitroui {
     return changed;
   }
 
-  bool NitroUiSizingEngine::applyReports(std::vector<Report>& reports) {
+  bool NitroUiSizingEngine::applyReports(std::vector<Report>& reports, int32_t immediateBudget) {
     bool changed = false;
     // Registry entries whose state has died (an unmounted or recycled node).
     std::vector<int64_t> dead{};
-    int32_t remaining = kImmediateBudgetPerTurn;
+    // What this flush may spend synchronously - the platform's call, see
+    // `flush(int32_t)`.
+    int32_t remaining = immediateBudget > 0 ? immediateBudget : 0;
     /**
      * The pushes to issue, collected under the lock and run after it is dropped.
      *
@@ -810,6 +816,10 @@ namespace margelo::nitro::nitroui {
 
   bool NitroUiSizing::flush() {
     return NitroUiSizingEngine::shared().flush();
+  }
+
+  bool NitroUiSizing::flush(int32_t immediateBudget) {
+    return NitroUiSizingEngine::shared().flush(immediateBudget);
   }
 
   void NitroUiSizing::invalidateEnvironment() {
