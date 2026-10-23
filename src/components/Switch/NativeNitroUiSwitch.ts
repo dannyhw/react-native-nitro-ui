@@ -6,11 +6,38 @@ import {
 } from 'react-native-nitro-modules';
 
 import { NitroUiSwitchConfig } from './NitroUiSwitchConfig';
-import type { NitroUiSwitch, NitroUiSwitchMethods } from './Switch.nitro';
+import type { NitroUiSize, NitroUiSwitchMethods } from './Switch.nitro';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
 
 type ValueChangeHandler = (value: boolean, eventCount: number) => void;
-type HybridRefHandler = (view: NitroUiSwitch) => void;
+type HybridRefHandler = (view: NitroUiSwitchHandle) => void;
+
+/**
+ * The read side of the native Switch - what a `hybridRef` callback gets.
+ *
+ * Deliberately read-only (DECISIONS D14): writing `view.value = …` from JS would
+ * run the native setter on the JS thread, mutate model state the UI thread owns,
+ * and never commit, so the write would silently do nothing. Every prop goes
+ * through React. Methods that only read a cache (`measureContent()`) are safe
+ * from any thread, which is why they are here.
+ *
+ * @internal v0.1 does not publish Hybrid View types; this alias exists so
+ * `hybridRef` can be typed for this repo's harness and benchmarks.
+ */
+export interface NitroUiSwitchHandle {
+  /** The last `value` React sent, or `null` while uncontrolled. */
+  readonly value: boolean | null;
+  /** How many native changes JS has confirmed. */
+  readonly mostRecentEventCount: number;
+  /** Whether interaction is disabled. */
+  readonly disabled: boolean;
+  /** The tint as this platform's `processColor` produces it, or `null`. */
+  readonly tintColor: number | null;
+  /** The control's accessibility label, or `null`. */
+  readonly accessibilityLabel: string | null;
+  /** The fitting size of the hosted control, in platform units. */
+  measureContent(): NitroUiSize;
+}
 
 /**
  * Props of the raw host component: **every** spec prop, always sent, with
@@ -48,6 +75,3 @@ export const NativeNitroUiSwitch = getHostComponent<
 >('NitroUiSwitch', () => NitroUiSwitchConfig) as unknown as ComponentType<
   Omit<ViewProps, 'testID' | 'accessibilityLabel'> & NativeNitroUiSwitchProps
 >;
-
-/** A reference to the native Switch, obtained through `hybridRef`. */
-export type NitroUiSwitchRef = NitroUiSwitch;

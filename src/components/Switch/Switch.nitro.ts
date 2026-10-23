@@ -72,6 +72,9 @@ export interface NitroUiSwitchMethods extends HybridViewMethods {
 /**
  * A size in platform units (iOS points / Android density-independent pixels).
  *
+ * @internal Only reachable through a Hybrid View, which v0.1 does not expose
+ * publicly (DECISIONS D14).
+ *
  * The value a native host reports as the *content* size of what it hosts (a
  * SwiftUI `Toggle`, a Compose `Switch`, ...), independent of the size Yoga gave
  * the Fabric node. T11 (the intrinsic-size ShadowNode) is the primary consumer;
@@ -82,7 +85,13 @@ export interface NitroUiSize {
   height: number;
 }
 
-/** The Hybrid View behind the `Switch` wrapper. */
+/**
+ * The Hybrid View behind the `Switch` wrapper.
+ *
+ * @internal v0.1 does not expose Hybrid Views or their settable props publicly
+ * (DECISIONS D14): it is exported for this repo's example, harness, bench and
+ * smoke apps, and for the typed `hybridRef` handle, and is not semver surface.
+ */
 export type NitroUiSwitch = HybridView<
   NitroUiSwitchProps,
   NitroUiSwitchMethods
