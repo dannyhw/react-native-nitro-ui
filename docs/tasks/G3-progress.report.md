@@ -20,11 +20,14 @@ Round 1 (implementation). Branch `task/G3-progress`; `main` @ `52823a9` merged i
   answers the intrinsic/fillWidth question once, when the composition is built.
 - **The animation gate.** Off-window, an indeterminate indicator is drawn as an **empty determinate**
   one in the same style — same style so the measured size does not move, empty because that is the one
-  determinate state with no motion. `inWindow` is written by a zero-size UIKit sibling on iOS
+  determinate state with no motion. On iOS that only holds for a **linear** bar: a circular
+  `ProgressView` is drawn the same either way, so the gate changes nothing there (F3). `inWindow` is written by a zero-size UIKit sibling on iOS
   (`NitroUiProgressWindowObserver`) and by `onAttachedToWindow` / `onDetachedFromWindow` on Android,
   and the recycle (`reset()`) and `onDropView()` paths close the gate too. `nuiTestIsAnimating()`
-  reports the gate; `animating` is derived from what the drawing code was handed, so the mirror cannot
-  disagree with the pixels.
+  reports the gate; `animating` is derived from what the drawing code was handed. On **Android** the
+  mirror and the pixels cannot disagree. On iOS a circular `ProgressView` spins whatever it is handed
+  — including a determinate fraction — so for that one configuration the mirror reports a rule the
+  pixels do not follow (F3, now documented in the component page).
 - **Accessibility.** Android publishes `ProgressBarRangeInfo` semantics (the real progressbar role)
   plus the label; iOS has no public progressbar/busy trait, so it sets label + `accessibilityValue`
   (`"0%"`…`"100%"`, `nil` value while indeterminate) — documented in the component page.
@@ -111,9 +114,10 @@ Device suites use JS-only mutations where possible (Metro re-serves; no rebuild)
 | `onDetachedFromWindow` / `onDropView` stop calling `refreshAnimationReport()` | Android (APK rebuilt) | `animates while it is on screen and stops when it is gone` → `expected true to be false`, **1 failed / 11 passed** — the only test that catches it |
 | `ProgressModel.drawnValue` ignores `inWindow` | Android JVM | `ProgressModelTest` → 11 tests, 2 failed (`anIndeterminateIndicatorOffWindowDrawsEmpty`, `enteringAndLeavingAWindowMovesAnIndeterminateIndicatorBothWays`) |
 
-11 of the 12 device tests were driven red. `mounts many instances at once` (200 instances, the D17
-cold-batch scenario) was not: every mutation that stops 200 controls mounting also stops one, which
-is already proved above, and its unique claim is scale/timing — see follow-ups.
+11 of the 12 device tests were driven red. `mounts many instances at once` (**40** instances — the
+D17 cold-batch shape at a scale one render holds; the test renders 40 and its log line says 40) was
+not: every mutation that stops 40 controls mounting also stops one, which is already proved above,
+and its unique claim is scale/timing — see follow-ups.
 
 One thing the mutations found, worth recording: `drawnValue` and `animating` gate on `inWindow`
 **independently**, so neither mutation alone reached the device oracle — the first mutated build
@@ -153,7 +157,7 @@ ms except bytes/inst (KiB). Ratios vs `expo-ui-shared-host` / `expo-ui-host-per-
 | Metric | vs shared-host | vs per-control | Verdictable? (runner's own flags) |
 | --- | --- | --- | --- |
 | mount presented | 2.26× [3.49×] | 0.23× [0.35×] | no — nitro spread 34.0% [13.7%], `presentedBeforeMount=33` [25] |
-| mount mounted | 4.72× [4.61×] | 0.74× [0.95×] | run A **yes** (both cells clean) → MISS; run B no (13.5%) |
+| mount mounted | 4.72× [4.61×] | 0.74× [0.95×] | no — run B flags 13.5% spread, and run A's nitro cell carries `presentedBeforeMount=25`, which bars a verdict (F4b) |
 | mount UI CPU/op | 2.13× [1.70×] | 0.30× [0.37×] | no — shared-host cell 32.6% [11.4%] |
 | update presented | 1.00× (tie) | 1.00× | yes (no flags) — but every arm lands on the one-frame ceiling (16.07 ms), so the tie is by construction |
 | update mounted | 0.54× [0.53×] | 0.45× [0.45×] | run A yes → **PASS** |
@@ -176,9 +180,10 @@ ms except bytes/inst (KiB). Ratios vs `expo-ui-shared-host` / `expo-ui-host-per-
 
 The two `@expo/ui` update cells report `missingMount=80`, so no Android update latency verdict
 exists at all. Ratios: mount presented 0.81× shared-host (not verdictable: 15.2% / 21.9% spread),
-mount mounted 1.04×, mount UI CPU 1.14× (nitro cell clean, shared-host 11.7%), update UI CPU **0.09×**
-shared-host / 0.10× per-control (the runner declines a verdict — its cell is clean but the shared-host
-cell flags 17.1% — and an 11× gap is far outside that noise), memory **1.48×** shared-host /
+mount mounted 1.04×, mount UI CPU 1.14× (nitro cell clean, shared-host 11.7%), update UI CPU 6.27
+ms/op **recorded and not compared** (F4a — the expo cells pay ≈3.5 s of mount/presented waiting
+inside the CPU bracket, so their 59.9 / 70.7 ms is a different quantity; the runner also declined a
+verdict at 17.1% spread on its own cell), memory **1.48×** shared-host /
 0.57× per-control (verdictable, all four cells clean).
 
 ### D15 verdict, honestly
@@ -188,19 +193,30 @@ UI CPU and memory.
 
 - **Memory: MISS on both platforms** — 1.36× iOS (reproduced exactly in two runs) and 1.48× Android,
   the only verdictable misses of this task. +45 KiB (iOS) / +43 KiB (Android) per instance over a
-  shared host, which is the price of one hosting controller + one Compose/SwiftUI root + one sizing
-  instance + the window observer per control. Still 0.57–0.76× of the per-control host. Explanation +
-  follow-up below, not chased (D19).
+  shared host is the price of **one hosting controller / composition per control**, which is what
+  every component in this library pays: Android's 130.9 KiB/instance is the library's existing
+  per-host floor (Switch measured 128.9–134.2 KiB in T12). Android has **no window observer at all**,
+  and a zero-frame `UIView` is on the order of 1 KiB rather than 45, so the iOS observer is not the
+  explanation either. Still 0.57–0.76× of the per-control host. Follow-up below, not chased (D19).
 - **Mount latency iOS: directionally MISS, mostly not verdictable.** 2.26–3.49× presented and
   1.70–2.13× UI CPU, but every one of those cells is noise-flagged and both nitro cells carry
-  `presentedBeforeMount`, so the latency pair is probe-suspect. `mounted` is verdictable in run A at
-  4.61× → a real MISS. Cause is structural, not this component: N controls = N hosted views, while
+  `presentedBeforeMount`, so the latency pair is probe-suspect. `mounted` is **not verdictable in
+  either run** (F4b): run A's nitro cell carries `presentedBeforeMount=25`, and a cell with that
+  marker gets no verdict; `mounted` is not a D15 target metric anyway. Cause is structural, not this
+  component: N controls = N hosted views, while
   the shared-host arm pays one host for all 50.
 - **Mount Android: ~parity or better than shared-host** (0.81× presented, 1.04× mounted, 1.14× UI
   CPU), none verdictable. Still 0.42× of per-control.
-- **Update path: wins.** iOS mounted 0.53–0.54× shared-host (PASS, verdictable in run A), UI CPU
-  0.80×; Android UI CPU 0.09× shared-host (a `value` write invalidates one small composable, while
-  both expo arms re-render a host containing 50 controls). JS commit is the one place nitro is worse
+- **Update path: iOS wins** — mounted 0.53–0.54× shared-host (PASS, verdictable in run A), UI CPU
+  0.80×. The **Android update cells are not comparable** and no factor is claimed for them (F4a):
+  `update.progress:expo-ui-*` still declares `mountSignal: true` while only `rn-core` is in
+  `NO_MOUNT_SIGNAL` (`bench/src/plan.ts`), so every measured iteration waits out `awaitMountNs(1500)`
+  + `awaitPresentedNs(2000)` (`bench/src/probe.ts:41`, `:52`) **inside** the CPU bracket
+  (`bench/src/runner.ts:66-68`, `:332-334`) — both expo cells report `missingMount=80`. Their
+  59.9 / 70.7 ms UI CPU/op is spread over ≈3.5 s of wall time against nitro's ≈50 ms, and the two
+  arms also draw different things (M3 expressive `LoadingIndicator` vs a linear bar). The fix is a
+  follow-up below, so the Android update row is a record, not a result.
+  JS commit is the one place nitro is worse
   than shared-host on Android (2.10×, and 4.76× `rn-core`) — still 0.94× of per-control and inside
   Fabric's own commit cost.
 - **`rn-core` (`ActivityIndicator`)** stays the cheapest control by definition (one UIKit view, no
@@ -210,7 +226,8 @@ UI CPU and memory.
 ## Known issues / follow-ups
 
 - Mint a `progress` bench baseline (and any component baseline) on a machine at load < 10 so the iOS mount latency cells become verdictable; the D15 memory miss (1.36× iOS / 1.48× Android vs shared-host) then needs a reviewer's call.
-- Investigate the +43–45 KiB/instance memory gap vs `expo-ui-shared-host`, starting with the iOS window-observer `UIView` and whether one observer per process can serve many instances.
+- Investigate the +43–45 KiB/instance memory gap vs `expo-ui-shared-host`. Start at the per-control hosting controller / composition (Android's number equals the library's existing per-host floor, and Android has no observer). The iOS window-observer `UIView` is a ≈1 KiB secondary check at best; the question worth asking there is whether one observer per process can serve many instances.
+- Make the Android update cells comparable before any ratio is quoted from them: put `update.progress:expo-ui-*` in `NO_MOUNT_SIGNAL` (or move `awaitMountNs`/`awaitPresentedNs` out of the CPU bracket in `bench/src/runner.ts`), and give both arms the same indicator.
 - Add a `progress` entry to the T15b real-input runner — not "one trivial render check": `scripts/real-input/controls.mjs` is input-only by contract, and its `screen` union, an iOS `testRealInput*` and an Android `CHECKS` entry (plus a fail-proof) all need a new *render-check* control kind on both platforms.
 - `mounts many instances at once` is the one Progress test never driven red; a mutation that fails it (a sizing flush that drops part of a cold batch) is a core-side experiment, not a wrapper edit.
 - The real-input suite's `screen` union should reject a non-interactive control loudly instead of type-erroring at the entry (noticed while adding nothing to it).
