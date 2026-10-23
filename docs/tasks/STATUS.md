@@ -12,7 +12,7 @@
 | G1 | Slider | Apex | Opus | merged (1 impl + 2 fix rounds) |
 | T14 | Register declared fallbacks before first measure (cold fillWidth height-0 frame) | Apex | Opus | merged (1 impl + 1 fix round) |
 | FIX1 | iOS Slider disabled a11y probe (main iOS harness red since 381b1f2) | Apex | — | merged |
-| G3 | Progress | Apex | Opus | reviewing (7928021; harness 84/84 both) |
+| G3 | Progress | Apex | Opus | fix round 1 queued (Android bar width, sizing id on variant switch, iOS circular determinate, bench retractions) — next free device slot |
 | G2 | Button (owns R3 sizing test) | Apex | Opus | merged (1 impl + 1 fix round) |
 | T15 | Real-input verification (OS taps/drags on Switch, Slider; Button added after G2 merges) | Apex | — | merged (runner) |
 | FIX2 | Stale Yoga measurement after a correction (iOS Switch at 0 width after `value` update, found by T15) | Apex | Opus | merged (1 impl + 1 fix round; iOS+Android Sizing 24/24, real input 3/3 both) |
