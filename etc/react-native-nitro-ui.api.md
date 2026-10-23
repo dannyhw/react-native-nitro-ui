@@ -107,9 +107,11 @@ export interface ProgressProps extends ViewProps {
     tintColor?: ColorValue | undefined;
     trackColor?: ColorValue | undefined;
     value?: number | null | undefined;
-    // Warning: (ae-forgotten-export) The symbol "ProgressVariant" needs to be exported by the entry point index.d.ts
     variant?: ProgressVariant | undefined;
 }
+
+// @public
+export type ProgressVariant = 'linear' | 'circular';
 
 // @public
 export function Slider(input: SliderProps): JSX.Element;
