@@ -270,12 +270,43 @@ function iosTarget(device, appPath, bundleId) {
   };
 }
 
+/**
+ * Make ART compile the app now, from the profile it was installed with.
+ *
+ * `adb install` only *stores* a baseline profile; the compiler that consumes it
+ * normally runs later, in `BackgroundDexOptService`, so whether a measured launch
+ * ran AOT-compiled code would depend on how long the device had been idle since
+ * the install. That is fine for a library that ships no profile (every arm is in
+ * the same position) and unforgivable for one that does: the benefit could land
+ * before, after or between the launches being compared. Forcing the compile here
+ * is what puts a library `baseline-prof.txt` on trial - the arms still share one
+ * APK and one install, so the command applies to every implementation equally
+ * (D9's pairing), and the only thing it can change is the profile's own effect.
+ *
+ * `speed-profile` is the filter ART would reach for anyway once it had compiled
+ * this profile; `-f` is what makes it ignore the "already compiled" state the
+ * install left behind.
+ */
+function applyArtProfile(serial, packageName) {
+  adb(serial, [
+    'shell',
+    'cmd',
+    'package',
+    'compile',
+    '-m',
+    'speed-profile',
+    '-f',
+    packageName,
+  ]);
+}
+
 function androidTarget(device, apkPath, packageName) {
   const remote = `/sdcard/Android/data/${packageName}/files/bench.ndjson`;
   return {
     label: `Android ${device.name} (${device.serial})`,
     async install() {
       adb(device.serial, ['install', '-r', apkPath]);
+      applyArtProfile(device.serial, packageName);
     },
     async run(entry) {
       // Benign when the file (or, on API 33+, its not-yet-created parent dir)

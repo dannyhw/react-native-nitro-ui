@@ -111,6 +111,15 @@ come back as NDJSON written inside the app container (`Documents/bench.ndjson` o
 iOS, external files dir on Android) and echoed to the system log under
 `NITRO_BENCH` as a fallback.
 
+On Android the runner also forces ART to compile the app right after the install
+(`cmd package compile -m speed-profile -f`, `scripts/bench/run.mjs`). An install only
+*stores* a baseline profile — the compiler that consumes it usually runs later, in
+`BackgroundDexOptService` — so without this a measured launch may or may not have run
+AOT-compiled code depending on how long the device sat idle. All implementations live in
+one APK behind one install, so the command lands on every arm identically (D9's pairing);
+what it can change is only the effect of a library's own `baseline-prof.txt`
+(`docs/architecture/core.md` §13).
+
 Scenarios: `mount` (N = 1/50/200), `update` (N = 1/50, K flips awaited per
 frame), `memory` (N = 200, after GC), `leak` (repeated mount/unmount of N = 200).
 Plans: `quick` = `mount:50`, `update:50`, `memory:200`; `full` adds N = 1/200 and
