@@ -72,6 +72,10 @@ Stay inside your brief. Anything you find that is not a correctness bug in your 
 gate, or a false claim: write one line in your report's "Follow-ups" section and move on — do not
 fix it, investigate it further, or widen the task. Tasks have a hard round cap (D19).
 
+**Always address Android devices by serial** (`adb -s emulator-55xx`, `ANDROID_SERIAL`): every adb
+server — including your private one — also sees the human's `emulator-5560`, so an unqualified `adb`
+command can reach it.
+
 **Never `pkill`/`killall` by process name** (logcat, emulator, node, Metro…): other tasks run the same
 processes. Kill only PIDs you started, or use the tool's own shutdown for your device/port.
 
