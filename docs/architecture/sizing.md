@@ -131,7 +131,7 @@ A cold Switch on iOS, counters as deltas (`example/__tests__/Sizing.harness.tsx`
    the view in a window, and SwiftUI has nothing to lay out while its view has none — a number taken
    there describes the content being replaced, not the content being mounted. So
    `refreshContentSize()` refuses while a content update is pending and the host is off-window, and
-   keeps the measure pending (`ios/core/NitroSwiftUIHost.swift:348`).
+   keeps the measure pending (`ios/core/NitroSwiftUIHost.swift:356`).
 4. `didMoveToWindow()` is the deferred measure point (`NitroSwiftUIHost.swift:175`), and it lands in
    the `Insert` of the **same** transaction. The pending update is applied (`layoutIfNeeded()`), then
    `sizeThatFits(.infinity)` says 61×28. An `intrinsic` control is measured regardless of its current
@@ -156,6 +156,16 @@ guess costs nothing: the confirmation writes the answer into the cache, which is
 reads. Every later instance is free either way: `report()` drops it or confirms a provisional entry
 without pushing (measured: 200 warm Switches = 0 corrections, 200 dropped reports).
 
+A `fillWidth` configuration is held to that rule with one adjustment: its width belongs to the box,
+so two instances of one configuration legitimately report different widths, and the comparison that
+decides "is there anything to correct" ignores the width for exactly that policy (`sameSizeForPush`,
+`cpp/NitroUiSizingEngine.cpp:99`). Without that adjustment the promise above is false for every
+Slider: each instance whose parent is a different width than the last one measured pays a commit, and
+each correction rewrites the cache with its own box width. The first `fillWidth` component measured
+it: two Sliders in boxes of 300 and 200 cost 2 corrections and left the cache answering 200 to a
+control that had only ever been 300 wide
+(`scripts/native-tests/sizing.test.cpp:testFillWidthInstancesOfDifferentWidthsCostNothing`).
+
 ## 5. Opting in
 
 Five things, four of which a component already has reasons to write:
@@ -170,9 +180,18 @@ Five things, four of which a component already has reasons to write:
    nitrogen version that changes shape fails loudly rather than silently un-sizing a control.
 2. **Declare the fallback size**, once, from the component's own native type:
    `NitroUiSizing::setFallback("NitroUiSwitch", 61, 28, POLICY_INTRINSIC)`. Only the component knows
-   what it hosts, and on iOS which OS's control size applies. A real measurement overwrites it; it is
-   only ever the first frame's guess, and it has to be a good one (a box smaller than the control
-   makes SwiftUI paint outside it — T10's `docs/architecture/core.md` §7 has the hit-test story).
+   what it hosts, and on iOS which OS's control size applies. It has to be a good one (a box smaller than the
+   control makes SwiftUI paint outside it — T10's `docs/architecture/core.md` §7 has the hit-test story), and
+   **it has to be in the engine before the component's first measure**, which means it cannot be declared only
+   from the Hybrid View: Fabric measures a shadow node before it creates the view, so a fallback that waits for
+   its own first view arrives one measure too late and the first instance is laid out `0 × 0` (there is no engine
+   default size — a cache miss with neither a guess nor a fallback is no size at all). Each platform therefore has
+   one startup table that calls every component's `declareFallback()`: `ios/core/NitroUiDeclaredFallbacks.swift`
+   (from `+load`) and `.../nitroui/core/NitroUiDeclaredFallbacks.kt` (from `NitroUiPackage`'s static init, which is
+   earlier than the first view manager Fabric can ask for). The view still declares its own in `init` as the
+   backstop, both are once per process, and one line per component goes in the table (core.md §9). After the first
+   report a configuration's own measurement outranks the declaration, so the fallback is only ever the first
+   frame's guess.
 3. **Send the two props** from the JS wrapper: `nuiSizingKey` (the size-affecting props, variant
    only) and `nuiSizingId` (one id per mounted instance, from `useSizingId()` in `src/core`). They are declared in
    `src/core/NitroUiIntrinsicProps.ts` and are `@internal`: users never pass them (D14). The
@@ -203,8 +222,12 @@ Five things, four of which a component already has reasons to write:
    recomposes, and its own measure pass reports the new size by itself. A Button's `label`, `variant`
    and `size` are all size-affecting, so every one of them has to say so.
 
-Then drop any default-size style: `SELF_SIZING_BASE_STYLE` in
-`src/components/Switch/Switch.tsx:91` is only `{ alignSelf: 'flex-start' }`. See the trap in §6.
+Then drop any default-size style. What is left is the base style, and it depends on the policy: an `intrinsic`
+control keeps `{ alignSelf: 'flex-start' }` (`SELF_SIZING_BASE_STYLE`, `src/components/Switch/Switch.tsx:111`) so a
+parent cannot stretch it, while a `fillWidth` control needs the opposite - `{ alignSelf: 'stretch' }`
+(`FILL_WIDTH_BASE_STYLE`, `src/components/Slider/Slider.tsx:135`) - because the cross axis is the axis it *wants*
+filled and `alignSelf` is the only thing that decides it (the trap in §6). Either way an explicit `width`, `height`,
+`flex` or `alignSelf` in the caller's `style` still wins.
 
 ### Building `nuiSizingKey`
 
@@ -260,6 +283,43 @@ corrects. Nothing cached survives the change to be wrong forever.
 Slider, linear Progress, wheel Picker (`cpp/core/NitroUiSizing.hpp:28`). The control declares the
 policy when it reports; the shadow node applies it. A component whose width is decided by its parent
 must use `fillWidth`, or it will fight the parent for its own preferred width.
+
+The policy also changes the **question the host asks the toolkit**, which is not obvious from either side of the
+`fillWidth` contract: an `intrinsic` control must be proposed an unbounded size (what does it want to be?), while a
+`fillWidth` control must be proposed *the box's width* with unbounded height (what height does it want **at that
+width**?). Ask the unbounded question of a `fillWidth` control and you get two wrong numbers — a width nobody asked
+for, and a height implied by that width — which is what iOS did for both policies until the first `fillWidth`
+component arrived; the proposal is now per policy (`fittingSizeProposal`, `ios/core/NitroSwiftUIHost.swift:457`),
+and the answer's width is replaced with the proposal's. Android has to be told the same question, in its own terms:
+`NitroUiMeasuredRoot` measures a `fillWidth` control at the box's **width** with the height **unbound**
+(`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt:632`). Unbinding the height is not a
+detail — a `maxHeight` left in place lets a box that is temporarily the wrong height clamp the answer to itself, so
+the wrong height confirms itself (the report matches the layout, so the engine is never told and never corrects).
+The `fillWidth` measure must also not run while the box has no **width** — a zero proposal is not the box's
+width — which is why `refreshContentSize()` refuses it there (`ios/core/NitroSwiftUIHost.swift:356`). Which
+half of the box gates it matters as much as the fact that something does: the **width** is the input a
+`fillWidth` control may not invent, so it gates; the **height** is the number being measured, so it must never
+gate. A box really can arrive with no height — a caller's `height: 0`, a `maxHeight` squashed below the
+control, a parent that has not decided — and a measure that waits for a non-zero height then closes the loop the
+sizing engine exists to break: no measure, so no height, so no measure. (Until T14 a cold first instance supplied
+its own zero: the declared fallback arrived with the component's first *view*, and Fabric creates that view after
+the shadow node's first measure. `NitroUiDeclaredFallbacks` closes that gap (§5), but the rule stays, because the
+other ways a box has no height never went anywhere.) On iOS the stalled host then paints SwiftUI's minimum content
+(`clipsToBounds` is false), which looks like a working control that has lost its track.
+
+**What a `fillWidth` cache entry stores.** Only the height is the configuration's own answer. The
+width in the entry is the last box width some instance was measured at — a restatement of a parent,
+not a fact about the control — so it is never compared, and the one case where it reaches the screen
+is a node measured under an *infinite* width constraint (a control in a horizontal scroller), where
+there is no box width to use. Two consequences a component author must know:
+
+- a `fillWidth` control whose **height depends on its width** (a wrapping label, a multi-line text
+  field) cannot share one entry between its widths, because an entry holds one height: it has to put
+  the width in its `nuiSizingKey` so each width becomes its own configuration. A Slider's height does
+  not move with its width — measured 200/300/328 pt on iOS and 200/480 dp on Android, same height.
+- the first frame of a cold `fillWidth` mount is the declared **height** at whatever width the box
+  has, which is why the width in `setFallback` barely matters and the height has to be right (D14,
+  D17).
 
 ## 6. Traps (each one measured, each one cost someone an hour)
 

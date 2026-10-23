@@ -8,10 +8,10 @@
  *   bun bench --platform ios --plan quick --update-baseline
  *   bun bench --platform android --plan quick --component button
  *
- * `--component` picks which arm set to schedule (default `switch`). Each set is
- * a complete implementation dimension - its own `rn-core` control - so a
- * component's ratios never divide by another component's numbers
- * (scripts/bench/lib.mjs `COMPONENTS`).
+ * `--component` restricts the run to one component's cells. A component is part
+ * of the scenario cell (`mount.button`), so the filter crosses the plan rather
+ * than renaming the arms, and every component's ratios still divide by the same
+ * `rn-core` control (scripts/bench/lib.mjs `componentOf`).
  *
  * Per cell of the matrix (scenario x implementation x N) the protocol is a
  * **fresh process**, a 1 s settle, 5 warmup + 20 measured iterations, and
@@ -45,7 +45,6 @@ import {
   simctl,
 } from './devices.mjs';
 import {
-  COMPONENTS,
   LAUNCHES_PER_CELL,
   MARK_CAPABLE_IMPLEMENTATIONS,
   PLANS,
@@ -58,6 +57,8 @@ import {
   isCompatibleBaseline,
   launchPlanString,
   resultsFileName,
+  componentOf,
+  scenarioActionOf,
 } from './lib.mjs';
 import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
 import {
@@ -445,7 +446,10 @@ async function runLaunch(target, entry) {
   let deadChecks = 0;
   const handle = await target.run(entry);
   const expected = launchPlanString(entry);
-  const budget = TIMEOUTS[entry.scenario] ?? 180_000;
+  // Keyed by the *action*, because a scenario cell carries its component
+  // (`mount.slider`): the budget belongs to what the launch does, not to which
+  // control it mounts.
+  const budget = TIMEOUTS[scenarioActionOf(entry.scenario)] ?? 180_000;
   for (;;) {
     const text = target.read(handle);
     if (text.includes('"kind":"end"')) {
@@ -562,7 +566,8 @@ export async function main(argv) {
     log(
       'usage: bun bench --platform ios|android [--plan quick|full] [--compare <ref|file>]\n' +
         '           [--check] [--update-baseline] [--force] [--skip-build] [--only <impl,impl>]\n' +
-        '           [--launches N] [--prebuild] [--shutdown] [--perf-marks]'
+        '           [--launches N] [--prebuild] [--shutdown] [--perf-marks]\n' +
+        '           [--component <name>]'
     );
     process.exitCode = 2;
     return;
@@ -617,19 +622,24 @@ export async function main(argv) {
       ? iosTarget(device, built.appPath, built.bundleId)
       : androidTarget(device, built.apkPath, built.packageName);
 
-  const component = flag(argv, '--component') ?? 'switch';
-  if (COMPONENTS[component] == null) {
-    throw new Error(
-      `Unknown --component "${component}" (known: ${Object.keys(COMPONENTS).join(', ')})`
+  const component = flag(argv, '--component');
+  const componentsInPlan = [
+    ...new Set(PLANS[plan].map((cell) => componentOf(cell.scenario))),
+  ];
+  if (component != null && !componentsInPlan.includes(component)) {
+    log(
+      `--component must be one of ${componentsInPlan.join(', ')} (plan ${plan})`
     );
+    process.exitCode = 2;
+    return;
   }
 
   const schedule = buildSchedule({
     plan,
-    implementations: COMPONENTS[component],
     launches,
     only: flag(argv, '--only'),
     perfMarks,
+    component,
   });
 
   // Counted from the schedule itself: `--only` narrows the implementation

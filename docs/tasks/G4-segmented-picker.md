@@ -7,8 +7,7 @@ pattern and R3 test helpers). Follow `docs/architecture/core.md` and `docs/archi
 Read `docs/DECISIONS.md`.
 
 Two components in one task because they share the data model (a list of options + a selected
-index, controlled via the core handshake). Ship SegmentedControl first; if the task runs long,
-report after it and Picker becomes G4b.
+index, controlled via the core handshake). **v0.1 scope (D19): SegmentedControl only.** Picker is 0.2 — do not start it in this task.
 
 ## Public API (JS)
 
@@ -70,3 +69,18 @@ handling and the D7 rule (no optional `?:` props — use `[]`/`-1` sentinels per
 
 `bun run check` green; harness green on both platforms; bench tables; screenshots (iOS + Android,
 light + dark, menu open) in `docs/tasks/G4-segmented-picker/`.
+
+## Lessons from G1/G2/T14 (read before starting)
+
+- **D19:** one implementation round + at most two fix rounds; stay inside this brief, follow-ups
+  go in one line each.
+- Register your declared fallback in `NitroUiDeclaredFallbacks` (T14) — never only from the first view.
+- Cache `*Defaults.colors()` / colour schemes process-wide per core.md "Shared objects" (G1/G2/T12).
+- Size-affecting prop setters call `noteContentSizeMayHaveChanged()` (iOS); a `nuiSizingKey` change
+  must reset the host's last-reported size (G2 F1 hook) so a same-size new key still reports.
+- Bench: use main's `--component <name>` mechanism (`*.<name>` cells, arms switch on `component`);
+  ART-primed Android (D18); verdicts only where the runner allows (no `presentedBeforeMount`, ≤10%
+  spread).
+- Harness: no suite-local `beforeAll` warm-ups, no two live `render()` trees, run edited harness
+  files on both platforms. Add your control to the T15 real-input runner (one entry).
+- Never `pkill`/`killall` by name; shut down your own devices at the end.

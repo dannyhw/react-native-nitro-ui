@@ -60,8 +60,9 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   D14's "until T11" clause is fulfilled: defaults are now only the cache-miss fallback.
 - **D17 (T11 round 2)** Sizing frame budget, both platforms: the **first instance of a sizing
   configuration per environment epoch** (no exact cache entry yet) may show the declared fallback
-  (today: height 0 for a cold first `fillWidth` instance, until T14 registers fallbacks before
-  the first measure) for one frame before its correction lands; every instance whose configuration is already exact
+  (registered at startup by `NitroUiDeclaredFallbacks`, T14, so that frame is the declared size,
+  never 0; a correct declaration costs 0 corrections — exception: iOS 26+ apps with
+  `UIDesignRequiresCompatibility` pay one correction, sizing.md §8) for one frame before its correction lands; every instance whose configuration is already exact
   in the cache must lay out exact on its first frame (0 stale). The immediate (synchronous) budget
   per flush is platform-set: iOS 2, Android 1 (T12; measured −32/−37 % flush time at 200/500 rows).
   The rest of a cold batch lands on a later frame. Gated: the synchronous-push count and the

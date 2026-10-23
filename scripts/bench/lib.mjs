@@ -57,7 +57,7 @@ export const BASELINE_LAUNCHES = 8;
  * arms: an `@expo/ui` bump must not fail a nitro-ui PR, and `rn-core` is the
  * control. They are measured and reported, never gated (T02 review S9).
  */
-export const GATED_IMPLEMENTATIONS = ['nitro-ui', 'nitro-ui-button'];
+export const GATED_IMPLEMENTATIONS = ['nitro-ui'];
 
 /**
  * The arms that can report their *own* native perf marks (`bun bench
@@ -65,55 +65,14 @@ export const GATED_IMPLEMENTATIONS = ['nitro-ui', 'nitro-ui-button'];
  * (`nitroUiCore.drainPerf()`), so a marks run narrows the matrix to these and
  * never pretends to instrument `@expo/ui` or `rn-core`.
  */
-export const MARK_CAPABLE_IMPLEMENTATIONS = ['nitro-ui', 'nitro-ui-button'];
+export const MARK_CAPABLE_IMPLEMENTATIONS = ['nitro-ui'];
 
-/**
- * The arms of the Switch set, under their original bare names.
- *
- * Those names predate the second component and are also the keys of every
- * committed baseline, so they stay; a Button arm is the same name with a
- * `-button` suffix. The name is the launch-plan token and the results-cell key,
- * so the suffix is what keeps two components out of each other's cells.
- */
-export const SWITCH_IMPLEMENTATIONS = [
+export const IMPLEMENTATIONS = [
   'rn-core',
   'expo-ui-host-per-control',
   'expo-ui-shared-host',
   'nitro-ui',
 ];
-
-/** The arms of the Button set (task G2), same names plus the suffix. */
-export const BUTTON_IMPLEMENTATIONS = SWITCH_IMPLEMENTATIONS.map(
-  (name) => `${name}-button`
-);
-
-/**
- * The component dimension: `bun bench --component <name>` restricts the
- * implementation dimension to one arm set.
- *
- * A set is complete - it has its own `rn-core` control - so ratios never cross
- * components. Default `switch` keeps every existing command working unchanged.
- */
-export const COMPONENTS = {
-  switch: SWITCH_IMPLEMENTATIONS,
-  button: BUTTON_IMPLEMENTATIONS,
-};
-
-/** Every arm the runner can schedule. */
-export const IMPLEMENTATIONS = [
-  ...SWITCH_IMPLEMENTATIONS,
-  ...BUTTON_IMPLEMENTATIONS,
-];
-
-/** The arm one component's ratios are divided by. */
-export function controlImplementation(implementation) {
-  return implementation.endsWith('-button') ? 'rn-core-button' : 'rn-core';
-}
-
-/** Whether an arm *is* a control, i.e. its ratio to itself is 1 by definition. */
-export function isControlImplementation(implementation) {
-  return implementation === 'rn-core' || implementation === 'rn-core-button';
-}
 
 /** Latency metrics, all nanoseconds, all smaller-is-better. */
 export const LATENCY_METRICS = ['jsCommitNs', 'mountedNs', 'presentedNs'];
@@ -139,12 +98,23 @@ export const GATE_METRICS = [
  * Plans are lists of `scenario:N` cells. The implementation dimension is crossed
  * with these by `buildSchedule`; `nitro-ui` self-skips until a component
  * registers itself (bench/src/implementations/nitroUi.tsx).
+ *
+ * A cell's scenario carries its component: the bare name is the first component
+ * (Switch, kept so pre-G1 results files and baselines still line up) and
+ * `<action>.<component>` is every component after it. `componentOf` is the one
+ * place that reads the encoding; `--component` filters on it.
  */
 export const PLANS = {
   quick: [
     { scenario: 'mount', n: 50 },
     { scenario: 'update', n: 50 },
     { scenario: 'memory', n: 200 },
+    { scenario: 'mount.slider', n: 50 },
+    { scenario: 'update.slider', n: 50 },
+    { scenario: 'memory.slider', n: 200 },
+    { scenario: 'mount.button', n: 50 },
+    { scenario: 'update.button', n: 50 },
+    { scenario: 'memory.button', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -154,8 +124,46 @@ export const PLANS = {
     { scenario: 'update', n: 50 },
     { scenario: 'memory', n: 200 },
     { scenario: 'leak', n: 200 },
+    { scenario: 'mount.slider', n: 1 },
+    { scenario: 'mount.slider', n: 50 },
+    { scenario: 'mount.slider', n: 200 },
+    { scenario: 'update.slider', n: 1 },
+    { scenario: 'update.slider', n: 50 },
+    { scenario: 'memory.slider', n: 200 },
+    { scenario: 'leak.slider', n: 200 },
+    { scenario: 'mount.button', n: 1 },
+    { scenario: 'mount.button', n: 50 },
+    { scenario: 'mount.button', n: 200 },
+    { scenario: 'update.button', n: 1 },
+    { scenario: 'update.button', n: 50 },
+    { scenario: 'memory.button', n: 200 },
+    { scenario: 'leak.button', n: 200 },
   ],
 };
+
+/**
+ * The component a scenario cell belongs to.
+ *
+ * The one reader of the `action.component` encoding, so the runner, the
+ * reporter and the gate all treat a component as a dimension rather than
+ * string-matching scenario names in three places.
+ */
+export function componentOf(scenario) {
+  const dot = String(scenario).indexOf('.');
+  return dot === -1 ? 'switch' : String(scenario).slice(dot + 1);
+}
+
+/** The action half of a scenario cell: `mount.slider` -> `mount`. */
+export function scenarioActionOf(scenario) {
+  const value = String(scenario);
+  const dot = value.indexOf('.');
+  return dot === -1 ? value : value.slice(0, dot);
+}
+
+/** The scenario cell for one component and action: `mount` + `slider` -> `mount.slider`. */
+export function scenarioFor(action, component) {
+  return component === 'switch' ? action : `${action}.${component}`;
+}
 
 /** `mount:rn-core:50` - the string one app launch is driven with. */
 export function planString(scenario, implementation, n) {
@@ -197,11 +205,27 @@ export function buildSchedule({
   launches = LAUNCHES_PER_CELL,
   only = null,
   perfMarks = false,
+  component = null,
 } = {}) {
   const cells = PLANS[plan];
   if (cells == null) {
     throw new Error(
       `Unknown plan "${String(plan)}" (expected ${Object.keys(PLANS).join(' or ')})`
+    );
+  }
+  // The component dimension is crossed here too, and *before* the
+  // implementation one: a plan now holds several components' cells, and running
+  // a component's cells is the unit of work a task or a review asks for
+  // (`--component slider`). `null` keeps the historical behaviour of measuring
+  // every component the plan knows about.
+  const wantedCells =
+    component == null
+      ? cells
+      : cells.filter((cell) => componentOf(cell.scenario) === component);
+  if (wantedCells.length === 0) {
+    throw new Error(
+      `--component ${String(component)} matched no cell in plan "${String(plan)}" ` +
+        `(components here: ${[...new Set(cells.map((cell) => componentOf(cell.scenario)))].join(', ')})`
     );
   }
   let wanted =
@@ -230,7 +254,7 @@ export function buildSchedule({
   const schedule = [];
   for (let launch = 0; launch < launches; launch++) {
     const order = launch % 2 === 0 ? wanted : [...wanted].reverse();
-    for (const cell of cells) {
+    for (const cell of wantedCells) {
       for (const implementation of order) {
         schedule.push({
           scenario: cell.scenario,
@@ -428,6 +452,13 @@ function emptyCell(record) {
     platform: null,
     warmup: 0,
     measured: 0,
+    /**
+     * `false` when the arm told the runner its latency pair cannot exist
+     * (`bench/src/plan.ts` `NO_MOUNT_SIGNAL`). Turned on by the launch's `meta`
+     * record; changes no number, only whether a cell full of nulls is called a
+     * lost signal or an absent one.
+     */
+    mountSignal: true,
     latency: {
       jsCommitNs: new Map(),
       mountedNs: new Map(),
@@ -698,6 +729,7 @@ function summariseCell(key, cell) {
      */
     marks,
     sanity: cell.sanity,
+    mountSignal: cell.mountSignal,
   };
 }
 
@@ -725,6 +757,9 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       cell.measured = Math.max(cell.measured, record.measured);
       cell.clock = record.probeClock;
       cell.platform = record.platform;
+      if (record.mountSignal === false) {
+        cell.mountSignal = false;
+      }
     } else if (record.kind === 'skip') {
       if (!cell.skipReasons.includes(record.reason)) {
         cell.skipReasons.push(record.reason);
@@ -1030,11 +1065,9 @@ export function ratioTable(source) {
       continue;
     }
     const control =
-      cell.implementation === controlImplementation(cell.implementation)
+      cell.implementation === 'rn-core'
         ? cell
-        : cells[
-            `${cell.scenario}:${controlImplementation(cell.implementation)}:${String(cell.n)}`
-          ];
+        : cells[`${cell.scenario}:rn-core:${cell.n}`];
     if (control == null) {
       continue;
     }
@@ -1048,7 +1081,7 @@ export function ratioTable(source) {
       if (!(metric in controlMetrics)) {
         continue;
       }
-      if (isControlImplementation(cell.implementation)) {
+      if (cell.implementation === 'rn-core') {
         entry.metrics[metric] = {
           ratio: 1,
           launchRatios: [1],
@@ -1116,10 +1149,7 @@ export function controlMovement(base, head) {
   const headCells = cellsFrom(head);
   const findings = [];
   for (const [key, headCell] of Object.entries(headCells)) {
-    if (
-      !isControlImplementation(headCell.implementation) ||
-      headCell.skipReason != null
-    ) {
+    if (headCell.implementation !== 'rn-core' || headCell.skipReason != null) {
       continue;
     }
     const baseCell = baseCells[key];
@@ -1206,12 +1236,11 @@ export function gate({
           launchRatios: headValue.launchRatios,
           arm: headValue.iterationsPerLaunch,
           control: (() => {
-            const controlName = controlImplementation(headEntry.implementation);
             const controlCell =
-              headEntry.implementation === controlName
+              headEntry.implementation === 'rn-core'
                 ? null
                 : cellsFrom(head)[
-                    `${headEntry.scenario}:${controlName}:${String(headEntry.n)}`
+                    `${headEntry.scenario}:rn-core:${headEntry.n}`
                   ];
             return controlCell == null
               ? null
@@ -1225,12 +1254,11 @@ export function gate({
             launchValues(cellsFrom(base)[key], metric) ??
             undefined,
           control: (() => {
-            const controlName = controlImplementation(baseEntry.implementation);
             const controlCell =
-              baseEntry.implementation === controlName
+              baseEntry.implementation === 'rn-core'
                 ? null
                 : cellsFrom(base)[
-                    `${baseEntry.scenario}:${controlName}:${String(baseEntry.n)}`
+                    `${baseEntry.scenario}:rn-core:${baseEntry.n}`
                   ];
             return controlCell == null
               ? null
@@ -1457,7 +1485,7 @@ export function baselineTable(baseline) {
             ratio: value.ratio,
             launchRatios: value.launchRatios ?? [value.ratio],
             samples: value.samples ?? 1,
-            control: isControlImplementation(cell.implementation),
+            control: cell.implementation === 'rn-core',
           },
         ])
       ),

@@ -58,6 +58,8 @@
     "check": "bun run typecheck && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check",
     "harness:ios": "bun --cwd example harness:ios",
     "harness:android": "bun --cwd example harness:android",
+    "harness:cold:ios": "bun --cwd example harness:cold:ios",
+    "harness:cold:android": "bun --cwd example harness:cold:android",
     "smoke:pack": "bash scripts/smoke/pack.sh",
     "smoke:expo": "bash scripts/smoke/expo.sh",
     "smoke:rn-cli": "bash scripts/smoke/rn-cli.sh",

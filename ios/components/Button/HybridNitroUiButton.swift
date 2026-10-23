@@ -182,7 +182,7 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
   private static let sizingComponentName = "NitroUiButton"
 
   /// The size to lay a Button out with before anything has been measured, in
-  /// points - the first Button of an app's first launch.
+  /// points.
   ///
   /// A Button has *many* configurations (title, variant, size, symbol), while the
   /// engine's fallback is keyed by component alone (`NitroUiSizing::setFallback`),
@@ -206,6 +206,17 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
     return true
   }()
 
+  /// Hand this control's declared size to the sizing engine, once per process
+  /// (the static above is lazy and thread-safe, so repeat calls cost nothing).
+  ///
+  /// ``NitroUiDeclaredFallbacks`` calls this at startup, which is the point that
+  /// matters: Fabric measures a Button's shadow node before it creates any Button
+  /// view, so a fallback declared from `init` is one measure too late for the
+  /// first instance (T14). `init` still calls it, as the backstop.
+  static func declareFallback() {
+    _ = Self.declaresFallback
+  }
+
   /// The declared fallback - see ``declaresFallback``.
   private static let fallbackSize = (width: 77.0, height: 35.0)
 
@@ -218,7 +229,10 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
     host.sizingPolicy = .intrinsic
     // A Button presents nothing, so it needs no view-controller containment.
     host.needsContainment = false
-    _ = Self.declaresFallback
+    // The backstop: startup normally registers this through
+    // ``NitroUiDeclaredFallbacks`` long before a Button can be measured, and a
+    // host built without that table still gets its fallback here.
+    Self.declareFallback()
   }
 
   var view: NitroSwiftUIHost<ButtonContent> {

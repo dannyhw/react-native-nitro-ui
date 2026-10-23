@@ -521,6 +521,23 @@ abstract class NitroComposeHost<M : NitroUiModel>(
         }
       }
     )
+    // A pre-draw listener only runs when the window next traverses, and a quiet
+    // window never decides to do that on its own: the listener above is a request
+    // to be consulted at the next draw, not a request for one. A report that
+    // arrives after an idle window's last draw - measured with a control inside
+    // an RN `Modal`, whose dialog stops drawing once presented - would otherwise
+    // leave its correction queued until some unrelated redraw came along.
+    // `postInvalidateOnAnimation` is the cheapest traversal request that reaches
+    // the window this host actually lives in (a `Modal` host's observer is the
+    // dialog's, so anything rooted in the main window would miss it entirely):
+    // it is vsync-aligned, coalesces with any invalidation already pending, and
+    // its cost is usually cancelled outright, because a flush that applies a
+    // correction returns `false` from `onPreDraw` and this very frame is skipped.
+    // `requestLayout()` would also traverse, but re-measures the native subtree
+    // for a size the traversal is about to correct anyway; a bare
+    // `postOnAnimation` block runs without scheduling a traversal, so it does
+    // not guarantee the listener is ever reached.
+    postInvalidateOnAnimation()
   }
 
   /**
@@ -702,8 +719,17 @@ internal object NitroUiColorSchemes {
  *   still the box, so the control is centred in what Yoga gave it and a
  *   user-specified width or height still wins.
  * - `false` (policy `fillWidth` - a Slider, whose width *is* the box): keep the
- *   maximum and drop only the minimum, which is one call and asks for the height
- *   the control wants at the width it was given.
+ *   width maximum, unbind the height. The width maximum is the question - a
+ *   Slider's height is what it is at *that* width. The height maximum must go for
+ *   the same reason the width minimum goes: a box that is temporarily the wrong
+ *   height (a `seedSize`-style guess, a stale cache, a correction still in flight)
+ *   would otherwise clamp the answer to itself, and the wrong height would
+ *   confirm itself forever - the report agrees with the layout, so the engine is
+ *   never told and never corrects. iOS asks the same question the same way
+ *   (`NitroSwiftUIHost.fittingSizeProposal`: box width, unbounded height).
+ *
+ *   The `else` arm covers a `fillWidth` control in a genuinely unbounded parent:
+ *   with no width to fill there is nothing to ask but the unbounded question.
  *
  * Material's `minimumInteractiveComponentSize` (a 48 dp touch target) is part of
  * the size by design, and only [NitroComposeHost.wantsContentSize] pays for
@@ -722,10 +748,15 @@ internal fun NitroUiMeasuredRoot(
         // The unbounded question. See the kdoc: this is what makes the recorded
         // size the control's, not the box's.
         Constraints()
+      } else if (constraints.hasBoundedWidth) {
+        // The fill-width question: measure at the box's width, at any height.
+        constraints.copy(
+          minWidth = 0,
+          minHeight = 0,
+          maxHeight = Constraints.Infinity,
+        )
       } else {
-        // The minimum as it arrives equals the maximum, which would make this
-        // report the box; the maximum is the width a fill-width control wants.
-        constraints.copy(minWidth = 0, minHeight = 0)
+        Constraints()
       }
     val placeable = measurables.firstOrNull()?.measure(childConstraints)
     val measuredWidth = placeable?.width ?: 0

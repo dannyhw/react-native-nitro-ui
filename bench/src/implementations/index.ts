@@ -1,16 +1,10 @@
 import type { BenchImplementation } from '../types';
 import { ExpoUiHostPerControlList, ExpoUiSharedHostList } from './expoUi';
 import {
-  ExpoUiButtonHostPerControlList,
-  ExpoUiButtonSharedHostList,
-} from './expoUiButton';
-import {
-  NitroUiButtonList,
   NitroUiList,
   drainNitroUiPerfMarks,
   enableNitroUiPerfMarks,
 } from './nitroUi';
-import { RnCoreButtonList } from './rnCoreButton';
 import { RnCoreList } from './rnCore';
 
 /**
@@ -19,8 +13,9 @@ import { RnCoreList } from './rnCore';
  * `rn-core` is the control arm and always runs. `nitro-ui` is the library under
  * development - the only arm with native perf marks, and the only gated one.
  *
- * Adding a new component to the matrix means adding one entry here plus its
- * scenario props; nothing else in the harness changes.
+ * Adding a new component to the matrix means one branch per arm here (they
+ * dispatch on `BenchListProps.component`) plus the plan cells; the arm names, the
+ * runner and the gate do not change.
  */
 export const implementations: BenchImplementation[] = [
   {
@@ -52,38 +47,6 @@ export const implementations: BenchImplementation[] = [
     available: true,
     skipReason: null,
     List: NitroUiList,
-    enablePerfMarks: enableNitroUiPerfMarks,
-    drainPerfMarks: drainNitroUiPerfMarks,
-  },
-  {
-    name: 'rn-core-button',
-    available: true,
-    skipReason: null,
-    List: RnCoreButtonList,
-    enablePerfMarks: null,
-    drainPerfMarks: null,
-  },
-  {
-    name: 'expo-ui-host-per-control-button',
-    available: true,
-    skipReason: null,
-    List: ExpoUiButtonHostPerControlList,
-    enablePerfMarks: null,
-    drainPerfMarks: null,
-  },
-  {
-    name: 'expo-ui-shared-host-button',
-    available: true,
-    skipReason: null,
-    List: ExpoUiButtonSharedHostList,
-    enablePerfMarks: null,
-    drainPerfMarks: null,
-  },
-  {
-    name: 'nitro-ui-button',
-    available: true,
-    skipReason: null,
-    List: NitroUiButtonList,
     enablePerfMarks: enableNitroUiPerfMarks,
     drainPerfMarks: drainNitroUiPerfMarks,
   },

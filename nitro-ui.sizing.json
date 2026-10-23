@@ -1,4 +1,5 @@
 {
-  "HybridNitroUiButton": "intrinsic",
-  "HybridNitroUiSwitch": "intrinsic"
+  "HybridNitroUiSwitch": "intrinsic",
+  "HybridNitroUiSlider": "fillWidth",
+  "HybridNitroUiButton": "intrinsic"
 }

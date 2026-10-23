@@ -45,6 +45,14 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
 type SwitchHandle = {
   readonly value: boolean | null;
   measureContent(): { width: number; height: number };
+  /**
+   * Read through an optional member: v0.1 keeps the Hybrid View prop types off the
+   * public surface (D14), so `@internal` `NitroUiSwitchHandle` does not name it.
+   * The getter exists on both platforms, and it is how a test attributes a trace
+   * event to *its* control instead of to whatever else is mounted (see the cold
+   * test below). `null` here would make that test fail loudly.
+   */
+  readonly nuiSizingId?: number;
 };
 
 /**
@@ -82,6 +90,13 @@ function describeBox(box: Size | null) {
   return box == null
     ? 'null'
     : `${box.width.toFixed(2)}x${box.height.toFixed(2)}`;
+}
+
+/**
+ * One trace event as a short label, for the line a failing run prints.
+ */
+function sizingEventLabel(event: NitroUiSizingTraceEvent) {
+  return `${event.stage}:${event.instanceId}:${event.width.toFixed(1)}x${event.height.toFixed(1)}`;
 }
 
 async function waitForTestId(testId: string, timeoutMs = 10000) {
@@ -310,10 +325,50 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(Math.abs(box!.height - content!.height)).toBeLessThan(0.6);
 
     // The first instance of a configuration pays exactly one state update: the
-    // shadow tree has to learn the size it will keep handing out.
-    const d = delta(before, stats());
-    expect(d.corrections).toBe(1);
-    expect(d.immediate).toBe(1);
+    // shadow tree has to learn the size it will keep handing out - asserted on
+    // *this instance's* trace events rather than on the process's counters.
+    //
+    // `toBe(1)` on the global delta was the flake (`corrections=0`, measured on
+    // iOS; the same shape as the Android `sizes a control inside a Modal` flake in
+    // docs/tasks/FOLLOWUPS.md, which G1 could not reproduce either). Both counters
+    // and the seeded guess are process-global, so the delta is this mount's
+    // correction *plus* every other Switch in the process that measured in the
+    // same window - a control an earlier test left mounted, or one of this file's
+    // own, since the runtime is reset between files while the engine is not. And
+    // because the guess is shared, whoever measures first also repairs it: when
+    // that was not this instance it mounted from the right size with nothing left
+    // to correct, and a second control's correction breaks the assertion from the
+    // other side. (G1's other suspect for the Android case is the `wrongGuess`
+    // test that runs immediately before it - docs/tasks/G1-slider.report.md.)
+    //
+    // What a lost correction cannot survive is the box assertions above - a Switch
+    // that was never corrected stays 40x20 (review S8) - and what a *second*
+    // correction cannot survive is this: at most one push for this instance, and
+    // if it did start from the wrong guess then it paid that push.
+    const mine = trace.filter(
+      (event: NitroUiSizingTraceEvent) =>
+        event.instanceId === (hybrid?.nuiSizingId ?? -1)
+    );
+    const laidOut = mine.filter(
+      (event: NitroUiSizingTraceEvent) => event.stage === 'laidOut'
+    );
+    const corrected = mine.filter(
+      (event: NitroUiSizingTraceEvent) => event.stage === 'corrected'
+    );
+    expect(laidOut.length).toBeGreaterThan(0);
+    expect(corrected.length).toBeLessThanOrEqual(1);
+    if (boxMatches(laidOut[0]!, WRONG_GUESS)) {
+      // Started from the poison: it must have been outranked, by exactly one push,
+      // with the control's own size as the result.
+      expect(corrected.length).toBe(1);
+      expect(boxMatches(corrected[0]!, expectedBox!)).toBe(true);
+    } else {
+      // Or its guess was already right when it mounted (another Switch in the
+      // process consumed the poison first) - then the only sizes it ever knew are
+      // the two real ones.
+      expect(boxMatches(laidOut[0]!, expectedBox!)).toBe(true);
+      expect(corrected.length).toBe(0);
+    }
     // What reached a frame. The guess here is deliberately wrong, so this is the
     // case that separates the platforms (`docs/architecture/sizing.md` §3):
     // Android's pre-draw listener cancels the draw whose layout was stale, iOS
@@ -772,18 +827,41 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('sizes a control inside a Modal', async () => {
-    // R6, for sizing. RN's `Modal` is a second window whose tree Fabric lays out
-    // before the dialog has a window, which is where a size that never arrives
-    // would show up. The harness cannot query a testID inside that window (H9,
-    // H10), so both oracles are read from inside the host: what the control
-    // measured, and the box the host recorded drawing on its first frame.
-    // The guess has to be wrong or nothing has to be corrected, and a test that
-    // requires a correction is the one that notices when a control on the second
-    // surface cannot be reached.
+    // R6, for sizing. RN's `Modal` is a second window with its own
+    // `ViewTreeObserver`, which stops scheduling draws once the dialog has been
+    // presented. That makes it the shape of test that asks whether a queued
+    // correction lands on its own: Android's flush is a pre-draw listener, and a
+    // pre-draw listener is a request to be consulted at the next draw, not a
+    // request for one. `scheduleSizingFlush` therefore requests the draw as well
+    // (`postInvalidateOnAnimation`), and the poisoned fallback below is what makes
+    // the cold mount in it about more than the happy path.
+    //
+    // Being exact about what this can prove, because the review asked for a red: a
+    // correction is only ever *produced* by a native measure (Compose's `Layout`
+    // block is the only caller of `reportToSizingEngine`), so a report always
+    // arrives inside a traversal - and an RN dialog does not stop at that
+    // traversal. Instrumented on `nitroui_t01`, the dialog traversed again 4 ms and
+    // 11 ms after the report, and with the draw request removed this test passed 9
+    // runs out of 9. The round-0 flake that started this (one run in three,
+    // `queued=1, flushes=0`) is the rare ordering where the composition's
+    // invalidations and Fabric's layout pass collapse into a single traversal, and
+    // no JS-side arrangement of mounts, re-renders, hidden wrappers or settled
+    // dialogs reproduced it. So the drain cannot be forced from JS, and the
+    // mechanism is guarded where a guard can see it:
+    // `scripts/check-sizing-flush-draw-request.sh`, which is red without the
+    // request and runs inside `bun run check`. What is asserted here is the
+    // behaviour that depends on it - in both shapes the dialog offers: the cold
+    // mount below, and a size that changes while the dialog is already presented
+    // and quiet, where there is no presenting draw left to hide behind.
+    //
+    // The harness cannot query a testID inside that window (H9, H10), so both
+    // oracles are read from inside the host: the size the control measured, and
+    // this instance's own trace events - not the process's counters, and not any
+    // instance's `drew` sample, which stops on the wrong side of a race.
     seedWrongGuess();
     nitroUiCore.setSizingTraceEnabled(true);
     const before = stats();
-    const { unmount } = await render(
+    const { rerender, unmount } = await render(
       <Modal visible animationType="none">
         <View
           style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
@@ -793,62 +871,119 @@ describe('Sizing · intrinsic (T11)', () => {
       </Modal>
     );
 
-    const content = await pollUntil(
+    const instanceId = await pollUntil(
       () => {
-        const size = hybrid?.measureContent() ?? null;
-        return size !== null && size.width > 0 && size.height > 0 ? size : null;
+        const id = hybrid?.nuiSizingId ?? 0;
+        return id > 0 ? id : null;
       },
       () =>
         new Error(
-          `Modal host never measured (last=${String(
-            JSON.stringify(hybrid?.measureContent() ?? null)
+          `Modal host never reported a nuiSizingId (handle keys: ${String(
+            Object.keys(hybrid ?? {}).join(',') || 'none'
           )}).`
         ),
       15000
     );
-    const trace = await collectTrace(hasDrawnSample, 2000);
-    const d = delta(before, stats());
-    console.log(
-      `modal: content=${content.width.toFixed(2)}x${content.height.toFixed(2)} ` +
-        `trace=${String(JSON.stringify(trace.map((e) => `${e.stage}:${e.instanceId}:${e.width.toFixed(1)}x${e.height.toFixed(1)}`)))} ` +
-        `d=${JSON.stringify(d)}`
+    // This instance's own `corrected`, and nothing less: it is recorded when a
+    // flush pushes the correction into this instance's Fabric state, so a report
+    // left queued in a window nobody redraws fails right here.
+    const trace = await collectTrace(
+      (events) =>
+        events.some(
+          (event) =>
+            event.instanceId === instanceId && event.stage === 'corrected'
+        ),
+      8000
     );
-
-    expect(Math.abs(content.width - expectedBox!.width)).toBeLessThan(1.5);
-    expect(Math.abs(content.height - expectedBox!.height)).toBeLessThan(1.5);
-    // The engine works across the second surface: a cold configuration in a dialog
-    // is laid out, corrected and drawn there like any other, and the box Fabric ends
-    // up with is the one the control measured - inside RN's second window, where the
-    // harness can query neither.
-    const stages = trace.map((event: NitroUiSizingTraceEvent) => event.stage);
-    expect(stages).toEqual(expect.arrayContaining(['laidOut', 'corrected']));
-    // ...and the correction is the control's own size, not a second guess.
-    const corrected = trace.filter(
+    const content = hybrid?.measureContent() ?? null;
+    const cold = delta(before, stats());
+    const own = trace.filter(
+      (event: NitroUiSizingTraceEvent) => event.instanceId === instanceId
+    );
+    const laidOut = own.filter(
+      (event: NitroUiSizingTraceEvent) => event.stage === 'laidOut'
+    );
+    const corrected = own.filter(
       (event: NitroUiSizingTraceEvent) => event.stage === 'corrected'
     );
-    for (const event of corrected) {
-      expect(Math.abs(event.width - content.width)).toBeLessThan(0.6);
-      expect(Math.abs(event.height - content.height)).toBeLessThan(0.6);
-    }
     console.log(
-      `modal correction: ${String(corrected.length)} of guess ${String(
-        WRONG_GUESS.width
-      )}x${String(WRONG_GUESS.height)} d=${JSON.stringify(delta(before, stats()))}`
+      `modal cold: id=${String(instanceId)} content=${describeBox(content)} ` +
+        `trace=${String(JSON.stringify(own.map(sizingEventLabel)))} d=${JSON.stringify(cold)}`
     );
-    // A `drew` sample is taken once, at the host's first frame, and attributed to
-    // the instance the host has at that moment. RN's Modal mounts its tree on the
-    // second surface separately, so a dialog host can paint before its sizing id
-    // arrives and then have no sample to give: measured on iOS, the same build
-    // produced one in one run and none in another. The trace is a diagnostic, so
-    // the sample is checked when it exists and its absence costs nothing here.
-    // And when it exists it is either the seeded guess (the frame before the
-    // correction) or the control's size - never a third box. Whether that one
-    // sample lands before or after the correction depends on when the dialog is
-    // presented, so the *last* sample is not required to be the corrected one
-    // here; the correction itself is asserted above, and the box the dialog ends
-    // up with cannot be queried from the harness (H9, H10).
-    const frames = drawnFrames(trace, content, WRONG_GUESS);
-    expect(frames.everySampleExplained).toBe(true);
+
+    expect(content).not.toBeNull();
+    // The dialog mounted from the poisoned guess (the wait above proves a report
+    // reached the engine, and `laidOut` names the box the first measure answered
+    // with), so `corrected` is the control's own measurement outranking it - and
+    // it can only be that instance's own.
+    expect(laidOut.length).toBeGreaterThan(0);
+    expect(Math.abs(laidOut[0]!.width - WRONG_GUESS.width)).toBeLessThan(1.5);
+    expect(Math.abs(laidOut[0]!.height - WRONG_GUESS.height)).toBeLessThan(1.5);
+    expect(corrected.length).toBeGreaterThan(0);
+    expect(Math.abs(content!.width - expectedBox!.width)).toBeLessThan(1.5);
+    expect(Math.abs(content!.height - expectedBox!.height)).toBeLessThan(1.5);
+    for (const event of corrected) {
+      expect(Math.abs(event.width - content!.width)).toBeLessThan(0.6);
+      expect(Math.abs(event.height - content!.height)).toBeLessThan(0.6);
+    }
+    // The dialog is the only window doing work, so the flush that pushed this
+    // correction is this mount's.
+    expect(cold.flushes).toBeGreaterThan(0);
+    // And no third box: whatever the dialog drew (a `drew` sample may or may not
+    // exist for a dialog host - RN mounts its tree on the second surface
+    // separately, so the sample can miss the sizing id), every sample is the guess
+    // or the control's size.
+    expect(drawnFrames(own, content!, WRONG_GUESS).everySampleExplained).toBe(
+      true
+    );
+
+    // A size that arrives *after* the dialog has been presented, drawn, and gone
+    // quiet. The wide configuration is cold, so this control is laid out at the
+    // component's guess and has to be corrected to the wide size - and the only
+    // thing that can apply that correction is a traversal of a dialog window that
+    // has no reason left to draw. This is the shape `postInvalidateOnAnimation`
+    // exists for, and the phase that would fail first if the request were dropped
+    // on a device slow enough to miss the redraw the composition itself causes.
+    nitroUiCore.drainSizingTrace();
+    const beforeWide = stats();
+    await rerender(
+      <Modal visible animationType="none">
+        <View
+          style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+        >
+          <Switch
+            defaultValue
+            nuiTestWidth={TEST_WIDTH}
+            testID="modal-size"
+            hybridRef={captureHybrid}
+          />
+        </View>
+      </Modal>
+    );
+    const lateTrace = await collectTrace(
+      (events) =>
+        events.some(
+          (event) =>
+            event.instanceId === instanceId && event.stage === 'corrected'
+        ),
+      8000
+    );
+    const late = delta(beforeWide, stats());
+    const lateOwn = lateTrace.filter(
+      (event: NitroUiSizingTraceEvent) => event.instanceId === instanceId
+    );
+    const lateCorrected = lateOwn.filter(
+      (event: NitroUiSizingTraceEvent) => event.stage === 'corrected'
+    );
+    const wideContent = hybrid?.measureContent() ?? null;
+    console.log(
+      `modal late: content=${describeBox(wideContent)} ` +
+        `trace=${String(JSON.stringify(lateOwn.map(sizingEventLabel)))} ` +
+        `d=${JSON.stringify(late)}`
+    );
+    expect(boxMatches(wideContent, wideBox)).toBe(true);
+    expect(lateCorrected.length).toBeGreaterThan(0);
+    expect(late.flushes).toBeGreaterThan(0);
     unmount();
   });
 
