@@ -51,8 +51,11 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
     // Kotlin's `NitroUiPerf.mark` throws UnsatisfiedLinkError if it is ever
     // reached, which only happens for a view that set `nuiPerfId`.
     registerPerfNatives(env);
-    // Same for sizing: a build without the engine lays views out with their
-    // fallback size instead of crashing at startup.
+    // Same for sizing. If the engine symbols are missing, the Kotlin
+    // `NitroUiSizing` catches the resulting `UnsatisfiedLinkError` and turns
+    // every call into a no-op, so views are laid out with their declared
+    // fallback size instead of crashing at startup — without that catch a missing
+    // engine would take down the first hosted view, not degrade the layout.
     registerSizingNatives(env);
   });
 }

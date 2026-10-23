@@ -94,6 +94,15 @@ namespace margelo::nitro::nitroui {
       NitroUiSizing::invalidateEnvironment();
     }
 
+    void nativeInvalidateEnvironmentIfChanged(JNIEnv* env, jclass, jstring signature) {
+      const std::string text = toUtf8(env, signature);
+      NitroUiSizing::invalidateEnvironmentIfChanged(text.c_str());
+    }
+
+    void nativeForget(JNIEnv* /*env*/, jclass, jlong instanceId) {
+      NitroUiSizing::forget(static_cast<int64_t>(instanceId));
+    }
+
     void nativeRecordDrawnSize(JNIEnv* /*env*/, jclass, jlong instanceId, jdouble width, jdouble height) {
       NitroUiSizing::recordDrawnSize(static_cast<int64_t>(instanceId), static_cast<double>(width), static_cast<double>(height));
     }
@@ -112,6 +121,8 @@ namespace margelo::nitro::nitroui {
       {"nReport", "(JDDI)V", reinterpret_cast<void*>(&nativeReport)},
       {"nSetFallback", "(Ljava/lang/String;DDI)V", reinterpret_cast<void*>(&nativeSetFallback)},
       {"nInvalidateEnvironment", "()V", reinterpret_cast<void*>(&nativeInvalidateEnvironment)},
+      {"nInvalidateEnvironmentIfChanged", "(Ljava/lang/String;)V", reinterpret_cast<void*>(&nativeInvalidateEnvironmentIfChanged)},
+      {"nForget", "(J)V", reinterpret_cast<void*>(&nativeForget)},
       {"nCachedSizeCount", "()J", reinterpret_cast<void*>(&nativeCachedSizeCount)},
       {"nRecordDrawnSize", "(JDD)V", reinterpret_cast<void*>(&nativeRecordDrawnSize)},
       {"nHasPendingReports", "()Z", reinterpret_cast<void*>(&nativeHasPendingReports)},

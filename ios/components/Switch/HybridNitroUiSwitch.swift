@@ -23,6 +23,8 @@ final class SwitchModel: NitroUiModel {
   /// symmetry with the other props; the sizing engine reads the key out of Fabric
   /// state itself, so nothing native looks at this.
   var sizingKey = ""
+  /// Test-only control width, in points: see `nuiTestWidth`.
+  var testWidth: Double?
   /// `onValueChange`, wired through a stable JS callback.
   var onChange: ((_ value: Bool, _ eventCount: Double) -> Void)?
 
@@ -54,11 +56,30 @@ struct SwitchContent: NitroUIContent {
         }
       )
     )
+
+    // Test-only: fix the control's *fitting* width, so a test can watch a
+    // sizing-key change re-measure (see `nuiTestWidth`). Nothing in a real app
+    // sets it, and `nil` - the default - adds no modifier at all.
+    .modifier(OptionalTestWidth(points: model.testWidth))
     .labelsHidden()
     .toggleStyle(.switch)
     .disabled(model.disabled)
     .modifier(OptionalTint(color: model.tint))
     .modifier(OptionalAccessibility(label: model.accessibilityLabel))
+  }
+}
+
+/// The test-only width modifier, applied only when set: an unconditional `.frame`
+/// would give every Switch in the app an explicit width.
+private struct OptionalTestWidth: ViewModifier {
+  let points: Double?
+
+  func body(content: Content) -> some View {
+    if let points {
+      content.frame(width: CGFloat(points))
+    } else {
+      content
+    }
   }
 }
 
@@ -235,6 +256,26 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     set { model.sizingKey = newValue }
   }
 
+  var nuiTestWidth: Variant_NullType_Double {
+    get {
+      guard let width = model.testWidth else { return .first(.null) }
+      return .second(width)
+    }
+    set {
+      let next = newValue.asType(Double.self)
+      guard next != model.testWidth else {
+        return
+      }
+      model.testWidth = next
+      host.markDirty()
+      // This is the one prop a Switch has that changes its *size*, so the fitting
+      // size has to be taken again after the commit - with a new width the
+      // reported size is what corrects the box. A text-sized component's real
+      // props do the same thing (a shorter label, a new selection).
+      host.noteContentSizeMayHaveChanged()
+    }
+  }
+
   var nuiSizingId: Double {
     get { Double(host.sizingInstanceId) }
     set { host.sizingInstanceId = Int64(newValue) }
@@ -265,6 +306,7 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     model.testID = nil
     model.accessibilityLabel = nil
     model.sizingKey = ""
+    model.testWidth = nil
     model.onChange = nil
     host.prepareForRecycle()
   }

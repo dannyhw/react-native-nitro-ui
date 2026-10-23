@@ -260,8 +260,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     // for it again: the listener it registered for the previous mount is gone.
     hasMarkedFirstFrame = false
     firstFrameWatchRegistered = false
-    sizingInstanceId = NitroUiSizing.NO_INSTANCE
-    lastReportedSize = null
+    releaseSizingInstance()
   }
 
   /**
@@ -277,8 +276,29 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   fun drop() {
     composeContent.disposeComposition()
     contentSize = null
+    releaseSizingInstance()
+  }
+
+  /**
+   * Tell the sizing engine this instance is finished, then forget its id.
+   *
+   * The engine's per-instance maps otherwise keep an entry for every mount the
+   * process ever made, which leaks for the life of a list that scrolls: expiry of
+   * the Fabric `State` is not a signal it can wait for (review S3). Idempotent, so
+   * the recycle path (which goes through [drop] first) is fine.
+   */
+  private fun releaseSizingInstance() {
+    val instanceId = sizingInstanceId
     sizingInstanceId = NitroUiSizing.NO_INSTANCE
     lastReportedSize = null
+    // Review N2: a flush listener registered on a `ViewTreeObserver` that never
+    // attaches again would leave this true forever, and this host would never
+    // schedule a flush after its first recycle. The listener itself dies with the
+    // (stale) observer, so resetting the flag costs nothing.
+    flushScheduled = false
+    if (instanceId != NitroUiSizing.NO_INSTANCE) {
+      NitroUiSizing.forget(instanceId)
+    }
   }
 
   // MARK: - View lifecycle
@@ -511,7 +531,16 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   override fun onConfigurationChanged(newConfig: android.content.res.Configuration?) {
     super.onConfigurationChanged(newConfig)
     lastReportedSize = null
-    NitroUiSizing.invalidateEnvironment()
+    // Only the parts of a configuration that can move a control's size belong in
+    // the signature. A rotation is a configuration change that moves no size, and
+    // this fires once per mounted view, so bumping unconditionally would clear a
+    // cache another control had just filled (review S2). Compose re-measures the
+    // content by itself after a real change, and the new measure arrives as a
+    // report; the engine decides whether the epoch moves.
+    val locales = newConfig?.locales?.joinToString(",") { it.toLanguageTag() } ?: ""
+    NitroUiSizing.invalidateEnvironmentIfChanged(
+      "${newConfig?.fontScale}|${newConfig?.densityDpi}|$locales",
+    )
   }
 
   private companion object {
