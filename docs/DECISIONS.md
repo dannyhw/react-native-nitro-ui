@@ -62,8 +62,11 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   configuration per environment epoch** (no exact cache entry yet) may show the declared fallback
   for one frame before its correction lands; every instance whose configuration is already exact
   in the cache must lay out exact on its first frame (0 stale). On Android a cold batch corrects
-  up to the immediate budget (2) inside the cancelled frame and the rest on the next frame — same
-  rule, documented; no budget increase (synchronous pushes risk re-entering `measureContent`).
+  up to the immediate budget inside the cancelled frame and the rest on the next frame — same
+  rule, documented; no budget increase (synchronous pushes risk re-entering `measureContent`). The
+  budget is platform-set since T12 (`flush(immediateBudget)`): 2 on iOS, 1 on Android, where each
+  synchronous push is a full commit inside the pre-draw pass that cancels the frame — and one still
+  measures `stale=0` for a cold batch, because the correction is shared by the configuration.
   No "hide until measured" mode in 0.1. Declared fallbacks must be accurate per OS (D14), and
   `prewarm` is the recommended way to make first mounts exact. Harness tests assert exactly this
   rule, with poisoned (wrong) fallbacks so a failed correction is visible.
