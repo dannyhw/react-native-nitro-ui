@@ -12,3 +12,4 @@
 - iOS 18 CI row for declared fallbacks (release readiness).
 - Flaky Android `Sizing › sizes a control inside a Modal` (`corrections=0`), seen twice in G1 fix round 1, unreproducible after APK rebuild; T14 should try to reproduce (it touches fallback/first-measure timing).
 - Harness fails on Node 26 with a misleading ESM error; `.nvmrc` pins 24 — document in CONTRIBUTING or fix.
+- G1 Slider verifier follow-ups (8 items) are listed in docs/tasks/G1-slider.report.md "Follow-ups".
