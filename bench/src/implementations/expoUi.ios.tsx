@@ -1,14 +1,30 @@
-import { Button, Host, Slider, Toggle, VStack } from '@expo/ui/swift-ui';
-import { buttonStyle, labelsHidden } from '@expo/ui/swift-ui/modifiers';
+import {
+  Button,
+  Host,
+  Picker,
+  Slider,
+  Text,
+  Toggle,
+  VStack,
+} from '@expo/ui/swift-ui';
+import {
+  buttonStyle,
+  labelsHidden,
+  pickerStyle,
+  tag,
+} from '@expo/ui/swift-ui/modifiers';
 
 import type { BenchListProps } from '../types';
 import {
+  SEGMENTED_SELECTION,
   buttonTitle,
   onPress,
+  onSegmentChange,
   onSliderChange,
   onValueChange,
   range,
   rowStyle,
+  segmentedOptions,
   sliderValue,
   stackStyle,
 } from './shared';
@@ -25,6 +41,40 @@ const LABELS_HIDDEN = [labelsHidden()];
  * same control.
  */
 const BORDERED_PROMINENT = [buttonStyle('borderedProminent')];
+
+/**
+ * `.segmented`, which is the same native control nitro-ui hosts, reached through
+ * Expo's bridge instead of through Nitro - the point of the comparison.
+ * `labelsHidden()` for the reason `BenchToggle` has: a labelled `Picker` lays out
+ * and renders a label `Text` that neither the floor nor the control under test
+ * has, and inflating this arm's mount, CPU and memory in the one comparison this
+ * project publishes is what T02 review B3 is about.
+ */
+const SEGMENTED_MODIFIERS = [pickerStyle('segmented'), labelsHidden()];
+
+/**
+ * The `tag` a segmented option needs, one array per position, built once.
+ *
+ * A fresh `[tag(n)]` per render would hand the host a `modifiers` prop whose
+ * identity changed on every flip (T02 review NIT). The count is fixed at three
+ * because every arm's option list has three labels; `tagModifiers` says so out
+ * loud rather than passing `undefined` to a control if that ever changes.
+ */
+const TAG_MODIFIERS = [[tag(0)], [tag(1)], [tag(2)]];
+
+/**
+ * @param {number} segment
+ */
+function tagModifiers(segment: number) {
+  const modifiers = TAG_MODIFIERS[segment];
+  if (modifiers == null) {
+    throw new Error(
+      `bench: the Expo UI segmented arm supports ${String(TAG_MODIFIERS.length)} ` +
+        `options; option ${String(segment)} has no tag to carry its selection.`
+    );
+  }
+  return modifiers;
+}
 
 /**
  * No `label`, plus `labelsHidden()`.
@@ -82,6 +132,27 @@ function BenchSlider({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
+ * A segmented `Picker` whose options are the same three labels every other arm
+ * draws, with the same one selected.
+ */
+function BenchSegmented({ index, value }: { index: number; value: boolean }) {
+  return (
+    <Picker
+      testID={`bench-expo-segmented-${String(index)}`}
+      selection={SEGMENTED_SELECTION}
+      onSelectionChange={onSegmentChange}
+      modifiers={SEGMENTED_MODIFIERS}
+    >
+      {segmentedOptions(value).map((label, segment) => (
+        <Text key={label} modifiers={tagModifiers(segment)}>
+          {label}
+        </Text>
+      ))}
+    </Picker>
+  );
+}
+
+/**
  * `@expo/ui` worst case for the library: one SwiftUI hosting view per control.
  * Expo UI always needs a `Host`, so both Expo arms are required for a fair
  * comparison (docs/research/setup-decisions.md SS6).
@@ -101,6 +172,10 @@ export function ExpoUiHostPerControlList({
         component === 'button' ? (
           <Host key={index} matchContents style={style}>
             <BenchButton index={index} value={value} />
+          </Host>
+        ) : component === 'segmented-control' ? (
+          <Host key={index} matchContents style={style}>
+            <BenchSegmented index={index} value={value} />
           </Host>
         ) : component === 'slider' ? (
           <Host key={index} style={style}>
@@ -124,15 +199,19 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
   if (n === 0) {
     return null;
   }
-  if (component === 'button') {
+  if (component === 'button' || component === 'segmented-control') {
     // `matchContents` for the batch's host too, for the same reason as the
     // per-control arm; the switch/slider hosts stay exactly as published.
     return (
       <Host matchContents style={stackStyle(n, component)}>
         <VStack spacing={0}>
-          {range(n).map((index) => (
-            <BenchButton key={index} index={index} value={value} />
-          ))}
+          {range(n).map((index) =>
+            component === 'button' ? (
+              <BenchButton key={index} index={index} value={value} />
+            ) : (
+              <BenchSegmented key={index} index={index} value={value} />
+            )
+          )}
         </VStack>
       </Host>
     );
