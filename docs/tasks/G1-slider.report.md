@@ -577,4 +577,7 @@ Harness/tooling (reported rather than fixed here, since they are upstream):
 | `efba374` | `chore(slider)`: regenerated API report and publish manifest |
 | `2825825` | `fix(ios)`: a box with no height must not stop a `fillWidth` measure |
 | `58a1258` | `test(slider)`: the two sizing questions a `fillWidth` control must answer apart |
-| _tip_ | `docs(slider)` / `docs(sizing)` / `docs(bench)`: the component page, screenshots, this report and the two guide corrections |
+| `eea3cf2` | `docs(sizing)`: the `fillWidth` measure waits for width, not height |
+| `b57623a` | `docs(bench)`: what a floor is, and what a cell without a mount signal means |
+| `4067f8b` | `docs(slider)`: the component page, the screenshots and this report |
+| _tip_ | `docs(sizing)`: re-point the host line references the fix moved, and record the SHAs above — the SHA of this commit is in the task hand-off, not in the file it names |
