@@ -1,4 +1,10 @@
-import { Button, nitroUiCore, Slider, Switch } from 'react-native-nitro-ui';
+import {
+  Button,
+  SegmentedControl,
+  nitroUiCore,
+  Slider,
+  Switch,
+} from 'react-native-nitro-ui';
 import * as React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -65,6 +71,10 @@ export default function App(): React.ReactElement {
         <Switch testID="SMOKE-switch" defaultValue={true} />
         <Slider testID="SMOKE-slider" defaultValue={0.5} />
         <Button testID="SMOKE-button" title="Save" />
+        <SegmentedControl
+          testID="SMOKE-segmented-control"
+          options={['One', 'Two', 'Three']}
+        />
       </ScrollView>
     </View>
   );
