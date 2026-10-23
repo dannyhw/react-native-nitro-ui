@@ -303,13 +303,18 @@ namespace margelo::nitro::nitroui {
       return;
     }
     nextRegistrySweepAt_ = registry_.size() + kRegistrySweepStride;
-    for (auto iterator = registry_.begin(); iterator != registry_.end();) {
-      if (iterator->second.state.expired()) {
-        forgetLocked(iterator->first);
-        iterator = registry_.erase(iterator);
-      } else {
-        ++iterator;
+    // `forgetLocked` erases the registry node itself, so it must never be called
+    // from a loop holding an iterator into `registry_` - the loop here used to read
+    // the node it had just freed (review F1, reproduced under ASan). Collect the
+    // expired ids first, then forget each one.
+    std::vector<int64_t> expired{};
+    for (const auto& entry: registry_) {
+      if (entry.second.state.expired()) {
+        expired.push_back(entry.first);
       }
+    }
+    for (const int64_t instanceId: expired) {
+      forgetLocked(instanceId);
     }
   }
 
