@@ -15,5 +15,6 @@
 | G3 | Progress | — | — | planned (after T02 + T11) |
 | G2 | Button (owns R3 sizing test) | Apex | Opus | fix round 1 (F1 stuck-at-fallback, bench port to main shape, docs) |
 | T15 | Real-input verification (OS taps/drags on Switch, Slider; Button added after G2 merges) | Apex | — | in progress (reset onto main) |
+| FIX2 | A props update must not resurrect a superseded measurement (T15 Finding 1: iOS controlled Switch off-window) | Apex | — | implemented (1 round), awaiting review — `FIX2-ios-switch-layout.report.md` |
 | G4 | SegmentedControl (+ Picker only if time, D19) | — | — | planned (after G2) |
 | G5 | DatePicker | — | — | moved to 0.2 (D19) |
