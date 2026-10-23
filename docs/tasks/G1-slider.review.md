@@ -360,3 +360,129 @@ priming before anyone quotes them. The counters are clean there; the spread is h
   reasoning for the handshake is correct.
 - The idempotent `beginDrag`, the range interpreted only in `afterUpdate`, the CADisplayLink in
   `.common` modes, and the weak proxy are all careful work.
+
+---
+
+## Fix round 1 verification
+
+**Branch:** `task/G1-slider` @ `38f7335`. Reviewed `git diff 9b583d8..38f7335`, but only the
+round's own commits (`4a419c8..38f7335`). Main's content from the merge was reviewed elsewhere.
+**Method:** code, tests, logs, and the bench result files. No simulators or emulators were used.
+- `bun run check` was re-run on the tip: **exit 0**. That covers 111 Jest tests, `test:native`
+  (including the new handshake and slider-value vectors), nitrogen (no drift), api-extractor,
+  publint and the manifest.
+- `test:native:android` (JVM only) also passes: 36 tests, 0 failures.
+- The working tree is clean apart from this section.
+- The device harness counts (54/54 on each platform) are the implementer's. Their logs exist
+  (`/tmp/g1-ios-harness-final3.log`, `/tmp/g1-android-full-{1,2}.log`), but I did not re-run them.
+
+### Verdict: MERGE-AFTER-SMALL-FIXES
+
+There are two small fixes and no re-review. D19 allows a doc-only round to merge on green gates;
+fix 1 below is a single line of Kotlin.
+
+1. **Android: a disabled Slider no longer tells TalkBack it is disabled. This regression came in
+   with this round.**
+   - The cause is `Modifier.clearAndSetSemantics { … }` at `HybridNitroUiSlider.kt:535-541`. It
+     clears M3's own `sliderSemantics`, and that function is where `disabled()` lived.
+   - I confirmed this in the M3 1.4.0 bytecode: `SliderKt.sliderSemantics$lambda` calls
+     `SemanticsPropertiesKt.disabled` when `!enabled`.
+   - The replacement block never restates it. TalkBack now reads a disabled Slider as an enabled,
+     adjustable control. Its action is still refused (`accessibilityStepToward` returns false at
+     `:218`), so the control looks live but does nothing.
+   - iOS gets this right: the element adds `.notEnabled` (`HybridNitroUiSlider.swift:584`).
+   - **Fix:** add `if (!enabled) disabled()` inside the block (`enabled` is already a parameter
+     of `SliderTrack`).
+2. **The report contains a red-proof that the committed test cannot produce.**
+   - `G1-slider.report.md:706` cites `finishes a drag that a write from JS lands inside` →
+     `expected 0.8 to be 0.5` (`/tmp/g1-ios-harness-1.log`). That log comes from an earlier draft
+     of the test: the failing assertion is `expect(change[last]).toBe(landed)` at old line 839.
+   - The committed test (`Slider.harness.tsx:789-874`) accepts either release value. Its own
+     comment says "the JS stream cannot see the bug".
+   - The real gates for fix 1 are `handshake.test.swift:117-151` and
+     `NitroUiControlledValueTest.kt:116-147`. Both go red by construction without the
+     `unreported` guard.
+   - **Fix:** replace the row with those two tests. This is the same class of error the report
+     itself calls out at `:722-726`.
+
+### 1. The 8 required fixes
+
+All 8 are done. The review's R1–R7, plus the bench-honesty list, map onto the report's 1–8.
+
+| # | Done? | Where |
+| - | ----- | ----- |
+| R1 handshake race | Yes | `NitroUiModel.swift:54,78`, `NitroUiModel.kt:58,82`. Set at `HybridNitroUiSlider.swift:255` / `.kt:282`. Cleared at the tick (`.swift:351-352`, `.kt:338-339`), `cancelDrag` (`.swift:283`, `.kt:311`), and through `endDrag`. Host tests at `handshake.test.swift:117-151` and `NitroUiControlledValueTest.kt:116-147`. Harness case at `Slider.harness.tsx:789` (non-discriminating; see fix 2). |
+| R2 ties | Yes | `NitroUiSliderValue.kt:103-104`, used in `division` `:82`, snapping `:146` and `tidy` `:178`. The Swift name is `NitroUiSliderValue.swift:81-83`. Mid-range and negative tie vectors are in both suites (`slider-value.test.swift:100-109`, `NitroUiSliderValueTest.kt:120-129`). |
+| R3 a11y | Yes | Directional rule: `stepped` (`.swift:186-229`, `.kt:210-253`), with shared vectors that include negative and non-aligned ranges. iOS vends an element (`HybridNitroUiSlider.swift:552-596`, installed at `:668`) whose increment/decrement goes to `accessibilityStep` (`:314-322`: begin → drag → end in one turn). Android: `clearAndSetSemantics` + `setProgress` (`.kt:533-541`) → `accessibilityStepToward` (`:217-236`). Probes with no fallback are at `.swift:979-1000` and `.kt:965-1036`, and the harness asserts `performed` at `Slider.harness.tsx:100`. |
+| R4 `endDrag` guard | Yes | `.swift:270`, `.kt:296`. |
+| R5 bench | Yes | Both platforms re-run on the merged tree, Android primed (`ART: speed-profile` is recorded in the artifact). After 272e471 the only native change is a one-line no-op in Swift (`498f3fe`). See §5 below. |
+| R6 colours | Yes | `SliderColorsCache` `.kt:388-455`, used at `:499`. |
+| R7 example/docs | Yes | Tab bar inset at `App.tsx:38-39,102`. `defaultValue={70}` and the label `70` at `SliderScreen.tsx:170,179`. The pump wording is now accurate (`slider.md:141-145`; the kdoc at `.kt:73-82` says it re-posts per sample). The `pending` comment was rewritten (`.swift:157-162`). |
+| Weak tests | Yes | Reuse is pinned per platform (`Slider.harness.tsx:1147-1153`). The pump-stops assertions use `nuiTestFramePumpArmed`. A flat-range render is at `:1370`. |
+
+### 2. `unreported` and Switch
+
+- **No change to Switch.** Switch never writes `unreported` (a grep of `ios/`, `android/src`
+  finds only Slider and tests), so it stays `nil`/`null`. With `unreported` nil, `reconcile()` is
+  byte-for-byte the old predicate on both platforms. Switch had no changes in the round's own
+  diff.
+- **Slider cannot get stuck refusing writes.**
+  - Every write to `unreported` (`drag(to:)` / `dragTo`) also arms the pump. The pump's only
+    `stop()` comes after `deliverUnreported()` (`endDrag`) or after clearing it (`cancelDrag`).
+  - Recycle clears it on both platforms: iOS `prepareForRecycle` runs `cancelDrag()` and then
+    replaces `state` (`.swift:857-858`); Android `reset()` runs `cancelDrag()` and sets
+    `state.unreported = null` (`.kt:348,359`).
+  - Drop clears it as well, via `cancelDrag()` in `onDropView` (`.swift:876`, `.kt:852`).
+  - A refused write is not queued, but the next echo commit always carries the app's current
+    value. A rejected-then-reverted value therefore still lands after release.
+
+### 3. A11y safety
+
+- **"No fallback" is test-only and safe.** Both probes are `nuiTest*` seams. When no node or
+  element is found they only write a report string; the value and events are untouched. The
+  harness then fails on `/performed /`.
+- **The production TalkBack path does not depend on the probe.** It is the semantics action
+  itself, and the probe's ambiguity check confirms the merged tree holds exactly one
+  `SetProgress` node.
+- **iOS: a VoiceOver write can no longer open a drag.**
+  - The host's `accessibilityElements = [a11yElement]` means UIKit never descends to SwiftUI's
+    Slider element. The SwiftUI side also hides children (`.accessibilityElement(children:
+    .ignore)` + `.accessibilityAdjustableAction`).
+  - No reader path writes the `Binding`. `accessibilityStep` opens and closes the drag in one
+    turn, so the pump is stopped and `dragging` is false afterwards.
+
+### 4. Rounding and negative values
+
+- **Consistent for every tie, including negative ones.** Kotlin's `roundHalfAway` is
+  `x < 0 ? -floor(-x + 0.5) : floor(x + 0.5)`. It is symmetric, and it matches Swift
+  `.rounded()`: −2.5 → −3, −0.5 → −1, 2.5 → 3, checked by running both formulas.
+- **Negative ranges are allowed and vectored on both platforms.** Examples:
+  `quantize(-2.5, -5…5, 1) = -2` (counted from the minimum), and `stepped` on `-10…-1 step 3`.
+- **Snapping never rounds a negative count.** The count is `(clamped - min) / step >= 0`. Only
+  `tidy` sees negative values, and it is symmetric too.
+- One divergence remains, and it is a single value; it is listed as a follow-up.
+
+### 5. Bench verdicts
+
+Both tables now carry only the verdicts the rules allow. I checked them against the artifacts.
+
+- **iOS** (`f5c0450-ios-20261023T100532Z.md`): the three cells that carry verdicts are clean.
+  These are update `presented`, update `mounted` (no spread flag, zero counters on the
+  nitro-ui and shared-host cells) and memory.
+  - Every mount row is "no verdict". This matches the spread flags at `:91,106` and
+    `presentedBeforeMount=76` at `:108`.
+  - Update UI CPU and update JS commit are "no verdict" (`:146,160`).
+  - The withdrawn 0.99× and 0.96× claims are stated as withdrawn.
+- **Android** (`7b6015e-android-…`): the only flag is UI CPU/unmount (`:77,105`), and that
+  metric carries no verdict. Mount `presented` at 1.01× is not claimed as a meet.
+
+### Follow-ups (one line each)
+
+- Kotlin `floor(x + 0.5)` rounds `0.49999999999999994` to 1, where Swift `.rounded()` gives 0. That single value is the only divergence left.
+- `drag(to:)` calls `refreshAccessibility()` on every touch sample (`HybridNitroUiSlider.swift:256`), which formats a String per sample on the drag path. The tick at `:353` already refreshes.
+- Xcode warning from this round's seam: `element.perform(selector)` result unused (`HybridNitroUiSlider.swift:997`). Fix with `_ =`.
+- An a11y step during an in-flight finger drag ends that finger's drag on both platforms, because `beginDrag` is a no-op and `endDrag` closes the drag.
+- The comment at `HybridNitroUiSlider.kt:527-529` says M3 1.4 publishes no progress range. Its `sliderSemantics` does call `progressSemantics`. The comment is wrong; the code is unaffected.
+- The Android harness asserts `nextHandle !== abandonedHandle` (`Slider.harness.tsx:1152`). That pins RN's recycler behaviour rather than ours.
+- There is still no device render for `min > max` (review §1).
+- `forceAccessibilityForTesting(true)` stays on for a probed instance after the probe. It is test-only, but undocumented in the spec comment.
