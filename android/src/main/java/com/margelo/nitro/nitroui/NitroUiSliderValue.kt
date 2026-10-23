@@ -1,6 +1,7 @@
 package com.margelo.nitro.nitroui
 
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
@@ -175,5 +176,79 @@ internal object NitroUiSliderValue {
       return value
     }
     return roundHalfAway(scaled) / scale
+  }
+
+  /**
+   * A continuous control's accessibility increment moves its value this many
+   * twentieths of its range.
+   *
+   * A screen reader does not know how far a *continuous* value should move, so
+   * both platforms' a11y layers approximate it as a fraction of the whole span -
+   * Compose's accessibility delegate derives a progress node's scroll-forward/back
+   * target from `ProgressBarRangeInfo` the same way. One twentieth is ~5% of the
+   * track: visible movement that is not a jump.
+   */
+  const val CONTINUOUS_STEP_DIVISIONS = 20.0
+
+  /**
+   * The next legal value above [from] (or below it, when [up] is false).
+   *
+   * This is the rule an accessibility increment follows, and it exists because the
+   * platform's own increment is not this control's rule. A range that does not end
+   * on a step is drawn continuous and quantised here, so the platform moves by a
+   * fraction of the range and native quantises the result - and on 0..10 step 3 a
+   * fraction smaller than half a step quantises *back to where it was*: the
+   * increment reports success and the thumb never moves. The platform cannot be
+   * handed the step in that case, because a `steps =` count that rounds the range
+   * would make [maximum] unreachable (see [Division.endsOnStep]).
+   *
+   * So the direction is what the platform may contribute, and the destination is
+   * computed here: the next stop of the grid [quantize] recognises, in that
+   * direction. The bounds are stops too, so the answer at a bound is the bound -
+   * an increment at the end of the track moves nothing rather than wrapping.
+   */
+  fun stepped(
+    from: Double,
+    up: Boolean,
+    minimum: Double,
+    maximum: Double,
+    step: Double,
+  ): Double {
+    // Start from a legal value: quantize clamps, tidies, and decides what a
+    // nonsense input or a widthless range means, so neither branch below has to
+    // repeat those rules.
+    val start = quantize(from, minimum, maximum, step)
+    val division = division(minimum, maximum, step)
+    if (division == null) {
+      // Continuous (no usable step, or a range with no width to move along).
+      if (maximum <= minimum) {
+        return start
+      }
+      val stride = (maximum - minimum) / CONTINUOUS_STEP_DIVISIONS
+      return quantize(start + if (up) stride else -stride, minimum, maximum, step)
+    }
+    // Steps counted from `minimum`, which is what quantize snaps to. The same
+    // tolerance as division's, for the same reason: three tenths of a step is not
+    // the same binary number as the step three times.
+    val stepsFromMinimum = (start - minimum) / step
+    val tolerance = maxOf(DIVISION_TOLERANCE, abs(stepsFromMinimum) * DIVISION_TOLERANCE)
+    val target =
+      if (up) {
+        // The next whole step above. Floor first so a value sitting *on* a stop
+        // moves to the one after it rather than staying put.
+        minimum + (floor(stepsFromMinimum + tolerance) + 1) * step
+      } else {
+        minimum + (ceil(stepsFromMinimum - tolerance) - 1) * step
+      }
+    // Past either end means the end is the next stop: quantize treats the maximum
+    // as a legal value even when it is off the grid, so the top of the track stays
+    // reachable.
+    if (target > maximum) {
+      return tidy(maximum)
+    }
+    if (target < minimum) {
+      return tidy(minimum)
+    }
+    return tidy(target)
   }
 }
