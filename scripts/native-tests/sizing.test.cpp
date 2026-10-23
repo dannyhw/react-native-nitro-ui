@@ -636,6 +636,51 @@ namespace {
     checkEquals(immediate, int64_t{NitroUiSizingEngine::kImmediateBudgetPerTurn}, "at most the budget is immediate");
     checkEquals(pushes.size(), size_t{6}, "one state update per instance");
     checkEquals(countPushes(true), size_t{NitroUiSizingEngine::kImmediateBudgetPerTurn}, "and the flags on the pushes agree");
+
+    /**
+     * The budget is the platform's, not the engine's (T12 phase 2). Android
+     * flushes inside the pre-draw pass it then cancels, so it spends one
+     * synchronous push; iOS spends the default two because its pushes join a
+     * commit that has not happened yet. The engine only has to honour whatever
+     * number it is handed, including none.
+     */
+    pushes.clear();
+    for (int64_t id = 191; id < 191 + 6; id++) {
+      bind(id, static_cast<int>(id));
+      measure(id, "one-at-a-time|");
+      engine().report(id, 70, 30, 0);
+    }
+    check(engine().flush(1), "a flush given one synchronous slot still corrects the batch");
+    const NitroUiSizingCounters spentOne = engine().stats();
+    checkEquals(spentOne.correctionsImmediate - after.correctionsImmediate, int64_t{1}, "one correction was synchronous");
+    checkEquals(spentOne.correctionsBatched - after.correctionsBatched, int64_t{5}, "the other five are batched");
+    checkEquals(countPushes(true), size_t{1}, "and the push flags agree with the budget it was given");
+
+    pushes.clear();
+    for (int64_t id = 291; id < 291 + 3; id++) {
+      bind(id, static_cast<int>(id));
+      measure(id, "nothing-synchronous|");
+      engine().report(id, 70, 30, 0);
+    }
+    check(engine().flush(0), "a flush with no synchronous slot still corrects the batch");
+    checkEquals(countPushes(true), size_t{0}, "and none of its pushes claims a synchronous commit");
+    checkEquals(pushes.size(), size_t{3}, "all three went out asynchronously");
+    // A negative budget is a caller bug, and it must still not skip corrections.
+    // What this pins is that the corrections go out anyway; it is documentation
+    // rather than a gate for the clamping arithmetic itself, because a negative
+    // `remaining` is already not greater than zero, so removing the clamp in
+    // `applyReports` would change nothing observable here. The behaviour worth
+    // guarding against is a budget check that returns early, and the two checks
+    // below are what would catch that.
+    pushes.clear();
+    for (int64_t id = 391; id < 391 + 2; id++) {
+      bind(id, static_cast<int>(id));
+      measure(id, "clamped|");
+      engine().report(id, 70, 30, 0);
+    }
+    check(engine().flush(-4), "a negative budget is clamped, not honoured");
+    checkEquals(countPushes(true), size_t{0}, "which means none synchronous");
+    checkEquals(pushes.size(), size_t{2}, "and the corrections still go out");
   }
 
   /**

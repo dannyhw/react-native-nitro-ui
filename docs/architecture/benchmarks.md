@@ -111,6 +111,25 @@ come back as NDJSON written inside the app container (`Documents/bench.ndjson` o
 iOS, external files dir on Android) and echoed to the system log under
 `NITRO_BENCH` as a fallback.
 
+On Android the runner also puts the app in the compiled state a device eventually leaves
+it in (`scripts/bench/run.mjs`): it asks `androidx.profileinstaller` to install the APK's
+merged baseline profile (the `INSTALL_PROFILE` broadcast), compiles from it
+(`cmd package compile -m speed-profile -f`), and logs the `dumpsys package dexopt` status it
+ended up with. An install alone only *stores* that profile — nothing reads it until the app
+itself writes the profile file, and the compiler that would do this in the background runs
+on an idle window — so without this step a measured launch may or may not have run
+AOT-compiled code depending on how long the device sat idle. All implementations live in
+one APK behind one install, so it lands on every arm identically (D9's pairing); what it can
+change is not only the effect of a library's own `baseline-prof.txt`
+(`docs/architecture/core.md` §13). Priming changes every arm's absolutes *and* the ratios
+between the arms, because the arms gain unequally from compiled Compose and RN: T12 measured
+mount `presented` against the shared host move 1.22× → 0.99× and memory 2.28× → 2.45× with no
+library change at all. ART compile state is therefore a **comparability break like a runtime
+change is** — Android runs before T12 (`status=verify`: interpreter + JIT) and runs after it are
+two regimes, and neither absolutes nor ratios may be compared across that boundary. A run that
+ends at anything but `speed-profile` measured the interpreter, and `--update-baseline` refuses it
+(T12 round 2).
+
 Scenarios: `mount` (N = 1/50/200), `update` (N = 1/50, K flips awaited per
 frame), `memory` (N = 200, after GC), `leak` (repeated mount/unmount of N = 200).
 Plans: `quick` = `mount:50`, `update:50`, `memory:200`; `full` adds N = 1/200 and
@@ -261,6 +280,9 @@ Every run also records what machine produced it - hostname, core count, CPU
 model (`os.cpus()[0].model`), load averages, RAM, Xcode version or Android image
 - because D15 keeps device *keys* class-level (`android35-emu-pixel9` is this
 desk's AVD and CI's) and uses the recorded CPU to tell same-class machines apart.
+On Android it records the ART state the run was measured in as well
+(`art: { packageName, status, primed, attempts }`), because that state decides which of the two
+regimes above a result belongs to; a result without it is pre-T12 and is a `verify` number.
 
 ## Render counts (hard gate)
 
