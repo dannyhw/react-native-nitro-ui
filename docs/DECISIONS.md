@@ -90,8 +90,11 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
     infrastructure tasks before release readiness unless a component is blocked by a bug.
   - **Perf:** a D15 miss after one optimisation task is documented (with follow-up), not chased.
 - **D20 (FIX2)** Exception to T11's S1 rule ("a props-only turn costs no measure"): an instance
-  whose laid-out size was ever **corrected** re-dirties its measurement on later props-only
-  clones (`requiresFreshMeasure`), because Yoga keeps the pre-correction answer in the node's
-  measurement cache and RN carries it into every clean clone. Never-corrected instances keep the
-  zero-cost path. Any future sizing change must keep the "box stays right across props turns
-  after a correction" harness cases green.
+  whose laid-out size was ever **corrected** re-dirties its measurement on later props-only clones
+  (`requiresFreshMeasure`). Reason: React clones from its own pre-correction revision, whose Yoga
+  cache and `layoutMetrics_` still hold the old size, and our `adopt` creates a fresh State on every
+  props change, so RN's `progressState` never re-dirties it. Cost for a flagged instance: one
+  measure + a Yoga pass up the dirtied ancestors per props turn (measured 8–48 µs on host for
+  35–316 node trees). Never-corrected instances keep the zero-cost path. Any future sizing change
+  must keep the "box stays right across props turns after a correction" harness cases green.
+  Cheaper non-sticky alternative (dirty on obsolete state) is a follow-up.
