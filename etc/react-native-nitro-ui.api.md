@@ -76,6 +76,9 @@ export interface NitroUiSizingTraceEvent {
 }
 
 // @public
+export function prewarm(componentNames: readonly string[]): number;
+
+// @public
 export function Switch(input: SwitchProps): JSX.Element;
 
 // @public

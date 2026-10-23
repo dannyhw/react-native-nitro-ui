@@ -37,7 +37,8 @@ function getCore(): NitroUiCore {
  * `setSizingTraceEnabled`/`drainSizingTrace` log every size a node was laid out
  * with, `invalidateSizingEnvironment`/`seedSizingSize` force a cold or warm
  * cache, and `prewarmSizing` adopts a component's declared size as this
- * environment's cached answer. None of them is app API.
+ * environment's cached answer. None of them is app API except pre-warming, which
+ * an app may want at startup: that is `prewarm`, exported on its own.
  */
 export const nitroUiCore: {
   now(): number;
@@ -89,3 +90,21 @@ export const nitroUiCore: {
     return getCore().drainSizingTrace();
   },
 };
+
+/**
+ * Adopt each named component's declared size as this environment's cached size,
+ * so its first mount is laid out at the right size and costs no correction.
+ *
+ * Call it once, early - after the imports, before the first screen renders - for
+ * the components the first screen uses. It is a guess with the library's own
+ * declared number behind it (`docs/architecture/sizing.md`), not a measurement:
+ * if the control's real size differs, the first instance corrects it like any
+ * cold mount would, so calling this can never make a layout worse.
+ *
+ * Returns how many components were seeded. A name the library does not know
+ * costs nothing and counts as zero, which is what makes it safe to list a
+ * component this version of the library does not have.
+ */
+export function prewarm(componentNames: readonly string[]): number {
+  return nitroUiCore.prewarmSizing(componentNames);
+}
