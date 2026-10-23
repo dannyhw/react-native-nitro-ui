@@ -587,3 +587,38 @@ What you still need, unchanged from §2-§8:
   Compose, a phase/`TimelineView` animator on SwiftUI) and needs no JS round trip. If a props write starts an animation,
   note that the host suppresses animation on the first commit and the first commit after a recycle
   (`ios/core/NitroSwiftUIHost.swift:170-184`) — so a recycled row does not animate from the previous row's value.
+
+## 13. The Android baseline profile
+
+`android/src/main/baseline-prof.txt` holds ART rules for this library's own classes
+(`HSPLcom/margelo/nitro/nitroui/**->**(**)**`). AGP's `merge*ArtProfile` task folds it, plus the file
+from every other library, into the host app's `assets/dexopt/baseline.prof`; ART then compiles the
+app's dex from that profile instead of interpreting our host view, its composition and the generated
+`HybridView` manager on the first launches. The bench measures what that is worth
+(`docs/tasks/T12-android-perf.report.md`, Phase 2) and `scripts/bench/run.mjs` makes sure the profile
+is actually in force before it measures.
+
+**Consumer defaults - nothing to add.** The merge needs no configuration, and the runtime piece
+arrives on its own: `androidx.profileinstaller` is a *runtime* dependency of Compose
+(`ui-android-1.11.4.pom` -> `profileinstaller:1.4.0`), which this library requires, so any app that can
+mount a nitro-ui control already ships it. On API 29+ ART also consumes the profile in its own
+background dex-opt pass; API 24-28 are covered by profileinstaller writing it at first launch. The
+library therefore does not declare the dependency itself - it would be a second path to the same
+artifact for every consumer, for a file the consumer may never use.
+
+**What does not happen on its own** (all measured on an API 35 emulator, where a library author would
+reasonably expect it to):
+
+| Step                                                               | `dumpsys package dexopt`   |
+| ------------------------------------------------------------------ | -------------------------- |
+| `adb install -r`                                                    | `status=verify`            |
+| `cmd package bg-dexopt-job` (job finished)                          | `status=verify`            |
+| `cmd package compile -m speed-profile -f`, before any launch        | `status=verify`            |
+| start the app once, then `cmd package compile -m speed-profile -f`  | `status=speed-profile`     |
+
+A stored profile is not a compiled app: the compiler reads the app's *profile file*, which
+profileinstaller writes a few seconds after process start, so `-m speed-profile` before the first
+launch has nothing to read and quietly falls back to `verify`. That fallback is why the bench reads the
+status back and logs it, and why it retries - a run that measured the interpreter must not be able to
+report a profile result. It is also why the bench primes through profileinstaller's own
+`INSTALL_PROFILE` hook rather than by hand: that is the path a consumer's app takes.
