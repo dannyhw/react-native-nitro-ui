@@ -95,6 +95,34 @@ class NitroUiSliderValueTest {
     expect(quantize(0.4, Double.NaN, 1.0, 0.0), 0.4, "an unbounded range keeps the value")
   }
 
+  /**
+   * Ties, the reason [NitroUiSliderValue.roundHalfAway] exists.
+   *
+   * `kotlin.math.round` is `Math.rint`: it rounds a tie to the **even** neighbour.
+   * Swift's `.rounded()` goes away from zero, and every quantity this rule rounds is
+   * a count of steps, where "up" is the rule. Before `roundHalfAway` these four
+   * vectors were the reviewer's repro: Android answered 0, 2, 0 and 0 where iOS
+   * answered 1, 3, 0.5 and 1, so a JS `value={2.5}` with `step={1}` put the thumb on
+   * a different stop per OS.
+   */
+  @Test
+  fun tiesGoAwayFromZeroNotToTheEvenNeighbour() {
+    expect(NitroUiSliderValue.roundHalfAway(0.5), 1.0, "0.5 goes to 1, not to the even 0")
+    expect(NitroUiSliderValue.roundHalfAway(2.5), 3.0, "2.5 goes to 3, not to the even 2")
+    expect(NitroUiSliderValue.roundHalfAway(-0.5), -1.0, "a negative tie goes away from zero")
+    expect(NitroUiSliderValue.roundHalfAway(-2.5), -3.0, "...all the way down")
+    expect(NitroUiSliderValue.roundHalfAway(0.4), 0.0, "a non-tie still rounds to nearest")
+    expect(NitroUiSliderValue.roundHalfAway(0.6), 1.0, "...in either direction")
+    expect(NitroUiSliderValue.roundHalfAway(-0.6), -1.0, "...including below zero")
+    expect(quantize(0.5, 0.0, 2.0, 1.0), 1.0, "a mid-range tie goes up")
+    expect(quantize(2.5, 0.0, 10.0, 1.0), 3.0, "a mid-range tie goes up, not to the even 2")
+    // The steps are counted *up from the minimum*, so -2.5 in -5..5 is 2.5 steps in:
+    // the tie is in the step count, and it goes up the track (old Kotlin: -3).
+    expect(quantize(-2.5, -5.0, 5.0, 1.0), -2.0, "a tie in a negative range counts steps up from the minimum")
+    expect(quantize(0.25, 0.0, 1.0, 0.5), 0.5, "a tie in a fraction goes up to the next stop")
+    expect(quantize(1.5, 0.0, 3.0, 1.0), 2.0, "an integer-valued tie is the same either way")
+  }
+
   @Test
   fun divisionKnowsWhichRangesASteppedControlCanDraw() {
     val tenths = NitroUiSliderValue.division(0.0, 1.0, 0.1)

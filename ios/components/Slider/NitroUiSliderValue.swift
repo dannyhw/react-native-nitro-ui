@@ -58,7 +58,7 @@ enum NitroUiSliderValue {
       return nil
     }
     let intervals = (maximum - minimum) / step
-    let nearest = intervals.rounded()
+    let nearest = roundHalfAway(intervals)
     let tolerance = max(divisionTolerance, abs(intervals) * divisionTolerance)
     // `nearest >= 1`: a range shorter than a hair of one step is not "exactly one
     // step wide", and calling it that would make the minimum unreachable.
@@ -66,6 +66,20 @@ enum NitroUiSliderValue {
       return Division(wholeSteps: nearest, endsOnStep: true)
     }
     return Division(wholeSteps: max(0, floor(intervals)), endsOnStep: false)
+  }
+
+  /// Rounds to the nearest integer with a tie going **away from zero**.
+  ///
+  /// Spelled as a function of its own so the two platforms cannot drift: Kotlin's
+  /// `kotlin.math.round` is `Math.rint`, which sends a tie to the **even**
+  /// neighbour, and every quantity this library rounds is a count of steps measured
+  /// from `minimumValue`, where "the thumb goes to the next stop" has to be the same
+  /// stop on both OSes. With `Math.rint`, `quantize(2.5, 0...10, step: 1)` answered 2
+  /// on Android and 3 on iOS, so a controlled `value={2.5}` put the thumb on
+  /// different stops per platform. `Double.rounded()` is already away-from-zero;
+  /// naming it here is the guard, and `roundHalfAway` is the Kotlin twin.
+  static func roundHalfAway(_ x: Double) -> Double {
+    return x.rounded()
   }
 
   /// The value a Slider shows and reports for `raw`.
@@ -108,7 +122,7 @@ enum NitroUiSliderValue {
       return tidy(clamped)
     }
 
-    let stepsFromMinimum = ((clamped - minimum) / step).rounded()
+    let stepsFromMinimum = roundHalfAway((clamped - minimum) / step)
     if stepsFromMinimum < division.wholeSteps {
       return tidy(minimum + stepsFromMinimum * step)
     }
@@ -141,6 +155,6 @@ enum NitroUiSliderValue {
     guard scaled.isFinite else {
       return value
     }
-    return scaled.rounded() / scale
+    return roundHalfAway(scaled) / scale
   }
 }
