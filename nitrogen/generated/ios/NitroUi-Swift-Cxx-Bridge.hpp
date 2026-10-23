@@ -8,18 +8,26 @@
 #pragma once
 
 // Forward declarations of C++ defined types
+// Forward declaration of `HybridNitroUiSliderSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiSliderSpec; }
 // Forward declaration of `HybridNitroUiSwitchSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 // Forward declaration of `NitroUiSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSize; }
+// Forward declaration of `NitroUiSliderSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 
 // Forward declarations of Swift defined types
+// Forward declaration of `HybridNitroUiSliderSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiSliderSpec_cxx; }
 // Forward declaration of `HybridNitroUiSwitchSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 
 // Include C++ defined types
+#include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "NitroUiSize.hpp"
+#include "NitroUiSliderSize.hpp"
 #include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
@@ -35,35 +43,6 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
  */
 namespace margelo::nitro::nitroui::bridge::swift {
 
-  // pragma MARK: std::variant<bool, nitro::NullType>
-  /**
-   * Wrapper struct for `std::variant<bool, nitro::NullType>`.
-   * std::variant cannot be used in Swift because of a Swift bug.
-   * Not even specializing it works. So we create a wrapper struct.
-   */
-  struct std__variant_bool__nitro__NullType_ final {
-    std::variant<bool, nitro::NullType> variant;
-    std__variant_bool__nitro__NullType_(std::variant<bool, nitro::NullType> variant): variant(variant) { }
-    operator std::variant<bool, nitro::NullType>() const noexcept {
-      return variant;
-    }
-    inline size_t index() const noexcept {
-      return variant.index();
-    }
-    inline bool get_0() const noexcept {
-      return std::get<0>(variant);
-    }
-    inline nitro::NullType get_1() const noexcept {
-      return std::get<1>(variant);
-    }
-  };
-  inline std__variant_bool__nitro__NullType_ create_std__variant_bool__nitro__NullType_(bool value) noexcept {
-    return std__variant_bool__nitro__NullType_(value);
-  }
-  inline std__variant_bool__nitro__NullType_ create_std__variant_bool__nitro__NullType_(nitro::NullType value) noexcept {
-    return std__variant_bool__nitro__NullType_(value);
-  }
-  
   // pragma MARK: std::variant<nitro::NullType, double>
   /**
    * Wrapper struct for `std::variant<nitro::NullType, double>`.
@@ -120,6 +99,102 @@ namespace margelo::nitro::nitroui::bridge::swift {
   }
   inline std__variant_nitro__NullType__std__string_ create_std__variant_nitro__NullType__std__string_(const std::string& value) noexcept {
     return std__variant_nitro__NullType__std__string_(value);
+  }
+  
+  // pragma MARK: std::function<void(double /* value */, double /* eventCount */)>
+  /**
+   * Specialized version of `std::function<void(double, double)>`.
+   */
+  using Func_void_double_double = std::function<void(double /* value */, double /* eventCount */)>;
+  /**
+   * Wrapper class for a `std::function<void(double / * value * /, double / * eventCount * /)>`, this can be used from Swift.
+   */
+  class Func_void_double_double_Wrapper final {
+  public:
+    explicit Func_void_double_double_Wrapper(std::function<void(double /* value */, double /* eventCount */)>&& func): _function(std::make_unique<std::function<void(double /* value */, double /* eventCount */)>>(std::move(func))) {}
+    inline void call(double value, double eventCount) const noexcept {
+      _function->operator()(value, eventCount);
+    }
+  private:
+    std::unique_ptr<std::function<void(double /* value */, double /* eventCount */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_double_double create_Func_void_double_double(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_double_double_Wrapper wrap_Func_void_double_double(Func_void_double_double value) noexcept {
+    return Func_void_double_double_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(double /* value */, double /* eventCount */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(double / * value * /, double / * eventCount * /)>>`.
+   */
+  using std__optional_std__function_void_double____value_____double____eventCount______ = std::optional<std::function<void(double /* value */, double /* eventCount */)>>;
+  inline std::optional<std::function<void(double /* value */, double /* eventCount */)>> create_std__optional_std__function_void_double____value_____double____eventCount______(const std::function<void(double /* value */, double /* eventCount */)>& value) noexcept {
+    return std::optional<std::function<void(double /* value */, double /* eventCount */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_double____value_____double____eventCount______(const std::optional<std::function<void(double /* value */, double /* eventCount */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(double /* value */, double /* eventCount */)> get_std__optional_std__function_void_double____value_____double____eventCount______(const std::optional<std::function<void(double /* value */, double /* eventCount */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiSliderSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiSliderSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiSliderSpec_ = std::shared_ptr<HybridNitroUiSliderSpec>;
+  std::shared_ptr<HybridNitroUiSliderSpec> create_std__shared_ptr_HybridNitroUiSliderSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiSliderSpec_(std__shared_ptr_HybridNitroUiSliderSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiSliderSpec>
+  using std__weak_ptr_HybridNitroUiSliderSpec_ = std::weak_ptr<HybridNitroUiSliderSpec>;
+  inline std__weak_ptr_HybridNitroUiSliderSpec_ weakify_std__shared_ptr_HybridNitroUiSliderSpec_(const std::shared_ptr<HybridNitroUiSliderSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiSliderSize>
+  using Result_NitroUiSliderSize_ = Result<NitroUiSliderSize>;
+  inline Result_NitroUiSliderSize_ create_Result_NitroUiSliderSize_(const NitroUiSliderSize& value) noexcept {
+    return Result<NitroUiSliderSize>::withValue(value);
+  }
+  inline Result_NitroUiSliderSize_ create_Result_NitroUiSliderSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiSliderSize>::withError(error);
+  }
+  
+  // pragma MARK: Result<void>
+  using Result_void_ = Result<void>;
+  inline Result_void_ create_Result_void_() noexcept {
+    return Result<void>::withValue();
+  }
+  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
+    return Result<void>::withError(error);
+  }
+  
+  // pragma MARK: std::variant<bool, nitro::NullType>
+  /**
+   * Wrapper struct for `std::variant<bool, nitro::NullType>`.
+   * std::variant cannot be used in Swift because of a Swift bug.
+   * Not even specializing it works. So we create a wrapper struct.
+   */
+  struct std__variant_bool__nitro__NullType_ final {
+    std::variant<bool, nitro::NullType> variant;
+    std__variant_bool__nitro__NullType_(std::variant<bool, nitro::NullType> variant): variant(variant) { }
+    operator std::variant<bool, nitro::NullType>() const noexcept {
+      return variant;
+    }
+    inline size_t index() const noexcept {
+      return variant.index();
+    }
+    inline bool get_0() const noexcept {
+      return std::get<0>(variant);
+    }
+    inline nitro::NullType get_1() const noexcept {
+      return std::get<1>(variant);
+    }
+  };
+  inline std__variant_bool__nitro__NullType_ create_std__variant_bool__nitro__NullType_(bool value) noexcept {
+    return std__variant_bool__nitro__NullType_(value);
+  }
+  inline std__variant_bool__nitro__NullType_ create_std__variant_bool__nitro__NullType_(nitro::NullType value) noexcept {
+    return std__variant_bool__nitro__NullType_(value);
   }
   
   // pragma MARK: std::function<void(bool /* value */, double /* eventCount */)>

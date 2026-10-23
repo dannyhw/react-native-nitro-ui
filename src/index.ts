@@ -26,4 +26,5 @@ export type {
   NitroUiSizingTraceEvent,
 } from './NitroUiCore.nitro';
 
+export { Slider, type SliderProps } from './components/Slider/Slider';
 export { Switch, type SwitchProps } from './components/Switch/Switch';
