@@ -73,7 +73,3 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
-
-# Machine state the harness runner publishes for its wall-clock gates (D21).
-# Owned by whichever harness run is alive; never evidence, never committed.
-.harness/

@@ -11,10 +11,16 @@
  * The assertions run inside the app, which cannot see this machine's load
  * average, so the harness runner publishes it where the app can read it: a
  * small JSON file under `example/`, which Metro serves live over its dev server
- * (`GET /.harness/timing-gate.json`). Metro reads that file from disk per
+ * (`GET /harness-timing/state.json`). Metro reads that file from disk per
  * request, so an assertion reads a current value, not the value from bundle
  * time - a bundling-time constant would be wrong for any run that outlived the
  * machine's quiet moment.
+ *
+ * The path is deliberately not a dotfile or a dot-directory: the first run of
+ * this gate had `GET /.harness/timing-gate.json` answered 404 by the dev server
+ * (and `<project>/.harness/` is `react-native-harness`'s own cache directory
+ * besides). Android reaches the host only through the Metro port, so this has to
+ * be a route Metro serves - there is no second port the app can fall back to.
  *
  * The file is gitignored and owned by the running harness. The refresh timer is
  * `unref()`'d so it can never keep the CLI alive, and an old file says nothing
@@ -27,10 +33,10 @@ import path from 'node:path';
 import process from 'node:process';
 
 /** Path of the gate file, relative to `example/` (Metro's dev-server root). */
-export const TIMING_GATE_FILE = path.join('.harness', 'timing-gate.json');
+export const TIMING_GATE_FILE = path.join('harness-timing', 'state.json');
 
 /** Same path as the URL Metro serves it under. */
-export const TIMING_GATE_URL = '/.harness/timing-gate.json';
+export const TIMING_GATE_URL = '/harness-timing/state.json';
 
 /** At or above this 1-minute load average, a duration gate refuses to judge. */
 export const BUSY_LOAD1 = 10;

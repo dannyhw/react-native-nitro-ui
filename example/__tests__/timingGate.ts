@@ -21,8 +21,8 @@
  * average or environment. The harness runner publishes both (see
  * `scripts/harness-timing-gate.mjs`) to a file under `example/`, which Metro
  * serves from disk per request - so this reads the load average at the moment
- * of the assertion, not the one from bundle time. `example/.harness/` is
- * gitignored and owned by whichever harness run is alive.
+ * of the assertion, not the one from bundle time. The file is gitignored and
+ * owned by whichever harness run is alive.
  */
 import { TurboModuleRegistry } from 'react-native';
 import { expect } from 'react-native-harness';
@@ -34,7 +34,7 @@ const sourceCode = TurboModuleRegistry.getEnforcing(
 ) as unknown as SourceCodeModule;
 
 /** Where the runner publishes the machine state, relative to Metro's root. */
-const GATE_PATH = '/.harness/timing-gate.json';
+const GATE_PATH = '/harness-timing/state.json';
 
 /** A read this slow is not worth blocking a test for. */
 const READ_TIMEOUT_MS = 3000;
