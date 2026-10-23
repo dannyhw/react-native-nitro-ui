@@ -21,3 +21,4 @@
 - `scripts/real-input/support.mjs:103` dies with ERR_STREAM_WRITE_AFTER_END when the script owns Metro (pre-start Metro as a workaround) (T15b).
 - Real-input runner has no render-check kind; Progress not covered there (G3).
 - G3 Progress follow-ups listed in docs/tasks/G3-progress.report.md.
+- R1 follow-ups (load-induced event flakes at load ~100, harness only shows console.log on failure, CocoaPods 1.15.2 vs lock 1.17.0, harness's own Android emulator launch dying) — docs/tasks/R1-gate-hygiene.report.md.
