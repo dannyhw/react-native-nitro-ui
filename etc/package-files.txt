@@ -13,6 +13,7 @@ android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
 cpp/HybridNitroUiCore.cpp
 cpp/HybridNitroUiCore.hpp
 cpp/NitroUiPropsCompat.hpp
+cpp/core/NitroUiClock.hpp
 cpp/core/NitroUiPerf.hpp
 ios/components/Switch/HybridNitroUiSwitch.swift
 ios/core/NitroSwiftUIHost.swift

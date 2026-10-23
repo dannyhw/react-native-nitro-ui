@@ -117,4 +117,9 @@ dependencies {
   implementation "androidx.compose.material3:material3"
   implementation "androidx.compose.ui:ui"
   implementation "androidx.compose.foundation:foundation"
+
+  // JVM unit tests for the pure core logic (`android/src/test`), run by
+  // `bun run test:native:android`. No Robolectric: the handshake has no Android
+  // imports, which is exactly why it can be tested off-device.
+  testImplementation "junit:junit:4.13.2"
 }
