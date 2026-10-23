@@ -48,3 +48,23 @@ emulator, ratios: nitro-ui vs `@expo/ui` shared-host = **1.95× UI CPU, 2.67× m
   ratios vs both Expo arms and rn-core. State plainly whether D15 is met; if not, what remains and
   the recommended next step.
 - `docs/architecture/core.md` updated with any new rules (e.g. "never allocate theme per instance").
+
+## Orchestrator answers to round 1 (Phase 1 report at `task/T12-android-perf` 034b94f)
+
+- **Sequencing:** option (a). Hold Phase 2 until T11 is merged, then rebase onto main and re-take
+  the "before" numbers on the post-T11 code (T11 rewrites the sizing path you attributed).
+- **N5 (double `updateState`):** don't implement the generator short-circuit. Record it as
+  quantified-negligible (<1 ms/launch, with evidence) in `docs/upstream.md` and core.md perf notes.
+- **`SwitchDefaults.colors()` per recomposition:** fix it first in Phase 2 (remember/hoist; a
+  process-wide cache keyed by colour inputs) and measure it alone.
+- **Baseline profile:** ship it as a library `baseline-prof.txt` (AAR-merged, covers only
+  `com.margelo.nitro.nitroui` classes), so other arms' code is unaffected. Compile the bench app
+  the same way for every run (e.g. `cmd package compile -m speed-profile -f` after install, or the
+  profileinstaller path, applied identically to all arms) and report it as its own before/after
+  row. Document what consumers get by default.
+- **Shared composition / §2 one-host-per-view contract:** do the per-instance reductions (A + B)
+  first. Then write up the structural option with the measured residual and its cost/risk
+  (including cheaper intermediate steps such as a shared parent `CompositionContext`, and reducing
+  the retained views per control). Do not build the spike in this task; the human decides.
+- **D15 outcome:** a documented miss is acceptable for 0.1 if the residual is architectural,
+  with an explanation and a follow-up item (D15 already allows this; the reviewer decides).
