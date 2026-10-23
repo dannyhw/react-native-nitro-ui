@@ -665,7 +665,13 @@ namespace {
     check(engine().flush(0), "a flush with no synchronous slot still corrects the batch");
     checkEquals(countPushes(true), size_t{0}, "and none of its pushes claims a synchronous commit");
     checkEquals(pushes.size(), size_t{3}, "all three went out asynchronously");
-    // A negative budget is a caller bug, not a way to skip corrections.
+    // A negative budget is a caller bug, and it must still not skip corrections.
+    // What this pins is that the corrections go out anyway; it is documentation
+    // rather than a gate for the clamping arithmetic itself, because a negative
+    // `remaining` is already not greater than zero, so removing the clamp in
+    // `applyReports` would change nothing observable here. The behaviour worth
+    // guarding against is a budget check that returns early, and the two checks
+    // below are what would catch that.
     pushes.clear();
     for (int64_t id = 391; id < 391 + 2; id++) {
       bind(id, static_cast<int>(id));

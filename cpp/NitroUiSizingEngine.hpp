@@ -317,13 +317,18 @@ namespace margelo::nitro::nitroui {
        * 200 (T11). Android flushes from an `OnPreDrawListener` that returns
        * `false`, so each synchronous commit is a full re-layout bought inside a
        * frame that never reaches the screen. One is still worth paying - it is the
-       * correction D17 asks for, and because it is shared by every instance with
-       * the same configuration it carries a whole batch at once - but a second is
-       * a re-layout of a tree that has just become correct: measured on that batch
-       * of 200, 36.2-38.5ms for two synchronous pushes and 36.6ms for one, while
-       * spending none costs 0.09ms and leaves every instance a wrong-size frame
-       * (T12 phase 2). The instance that reported is corrected before the
-       * cancelled frame either way, which is the rule D17 actually asks for.
+       * correction D17 asks for, and one instance is what one push is known to
+       * carry: the push clones one family, so an untouched sibling keeps the
+       * measurement it cached. T12 measured `stale=0` for a 100-instance cold batch
+       * at budget 1 against `stale=100` at budget 0, which is a measurement on one
+       * device and not a property of the budget - the harness logs the count and
+       * does not gate on it. What a second push does buy is nothing measured: on
+       * that batch of 200 the first batch in a process cost 38.80ms with two
+       * pushes and 36.76ms with one, and the median of three rounds 18.88ms against
+       * 12.84ms (-32%; at 500 rows 42.51ms against 26.77ms, -37%), while spending
+       * none costs 0.09ms and leaves every instance a wrong-size frame (T12 phase
+       * 2). The instance that reported is corrected before the cancelled frame
+       * either way, which is the rule D17 actually asks for.
        *
        * Clamped at zero: a platform may spend none.
        */
