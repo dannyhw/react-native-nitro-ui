@@ -31,12 +31,19 @@ never arbitrary: it is the platform's documented control size, declared by the c
 | Engine: cache, ledger, fallbacks, flush        | `cpp/NitroUiSizingEngine.{hpp,cpp}` | Decides who needs correcting, batches it, times itself.                  |
 | Host integration                               | `cpp/core/NitroUiSizing.hpp` + hosts | Reports measured sizes, flushes at the frame boundary, invalidates on environment change. |
 
-The lookup in `measure` is `cache → state → fallback` (`cpp/NitroUiSizingEngine.cpp:184`):
+The lookup in `measure` is `cache → state → guess` (`cpp/NitroUiSizingEngine.cpp`):
 
-1. **cache** — a size already learned for this exact configuration in this environment. Exact.
+1. **cache** — a size already learned for this exact configuration in this environment. Exact, unless the entry is
+   **provisional** (§8): a pre-warmed or test-seeded size answers the layout but does not count as an answer.
 2. **state** — the size the engine pushed into *this node's* Fabric state for this configuration. Exact.
-3. **fallback** — the component's declared size, keyed by component only. Inexact by construction:
-   it carries an empty key, so `valid()` can tell a guess from an answer.
+3. **guess** — the size *this same configuration* last measured, which survives an environment bump that clears
+   the cache. Inexact by construction: it carries an empty key, so `valid()` can tell a guess from an answer.
+4. **declared fallback** — the size the component declared for this OS, keyed by component only, used when this
+   configuration has never been measured. Also inexact.
+
+Steps 3 and 4 are deliberately separate maps. Only step 4 may be answered by another configuration's
+measurement, and it may not: `fallbacks_` is written by declarations (`setFallback`, `seedSize`) and never by a
+measurement, because it is keyed by component and would let a 100pt variant become the default variant's guess.
 
 Every answer is recorded in a per-instance **ledger**. That is what makes a warm mount free: when a
 host later reports a size, `report()` looks at the ledger, sees the instance was laid out at the
@@ -80,17 +87,25 @@ trace (`§7`) is what turned this from an argument into a number.
 A cold Switch on iOS, counters as deltas (`example/__tests__/Sizing.harness.tsx`):
 
 1. JS mounts with `nuiSizingKey=""`, `nuiSizingId=n`, and no size.
-2. `measure` finds nothing cached and answers the declared fallback (61×28). Ledger: inexact.
-3. The host lays out at 61×28, then measures the real `Toggle(.switch)`: 61×28. It reports.
-4. `report()` sees an inexact ledger → queues one report.
-5. End of turn: `flush()` corrects the ledger's instances to 61×28 — the same numbers, and that is
-   the point. One state update, immediate, and the node is now **exact**, so every later instance of
-   that configuration costs nothing.
+2. `measure` finds nothing cached and answers the declared fallback (61×28). Ledger: inexact, so this
+   instance is now on the list of things to correct for this configuration.
+3. The host's first `commit()` measures the real `Toggle(.switch)`: 61×28. An `intrinsic` control is
+   measured there regardless of its current bounds — `sizeThatFits(.infinity)` does not depend on
+   them — which is what puts this report in the *same* turn as the mount instead of in
+   `layoutSubviews`, inside Core Animation's commit and after the flush observer. It reports.
+4. `report()` sees an inexact ledger → queues one report, and wakes the run loop so the turn really
+   does end (`CFRunLoopWakeUp`) rather than waiting for the next touch.
+5. `flush()` corrects the ledger's instances to 61×28 — the same numbers, and that is the point. One
+   state update, immediate, and the node is now **exact**, so every later instance of that
+   configuration costs nothing. "End of turn" is literal here: iOS flushes from an observer below
+   Core Animation's commit observer, and Android flushes from a pre-draw listener that cancels the
+   frame. A correction queued *after* the immediate budget is not in this turn — see §3 for what
+   that costs on each platform.
 
 The first instance of a configuration pays exactly one state update per environment even when the
 guess was right, because the state has to learn the size. Every later one is free: pre-warmed or
-already-measured, `report()` drops it (measured: 200 warm Switches = 0 corrections, 200 dropped
-reports).
+already-measured, `report()` either drops it or confirms a provisional entry without pushing
+(measured: 200 warm Switches = 0 corrections, 200 dropped reports).
 
 ## 5. Opting in
 
@@ -110,13 +125,18 @@ Four things, all of which a component already has reasons to write:
    only ever the first frame's guess, and it has to be a good one (a box smaller than the control
    makes SwiftUI paint outside it — T10's `docs/architecture/core.md` §7 has the hit-test story).
 3. **Send the two props** from the JS wrapper: `nuiSizingKey` (the size-affecting props, variant
-   only) and `nuiSizingId` (a module-level counter per mounted instance). They are declared in
+   only) and `nuiSizingId` (one id per mounted instance, from `useSizingId()` in `src/core`). They are declared in
    `src/core/NitroUiIntrinsicProps.ts` and are `@internal`: users never pass them (D14). The
    interface is *not* a `.nitro.ts` file — nitrogen prints "No specs found" for a spec file with no
    specs, and a plain `.ts` interface resolves and flattens into the props just the same (R10).
 4. **Report the measured size** from the host when it changes (`NitroUiSizing.report(id, w, h, policy)`),
-   and call `NitroUiSizing.invalidateEnvironment()` when the environment changes
-   (`traitCollectionDidChange` / `onConfigurationChanged`).
+   hand the id back when the host goes away (`NitroUiSizing.forget(id)`, from `drop()` and
+   `prepareForRecycle()` / Android's drop), and call
+   `NitroUiSizing.invalidateEnvironmentIfChanged(signature)` when the environment may have changed
+   (`traitCollectionDidChange` / `onConfigurationChanged`). The signature is what the host can observe
+   about the environment (iOS: content size category + legibility weight; Android:
+   `fontScale|densityDpi|locales`); the engine bumps the epoch only when it actually moved, so the
+   notification that fires once per mounted view costs one invalidation per real change.
 
 Then drop any default-size style: `SELF_SIZING_BASE_STYLE` in
 `src/components/Switch/Switch.tsx:91` is only `{ alignSelf: 'flex-start' }`. See the trap in §6.
@@ -137,13 +157,33 @@ the cache identity itself from component name + key + environment epoch
   share one cached size, so a missing input is a wrong size for every instance after the first;
 - pass `""` rather than omitting it (D7 / nitro#1184). An empty string is a real configuration.
 
+### Instance ids
+
+`nuiSizingId` keys the engine's ledger and registry, which are **process-global** — so the id has to
+be unique across components and across JS runtimes, not just within one component's module.
+`useSizingId()` (`src/core/useSizingId.ts`) takes it from `nitroUiCore.nextSizingId()`, a synchronous
+call to one atomic counter in C++. A per-component counter would give Button #1 and Switch #1 the same
+id and deliver a correction to the wrong control, and a per-runtime counter would restart on every
+JS reload against an engine that outlives the reload. One native counter is the only one of these
+that cannot collide, and at one call per mount it is free next to the mount itself.
+
 ### Environment epoch
 
-`invalidateEnvironment()` bumps an epoch that is part of every cache identity, and clears the cache
-and the ledger — every size in there was measured under a text size, density or OS control size that
-may no longer apply. It deliberately **keeps the declared fallbacks**: a component declares its size
-once per process, and dropping it would leave the next first mount with nothing to lay out (0×0)
-until a measurement arrived. Measured, and covered by `scripts/native-tests/sizing.test.cpp`.
+`invalidateEnvironment()` bumps an epoch that is part of every cache identity, and clears the cache —
+every size in there was measured under a text size, density or OS control size that may no longer
+apply. It keeps two things instead. The **declared fallbacks** stay because a component declares its size once
+per process, and dropping them would leave the next first mount with nothing to lay out (0×0) until a
+measurement arrived. And so does each configuration's **own last measured size** (`guesses_`, keyed by
+component + sizing key rather than by cache identity), which is what keeps an environment change that did not
+move a control from costing that control a commit. Measured, and covered by
+`scripts/native-tests/sizing.test.cpp`.
+
+The ledger entries **survive** the bump, marked inexact, with their key recomputed for the new epoch
+from the component name and sizing key the entry already holds. That is what lets a control that is
+*already mounted* be corrected: the host re-measures and reports, and `report()` finds a live ledger
+entry to correct instead of an instance "that was never laid out" to drop. Dropping the ledger here
+was the round-1 bug — a mounted text-sized control would have kept its old-environment box until it
+remounted.
 
 The first mount after an environment change therefore lays out at the declared size, measures, and
 corrects. Nothing cached survives the change to be wrong forever.
@@ -158,19 +198,35 @@ must use `fillWidth`, or it will fight the parent for its own preferred width.
 
 ## 6. Traps (each one measured, each one cost someone an hour)
 
-- **A correction writes an explicit size, and an explicit size stops the cross-axis stretch.** Yoga
-  stretches a child on the cross axis only while its size there is *undefined*; once the engine has
-  written a height, `alignItems: 'stretch'` has nothing to fill. That is why the base style is
-  `alignSelf: 'flex-start'` — without it, a parent's default stretch would widen a Switch into a
+- **A measure result does *not* stop the cross-axis stretch — `alignSelf` does.** Yoga stretches a
+  child on the cross axis whenever its size there is *undefined*, and a leaf with a measure function
+  is no exception: the measurement is what Yoga fills, not what resists the fill. So the engine
+  writing a size into the node's state never protects a control from being stretched. The thing that
+  does is the base style, `alignSelf: 'flex-start'` — the same guard stock RN's own `Switch` carries
+  (`Switch.js`), for the same reason. Without it, a parent's default `alignItems: 'stretch'` would
+  widen a Switch into a
   300 pt box and the control would sit centred in it. The consequence, measured on both platforms:
   `style={{ flex: 1 }}` in a 300×60 row gives **300×28 on iOS / 300.19×48 on Android** — the axis
   flex applies grows, the control's own size holds the other. A caller who wants the fill asks for
   it with `alignSelf: 'stretch'` (measured: 300 wide, control height kept). Stock RN's `Switch`
   behaves differently here; this is a deliberate trade, not an oversight.
+
+  (An earlier version of this document blamed the correction. It was wrong, and the number above is
+  the same with or without a correction, which is how it was checked.)
 - **Never push a Fabric state update while holding the engine lock.** A push can come straight back:
   the commit re-layouts, `measureContent` calls `measure`, and `std::shared_mutex` is not recursive.
   `flush()` therefore collects under the lock and pushes after dropping it
   (`cpp/NitroUiSizingEngine.cpp:345`). Deadlocked once, on a device, in a harness run.
+- **Never capture a reference in a state-update callback.** The callback handed to
+  `ConcreteState::updateState` may run on the JS thread at some later point — `Asynchronous` updates
+  are only *queued* by `EventQueue::enqueueStateUpdate`. Round 1 captured `[&measured]`, a reference
+  into a local vector in `applyReports`, so every batched correction read freed memory; ASan caught it
+  in seconds once a host test deferred the push instead of running it inline. Capture by value.
+- **An instance's id is owned by the JS side and its memory by the native side.** `forget(id)` from
+  `drop()`/`prepareForRecycle()` is what keeps the ledger and registry bounded; pruning on weak
+  expiry alone leaks one entry per mount for the life of the process, and a recycled Android host
+  keeps an id it will reuse. `flush()` sweeps expired registry entries as a backstop for a host that
+  forgot to call it.
 - **`invalidateEnvironment()` must keep the fallbacks**, or the next cold mount has no box at all (§5).
 - **A `drew` sample is one-shot.** The host samples the box it first drew, attributed to the instance
   id it holds at that moment. A host that paints before its props land (RN's `Modal` mounts its tree
@@ -192,7 +248,7 @@ On `nitroUiCore` (`src/NitroUiCore.ts`), all of it diagnostics except `prewarm` 
 
 | Call                             | Proves / measures                                                            |
 | -------------------------------- | ---------------------------------------------------------------------------- |
-| `sizingStats()`                  | counts + timings: cached sizes, epoch, measures, reports queued/dropped, corrections immediate/batched, flushes, `maxFlushMs`, `staleFramesSkipped`. |
+| `sizingStats()`                  | counts + timings: cached sizes, epoch, measures, reports queued/dropped/**confirmed**, corrections immediate/batched, flushes, `maxFlushMs`, `changedFlushes`, and live `ledgerEntries`/`registryEntries`. |
 | `setSizingTraceEnabled(true)` / `drainSizingTrace()` | per-instance log: `laidOut` (what Yoga was told), `corrected` (what was pushed), `drew` (what the platform sampled on its first frame). Only size *changes* are recorded, cap 512. |
 | `seedSizingSize(c, key, w, h)`   | put a known-wrong size in the cache — the R2 test's poisoned guess.          |
 | `invalidateSizingEnvironment()`  | move the environment without changing a setting on a device.                  |
@@ -206,10 +262,13 @@ a wrong size". `laidOut` + `corrected` alone cannot tell those apart; adding the
 sampled drew is what measured the iOS/Android difference in §3. What it cannot see: a correction
 applied inside a turn *after* the commit, and any frame after the first.
 
-`staleFramesSkipped` counts flushes that changed a size. On Android that is exactly the number of
-frames that were cancelled; on iOS it is not evidence of a skipped frame (see the comment at
-`cpp/NitroUiSizingEngine.cpp:336`) — the `drew` samples are. Renaming it to something platform-neutral
-(`changedFlushes`) is worth doing before this is published.
+`changedFlushes` counts flushes that changed a size (D16 renamed it from
+`staleFramesSkipped`, which it never was on iOS). On Android that is exactly the number of frames
+that were cancelled before reaching the screen; on iOS it is not evidence of a skipped frame at all
+(see the comment in `flush()`) — the `drew` samples are. `reportsConfirmed` is its own counter
+because a report that agrees with the cache is a different event from one that was dropped: it is
+the pre-warmed and environment-unchanged case, and the proof that a provisional entry was promoted
+without a commit.
 
 ### Measured, debug builds, iOS 27 simulator + API 35 emulator
 
@@ -235,10 +294,13 @@ clock deltas (`nitroUiCore.now()`, D1) around a render, not published benchmark 
 
 ## 8. `prewarm`
 
-`prewarm(['NitroUiSwitch'])` (exported, `src/NitroUiCore.ts`) adopts each component's *declared*
-size as this environment's cached answer for the default configuration, so the first mount is exact
-and costs no correction. Returns how many it seeded; an unknown name costs nothing and counts zero,
-which makes the list safe to keep in an app that upgrades the library.
+`prewarm(['NitroUiSwitch'])` (exported, `src/NitroUiCore.ts`) adopts each component's *declared* size
+as this environment's **provisional** cached size for the default configuration. A provisional entry
+answers `measure` — that is the whole point, the first mount gets a real box instead of a guess that
+carries no key — but it does not mark the instance exact. The first control that measures and reports
+either **promotes** the entry (the sizes match: no state update, counted as `reportsConfirmed`) or
+**replaces** it through the ordinary correction path. Returns how many it seeded; an unknown name
+costs nothing and counts zero, which makes the list safe to keep in an app that upgrades the library.
 
 Limits, stated plainly:
 
@@ -246,8 +308,14 @@ Limits, stated plainly:
   has more than one configuration, and pre-warming those needs a per-component list of keys — the
   brief's `prewarmKeys` — which nothing has needed yet, because the only self-sizing component so far
   has one variant.
-- it is a declared number, not a measurement. It cannot make a layout worse: a wrong guess is
-  corrected exactly like a cold mount.
+- it is a declared number, not a measurement, and the engine treats it that way. Round 1 wrote it into
+  the cache as an *authoritative* size, which made the documented guarantee false: with a declared
+  61×28 and a real 51×31 (an app opting into `UIDesignRequiresCompatibility` on iOS 26+), every Switch
+  was laid out, marked exact, and then had its real measurement dropped for the whole session. Same for
+  `seedSizingSize`, which is why the harness can poison a cache and still have the control come out
+  right — that is what makes the on-device tests able to fail.
+- pre-warming after an environment change is safe for the same reason: the entry belongs to the new
+  epoch and is provisional in it, so it can be stale without being trusted.
 - a real pre-measure (mount one off-screen, let it report, throw it away) is the stronger version and
   is deliberately not here yet: it has main-thread cost at the worst moment (app start), and T10's
   Android recycling notes (`docs/architecture/core.md` §6) say off-screen Compose is where surprises
@@ -263,5 +331,12 @@ Limits, stated plainly:
   AccessibilityLarge. The epoch path is exercised mechanically (`invalidateSizingEnvironment`,
   `traitCollectionDidChange`/`onConfigurationChanged`), and the first component with a text-derived
   size will exercise it for real.
+- It cannot know a trait environment that is not on screen yet. iOS measures a detached host
+  (a `Modal`'s content before presentation) with `sizeThatFits` under the **default** traits, and the
+  size it gets is cached under the *current* epoch. Harmless for Switch, which does not resize with
+  Dynamic Type; wrong for the first text-sized control mounted in a `Modal`, and the wrong number then
+  serves other instances of that configuration. A control that knows its size is trait-dependent
+  should call `invalidateContentSize()` when it is presented (or its host should defer reporting until
+  `window != nil`) — that is the first such component's job, and this is the note saying so.
 - It does not shrink a control into a smaller box on request. Yoga still owns layout: a caller's
   `width`, `height` or `flex` wins, unchanged (`example/__tests__/Sizing.harness.tsx`).
