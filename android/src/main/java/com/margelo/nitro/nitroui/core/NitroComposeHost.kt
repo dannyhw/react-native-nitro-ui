@@ -389,6 +389,17 @@ abstract class NitroComposeHost<M : NitroUiModel>(
           if (!hasMarkedFirstFrame) {
             hasMarkedFirstFrame = true
             NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_FIRST_FRAME)
+            // What this frame actually drew into, for the sizing trace: the host
+            // is the RN view, so its size here is Yoga's box in px. `onPreDraw`
+            // runs after layout, so the box is final for this frame.
+            val density = resources.displayMetrics.density
+            if (density > 0f) {
+              NitroUiSizing.recordDrawnSize(
+                sizingInstanceId,
+                width.toDouble() / density,
+                height.toDouble() / density,
+              )
+            }
           }
           return true
         }

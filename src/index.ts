@@ -8,8 +8,18 @@
  * can arrive later without breaking anyone. `SwitchProps.hybridRef` stays typed
  * for this repo's own harness and benchmarks; it is marked `@internal` and is
  * read-only in practice.
+ *
+ * `NitroUiSizingStats` and `NitroUiSizingTraceEvent` are the shapes the sizing
+ * diagnostics return (docs/architecture/sizing.md). They are exported because
+ * `nitroUiCore`'s methods return them - the diagnostics themselves stay
+ * diagnostics.
  */
 export { nitroUiCore } from './NitroUiCore';
-export type { NitroUiCore, NitroUiPerfEvent } from './NitroUiCore.nitro';
+export type {
+  NitroUiCore,
+  NitroUiPerfEvent,
+  NitroUiSizingStats,
+  NitroUiSizingTraceEvent,
+} from './NitroUiCore.nitro';
 
 export { Switch, type SwitchProps } from './components/Switch/Switch';

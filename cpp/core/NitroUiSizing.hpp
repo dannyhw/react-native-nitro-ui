@@ -66,6 +66,16 @@ namespace margelo::nitro::nitroui {
      */
     static void setFallback(const char* componentName, double width, double height, int32_t policy);
 
+    /**
+     * Record the box an instance was actually drawn at, once, on its first
+     * frame. Sizing never reads this: it is the trace that lets an on-device
+     * test assert that the first *drawn* frame had the right box, which is the
+     * difference between "Yoga was corrected" and "nobody saw a wrong size".
+     *
+     * `width`/`height` are in platform units, and `NO_INSTANCE` records nothing.
+     */
+    static void recordDrawnSize(int64_t instanceId, double width, double height);
+
     /// Number of cached sizes. For diagnostics and tests.
     static int64_t cachedSizeCount();
   };

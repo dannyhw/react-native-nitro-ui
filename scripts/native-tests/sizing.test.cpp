@@ -184,7 +184,13 @@ namespace {
           "the environment epoch changes the key");
   }
 
-  void testEnvironmentChangeInvalidatesEverything() {
+  /**
+   * The environment moving (text size, density, OS control size) must drop every
+   * *answer* but keep a *guess*: a component declares its fallback once per
+   * process, so clearing it would leave the first instance of the new epoch laid
+   * out at 0x0 - invisible for a frame - instead of at roughly the right size.
+   */
+  void testEnvironmentChangeDropsAnswersAndKeepsTheGuess() {
     resetEngine();
     engine().seedSize("NitroUiSwitch", "Switch|", 61, 28, 0);
     bind(31, 31);
@@ -193,10 +199,135 @@ namespace {
     engine().invalidateEnvironment();
     auto after = measure(31, "Switch|");
     check(!after.valid(), "a new epoch has no cached size");
-    checkSize(after, 0, 0, "and nothing to fall back to either");
+    checkSize(after, 61, 28, "but the last known size is still the guess");
     engine().report(31, 61, 40, 0);
     engine().flush();
-    checkEquals(pushes.size(), size_t{1}, "the control corrects itself after the epoch moves");
+    checkEquals(pushes.size(), size_t{1}, "and the control corrects it in the new epoch");
+  }
+
+  /**
+   * `prewarm`: adopt the declared size as this environment's answer for the
+   * default configuration (the empty variant), so the first instance costs no
+   * correction - and say `false` for a component that declared nothing.
+   */
+  void testPrewarmMakesTheFirstMountExact() {
+    resetEngine();
+    check(engine().cachedSizeCount() == 0, "a new epoch starts with no answers");
+    check(!engine().prewarm("NitroUiNotLoaded"), "a component that declared nothing is not pre-warmable");
+
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+    check(engine().prewarm("NitroUiSwitch"), "a declared component is");
+    checkEquals(engine().cachedSizeCount(), size_t{1}, "pre-warm puts one answer in the cache");
+
+    bind(71, 71);
+    auto laid = measure(71, "");
+    check(laid.valid(), "the first instance is laid out from the cache, not a guess");
+    checkSize(laid, 52, 48, "with the declared size");
+    engine().report(71, 52, 48, 0);
+    check(!engine().flush(), "the control agreeing with it needs no correction");
+    checkEquals(pushes.size(), size_t{0}, "so the mount costs zero state updates");
+  }
+
+  /**
+   * The counters an on-device test asserts on: one correction for a cold
+   * instance, none for a warm one, and a flush counted as a skipped stale frame.
+   */
+  void testStatsCountCorrectionsAndDroppedReports() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+    const NitroUiSizingCounters before = engine().stats();
+
+    bind(81, 81);
+    measure(81, "");
+    engine().report(81, 61, 28, 0);
+    check(engine().flush(), "a change is reported to the caller");
+    const NitroUiSizingCounters cold = engine().stats();
+    checkEquals(cold.correctionsImmediate - before.correctionsImmediate, int64_t{1}, "one correction for a cold instance");
+    checkEquals(cold.correctionsBatched - before.correctionsBatched, int64_t{0}, "inside the budget, so it is immediate");
+    checkEquals(cold.staleFramesSkipped - before.staleFramesSkipped, int64_t{1}, "one stale frame skipped");
+    check(cold.measurements > before.measurements, "measurements are counted");
+    check(cold.lastFlushNs >= 0, "flush time is recorded");
+
+    // A second instance of the same configuration: the cache has the answer now.
+    const NitroUiSizingCounters warmBefore = cold;
+    bind(82, 82);
+    auto second = measure(82, "");
+    check(second.valid(), "the next instance is warm");
+    engine().report(82, 61, 28, 0);
+    check(!engine().flush(), "and agreeing with the cache needs nothing");
+    const NitroUiSizingCounters warm = engine().stats();
+    checkEquals(warm.correctionsImmediate - warmBefore.correctionsImmediate, int64_t{0}, "a warm mount costs zero corrections");
+    check(warm.reportsDropped > warmBefore.reportsDropped, "the report is counted as dropped, not queued");
+  }
+
+  /**
+   * The per-turn budget (R2/R4): the first corrections of a flush go out as
+   * `unstable_Immediate` state updates, the rest are batched, so 200 cold
+   * instances cannot each force a synchronous commit.
+   */
+  void testImmediateBudgetCapsOneFlush() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+    const NitroUiSizingCounters before = engine().stats();
+
+    for (int64_t id = 91; id < 91 + 6; id++) {
+      bind(id, static_cast<int>(id));
+      measure(id, "");
+      engine().report(id, 70, 30, 0);
+    }
+    check(engine().flush(), "one flush corrects the batch");
+    const NitroUiSizingCounters after = engine().stats();
+    const int64_t immediate = after.correctionsImmediate - before.correctionsImmediate;
+    const int64_t batched = after.correctionsBatched - before.correctionsBatched;
+    checkEquals(immediate + batched, int64_t{6}, "every instance got a correction");
+    checkEquals(immediate, int64_t{NitroUiSizingEngine::kImmediateBudgetPerTurn}, "at most the budget is immediate");
+    checkEquals(pushes.size(), size_t{6}, "one state update per instance");
+
+    size_t immediatePushes = 0;
+    for (const Push& push: pushes) {
+      immediatePushes += push.immediate ? 1 : 0;
+    }
+    checkEquals(immediatePushes, size_t{NitroUiSizingEngine::kImmediateBudgetPerTurn}, "and the flags on the pushes agree");
+  }
+
+  /**
+   * The trace: laid out, corrected, drew - and only on *changes*, so a control
+   * laid out a hundred times is not a hundred events.
+   */
+  void testTraceRecordsSizeChangesOnce() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+    engine().setTraceEnabled(true);
+    bind(101, 101);
+
+    measure(101, "");
+    measure(101, "");
+    measure(101, "");
+    engine().report(101, 61, 28, 0);
+    engine().flush();
+    engine().recordDrawnSize(101, 61, 28);
+    measure(101, "");
+
+    auto events = engine().drainTrace();
+    // Four events for a correction, and that is the whole log: laid out with the
+    // guess, corrected, drawn, and laid out again at the real size (the re-layout
+    // the correction causes). Three layout passes before the correction cost one
+    // event between them, not three.
+    checkEquals(events.size(), size_t{4}, "one event per size change, not per layout pass");
+    if (events.size() == 4) {
+      checkEquals(events[0].stage, NitroUiSizingEngine::kStageLaidOut, "first: laid out with the guess");
+      checkSize(NitroUiMeasuredSize{events[0].width, events[0].height, {}, 0}, 52, 48, "which was the fallback");
+      checkEquals(events[1].stage, NitroUiSizingEngine::kStageCorrected, "then the correction");
+      checkEquals(events[2].stage, NitroUiSizingEngine::kStageDrew, "then what was drawn");
+      checkSize(NitroUiMeasuredSize{events[2].width, events[2].height, {}, 0}, 61, 28, "drawn at the real size");
+      checkEquals(events[3].stage, NitroUiSizingEngine::kStageLaidOut, "and the re-layout the correction caused");
+      checkSize(NitroUiMeasuredSize{events[3].width, events[3].height, {}, 0}, 61, 28, "at the real size too");
+    }
+
+    engine().setTraceEnabled(false);
+    bind(102, 102);
+    measure(102, "");
+    checkEquals(engine().drainTrace().size(), size_t{0}, "disarmed, nothing is recorded");
   }
 
   void testStateSizeIsUsedWhenItMatchesTheKey() {
@@ -295,7 +426,11 @@ int main() {
   testPrewarmedMountCostsNothing();
   testOneReportCorrectsEveryInstance();
   testKeysAreIndependent();
-  testEnvironmentChangeInvalidatesEverything();
+  testEnvironmentChangeDropsAnswersAndKeepsTheGuess();
+  testPrewarmMakesTheFirstMountExact();
+  testStatsCountCorrectionsAndDroppedReports();
+  testImmediateBudgetCapsOneFlush();
+  testTraceRecordsSizeChangesOnce();
   testStateSizeIsUsedWhenItMatchesTheKey();
   testFillWidthKeepsTheFlag();
   testReportsWithoutAnInstanceAreDropped();

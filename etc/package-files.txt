@@ -40,6 +40,8 @@ lib/module/components/Switch/Switch.js
 lib/module/components/Switch/Switch.js.map
 lib/module/components/Switch/Switch.nitro.js
 lib/module/components/Switch/Switch.nitro.js.map
+lib/module/core/NitroUiIntrinsicProps.js
+lib/module/core/NitroUiIntrinsicProps.js.map
 lib/module/core/index.js
 lib/module/core/index.js.map
 lib/module/core/useControlled.js
@@ -64,6 +66,8 @@ lib/typescript/src/components/Switch/Switch.d.ts
 lib/typescript/src/components/Switch/Switch.d.ts.map
 lib/typescript/src/components/Switch/Switch.nitro.d.ts
 lib/typescript/src/components/Switch/Switch.nitro.d.ts.map
+lib/typescript/src/core/NitroUiIntrinsicProps.d.ts
+lib/typescript/src/core/NitroUiIntrinsicProps.d.ts.map
 lib/typescript/src/core/index.d.ts
 lib/typescript/src/core/index.d.ts.map
 lib/typescript/src/core/useControlled.d.ts
@@ -124,6 +128,8 @@ nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.hpp
 nitrogen/generated/shared/c++/NitroUiPerfEvent.hpp
 nitrogen/generated/shared/c++/NitroUiSize.hpp
+nitrogen/generated/shared/c++/NitroUiSizingStats.hpp
+nitrogen/generated/shared/c++/NitroUiSizingTraceEvent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.hpp
 nitrogen/generated/shared/json/NitroUiSwitchConfig.json
@@ -134,8 +140,8 @@ src/components/Switch/NativeNitroUiSwitch.ts
 src/components/Switch/NitroUiSwitchConfig.ts
 src/components/Switch/Switch.nitro.ts
 src/components/Switch/Switch.tsx
+src/core/NitroUiIntrinsicProps.ts
 src/core/index.ts
-src/core/sizing.nitro.ts
 src/core/useControlled.ts
 src/core/useProcessedColor.ts
 src/core/useStableCallback.ts

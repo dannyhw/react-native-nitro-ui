@@ -8,6 +8,7 @@
 
 #include "NitroUiSizingEngine.hpp"
 
+#include "core/NitroUiClock.hpp"
 #include "core/NitroUiSizing.hpp"
 
 #include <algorithm>
@@ -138,10 +139,16 @@ namespace margelo::nitro::nitroui {
     environmentEpoch_ += 1;
     cache_.clear();
     // Every ledger entry was computed for an environment that no longer exists,
-    // so none of them may suppress a correction any more. The fallbacks go too:
-    // a Switch measured at the default text size is not a fallback at AX5.
-    fallbacks_.clear();
+    // so none of them may suppress a correction any more.
     ledger_.clear();
+    lastLaidOut_.clear();
+    // The fallbacks deliberately stay. A component declares its fallback once, at
+    // process start, and nothing re-declares it - clearing it here would leave a
+    // cache miss in the new environment with *no* guess at all, so the first
+    // instance would be laid out at 0x0 and be invisible for a frame. A guess
+    // from the old environment is not exact (it carries an empty key, so the
+    // ledger still marks the instance inexact and the real measurement still
+    // corrects it), it is just better than nothing.
     needsCorrection_.clear();
   }
 
@@ -187,6 +194,7 @@ namespace margelo::nitro::nitroui {
     }
 
     const std::lock_guard<std::shared_mutex> lock(mutex_);
+    stats_.measurements += 1;
     const NitroUiSizeKey key = keyFor(componentName, sizingKey, environmentEpoch_);
 
     NitroUiMeasuredSize result{};
@@ -228,6 +236,16 @@ namespace margelo::nitro::nitroui {
     if (!exact) {
       needsCorrection_[key.hash].push_back(instanceId);
     }
+
+    if (traceEnabled_.load(std::memory_order_relaxed)) {
+      // Only when the answer for this instance changed: a control that is laid
+      // out a hundred times at one size is not a hundred trace events.
+      auto previous = lastLaidOut_.find(instanceId);
+      if (previous == lastLaidOut_.end() || !(previous->second == result)) {
+        lastLaidOut_[instanceId] = result;
+        recordTraceLocked(instanceId, kStageLaidOut, result.width, result.height);
+      }
+    }
     return result;
   }
 
@@ -246,6 +264,7 @@ namespace margelo::nitro::nitroui {
     const std::lock_guard<std::shared_mutex> lock(mutex_);
     const NitroUiSizeKey key = keyFor(componentName, sizingKey, environmentEpoch_);
     cache_[key.hash] = SizeEntry{key, NitroUiMeasuredSize{width, height, key, flags}};
+    stats_.cachedSizes = static_cast<int64_t>(cache_.size());
     fallbacks_[componentHash(componentName)] = NitroUiMeasuredSize{width, height, NitroUiSizeKey{}, flags};
   }
 
@@ -257,6 +276,9 @@ namespace margelo::nitro::nitroui {
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
       auto ledger = ledger_.find(instanceId);
+      if (ledger != ledger_.end() && ledger->second.key && ledger->second.exact) {
+        stats_.reportsDropped += 1;
+      }
       if (ledger == ledger_.end() || !ledger->second.key) {
         // Nothing ever laid out for this instance, so there is nothing to correct.
         return;
@@ -276,6 +298,7 @@ namespace margelo::nitro::nitroui {
                                     [&](const Report& existing) { return existing.instanceId == instanceId; }),
                      pending_.end());
       pending_.push_back(Report{instanceId, width, height, flags});
+      stats_.reportsQueued += 1;
     }
 #if defined(__APPLE__)
     installFlushObserverIfNeeded();
@@ -303,8 +326,23 @@ namespace margelo::nitro::nitroui {
         return false;
       }
       reports.swap(pending_);
+      stats_.flushes += 1;
     }
-    return applyReports(reports);
+    const int64_t startedAt = NitroUiClock::nowNs();
+    const bool changed = applyReports(reports);
+    const int64_t elapsed = NitroUiClock::nowNs() - startedAt;
+    {
+      const std::lock_guard<std::shared_mutex> lock(mutex_);
+      stats_.lastFlushNs = elapsed;
+      stats_.maxFlushNs = std::max(stats_.maxFlushNs, elapsed);
+      if (changed) {
+        // On Android this is the frame the caller skipped by returning `false`
+        // from `OnPreDrawListener`; on iOS the run-loop observer means the stale
+        // layout was never committed in the first place.
+        stats_.staleFramesSkipped += 1;
+      }
+    }
+    return changed;
   }
 
   bool NitroUiSizingEngine::applyReports(std::vector<Report>& reports) {
@@ -357,6 +395,7 @@ namespace margelo::nitro::nitroui {
         // The cache entry is what makes the *next* mount of this configuration
         // exact on its first layout, so it goes in before any push.
         cache_[key.hash] = SizeEntry{key, measured};
+        stats_.cachedSizes = static_cast<int64_t>(cache_.size());
         // A measured size is a better guess for the component than a declared
         // default, and it is the only way a component's fallback stays honest on
         // an OS whose control is a different size (D14).
@@ -393,12 +432,21 @@ namespace margelo::nitro::nitroui {
           changed = true;
           const bool immediate = remaining > 0;
           remaining -= 1;
+          if (immediate) {
+            stats_.correctionsImmediate += 1;
+          } else {
+            stats_.correctionsBatched += 1;
+          }
+          if (traceEnabled_.load(std::memory_order_relaxed)) {
+            recordTraceLocked(target, kStageCorrected, measured.width, measured.height);
+          }
           pending.push_back(Pending{targetInstance->second.push, targetState, measured, immediate});
         }
       }
       for (const int64_t instanceId: dead) {
         registry_.erase(instanceId);
         ledger_.erase(instanceId);
+        lastLaidOut_.erase(instanceId);
       }
     }
 
@@ -406,6 +454,63 @@ namespace margelo::nitro::nitroui {
       entry.push(entry.state, entry.measured, entry.immediate);
     }
     return changed;
+  }
+
+  // MARK: - Pre-warm, stats and the trace
+
+  bool NitroUiSizingEngine::prewarm(const char* componentName) {
+    if (componentName == nullptr) {
+      return false;
+    }
+    const std::lock_guard<std::shared_mutex> lock(mutex_);
+    auto fallback = fallbacks_.find(componentHash(componentName));
+    if (fallback == fallbacks_.end()) {
+      // Nothing declared: this component is not loaded, or does not size itself.
+      return false;
+    }
+    const NitroUiSizeKey key = keyFor(componentName, "", environmentEpoch_);
+    cache_[key.hash] = SizeEntry{key, NitroUiMeasuredSize{fallback->second.width, fallback->second.height, key,
+                                                         fallback->second.flags}};
+    stats_.cachedSizes = static_cast<int64_t>(cache_.size());
+    return true;
+  }
+
+  NitroUiSizingCounters NitroUiSizingEngine::stats() const {
+    const std::shared_lock<std::shared_mutex> lock(mutex_);
+    NitroUiSizingCounters stats = stats_;
+    stats.cachedSizes = static_cast<int64_t>(cache_.size());
+    stats.environmentEpoch = static_cast<int64_t>(environmentEpoch_);
+    return stats;
+  }
+
+  void NitroUiSizingEngine::recordDrawnSize(int64_t instanceId, float width, float height) {
+    if (instanceId == NitroUiSizing::NO_INSTANCE || !traceEnabled_.load(std::memory_order_relaxed)) {
+      return;
+    }
+    const std::lock_guard<std::shared_mutex> lock(mutex_);
+    recordTraceLocked(instanceId, kStageDrew, width, height);
+  }
+
+  void NitroUiSizingEngine::setTraceEnabled(bool enabled) {
+    const std::lock_guard<std::shared_mutex> lock(mutex_);
+    traceEnabled_.store(enabled, std::memory_order_relaxed);
+    trace_.clear();
+    stats_.traceDropped = 0;
+  }
+
+  std::vector<NitroUiSizingTraceEntry> NitroUiSizingEngine::drainTrace() {
+    const std::lock_guard<std::shared_mutex> lock(mutex_);
+    std::vector<NitroUiSizingTraceEntry> events{};
+    events.swap(trace_);
+    return events;
+  }
+
+  void NitroUiSizingEngine::recordTraceLocked(int64_t instanceId, int32_t stage, float width, float height) {
+    if (trace_.size() >= kTraceCapacity) {
+      trace_.erase(trace_.begin());
+      stats_.traceDropped += 1;
+    }
+    trace_.push_back(NitroUiSizingTraceEntry{instanceId, stage, width, height, NitroUiClock::nowNs()});
   }
 
   // MARK: - The host-facing entry points (cpp/core/NitroUiSizing.hpp)
@@ -430,6 +535,12 @@ namespace margelo::nitro::nitroui {
                                               static_cast<float>(width),
                                               static_cast<float>(height),
                                               policy == POLICY_FILL_WIDTH ? NitroUiSizingEngine::kFlagFillWidth : 0u);
+  }
+
+  void NitroUiSizing::recordDrawnSize(int64_t instanceId, double width, double height) {
+    NitroUiSizingEngine::shared().recordDrawnSize(instanceId,
+                                                  static_cast<float>(width),
+                                                  static_cast<float>(height));
   }
 
   int64_t NitroUiSizing::cachedSizeCount() {

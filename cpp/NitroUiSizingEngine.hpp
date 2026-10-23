@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <shared_mutex>
@@ -92,6 +93,59 @@ namespace margelo::nitro::nitroui {
     NitroUiPushFn push = nullptr;
   };
 
+  /**
+   * Counters for the P1 questions: how many corrections a mount cost, and how
+   * long a flush took. Reported to JS by `nitroUiCore.sizingStats()`.
+   *
+   * They are counters and not a sampling profiler on purpose: the exit criterion
+   * they serve is a number ("a pre-warmed mount costs zero corrections", "200
+   * cold instances flush in well under a frame"), and a counter is cheap enough
+   * to leave in forever.
+   */
+  struct NitroUiSizingCounters final {
+    /// Distinct configurations with a measured size.
+    int64_t cachedSizes = 0;
+    /// Value of `invalidateEnvironment`'s counter, folded into every key.
+    int64_t environmentEpoch = 1;
+    /// `measureContent` answers given (every layout pass of every sized node).
+    int64_t measurements = 0;
+    /// Reports accepted for correction, and reports dropped because the answer
+    /// already matched (the pre-warmed case: these should outnumber accepts).
+    int64_t reportsQueued = 0;
+    int64_t reportsDropped = 0;
+    /// Fabric state updates actually issued, split by priority: a correction
+    /// inside the per-turn budget is `unstable_Immediate` (same frame), the rest
+    /// are batched into the next commit.
+    int64_t correctionsImmediate = 0;
+    int64_t correctionsBatched = 0;
+    /// Flushes that changed a size - on Android, exactly the frames that were
+    /// skipped because the layout about to be drawn was stale.
+    int64_t flushes = 0;
+    int64_t staleFramesSkipped = 0;
+    /// Engine time of the last and the worst flush, nanoseconds. Does not include
+    /// the re-layout the push causes - that is a Fabric commit, and it is what
+    /// the mount benchmarks measure end to end.
+    int64_t lastFlushNs = 0;
+    int64_t maxFlushNs = 0;
+    /// Trace events dropped because the ring wrapped.
+    int64_t traceDropped = 0;
+  };
+
+  /**
+   * One entry of the sizing trace - the per-frame layout log P1 asks for.
+   *
+   * Only size *changes* are recorded, so a mounted control costs two or three
+   * events rather than one per layout pass, and the ring cannot fill up.
+   */
+  struct NitroUiSizingTraceEntry final {
+    int64_t instanceId = 0;
+    /// One of `STAGE_*` below.
+    int32_t stage = 0;
+    float width = 0;
+    float height = 0;
+    int64_t timeNs = 0;
+  };
+
   class NitroUiSizingEngine final {
     public:
       /// Bit in `NitroUiMeasuredSize::flags` for the fill-width policy.
@@ -102,6 +156,14 @@ namespace margelo::nitro::nitroui {
       /// Immediate Fabric commits one flush may issue, like Expo's
       /// `kImmediateSizeUpdateBudgetPerTurn`. The rest go out asynchronously.
       static constexpr int32_t kImmediateBudgetPerTurn = 2;
+
+      /// Trace stages: the engine laid an instance out with this size, the engine
+      /// pushed a correction for it, and the platform drew it at this box size.
+      static constexpr int32_t kStageLaidOut = 0;
+      static constexpr int32_t kStageCorrected = 1;
+      static constexpr int32_t kStageDrew = 2;
+      /// Trace capacity; the oldest events drop.
+      static constexpr size_t kTraceCapacity = 512;
 
     public:
       static NitroUiSizingEngine& shared();
@@ -182,6 +244,32 @@ namespace margelo::nitro::nitroui {
       /// Number of cached sizes. Diagnostics and tests.
       size_t cachedSizeCount() const;
 
+      /**
+       * Adopt a component's declared size as this environment's cached answer for
+       * its default configuration (the empty sizing key), so the first instance
+       * mounted after this is laid out from the cache and costs no correction.
+       *
+       * Returns `false` for a component that has declared nothing - it is either
+       * not loaded or does not size itself, and saying so is the point: silently
+       * "pre-warming" nothing would be worse. A configuration with a non-default
+       * sizing key is not covered (the engine has no way to know its key), and
+       * neither is a control whose real size has never been measured on this
+       * device - see the pre-warm section of docs/architecture/sizing.md.
+       */
+      bool prewarm(const char* componentName);
+
+      /// The counters above, taken under the lock.
+      NitroUiSizingCounters stats() const;
+
+      /// Record the box a platform drew an instance at (first frame only).
+      void recordDrawnSize(int64_t instanceId, float width, float height);
+
+      /// Trace on/off (off by default: `measure` only compares two floats).
+      void setTraceEnabled(bool enabled);
+
+      /// Everything traced so far, oldest first, and start over.
+      std::vector<NitroUiSizingTraceEntry> drainTrace();
+
     private:
       struct SizeEntry final {
         NitroUiSizeKey key{};
@@ -208,6 +296,11 @@ namespace margelo::nitro::nitroui {
 
       /// Apply reports queued by `report`; takes the lock itself.
       bool applyReports(std::vector<Report>& reports);
+      void recordTraceLocked(int64_t instanceId, int32_t stage, float width, float height);
+
+      /// Append a trace event. Caller holds the lock (hence "Locked"): `measure`
+      /// and `applyReports` record from inside it, and taking the lock again
+      /// would be the same mistake as pushing Fabric state from under it.
 
       mutable std::shared_mutex mutex_;
       /// `NitroUiSizeKey::hash` -> entry (the entry re-checks the full key).
@@ -219,6 +312,14 @@ namespace margelo::nitro::nitroui {
       std::unordered_map<int64_t, BoundInstance> registry_;
       std::unordered_map<std::string, NitroUiComponentBinding> components_;
       std::vector<Report> pending_;
+      /// Size counters (see `NitroUiSizingCounters`). Guarded by `mutex_` like the
+      /// rest, except `traceDropped_`, which is only written while tracing.
+      NitroUiSizingCounters stats_{};
+      /// The last size each instance was told to lay out with, so the trace
+      /// records a change and not every layout pass.
+      std::unordered_map<int64_t, NitroUiMeasuredSize> lastLaidOut_{};
+      std::vector<NitroUiSizingTraceEntry> trace_{};
+      std::atomic<bool> traceEnabled_{false};
       /// Folded into every key; bumped by `invalidateEnvironment`.
       uint64_t environmentEpoch_ = 1;
   };

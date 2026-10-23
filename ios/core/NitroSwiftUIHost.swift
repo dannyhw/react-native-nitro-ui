@@ -327,6 +327,12 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     }
     hasMarkedFirstFrame = true
     mark(.firstFrame)
+    // The box this frame drew into, for the sizing trace: `measureContent` can
+    // say what Yoga was told, and this says what was actually drawn, so a test
+    // can tell "corrected before the frame" from "corrected a frame late".
+    // `bounds` is empty exactly when the host is not in a window, which is the
+    // one case the guard above already excludes.
+    NitroUiSizing.recordDrawnSize(sizingInstanceId, Double(bounds.width), Double(bounds.height))
   }
 
   private func mark(_ kind: NitroUiPerfKind) {
