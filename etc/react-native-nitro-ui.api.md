@@ -6,24 +6,8 @@
 
 import { ColorValue } from 'react-native';
 import type { HybridObject } from 'react-native-nitro-modules';
-import type { HybridView } from 'react-native-nitro-modules';
-import type { HybridViewMethods } from 'react-native-nitro-modules';
-import type { HybridViewProps } from 'react-native-nitro-modules';
 import { JSX } from 'react';
 import { ViewProps } from 'react-native';
-
-// @public
-export interface ControlledState<Value> {
-    defaultValue: Value;
-    mostRecentEventCount: number;
-    onNativeChange: NitroCallbackProp<(value: Value, eventCount: number) => void>;
-    value: Value | null;
-}
-
-// @public
-export type NitroCallbackProp<Fn> = {
-    f: Fn;
-};
 
 // @public
 export interface NitroUiCore extends HybridObject<{
@@ -50,47 +34,30 @@ export interface NitroUiPerfEvent {
 }
 
 // @public
-export interface NitroUiSize {
-    // (undocumented)
-    height: number;
-    // (undocumented)
-    width: number;
-}
-
-// Warning: (ae-forgotten-export) The symbol "NitroUiSwitchProps" needs to be exported by the entry point index.d.ts
-//
-// @public
-export type NitroUiSwitch = HybridView<NitroUiSwitchProps, NitroUiSwitchMethods>;
-
-// @public (undocumented)
-export interface NitroUiSwitchMethods extends HybridViewMethods {
-    measureContent(): NitroUiSize;
-}
-
-// @public
 export function Switch(input: SwitchProps): JSX.Element;
 
 // @public
 export interface SwitchProps extends ViewProps {
     defaultValue?: boolean | undefined;
     disabled?: boolean | undefined;
-    hybridRef?: ((view: NitroUiSwitch) => void) | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly value: boolean | null;
+        readonly mostRecentEventCount: number;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+    }) => void) | undefined;
+    // @internal
     nuiPerfId?: number | null | undefined;
     onValueChange?: ((value: boolean) => void) | undefined;
     tintColor?: ColorValue | undefined;
     value?: boolean | undefined;
 }
-
-// @public
-export function useControlled<Value>(value: Value | undefined, defaultValue: Value, onChange: ((value: Value) => void) | undefined): ControlledState<Value>;
-
-// @public
-export function useProcessedColor(color: ColorValue | undefined | null): number | null;
-
-// Warning: (ae-forgotten-export) The symbol "AnyFunction" needs to be exported by the entry point index.d.ts
-//
-// @public
-export function useStableCallback<Fn extends AnyFunction>(fn: Fn | undefined | null): NitroCallbackProp<Fn> | null;
 
 // (No @packageDocumentation comment for this package)
 

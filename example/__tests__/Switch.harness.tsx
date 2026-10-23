@@ -11,7 +11,14 @@
  * display `true` and the second tap would report `false`.
  */
 import { useCallback, useState } from 'react';
-import { processColor, Text, TurboModuleRegistry, View } from 'react-native';
+import {
+  Modal,
+  Platform,
+  processColor,
+  Text,
+  TurboModuleRegistry,
+  View,
+} from 'react-native';
 import {
   afterEach,
   beforeAll,
@@ -23,7 +30,7 @@ import {
   waitFor,
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
-import { Switch, nitroUiCore, type NitroUiSwitch } from 'react-native-nitro-ui';
+import { Switch, nitroUiCore } from 'react-native-nitro-ui';
 
 /**
  * Bounds of a rendered view, read straight from the harness native module.
@@ -41,9 +48,59 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-let hybrid: NitroUiSwitch | null = null;
-const captureHybrid = (view: NitroUiSwitch) => {
+/**
+ * What `hybridRef` hands back.
+ *
+ * Declared here rather than imported: DECISIONS D14 keeps Hybrid View types off
+ * the public surface in v0.1, and the only reason to read one is diagnostics -
+ * exactly what this file does. Read-only by design; writing a prop through it
+ * would bypass React and never commit.
+ */
+type SwitchHandle = {
+  readonly value: boolean | null;
+  readonly mostRecentEventCount: number;
+  readonly disabled: boolean;
+  readonly tintColor: number | null;
+  readonly accessibilityLabel: string | null;
+  measureContent(): { width: number; height: number };
+};
+
+let hybrid: SwitchHandle | null = null;
+const captureHybrid = (view: SwitchHandle) => {
   hybrid = view;
+};
+
+/**
+ * The box a Switch with no `style` is supposed to get, spelled out here rather
+ * than imported from `src/components/Switch/Switch.tsx`: the point of the test is
+ * that the shipped default is the size the control actually is, so reading the
+ * constant back would assert nothing. Measured numbers, per platform:
+ * - iOS 26+: SwiftUI `Toggle(.switch)` lays out at 61x28 pt. Before 26 the
+ *   control is the old 51x31 (DECISIONS D14).
+ * - Android: a Material 3 `Switch` is a 52x48 dp track inside the 48 dp minimum
+ *   interactive size.
+ */
+const osVersion = (
+  Platform.constants as { readonly osVersion?: string } | undefined
+)?.osVersion;
+const iosMajor = Number.parseInt(osVersion ?? String(Platform.Version), 10);
+const expectedBox = Platform.select({
+  android: { width: 52, height: 48 },
+  // `Platform.Version` is a string on iOS, so the major has to be parsed -
+  // comparing it numerically silently fails and the test then expects the
+  // pre-26 box on a 26+ device.
+  default:
+    Number.isFinite(iosMajor) && iosMajor >= 26
+      ? { width: 61, height: 28 }
+      : { width: 51, height: 31 },
+});
+
+/** A press near one end of the box, at the control's vertical centre. */
+const pressNearEnd = async (box: ViewInfo, end: 'start' | 'end') => {
+  await userEvent.pressAt(
+    end === 'start' ? box.x + 2 : box.x + box.width - 2,
+    box.y + box.height / 2
+  );
 };
 
 /**
@@ -84,10 +141,222 @@ describe('Switch · core runtime', () => {
     // UIHostingController commit. On a cold Android emulator that is more than
     // the 1000ms the harness waits for a mount, so pay it here - every test
     // below then measures a steady-state mount, which is what it asserts on.
+    console.log('[dbg] warm-up: render begin');
     const { unmount } = await render(<Switch defaultValue testID="warm-up" />, {
       timeout: 15000,
     });
+    console.log('[dbg] warm-up: done');
     unmount();
+  });
+
+  it('hosts, measures and takes props inside a Modal', async () => {
+    // R6, closed. RN 0.88's `Modal` is a second window with its own surface, and it
+    // is where a hosting bug no other test can see shows up: Fabric lays that tree
+    // out before `Dialog.show()` gives it a window, which is the one thing a
+    // `ComposeView` cannot survive (docs/architecture/core.md §6). Two oracles: the
+    // size the composition reports from inside that window, and a `value` write from
+    // JS being accepted there. A tap would be a third - see the note below.
+    let value = false;
+    const seen: boolean[] = [];
+    const holder: { current: SwitchHandle | null } = { current: null };
+    const { rerender } = await render(
+      <Modal visible animationType="none">
+        <View
+          style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+        >
+          <Switch
+            value={value}
+            onValueChange={(next) => {
+              seen.push(next);
+              value = next;
+            }}
+            testID="in-modal"
+            hybridRef={(view) => {
+              holder.current = view;
+            }}
+          />
+        </View>
+      </Modal>
+    );
+
+    const measured = await pollUntil(
+      () => {
+        const size = holder.current?.measureContent() ?? null;
+        return size !== null && size.width > 0 && size.height > 0 ? size : null;
+      },
+      () =>
+        new Error(
+          `Modal host never measured (last=${String(
+            JSON.stringify(holder.current?.measureContent() ?? null)
+          )}).`
+        )
+    );
+    expect(Math.abs(measured.width - expectedBox!.width)).toBeLessThan(1.5);
+    expect(Math.abs(measured.height - expectedBox!.height)).toBeLessThan(1.5);
+
+    // Why no press here: the harness cannot deliver a tap into an RN `Modal` on
+    // either platform, and not because of this library. RN's `Modal` is a second
+    // window, and a coordinate press at the frame the native query reports reaches
+    // nothing inside it - measured on API 35 against React Native's own `Switch` in
+    // the same dialog, which ignores the same tap, so no library's control can be
+    // pressed there (H9). iOS misses too, and adding a plain RN control to the dialog
+    // makes the query itself throw "No active window found" (H10).
+    // Every press this suite makes is therefore on the first window, where the
+    // harness does work; what R6 needed - that a composition exists in the dialog's
+    // window and takes props there - is settled by the two oracles above and below.
+
+    // The handshake works across the second surface, too: a `value` write from JS is
+    // applied inside the dialog, not only on the first screen.
+    value = true;
+    await rerender(
+      <Modal visible animationType="none">
+        <View
+          style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+        >
+          <Switch
+            value
+            onValueChange={(next) => {
+              seen.push(next);
+              value = next;
+            }}
+            testID="in-modal"
+            hybridRef={(view) => {
+              holder.current = view;
+            }}
+          />
+        </View>
+      </Modal>
+    );
+    await waitFor(() => expect(holder.current!.value).toBe(true));
+  });
+
+  /**
+   * Wait for a query the harness cannot express yet.
+   *
+   * `waitForTestId` needs a testID, and a hosted control inside a `Modal` has no
+   * reachable one, so this polls whatever the caller can observe instead. The
+   * deadline is one frame clock (`nitroUiCore.now()`), not `Date.now()`, to keep
+   * every wait in this suite on the same base as the native marks.
+   */
+  async function pollUntil<T>(read: () => T | null, onError: () => Error) {
+    const deadline = nitroUiCore.now() + 10000;
+    for (;;) {
+      const value = read();
+      if (value !== null) return value;
+      if (nitroUiCore.now() > deadline) throw onError();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  it('keeps the control inside its default box and answers taps at both ends', async () => {
+    // Review B1: with the pre-26 default on a 26 device, SwiftUI laid the Toggle
+    // out at 61 pt inside a 51 pt Fabric box - it overflowed, centred, so the
+    // painted track stuck past both edges. RN hit-tests to the box, so the outer
+    // ~6 pt of a visible control answered nothing, and the row next to it was
+    // laid out wrong. This asserts the box, the hosted control's own size
+    // against it, and that a press near each inside edge is delivered.
+    await render(
+      <Switch defaultValue={false} testID="box" hybridRef={captureHybrid} />
+    );
+    await waitForTestId('box');
+    const box = harnessUi.queryByTestId('box');
+    const content = hybrid?.measureContent() ?? null;
+    console.log(
+      `Switch box: fabric=${box?.width}x${box?.height} at ${box?.x},${box?.y} hosted=${content?.width}x${content?.height} expected=${expectedBox?.width}x${expectedBox?.height}`
+    );
+
+    expect(box).not.toBeNull();
+    expect(content).not.toBeNull();
+    // Yoga rounds to hundredths; anything past that is the control overflowing.
+    expect(Math.abs(box!.width - expectedBox!.width)).toBeLessThan(0.6);
+    expect(Math.abs(box!.height - expectedBox!.height)).toBeLessThan(0.6);
+    expect(content!.width).toBeLessThanOrEqual(box!.width + 0.6);
+    expect(content!.height).toBeLessThanOrEqual(box!.height + 0.6);
+
+    const seen: boolean[] = [];
+    await render(
+      <Switch
+        defaultValue={false}
+        onValueChange={(next) => seen.push(next)}
+        testID="ends"
+      />
+    );
+    await waitForTestId('ends');
+    const ends = harnessUi.queryByTestId('ends');
+    expect(ends).not.toBeNull();
+    await pressNearEnd(ends!, 'start');
+    await waitFor(() => expect(seen).toEqual([true]));
+    await pressNearEnd(ends!, 'end');
+    await waitFor(() => expect(seen).toEqual([true, false]));
+  });
+
+  it('keeps up with taps faster than React can round trip', async () => {
+    // Two or three taps in the time one round trip takes: native must show the
+    // newest value, JS must see every event in order and counted, and the write
+    // JS sends back must be accepted rather than read as a stale clobber.
+    // Controlled, because that is the mode where the echo travels back to native.
+    const seen: boolean[] = [];
+    function Rapid() {
+      const [on, setOn] = useState(false);
+      const onChange = useCallback((next: boolean) => {
+        seen.push(next);
+        setOn(next);
+      }, []);
+      return (
+        <Switch
+          value={on}
+          onValueChange={onChange}
+          testID="rapid"
+          hybridRef={captureHybrid}
+        />
+      );
+    }
+    await render(<Rapid />);
+    const element = await waitForTestId('rapid');
+    await userEvent.press(element);
+    await userEvent.press(element);
+    await userEvent.press(element);
+    await waitFor(() => expect(seen).toEqual([true, false, true]));
+    // The echo of the newest count reaches native, which is what lets a later
+    // write through instead of being dropped as stale.
+    await waitFor(() => expect(hybrid?.mostRecentEventCount).toBe(3));
+    // And the control is where the last tap put it: the next tap reports false.
+    await userEvent.press(element);
+    await waitFor(() => expect(seen).toEqual([true, false, true, false]));
+  });
+
+  it('keeps the tint and the disabled flag when its props change', async () => {
+    // The closest JS reaches to a recycled row: the same instance, new props, no
+    // remount. Both a rendered prop (`tintColor`) and a behaviour prop
+    // (`disabled`) have to follow, each way.
+    const tint = processColor('#7C4DFF') as number;
+    const seen: boolean[] = [];
+    const { rerender } = await render(
+      <Switch
+        defaultValue
+        disabled
+        tintColor="#7C4DFF"
+        onValueChange={(next) => seen.push(next)}
+        testID="repaint"
+        hybridRef={captureHybrid}
+      />
+    );
+    const element = await waitForTestId('repaint');
+    await userEvent.press(element);
+    expect(seen).toEqual([]);
+    expect(hybrid?.tintColor).toBe(tint);
+
+    await rerender(
+      <Switch
+        defaultValue
+        onValueChange={(next) => seen.push(next)}
+        testID="repaint"
+        hybridRef={captureHybrid}
+      />
+    );
+    expect(hybrid?.tintColor).toBeNull();
+    await userEvent.press(element);
+    await waitFor(() => expect(seen).toEqual([false]));
   });
 
   it('reports the size of what it hosts', async () => {
@@ -224,19 +493,36 @@ describe('Switch · core runtime', () => {
 
   it('ignores presses when disabled', async () => {
     const seen: boolean[] = [];
+    const barrier: boolean[] = [];
     await render(
-      <Switch
-        disabled
-        value
-        onValueChange={(next) => seen.push(next)}
-        testID="off-limits"
-        hybridRef={captureHybrid}
-      />
+      <View>
+        <Switch
+          disabled
+          value
+          onValueChange={(next) => seen.push(next)}
+          testID="off-limits"
+          hybridRef={captureHybrid}
+        />
+        {/* A control that is allowed to answer, so its event can be awaited.
+            Asserting `seen` straight after the presses would pass even if an
+            event were still travelling; once the barrier's event has arrived,
+            the pipeline demonstrably flushed and nothing arrived for the
+            disabled Switch. */}
+        <Switch
+          defaultValue={false}
+          onValueChange={(next) => barrier.push(next)}
+          testID="barrier"
+        />
+      </View>
     );
     const element = await waitForTestId('off-limits');
+    const barrierElement = await waitForTestId('barrier');
 
     await userEvent.press(element);
     await userEvent.press(element);
+    await userEvent.press(barrierElement);
+    await waitFor(() => expect(barrier).toEqual([true]));
+
     expect(seen).toEqual([]);
     // No interaction, so no event for JS to echo back.
     expect(hybrid?.mostRecentEventCount).toBe(0);
@@ -291,8 +577,30 @@ describe('Switch · core runtime', () => {
         { timeout: 3000 }
       );
       unmount();
-      // Marks for a dropped view must not be recorded any more.
+      // A dropped view must not mark anything any more. Asserting that straight
+      // away would prove nothing - a mark could still be in flight - so mount a
+      // *different* instance and wait for its marks first. Once instance 8's
+      // marks have arrived the ring is demonstrably live and flushed, and a mark
+      // for the dropped instance 7 would have arrived with them.
       nitroUiCore.drainPerf();
+      const { unmount: unmountAfterDrop } = await render(
+        <Switch defaultValue testID="marked-again" nuiPerfId={8} />
+      );
+      await waitForTestId('marked-again');
+      const afterDrop: number[] = [];
+      await waitFor(
+        () => {
+          for (const event of nitroUiCore.drainPerf()) {
+            if (event.kind === 'propsApplied') {
+              afterDrop.push(event.instanceId);
+            }
+          }
+          expect(afterDrop).toEqual(expect.arrayContaining([8]));
+        },
+        { timeout: 3000 }
+      );
+      expect(afterDrop).not.toContain(7);
+      unmountAfterDrop();
     } finally {
       nitroUiCore.setPerfEnabled(false);
       nitroUiCore.drainPerf();

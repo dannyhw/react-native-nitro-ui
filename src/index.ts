@@ -1,17 +1,15 @@
+/**
+ * The public surface of `react-native-nitro-ui` (v0.1).
+ *
+ * Deliberately small (DECISIONS D14): components and the shared clock. *Not*
+ * public are the Hybrid Views behind them, their settable props, and the core
+ * hooks a wrapper is built from - all of those are package-internal in v0.1, so
+ * every prop flows through React (UI thread, batched) and an imperative surface
+ * can arrive later without breaking anyone. `SwitchProps.hybridRef` stays typed
+ * for this repo's own harness and benchmarks; it is marked `@internal` and is
+ * read-only in practice.
+ */
 export { nitroUiCore } from './NitroUiCore';
 export type { NitroUiCore, NitroUiPerfEvent } from './NitroUiCore.nitro';
 
-export {
-  useControlled,
-  useProcessedColor,
-  useStableCallback,
-  type ControlledState,
-  type NitroCallbackProp,
-} from './core';
-
 export { Switch, type SwitchProps } from './components/Switch/Switch';
-export type {
-  NitroUiSize,
-  NitroUiSwitch,
-  NitroUiSwitchMethods,
-} from './components/Switch/Switch.nitro';
