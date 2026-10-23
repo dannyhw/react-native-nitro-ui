@@ -119,6 +119,16 @@ guess costs nothing: the confirmation writes the answer into the cache, which is
 reads. Every later instance is free either way: `report()` drops it or confirms a provisional entry
 without pushing (measured: 200 warm Switches = 0 corrections, 200 dropped reports).
 
+A `fillWidth` configuration is held to that rule with one adjustment: its width belongs to the box,
+so two instances of one configuration legitimately report different widths, and the comparison that
+decides "is there anything to correct" ignores the width for exactly that policy (`sameSizeForPush`,
+`cpp/NitroUiSizingEngine.cpp:99`). Without that adjustment the promise above is false for every
+Slider: each instance whose parent is a different width than the last one measured pays a commit, and
+each correction rewrites the cache with its own box width. The first `fillWidth` component measured
+it: two Sliders in boxes of 300 and 200 cost 2 corrections and left the cache answering 200 to a
+control that had only ever been 300 wide
+(`scripts/native-tests/sizing.test.cpp:testFillWidthInstancesOfDifferentWidthsCostNothing`).
+
 ## 5. Opting in
 
 Five things, four of which a component already has reasons to write:
@@ -166,8 +176,12 @@ Five things, four of which a component already has reasons to write:
    recomposes, and its own measure pass reports the new size by itself. A Button's `label`, `variant`
    and `size` are all size-affecting, so every one of them has to say so.
 
-Then drop any default-size style: `SELF_SIZING_BASE_STYLE` in
-`src/components/Switch/Switch.tsx:91` is only `{ alignSelf: 'flex-start' }`. See the trap in §6.
+Then drop any default-size style. What is left is the base style, and it depends on the policy: an `intrinsic`
+control keeps `{ alignSelf: 'flex-start' }` (`SELF_SIZING_BASE_STYLE`, `src/components/Switch/Switch.tsx:111`) so a
+parent cannot stretch it, while a `fillWidth` control needs the opposite - `{ alignSelf: 'stretch' }`
+(`FILL_WIDTH_BASE_STYLE`, `src/components/Slider/Slider.tsx:135`) - because the cross axis is the axis it *wants*
+filled and `alignSelf` is the only thing that decides it (the trap in §6). Either way an explicit `width`, `height`,
+`flex` or `alignSelf` in the caller's `style` still wins.
 
 ### Building `nuiSizingKey`
 
@@ -223,6 +237,34 @@ corrects. Nothing cached survives the change to be wrong forever.
 Slider, linear Progress, wheel Picker (`cpp/core/NitroUiSizing.hpp:28`). The control declares the
 policy when it reports; the shadow node applies it. A component whose width is decided by its parent
 must use `fillWidth`, or it will fight the parent for its own preferred width.
+
+The policy also changes the **question the host asks the toolkit**, which is not obvious from either side of the
+`fillWidth` contract: an `intrinsic` control must be proposed an unbounded size (what does it want to be?), while a
+`fillWidth` control must be proposed *the box's width* with unbounded height (what height does it want **at that
+width**?). Ask the unbounded question of a `fillWidth` control and you get two wrong numbers — a width nobody asked
+for, and a height implied by that width — which is what iOS did for both policies until the first `fillWidth`
+component arrived; the proposal is now per policy (`fittingSizeProposal`, `ios/core/NitroSwiftUIHost.swift:443`),
+and the answer's width is replaced with the proposal's. Android has to be told the same question, in its own terms:
+`NitroUiMeasuredRoot` measures a `fillWidth` control at the box's **width** with the height **unbound**
+(`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt:632`). Unbinding the height is not a
+detail — a `maxHeight` left in place lets a box that is temporarily the wrong height clamp the answer to itself, so
+the wrong height confirms itself (the report matches the layout, so the engine is never told and never corrects).
+The `fillWidth` measure must also not run on empty bounds — a zero proposal is not the box's width — which
+is why `refreshContentSize()` refuses it there.
+
+**What a `fillWidth` cache entry stores.** Only the height is the configuration's own answer. The
+width in the entry is the last box width some instance was measured at — a restatement of a parent,
+not a fact about the control — so it is never compared, and the one case where it reaches the screen
+is a node measured under an *infinite* width constraint (a control in a horizontal scroller), where
+there is no box width to use. Two consequences a component author must know:
+
+- a `fillWidth` control whose **height depends on its width** (a wrapping label, a multi-line text
+  field) cannot share one entry between its widths, because an entry holds one height: it has to put
+  the width in its `nuiSizingKey` so each width becomes its own configuration. A Slider's height does
+  not move with its width — measured 200/300/328 pt on iOS and 200/480 dp on Android, same height.
+- the first frame of a cold `fillWidth` mount is the declared **height** at whatever width the box
+  has, which is why the width in `setFallback` barely matters and the height has to be right (D14,
+  D17).
 
 ## 6. Traps (each one measured, each one cost someone an hour)
 
