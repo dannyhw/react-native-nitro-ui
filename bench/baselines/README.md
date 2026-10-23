@@ -1,5 +1,16 @@
 # Committed benchmark baselines
 
+**Status (T02 round 4): no latency baselines are committed.** There is no
+`ios27-sim-*.json` and no `android35-emu-pixel9.json`, so `--check` on either
+platform exits with `no baseline at bench/baselines/<deviceKey>.json` and gates
+nothing. The one Android baseline that was committed (`bb41d00`) was recorded
+while nitro-ui self-skipped: all seven of its nitro-ui cells carry a
+`skipReason` and zero metrics, so every `--check` against it degraded to
+`new-arm` and could never fail. It measured Android `presented` through the
+probe bug fixed in round 4 too. Deleting it is honest; a replacement must come
+from one clean `--plan full --launches 8` run on an idle canonical device per
+the rules below — never from a quick run.
+
 One JSON per canonical device, produced by a run the `--check` flag can read:
 
     bun bench --platform ios --plan full --launches 8 --update-baseline
