@@ -67,6 +67,12 @@ the Fabric node, and both are asserted on-device by
 | iOS 15 - 25          | 51 × 31 pt       | **51 × 31**         |
 | Android              | 52 × 48 dp       | **52 × 48**         |
 
+Content does not grow with the box: rendered in a 90 × 50 box it still reports
+the numbers above, and the control is centred inside the space (`docs/`
+`architecture/core.md` §7 explains how each platform is asked). The harness
+asserts exactly that, because at the default box the two platforms' answers are
+indistinguishable.
+
 The iOS default follows the running OS (DECISIONS D14): the switch changed size
 with iOS 26, so one constant cannot be right on both. The first version of this
 file shipped 51×31 everywhere, measured on a pre-26 SDK, and on a 26 device that
@@ -78,6 +84,10 @@ the row it sat in was laid out ~12 pt too narrow.
 
 Android's number is the Material 3 track (52×32 dp) inside the 48 dp minimum
 interactive size, so the box includes the touch target the platform enforces.
+It is the one answer that is capped by the box: Android asks the control for its
+size with a minimum of zero inside the box it was given, so the recorded content
+can never be bigger than the box, while iOS asks unbounded and can report a
+control that overflows.
 
 T11 replaces both constants: `measureContent()` already reports what the hosted
 control measures, so `DEFAULT_SIZE` in `src/components/Switch/Switch.tsx` is the

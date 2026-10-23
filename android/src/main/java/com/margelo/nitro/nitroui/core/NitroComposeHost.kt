@@ -401,8 +401,8 @@ fun NitroUiTheme(content: @Composable () -> Unit) {
 }
 
 /**
- * Records the control's size during Compose's own measure pass and centres it in
- * the box RN gave it.
+ * Records the control's intrinsic size during Compose's own measure pass and
+ * centres it in the box RN gave it.
  *
  * Exactly one `measure()` call per pass, and that is a hard rule rather than a
  * preference: measuring the same `Measurable` twice throws
@@ -412,12 +412,25 @@ fun NitroUiTheme(content: @Composable () -> Unit) {
  * question twice (bounded for placement, unbounded for the record) and every
  * hosted Switch on Android died before its first frame.
  *
- * The consequence for T11: the Android answer is the size the control got *inside*
- * the Yoga box - its intrinsic size when the box is big enough (the normal case,
- * and the one `measureContent()` exists for), the box when the box is smaller.
- * iOS is not symmetric: `sizeThatFits(in: .infinity)` runs in a pass of its own,
- * so it can propose unbounded. Giving Android the same unbounded question has to
- * happen outside this layout pass (docs/architecture/core.md §7,
+ * So the one question has to be the right one, and it cannot be the incoming
+ * constraints as they arrive: the host lays the composition out `MATCH_PARENT`,
+ * Fabric measures the host `EXACTLY`, and `AndroidComposeView` turns `EXACTLY`
+ * into `minWidth == maxWidth`. A `Placeable`'s size is always coerced into its
+ * constraints, so measuring with them reports the box back - the recorded size
+ * would be 90x50 dp for a 90x50 dp box no matter what the control is, and the
+ * centring offset would always be 0. Dropping the minimum to zero keeps it one
+ * call and asks the question that was meant: the control reports what it wants
+ * (up to the still-binding maximum), that gets recorded, and it is centred in
+ * the box. What this records is never bigger than the box maximum; whether a
+ * control that wants more than it was given paints outside the box anyway is the
+ * control's own sizing (Material sizes parts of a Switch with `requiredSize`),
+ * and it is not what the recorded size claims.
+ *
+ * The answer is therefore intrinsic up to the box maximum - not the unbounded
+ * question iOS asks in a pass of its own with `sizeThatFits(in: .infinity)`.
+ * Content whose intrinsic size can exceed its box (a wrapping label, a long
+ * `Picker` title) needs that question asked outside this layout pass, which is
+ * T11's design (docs/architecture/core.md §7,
  * docs/tasks/T11-intrinsic-sizing.md). Material's
  * `minimumInteractiveComponentSize` (a 48 dp touch target) is part of the size by
  * design, and only [NitroComposeHost.wantsContentSize] pays for recording at all.
@@ -429,7 +442,12 @@ internal fun NitroUiMeasuredRoot(
   content: @Composable () -> Unit,
 ) {
   Layout(content) { measurables, constraints ->
-    val placeable = measurables.firstOrNull()?.measure(constraints)
+    // The minimum is dropped on purpose: as they arrive it equals the maximum,
+    // which would make this report the box. See the kdoc above.
+    val placeable =
+      measurables.firstOrNull()?.measure(
+        constraints.copy(minWidth = 0, minHeight = 0)
+      )
     val measuredWidth = placeable?.width ?: 0
     val measuredHeight = placeable?.height ?: 0
     if (record && placeable != null) {
