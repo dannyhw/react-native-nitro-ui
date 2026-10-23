@@ -1258,7 +1258,8 @@ export function gate({
 
 /**
  * Whether a run may mint a committed baseline (D9 + T02 review S10): clean tree,
- * every launch completed, and an idle machine. `--force` overrides, loudly.
+ * every launch completed, an idle machine, and on Android an app that is actually
+ * compiled. `--force` overrides, loudly.
  */
 export function baselineBlockers(run) {
   const reasons = [];
@@ -1319,6 +1320,23 @@ export function baselineBlockers(run) {
   } else if (machine.loadavg1 == null) {
     reasons.push('the run did not record a load average');
   }
+  // The ART compile state is a comparability regime, not a detail: with the
+  // baseline profile in force (`speed-profile`) versus left at `verify`, T12
+  // measured the same code's launch-paired ratio to the shared host move 1.22x ->
+  // 0.99x on mount `presented` and 2.28x -> 2.45x on memory, so a baseline minted
+  // from an uncompiled app would gate future runs against a different regime
+  // (`docs/architecture/benchmarks.md`). iOS has no ART and is exempt.
+  if (run.platform === 'android') {
+    if (run.art == null) {
+      reasons.push(
+        'the run did not record an ART compile state, so its regime is unknown (anything before T12 measured the interpreter)'
+      );
+    } else if (run.art.status !== 'speed-profile') {
+      reasons.push(
+        `the app was still at ART status "${String(run.art.status)}", so this run measured the interpreter: a baseline has to be recorded at speed-profile (${String(run.art.primed === false ? 'priming was attempted and did not reach it' : 'priming did not run')})`
+      );
+    }
+  }
   return reasons;
 }
 
@@ -1361,6 +1379,7 @@ export function buildBaseline(run) {
     launches: run.launches,
     updatedAt: run.createdAt,
     machine: run.machine ?? null,
+    art: run.art ?? null,
     cells,
   };
 }

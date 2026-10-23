@@ -337,6 +337,19 @@ export function runHeader(run) {
       '- native perf marks: **ON** - every iteration paid for instrumentation, so these numbers diagnose; they do not gate'
     );
   }
+  if (run.art != null) {
+    lines.push(
+      `- ART: \`${String(run.art.status)}\` for \`${String(run.art.packageName)}\` (${String(run.art.attempts)} attempt(s))${
+        run.art.status === 'speed-profile'
+          ? ''
+          : ' **(not compiled - this run measured the interpreter, and it cannot be compared with a `speed-profile` run)**'
+      }`
+    );
+  } else if (run.platform === 'android') {
+    lines.push(
+      '- ART: **not recorded** - a run from before T12 left the app at `verify`, so its numbers belong to the interpreter regime'
+    );
+  }
   if (machine.cpuCount != null) {
     const cpu = machine.cpuModel != null ? ` (${machine.cpuModel})` : '';
     lines.push(

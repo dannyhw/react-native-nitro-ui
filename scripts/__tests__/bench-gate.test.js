@@ -489,6 +489,61 @@ describe('benchmark gate', () => {
       )
     ).toBe(true);
   });
+
+  /**
+   * The ART regime guard (T12 round 2). `speed-profile` and `verify` are two
+   * comparability regimes - T12 measured the same code's ratio to the shared host
+   * move 1.22x -> 0.99x on mount `presented` across that line - so a baseline may
+   * not be minted from an app that is still interpreting. iOS has no ART, so the
+   * guard is keyed on the platform, and a pre-T12 results file that recorded no
+   * `art` at all is refused rather than assumed compiled.
+   */
+  it('refuses to mint an Android baseline from an uncompiled app', () => {
+    const cleanAndroid = {
+      ...makeRun(),
+      platform: 'android',
+      dirty: false,
+      problems: [],
+      plan: 'full',
+      launches: 8,
+      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
+      art: {
+        packageName: 'com.nitroui.bench',
+        status: 'speed-profile',
+        primed: true,
+        attempts: 1,
+      },
+    };
+    expect(baselineBlockers(cleanAndroid)).toEqual([]);
+    expect(
+      baselineBlockers({
+        ...cleanAndroid,
+        art: { ...cleanAndroid.art, status: 'verify', primed: false },
+      }).some((reason) => reason.includes('verify'))
+    ).toBe(true);
+    expect(
+      baselineBlockers({
+        ...cleanAndroid,
+        art: { ...cleanAndroid.art, status: 'interpret-only' },
+      }).some((reason) => reason.includes('interpreter'))
+    ).toBe(true);
+    // A run from before the state was recorded: unknown regime, no baseline.
+    expect(
+      baselineBlockers({ ...cleanAndroid, art: null }).some((reason) =>
+        reason.includes('did not record an ART compile state')
+      )
+    ).toBe(true);
+    // iOS is exempt: it has no ART, and must keep minting baselines as before.
+    const cleanIos = {
+      ...makeRun(),
+      dirty: false,
+      problems: [],
+      plan: 'full',
+      launches: 8,
+      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
+    };
+    expect(baselineBlockers(cleanIos)).toEqual([]);
+  });
 });
 
 /**
