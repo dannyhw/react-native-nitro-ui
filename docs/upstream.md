@@ -30,6 +30,7 @@ means.
 | N2   | `react-native-nitro-modules` 0.37.1            | removed props arrive as `null`, which crashes optional props       | open (`nitro#1184`)      | lint rule + spec/wrapper rule (D7)     |
 | N3   | `nitrogen` 0.37.1                              | callback props must be optional; `fn \| null` throws at mount      | no upstream issue yet    | lint rule + spec rule (D7b)            |
 | N4   | `nitrogen` 0.37.1                              | generated `SimpleViewManager` ignores border/radius on Android     | no upstream issue yet    | documented limitation, undecided       |
+| N5   | `nitrogen` 0.37.1                              | generated Android `updateState` no-ops through RN's second per-view delivery | no upstream issue yet    | documented limitation; generator short-circuit is the fix (T12) |
 | B1   | `create-react-native-library` 0.64.0 (bob)     | template omits `react { jsRootDir }` → duplicate dex in release    | no upstream issue yet    | fixed in `android/build.gradle`        |
 | B2   | `create-react-native-library` 0.64.0 (bob)     | `--tools a b c` keeps only the first value, silently               | no upstream issue yet    | one `--tools` flag per tool            |
 
@@ -749,6 +750,34 @@ border support, and the Switch needs none.
 file one: with `SimpleViewManager` being the reasonable codegen default, the fix
 may belong in this library. Keep the entry until the open risk is decided, then
 replace it with either the implementation or a line in the component docs.
+
+### N5 — generated Android `updateState` re-runs for RN's second per-view state delivery (documented limitation)
+
+**Observed.** On Android, every newly created Nitro Hybrid View receives
+`updateState` **twice**: `ViewManager.createViewInstance` applies the initial
+state once (`ViewManager.java:231-236`), and
+`FabricMountingManager.cpp:760-766` emits an additional
+`UpdateStateMountItem` for every **Insert** of a view that has state. RN's own
+view managers tolerate the repeat because they read props field-by-field
+against the old snapshot; the manager nitrogen generates does not
+short-circuit — it runs `beforeUpdate → updateViewProps → afterUpdate`, so the
+second call costs a JNI props diff, a `reconcile()` that applies nothing (the
+snapshot from `holder.lastState` equals the new one), and one unconditional
+`host.commit()` mark. Measured by the T02 bench probe: `propsApplied` is
+**2.00 per instance** on Android `mount` and 1.00 on `update`; iOS is 1.00
+everywhere (`docs/tasks/T02-bench.review.md`, "Android `propsApplied = 2.00`").
+
+**Today.** Documented limitation, no code: `docs/architecture/core.md` §3 tells
+component authors to read Android mount `propsApplied = 2.00` as the floor, and
+the bench sanity metric is interpreted through that note.
+
+**Upstream status.** No upstream issue yet. The double delivery is RN Fabric's
+design (view managers are expected to be idempotent), so the improvement is
+Nitro's: the generated `updateState` could return before `beforeUpdate` when
+the incoming props snapshot equals `holder.lastState`, or count `updateState`
+calls and "applied" marks separately. **Removal.** When the generator
+short-circuits (planned under T12), re-record the Android sanity expectations,
+drop this entry, and update the §3 note in `docs/architecture/core.md`.
 
 ---
 

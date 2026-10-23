@@ -1,0 +1,25 @@
+{
+  "name": "nitro-ui-bench",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "prebuild": "expo prebuild --clean",
+    "android:release": "expo run:android --variant release --no-bundle",
+    "ios:release": "expo run:ios --configuration Release --no-bundle",
+    "typecheck:android": "tsc -p tsconfig.android.json"
+  },
+  "dependencies": {
+    "@expo/ui": "58.0.22",
+    "expo": "~58.0.17",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-nitro-modules": "^0.37.1",
+    "react-native-worklets": "0.13.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "typescript": "^6.0.3"
+  }
+}

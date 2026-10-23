@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "nitroui-bench",
+    "slug": "nitroui-bench",
+    "version": "0.0.0",
+    "sdkVersion": "58.0.0",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.nitroui.bench",
+      "supportsTablet": false,
+      "deploymentTarget": "16.4"
+    },
+    "android": {
+      "package": "com.nitroui.bench",
+      "reactNativeArchitectures": ["arm64-v8a"],
+      "adaptiveIcon": {
+        "backgroundColor": "#000000"
+      }
+    },
+    "plugins": [],
+    "extra": {
+      "bench": true
+    }
+  }
+}
