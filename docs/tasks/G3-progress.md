@@ -2,7 +2,7 @@
 
 **Worktree:** `~/Developer/oss/nitro-ui-worktrees/G3` (branch `task/G3-progress`, from `main`)
 **Devices / env:** assigned in the delegation message (D13).
-**Depends on:** T10 (core + Switch) and T02 (bench) merged. Follow `docs/architecture/core.md`
+**Depends on:** T10 (core + Switch), T02 (bench) and T11 (intrinsic sizing) merged. Follow `docs/architecture/core.md`
 and copy Switch's structure (this one is non-interactive: no events, no handshake). Read
 `docs/DECISIONS.md`.
 
@@ -30,8 +30,9 @@ the RN `ActivityIndicator` look (`variant="circular"`, indeterminate).
 - Updating `value` at 60 Hz from JS must stay cheap: one batched commit per update, no hosting
   recreation, animations between values follow platform defaults (document; allow
   `animated?: boolean` if trivial).
-- Sizing: linear = `fillWidth` (height = platform default); circular = intrinsic (platform default
-  size; measure real values per OS — D14). T11 later replaces defaults.
+- Sizing: opt in per `docs/architecture/sizing.md` §5 — linear = `fillWidth` (wrapper defaults to
+  `alignSelf: 'stretch'`), circular = `intrinsic`; `nuiSizingKey` = the variant. Declare
+  OS-specific fallbacks with `setFallback`.
 - Accessibility: progressbar role with value (determinate) / busy (indeterminate).
 - Indeterminate animation must stop when the view is off-window / recycled and resume on re-attach
   (check CPU when a hidden indicator exists — no runaway animations).
