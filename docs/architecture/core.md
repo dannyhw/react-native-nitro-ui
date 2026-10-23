@@ -231,12 +231,13 @@ Don't write a component that behaves differently because of it: both sides must 
   before the reset and, on Android, is also the unmount path — cheap, and it must not destroy the host.
 - Re-arm every per-mount flag (animation suppression, `firstFrame`, cached content size).
 
-## 7. Sizing (until T11)
+## 7. Sizing hooks in the hosts
 
-A Nitro Hybrid View is a plain Yoga leaf: with no style it is 0×0. T11 adds the intrinsic-size shadow node; meanwhile the
-JS wrapper applies a default box (`style={[DEFAULT_SIZE, style]}`, user style wins,
-`src/components/Switch/Switch.tsx:131`). The default must be the control's real layout size, and on iOS that is
-**OS-versioned** (`src/components/Switch/Switch.tsx:98-104`, D14):
+The mechanism — shadow node, size cache, corrections — is `docs/architecture/sizing.md` (T11). What lives here is the
+host side of it: when a host is allowed to ask its content for a size, and how each platform asks. A Nitro Hybrid View is
+a plain Yoga leaf: with no style it is 0×0, so the first layout of a component uses the **fallback** the component
+declares (`NitroUiSizing.setFallback`), and that must be the control's real layout size — on iOS **OS-versioned**
+(`ios/components/Switch/HybridNitroUiSwitch.swift:104-113`, D14):
 
 | Platform | Default box | Why                                                              |
 | -------- | ----------- | ---------------------------------------------------------------- |
@@ -249,8 +250,8 @@ it (`clipsToBounds` is false) — but `RCTViewComponentView` hit-tests to its bo
 (`node_modules/react-native/React/Fabric/Mounting/ComponentViews/View/RCTViewComponentView.mm:181-189`). The control
 paints outside its Fabric box, the outer few points of each end are dead to touches, and neighbouring layout is off by the
 overflow: T10 measured a 51 pt box around a 63 pt painted track on iOS 26/27, ~6 pt dead at each end. Too *big* is quieter
-but equally wrong: dead padding swallows taps beside the control. T11 replaces the constant, not the plumbing — hosts
-already report a measured size.
+but equally wrong: dead padding swallows taps beside the control. A measurement corrects a fallback within a turn, which
+is why the fallback is only ever the first frame's guess — and why it still has to be close.
 
 Measurement cadence — this is where sizing costs performance:
 
@@ -272,8 +273,8 @@ Measurement cadence — this is where sizing costs performance:
   So the Android answer is intrinsic **up to the box maximum** (content can never be recorded bigger than its box), while
   iOS asks the unbounded `sizeThatFits(in: .infinity)` in a pass of its own and can therefore report an oversized
   control. Content whose intrinsic size may exceed its box (a re-wrapped label, a longer selected `Picker` title) still
-  needs the unbounded question asked outside this layout pass, which is T11's design
-  (§11 of `docs/tasks/T11-intrinsic-sizing.md`). Material's 48 dp touch target is inside the recorded size by design.
+  needs the unbounded question asked outside this layout pass: `invalidateContentSize()` on iOS, a re-measure on Android,
+  and the size then corrected through the engine. Material's 48 dp touch target is inside the recorded size by design.
 - The cached size crosses threads, so it is immutable behind a lock/`@Volatile` (§5), and `measureContent()` never touches
   SwiftUI/Compose.
 
@@ -317,8 +318,8 @@ measurable while being much harder to prove correct (`cpp/core/NitroUiPerf.hpp:9
    the wrapper's prop type, callbacks typed `{ f: Fn }`. That hand-written copy of the generated config (its
    `validAttributes`) is drift-checked against `nitrogen/generated/shared/json/` by `src/__tests__/viewConfigs.test.ts`.
 3. `<Name>.tsx` — friendly props, `useControlled` (only if it has a value), `useProcessedColor`, `useStableCallback`,
-   `style={[DEFAULT_SIZE, style]}` with a per-OS-correct default (§7), and an `@internal` read-only `hybridRef` only if
-   the harness needs one (§5).
+   the two sizing props and a `alignSelf: 'flex-start'` base style instead of a default-size one
+   (`docs/architecture/sizing.md` §5), and an `@internal` read-only `hybridRef` only if the harness needs one (§5).
 4. `ios/components/<Name>/HybridNitroUi<Name>.swift` — model, `NitroUIContent` view, Hybrid View (`Hybrid…Spec,
    RecyclableView`).
 5. `android/.../nitroui/HybridNitroUi<Name>.kt` — the same three pieces on Compose, in the package named in §1.
