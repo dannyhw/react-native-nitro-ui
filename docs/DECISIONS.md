@@ -52,3 +52,9 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   `expo-ui-host-per-control`** on mount presented, UI CPU and memory. Misses need an explanation
   and a follow-up item; the reviewer decides. Same-class machines are distinguished by recording
   the machine model/CPU in result metadata (keys stay class-level).
+- **D16 (T11)** Sizing: accept T11's recommendations — size-affecting-prop verification (R3)
+  is owned by the first size-affecting component (G2 Button must add the test); `prewarmKeys`
+  deferred past 0.1; measured sizes are explicit sizes, so cross-axis stretch is opt-in via
+  `alignSelf: 'stretch'` (documented difference from RN `Switch`); one stale iOS frame after an
+  environment change is accepted; rename `staleFramesSkipped` → `changedFlushes` before 0.1.
+  D14's "until T11" clause is fulfilled: defaults are now only the cache-miss fallback.
