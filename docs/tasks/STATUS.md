@@ -19,3 +19,4 @@
 | G4 | SegmentedControl (Picker → 0.2, D19) | Apex | Opus | in progress |
 | T15b | Add Button to the real-input runner + fix the Android Slider drag/JS-write test (red on main) | Apex | — | merged (real input 3/3 both platforms) |
 | G5 | DatePicker | — | — | moved to 0.2 (D19) |
+| R1 | Release readiness: gate hygiene (D21 timing tag, real-input Metro bug, Node 26 check) | Apex | — | in progress |
