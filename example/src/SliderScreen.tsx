@@ -167,12 +167,16 @@ export default function SliderScreen() {
           minimumValue={0}
           maximumValue={120}
           step={5}
-          defaultValue={72}
+          defaultValue={70}
           tintColor="#E0457B"
           testID="slider-bounded"
         />
         <Row label="0...120 step 5, tinted">
-          <Text style={[styles.value, { color: ink.muted }]}>72</Text>
+          {/* The number the thumb is showing, not the number this file chose:
+              72 is not on the step, so native quantises it to 70 and the label
+              would have contradicted the page's own "JS is told what the thumb
+              shows". */}
+          <Text style={[styles.value, { color: ink.muted }]}>70</Text>
         </Row>
 
         <Text style={[styles.section, { color: ink.ink }]}>
