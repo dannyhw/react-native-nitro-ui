@@ -11,12 +11,16 @@ work is in the four core fixes it forced (below) and in what "native owns the
 displayed value" costs per frame.
 
 - Spec, wrapper, both platform implementations, docs page, example screen.
-- 18 device tests (`example/__tests__/Slider.harness.tsx`), green on iPhone 17
-  (iOS 27) and `nitroui_t01` (Android 15/API 35); 51 tests total in each suite.
+- 21 device tests (`example/__tests__/Slider.harness.tsx`), green on iPhone 17
+  (iOS 27) and `nitroui_t01` (Android 15/API 35); 54 tests total in each suite.
 - Reassure render contract (`Slider.perf-test.tsx`), baseline 6, proven to fire.
 - Bench: Slider arms for all four implementations plus a `--component` dimension,
   quick plan on both platforms.
 - Screenshots in `docs/tasks/G1-slider/` (iOS + Android, light + dark).
+- **Round 1 lives at the end of this file.** The review returned
+  CHANGES-REQUIRED; every fix is in, and the Benchmarks section is rewritten —
+  two verdicts quoted in round 1 are withdrawn there because the runner's own
+  noise and signal rules never allowed them.
 
 ## What the first `fillWidth` component broke in the core
 
@@ -249,118 +253,175 @@ measures narrow), with the reason in the comments.
 
 Device: iPhone 17 simulator (iOS 27) and `nitroui_t01` (Android 15, API 35).
 Plan `quick`, 4 launches, 5 warmup + 20 measured iterations, release builds, no
-Metro. D15: iOS on iPhone 17 is canonical. Android is reported as measured — T12
-is optimising the Compose host in parallel and I did not touch it.
+Metro. D15: iOS on iPhone 17 is canonical. Both runs are in `bench/results/`
+(gitignored; the file names are quoted so a reviewer can re-run and diff).
 
-Both runs are in `bench/results/` (gitignored; the file names are quoted so a
-reviewer can re-run and diff). D15 also says a component's *first* `nitro-ui`
-arm never blocks, because there is no `nitro-ui` baseline for it to miss — so
-what follows is a recorded baseline plus the misses it contains, for the reviewer.
+**Round 1 re-ran both platforms** and this section is what came out. The tables
+the review saw are withdrawn, for two separate reasons:
+
+- the iOS table was `efba374-dirty-ios-20261023T064108Z.md`, a tree from *before*
+  `2825825` (the `fillWidth` measure fix this branch later landed), so it
+  measured code the branch no longer has;
+- the first round-1 iOS re-run, `7b6015e-ios-20261023T094459Z.md`, measured a
+  stale bundle: the runner *reused* a `main.jsbundle` three and a half hours
+  older than `bench/src/plan.ts`, so it never saw `mountSignal` and burned ~95 s
+  per launch waiting for a signal the cell had stopped asking for. 633 s of
+  numbers about a build that was not the one under test. That is fixed in
+  `8812717` (the artifact's freshness test now checks the bundle, not the
+  `.app` directory's mtime, and `--skip-build` refuses a stale bundle outright);
+  it is also why the D15 reading below is stricter than the one in round 1 — the
+  rig was quietly capable of publishing numbers for the wrong tree.
+
+Nothing from the old tables survives into the verdicts. Both new runs are the
+merged tree, post-T12 (Android's immediate sizing budget is 1, and the Compose
+host T12 optimised is in the baseline I compare against), with Android primed
+per D18. D15 also says a component's *first* `nitro-ui` arm never blocks, so
+what follows is a recorded baseline plus the misses it contains.
 
 ### iOS — canonical
 
-`efba374-dirty-ios-20261023T064108Z.md`: iPhone 17 (iOS 27), 627 s, machine load
-3.04 / 3.16. A clean-tree run of the same commit
-(`efba374-ios-20261023T061709Z.md`, load 5.88 / 21.11 because T12 was compiling)
-agrees with it within 4 % on every `nitro-ui` cell; it is the *floor* that moved
-there (`mounted` 1.41 ms vs 3.76 ms), which is why the quieter run is the one
-quoted.
+`f5c0450-ios-20261023T100532Z.md`: iPhone 17 (iOS 27), 263 s, machine load
+3.36 / 5.15. The file name records `f5c0450`, the pre-rebase SHA of the tree it
+measured — the round-1 commits section has the map.
 
 | Cell                | arm                      | presented | mounted  | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
 | ------------------- | ------------------------ | --------- | -------- | --------- | --------- | --------- | ---------- |
-| mount.slider N=50   | rn-core                  | 15.98 ms  | 3.76 ms  | 2.16 ms   | 2.09 ms   | 1.57 ms   | n/a        |
-| mount.slider N=50   | expo-ui-host-per-control | 16.15 ms  | 16.03 ms | 1.91 ms   | 2.16 ms   | 42.89 ms  | n/a        |
-| mount.slider N=50   | expo-ui-shared-host      | 16.16 ms  | 5.40 ms  | 1.11 ms   | 1.31 ms   | 23.10 ms  | n/a        |
-| mount.slider N=50   | nitro-ui                 | 16.06 ms  | 23.23 ms | 1.49 ms   | 1.66 ms   | 22.17 ms  | n/a        |
-| update.slider N=50  | rn-core                  | n/a       | n/a      | 299.89 us | 834.65 us | 17.88 ms  | n/a        |
-| update.slider N=50  | expo-ui-host-per-control | 16.12 ms  | 3.67 ms  | 1.63 ms   | 1.76 ms   | 13.26 ms  | n/a        |
-| update.slider N=50  | expo-ui-shared-host      | 16.13 ms  | 2.97 ms  | 845.89 us | 974.98 us | 10.48 ms  | n/a        |
-| update.slider N=50  | nitro-ui                 | 16.12 ms  | 1.58 ms  | 1.03 ms   | 1.14 ms   | 7.50 ms   | n/a        |
-| memory.slider N=200 | rn-core                  | n/a       | n/a      | n/a       | n/a       | n/a       | 6.2 KiB    |
-| memory.slider N=200 | expo-ui-host-per-control | n/a       | n/a      | n/a       | n/a       | n/a       | 300.1 KiB  |
-| memory.slider N=200 | expo-ui-shared-host      | n/a       | n/a      | n/a       | n/a       | n/a       | 180.2 KiB  |
-| memory.slider N=200 | nitro-ui                 | n/a       | n/a      | n/a       | n/a       | n/a       | 255.4 KiB  |
+| mount.slider N=50   | rn-core                  | 16.01 ms  | 1.31 ms  | 604.84 us | 1.23 ms   | 1.15 ms   | n/a        |
+| mount.slider N=50   | expo-ui-host-per-control | 41.12 ms  | 17.05 ms | 2.07 ms   | 2.44 ms   | 47.84 ms  | n/a        |
+| mount.slider N=50   | expo-ui-shared-host      | 45.35 ms  | 5.16 ms  | 1.08 ms   | 1.34 ms   | 26.78 ms  | n/a        |
+| mount.slider N=50   | nitro-ui                 | 16.04 ms  | 24.08 ms | 1.44 ms   | 1.64 ms   | 22.68 ms  | n/a        |
+| update.slider N=50  | rn-core                  | n/a       | n/a      | 294.17 us | 304.27 us | 675 ns    | n/a        |
+| update.slider N=50  | expo-ui-host-per-control | 16.12 ms  | 3.72 ms  | 1.62 ms   | 1.74 ms   | 13.22 ms  | n/a        |
+| update.slider N=50  | expo-ui-shared-host      | 16.11 ms  | 3.08 ms  | 874.45 us | 1.01 ms   | 10.81 ms  | n/a        |
+| update.slider N=50  | nitro-ui                 | 16.13 ms  | 1.68 ms  | 987.89 us | 1.10 ms   | 7.56 ms   | n/a        |
+| memory.slider N=200 | rn-core                  | n/a       | n/a      | n/a       | n/a       | n/a       | 6.6 KiB    |
+| memory.slider N=200 | expo-ui-host-per-control | n/a       | n/a      | n/a       | n/a       | n/a       | 298.0 KiB  |
+| memory.slider N=200 | expo-ui-shared-host      | n/a       | n/a      | n/a       | n/a       | n/a       | 178.0 KiB  |
+| memory.slider N=200 | nitro-ui                 | n/a       | n/a      | n/a       | n/a       | n/a       | 258.4 KiB  |
 
-`presented` is a frame stamp, not a duration: every arm is quantised to the
-display link, which is why all four land at ~16 ms and why it is the one metric
-where "equal to the floor" is a real result rather than a coincidence.
+**The D15 verdict**, built only from cells the runner's own rules let carry one
+— no verdict on a metric whose within-run spread is above 10 %, and no verdict
+for `presented` where `presentedBeforeMount` is high:
 
-**The D15 verdict** (target: ≤ 1.0× `expo-ui-shared-host` and well below
-`expo-ui-host-per-control` on mount presented, UI CPU and memory):
+| D15 axis            | nitro ÷ shared-host | nitro ÷ host-per-control | verdict                                                    |
+| ------------------- | ------------------- | ------------------------ | ---------------------------------------------------------- |
+| update `presented`  | 1.00×               | 1.00×                    | **meets**                                                  |
+| update `mounted`    | 0.55×               | 0.45×                    | **meets**, and well below host-per-control                 |
+| memory `bytes/inst` | 1.45×               | 0.87×                    | **misses** shared-host — the only quiet axis on iOS        |
+| mount `presented`   | 0.35×               | 0.39×                    | **no verdict** — the probe is broken for this cell         |
+| mount `mounted`     | 4.67×               | 1.41×                    | no verdict (spread), but a **real cost**, see below        |
+| mount `UI CPU/op`   | 0.85×               | 0.47×                    | no verdict (spread) — reported, not adjudicated            |
+| mount `JS commit`   | 1.33×               | 0.70×                    | no verdict (spread 19.1 / 18.6 / 11.8 %)                   |
+| mount `JS CPU/op`   | 1.22×               | 0.67×                    | no verdict (spread 37.4 / 36.2 / 36.1 %)                   |
+| update `UI CPU/op`  | 0.70×               | 0.57×                    | no verdict (spread 22.1 / 19.7 / 18.8 %)                   |
+| update `JS commit`  | 1.13×               | 0.61×                    | no verdict (spread 32.6 / 37.7 / 37.4 %)                   |
 
-| D15 axis              | nitro ÷ shared-host | nitro ÷ host-per-control | verdict                                      |
-| --------------------- | ------------------- | ------------------------ | -------------------------------------------- |
-| mount `presented`     | 0.99×               | 0.99×                    | **meets**                                    |
-| mount `UI CPU/op`     | 0.96×               | 0.52×                    | **meets**                                    |
-| memory `bytes/inst`   | 1.42×               | 0.85×                    | **misses** shared-host — explanation below   |
-| mount `mounted`       | 4.30×               | 1.45×                    | misses, and the metric favours the wrong arm |
-| update `UI CPU/op`    | 0.72×               | 0.57×                    | meets (best slider arm on the device)        |
-| update `JS commit`    | 1.22×               | 0.63×                    | above shared-host, below per-control         |
+Withdrawing two claims from round 1, both of which were built on cells the
+runner had already flagged: mount `presented` **0.99× "meets"** and mount
+`UI CPU/op` **0.96× "meets"**. Neither can be made from these numbers.
 
-Why `mounted` is not a fair axis here: `--perf-marks`
-(`efba374-dirty-ios-20261023T064009Z-marks.md`) shows `propsApplied/op = 50` —
-exactly one per instance, so nothing is applied twice — `props → draw` of
-157.38 µs per op, and `presentedBeforeMount = 40`. The 23 ms is the UI thread
-creating 50 Fabric nodes and 50 SwiftUI hosting views (~0.44 ms each) before the
-batch's mount signal fires; `expo-ui-shared-host` is **one** node, so its signal
-fires at 5.4 ms and the 200 controls it then builds inside one SwiftUI tree are
-not in that number. Both arms agree on `presented`, which is what the user sees,
-and `nitro-ui` wins UI CPU by 4 % and update UI CPU by 28 %.
+Why mount `presented` gets no verdict, stated as precisely as the rig allows:
+the runner prints `presentedBeforeMount=76` for the `nitro-ui` mount cell — 76
+of 80 presentation stamps land *before* the mount signal — so for that arm the
+latency pair is not measuring what D15 needs. The `--perf-marks` run
+(`f5c0450-ios-20261023T102315Z-marks.md`, 64 s, load 4.40 / 4.83) says why:
+`mounted` is 23.54 ms, and a mount that outlasts a frame is precisely the case
+where "first `CADisplayLink` tick after the mount" stops being a cost — it
+stamps an earlier vsync than the work. Its `presentedNs` there is 15.92 ms
+median with a **32.81 ms p95**: about a tenth of the samples need a second
+frame. The two expo arms are no better as evidence: their `presented` moved
+16.16 → 45.35 ms (shared-host) and 16.15 → 41.12 ms (per-control) between runs
+of code that did not change, which is a frame-boundary coin flip, not a
+1.4× cost either way. A 0.35× ratio built from those is not a win to bank and
+I am not banking it. **iOS mount `presented` cannot adjudicate a mount longer
+than one frame; that is a rig gap, recorded as a follow-up.**
 
-Why memory misses: 255.4 KiB/instance vs 180.2 KiB is the cost of the
-architecture rather than of this component — one hosting view, one Nitro host
-object, one props buffer and one Fabric node per control, where the shared host
-amortises all four across the batch. It is still 0.85× of the per-control expo
-arm, which is the same one-host-per-control idea without Nitro. Accepting it or
-opening a shared-host follow-up is a call above this task → asked below.
+`mounted` is a real cost, not an artifact. 24.08 ms for 50 controls is
+~0.47 ms per control, and it is 1.41× **`expo-ui-host-per-control`** as well as
+4.67× shared-host — the round-1 text leaned on the shared-host comparison and
+let the flattering reading of "the metric favours the wrong arm" stand. Both
+ratios are here now. The spread rule still denies it a verdict (nitro 13.6 %,
+shared-host 16.6 %), so it is stated as a measurement and a miss-shaped cost,
+with the same `--perf-marks` support as before: `propsApplied/op = 50` at 1.00
+per instance and `firstFrame/op = 50` (nothing applied twice, every instance
+draws), props landed 22.68 ms, `props → draw` 161.71 µs. `expo-ui-shared-host`
+is one node whose signal fires at 5.16 ms and builds 200 views afterwards, so
+the 4.67× is partly what the mount signal counts. The 1.41× against
+host-per-control is not explainable that way: same one-host-per-control idea,
+less time. That goes to the follow-up already recorded in `docs/tasks/FOLLOWUPS.md`.
 
-What the runner flagged, quoted rather than smoothed over: within-run spread
-above 10 % on mount `JS commit`, `mounted`, `JS CPU/op` and `UI CPU/op` for all
-three hosted arms (per-control 35.8 %, shared-host 18.8 %, nitro-ui 30.4 %), so
-by the runner's own rule those cells "cannot carry a verdict". `presented`,
-`bytes/inst` and the update `presented`/`mounted` cells were clean, and the
-verdict table is built from those plus the medians above.
+Memory is the one axis iOS measures quietly, and the Slider misses it:
+258.4 KiB/instance vs 178.0 KiB (39.05× the 6.6 KiB floor, 0.87× the 298.0 KiB
+per-control arm). One hosting view, one Nitro host object, one props buffer and
+one Fabric node per control, where the shared host amortises all four across the
+batch. Accepted for 0.1 and recorded in `docs/tasks/FOLLOWUPS.md`.
 
-### Android — reported, not adjudicated
+One reporting artifact of the `mountSignal: false` flag, so nobody reads it as a
+result: with the floor no longer sitting in mount-signal timeouts during
+`update.slider`, its `UI CPU/op` is 675 ns instead of the 17.88 ms the old run
+printed — the floor draws nothing. So the runner's launch-paired ratio column
+for that row prints 3 425×–15 946× and means only "arbitrary work over zero".
+Read the absolute table on the update row; the ratios there are not comparisons.
 
-`efba374-dirty-android-20261023T063022Z.md`: `nitroui_t01` (Android 15, API 35),
-559 s, load 2.67 / 5.56 with T12 compiling on `nitroui_t02` throughout. I changed
-nothing in the Compose host.
+### Android — primed, and carrying verdicts
+
+`7b6015e-android-20261023T095647Z.md`: `nitroui_t01` (Android 15, API 35), ART
+`speed-profile` for `com.nitroui.bench` (1 attempt, per D18), 206 s, machine load
+6.44 / 6.67. Recorded by the runner as `ART: speed-profile`, so the priming is
+part of the artifact and not a footnote. This is the merged tree, so the Compose
+host in the baseline is T12's. I changed nothing in it.
 
 | Cell                | arm                      | presented | mounted  | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
 | ------------------- | ------------------------ | --------- | -------- | --------- | --------- | --------- | ---------- |
-| mount.slider N=50   | rn-core                  | 32.47 ms  | 17.27 ms | 1.39 ms   | 2.09 ms   | 2.81 ms   | n/a        |
-| mount.slider N=50   | expo-ui-host-per-control | 40.00 ms  | 30.83 ms | 6.84 ms   | 8.16 ms   | 23.20 ms  | n/a        |
-| mount.slider N=50   | expo-ui-shared-host      | 32.89 ms  | 24.32 ms | 1.86 ms   | 2.35 ms   | 11.31 ms  | n/a        |
-| mount.slider N=50   | nitro-ui                 | 39.56 ms  | 28.88 ms | 1.57 ms   | 2.05 ms   | 16.29 ms  | n/a        |
-| update.slider N=50  | rn-core                  | n/a       | n/a      | 779.47 us | 1.28 ms   | 34.79 ms  | n/a        |
-| update.slider N=50  | expo-ui-host-per-control | 47.55 ms  | 15.24 ms | 1.98 ms   | 2.27 ms   | 7.63 ms   | n/a        |
-| update.slider N=50  | expo-ui-shared-host      | 48.16 ms  | 15.53 ms | 963.39 us | 1.24 ms   | 5.72 ms   | n/a        |
-| update.slider N=50  | nitro-ui                 | 48.63 ms  | 16.35 ms | 1.28 ms   | 1.49 ms   | 6.90 ms   | n/a        |
+| mount.slider N=50   | rn-core                  | 32.66 ms  | 16.84 ms | 872.14 us | 1.28 ms   | 1.90 ms   | n/a        |
+| mount.slider N=50   | expo-ui-host-per-control | 36.70 ms  | 27.59 ms | 7.67 ms   | 8.44 ms   | 18.15 ms  | n/a        |
+| mount.slider N=50   | expo-ui-shared-host      | 32.56 ms  | 21.10 ms | 1.53 ms   | 2.08 ms   | 6.92 ms   | n/a        |
+| mount.slider N=50   | nitro-ui                 | 32.74 ms  | 24.81 ms | 1.78 ms   | 2.31 ms   | 10.78 ms  | n/a        |
+| update.slider N=50  | rn-core                  | n/a       | n/a      | 365.63 us | 437.12 us | n/a       | n/a        |
+| update.slider N=50  | expo-ui-host-per-control | 47.45 ms  | 14.51 ms | 2.64 ms   | 2.86 ms   | 6.16 ms   | n/a        |
+| update.slider N=50  | expo-ui-shared-host      | 47.79 ms  | 15.52 ms | 1.29 ms   | 1.81 ms   | 3.87 ms   | n/a        |
+| update.slider N=50  | nitro-ui                 | 48.78 ms  | 16.69 ms | 1.22 ms   | 1.77 ms   | 4.86 ms   | n/a        |
 | memory.slider N=200 | rn-core                  | n/a       | n/a      | n/a       | n/a       | n/a       | 15.0 KiB   |
-| memory.slider N=200 | expo-ui-host-per-control | n/a       | n/a      | n/a       | n/a       | n/a       | 204.5 KiB  |
-| memory.slider N=200 | expo-ui-shared-host      | n/a       | n/a      | n/a       | n/a       | n/a       | 72.5 KiB   |
-| memory.slider N=200 | nitro-ui                 | n/a       | n/a      | n/a       | n/a       | n/a       | 156.4 KiB  |
+| memory.slider N=200 | expo-ui-host-per-control | n/a       | n/a      | n/a       | n/a       | n/a       | 198.8 KiB  |
+| memory.slider N=200 | expo-ui-shared-host      | n/a       | n/a      | n/a       | n/a       | n/a       | 61.6 KiB   |
+| memory.slider N=200 | nitro-ui                 | n/a       | n/a      | n/a       | n/a       | n/a       | 139.0 KiB  |
 
-Against `expo-ui-shared-host`: mount `presented` 1.20×, `mounted` 1.19×,
-`UI CPU/op` 1.44×, memory 2.16×, and better on `JS commit` (0.84×) and
-`JS CPU/op` (0.87×). Against `expo-ui-host-per-control`: `presented` 0.99×,
-`mounted` 0.94×, `UI CPU/op` 0.70×, `JS commit` 0.23×, memory 0.76×. Update is
-level (1.01× presented, 1.05× mounted, 1.21× UI CPU, 1.33× JS commit).
+Priming is why this table can adjudicate at all: the only metric the runner
+flags above 10 % spread is `UI CPU/unmount` (per-control 10.2 %, nitro 23.5 %),
+so every mount and update axis except unmount carries a verdict.
 
-So on Android the Slider is **behind the shared host** and ahead of the
-per-control arm. That is the honest number, and it is also the number T12 owns:
-the gap is the Compose host's mount cost, which is exactly the thing being
-optimised in parallel. Treat these as directional: the runner flagged >10 %
-spread on every Android mount cell (per-control `JS commit` 27.6 %, nitro
-`JS commit` 21.5 % / `UI CPU/op` 22.5 %, shared-host `presented` 16.4 %), and the
-floor arm itself is the noisiest row on the page.
+| D15 axis            | nitro ÷ shared-host | nitro ÷ host-per-control | verdict                                          |
+| ------------------- | ------------------- | ------------------------ | ------------------------------------------------ |
+| mount `presented`   | 1.01×               | 0.89×                    | level (1.00× the floor); strictly above ≤ 1.0×   |
+| mount `JS commit`   | 1.16×               | 0.23×                    | above shared, far below per-control              |
+| mount `JS CPU/op`   | 1.11×               | 0.27×                    | same shape                                       |
+| mount `mounted`     | 1.18×               | 0.90×                    | **misses** shared-host                           |
+| mount `UI CPU/op`   | 1.56×               | 0.59×                    | **misses** shared-host, well below per-control   |
+| memory `bytes/inst` | 2.26×               | 0.70×                    | **misses** shared-host                           |
+| update `presented`  | 1.02×               | 1.03×                    | level                                            |
+| update `mounted`    | 1.08×               | 1.15×                    | misses both                                      |
+| update `UI CPU/op`  | 1.26×               | 0.79×                    | misses shared-host                               |
+| update `JS commit`  | 0.95×               | 0.46×                    | **meets** shared-host                            |
 
-`update.slider:rn-core` has `missingMount=80` by construction: RN removed
-`Slider` in 0.80, so the slider floor is a bare `View` with no mount signal, its
-latency pair is `n/a`, and its `UI CPU/op` (34.79 ms) is the denominator of every
-update UI-CPU ratio. Documented in `docs/architecture/benchmarks.md` alongside
-the `mountSignal: false` fix this task should have had.
+`mount presented` at 1.01× is 0.18 ms on a metric quantised to a vsync, and the
+same 1.00× as the `rn-core` floor, so "level with the shared host" is the honest
+reading — but the D15 bar is ≤ 1.0× and 1.01× is above it. Not claimed as a
+meet.
+
+What D18 changed, which is the useful part of re-running: against the pre-T12,
+ART-`verify` run (`efba374-dirty-android-20261023T063022Z.md`, which the
+round-1 report itself labelled not comparable) the ratios were presented 1.20×,
+`mounted` 1.19×, `UI CPU/op` 1.44×, memory 2.16×. Priming took `presented` from
+1.20× to 1.01× — that gap was largely an ART artifact — while `mounted` (1.19× →
+1.18×) and memory (2.16× → 2.26×) reproduce. So the shape that is left is
+architectural, not warm-up: the Slider costs the Compose host more UI CPU and
+more memory per control than the shared host does, and T12's host does not
+change that. The per-control comparisons stay favourable throughout (0.23× JS
+commit, 0.59× UI CPU, 0.70× memory).
+
+Floors are not comparable across platforms, per the runner's own note: Android's
+`rn-core` floor costs 15.0 KiB/instance against iOS's 6.6 KiB, so the 9.3× and
+39.05× ratios to floor describe the floors, not the components. Compare arms.
 
 ### What the bench harness gained here
 
@@ -369,6 +430,14 @@ the `mountSignal: false` fix this task should have had.
   one unit (`bench/`).
 - The guide now records that a cell can lack a mount signal, and that such a
   cell's floor ratios are to be read as re-layout cost only.
+- A cell may now *declare* that: `mountSignal: false` in `plan.ts` stops the
+  runner waiting ~1.5 s per iteration for a signal a bare `View` cannot send
+  (~95 s per launch), and its records are labelled `absent by construction`
+  instead of `missingMount=80 - treat this cell's latency pair with care`.
+  Asked as question 4, approved, done here (`272e471`).
+- `locateArtifact('ios')` now proves the artifact is fresh — the bundle inside
+  it, not the `.app` directory's mtime — because a green `--skip-build` had
+  reused a three-and-a-half-hour-old bundle (`8812717`).
 
 ## Screenshots
 
@@ -483,8 +552,10 @@ Harness/tooling (reported rather than fixed here, since they are upstream):
 
 ## Known issues / follow-ups
 
-- **Android a11y is asserted as weakly as it honestly can be** (see above). Fix
-  belongs in the harness: a Compose-semantics query.
+- **Android a11y: the label is still asserted at View level.** The step is not
+  — round 1 drives the real Compose a11y action and asserts the value it lands
+  on, which is the assertion that mattered (`1e1cc2d`). A Compose-semantics query
+  in `react-native-harness` would still be the right home for the label.
 - **`rn-core`'s slider floor** is a bare `View` (RN removed `Slider` in 0.80), so
   `update.slider:rn-core` emits no mount signal and its native-latency ratio is
   `n/a`. A `@react-native-community/slider` arm would be a *peer*, not a floor —
@@ -492,12 +563,13 @@ Harness/tooling (reported rather than fixed here, since they are upstream):
 - The per-OS fallback for iOS below 26 is a measured 31 pt carried across all
   runtimes (D8: no older runtime on this machine). A `fillWidth` control corrects
   its own height on the first layout, so the cost is one stale frame, not a wrong
-  layout — but CI on an iOS 18 runner would settle it.
+  layout — but CI on an iOS 18 runner would settle it. Answered in round 1:
+  follow-up, recorded in `docs/tasks/FOLLOWUPS.md`.
 - `OptionalTint` / `OptionalAccessibility` are now copied a second time (Switch,
   then Slider). Promote them to `ios/core/` when a third component needs them.
-- The bench runner spends ~1.5 s per iteration in `update.slider:rn-core` waiting
-  for a mount signal that cannot arrive. Cheap fix: let a cell declare
-  `mountSignal: false`.
+- ~~The bench runner spends ~1.5 s per iteration in `update.slider:rn-core`
+  waiting for a mount signal that cannot arrive.~~ Done in round 1: cells declare
+  `mountSignal: false` (`272e471`).
 - The first instance of a `fillWidth` configuration in a process is still laid
   out at height 0 once and corrected on the next turn. The deadlock is gone
   (measure no longer waits for a height); the one-frame artifact is a different
@@ -581,3 +653,147 @@ Harness/tooling (reported rather than fixed here, since they are upstream):
 | `b57623a` | `docs(bench)`: what a floor is, and what a cell without a mount signal means |
 | `4067f8b` | `docs(slider)`: the component page, the screenshots and this report |
 | _tip_ | `docs(sizing)`: re-point the host line references the fix moved, and record the SHAs above — the SHA of this commit is in the task hand-off, not in the file it names |
+## Fix round 1
+
+The review returned CHANGES-REQUIRED: seven required fixes, a list of tests it
+called weak, and a bench-honesty list. All of them are answered below — nothing
+was declined, and nothing outside them was fixed (D19: what I found along the way
+is a line in the last subsection, not a commit).
+
+### Step 0 — the merge
+
+The review doc was uncommitted, so it went in first as `86f2832`. Then `4a419c8`
+merges `main` (`979b7b2`) in: T12's Android host changes — the Android
+synchronous sizing budget is now **1** — the "Shared objects" rule in
+`docs/architecture/core.md`, D18 (ART priming), D19 (hard stops), the amended D17,
+and `docs/tasks/FOLLOWUPS.md`. The reviewer was right that there were no textual
+conflicts; the merge needed judgement in two places instead:
+
+- **Budget 1 on Android** changes when a `fillWidth` Slider may answer its own
+  height synchronously. The sizing harness tests are the check, and they are in
+  the 54 green: the Slider still answers its height under the tighter budget
+  rather than waiting for a box that never arrives. Nothing in the Slider needed
+  a change to fit it; the round-0 Android measure code was written against a
+  budget of 2 and behaves the same at 1 because it never relied on a second
+  synchronous round.
+- **The "Shared objects" rule** is the reason fix 5 exists: `SliderDefaults.colors(…)`
+  was being built per view, which the guide now says not to do. Switch already
+  cached its equivalent, so the Slider follows the same shape.
+
+`main` moved one commit after this merge (`e9e2448`, T13's docs-only report). It
+is not re-merged: it is another task's report, and the published tables should
+describe the tree the benches actually ran on.
+
+### The required fixes
+
+| # | Fix | Commit(s) |
+| - | --- | --------- |
+| 1 | **iOS handshake race.** A JS write could overtake a sample native had sampled but not yet emitted, and `reconcile()` would then treat the *old* controlled value as a fresh instruction and rewind the thumb mid-drag. The rule moved into the shared core: a controlled value tracks whether the last sample is still unreported (`NitroUiControlledValue.unreported`) and `reconcile()` refuses while it is, on both platforms — the race was Android-shaped too, it was only *observed* on iOS. The `pending`-comment in the Swift view says what it now means. | `eacf3fe` |
+| 2 | **Rounding ties.** Kotlin's `round` sends a tie to the *even* neighbour, so `0.5` quantised to `0` while Swift sent it up the track. Both now use `floor(x + 0.5)` (`roundHalfAway`), and both suites carry a mid-range tie (`0.5` at step 1, and `2.5` where the even neighbour is `2`). | `c9d1820` |
+| 3 | **Accessibility increment / decrement.** Both value rules gained `stepped(from:up:minimum:maximum:step:)`: the next legal stop *in the requested direction*, counted from `minimum`, with the bounds as stops — so `0…10 step 3` reaches `10` and an increment at the end of the track moves nothing instead of wrapping. The platforms contribute only the direction, because handing either one a `step:` on a range that does not end on a step would make `maximumValue` unreachable. Android drives it through the **real Compose a11y action** and the harness asserts the value it lands on; iOS vends the adjustable element the same way so VoiceOver's own gesture reaches it, and a VoiceOver value write with no editing callbacks attached cannot open a drag that never ends. | `ec390fb`, `cd08a4e`, `67f4f64`, `246f98e`, `e9e2f00`, `498f3fe` |
+| 4 | **`endDrag()`.** `guard dragging` on both platforms: no `onSlidingComplete` without a start, and no late end landing on a recycled instance. The documented "complete without a start" limitation is gone rather than explained. | `b04a9f4` |
+| 5 | **Android colours.** `SliderDefaults.colors(…)` is built once and cached (`SliderColorsCache`), per main's new "Shared objects" rule, matching Switch. It rode along in the a11y commit because both touch the same view file. | `cd08a4e` |
+| 6 | **Example and doc nits.** The Android tab bar sits under the status bar instead of behind it; the off-grid `72` label is on the grid; the "the pump keeps the display link warm" claim was removed because it was not true of what the pump does; the `pending` comment describes the flag it sits on. | `2089576` |
+| 7 | **Weak tests.** The abandoned-drag test now asserts the view was *actually reused* (`reused=${nextHandle === abandonedHandle}`) so it cannot silently become a test of garbage collection; both platforms now assert the frame source stops feeding after a drag ends (the `CADisplayLink` / Choreographer callback, which is what makes an abandoned drag a leak rather than a cosmetic miss); and `min == max` is rendered on device, which was previously only ever covered by native vectors. | `e9e2f00` |
+| 8 | **Bench honesty.** Both platforms re-run, `mountSignal: false` implemented (approved as answer 4), and the iOS artifact freshness bug that made the first re-run worthless found and fixed. Tables and verdicts: the Benchmarks section above. | `272e471`, `8812717` |
+
+### Every round-1 test shown to fail
+
+AGENTS.md again: applied, run, reverted.
+
+| Proof | Mutation / state | Red result |
+| ----- | ---------------- | ---------- |
+| Fix 1, iOS harness | `reconcile()` allowed while a sample is unreported (the pre-fix tree, JS writes the controlled value mid-drag) | `Slider › finishes a drag that a write from JS lands inside` → `expected 0.8 to be 0.5` (`/tmp/g1-ios-harness-1.log`) |
+| Fix 3, iOS harness | before the view vended an adjustable element | both a11y tests fail with `no adjustable element` — they cannot even reach the action |
+| Fix 2, Kotlin | `roundHalfAway` restored to `kotlin.math.round` (which is `Math.rint`) | `NitroUiSliderValueTest > tiesGoAwayFromZeroNotToTheEvenNeighbour FAILED` — `0.5 goes to 1, not to the even 0 (got 0.0, want 1.0)`; `36 tests completed, 1 failed`, `BUILD FAILED` (`/tmp/g1-jvm-tie-red.log`) |
+| Fix 2, Swift | `.rounded(.toNearestOrEven)` | `slider-value.test: 8 failure(s)` → `test:native: FAIL`, including `a mid-range tie goes up, not to the even 2 (got 2.0, want 3.0)` and `a tie in a fraction goes up to the next stop (got 0.0, want 0.5)` (`/tmp/g1-swift-tie-red.log`) — the same bug, visible on the platform that had it right |
+| Fix 3, Kotlin | the pre-fix tree (before `ec390fb`), JVM suite | `36 tests completed, 2 failed` — `anAccessibilityStepMovesToTheNextLegalValueInItsDirection` and `aPlatformFractionStillLandsOnTheGrid` (`/tmp/g1-jvm.log`) |
+| Fix 8, runner guard | pre-fix tree, `node scripts/bench/build.mjs --platform ios` | answers `reused: true` while `main.jsbundle` (07:17) predates `bench/src/plan.ts` (10:42) and contains no `mountSignal`; post-fix `locateArtifact('ios')` throws on that same tree and the plain build path answers `reused: false` with a bundle that does contain it |
+
+The Swift tie mutation failing **8** checks where the Kotlin one failed 1 is
+worth noting: iOS was already correct, so the mutation showed how much of the
+shared expectation the Swift suite actually covers. That is also why the fix went
+to Kotlin rather than to a shared "whatever Swift does" shrug.
+
+Both tie mutations were re-run for this round and the logs kept, because the
+round-1 report cited a log that turned out to hold a *different* red (the
+pre-fix a11y step, now its own row above) — a citation that does not contain its
+claim is the same class of error as a bench table for the wrong tree, so the two
+rows above are from runs taken on this tree and named accordingly.
+
+One slip, recorded because the gate caught it: the first attempt at the
+`498f3fe` warning fix was aimed at a `guard let division` line by content, and
+the file has two textually identical ones — it hit the one in `quantize`, whose
+binding *is* read, and `bun run check` died with `value of type … has no member
+'wholeSteps'`. Re-aimed at line 197, green. The mutation is why the gate exists.
+
+### Gates on the final tip
+
+| Gate | Result |
+| ---- | ------ |
+| `bun run check` | **exit 0** — typecheck, bench typecheck, lint, format, 111 Jest tests (8 suites), `test:native` (187 C++ checks ×2 under ASan/UBSan, `handshake.test`, `slider-value.test`), `perf:renders` (baseline 6, both components), nitrogen no drift (77 generated files), autolinking, bob build, api-extractor, publint, manifest (202 files). **No source warnings** — `498f3fe` removed the one this round introduced. |
+| `bun run test:native:android` | **36 tests, 0 failures** — `NitroUiSliderValueTest` 12, `SliderModelTest` 12, `NitroUiControlledValueTest` 9, `NitroUiWeakKeyTest` 3 |
+| iOS harness | **54 passed, 3 suites** against an app rebuilt from this tree (`xcodebuild -derivedDataPath build`, app 11:33, no source newer than it) |
+| Android harness | **54 passed, 3 suites** against the 11:22 APK — and no Android source is newer than that APK, which is gotcha 1 checked instead of assumed |
+| Bench load | iOS run 3.36 / 5.15 (263 s), marks run 4.40 / 4.83 (64 s), Android 6.44 / 6.67 (206 s) — all under the D13 ceiling, all recorded in the artifacts |
+
+Gotcha 2 cost another 10 minutes here in a new way: the harness's Jest transform
+breaks on Node 26, and this shell's default is Node 26 while `.nvmrc` pins 24. A
+harness run that *fails* with `Must use import to load ES Module …
+react-native/index.js` is the Node version, not the code — re-run under Node 24
+and the same binary gives 54/54.
+
+### Answers received, and what happened
+
+| Q | Answer | Done |
+| - | ------ | ---- |
+| 1 | iOS < 26: follow-up | recorded in `docs/tasks/FOLLOWUPS.md`; the follow-up bullet here points at it |
+| 2 | Label at View level is fine; increment/decrement is real | fix 3 — the step now goes through the platform's own a11y action on both platforms; the label stays View-level and the follow-up bullet says exactly that |
+| 3 | Accept memory 1.42× for 0.1; state the iOS mount-presentation result honestly | accepted and recorded in `FOLLOWUPS.md`; the iOS mount `presented` result is now "no verdict, the probe cannot adjudicate a >1-frame mount", which is the opposite of flattering |
+| 4 | `mountSignal`: do it here | `272e471` |
+| 5 | Fallback registration before the first measure is **T14** — not here | not done; D17 on main documents the height-0 cold frame, and the follow-up bullet points at T14 |
+| 6 | Android: re-run primed | `7b6015e-android-20261023T095647Z.md`, ART `speed-profile` recorded in the artifact, verdict table above |
+
+### What I found and did not fix (D19)
+
+- `react-native-harness` needs Node 24 (`.nvmrc`) and dies on Node 26 with an ESM
+  transform error that looks like a code bug — worth a line in the harness docs.
+- The bench rig cannot adjudicate `presented` for a mount longer than one frame on
+  iOS (`presentedBeforeMount=76`); needs a mount-relative stamp, not a vsync stamp.
+- The Android example's tab bar uses `StatusBar.currentHeight` rather than
+  `react-native-safe-area-context` (D12 allows it; a safe-area dependency would be
+  tidier for the next screen that needs insets).
+- `NitroUiSliderValue.swift` has two textually identical `guard let division`
+  lines — a content-only patch target cannot tell them apart.
+- A superseded `f5c0450-dirty-*` marks run was taken while the tree was mutated
+  for the tie proofs; it is deleted rather than published, and this line is its
+  tombstone. The stale-bundle run `7b6015e-ios-20261023T094459Z*` is **kept** as
+  the evidence for the `8812717` fix.
+
+### Round 1 commits
+
+`86f2832` (base, the review doc) → tip, after `4a419c8` merges `main`:
+
+| SHA | What it carries |
+| --- | --------------- |
+| `86f2832` | `docs(slider)`: the round-1 review of the Slider task |
+| `4a419c8` | merge of `main` (T12 host + budget 1, D17/D18/D19, FOLLOWUPS) |
+| `c9d1820` | `fix(slider)`: a rounding tie goes up the track on Android too |
+| `eacf3fe` | `fix(slider)`: a React write cannot overtake a sample native has not emitted |
+| `b04a9f4` | `fix(slider)`: only a drag that started may end |
+| `ec390fb` | `feat(slider)`: the value rule knows the next legal value in a direction |
+| `cd08a4e` | `feat(slider)`: a screen reader's step lands on the grid, via the platform's action — and the cached `SliderDefaults.colors` |
+| `67f4f64` | `fix(slider)`: the a11y step probe reports usefully, and stops killing the app |
+| `246f98e` | `feat(slider)`: the view vends the element a screen reader focuses |
+| `e9e2f00` | `test(slider)`: the drag a write lands inside, a reader's step, a flat range, the reuse and frame-source assertions |
+| `2089576` | `docs(slider)`: the example's tab bar, the off-grid 72, and what the pump does |
+| `272e471` | `perf(bench)`: a cell may declare that it has no mount signal |
+| `8812717` | `fix(bench)`: the iOS artifact's freshness test trusted a directory mtime |
+| `498f3fe` | `fix(ios)`: the compiler knew the a11y step did not need the division |
+
+The branch was rebased once during this round to remove a `Co-Authored-By:` trailer
+from `cd08a4e`'s message (AGENTS.md: no attribution of this kind in commits). The
+rewrite touched messages only: `git diff` between the pre-rewrite and post-rewrite
+tips is empty, so `f5c0450` ≡ `8812717` and `7b6015e` ≡ `272e471` — which is why
+the bench artifact file names still show the old SHAs and why the tables above are
+unaffected by the rewrite.
