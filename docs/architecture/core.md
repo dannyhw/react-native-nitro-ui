@@ -64,6 +64,13 @@ Fabric updateProps / updateState
   interaction costs zero re-renders. **Anything rendered must mark dirty** — including `accessibilityLabel`
   (`ios/components/Switch/HybridNitroUiSwitch.swift:189-196`, `android/.../HybridNitroUiSwitch.kt:211-222`): stored
   without a commit, a label never reaches VoiceOver/TalkBack and no screenshot can show it.
+- **Nitro does not order props inside one batch**, so a setter must not interpret its value against another
+  prop's. A `value` that has to be clamped or quantised against `minimumValue`/`maximumValue`/`step` cannot be
+  normalised in the `value` setter: the range may arrive before it, after it, or not at all in this batch. Store
+  raw in the setters and interpret in `afterUpdate()` (`ios/components/Slider/HybridNitroUiSlider.swift:499`,
+  `android/.../HybridNitroUiSlider.kt:529`), which is also where `defaultValue` gets applied - and note the getter
+  then answers the *normalised* value, not the number React sent. A `Switch` gets away with applying
+  `defaultValue` in the setter because a Bool has nothing to normalise against; anything numeric does not.
 - iOS `NitroUiModel` is an `ObservableObject` with a **manual** `objectWillChange` — `@Published` would fire per write
   (`ios/core/NitroUiModel.swift:25-31`). Android's model uses `mutableStateOf` only for what renders and keeps logic-only
   fields plain (`android/.../HybridNitroUiSwitch.kt:33-59`). Never replace or rebuild the model.
@@ -475,6 +482,11 @@ choice. After release the newest echo lands and writes apply normally.
   of the coalesced "value during this drag" field, the thumb renders the *previous* emitted value and trails the finger a
   frame at the exact moment the user is watching. One field is both what `set` writes and what `get` reads — the Switch's
   one-bit version is `ios/components/Switch/HybridNitroUiSwitch.swift:42-51`.
+- **A drag start has two candidates, and neither is reliable alone.** `onEditingChanged(true)` and the first
+  `Binding` write have no defined order, and a tap that jumps the thumb can write before it says editing started.
+  Make the start idempotent (`if dragging { return }`) and call it from both, so whoever arrives first opens the
+  drag once (`ios/components/Slider/HybridNitroUiSlider.swift:163`). On Compose the same job falls to the first
+  value change, since there is no start callback at all.
 - **The end-of-drag hooks are platform-named, not invented.** SwiftUI: `Slider(value:in:step:onEditingChanged:)`, whose
   callback fires `true` at gesture start and `false` at release. Compose Material 3: `Slider`'s `onValueChangeFinished`,
   which fires at release only — Compose has no start callback, so take "dragging" from the first value change (or
@@ -499,6 +511,12 @@ rejected revert into "close enough, keep what the user did" (the control silentl
 different tolerances. Want snapping? **Quantise in native before emitting** — round to the step, emit that — then compare
 JS's `value` exactly; re-deriving it in JS with different rounding means native reverts to a value nobody dragged to.
 
+Quantising has to tidy as well as snap, because Android's control is `Float`-based: Material 3's `Slider` hands back
+a 32-bit position, so a `Double` API on top of it would compare `0.10000000149011612` with React's `0.1` and see a
+change on every commit. Rounding the emitted value to 15 significant digits absorbs that, and it is the same rule
+iOS needs for binary fractions - which is why the rule is one file per platform with one set of test vectors
+(`ios/components/Slider/NitroUiSliderValue.swift`, `android/.../nitroui/NitroUiSliderValue.kt`).
+
 ### A native interaction must re-render itself
 
 During a drag no props arrive, so `commit()` never runs: the interaction must invalidate the UI, and the platforms do it
@@ -507,7 +525,11 @@ differently on purpose.
 - **iOS**: the `Binding` setter writes the handshake value, sends the change, then calls out to JS —
   `model.state.user(requested)`, `model.objectWillChange.send()`, `model.onChange?(...)`
   (`ios/components/Switch/HybridNitroUiSwitch.swift:42-51`, send at `:48`). The `send()` is required: with the manual
-  publisher (§3) nothing else invalidates the view. Do **not** route an interaction through
+  publisher (§3) nothing else invalidates the view. **On a continuous control, put the `send()` on the frame tick
+  with the emit, not in the `Binding` setter**: the write to the model is what the control itself renders, while
+  `objectWillChange` re-evaluates the whole hosted body, and a `send()` per touch sample is exactly the
+  per-sample invalidation this section exists to prevent
+  (`ios/components/Slider/HybridNitroUiSlider.swift:211`). Do **not** route an interaction through
   `host.markDirty()`/`host.commit()` — that is the props path, and it adds a second invalidation plus a perf mark per
   frame. `objectWillChange` invalidates the whole hosted body, so keep it small.
 - **Android**: write the snapshot state and stop — `model.state.user(requested)` then `model.displayed = requested`
