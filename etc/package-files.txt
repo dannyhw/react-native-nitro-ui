@@ -48,6 +48,8 @@ lib/module/core/useControlled.js
 lib/module/core/useControlled.js.map
 lib/module/core/useProcessedColor.js
 lib/module/core/useProcessedColor.js.map
+lib/module/core/useSizingId.js
+lib/module/core/useSizingId.js.map
 lib/module/core/useStableCallback.js
 lib/module/core/useStableCallback.js.map
 lib/module/index.js
@@ -74,6 +76,8 @@ lib/typescript/src/core/useControlled.d.ts
 lib/typescript/src/core/useControlled.d.ts.map
 lib/typescript/src/core/useProcessedColor.d.ts
 lib/typescript/src/core/useProcessedColor.d.ts.map
+lib/typescript/src/core/useSizingId.d.ts
+lib/typescript/src/core/useSizingId.d.ts.map
 lib/typescript/src/core/useStableCallback.d.ts
 lib/typescript/src/core/useStableCallback.d.ts.map
 lib/typescript/src/index.d.ts
@@ -144,5 +148,6 @@ src/core/NitroUiIntrinsicProps.ts
 src/core/index.ts
 src/core/useControlled.ts
 src/core/useProcessedColor.ts
+src/core/useSizingId.ts
 src/core/useStableCallback.ts
 src/index.ts
