@@ -19,10 +19,11 @@
  *
  * The assertions run inside the app, which cannot see this machine's load
  * average or environment. The harness runner publishes both (see
- * `scripts/harness-timing-gate.mjs`) to a file under `example/`, which Metro
- * serves from disk per request - so this reads the load average at the moment
- * of the assertion, not the one from bundle time. The file is gitignored and
- * owned by whichever harness run is alive.
+ * `scripts/harness-timing-gate.js`) to a file under `example/`, which Metro
+ * serves per request through a route that config declares - so this reads the
+ * load average at the moment of the assertion, not the one from bundle time.
+ * The file is gitignored and owned by whichever harness run is alive; nothing
+ * here trusts it without checking `metroPort` and its age first.
  */
 import { TurboModuleRegistry } from 'react-native';
 import { expect } from 'react-native-harness';
