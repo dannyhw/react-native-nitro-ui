@@ -2,6 +2,7 @@ package com.margelo.nitro.nitroui
 
 import android.app.Activity
 import android.view.View
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
