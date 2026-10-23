@@ -54,6 +54,18 @@ namespace margelo::nitro::nitroui {
      */
     static void invalidateEnvironment();
 
+    /**
+     * Declare the size to lay a component's first instance out with, before
+     * anything has been measured - the platform's documented control size.
+     *
+     * A component calls this once, from its own native type, because only it
+     * knows what it hosts (and, on iOS, which OS's control size applies). The
+     * first real measurement overwrites it, so this is only ever the first
+     * frame's guess - but it has to be a good one: giving SwiftUI or Compose a
+     * box smaller than the control makes it paint outside it.
+     */
+    static void setFallback(const char* componentName, double width, double height, int32_t policy);
+
     /// Number of cached sizes. For diagnostics and tests.
     static int64_t cachedSizeCount();
   };

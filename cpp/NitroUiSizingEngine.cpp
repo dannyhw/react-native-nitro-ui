@@ -406,6 +406,13 @@ namespace margelo::nitro::nitroui {
     NitroUiSizingEngine::shared().invalidateEnvironment();
   }
 
+  void NitroUiSizing::setFallback(const char* componentName, double width, double height, int32_t policy) {
+    NitroUiSizingEngine::shared().setFallback(componentName,
+                                              static_cast<float>(width),
+                                              static_cast<float>(height),
+                                              policy == POLICY_FILL_WIDTH ? NitroUiSizingEngine::kFlagFillWidth : 0u);
+  }
+
   int64_t NitroUiSizing::cachedSizeCount() {
     return static_cast<int64_t>(NitroUiSizingEngine::shared().cachedSizeCount());
   }
