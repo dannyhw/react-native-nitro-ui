@@ -269,6 +269,30 @@ namespace {
     checkEquals(pushes.size(), size_t{0}, "zero commits for the second mount");
   }
 
+  /**
+   * Review B2, pinned (review O1): a pre-warmed entry is a *guess*, so every
+   * instance laid out from it stays inexact. Two instances take the pre-warm, only
+   * one of them measures, and the answer has to reach both. Making the pre-warm
+   * authoritative answers the second one "exact" out of the guess and it never
+   * hears that the first control measured something else - one push instead of
+   * two, and a Switch that stays in a box 10 pt too short for its whole life.
+   */
+  void testAPrewarmLeavesEveryInstanceInexact() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 61, 28, 0);
+    check(engine().prewarm("NitroUiSwitch"), "the declared size is pre-warmable");
+    bind(93, 93);
+    bind(94, 94);
+    measure(93, "");
+    measure(94, "");
+    checkEquals(pushes.size(), size_t{0}, "two pre-warmed mounts cost nothing");
+
+    // The real control is 51x31 (compat mode), and only one of them measured it.
+    engine().report(93, 51, 31, 0);
+    engine().flush();
+    checkEquals(pushes.size(), size_t{2}, "both instances are corrected, not just the reporter");
+  }
+
   void testOneReportCorrectsEveryInstance() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -375,6 +399,48 @@ namespace {
     check(engine().flush(), "a real size change after the bump is corrected");
     checkEquals(pushes.size(), size_t{1}, "one commit, for the size that moved");
     checkSize(NitroUiMeasuredSize{pushes[0].width, pushes[0].height, {}, 0}, 66, 44, "to the new size");
+  }
+
+  /**
+   * Review F2: the S2 correction with no `measure` between the bump and the
+   * report, which is what a real host does.
+   *
+   * A trait change re-lays out the hosted control from the platform side, and the
+   * control reports its new size from that layout. Yoga is only asked again if a
+   * layout pass needs a number, and a mounted control whose size was believed
+   * exact does not need one - so there is no re-measure coming to rescue the
+   * report. Round 1 cleared the ledger on every bump, so this report was answered
+   * "nothing ever laid out for this instance" and dropped: the control stayed at
+   * the old size until something else happened to lay it out again. The case above
+   * could not see that because it measured after each bump, which rebuilds the
+   * entry by itself.
+   */
+  void testEnvironmentChangeCorrectsAReportWithNoMeasure() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+    bind(36, 36);
+    measure(36, "");
+    engine().report(36, 60, 40, 0);
+    engine().flush();
+    checkEquals(pushes.size(), size_t{1}, "mounted, corrected, and exact at 60x40");
+
+    pushes.clear();
+    // Dynamic Type grows. The host re-lays out and reports the bigger size; no
+    // layout pass asked Yoga for a number in between.
+    engine().invalidateEnvironment();
+    checkEquals(pushes.size(), size_t{0}, "the bump itself commits nothing");
+    engine().report(36, 72, 48, 0);
+    check(engine().flush(), "the report is still believed without a re-measure");
+    checkEquals(pushes.size(), size_t{1}, "one commit, for the control whose size moved");
+    checkSize(NitroUiMeasuredSize{pushes[0].width, pushes[0].height, {}, 0}, 72, 48, "to the size it measured");
+
+    // The other half of S2, again with no re-measure: an epoch bump that did not
+    // move this control must not push it a byte-identical second size.
+    pushes.clear();
+    engine().invalidateEnvironment();
+    engine().report(36, 72, 48, 0);
+    check(!engine().flush(), "a bump that did not move the control leaves nothing to flush");
+    checkEquals(pushes.size(), size_t{0}, "and costs no commit");
   }
 
   /**
@@ -807,6 +873,33 @@ namespace {
   }
 
   /**
+   * Review S7, pinned (review O1): the re-queue, not the cache.
+   *
+   * An instance that could not be reached during a flush goes back on the
+   * needs-correction list. Here it binds and is *never measured again*, so the
+   * cache cannot rescue it: the next report of its configuration - a sibling
+   * measuring the same variant - is the only thing left that can reach it. Dropping
+   * the re-queue leaves that control sitting at the guess for as long as it is on
+   * screen, and the case above cannot see it because it re-measures after binding.
+   */
+  void testAnUnboundTargetIsCorrectedByALaterReport() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+    bind(115, 115);
+    measure(115, "Switch|");
+    measure(116, "Switch|"); // never bound: its state has not arrived yet
+    engine().report(115, 61, 28, 0);
+    engine().flush();
+    checkEquals(pushes.size(), size_t{1}, "the reachable one is corrected");
+
+    bind(116, 116);
+    engine().report(115, 61, 28, 0);
+    check(engine().flush(), "a later report of the same configuration still has a target to reach");
+    checkEquals(pushes.size(), size_t{2}, "the instance that had been unreachable is corrected");
+    checkSize(NitroUiMeasuredSize{pushes[1].width, pushes[1].height, {}, 0}, 61, 28, "at the size it was owed");
+  }
+
+  /**
    * Reports that arrive before *any* layout for an instance are dropped, and do
    * not leave anything behind.
    */
@@ -895,10 +988,12 @@ int main() {
   testColdMountFallsBackAndCorrects();
   testPrewarmedMountCostsNothing();
   testPrewarmCannotPoisonTheCache();
+  testAPrewarmLeavesEveryInstanceInexact();
   testOneReportCorrectsEveryInstance();
   testKeysAreIndependent();
   testEnvironmentChangeDropsAnswersAndKeepsTheGuess();
   testEnvironmentChangeCorrectsAMountedInstance();
+  testEnvironmentChangeCorrectsAReportWithNoMeasure();
   testEnvironmentSignatureCoalescesCallbacks();
   testPrewarmMakesTheFirstMountExact();
   testStatsCountCorrectionsAndDroppedReports();
@@ -915,6 +1010,7 @@ int main() {
   testFillWidthKeepsTheFlag();
   testUnboundReporterKeepsItsCorrection();
   testUnboundTargetKeepsTheCorrection();
+  testAnUnboundTargetIsCorrectedByALaterReport();
   testReportsWithoutAnInstanceAreDropped();
   testDeadStateIsPruned();
   testForgetDuringPendingCorrection();

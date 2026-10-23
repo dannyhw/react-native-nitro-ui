@@ -1061,8 +1061,18 @@ describe('Sizing · intrinsic (T11)', () => {
     // report of a mounted control was answered "nothing ever laid out" and it kept
     // its old size until it remounted. A Switch does not move with the text size,
     // so the environment is moved under a mounted control and the control is then
-    // asked for a genuinely new size: if the invalidation dropped the instance,
-    // that second correction never arrives, and this test times out.
+    // asked for a genuinely new size.
+    //
+    // What this proves on device is what a host test cannot: the bump keeps a
+    // mounted instance alive and commits nothing for a size that did not move, and
+    // a control that really does change size afterwards is still corrected in the
+    // new epoch. What it does *not* pin is S2 itself - the `nuiTestWidth` re-render
+    // changes the sizing key, which dirties the measurement, and the resulting
+    // `measure` rebuilds the very ledger entry a dropping bump would have deleted,
+    // so round 1's code passes here too (round-2 review F1/F2 found this). The gate
+    // for the dropping bug is `testEnvironmentChangeCorrectsAReportWithNoMeasure`
+    // in `scripts/native-tests/sizing.test.cpp`, which reports after a bump with no
+    // re-measure - the order a real trait change happens in.
     //
     // The guess is this platform's real size so the mount itself costs nothing:
     // every correction counted below belongs to the environment change.
@@ -1114,10 +1124,11 @@ describe('Sizing · intrinsic (T11)', () => {
     );
     const d = delta(mid, stats());
     console.log(`env change then a real size change: d=${JSON.stringify(d)}`);
-    // This is the proof the report was not dropped: the control was already on
-    // screen, in the new epoch, with no cached size - and its own measure still
-    // reached the instance that had to be corrected. Round 1's code answered it
-    // "nothing ever laid out", and the box above is where that would show.
+    // The control was already on screen, in the new epoch, with no cached size -
+    // and its own measure still reached the instance that had to be corrected, so
+    // the new size arrived rather than waiting for a remount. Read together with
+    // the note at the top of this test: this is the correction working, not the
+    // gate for a dropped report (a host test owns that one).
     expect(boxMatches(box, wideBox)).toBe(true);
     expect(d.corrections).toBe(1);
     unmount();
