@@ -287,6 +287,17 @@ export function patchSizingObjC(source, className, fileName = 'Component.mm') {
       error: `${fileName}: "@implementation ${className}Component" not found - nitrogen changed its output shape, update patch-nitrogen.mjs.`,
     };
   }
+  // Hard-fail rather than insert a second one: a nitrogen that starts generating
+  // this override itself would otherwise get a duplicate method - which Objective-
+  // C++ accepts and resolves to whichever implementation the linker picks, so the
+  // sizing bind would silently stop happening.
+  if (source.includes('- (void)updateState:')) {
+    return {
+      code: source,
+      status: 'error',
+      error: `${fileName}: already defines updateState:oldState: - nitrogen generates it now, so this patch must be dropped rather than duplicated.`,
+    };
+  }
   const end = source.lastIndexOf('@end');
   if (end === -1) {
     return {
@@ -345,6 +356,16 @@ export function patchSizingKotlin(source, className, fileName = 'Manager.kt') {
           status: 'error',
           error: `${fileName}: marker found but the bind call or import is missing.`,
         };
+  }
+
+  // Same rule as the iOS hook: a `bind` that is already there means nitrogen
+  // generates one, and a second call would bind every state change twice.
+  if (source.includes('NitroUiSizing.bind(')) {
+    return {
+      code: source,
+      status: 'error',
+      error: `${fileName}: already calls NitroUiSizing.bind() - nitrogen generates the hook now, so this patch must be dropped rather than duplicated.`,
+    };
   }
 
   const anchorRe = new RegExp(
