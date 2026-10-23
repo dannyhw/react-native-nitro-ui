@@ -1094,6 +1094,110 @@ namespace {
     check(std::fabs(pushes[0].width - 61) < 0.001f, "and it is the last size");
   }
 
+  /**
+   * FIX2 (T15 Finding 1, D20). The correction lands as a new `State`, but React's
+   * next props clone copies the state of *its own* pre-correction revision, and our
+   * `adopt` mints a fresh `State` from it on every props change - so RN's
+   * `progressState` never re-dirties the node and a props-only clone stays clean
+   * (`shouldNewRevisionDirtyMeasurement`) with that revision's superseded size. Once
+   * an instance has been corrected it must stop trusting that revision; this is the
+   * flag the shadow node asks for on a props turn.
+   */
+  void testACorrectedInstanceAsksForAFreshMeasure() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 40, 20, 0);
+    bind(91, 91);
+    bind(93, 93);
+
+    check(!engine().requiresFreshMeasure(91), "an instance that was never measured asks for nothing");
+    check(!engine().requiresFreshMeasure(NitroUiSizing::NO_INSTANCE), "and neither does a view sizing ignores");
+
+    measure(91, "Switch|");
+    check(!engine().requiresFreshMeasure(91), "a first answer is not a change, even a wrong one");
+
+    // Corrected without being measured again: the flag has to come from the
+    // report, because a props turn that never re-layouts is exactly the turn
+    // that would otherwise lay the control out at the superseded size.
+    engine().report(91, 61, 28, 0);
+    check(engine().flush(), "the correction commits");
+    check(engine().requiresFreshMeasure(91), "an instance whose answer moved must re-ask on a props turn");
+    check(!engine().requiresFreshMeasure(93), "and only that instance - another mount keeps the fast path");
+
+    measure(91, "Switch|");
+    check(engine().requiresFreshMeasure(91), "the flag is sticky: Yoga is still holding the old answer");
+
+    engine().forget(91);
+    check(!engine().requiresFreshMeasure(91), "a dropped instance carries nothing with it");
+  }
+
+  /**
+   * The other half of the fix: the exemption must not become a measure on every
+   * props turn. An instance that was never answered twice keeps review S1's
+   * promise that toggling a control costs no measure and no commit.
+   */
+  void testAnUncorrectedInstanceKeepsTheMeasurementCache() {
+    resetEngine();
+    engine().seedSize("NitroUiSwitch", "Switch|", 61, 28, 0);
+    bind(92, 92);
+    const NitroUiSizingCounters before = engine().stats();
+
+    for (int turn = 0; turn < 30; turn++) {
+      const NitroUiMeasuredSize size = measure(92, "Switch|");
+      checkSize(size, 61, 28, "a prop turn is laid out from what the engine believes");
+      check(!engine().requiresFreshMeasure(92), "and never has to re-ask");
+    }
+
+    const NitroUiSizingCounters after = engine().stats();
+    checkEquals(after.correctionsImmediate + after.correctionsBatched - (before.correctionsImmediate + before.correctionsBatched), int64_t{0},
+                "a control that agreed with the engine was never corrected");
+  }
+
+  /**
+   * FIX2 fix round 1 (review finding 1). A configuration change is not a
+   * correction. `measure` deliberately clears what the instance was last laid out
+   * at when its key moves, so comparing the new answer against that cleared size
+   * flags *every* re-key - warm keys of the identical size included - and a control
+   * whose size never moved is on the paying path for the rest of its mount. Both
+   * halves are pinned: a re-key costs nothing, and an answer that really moved
+   * under an unchanged configuration still raises the flag. Without the second
+   * half the line could simply be deleted.
+   */
+  void testARekeyIsNotACorrectionButAMovedAnswerIs() {
+    // A re-key between two configurations that happen to be the same size: a
+    // Button going from "Save" to "Edit". Both answers are warm, nothing was ever
+    // corrected, so nothing may be flagged and nothing may be committed.
+    resetEngine();
+    engine().seedSize("NitroUiSwitch", "Switch|Save", 80, 35, 0);
+    engine().seedSize("NitroUiSwitch", "Switch|Edit", 80, 35, 0);
+    bind(94, 94);
+    const NitroUiSizingCounters beforeRekey = engine().stats();
+
+    measure(94, "Switch|Save");
+    check(!engine().requiresFreshMeasure(94), "the first answer flags nothing");
+    measure(94, "Switch|Edit");
+    check(!engine().requiresFreshMeasure(94), "moving to another configuration of the same size is not a correction");
+
+    const NitroUiSizingCounters afterRekey = engine().stats();
+    checkEquals(afterRekey.correctionsImmediate + afterRekey.correctionsBatched -
+                    (beforeRekey.correctionsImmediate + beforeRekey.correctionsBatched),
+                int64_t{0}, "and it corrected nothing");
+    checkEquals(pushes.size(), size_t{0}, "and it committed nothing");
+
+    // The other half: with the configuration unchanged, an answer that moves is
+    // still a correction, and this is the line that has to notice it. The instance
+    // is laid out before the component's declared size arrives (T14's ordering), so
+    // the same key is later answered something else with no report in between - only
+    // `measure` can see that.
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 40, 20, 0);
+    bind(95, 95);
+    measure(95, "Switch|");
+    check(!engine().requiresFreshMeasure(95), "a first answer is not a change");
+    engine().setFallback("NitroUiSwitch", 61, 28, 0);
+    measure(95, "Switch|");
+    check(engine().requiresFreshMeasure(95), "the same configuration answered a different size, so it must re-ask");
+  }
+
   void testEpsilonTreatsTinyDifferencesAsEqual() {
     resetEngine();
     engine().seedSize("NitroUiSwitch", "Switch|", 61, 28, 0);
@@ -1148,6 +1252,9 @@ int main() {
   testForgetDuringPendingCorrection();
   testRepeatedReportsKeepTheLastOne();
   testEpsilonTreatsTinyDifferencesAsEqual();
+  testACorrectedInstanceAsksForAFreshMeasure();
+  testAnUncorrectedInstanceKeepsTheMeasurementCache();
+  testARekeyIsNotACorrectionButAMovedAnswerIs();
 
   if (failures == 0) {
     std::printf("  %d checks passed\n", checks);
