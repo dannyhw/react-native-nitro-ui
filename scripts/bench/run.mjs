@@ -294,41 +294,47 @@ function iosTarget(device, appPath, bundleId) {
  * is what a profile is worth.
  *
  * The status is read back and logged because "the profile did nothing" and "the
- * profile was worth nothing" look identical in a results table otherwise.
+ * profile was worth nothing" look identical in a results table otherwise, and the
+ * cycle is repeated until it says `speed-profile`: the write lands a few seconds
+ * after process start, and one measured run got `verify` from a single 4s settle.
  */
 function primeArtProfile(serial, packageName) {
-  // 2. One throwaway launch, settled, so the profile is on disk before the compile.
-  adb(serial, [
-    'shell',
-    'am',
-    'start',
-    '-W',
-    '-S',
-    '-n',
-    `${packageName}/.MainActivity`,
-  ]);
-  sleep(4_000);
-  adb(serial, ['shell', 'am', 'force-stop', packageName]);
-  // 3. Compile from it now.
-  adb(serial, [
-    'shell',
-    'cmd',
-    'package',
-    'compile',
-    '-m',
-    'speed-profile',
-    '-f',
-    packageName,
-  ]);
-  const dexopt = adb(serial, ['shell', 'dumpsys', 'package', 'dexopt']);
-  const block = dexopt.slice(dexopt.indexOf(`[${packageName}]`));
-  const status = /\[status=([^\]]+)\]/.exec(block)?.[1] ?? 'unknown';
-  log(`ART:       ${packageName} -> ${status}`);
-  if (status !== 'speed-profile') {
-    log(
-      'ART:       not speed-profile - this run measures the interpreter, not a baseline profile'
-    );
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    // 2. One throwaway launch, settled, so the profile is on disk before the compile.
+    adb(serial, [
+      'shell',
+      'am',
+      'start',
+      '-W',
+      '-S',
+      '-n',
+      `${packageName}/.MainActivity`,
+    ]);
+    sleep(8_000);
+    adb(serial, ['shell', 'am', 'force-stop', packageName]);
+    sleep(1_000);
+    // 3. Compile from it now.
+    adb(serial, [
+      'shell',
+      'cmd',
+      'package',
+      'compile',
+      '-m',
+      'speed-profile',
+      '-f',
+      packageName,
+    ]);
+    const dexopt = adb(serial, ['shell', 'dumpsys', 'package', 'dexopt']);
+    const block = dexopt.slice(dexopt.indexOf(`[${packageName}]`));
+    const status = /\[status=([^\]]+)\]/.exec(block)?.[1] ?? 'unknown';
+    log(`ART:       attempt ${String(attempt)}: ${packageName} -> ${status}`);
+    if (status === 'speed-profile') {
+      return;
+    }
   }
+  log(
+    'ART:       not speed-profile - this run measures the interpreter, not a baseline profile'
+  );
 }
 
 function androidTarget(device, apkPath, packageName) {
