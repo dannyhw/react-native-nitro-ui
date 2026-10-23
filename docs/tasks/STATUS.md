@@ -15,7 +15,7 @@
 | G3 | Progress | Apex | Opus | in progress |
 | G2 | Button (owns R3 sizing test) | Apex | Opus | merged (1 impl + 1 fix round) |
 | T15 | Real-input verification (OS taps/drags on Switch, Slider; Button added after G2 merges) | Apex | — | merged (runner) |
-| FIX2 | Stale Yoga measurement after a correction (iOS Switch at 0 width after `value` update, found by T15) | Apex | Opus | fix round 1 (flag only on correction, cost/mechanism wording) |
-| G4 | SegmentedControl (Picker → 0.2, D19) | — | — | next free device slot |
+| FIX2 | Stale Yoga measurement after a correction (iOS Switch at 0 width after `value` update, found by T15) | Apex | Opus | merged (1 impl + 1 fix round; iOS+Android Sizing 24/24, real input 3/3 both) |
+| G4 | SegmentedControl (Picker → 0.2, D19) | Apex | Opus | in progress |
 | T15b | Add Button to the real-input runner + fix the Android Slider drag/JS-write test (red on main) | Apex | — | merged (real input 3/3 both platforms) |
 | G5 | DatePicker | — | — | moved to 0.2 (D19) |
