@@ -61,9 +61,16 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
 - **D17 (T11 round 2)** Sizing frame budget, both platforms: the **first instance of a sizing
   configuration per environment epoch** (no exact cache entry yet) may show the declared fallback
   for one frame before its correction lands; every instance whose configuration is already exact
-  in the cache must lay out exact on its first frame (0 stale). On Android a cold batch corrects
-  up to the immediate budget (2) inside the cancelled frame and the rest on the next frame — same
-  rule, documented; no budget increase (synchronous pushes risk re-entering `measureContent`).
+  in the cache must lay out exact on its first frame (0 stale). The immediate (synchronous) budget
+  per flush is platform-set: iOS 2, Android 1 (T12; measured −32/−37 % flush time at 200/500 rows).
+  The rest of a cold batch lands on a later frame. Gated: the synchronous-push count and the
+  never-stale exact-cache instance; **not** gated: a whole cold batch's stale count (logged; T12
+  measured 0 for 100 instances at budget 1 on one emulator, no mechanism claimed). No budget
+  increase (synchronous pushes risk re-entering `measureContent`).
   No "hide until measured" mode in 0.1. Declared fallbacks must be accurate per OS (D14), and
   `prewarm` is the recommended way to make first mounts exact. Harness tests assert exactly this
   rule, with poisoned (wrong) fallbacks so a failed correction is visible.
+- **D18 (T12)** Android bench numbers are only comparable within one ART compilation state.
+  Runs record it (`art`); baselines are minted only from `speed-profile` runs. Android numbers
+  published before T12 (T02 rounds 3–4, T11, T12 phase 1) were measured at `verify` — ratios and
+  absolutes both differ. Primed Android baselines are recorded during release readiness (Phase 4).
