@@ -185,7 +185,16 @@ extension SliderModel {
   /// The finger lifted. The final value always reaches JS, even when the frame
   /// that carried it was the last thing emitted.
   ///
+  /// Idempotent, and the guard is the event contract: only a drag that started
+  /// may end. SwiftUI's `onEditingChanged(false)` has no defined order with the
+  /// `Binding` writes of the same gesture and neither platform promises one end
+  /// per start, so without it a second end reports a completion nobody performed
+  /// and - after ``cancelDrag()`` - delivers one to whoever owns this instance
+  /// next.
   func endDrag() {
+    guard dragging else {
+      return
+    }
     deliverUnreported()
     dragging = false
     pump.stop()

@@ -192,7 +192,8 @@ values the thumb can show, and still emits through the same handshake.
   end on a step.
 - **Android start events are inferred.** Compose has no drag-start callback, so
   `onSlidingStart` comes from the first value change. A touch that never changes
-  the value therefore reports `onSlidingComplete` with no start.
+  the value therefore reports nothing at all: `onSlidingComplete` is guarded on a
+  drag having started, so the three callbacks are never half-emitted.
 - **Android a11y is not visible to the harness.** Compose semantics are not Views:
   M3 publishes the label and its actions in the `SemanticsNode` tree, while
   `@react-native-harness/ui`'s label query matches `View.contentDescription`. The
