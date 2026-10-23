@@ -498,27 +498,47 @@ describe('Sizing · intrinsic (T11)', () => {
         `changedFlushes=${d.changedFlushes} flushMs=${flushMs.toFixed(3)} ` +
         `maxFlushMs=${d.maxFlushMs.toFixed(3)}`
     );
-    // One update per instance, and never more than the per-flush budget of two
-    // synchronous ones.
+    // One update per instance, and never more synchronous ones than the platform
+    // is allowed to spend per flush: 2 on iOS, where `flush` runs at the end of a
+    // turn whose commit has not happened yet (T11 measured 8.5ms for this batch),
+    // and 1 on Android, whose flush runs inside the pre-draw pass it is about to
+    // cancel. One is enough there because the correction is shared by every
+    // instance with this configuration, so the other 199 ride the same commit -
+    // the stale-frame test below measures `stale=0` with the budget at 1 - while a
+    // second synchronous commit re-lays out a tree that just became correct
+    // (T12 phase 2: 36.2-38.5ms for two pushes, 36.6ms for one).
+    const immediateBudget = Platform.OS === 'android' ? 1 : 2;
     expect(d.corrections).toBe(200);
-    expect(d.immediate).toBeLessThanOrEqual(2 * Math.max(d.flushes, 1));
-    expect(d.immediate).toBeGreaterThanOrEqual(2);
+    expect(d.immediate).toBeLessThanOrEqual(
+      immediateBudget * Math.max(d.flushes, 1)
+    );
+    // At least one: the instance that reported must be corrected inside the frame
+    // this flush cancels, which is the Android half of D17 (`stale=0` for a single
+    // cold control is asserted by the cold-Switch test above).
+    expect(d.immediate).toBeGreaterThanOrEqual(1);
     expect(d.batched).toBe(d.corrections - d.immediate);
     // The engine's work must stay small next to the mount, and must not be 200
     // synchronous commits. One report corrects every instance that shares the
-    // configuration, so the batch costs one flush - and it is bounded by the
-    // instances in a turn, which is the knob (a per-flush instance cap) if a turn
-    // ever carries more.
+    // configuration, so the batch costs one flush. Cap-ing corrections per flush is
+    // not the knob it looks like: T12 phase 2 found the whole cost is the one
+    // synchronous commit, so spending it on fewer instances would keep the ms and
+    // lose the correction. The knob is the budget above - how many commits, not how
+    // many instances per commit.
     //
     // `maxFlushMs` cannot carry this assertion: it is a process-wide high-water
     // mark, so it also reports every other test's flushes - a test that never
     // flushed at all reads back the slowest flush of the run. `lastFlushMs` is
-    // this batch's own. Measured here, debug build: 8.5ms on iOS and 84-125ms on
-    // Android for the 200. The Android gap is the re-layout those pushes trigger
-    // inside its pre-draw pass, which is the same pass that cancels the wrong-size
-    // frame (D17) - the frame it spends is the frame it replaces. The relative
-    // bound is the machine-independent bar (a software-rendered emulator, beside
-    // other work); the absolute one stops a fast machine hiding a regression.
+    // this batch's own. Measured here, debug build: 8.5ms on iOS. On Android it is
+    // the re-layout the synchronous push triggers inside the pre-draw pass, which
+    // is the same pass that cancels the wrong-size frame (D17) - the frame it
+    // spends is the frame it replaces. T12 phase 2 attributed that re-layout: it is
+    // the single Fabric commit, and the engine's own work around it (200 reports,
+    // one correction, 199 async enqueues) is 0.09ms. One commit of a 200-host tree
+    // costs 36.2-38.5ms on a quiet emulator and T11 measured 84-125ms for the same
+    // batch on a loaded one, so this is the load-bound number, not a target: the
+    // bar stays where T11 put it because it cannot be tightened without turning
+    // this test red on a busy machine. The structural guarantee - not N synchronous
+    // commits - is carried by the `immediate` gate above, not by milliseconds.
     expect(flushMs).toBeLessThan(mountedIn * 0.1);
     expect(flushMs).toBeLessThan(Platform.OS === 'android' ? 250 : 40);
     unmount();

@@ -24,7 +24,7 @@ object NitroUiSizing {
 
   private external fun nBind(componentName: String, stateWrapper: StateWrapper?)
 
-  private external fun nFlush(): Boolean
+  private external fun nFlush(immediateBudget: Int): Boolean
 
   private external fun nReport(instanceId: Long, width: Double, height: Double, policy: Int)
 
@@ -62,6 +62,23 @@ object NitroUiSizing {
   }
 
   /**
+   * How many of a flush's corrections this platform pays for synchronously.
+   *
+   * One, on Android: a synchronous correction is a Fabric commit run inside the
+   * `OnPreDrawListener` that called `flush`, and that listener is about to return
+   * `false` and cancel the frame the commit would have drawn. One is what D17 asks
+   * for there, and one is also enough for a batch - the correction is shared by
+   * every instance with the same configuration, so a cold batch still shows no
+   * wrong-size frame at a budget of one (T12 phase 2 measured `stale=0` over 100
+   * instances). A second synchronous push in the same flush re-lays out a tree
+   * that has just become correct: on a cold batch of 200, debug build, the flush
+   * costs 36.2-38.5 ms with two and 36.6 ms with one. iOS keeps two, because its
+   * flush runs at the end of a turn whose commit has not happened yet, so the
+   * pushes ride along with it (8.5 ms for the same batch).
+   */
+  private const val IMMEDIATE_BUDGET_PER_FLUSH = 1
+
+  /**
    * Apply queued size corrections as one batch of Fabric state updates.
    * Returns `true` when at least one size changed, i.e. the frame about to be
    * drawn is stale and the caller should skip drawing it.
@@ -71,7 +88,7 @@ object NitroUiSizing {
       return false
     }
     return try {
-      nFlush()
+      nFlush(IMMEDIATE_BUDGET_PER_FLUSH)
     } catch (_: UnsatisfiedLinkError) {
       unavailable = true
       false

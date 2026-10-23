@@ -73,8 +73,8 @@ namespace margelo::nitro::nitroui {
       NitroUiSizingEngine::shared().bind(name.c_str(), stateFromWrapper(jni::alias_ref<JStateWrapper::javaobject>{stateWrapper}));
     }
 
-    jboolean nativeFlush(JNIEnv* /*env*/, jclass) {
-      return NitroUiSizing::flush() ? JNI_TRUE : JNI_FALSE;
+    jboolean nativeFlush(JNIEnv* /*env*/, jclass, jint immediateBudget) {
+      return NitroUiSizing::flush(static_cast<int32_t>(immediateBudget)) ? JNI_TRUE : JNI_FALSE;
     }
 
     void nativeReport(JNIEnv* /*env*/, jclass, jlong instanceId, jdouble width, jdouble height, jint policy) {
@@ -117,7 +117,7 @@ namespace margelo::nitro::nitroui {
 
     const JNINativeMethod sizingMethods[] = {
       {"nBind", "(Ljava/lang/String;Lcom/facebook/react/uimanager/StateWrapper;)V", reinterpret_cast<void*>(&nativeBind)},
-      {"nFlush", "()Z", reinterpret_cast<void*>(&nativeFlush)},
+      {"nFlush", "(I)Z", reinterpret_cast<void*>(&nativeFlush)},
       {"nReport", "(JDDI)V", reinterpret_cast<void*>(&nativeReport)},
       {"nSetFallback", "(Ljava/lang/String;DDI)V", reinterpret_cast<void*>(&nativeSetFallback)},
       {"nInvalidateEnvironment", "()V", reinterpret_cast<void*>(&nativeInvalidateEnvironment)},
