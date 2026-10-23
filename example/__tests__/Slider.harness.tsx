@@ -287,6 +287,153 @@ describe('Slider', () => {
     expect(Math.abs(content.width - box.width)).toBeLessThan(1);
   });
 
+  it('answers its own height at any width, and ignores a box height that is wrong', async () => {
+    // Two properties a `fillWidth` control must keep separate:
+    //
+    // - the **height does not move with the width** - one cached answer serves
+    //   every parent, which is what makes `nuiSizingKey` the empty string and
+    //   `prewarm(['NitroUiSlider'])` able to warm the whole component;
+    // - the **box cannot contaminate the answer**. A box of the wrong height is
+    //   the ordinary state of a first layout (the fallback, a stale cache, a
+    //   correction still in flight). If the host measured under the box's height,
+    //   the report would agree with the layout, the engine would never be told,
+    //   and a wrong height would confirm itself forever - the bug that made the
+    //   Android measure unbind its height maximum.
+    const contentOf = async (testId: string) => {
+      const handle = await handleFor(testId);
+      return pollUntil(
+        () => {
+          const size = handle.measureContent();
+          return size.height > 0 ? size : null;
+        },
+        () => new Error(`${testId} never measured.`)
+      );
+    };
+
+    // One live tree per test: the first instance is measured and unmounted before
+    // the second is rendered. `Sizing.harness.tsx` renders this way throughout,
+    // and it is not a style choice - on Android a second `render()` inside one
+    // test leaves the *first* control's host unmeasurable (`measureContent()`
+    // answers 0x0 for as long as the test then asks it), while iOS happily keeps
+    // both trees alive. A suite that compares two live instances therefore passes
+    // on iOS and times out on Android. Measuring in sequence asks the same
+    // question and answers it on both platforms.
+    const wide = await render(
+      <View style={{ width: 300 }}>
+        <Slider
+          defaultValue={0.4}
+          testID="wide"
+          hybridRef={captureFor('wide')}
+        />
+      </View>
+    );
+    const wideBox = await waitForBox('wide');
+    const wideContent = await contentOf('wide');
+    wide.unmount();
+
+    const narrow = await render(
+      <View style={{ width: 180 }}>
+        <Slider
+          defaultValue={0.4}
+          testID="narrow"
+          hybridRef={captureFor('narrow')}
+        />
+      </View>
+    );
+    const narrowBox = await waitForBox('narrow');
+    const narrowContent = await contentOf('narrow');
+    console.log(
+      `height vs width: wide=${describeBox(wideBox)}/${describeBox(wideContent)} ` +
+        `narrow=${describeBox(narrowBox)}/${describeBox(narrowContent)}`
+    );
+    narrow.unmount();
+
+    // The width is the parent's, and it changed by 120 pt.
+    expect(Math.abs(wideBox.width - 300)).toBeLessThan(1);
+    expect(Math.abs(narrowBox.width - 180)).toBeLessThan(1);
+    // The height is the control's, and it did not move.
+    expect(Math.abs(narrowBox.height - EXPECTED_HEIGHT)).toBeLessThan(1);
+    expect(Math.abs(narrowContent.height - wideContent.height)).toBeLessThan(
+      0.5
+    );
+    // And the width the control reports for itself is the *new* box, not the one
+    // the first instance of this configuration happened to be measured at: a
+    // `fillWidth` cache entry's width is a restatement of a parent, so an answer
+    // that carried one over would show up here (`sizing.md` §5).
+    expect(Math.abs(narrowContent.width - narrowBox.width)).toBeLessThan(1);
+
+    // Now a box that is *wrong* about the height: 12 against a control that is
+    // 31/48. The user's style owns the layout, so the box stays 12 - but the
+    // control's own answer must still be the truth, or the correction that
+    // follows is measuring the box instead of the control.
+    const squashed = await render(
+      <View style={{ width: 180, height: 12 }}>
+        <Slider
+          defaultValue={0.4}
+          testID="squashed"
+          hybridRef={captureFor('squashed')}
+        />
+      </View>
+    );
+    const squashedBox = await waitForBox('squashed');
+    const squashedContent = await contentOf('squashed');
+    console.log(
+      `squashed box: box=${describeBox(squashedBox)} ` +
+        `measured=${describeBox(squashedContent)}`
+    );
+    squashed.unmount();
+
+    expect(Math.abs(squashedBox.width - 180)).toBeLessThan(1);
+    expect(Math.abs(squashedBox.height - 12)).toBeLessThan(1);
+    expect(Math.abs(squashedContent.height - EXPECTED_HEIGHT)).toBeLessThan(1);
+  });
+
+  it('answers its own height even when the box has none', async () => {
+    // The box can have no height for a perfectly ordinary reason: it is the
+    // first instance of a configuration, and a `fillWidth` control's height is
+    // something nobody knows yet. One frame at zero is survivable; what is not
+    // survivable is a measure that refuses to *run* until the box has a height,
+    // because the report is the only thing that gives the box one. That is a
+    // closed loop, and on iOS it was a whole broken screen: every Slider on it
+    // drew a ~28 pt thumb at the origin, because a `UIHostingController` whose
+    // frame is still `.zero` paints only SwiftUI's minimum content - and the
+    // first (zero) answer is what the instances below it were laid out from.
+    //
+    // So the box owns the layout and nothing else. A `fillWidth` measure needs
+    // the box's *width* - the half it may not invent - and must answer the
+    // height question whatever the height currently is.
+    //
+    // A user's `height: 0` reaches the same code, so this is written as the
+    // general rule rather than as a cold-mount special case.
+    await render(
+      <View style={{ width: 180, height: 0 }}>
+        <Slider
+          defaultValue={0.4}
+          testID="flat"
+          hybridRef={captureFor('flat')}
+        />
+      </View>
+    );
+    const handle = await handleFor('flat');
+    const content = await pollUntil(
+      () => {
+        const size = handle.measureContent();
+        return size.height > 0 ? size : null;
+      },
+      () =>
+        new Error(
+          `a box with no height stopped the control measuring ` +
+            `(last=${describeBox(handle.measureContent())}).`
+        )
+    );
+    console.log(`zero-height box: measured=${describeBox(content)}`);
+
+    expect(Math.abs(content.height - EXPECTED_HEIGHT)).toBeLessThan(1);
+    // The width still comes from the box it was given - the half of the
+    // question the control may not answer for itself.
+    expect(Math.abs(content.width - 180)).toBeLessThan(1);
+  });
+
   it('lays out at the declared fallback and corrects a wrong cached size', async () => {
     // D17: the first instance of a configuration may show the *declared* fallback
     // for one frame, and every configuration already answered exactly must lay out
