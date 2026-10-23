@@ -119,13 +119,14 @@ wants filled, and `alignSelf` is what decides it. An explicit `width`, `height`,
 keeps 60, and a `width: 200` keeps 200 while the height stays measured).
 
 One invariant belongs here because the first `fillWidth` component is what found
-it: the control must answer its height **even when its box has none**. A cold
-first instance really is laid out 0 tall — the declared fallback is registered by
-a component's first *view*, and Fabric creates that view after the shadow node's
-first measure — so a `fillWidth` measure that waits for a non-zero box height can
-starve forever, and on iOS a stalled host paints SwiftUI's minimum content: a
-thumb with no track, overflowing its neighbours. The gate is the box's *width*
-only (`docs/architecture/sizing.md` §5), asserted on both platforms by
+it: the control must answer its height **even when its box has none**. The
+ordinary way that happens is a caller's `height: 0` (until T14 a cold first
+instance supplied its own zero too, because the declared fallback arrived only
+with the component's first view — `docs/architecture/sizing.md` §5 and §6).
+Either way, a `fillWidth` measure that waits for a non-zero box height can starve
+forever, and on iOS a stalled host paints SwiftUI's minimum content: a thumb with
+no track, overflowing its neighbours. The gate is the box's *width* only
+(`docs/architecture/sizing.md` §5), asserted on both platforms by
 `answers its own height even when the box has none`
 (`example/__tests__/Slider.harness.tsx`).
 
