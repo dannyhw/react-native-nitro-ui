@@ -1,0 +1,105 @@
+import { Switch, nitroUiCore } from 'react-native-nitro-ui';
+
+import type { BenchListProps, BenchPerfMark } from '../types';
+import { onValueChange, range, rowStyle } from './shared';
+
+/**
+ * =====================================================================================
+ *  THE ONE-FILE CHANGE - the `nitro-ui` arm
+ * =====================================================================================
+ *
+ * This is the only file in the harness that renders `react-native-nitro-ui`, plus
+ * the only place its native perf marks are read. Everything else (plan, runner,
+ * reporter) is runtime-agnostic.
+ *
+ * Adding a *second* component to the matrix means one entry in
+ * `bench/src/plan.ts`/`docs` scenario props and one `List` per platform here - see
+ * docs/architecture/benchmarks.md "Per-component checklist".
+ *
+ * `Switch` is a **named import** from T10 onwards, so the props passed below are
+ * typechecked against the real component by `bun run bench:typecheck`
+ * (`paths: { "react-native-nitro-ui": ["../src/index.ts"] }` in
+ * `bench/tsconfig.json` is the TS mirror of Metro's `extraNodeModules`, which
+ * resolves the package to the repository root and asks for its
+ * `react-native-nitro-ui-source` export condition).
+ *
+ * Cost fairness: the arm passes what the reference arms pass - `value`, a stable
+ * no-op `onValueChange`, `testID`, and the shared `rowStyle`, so every arm lays
+ * out the same box and diffs the same JS props. `tintColor` and `disabled` stay
+ * unset: the comparison is each control's platform default. What the arm cannot
+ * avoid passing is what the library's own wrapper always sends
+ * (`defaultValue`, `mostRecentEventCount`, `nuiPerfId`, `null` for the rest,
+ * DECISIONS D7) - that is the library's props contract being measured, not bench
+ * bias, and it is the same cost a consumer pays.
+ * =====================================================================================
+ */
+
+/** `nitroUiCore.now()` and every perf mark are ms; the probe speaks ns (D1). */
+const MS_TO_NS = 1_000_000;
+
+/**
+ * Whether this process turned marks on.
+ *
+ * `nuiPerfId` alone is not enough to record anything (a marked view with
+ * recording off pays one relaxed atomic load and writes nothing), and a drained
+ * buffer is JS work, so both halves stay behind this flag: a normal measured run
+ * of the `nitro-ui` arm is instrumented exactly as much as the reference arms
+ * are, i.e. not at all.
+ */
+let marksEnabled = false;
+
+/** Called by the runner for a `--perf-marks` launch, before the first commit. */
+export function enableNitroUiPerfMarks(): void {
+  nitroUiCore.setPerfEnabled(true);
+  marksEnabled = true;
+}
+
+/**
+ * Every mark recorded since the last call, in the probe's nanosecond base.
+ *
+ * The library's ring is 4096 events and a 25-iteration x 50-instance run writes
+ * thousands, so the caller drains between iterations rather than once at the end
+ * - a full ring drops its oldest marks, which would silently under-count.
+ */
+export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
+  if (!marksEnabled) {
+    return null;
+  }
+  const marks: BenchPerfMark[] = [];
+  for (const event of nitroUiCore.drainPerf()) {
+    marks.push({
+      instanceId: event.instanceId,
+      kind: event.kind,
+      timeNs: Math.round(event.time * MS_TO_NS),
+    });
+  }
+  return marks;
+}
+
+/**
+ * `n` real nitro-ui switches.
+ *
+ * `nuiPerfId` is the library's own per-instance mark id, and it stays `null`
+ * unless the launch asked for marks: passing an id is nearly free but not
+ * literally free (one integer compare per mark site), and the numbers in the
+ * published tables should be the numbers a consumer gets.
+ */
+export function NitroUiList({ n, value, perfMarks }: BenchListProps) {
+  if (n === 0) {
+    return null;
+  }
+  return (
+    <>
+      {range(n).map((index) => (
+        <Switch
+          key={index}
+          testID={`bench-nitro-ui-${String(index)}`}
+          value={value}
+          onValueChange={onValueChange}
+          nuiPerfId={perfMarks ? index : null}
+          style={rowStyle}
+        />
+      ))}
+    </>
+  );
+}

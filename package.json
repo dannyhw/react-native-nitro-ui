@@ -29,6 +29,7 @@
     "!android/gradlew.bat",
     "!android/local.properties",
     "!**/__tests__",
+    "!**/*.perf-test.*",
     "!android/src/test",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -53,12 +54,17 @@
     "publint": "publint --strict",
     "manifest:check": "node scripts/package-files.mjs",
     "manifest:update": "node scripts/package-files.mjs --update",
-    "check": "bun run typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check",
+    "check": "bun run typecheck && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check",
     "harness:ios": "bun --cwd example harness:ios",
     "harness:android": "bun --cwd example harness:android",
     "smoke:pack": "bash scripts/smoke/pack.sh",
     "smoke:expo": "bash scripts/smoke/expo.sh",
     "smoke:rn-cli": "bash scripts/smoke/rn-cli.sh",
+    "bench": "node scripts/bench/run.mjs",
+    "bench:report": "node scripts/bench/report.mjs",
+    "bench:typecheck": "bun --cwd bench typecheck && bun --cwd bench typecheck:android",
+    "probe:nitrogen": "bun --cwd bench/modules/bench-probe nitrogen",
+    "perf:renders": "node scripts/perf/renders.mjs",
     "release": "release-it --only-version",
     "api-extractor": "api-extractor run --local --config etc/api-extractor.json",
     "api-extractor:check": "api-extractor run --config etc/api-extractor.json"
@@ -93,6 +99,7 @@
     "@react-native/eslint-config": "0.88.0",
     "@react-native/jest-preset": "0.88.0",
     "@release-it/conventional-changelog": "^12.0.2",
+    "@testing-library/react-native": "^14.1.0",
     "@types/react": "^19.2.0",
     "@types/react-test-renderer": "^19.3.0",
     "@typescript-eslint/parser": "^8.72.0",
@@ -113,6 +120,7 @@
     "react-native-builder-bob": "^0.44.1",
     "react-native-nitro-modules": "^0.37.1",
     "react-test-renderer": "19.3.0",
+    "reassure": "^1.6.1",
     "release-it": "^21.1.1",
     "turbo": "^2.11.10",
     "typescript": "^6.0.3"
@@ -123,7 +131,9 @@
     "react-native-nitro-modules": "^0.37.1"
   },
   "workspaces": [
-    "example"
+    "example",
+    "bench",
+    "bench/modules/bench-probe"
   ],
   "react-native-builder-bob": {
     "source": "src",
@@ -178,7 +188,11 @@
     ],
     "testMatch": [
       "**/*.test.[jt]s?(x)"
-    ]
+    ],
+    "transform": {
+      "^.+\\.(js|mjs|jsx|ts|tsx)$": "babel-jest",
+      "^.+\\.(bmp|gif|jpg|jpeg|mp4|png|psd|svg|webp)$": "@react-native/jest-preset/jest/assetFileTransformer.js"
+    }
   },
   "commitlint": {
     "extends": [
