@@ -55,6 +55,8 @@ namespace margelo::nitro::nitroui::views {
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> accessibilityLabel;
     nitro::ReactProp<std::variant<nitro::NullType, double>> nuiPerfId;
     nitro::ReactProp<std::optional<std::function<void(bool /* value */, double /* eventCount */)>>> onValueChange;
+    nitro::ReactProp<std::string> nuiSizingKey;
+    nitro::ReactProp<double> nuiSizingId;
     nitro::ReactProp<std::optional<std::function<void(const std::shared_ptr<HybridNitroUiSwitchSpec>& /* ref */)>>> hybridRef;
 
     [[nodiscard]]
@@ -68,6 +70,8 @@ namespace margelo::nitro::nitroui::views {
              accessibilityLabel.hasSameValue(other.accessibilityLabel) &&
              nuiPerfId.hasSameValue(other.nuiPerfId) &&
              onValueChange.hasSameValue(other.onValueChange) &&
+             nuiSizingKey.hasSameValue(other.nuiSizingKey) &&
+             nuiSizingId.hasSameValue(other.nuiSizingId) &&
              hybridRef.hasSameValue(other.hybridRef);
     }
 
@@ -82,6 +86,8 @@ namespace margelo::nitro::nitroui::views {
              accessibilityLabel.isProvided() ||
              nuiPerfId.isProvided() ||
              onValueChange.isProvided() ||
+             nuiSizingKey.isProvided() ||
+             nuiSizingId.isProvided() ||
              hybridRef.isProvided();
     }
 

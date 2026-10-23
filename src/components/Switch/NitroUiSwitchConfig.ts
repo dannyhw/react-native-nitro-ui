@@ -28,6 +28,8 @@ export const NitroUiSwitchConfig: ViewConfig<NativeNitroUiSwitchProps> = {
     accessibilityLabel: true,
     nuiPerfId: true,
     onValueChange: true,
+    nuiSizingKey: true,
+    nuiSizingId: true,
     hybridRef: true,
   },
 };

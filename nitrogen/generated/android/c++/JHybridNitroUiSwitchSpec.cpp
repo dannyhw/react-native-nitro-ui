@@ -143,6 +143,24 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void_bool_double::javaobject> /* onValueChange */)>("setOnValueChange_cxx");
     method(_javaPart, onValueChange.has_value() ? JFunc_void_bool_double_cxx::fromCpp(onValueChange.value()) : nullptr);
   }
+  std::string JHybridNitroUiSwitchSpec::getNuiSizingKey() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getNuiSizingKey");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
+  void JHybridNitroUiSwitchSpec::setNuiSizingKey(const std::string& nuiSizingKey) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* nuiSizingKey */)>("setNuiSizingKey");
+    method(_javaPart, jni::make_jstring(nuiSizingKey));
+  }
+  double JHybridNitroUiSwitchSpec::getNuiSizingId() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<double()>("getNuiSizingId");
+    auto __result = method(_javaPart);
+    return __result;
+  }
+  void JHybridNitroUiSwitchSpec::setNuiSizingId(double nuiSizingId) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(double /* nuiSizingId */)>("setNuiSizingId");
+    method(_javaPart, nuiSizingId);
+  }
 
   // Methods
   NitroUiSize JHybridNitroUiSwitchSpec::measureContent() {

@@ -67,7 +67,7 @@ namespace {
   std::vector<Push> pushes{};
 
   void fakePush(const NitroUiStateRef& state, const NitroUiMeasuredSize& measured, bool immediate) {
-    auto* raw = static_cast<FakeState*>(state.get());
+    auto* raw = static_cast<const FakeState*>(state.get());
     pushes.push_back(Push{raw->tag, measured.width, measured.height, immediate});
   }
 

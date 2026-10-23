@@ -152,6 +152,18 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.onValueChange.hasSameValue(oldViewProps->onValueChange)) {
       swiftPart.setOnValueChange(newViewProps.onValueChange.get());
     }
+    // nuiSizingKey: string
+    if (oldViewProps == nullptr
+          ? newViewProps.nuiSizingKey.isProvided()
+          : !newViewProps.nuiSizingKey.hasSameValue(oldViewProps->nuiSizingKey)) {
+      swiftPart.setNuiSizingKey(newViewProps.nuiSizingKey.get());
+    }
+    // nuiSizingId: number
+    if (oldViewProps == nullptr
+          ? newViewProps.nuiSizingId.isProvided()
+          : !newViewProps.nuiSizingId.hasSameValue(oldViewProps->nuiSizingId)) {
+      swiftPart.setNuiSizingId(newViewProps.nuiSizingId.get());
+    }
 
     // Update hybridRef if it changed
     if (oldViewProps == nullptr

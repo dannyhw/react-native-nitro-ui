@@ -32,6 +32,10 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("nuiPerfId", &HybridNitroUiSwitchSpec::setNuiPerfId);
       prototype.registerHybridGetter("onValueChange", &HybridNitroUiSwitchSpec::getOnValueChange);
       prototype.registerHybridSetter("onValueChange", &HybridNitroUiSwitchSpec::setOnValueChange);
+      prototype.registerHybridGetter("nuiSizingKey", &HybridNitroUiSwitchSpec::getNuiSizingKey);
+      prototype.registerHybridSetter("nuiSizingKey", &HybridNitroUiSwitchSpec::setNuiSizingKey);
+      prototype.registerHybridGetter("nuiSizingId", &HybridNitroUiSwitchSpec::getNuiSizingId);
+      prototype.registerHybridSetter("nuiSizingId", &HybridNitroUiSwitchSpec::setNuiSizingId);
       prototype.registerHybridMethod("measureContent", &HybridNitroUiSwitchSpec::measureContent);
     });
   }

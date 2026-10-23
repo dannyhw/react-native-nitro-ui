@@ -1,5 +1,5 @@
-import { Platform, type ColorValue, type ViewProps } from 'react-native';
-import { useMemo } from 'react';
+import { type ColorValue, type ViewProps } from 'react-native';
+import { useRef } from 'react';
 
 import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
@@ -63,45 +63,24 @@ export interface SwitchProps extends ViewProps {
 }
 
 /**
- * Whether the running iOS lays a switch out at the iOS 26 size.
+ * The size configuration of a Switch, as the sizing engine sees it.
  *
- * `Platform.Version` is a **string** on iOS (`"27.0"`) and a number on Android,
- * so `typeof … === 'number' && … >= 26` is quietly false on every iPhone and the
- * pre-26 size ships everywhere - which the on-device box test caught. iOS also
- * reports the same value as `constants.osVersion`, which Android does not have,
- * hence the read-through-unknown cast: this runs on every platform because
- * `Platform.select` builds all of its branches.
+ * Every prop that can change a Switch's size has to appear in this key
+ * (`docs/architecture/sizing.md`). A Switch has none: `value`, `disabled` and
+ * `tintColor` repaint, they do not resize - the only thing that changes a
+ * control's size on iOS is the OS's own control size, and native folds the
+ * environment into the key itself. So the key is a constant, which is also the
+ * cheapest possible answer: one string, shared by every instance, one cache
+ * entry for the whole app.
  */
-function usesModernSwitchSize(): boolean {
-  const osVersion = (
-    Platform.constants as { readonly osVersion?: string } | undefined
-  )?.osVersion;
-  const major = Number.parseInt(osVersion ?? String(Platform.Version), 10);
-  return Number.isFinite(major) && major >= 26;
-}
+const SIZING_KEY = 'Switch|';
 
 /**
- * The default box of a Switch, per platform, until T11 measures it natively.
- *
- * A Nitro Hybrid View is a plain Yoga leaf, so with no style it is 0x0
- * (docs/research/core-architecture.md §1.1). These are the *measured* intrinsic
- * sizes of the controls we host - see docs/components/switch.md:
- * - iOS: SwiftUI `Toggle(...).toggleStyle(.switch)` is 61x28 pt from iOS 26, and
- *   51x31 pt before it - the control changed size with the OS, so the default has
- *   to follow the running OS (DECISIONS D14). Anything smaller and SwiftUI
- *   overflows the Fabric box, which paints outside it and leaves dead touch zones
- *   at both ends; anything larger adds padding the control does not have.
- * - Android: a Material 3 `Switch` is a 52x32 dp track inside a 48 dp minimum
- *   interactive size, so it measures 52x48 dp.
- * A `style` from the user wins over these.
+ * Source of `nuiSizingId`s. Module-level, so ids are unique among the mounted
+ * Switches of this app run - the engine reports a measured size back to one
+ * instance, and a shared id would correct the wrong view.
  */
-const DEFAULT_SIZE = Platform.select({
-  ios: usesModernSwitchSize()
-    ? { width: 61, height: 28 }
-    : { width: 51, height: 31 },
-  android: { width: 52, height: 48 },
-  default: { width: 61, height: 28 },
-});
+let nextSizingId = 1;
 
 /**
  * The platform Switch: SwiftUI `Toggle` with `.switch` style on iOS, Material 3
@@ -128,7 +107,14 @@ export function Switch({
   const controlled = useControlled(value, defaultValue, onValueChange);
   const processedTint = useProcessedColor(tintColor);
   const hybridRefCallback = useStableCallback(hybridRef);
-  const sizedStyle = useMemo(() => [DEFAULT_SIZE, style], [style]);
+  // Lazily, once per mounted instance: the id a measured size comes back to.
+  // `useRef` rather than a render-time increment, because StrictMode's double
+  // render would otherwise burn an id per mount and - worse - a re-render would
+  // send a new one, making native re-measure a view that had not changed.
+  const sizingIdRef = useRef<number>(0);
+  if (sizingIdRef.current === 0) {
+    sizingIdRef.current = nextSizingId++;
+  }
 
   return (
     <NativeNitroUiSwitch
@@ -142,8 +128,10 @@ export function Switch({
       accessibilityLabel={accessibilityLabel ?? null}
       nuiPerfId={nuiPerfId}
       onValueChange={controlled.onNativeChange}
+      nuiSizingKey={SIZING_KEY}
+      nuiSizingId={sizingIdRef.current}
       hybridRef={hybridRefCallback ?? undefined}
-      style={sizedStyle}
+      style={style}
     />
   );
 }

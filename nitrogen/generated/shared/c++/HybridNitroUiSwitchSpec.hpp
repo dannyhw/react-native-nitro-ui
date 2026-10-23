@@ -68,6 +68,10 @@ namespace margelo::nitro::nitroui {
       virtual void setNuiPerfId(const std::variant<nitro::NullType, double>& nuiPerfId) = 0;
       virtual std::optional<std::function<void(bool /* value */, double /* eventCount */)>> getOnValueChange() = 0;
       virtual void setOnValueChange(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& onValueChange) = 0;
+      virtual std::string getNuiSizingKey() = 0;
+      virtual void setNuiSizingKey(const std::string& nuiSizingKey) = 0;
+      virtual double getNuiSizingId() = 0;
+      virtual void setNuiSizingId(double nuiSizingId) = 0;
 
     public:
       // Methods

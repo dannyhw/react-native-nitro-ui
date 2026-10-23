@@ -35,7 +35,7 @@
 #include <react/renderer/components/view/ConcreteViewShadowNode.h>
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
 #include <react/renderer/core/LayoutConstraints.h>
-#include <react/renderer/core/Size.h>
+#include <react/renderer/graphics/Size.h>
 
 #include <cmath>
 #include <memory>
@@ -44,6 +44,11 @@
 #include <variant>
 
 namespace margelo::nitro::nitroui {
+
+  // Not every translation unit that includes this has it (a generated file does,
+  // our own JNI door does not), and this is the same thing Nitro's own headers
+  // do - `react::` is a subnamespace of `facebook::`.
+  using namespace facebook;
 
   using react::EventQueue;
   using react::LayoutConstraints;
@@ -298,9 +303,10 @@ namespace margelo::nitro::nitroui {
    * Android JNI unwrap.
    */
   inline NitroUiStateRef eraseFabricState(const std::shared_ptr<const State>& state) {
-    // The engine only ever holds this to keep the `State` alive and to hand the
-    // pointer back to `pushMeasuredSize`, which casts it back.
-    return std::static_pointer_cast<void>(state);
+    // An implicit upcast: the engine only ever holds this to keep the `State`
+    // alive and to hand the pointer back to `pushMeasuredSize`, which casts it
+    // back to the concrete type.
+    return NitroUiStateRef{state};
   }
 
   // MARK: - Component descriptor

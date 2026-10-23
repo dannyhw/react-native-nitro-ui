@@ -18,6 +18,7 @@ import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
+import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
 
 /*
@@ -47,6 +48,13 @@ internal class SwitchModel : NitroUiModel() {
    */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
+  /**
+   * The size configuration React sent (empty for a Switch today). Stored for
+   * symmetry with the other props; the sizing engine reads the key out of Fabric
+   * state itself, so nothing native looks at this.
+   */
+  var sizingKey = ""
+
   /** Event-count handshake. Not observed: it drives [displayed], never renders. */
   val state = NitroUiControlledValue<Boolean>(false)
 
@@ -62,6 +70,7 @@ internal class SwitchModel : NitroUiModel() {
     displayed = false
     enabled = true
     checkedTrackColor = null
+    sizingKey = ""
     accessibilityLabel = null
     state.displayed = false
     state.js = null
@@ -129,8 +138,45 @@ class HybridNitroUiSwitch(
     get() = host
 
   init {
-    // T11 and `measureContent()` want the fitting size.
+    // The fitting size is both measured and pushed (docs/architecture/sizing.md).
     host.wantsContentSize = true
+    host.sizingPolicy = NitroUiSizing.POLICY_INTRINSIC
+    declareFallback()
+  }
+
+  companion object {
+    /**
+     * This component's name in the sizing engine: `HybridNitroUiSwitchComponentName`
+     * in the generated C++, and `getName()` in the generated Kotlin manager.
+     */
+    private const val SIZING_COMPONENT_NAME = "NitroUiSwitch"
+
+    /**
+     * The size to lay a Switch out with before anything has been measured, in dp:
+     * the first Switch of an app's first launch. Material 3's Switch is 51x31 dp
+     * of control inside a 48 dp minimum interactive size, which measures 52x48. A
+     * measurement replaces it on the first report, and a Switch has one
+     * configuration, so this is a one-frame thing - it still has to be close,
+     * because Compose clips a control to a box that is too small.
+     */
+    private const val FALLBACK_WIDTH_DP = 52.0
+    private const val FALLBACK_HEIGHT_DP = 48.0
+
+    private var fallbackDeclared = false
+
+    /** One `JNI` call per process, before the first Switch can be measured. */
+    private fun declareFallback() {
+      if (fallbackDeclared) {
+        return
+      }
+      fallbackDeclared = true
+      NitroUiSizing.setFallback(
+        SIZING_COMPONENT_NAME,
+        FALLBACK_WIDTH_DP,
+        FALLBACK_HEIGHT_DP,
+        NitroUiSizing.POLICY_INTRINSIC,
+      )
+    }
   }
 
   // MARK: - Props
@@ -233,6 +279,20 @@ class HybridNitroUiSwitch(
       host.perfInstanceId = if (raw != null && raw.isFinite()) raw.toInt() else NitroUiPerf.NO_INSTANCE
     }
 
+  override var nuiSizingKey: String
+    get() = model.sizingKey
+    set(next) {
+      // Store only: the engine reads the key out of Fabric state, and a Switch has
+      // one configuration, so a change here cannot even dirty its measurement.
+      model.sizingKey = next
+    }
+
+  override var nuiSizingId: Double
+    get() = host.sizingInstanceId.toDouble()
+    set(next) {
+      host.sizingInstanceId = if (next.isFinite()) next.toLong() else NitroUiSizing.NO_INSTANCE
+    }
+
   override var onValueChange: ((Boolean, Double) -> Unit)?
     get() = model.onChange
     set(next) {
@@ -254,6 +314,7 @@ class HybridNitroUiSwitch(
   override fun prepareForRecycle() {
     host.tag = null
     host.perfInstanceId = NitroUiPerf.NO_INSTANCE
+    host.sizingInstanceId = NitroUiSizing.NO_INSTANCE
     // Resets the model. The composition does not survive a recycle: Nitro's
     // generated manager calls `onDropView()` (-> [onDropView] below, which
     // disposes it) before `prepareToRecycleView`, and `AbstractComposeView`
