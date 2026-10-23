@@ -13,6 +13,7 @@
 import {
   cellsFrom,
   comparableMetrics,
+  componentOf,
   CONTROL_NOTE_THRESHOLD,
   controlMovement,
   formatBytes,
@@ -30,6 +31,7 @@ import {
   noiseTable,
   RATIO_FAIL_THRESHOLD,
   ratioTable,
+  scenarioActionOf,
 } from './lib.mjs';
 
 const METRIC_LABELS = {
@@ -55,10 +57,22 @@ function formatNumber(value, digits = 0) {
   return isNumber(value) ? value.toFixed(digits) : 'n/a';
 }
 
+/**
+ * Cells group by what the launch does, then by which control it mounted, then
+ * by size. A scenario cell carries its component (`mount.slider`), so sorting on
+ * the whole string would put `mount.slider` next to `mount` only by luck and
+ * every later component wherever the alphabet puts it.
+ */
 function cellSort(a, b) {
   const scenarioOrder = ['mount', 'update', 'memory', 'leak'];
+  const actionOrder = (scenario) => {
+    const index = scenarioOrder.indexOf(scenarioActionOf(scenario));
+    // An action the reporter has never seen goes last, not first.
+    return index === -1 ? scenarioOrder.length : index;
+  };
   return (
-    scenarioOrder.indexOf(a.scenario) - scenarioOrder.indexOf(b.scenario) ||
+    actionOrder(a.scenario) - actionOrder(b.scenario) ||
+    componentOf(a.scenario).localeCompare(componentOf(b.scenario)) ||
     a.n - b.n ||
     IMPLEMENTATIONS.indexOf(a.implementation) -
       IMPLEMENTATIONS.indexOf(b.implementation)

@@ -51,6 +51,8 @@ import {
   isCompatibleBaseline,
   launchPlanString,
   resultsFileName,
+  componentOf,
+  scenarioActionOf,
 } from './lib.mjs';
 import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
 import {
@@ -361,7 +363,10 @@ async function runLaunch(target, entry) {
   let deadChecks = 0;
   const handle = await target.run(entry);
   const expected = launchPlanString(entry);
-  const budget = TIMEOUTS[entry.scenario] ?? 180_000;
+  // Keyed by the *action*, because a scenario cell carries its component
+  // (`mount.slider`): the budget belongs to what the launch does, not to which
+  // control it mounts.
+  const budget = TIMEOUTS[scenarioActionOf(entry.scenario)] ?? 180_000;
   for (;;) {
     const text = target.read(handle);
     if (text.includes('"kind":"end"')) {
@@ -478,7 +483,8 @@ export async function main(argv) {
     log(
       'usage: bun bench --platform ios|android [--plan quick|full] [--compare <ref|file>]\n' +
         '           [--check] [--update-baseline] [--force] [--skip-build] [--only <impl,impl>]\n' +
-        '           [--launches N] [--prebuild] [--shutdown] [--perf-marks]'
+        '           [--launches N] [--prebuild] [--shutdown] [--perf-marks]\n' +
+        '           [--component <name>]'
     );
     process.exitCode = 2;
     return;
@@ -533,11 +539,24 @@ export async function main(argv) {
       ? iosTarget(device, built.appPath, built.bundleId)
       : androidTarget(device, built.apkPath, built.packageName);
 
+  const component = flag(argv, '--component');
+  const componentsInPlan = [
+    ...new Set(PLANS[plan].map((cell) => componentOf(cell.scenario))),
+  ];
+  if (component != null && !componentsInPlan.includes(component)) {
+    log(
+      `--component must be one of ${componentsInPlan.join(', ')} (plan ${plan})`
+    );
+    process.exitCode = 2;
+    return;
+  }
+
   const schedule = buildSchedule({
     plan,
     launches,
     only: flag(argv, '--only'),
     perfMarks,
+    component,
   });
 
   // Counted from the schedule itself: `--only` narrows the implementation
