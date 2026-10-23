@@ -298,8 +298,17 @@ function iosTarget(device, appPath, bundleId) {
  * The status is read back and logged because "the profile did nothing" and "the
  * profile was worth nothing" look identical in a results table. A run whose app has no
  * profileinstaller to ask still measures something - it just says so here.
+ *
+ * It returns the state it ended in, and the caller persists that in the results: the
+ * two ART regimes are not comparable with each other (T12 round 2: the same code's
+ * launch-paired ratio to the shared host moved 1.22x -> 0.99x on mount `presented`
+ * with no library change at all), so a result file has to say which regime it
+ * belongs to. `--update-baseline` refuses anything but `speed-profile` for that
+ * reason, and Android numbers published before T12 are `verify` numbers with nothing
+ * in the file saying so.
  */
 function primeArtProfile(serial, packageName) {
+  let status = 'unknown';
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     // 1. Have the app install its own baseline profile.
     adb(serial, [
@@ -325,15 +334,16 @@ function primeArtProfile(serial, packageName) {
     ]);
     const dexopt = adb(serial, ['shell', 'dumpsys', 'package', 'dexopt']);
     const block = dexopt.slice(dexopt.indexOf(`[${packageName}]`));
-    const status = /\[status=([^\]]+)\]/.exec(block)?.[1] ?? 'unknown';
+    status = /\[status=([^\]]+)\]/.exec(block)?.[1] ?? 'unknown';
     log(`ART:       attempt ${String(attempt)}: ${packageName} -> ${status}`);
     if (status === 'speed-profile') {
-      return;
+      return { packageName, status, primed: true, attempts: attempt };
     }
   }
   log(
     'ART:       not speed-profile - this run measures the interpreter, not a baseline profile'
   );
+  return { packageName, status, primed: false, attempts: 2 };
 }
 
 function androidTarget(device, apkPath, packageName) {
@@ -342,7 +352,7 @@ function androidTarget(device, apkPath, packageName) {
     label: `Android ${device.name} (${device.serial})`,
     async install() {
       adb(device.serial, ['install', '-r', apkPath]);
-      primeArtProfile(device.serial, packageName);
+      return primeArtProfile(device.serial, packageName);
     },
     async run(entry) {
       // Benign when the file (or, on API 33+, its not-yet-created parent dir)
@@ -621,7 +631,9 @@ export async function main(argv) {
       schedule.length
     )} launches)`
   );
-  await target.install();
+  // Android returns the ART state the app is in now that every arm is primed
+  // identically; iOS has no such state and contributes null.
+  const art = (await target.install()) ?? null;
 
   const started = Date.now();
   const { records, problems } = await drive({ target, schedule });
@@ -647,6 +659,7 @@ export async function main(argv) {
     plan,
     launches,
     perfMarks,
+    art,
     clock: Object.values(cells)[0]?.clock ?? null,
     createdAt: new Date().toISOString(),
     durationMs: Date.now() - started,
