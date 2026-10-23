@@ -13,6 +13,7 @@ android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiSliderValue.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
+android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiDeclaredFallbacks.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
@@ -30,6 +31,8 @@ ios/components/Slider/NitroUiSliderValue.swift
 ios/components/Switch/HybridNitroUiSwitch.swift
 ios/core/NitroSwiftUIHost.swift
 ios/core/NitroUIContent.swift
+ios/core/NitroUiDeclaredFallbacks.swift
+ios/core/NitroUiDeclaredFallbacksLoader.m
 ios/core/NitroUiMainThread.swift
 ios/core/NitroUiModel.swift
 ios/core/UIColor+NitroUiColor.swift

@@ -25,6 +25,7 @@ import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
+import java.util.concurrent.atomic.AtomicBoolean
 
 /*
  * The Switch component: Material 3 `Switch` on the core runtime. It is the
@@ -270,6 +271,8 @@ class HybridNitroUiSwitch(
     // The fitting size is both measured and pushed (docs/architecture/sizing.md).
     host.wantsContentSize = true
     host.sizingPolicy = NitroUiSizing.POLICY_INTRINSIC
+    // The backstop: `NitroUiDeclaredFallbacks` registers this at startup, which
+    // is the point that matters (see its doc comment).
     declareFallback()
   }
 
@@ -291,14 +294,21 @@ class HybridNitroUiSwitch(
     private const val FALLBACK_WIDTH_DP = 52.0
     private const val FALLBACK_HEIGHT_DP = 48.0
 
-    private var fallbackDeclared = false
+    private val fallbackDeclared = AtomicBoolean(false)
 
-    /** One `JNI` call per process, before the first Switch can be measured. */
-    private fun declareFallback() {
-      if (fallbackDeclared) {
+    /**
+     * One `JNI` call per process, before the first Switch can be measured.
+     *
+     * Called from `NitroUiDeclaredFallbacks.registerAll()` at package init - a
+     * Fabric measure can happen before this class has ever been instantiated, so
+     * a fallback declared from `init` is one measure too late for the first
+     * instance (T14) - and from `init` as the backstop. The two calls land on
+     * different threads, hence the atomic.
+     */
+    internal fun declareFallback() {
+      if (!fallbackDeclared.compareAndSet(false, true)) {
         return
       }
-      fallbackDeclared = true
       NitroUiSizing.setFallback(
         SIZING_COMPONENT_NAME,
         FALLBACK_WIDTH_DP,

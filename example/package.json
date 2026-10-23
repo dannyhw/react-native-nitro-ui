@@ -10,7 +10,9 @@
     "build:ios": "react-native build-ios --mode Debug",
     "harness": "react-native-harness",
     "harness:ios": "react-native-harness --harnessRunner ios",
-    "harness:android": "react-native-harness --harnessRunner android"
+    "harness:android": "react-native-harness --harnessRunner android",
+    "harness:cold:ios": "react-native-harness --harnessRunner ios ColdSizing",
+    "harness:cold:android": "react-native-harness --harnessRunner android ColdSizing"
   },
   "dependencies": {
     "react": "19.3.0",

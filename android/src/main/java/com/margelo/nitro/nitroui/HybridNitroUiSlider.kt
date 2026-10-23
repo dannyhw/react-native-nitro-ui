@@ -37,6 +37,7 @@ import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
+import java.util.concurrent.atomic.AtomicBoolean
 
 /*
  * The Slider component: Material 3 `Slider` on the core runtime, with the drag
@@ -605,6 +606,8 @@ class HybridNitroUiSlider(
   init {
     host.wantsContentSize = true
     host.sizingPolicy = NitroUiSizing.POLICY_FILL_WIDTH
+    // The backstop; `NitroUiDeclaredFallbacks` registers this at startup. A cold
+    // first Slider with no declared fallback is laid out 0 tall (T14, D17).
     declareFallback()
   }
 
@@ -637,14 +640,17 @@ class HybridNitroUiSlider(
     private const val FALLBACK_WIDTH_DP = 328.0
     private const val FALLBACK_HEIGHT_DP = 48.0
 
-    private var fallbackDeclared = false
+    private val fallbackDeclared = AtomicBoolean(false)
 
-    /** One JNI call per process, before the first Slider can be measured. */
-    private fun declareFallback() {
-      if (fallbackDeclared) {
+    /**
+     * One JNI call per process. See `HybridNitroUiSwitch.declareFallback` for why
+     * this is called from `NitroUiDeclaredFallbacks` at package init rather than
+     * only from here, and for the atomic.
+     */
+    internal fun declareFallback() {
+      if (!fallbackDeclared.compareAndSet(false, true)) {
         return
       }
-      fallbackDeclared = true
       NitroUiSizing.setFallback(
         SIZING_COMPONENT_NAME,
         FALLBACK_WIDTH_DP,
