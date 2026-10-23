@@ -180,6 +180,9 @@ namespace margelo::nitro::nitroui {
    public:
     using Base::Base;
 
+    /// The props this node was generated for.
+    using ConcreteProps = TProps;
+
     /// The descriptor registers the sizing binding under this name.
     static constexpr const char* SizingComponentName = Name;
 
@@ -216,7 +219,7 @@ namespace margelo::nitro::nitroui {
      * Yoga's measurement of every instance (`YogaLayoutableShadowNode` returns
      * `true` by default) and throw away the cached answer.
      */
-    bool shouldNewRevisionDirtyMeasurement(const ShadowNode& sourceShadowNode, const ShadowNodeFragment& fragment) const override {
+    bool shouldNewRevisionDirtyMeasurement(const ShadowNode& /*sourceShadowNode*/, const ShadowNodeFragment& fragment) const override {
       if (fragment.state != nullptr) {
         // Native pushed a size into state - that is the whole point.
         return true;
@@ -226,14 +229,25 @@ namespace margelo::nitro::nitroui {
         // invalidates its own measure cache when the constraints move.
         return false;
       }
-      const auto* source = dynamic_cast<const IntrinsicShadowNode*>(&sourceShadowNode);
-      if (source == nullptr) {
+      /**
+       * `YogaLayoutableShadowNode::completeClone` passes `*this` as the source
+       * node, so the node cannot be compared with itself (review S1). What is
+       * different is `fragment.props` versus the props the *state* still carries:
+       * `adopt` - which rebuilds the state from the new props - runs after this, so
+       * the state is still the previous one here.
+       */
+      // `StateData::getProps()` is typed as the base `Props`, so it needs the same
+      // narrowing cast nitrogen's own generated state updater uses: the state of
+      // this node always carries this component's props.
+      const auto previous = std::static_pointer_cast<const ConcreteProps>(
+          this->getStateData().getProps());
+      const auto incoming =
+          std::static_pointer_cast<const ConcreteProps>(fragment.props);
+      if (previous == nullptr || incoming == nullptr) {
         return true;
       }
-      const auto& mine = this->getConcreteProps();
-      const auto& theirs = source->getConcreteProps();
-      return detail::sizingIdOf(mine.nuiSizingId.get()) != detail::sizingIdOf(theirs.nuiSizingId.get()) ||
-          detail::sizingKeyOf(mine.nuiSizingKey.get()) != detail::sizingKeyOf(theirs.nuiSizingKey.get());
+      return detail::sizingIdOf(incoming->nuiSizingId.get()) != detail::sizingIdOf(previous->nuiSizingId.get()) ||
+          detail::sizingKeyOf(incoming->nuiSizingKey.get()) != detail::sizingKeyOf(previous->nuiSizingKey.get());
     }
   };
 
@@ -251,12 +265,27 @@ namespace margelo::nitro::nitroui {
     using ConcreteState = typename TShadowNode::ConcreteState;
     using StateData = typename TShadowNode::ConcreteStateData;
 
-    auto concrete = std::static_pointer_cast<const ConcreteState>(state);
+    // Narrow through `react::State`, which is what the engine was handed: it
+    // stores the state type-erased, so a `static_pointer_cast` straight from
+    // `const void` to the derived type would only work by accident of the base
+    // class layout (review N1).
+    const auto asState = std::static_pointer_cast<const State>(state);
+    const auto concrete = std::static_pointer_cast<const ConcreteState>(asState);
     if (concrete == nullptr) {
       return;
     }
+    /**
+     * `measured` is captured **by value**.
+     *
+     * RN documents the callback as able to run "from any thread any moment later"
+     * (`ConcreteState.h`), and for `Asynchronous` it *always* does: it runs on the
+     * JS thread after the sizing engine's `applyReports` has returned and freed the
+     * vector this size lives in. A `[&measured]` capture is a use-after-free on
+     * every correction past the immediate budget - 198 of 200 in a cold batch -
+     * that ASan sees and production only sometimes does (review B1).
+     */
     concrete->updateState(
-        [&measured](const StateData& oldData) -> react::StateData::Shared {
+        [measured](const StateData& oldData) -> react::StateData::Shared {
           if (oldData.measured.nearlyEquals(measured)) {
             // Nothing to correct: no commit, no re-layout.
             return nullptr;
@@ -277,7 +306,8 @@ namespace margelo::nitro::nitroui {
     using ConcreteState = typename TShadowNode::ConcreteState;
     using Props = typename TShadowNode::ConcreteProps;
 
-    auto concrete = std::static_pointer_cast<const ConcreteState>(state);
+    const auto asState = std::static_pointer_cast<const State>(state);
+    const auto concrete = std::static_pointer_cast<const ConcreteState>(asState);
     if (concrete == nullptr) {
       return;
     }
