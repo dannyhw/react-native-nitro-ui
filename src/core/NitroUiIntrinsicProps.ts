@@ -12,11 +12,17 @@
  */
 export interface NitroUiIntrinsicProps {
   /**
-   * Every prop that changes the control's size, serialised by the JS wrapper -
-   * for example `"Switch|"` or `"Button|bordered|large|Save"`. Two instances
-   * with the same component and key share one cached size, so a key must cover
-   * exactly the size-affecting inputs (plus anything in the environment, which
-   * native folds in itself through an epoch).
+   * The size-affecting props of this instance, serialised by the JS wrapper -
+   * for example `""` for a Switch or `"bordered|large|Save"` for a Button.
+   * *Variant only*: the engine composes the cache identity itself from the
+   * component name, this key, and the environment epoch, so a key never repeats
+   * the component name (and `prewarmSizing([name])` can find the default
+   * configuration, which is the one with an empty variant).
+   *
+   * Two instances with the same component and key share one cached size, so the
+   * key must cover exactly the size-affecting inputs - anything the environment
+   * decides (text size, density, OS control size) is not part of it, because
+   * native folds the environment in through an epoch.
    *
    * Non-optional (D7 / nitro#1184): a wrapper that has nothing size-related to
    * send passes `""`, which is a real configuration - not "unset".
