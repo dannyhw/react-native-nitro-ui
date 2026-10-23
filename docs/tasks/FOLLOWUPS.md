@@ -10,6 +10,7 @@
 - `fillWidth` control in a parent with no finite width (horizontal scroller) keeps the last cached width, never corrected (G1 review).
 - iOS mount `mounted`: per-instance UIHostingController creation (~0.46 ms each at N=50); profile before 0.2 (G1 review).
 - iOS 18 CI row for declared fallbacks (release readiness).
-- Flaky Android `Sizing › sizes a control inside a Modal` (`corrections=0`), seen twice in G1 fix round 1, unreproducible after APK rebuild; T14 should try to reproduce (it touches fallback/first-measure timing).
+- Flaky Android `Sizing › sizes a control inside a Modal` (`corrections=0`), seen twice in G1 fix round 1 and once by T14 (1 in 3 runs of the same invocation): the dialog's stale first frame *is* drawn — Android's pre-draw cancellation does not cover RN's second window — and its report sits `queued` until some later commit pumps it, which the test never triggers. Not T14's cause; both halves contradict sizing.md §3 as written, and `collectTrace(hasDrawnSample)` stops on the wrong side of the race. Evidence in T14's report.
+- `Slider › ignores a drag while disabled, and follows the flag back` is red on iOS on `main` since 381b1f2 (merged): the assertion tests Android-only probe text (`disabled=true`), and the iOS element's traits were `4096` = `.adjustable` with no `.notEnabled`, so the iOS half of that announcement may be missing rather than just unasserted. Gate it by platform and check the flag; found by T14.
 - Harness fails on Node 26 with a misleading ESM error; `.nvmrc` pins 24 — document in CONTRIBUTING or fix.
 - G1 Slider verifier follow-ups (8 items) are listed in docs/tasks/G1-slider.report.md "Follow-ups".
