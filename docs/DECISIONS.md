@@ -98,3 +98,7 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   35–316 node trees). Never-corrected instances keep the zero-cost path. Any future sizing change
   must keep the "box stays right across props turns after a correction" harness cases green.
   Cheaper non-sticky alternative (dirty on obsolete state) is a follow-up.
+- **D21 (G3)** Harness gates on this shared machine assert **structure** (counts: corrections,
+  immediate pushes, flushes, stale frames, event counts) everywhere; **wall-clock thresholds**
+  (e.g. cold-batch `flushMs`) move behind a quiet-machine tag (`HARNESS_TIMING=1`, refused when
+  load average ≥ 10) and are reported, not gated, otherwise. Done during release readiness.
