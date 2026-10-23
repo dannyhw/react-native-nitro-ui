@@ -135,4 +135,74 @@ describe('useControlled - controlled', () => {
 
     expect(seen).toEqual([true]);
   });
+
+  it('echoes the event count even when the user handler throws', () => {
+    // The echo is what lets native accept the next `value` write. If a throwing
+    // handler skipped it, the component would ignore every later prop write from
+    // JS for the rest of its life.
+    const hook = renderHook(() =>
+      useControlled<boolean>(false, false, () => {
+        throw new Error('handler rejected the change');
+      })
+    );
+    const change = nativeChangeOf(hook.result.current.onNativeChange);
+
+    let thrown: unknown = null;
+    run(() => {
+      try {
+        change(true, 3);
+      } catch (error) {
+        thrown = error;
+      }
+    });
+
+    expect((thrown as Error | null)?.message).toBe(
+      'handler rejected the change'
+    );
+    expect(hook.result.current.mostRecentEventCount).toBe(3);
+  });
+
+  it('catches native up when the component becomes controlled', () => {
+    // An uncontrolled control echoes nothing, so after two taps native is at
+    // event 2 while JS is still at 0. Passing `value` without seeding the echo
+    // would make every write look stale until the next tap.
+    let value: boolean | undefined;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const hook = renderHook(() =>
+      useControlled<boolean>(value, false, undefined)
+    );
+    const change = nativeChangeOf(hook.result.current.onNativeChange);
+
+    run(() => change(false, 1));
+    run(() => change(true, 2));
+    expect(hook.result.current.mostRecentEventCount).toBe(0);
+    expect(hook.result.current.value).toBeNull();
+
+    value = true;
+    hook.rerender();
+
+    expect(hook.result.current.value).toBe(true);
+    expect(hook.result.current.mostRecentEventCount).toBe(2);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('uncontrolled to controlled')
+    );
+    warn.mockRestore();
+  });
+
+  it('warns when a controlled component becomes uncontrolled', () => {
+    let value: boolean | undefined = true;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const hook = renderHook(() =>
+      useControlled<boolean>(value, false, undefined)
+    );
+
+    value = undefined;
+    hook.rerender();
+
+    expect(hook.result.current.value).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('controlled to uncontrolled')
+    );
+    warn.mockRestore();
+  });
 });
