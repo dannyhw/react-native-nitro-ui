@@ -11,7 +11,11 @@ import {
   appleSimulator,
 } from '@react-native-harness/platform-apple';
 import { assertSupportedNode } from '../scripts/node-version.mjs';
-import { publishTimingGate } from '../scripts/harness-timing-gate.mjs';
+// CommonJS, because `example/metro.config.js` requires the same module to serve
+// the state this publishes.
+import harnessTimingGate from '../scripts/harness-timing-gate.js';
+
+const { publishTimingGate } = harnessTimingGate;
 
 // The harness transforms `.harness.tsx` with Jest on this machine, and that
 // transform breaks on Node 25/26 with an ESM error that reads like a bug in the
