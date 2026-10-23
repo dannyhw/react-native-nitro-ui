@@ -218,15 +218,18 @@ frames that were cancelled; on iOS it is not evidence of a skipped frame (see th
 | Control's real size            | 61×28 pt                         | 52.19×48 dp                   |
 | First cold instance            | 1 correction, 1 immediate, 1 flush | same                        |
 | Second warm instance           | 0 corrections, 1 dropped report  | same                          |
-| 200 same configuration, cold   | 200 corrections (2 immediate + 198 batched) in 1 flush, ~5 ms | same shape, ~18–22 ms |
+| 200 same configuration, cold   | 200 corrections (2 immediate + 198 batched) in 1 flush, ~5 ms | same shape, 8.5–24 ms |
 | 200, pre-warmed                | 0 corrections, 200 dropped reports | same                        |
-| 200 mounts, warm / cold        | 322 ms / 155 ms                  | 2310 ms / 3469 ms             |
-| 50 mounts, warm / cold         | 0.63 / 0.82 ms per instance      | 5.18 / 6.90 ms per instance   |
+| 200 mounts, warm / cold        | 295–329 ms / 137–155 ms          | 899–2310 ms / 830–3469 ms     |
+| 50 mounts, warm / cold         | 0.66–0.71 / 0.76–0.83 ms ea.     | 5.7–12.0 / 7.5–12.1 ms ea.    |
 | 30 rapid prop turns            | 0 measures, 0 corrections        | same                          |
 | font scale 1.3 / Dynamic Type XL | unchanged size                 | unchanged size                |
 
-Read the mount rows as *the mount dominating, not the sizing*: on iOS the correction path is
-invisible inside mount noise, and Android's cold batch costs about half again per instance while
+Ranges are the spread across the runs in the report. The Android ones are wide because another
+task's device work shares this machine (D13): its cold-batch flush measured 8.5 ms on a quiet
+machine and 17.9–24.2 ms under load, so read the Android rows as an order of magnitude, not a
+number. Read them all as *the mount dominating, not the sizing*: on iOS the correction path is
+invisible inside mount noise, and Android's cold batch costs a few ms more per instance while
 paying ~1 frame in one pre-draw flush. T02's bench harness is not merged, so these are core perf
 clock deltas (`nitroUiCore.now()`, D1) around a render, not published benchmark numbers.
 
