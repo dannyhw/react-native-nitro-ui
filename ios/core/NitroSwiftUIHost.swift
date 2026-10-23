@@ -327,12 +327,24 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     }
     hasMarkedFirstFrame = true
     mark(.firstFrame)
-    // The box this frame drew into, for the sizing trace: `measureContent` can
-    // say what Yoga was told, and this says what was actually drawn, so a test
-    // can tell "corrected before the frame" from "corrected a frame late".
-    // `bounds` is empty exactly when the host is not in a window, which is the
-    // one case the guard above already excludes.
-    NitroUiSizing.recordDrawnSize(sizingInstanceId, Double(bounds.width), Double(bounds.height))
+    // The box this turn committed, for the sizing trace: `laidOut` already says
+    // what Yoga was told, so this is what makes "corrected before the frame was
+    // committed" testable rather than argued. Read on the next drain of the main
+    // queue, i.e. after UIKit's own `beforeWaiting` observer (order 2 000 000,
+    // above the sizing flusher's 1 000 000) has committed this turn's layer
+    // changes - reading `bounds` here, mid-layout, would report a box that had
+    // not been committed yet. It is a sample of the committed frame, not a
+    // per-frame tap: what it cannot see is a correction applied inside the same
+    // turn after the commit, and `staleFramesSkipped` covers that on Android.
+    let instanceId = sizingInstanceId
+    if instanceId != nitroUiSizingNoInstance {
+      DispatchQueue.main.async { [weak self] in
+        guard let self, self.window != nil else {
+          return
+        }
+        NitroUiSizing.recordDrawnSize(instanceId, Double(self.bounds.width), Double(self.bounds.height))
+      }
+    }
   }
 
   private func mark(_ kind: NitroUiPerfKind) {

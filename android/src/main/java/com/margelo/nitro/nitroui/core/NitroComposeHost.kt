@@ -386,6 +386,14 @@ abstract class NitroComposeHost<M : NitroUiModel>(
           if (current.isAlive) {
             current.removeOnPreDrawListener(this)
           }
+          if (NitroUiSizing.hasPendingReports()) {
+            // A size measured this turn has not reached Yoga yet, and the sizing
+            // listener (registered after this one, so it runs next) is about to
+            // cancel this draw. Staying armed is what makes "first frame" mean
+            // the first frame a user could have seen; this listener keeps its
+            // registration, so it fires on the next pass.
+            return true
+          }
           if (!hasMarkedFirstFrame) {
             hasMarkedFirstFrame = true
             NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_FIRST_FRAME)

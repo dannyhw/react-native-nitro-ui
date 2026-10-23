@@ -98,6 +98,10 @@ namespace margelo::nitro::nitroui {
       NitroUiSizing::recordDrawnSize(static_cast<int64_t>(instanceId), static_cast<double>(width), static_cast<double>(height));
     }
 
+    jboolean nativeHasPendingReports(JNIEnv* /*env*/, jclass) {
+      return NitroUiSizingEngine::shared().hasPendingReports() ? JNI_TRUE : JNI_FALSE;
+    }
+
     jlong nativeCachedSizeCount(JNIEnv* /*env*/, jclass) {
       return static_cast<jlong>(NitroUiSizing::cachedSizeCount());
     }
@@ -110,6 +114,7 @@ namespace margelo::nitro::nitroui {
       {"nInvalidateEnvironment", "()V", reinterpret_cast<void*>(&nativeInvalidateEnvironment)},
       {"nCachedSizeCount", "()J", reinterpret_cast<void*>(&nativeCachedSizeCount)},
       {"nRecordDrawnSize", "(JDD)V", reinterpret_cast<void*>(&nativeRecordDrawnSize)},
+      {"nHasPendingReports", "()Z", reinterpret_cast<void*>(&nativeHasPendingReports)},
     };
 
   } // namespace

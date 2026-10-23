@@ -36,6 +36,8 @@ object NitroUiSizing {
 
   private external fun nRecordDrawnSize(instanceId: Long, width: Double, height: Double)
 
+  private external fun nHasPendingReports(): Boolean
+
   /** Whether [registerNatives] found the class in this build. */
   @Volatile
   private var unavailable: Boolean = false
@@ -111,6 +113,23 @@ object NitroUiSizing {
       nInvalidateEnvironment()
     } catch (_: UnsatisfiedLinkError) {
       unavailable = true
+    }
+  }
+
+  /**
+   * Whether size corrections are waiting for the next flush. A host uses this to
+   * tell "this frame drew" from "this frame is about to be skipped because a
+   * measured size has not reached Yoga yet" (see [recordDrawnSize]).
+   */
+  fun hasPendingReports(): Boolean {
+    if (unavailable) {
+      return false
+    }
+    return try {
+      nHasPendingReports()
+    } catch (_: UnsatisfiedLinkError) {
+      unavailable = true
+      false
     }
   }
 
