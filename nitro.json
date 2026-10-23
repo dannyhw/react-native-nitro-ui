@@ -18,6 +18,16 @@
         "implementationClassName": "HybridNitroUiCore"
       }
     },
+    "NitroUiSlider": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiSlider"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiSlider"
+      }
+    },
     "NitroUiSwitch": {
       "ios": {
         "language": "swift",
