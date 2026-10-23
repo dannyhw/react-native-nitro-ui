@@ -5,6 +5,7 @@ import {
   type HybridViewProps,
 } from 'react-native-nitro-modules';
 
+import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
 import { NitroUiSwitchConfig } from './NitroUiSwitchConfig';
 import type { NitroUiSize, NitroUiSwitchMethods } from './Switch.nitro';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
@@ -47,7 +48,13 @@ export interface NitroUiSwitchHandle {
  * friendly API, and it converts `undefined` into `null` so a prop can never
  * disappear between two commits (nitro#1184).
  */
-export interface NativeNitroUiSwitchProps extends HybridViewProps {
+/**
+ * The two sizing props (`nuiSizingKey`, `nuiSizingId`) come from
+ * [NitroUiIntrinsicProps](../../core/NitroUiIntrinsicProps.ts), like every other
+ * self-sizing component's native props.
+ */
+export interface NativeNitroUiSwitchProps
+  extends HybridViewProps, NitroUiIntrinsicProps {
   value: boolean | null;
   defaultValue: boolean | null;
   mostRecentEventCount: number;
@@ -56,6 +63,8 @@ export interface NativeNitroUiSwitchProps extends HybridViewProps {
   testID: string | null;
   accessibilityLabel: string | null;
   nuiPerfId: number | null;
+  /** TEMPORARY, test-only size-affecting prop - see `SwitchProps.nuiTestWidth`. */
+  nuiTestWidth: number | null;
   onValueChange: NitroCallbackProp<ValueChangeHandler>;
   hybridRef?: NitroCallbackProp<HybridRefHandler>;
 }

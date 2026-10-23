@@ -4,6 +4,8 @@ import type {
   HybridViewProps,
 } from 'react-native-nitro-modules';
 
+import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
+
 /**
  * Native props of the `NitroUiSwitch` Hybrid View.
  *
@@ -15,7 +17,8 @@ import type {
  * All props are applied in one batch between `beforeUpdate()` and
  * `afterUpdate()`; setters only store + mark dirty.
  */
-export interface NitroUiSwitchProps extends HybridViewProps {
+export interface NitroUiSwitchProps
+  extends HybridViewProps, NitroUiIntrinsicProps {
   /**
    * Controlled selected state, or `null` for an uncontrolled Switch - in which
    * case native keeps the displayed value and `defaultValue` seeded it.
@@ -41,6 +44,15 @@ export interface NitroUiSwitchProps extends HybridViewProps {
   accessibilityLabel: string | null;
   /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
+  /**
+   * TEMPORARY, test-only: the control's width in platform units, so a harness can
+   * make a self-sizing control genuinely change size through a prop and prove that
+   * a `nuiSizingKey` change re-measures (review S1). The
+   * Switch has no size-affecting public prop, and per DECISIONS D16 the real
+   * test belongs to the G2 Button; this is the seam until that lands. Not a
+   * feature: no wrapper prop exposes it, and it is deleted with the G2 test.
+   */
+  nuiTestWidth: number | null;
   /**
    * Called on every user interaction with the value native now displays, plus
    * native's event count (the JS wrapper echoes it back as

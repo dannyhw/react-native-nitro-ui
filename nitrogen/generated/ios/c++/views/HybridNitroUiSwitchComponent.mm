@@ -146,11 +146,29 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.nuiPerfId.hasSameValue(oldViewProps->nuiPerfId)) {
       swiftPart.setNuiPerfId(newViewProps.nuiPerfId.get());
     }
+    // nuiTestWidth: variant
+    if (oldViewProps == nullptr
+          ? newViewProps.nuiTestWidth.isProvided()
+          : !newViewProps.nuiTestWidth.hasSameValue(oldViewProps->nuiTestWidth)) {
+      swiftPart.setNuiTestWidth(newViewProps.nuiTestWidth.get());
+    }
     // onValueChange: optional
     if (oldViewProps == nullptr
           ? newViewProps.onValueChange.isProvided()
           : !newViewProps.onValueChange.hasSameValue(oldViewProps->onValueChange)) {
       swiftPart.setOnValueChange(newViewProps.onValueChange.get());
+    }
+    // nuiSizingKey: string
+    if (oldViewProps == nullptr
+          ? newViewProps.nuiSizingKey.isProvided()
+          : !newViewProps.nuiSizingKey.hasSameValue(oldViewProps->nuiSizingKey)) {
+      swiftPart.setNuiSizingKey(newViewProps.nuiSizingKey.get());
+    }
+    // nuiSizingId: number
+    if (oldViewProps == nullptr
+          ? newViewProps.nuiSizingId.isProvided()
+          : !newViewProps.nuiSizingId.hasSameValue(oldViewProps->nuiSizingId)) {
+      swiftPart.setNuiSizingId(newViewProps.nuiSizingId.get());
     }
 
     // Update hybridRef if it changed
@@ -189,4 +207,17 @@ using namespace margelo::nitro::nitroui::views;
 }
 #endif
 
+// nitro-ui: intrinsic sizing (docs/architecture/sizing.md)
+//
+// The hosted control can only be measured on the main thread, so its size has
+// to reach the shadow tree through Fabric state. Bind this instance here:
+// `updateState:oldState:` runs on mount and on every state change, including
+// the ones our own push causes - which is what keeps the binding alive.
+- (void)updateState:(const facebook::react::State::Shared &)state
+           oldState:(const facebook::react::State::Shared &)oldState {
+  const auto sizingState = ::margelo::nitro::nitroui::eraseFabricState(state);
+  ::margelo::nitro::nitroui::NitroUiSizingEngine::shared().bind(
+      HybridNitroUiSwitchComponentName, sizingState);
+  [super updateState:state oldState:oldState];
+}
 @end

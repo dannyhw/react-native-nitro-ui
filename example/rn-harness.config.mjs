@@ -111,7 +111,12 @@ export default {
   ],
   defaultRunner: 'ios',
   resetEnvironmentBetweenTestFiles: 'runtime',
-  testTimeout: CI ? 30000 : 10000,
+  // react-native-harness 1.6 has no per-test timeout: this is the budget for
+  // the slowest test in the suite, not the average one. The sizing suite mounts
+  // 200 hosted controls in a single test, which does not fit in 10s, so the
+  // floor is 30s everywhere. Several tasks share one machine's simulators, so
+  // HARNESS_TEST_TIMEOUT raises it further for a run on a loaded host.
+  testTimeout: Number(process.env.HARNESS_TEST_TIMEOUT ?? 30000),
   platformReadyTimeout: CI ? 900000 : 300000,
   bridgeTimeout: CI ? 180000 : 120000,
   bundleStartTimeout: CI ? 180000 : 120000,

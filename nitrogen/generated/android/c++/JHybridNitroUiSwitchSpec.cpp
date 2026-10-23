@@ -126,6 +126,15 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant_NullType_Double> /* nuiPerfId */)>("setNuiPerfId");
     method(_javaPart, JVariant_NullType_Double::fromCpp(nuiPerfId));
   }
+  std::variant<nitro::NullType, double> JHybridNitroUiSwitchSpec::getNuiTestWidth() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JVariant_NullType_Double>()>("getNuiTestWidth");
+    auto __result = method(_javaPart);
+    return __result->toCpp();
+  }
+  void JHybridNitroUiSwitchSpec::setNuiTestWidth(const std::variant<nitro::NullType, double>& nuiTestWidth) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant_NullType_Double> /* nuiTestWidth */)>("setNuiTestWidth");
+    method(_javaPart, JVariant_NullType_Double::fromCpp(nuiTestWidth));
+  }
   std::optional<std::function<void(bool /* value */, double /* eventCount */)>> JHybridNitroUiSwitchSpec::getOnValueChange() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JFunc_void_bool_double::javaobject>()>("getOnValueChange_cxx");
     auto __result = method(_javaPart);
@@ -142,6 +151,24 @@ namespace margelo::nitro::nitroui {
   void JHybridNitroUiSwitchSpec::setOnValueChange(const std::optional<std::function<void(bool /* value */, double /* eventCount */)>>& onValueChange) {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void_bool_double::javaobject> /* onValueChange */)>("setOnValueChange_cxx");
     method(_javaPart, onValueChange.has_value() ? JFunc_void_bool_double_cxx::fromCpp(onValueChange.value()) : nullptr);
+  }
+  std::string JHybridNitroUiSwitchSpec::getNuiSizingKey() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getNuiSizingKey");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
+  void JHybridNitroUiSwitchSpec::setNuiSizingKey(const std::string& nuiSizingKey) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* nuiSizingKey */)>("setNuiSizingKey");
+    method(_javaPart, jni::make_jstring(nuiSizingKey));
+  }
+  double JHybridNitroUiSwitchSpec::getNuiSizingId() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<double()>("getNuiSizingId");
+    auto __result = method(_javaPart);
+    return __result;
+  }
+  void JHybridNitroUiSwitchSpec::setNuiSizingId(double nuiSizingId) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(double /* nuiSizingId */)>("setNuiSizingId");
+    method(_javaPart, nuiSizingId);
   }
 
   // Methods

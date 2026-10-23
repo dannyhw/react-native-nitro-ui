@@ -31,6 +31,7 @@ means.
 | N3   | `nitrogen` 0.37.1                              | callback props must be optional; `fn \| null` throws at mount      | no upstream issue yet    | lint rule + spec rule (D7b)            |
 | N4   | `nitrogen` 0.37.1                              | generated `SimpleViewManager` ignores border/radius on Android     | no upstream issue yet    | documented limitation, undecided       |
 | N5   | `nitrogen` 0.37.1                              | generated Android `updateState` no-ops through RN's second per-view delivery | no upstream issue yet    | documented limitation; generator short-circuit is the fix (T12) |
+| N6   | `nitrogen` 0.37.1                              | no hook for a custom shadow node/state, so self-sizing needs post-processing | no upstream issue yet (draft below) | post-nitrogen patch via `nitro-ui.sizing.json`  |
 | B1   | `create-react-native-library` 0.64.0 (bob)     | template omits `react { jsRootDir }` → duplicate dex in release    | no upstream issue yet    | fixed in `android/build.gradle`        |
 | B2   | `create-react-native-library` 0.64.0 (bob)     | `--tools a b c` keeps only the first value, silently               | no upstream issue yet    | one `--tools` flag per tool            |
 
@@ -778,6 +779,66 @@ the incoming props snapshot equals `holder.lastState`, or count `updateState`
 calls and "applied" marks separately. **Removal.** When the generator
 short-circuits (planned under T12), re-record the Android sanity expectations,
 drop this entry, and update the §3 note in `docs/architecture/core.md`.
+
+### N6 — no hook for a custom shadow node, so a self-sizing view must be post-processed
+
+**Observed.** RN's state-based sizing needs three things at once: a shadow node
+with a `MeasurableYogaNode` (`measureContent`), a `State` that carries the
+measured size through the commit, and — on iOS — an `updateState:oldState:` that
+forwards that state to the Swift side. Nitro 0.37.1 generates all three itself,
+`final` and with no substitution point
+(`nitro:nitrogen/src/views/CppHybridViewComponent.ts`), so a Hybrid View cannot
+report its own intrinsic size. `docs/research/core-architecture.md` §1.5 lists
+this as the thing to propose upstream; T11 is the task that needed it.
+
+**Today.** `scripts/patch-nitrogen.mjs` rewrites the generated output for each
+view named in `nitro-ui.sizing.json`: it repoints the `…ShadowNode`,
+`…ComponentDescriptor` and `…State` aliases at the templates in
+`cpp/NitroUiIntrinsic.hpp`, adds the `updateState:oldState:` hook to the
+generated `.mm`, and the `onState` bind to the generated Kotlin manager. It is
+one script, idempotent, hard-failing on a missing anchor or an unknown policy;
+`bun run nitrogen:check` fails on drift and
+`scripts/__tests__/patch-nitrogen.test.js` asserts the behaviour including the
+failure cases. That is the mitigation for risk R1, not a removal of it: the cost
+is three anchor sets per platform whose breakage a nitrogen release would
+otherwise reveal only at build time.
+
+```text
+Problem
+A library cannot give its own Hybrid View an intrinsic size. Fabric's state-based
+sizing needs a shadow node with `measureContent`, a `State` carrying the measured
+size, and a generated `updateState` that forwards it to Swift — and nitrogen
+generates all three `final`, with no option to substitute or subclass any of them.
+Every library that hosts SwiftUI/Compose content ends up rewriting generated text
+to get there (ours: alias swaps + an `.mm` hook + a Kotlin `onState` bind).
+
+Asks
+1. Make the generated `ViewComponentDescriptor` and its state holder composable
+   rather than `final`, so a library can build on them instead of replacing them.
+2. A per-view option along the lines of
+   "shadowNode": { "header": "mylib/IntrinsicShadowNode.hpp",
+                   "template": "mylib::IntrinsicShadowNode" }
+   that repoints the generated aliases (including the `State` alias, which is the
+   one a self-sizing view has to change).
+3. Generate the iOS `updateState:oldState:` hook that forwards the new state to the
+   Swift part of the view, and the Kotlin equivalent. Without it, a state a library
+   puts into the `State` can never reach the view that put it there.
+
+Why it belongs upstream: this is not a preference about generated style — with (1)
+and (2) absent, the mechanism is unreachable, and with (3) absent it is unreachable
+on iOS specifically. Three small codegen options remove a post-processing patch from
+every library that sizes its own controls.
+```
+
+**Upstream status.** No issue filed yet. Task branches in this repo are not allowed
+to open issues, so T11 records the draft above for a maintainer to file; until then
+the post-processing stays, with its tests.
+
+**Removal.** When nitrogen offers the option in (2) and the hook in (3): point
+`nitro-ui.sizing.json`'s views at it, delete the alias/hook hunks from
+`scripts/patch-nitrogen.mjs` and the tests that assert them, keep
+`cpp/NitroUiIntrinsic.hpp` and the sizing engine (those are this library's, not
+generated), and delete this entry.
 
 ---
 

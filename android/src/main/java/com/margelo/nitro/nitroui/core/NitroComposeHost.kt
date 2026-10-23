@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnLifecycleDestroyed
@@ -93,6 +94,24 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   var perfInstanceId: Int = NitroUiPerf.NO_INSTANCE
 
   /**
+   * `nuiSizingId` of the owning view, or [NitroUiSizing.NO_INSTANCE].
+   *
+   * The other half of [wantsContentSize]: a measured size is only useful if it
+   * can be pushed somewhere, and this says which Fabric node owns it
+   * (`docs/architecture/sizing.md`). Reset on every recycle, so a reused host can
+   * never report a size into a dead instance's state.
+   */
+  var sizingInstanceId: Long = NitroUiSizing.NO_INSTANCE
+
+  /**
+   * Declared by the component: [NitroUiSizing.POLICY_INTRINSIC] when the control's
+   * own size is its size, [NitroUiSizing.POLICY_FILL_WIDTH] when the width comes
+   * from Yoga's box. It decides the question [NitroUiMeasuredRoot] asks Compose
+   * (see there), so getting it wrong makes a control report its box.
+   */
+  var sizingPolicy: Int = NitroUiSizing.POLICY_INTRINSIC
+
+  /**
    * Set by components that want [contentSize] maintained (T11's sizing, plus
    * `measureContent()`). Off by default: recording costs a Compose measure
    * bookkeeping step on every pass.
@@ -109,6 +128,18 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
   private var isDirty = true
   private var hasMarkedFirstFrame = false
+  private var firstFrameWatchRegistered = false
+
+  /**
+   * The size the sizing engine already has from this host, in dp. Compared with an
+   * epsilon so a measure that wobbles by a fraction of a dp does not become a
+   * Fabric commit (risk R12). This only skips the JNI call - the engine drops a
+   * duplicate report by itself.
+   */
+  private var lastReportedSize: NitroUiDpSize? = null
+
+  /** Whether a pre-draw flush is already queued for this host. */
+  private var flushScheduled = false
 
   /**
    * Whether the measure that arrives for this mount still has to happen. True at
@@ -161,6 +192,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     NitroUiTheme {
       NitroUiMeasuredRoot(
         record = wantsContentSize,
+        unbounded = wantsContentSize && sizingPolicy == NitroUiSizing.POLICY_INTRINSIC,
         onMeasured = ::recordMeasuredSize,
       ) {
         Component(model)
@@ -224,8 +256,11 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     isDirty = true
     isMeasurePending = true
     contentSize = null
-    // A recycled mount still paints its first frame for itself.
+    // A recycled mount still paints its first frame for itself, and has to watch
+    // for it again: the listener it registered for the previous mount is gone.
     hasMarkedFirstFrame = false
+    firstFrameWatchRegistered = false
+    releaseSizingInstance()
   }
 
   /**
@@ -241,6 +276,29 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   fun drop() {
     composeContent.disposeComposition()
     contentSize = null
+    releaseSizingInstance()
+  }
+
+  /**
+   * Tell the sizing engine this instance is finished, then forget its id.
+   *
+   * The engine's per-instance maps otherwise keep an entry for every mount the
+   * process ever made, which leaks for the life of a list that scrolls: expiry of
+   * the Fabric `State` is not a signal it can wait for (review S3). Idempotent, so
+   * the recycle path (which goes through [drop] first) is fine.
+   */
+  private fun releaseSizingInstance() {
+    val instanceId = sizingInstanceId
+    sizingInstanceId = NitroUiSizing.NO_INSTANCE
+    lastReportedSize = null
+    // Review N2: a flush listener registered on a `ViewTreeObserver` that never
+    // attaches again would leave this true forever, and this host would never
+    // schedule a flush after its first recycle. The listener itself dies with the
+    // (stale) observer, so resetting the flag costs nothing.
+    flushScheduled = false
+    if (instanceId != NitroUiSizing.NO_INSTANCE) {
+      NitroUiSizing.forget(instanceId)
+    }
   }
 
   // MARK: - View lifecycle
@@ -333,29 +391,59 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
   /**
    * Mark the first frame this mount draws. The pre-draw callback is the closest
-   * thing to a frame boundary available to a `ViewGroup` here; the listener
-   * removes itself after firing once.
+   * thing to a frame boundary available to a `ViewGroup` here, and the listener
+   * removes itself once it has marked - but only then: a pass that finds a size
+   * correction still queued is a frame about to be cancelled by
+   * [scheduleSizingFlush], so unregistering there would mean this mount never
+   * marks a first frame at all (measured: no `firstFrame`, no `drew` trace event).
+   * [firstFrameWatchRegistered] keeps one listener per mount, since attaching a
+   * view repeatedly would otherwise stack them and record the same box twice.
    */
   private fun watchForFirstFrame() {
-    if (hasMarkedFirstFrame) {
+    if (hasMarkedFirstFrame || firstFrameWatchRegistered) {
       return
     }
     val observer = viewTreeObserver
     if (!observer.isAlive) {
       return
     }
+    firstFrameWatchRegistered = true
     observer.addOnPreDrawListener(
       object : ViewTreeObserver.OnPreDrawListener {
         override fun onPreDraw(): Boolean {
+          if (NitroUiSizing.hasPendingReports()) {
+            // A size measured this turn has not reached Yoga yet, and this frame
+            // is the one [scheduleSizingFlush] cancels when it does flush. Staying
+            // registered is what makes "first frame" mean the first frame a user
+            // could have seen; the next pass decides again. Which of the two
+            // listeners the observer runs first is not something to rely on, so
+            // this does not: pending reports are enough either way.
+            return true
+          }
+          unregister()
+          hasMarkedFirstFrame = true
+          NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_FIRST_FRAME)
+          // What this frame actually drew into, for the sizing trace: the host
+          // is the RN view, so its size here is Yoga's box in px. `onPreDraw`
+          // runs after layout, so the box is final for this frame. dp, because
+          // that is the unit the engine and the JS side speak.
+          val density = resources.displayMetrics.density
+          if (density > 0f) {
+            NitroUiSizing.recordDrawnSize(
+              sizingInstanceId,
+              width.toDouble() / density,
+              height.toDouble() / density,
+            )
+          }
+          return true
+        }
+
+        private fun unregister() {
+          firstFrameWatchRegistered = false
           val current = viewTreeObserver
           if (current.isAlive) {
             current.removeOnPreDrawListener(this)
           }
-          if (!hasMarkedFirstFrame) {
-            hasMarkedFirstFrame = true
-            NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_FIRST_FRAME)
-          }
-          return true
         }
       }
     )
@@ -369,7 +457,97 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     if (density <= 0f) {
       return
     }
-    contentSize = NitroUiDpSize(widthPx.toDouble() / density, heightPx.toDouble() / density)
+    val size = NitroUiDpSize(widthPx.toDouble() / density, heightPx.toDouble() / density)
+    contentSize = size
+    reportToSizingEngine(size)
+  }
+
+  /**
+   * Hand the measured size to the sizing engine, which decides whether it deserves
+   * a Fabric state update at all.
+   *
+   * The engine drops a report that agrees with its cache, so a pre-warmed mount
+   * costs no commit; the epsilon here only skips the JNI call. When a correction
+   * *is* queued, the frame that is about to be drawn would show the old size, so
+   * [scheduleSizingFlush] asks for it to be skipped.
+   */
+  private fun reportToSizingEngine(size: NitroUiDpSize) {
+    val instanceId = sizingInstanceId
+    if (!NitroUiSizing.isSized(instanceId)) {
+      return
+    }
+    val last = lastReportedSize
+    if (last != null &&
+      kotlin.math.abs(last.width - size.width) < SIZING_EPSILON_DP &&
+      kotlin.math.abs(last.height - size.height) < SIZING_EPSILON_DP
+    ) {
+      return
+    }
+    lastReportedSize = size
+    NitroUiSizing.report(instanceId, size.width, size.height, sizingPolicy)
+    scheduleSizingFlush()
+  }
+
+  /**
+   * Apply the queued size corrections before the next frame is drawn.
+   *
+   * Returning `false` from `onPreDraw` cancels that one draw pass, which is how
+   * Android skips the wrong-size frame: the correction is a Fabric state update,
+   * so Yoga re-lays-out and RN draws again with the right frame. One listener per
+   * host, dropped as soon as it has run; [flushScheduled] keeps a burst of reports
+   * from stacking listeners up. If this host detaches first the listener dies with
+   * its (stale) `ViewTreeObserver`, and the next report re-registers on a live one
+   * - a lost flush only means one frame drawn at the fallback size.
+   */
+  private fun scheduleSizingFlush() {
+    if (flushScheduled) {
+      return
+    }
+    val observer = viewTreeObserver
+    if (!observer.isAlive) {
+      return
+    }
+    flushScheduled = true
+    observer.addOnPreDrawListener(
+      object : ViewTreeObserver.OnPreDrawListener {
+        override fun onPreDraw(): Boolean {
+          flushScheduled = false
+          val current = viewTreeObserver
+          if (current.isAlive) {
+            current.removeOnPreDrawListener(this)
+          }
+          return !NitroUiSizing.flush()
+        }
+      }
+    )
+  }
+
+  /**
+   * Font scale, screen size, locale or density changed: every cached size was
+   * measured under the old environment, so all of them are suspect - not just this
+   * view's (`docs/architecture/sizing.md`). Compose re-measures the content by
+   * itself after a configuration change, and the new measure arrives as a report.
+   */
+  override fun onConfigurationChanged(newConfig: android.content.res.Configuration?) {
+    super.onConfigurationChanged(newConfig)
+    lastReportedSize = null
+    // Only the parts of a configuration that can move a control's size belong in
+    // the signature. A rotation is a configuration change that moves no size, and
+    // this fires once per mounted view, so bumping unconditionally would clear a
+    // cache another control had just filled (review S2). Compose re-measures the
+    // content by itself after a real change, and the new measure arrives as a
+    // report; the engine decides whether the epoch moves.
+    // `LocaleList` is not an `Iterable`, so the tags come out as the platform
+    // already renders them: one comma-separated string, in priority order.
+    val locales = newConfig?.locales?.toLanguageTags() ?: ""
+    NitroUiSizing.invalidateEnvironmentIfChanged(
+      "${newConfig?.fontScale}|${newConfig?.densityDpi}|$locales",
+    )
+  }
+
+  private companion object {
+    /** Sub-dp wobble that is not a size change. */
+    private const val SIZING_EPSILON_DP = 0.5
   }
 }
 
@@ -418,41 +596,56 @@ fun NitroUiTheme(content: @Composable () -> Unit) {
  * into `minWidth == maxWidth`. A `Placeable`'s size is always coerced into its
  * constraints, so measuring with them reports the box back - the recorded size
  * would be 90x50 dp for a 90x50 dp box no matter what the control is, and the
- * centring offset would always be 0. Dropping the minimum to zero keeps it one
- * call and asks the question that was meant: the control reports what it wants
- * (up to the still-binding maximum), that gets recorded, and it is centred in
- * the box. What this records is never bigger than the box maximum; whether a
- * control that wants more than it was given paints outside the box anyway is the
- * control's own sizing (Material sizes parts of a Switch with `requiredSize`),
- * and it is not what the recorded size claims.
+ * centring offset would always be 0.
  *
- * The answer is therefore intrinsic up to the box maximum - not the unbounded
- * question iOS asks in a pass of its own with `sizeThatFits(in: .infinity)`.
- * Content whose intrinsic size can exceed its box (a wrapping label, a long
- * `Picker` title) needs that question asked outside this layout pass, which is
- * T11's design (docs/architecture/core.md §7,
- * docs/tasks/T11-intrinsic-sizing.md). Material's
- * `minimumInteractiveComponentSize` (a 48 dp touch target) is part of the size by
- * design, and only [NitroComposeHost.wantsContentSize] pays for recording at all.
+ * [unbounded] picks which of the two questions to ask, and the component decides
+ * it through its sizing policy (`docs/architecture/sizing.md`):
+ *
+ * - `true` (policy `intrinsic`, the whole library today): ask
+ *   `Constraints()`, no minimum and no maximum - the same question iOS asks with
+ *   `sizeThatFits(in: .infinity)`. A control that wants more than the box was
+ *   given reports what it wants rather than the box, which is the only answer
+ *   Yoga can act on. Capping it at the box maximum instead (what this did before
+ *   T11) means a box *smaller* than the control records the box, and that number
+ *   then goes in the cache under this configuration - every later Switch with the
+ *   same key would be laid out at the wrong size. The layout this returns is
+ *   still the box, so the control is centred in what Yoga gave it and a
+ *   user-specified width or height still wins.
+ * - `false` (policy `fillWidth` - a Slider, whose width *is* the box): keep the
+ *   maximum and drop only the minimum, which is one call and asks for the height
+ *   the control wants at the width it was given.
+ *
+ * Material's `minimumInteractiveComponentSize` (a 48 dp touch target) is part of
+ * the size by design, and only [NitroComposeHost.wantsContentSize] pays for
+ * recording at all.
  */
 @Composable
 internal fun NitroUiMeasuredRoot(
   record: Boolean,
+  unbounded: Boolean,
   onMeasured: (Int, Int) -> Unit,
   content: @Composable () -> Unit,
 ) {
   Layout(content) { measurables, constraints ->
-    // The minimum is dropped on purpose: as they arrive it equals the maximum,
-    // which would make this report the box. See the kdoc above.
-    val placeable =
-      measurables.firstOrNull()?.measure(
+    val childConstraints =
+      if (unbounded) {
+        // The unbounded question. See the kdoc: this is what makes the recorded
+        // size the control's, not the box's.
+        Constraints()
+      } else {
+        // The minimum as it arrives equals the maximum, which would make this
+        // report the box; the maximum is the width a fill-width control wants.
         constraints.copy(minWidth = 0, minHeight = 0)
-      )
+      }
+    val placeable = measurables.firstOrNull()?.measure(childConstraints)
     val measuredWidth = placeable?.width ?: 0
     val measuredHeight = placeable?.height ?: 0
     if (record && placeable != null) {
       onMeasured(measuredWidth, measuredHeight)
     }
+    // What this returns is Yoga's box, not the control's size - the control gets
+    // centred inside it. `resolveSize` keeps an explicit `EXACTLY` from Fabric
+    // winning, and falls back to the measured size when a dimension is unbounded.
     val width =
       if (constraints.hasBoundedWidth) constraints.maxWidth else measuredWidth
     val height =

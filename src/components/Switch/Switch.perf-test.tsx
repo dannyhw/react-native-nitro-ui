@@ -1,9 +1,10 @@
-import { test } from '@jest/globals';
+import { beforeAll, test } from '@jest/globals';
 import { fireEvent, screen } from '@testing-library/react-native';
 import { measureRenders } from 'reassure';
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 
+import { nitroUiHybridObjects } from '../../../__mocks__/react-native-nitro-modules';
 import { Switch } from './Switch';
 
 /**
@@ -41,6 +42,20 @@ function Harness() {
     </>
   );
 }
+
+// A self-sizing wrapper asks native for its sizing id (`useSizingId`), so
+// rendering one needs a core to exist. It is asked exactly once per mounted
+// instance - the hook keeps the answer in a ref, so no render is spent on it -
+// which is why this mock cannot move the count the baseline records.
+beforeAll(() => {
+  let issued = 0;
+  nitroUiHybridObjects.NitroUiCore = () => ({
+    nextSizingId: () => {
+      issued += 1;
+      return issued;
+    },
+  });
+});
 
 test('Switch: mount, 3 flips, 2 unrelated parent renders', async () => {
   await measureRenders(<Harness />, {

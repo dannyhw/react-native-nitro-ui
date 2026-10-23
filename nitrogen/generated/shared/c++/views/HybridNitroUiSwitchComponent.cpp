@@ -29,7 +29,10 @@ namespace margelo::nitro::nitroui::views {
     testID(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiSwitch", "testID", rawProps, sourceProps.testID)),
     accessibilityLabel(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiSwitch", "accessibilityLabel", rawProps, sourceProps.accessibilityLabel)),
     nuiPerfId(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiSwitch", "nuiPerfId", rawProps, sourceProps.nuiPerfId)),
+    nuiTestWidth(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiSwitch", "nuiTestWidth", rawProps, sourceProps.nuiTestWidth)),
     onValueChange(nitro::ReactProp<std::optional<std::function<void(bool /* value */, double /* eventCount */)>>>::fromRawValue("NitroUiSwitch", "onValueChange", rawProps, sourceProps.onValueChange)),
+    nuiSizingKey(nitro::ReactProp<std::string>::fromRawValue("NitroUiSwitch", "nuiSizingKey", rawProps, sourceProps.nuiSizingKey)),
+    nuiSizingId(nitro::ReactProp<double>::fromRawValue("NitroUiSwitch", "nuiSizingId", rawProps, sourceProps.nuiSizingId)),
     hybridRef(nitro::ReactProp<std::optional<std::function<void(const std::shared_ptr<HybridNitroUiSwitchSpec>& /* ref */)>>>::fromRawValue("NitroUiSwitch", "hybridRef", rawProps, sourceProps.hybridRef)) {
     // nitro-ui: initializeDynamicProps
     ::nitroui::compat::initializeDynamicProps(*this, sourceProps, rawProps, filterObjectKeys);
@@ -45,7 +48,10 @@ namespace margelo::nitro::nitroui::views {
       case hashString("testID"): return true;
       case hashString("accessibilityLabel"): return true;
       case hashString("nuiPerfId"): return true;
+      case hashString("nuiTestWidth"): return true;
       case hashString("onValueChange"): return true;
+      case hashString("nuiSizingKey"): return true;
+      case hashString("nuiSizingId"): return true;
       case hashString("hybridRef"): return true;
       default: return false;
     }

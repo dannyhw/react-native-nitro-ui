@@ -36,6 +36,21 @@ namespace margelo::nitro::nitroui {
       double now() override;
       void setPerfEnabled(bool enabled) override;
       std::vector<NitroUiPerfEvent> drainPerf() override;
+
+      // Sizing diagnostics (docs/architecture/sizing.md). The engine is C++-only
+      // state, so these are thin translations - which is also why they live on the
+      // core object instead of getting their own HybridObject: one seam between
+      // JS and the engine is easier to keep honest than two.
+      NitroUiSizingStats sizingStats() override;
+      // One process-global counter lives in the engine, so an id is unique across
+      // components, JS runtimes and reloads (review S4).
+      double nextSizingId() override;
+      void seedSizingSize(const std::string& componentName, const std::string& sizingKey, double width,
+                          double height) override;
+      void invalidateSizingEnvironment() override;
+      double prewarmSizing(const std::vector<std::string>& componentNames) override;
+      void setSizingTraceEnabled(bool enabled) override;
+      std::vector<NitroUiSizingTraceEvent> drainSizingTrace() override;
   };
 
 } // namespace margelo::nitro::nitroui
