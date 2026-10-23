@@ -238,6 +238,19 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
    * callback is used instead; that is the vsync *before* the frame is drawn, so
    * it is a frame earlier - the two are not interchangeable, and the report
    * labels the number a frame stamp.
+   *
+   * Round-4 correction (docs/tasks/T02-bench.review.md S3): the naive filter
+   * "reject a frame whose intended vsync predates the mount" rejects **the
+   * presenting frame itself**. Fabric dispatches mount items from
+   * `DispatchUIFrameCallback.doFrameGuarded`, a Choreographer frame callback,
+   * and the views it invalidates are traversed and drawn in that same `doFrame`
+   * - whose intended vsync is by construction earlier than the `nanoTime()`
+   * stamp taken inside it. The old condition therefore recorded the first frame
+   * drawn *after* presentation, which only exists when something invalidates
+   * again within `FRAME_TIMEOUT_MS`: every `update` cell had it (a thumb
+   * animation) and a static `mount` screen mostly did not. Acceptance now asks
+   * the real question - did this frame's animation phase run no earlier than
+   * the mount? - in [frameMetricsEndNs].
    */
   private fun armFrameCapture(target: Capture, mountNs: Long) {
     val activity: Activity? = BenchProbeContextHolder.context?.currentActivity
@@ -313,17 +326,48 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
     }, FRAME_TIMEOUT_MS)
   }
 
-  /** End timestamp of a completed frame, or null when it cannot be attributed. */
+  /**
+   * End timestamp of a completed frame, or null when it cannot be attributed
+   * to the mount at [mountNs].
+   *
+   * A frame is attributable when its animation phase ran no later than the
+   * mount, i.e. the mount could have been the invalidation this frame drew:
+   *
+   *   INTENDED_VSYNC + UNKNOWN_DELAY_DURATION + INPUT_HANDLING_DURATION +
+   *     ANIMATION_DURATION >= mountNs
+   *
+   * `INTENDED_VSYNC` alone is not the test (round 3's bug): Fabric mounts
+   * inside a Choreographer frame callback (`DispatchUIFrameCallback.doFrame`,
+   * animation phase), and that same frame traverses and draws the new views -
+   * so by the time `didMountItems` stamps the mount, the presenting frame's
+   * intended vsync is already in the past, and a filter on it rejects exactly
+   * the frame being looked for. The three durations before the animation phase
+   * place that phase on the timeline (all public since API 24; the API 24
+   * original `UNKNOWN_DELAY` was renamed `UNKNOWN_DELAY_DURATION`), and a frame
+   * whose animation phase ended *before* the mount drew something else. A
+   * mount landing inside the same frame's layout/draw tail is attributed at
+   * most one frame early - `presented` is a frame stamp anyway.
+   *
+   * The stamp that is reported stays `INTENDED_VSYNC + TOTAL_DURATION`: the
+   * instant the frame finished, on the same `System.nanoTime()` base as
+   * [mountNs] (D1). A frame whose total duration is not recorded is rejected.
+   */
   private fun frameMetricsEndNs(frameMetrics: FrameMetrics, mountNs: Long): Long? {
     return try {
       // `getMetric` is the only public accessor (`getLong`/`getInt` are internal
       // in android.view.FrameMetrics). Timestamp metrics are System.nanoTime()
       // values and duration metrics are nanoseconds, so the sum is the instant
       // the frame finished - "on screen", comparable with `mountNs` on D1's
-      // clock, and never earlier than it (frames that started before the mount
-      // are not attributable to it and are rejected below).
+      // clock. Timestamp metrics that were not recorded read as 0, which makes
+      // the acceptance test below fail closed.
       val intendedVsync = frameMetrics.getMetric(FrameMetrics.INTENDED_VSYNC_TIMESTAMP)
-      if (intendedVsync <= 0L || intendedVsync <= mountNs) return null
+      if (intendedVsync <= 0L) return null
+      val animationPhaseEndsNs =
+        intendedVsync +
+          frameMetrics.getMetric(FrameMetrics.UNKNOWN_DELAY_DURATION) +
+          frameMetrics.getMetric(FrameMetrics.INPUT_HANDLING_DURATION) +
+          frameMetrics.getMetric(FrameMetrics.ANIMATION_DURATION)
+      if (animationPhaseEndsNs < mountNs) return null
       val totalDuration = frameMetrics.getMetric(FrameMetrics.TOTAL_DURATION)
       if (totalDuration <= 0L) return null
       intendedVsync + totalDuration
