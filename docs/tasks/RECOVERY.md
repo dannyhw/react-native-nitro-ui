@@ -36,3 +36,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 
 Merge G3, G4, R1 → remaining release readiness (README/docs, smoke on both platforms, primed
 baselines D18, final report) → hand back to the human before any public repo / npm publish.
+
+## Overnight baselines
+
+The human approved running the ~3 h bench baselines overnight. A one-shot T3 scheduled task fires at 01:00 local into the orchestrator thread (`nitroui-overnight-baselines-1`): delegate A1b (iOS then Android, `--plan full --launches 8 --update-baseline`, one attempt each), then delete the schedule. The RN Storybook thread was asked to keep devices idle 01:00–07:00. No other nitro-ui device work in that window.
