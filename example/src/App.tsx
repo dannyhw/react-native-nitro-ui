@@ -12,9 +12,10 @@ import {
 import ButtonScreen from './ButtonScreen';
 import ProgressScreen from './ProgressScreen';
 import SliderScreen from './SliderScreen';
+import SegmentedControlScreen from './SegmentedControlScreen';
 import SwitchScreen from './SwitchScreen';
 
-type Screen = 'switch' | 'slider' | 'button' | 'progress';
+type Screen = 'switch' | 'slider' | 'button' | 'progress' | 'segmented';
 
 /**
  * Which screen a cold launch shows.
@@ -45,6 +46,7 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'slider', label: 'Slider' },
   { id: 'button', label: 'Button' },
   { id: 'progress', label: 'Progress' },
+  { id: 'segmented', label: 'Segments' },
 ];
 
 /**
@@ -88,6 +90,7 @@ export default function App() {
         {screen === 'slider' ? <SliderScreen /> : null}
         {screen === 'button' ? <ButtonScreen /> : null}
         {screen === 'progress' ? <ProgressScreen /> : null}
+        {screen === 'segmented' ? <SegmentedControlScreen /> : null}
       </View>
     </View>
   );

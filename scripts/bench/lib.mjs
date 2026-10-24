@@ -118,6 +118,9 @@ export const PLANS = {
     { scenario: 'mount.progress', n: 50 },
     { scenario: 'update.progress', n: 50 },
     { scenario: 'memory.progress', n: 200 },
+    { scenario: 'mount.segmented-control', n: 50 },
+    { scenario: 'update.segmented-control', n: 50 },
+    { scenario: 'memory.segmented-control', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -148,6 +151,13 @@ export const PLANS = {
     { scenario: 'update.progress', n: 50 },
     { scenario: 'memory.progress', n: 200 },
     { scenario: 'leak.progress', n: 200 },
+    { scenario: 'mount.segmented-control', n: 1 },
+    { scenario: 'mount.segmented-control', n: 50 },
+    { scenario: 'mount.segmented-control', n: 200 },
+    { scenario: 'update.segmented-control', n: 1 },
+    { scenario: 'update.segmented-control', n: 50 },
+    { scenario: 'memory.segmented-control', n: 200 },
+    { scenario: 'leak.segmented-control', n: 200 },
   ],
 };
 

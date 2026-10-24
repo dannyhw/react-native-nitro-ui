@@ -3,6 +3,8 @@ import {
   Column,
   Host,
   LoadingIndicator,
+  SegmentedButton,
+  SingleChoiceSegmentedButtonRow,
   Slider,
   Switch,
   Text,
@@ -12,6 +14,7 @@ import { useEffect } from 'react';
 
 import type { BenchListProps } from '../types';
 import {
+  SEGMENTED_SELECTION,
   buttonTitle,
   onPress,
   onSliderChange,
@@ -19,6 +22,7 @@ import {
   progressValue,
   range,
   rowStyle,
+  segmentedOptions,
   sliderValue,
   stackStyle,
 } from './shared';
@@ -46,6 +50,10 @@ export function ExpoUiHostPerControlList({
           // numbers.
           <Host key={index} matchContents style={style}>
             <BenchButton value={value} />
+          </Host>
+        ) : component === 'segmented-control' ? (
+          <Host key={index} matchContents style={style}>
+            <BenchSegmented value={value} />
           </Host>
         ) : (
           <Host key={index} style={style}>
@@ -130,6 +138,31 @@ function BenchProgress({ value }: { value: boolean }) {
 }
 
 /**
+ * Material 3's single-choice segmented row - the same composable nitro-ui hosts,
+ * reached through Expo's bridge instead of through Nitro.
+ *
+ * No `colors`: `tintColor` has an equivalent here, but the comparison is each
+ * control's platform default (as in `BenchButton`), and a seeded palette would
+ * change what this arm draws. Like the other Compose arms it has no `testID` to
+ * pass - the props carry none.
+ */
+function BenchSegmented({ value }: { value: boolean }) {
+  return (
+    <SingleChoiceSegmentedButtonRow>
+      {segmentedOptions(value).map((label, segment) => (
+        <SegmentedButton
+          key={label}
+          selected={segment === SEGMENTED_SELECTION}
+          onClick={onPress}
+        >
+          <SegmentedButton.Label>{label}</SegmentedButton.Label>
+        </SegmentedButton>
+      ))}
+    </SingleChoiceSegmentedButtonRow>
+  );
+}
+
+/**
  * `@expo/ui` best case: N composables inside a single `Host`, i.e. one Compose
  * tree and one recomposition scope for the whole batch.
  */
@@ -143,6 +176,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
         {range(n).map((index) =>
           component === 'button' ? (
             <BenchButton key={index} value={value} />
+          ) : component === 'segmented-control' ? (
+            <BenchSegmented key={index} value={value} />
           ) : component === 'slider' ? (
             <BenchSlider key={index} value={value} />
           ) : component === 'progress' ? (

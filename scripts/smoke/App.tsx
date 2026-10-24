@@ -2,6 +2,7 @@ import {
   Button,
   nitroUiCore,
   Progress,
+  SegmentedControl,
   Slider,
   Switch,
 } from 'react-native-nitro-ui';
@@ -72,6 +73,10 @@ export default function App(): React.ReactElement {
         <Slider testID="SMOKE-slider" defaultValue={0.5} />
         <Button testID="SMOKE-button" title="Save" />
         <Progress testID="SMOKE-progress" value={0.6} />
+        <SegmentedControl
+          testID="SMOKE-segmented-control"
+          options={['One', 'Two', 'Three']}
+        />
       </ScrollView>
     </View>
   );
