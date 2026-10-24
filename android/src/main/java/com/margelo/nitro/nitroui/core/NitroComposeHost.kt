@@ -20,8 +20,10 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnLifecycleDestroyed
 import android.view.ViewTreeObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
@@ -68,6 +70,8 @@ data class NitroUiDpSize(val width: Double, val height: Double)
  * Lifetime:
  * - prop setters write snapshot state on the model and call [markDirty];
  * - [commit] runs once per `updateState` and sends one apply notification;
+ * - the composition's strategy is armed at [onAttachedToWindow], which is the first
+ *   moment anything can compose, and unarmed at [drop];
  * - [drop] disposes the composition;
  * - [prepareForRecycle] resets the model and the flags, ready for the next
  *   attach.
@@ -84,6 +88,12 @@ data class NitroUiDpSize(val width: Double, val height: Double)
  * compositions alive: not disposing would leak one per real unmount, and with the
  * flag off every unmount is a real one. Measuring a keep-it-alive variant is
  * T02's job (docs/architecture/core.md §6).
+ *
+ * A pooled view therefore holds nothing this host registered: the pool is RN's, it
+ * is unbounded, and RN empties it without telling the views in it (`ViewManager`
+ * drops the whole map on `trimMemory` and on `onSurfaceStopped`), so arming
+ * anything at pool entry would put a host that is never reused back into the
+ * activity. Hence arming at attach rather than at recycle.
  */
 abstract class NitroComposeHost<M : NitroUiModel>(
   context: Context,
@@ -132,6 +142,31 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private var isDirty = true
   private var hasMarkedFirstFrame = false
   private var firstFrameWatchRegistered = false
+
+  /**
+   * Whether a pre-draw listener is registered for this mount, with the observer it
+   * was registered on.
+   *
+   * The pair, not just the flag: a `View` that is no longer attached answers
+   * `viewTreeObserver` with a *fresh* floating observer, so removing through the
+   * current one after a detach removes nothing and leaves the listener on the
+   * window's observer - which holds it, and through it this host, for the life of
+   * the window. [unregisterPreDraw] is the only way back.
+   */
+  private var firstFrameWatch: PreDrawWatch? = null
+
+  /** The same, for the sizing flush. See [firstFrameWatch]. */
+  private var flushWatch: PreDrawWatch? = null
+
+  /**
+   * Whether a composition strategy is currently installed for this host.
+   *
+   * A strategy is a registration on the activity, not a property of the view
+   * ([armCompositionStrategy]), so it is armed only when there is something to
+   * guard - the moment this host is attached - and never while this host is sitting
+   * in RN's recycling pool, which RN empties without telling the views inside it.
+   */
+  private var strategyArmed = false
 
   /**
    * The size the sizing engine already has from this host, in dp. Compared with an
@@ -194,10 +229,11 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private val composeContent: ComposeContent = ComposeContent(context)
 
   init {
-    // The default strategy disposes on detach, which is wrong in RN: screen
-    // transitions, `removeClippedSubviews` and the recycling pool all detach
-    // views, and each detach would throw the composition away.
-    owner?.let { composeContent.setViewCompositionStrategy(DisposeOnLifecycleDestroyed(it)) }
+    // No strategy is installed here: a strategy is a registration on the activity,
+    // and nothing can compose until this host is attached, so
+    // [onAttachedToWindow] arms it and nothing here has to. Arming any earlier would
+    // make a host that is preallocated and then discarded - RN preallocates views -
+    // a registration with no composition behind it.
     addView(
       composeContent,
       LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
@@ -278,6 +314,9 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * this model from scratch.
    */
   fun prepareForRecycle() {
+    // No strategy is re-armed here, deliberately: this is pool entry, and the pool
+    // is where a host may never be reused. [onAttachedToWindow] arms the guard for
+    // the mount that follows, before that mount can compose.
     model.reset()
     isDirty = true
     isMeasurePending = true
@@ -298,12 +337,116 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * unmount path. Disposing is still the right call: with the recycling flag
    * off - the default - every call here is an unmount, and a composition left
    * alive would be retained until the activity dies.
-   * `DisposeOnLifecycleDestroyed` is what bounds the other case.
+   *
+   * Disposing is not enough on its own. `AbstractComposeView` installs a
+   * [ViewCompositionStrategy] when it is set and uninstalls it from nowhere else -
+   * not from `disposeComposition()`, not from a detach - so the strategy armed for a
+   * mount outlives its composition by the whole life of the activity. What it
+   * installs is an observer on the activity's `LifecycleRegistry`, which holds its
+   * observers strongly: one unmounted host, one strong path
+   * `activity -> LifecycleRegistry -> observer -> ComposeView`, holding the view,
+   * its `AndroidComposeView` and the disposed composition's residue - three `View`s
+   * per control (host, `ComposeContent`, `AndroidComposeView`) and ~42 KiB. Measured
+   * on the churn gate at 8.18 MiB retained per cycle of 200 Switches, which is how
+   * `mount.<component>:nitro-ui:200` ran a 192 MiB heap out
+   * (`docs/tasks/A1-baselines.report.md`,
+   * `docs/tasks/B1-android-mount-oom.report.md`). Hence [unarmCompositionStrategy].
    */
   fun drop() {
     composeContent.disposeComposition()
+    // After the dispose, not before: a strategy must be set with no composition
+    // in flight, and the guard is worth nothing once the composition is gone.
+    unarmCompositionStrategy()
+    // Same rule as the strategy, different registrar: a pre-draw listener is held
+    // by the observer it was registered on, which is the *window's* when the host
+    // was attached, and a window outlives a control. A host dropped before its
+    // listener ran has to take it out itself or the window keeps the host - the
+    // same retention shape as the strategy, one per mount.
+    unregisterPreDraw(firstFrameWatch)
+    firstFrameWatch = null
+    firstFrameWatchRegistered = false
+    unregisterPreDraw(flushWatch)
+    flushWatch = null
     contentSize = null
     releaseSizingInstance()
+  }
+
+  /**
+   * Install [DisposeOnLifecycleDestroyed] as the composition's guard.
+   *
+   * Compose's own default disposes on detach, which RN's detach behaviour makes
+   * wrong for us (see [onAttachedToWindow]), and the alternative
+   * `DisposeOnViewTreeLifecycleDestroyed` resolves the owner from the view tree -
+   * which is not the activity whenever something else owns the view tree, as
+   * react-native-screens does for a screen's fragment. The strategy is the one
+   * Compose offers for a view with a 1-1 relationship with a [LifecycleOwner], and
+   * we do have that - for one mount. Keeping it installed after the mount is what
+   * leaks, so it is armed at attach and taken out again in
+   * [unarmCompositionStrategy]; no-op without a `LifecycleOwner`, as before.
+   */
+  private fun armCompositionStrategy() {
+    if (strategyArmed) {
+      // Re-attaching a host that was detached without being dropped (a screen
+      // transition, `removeClippedSubviews`) must not pay for a second observer.
+      return
+    }
+    val owner = owner ?: return
+    // `installFor` throws rather than skip when the owner is already DESTROYED, and
+    // a view can be attached while an activity is being torn down (a surface that is
+    // stopping still lays its tree out). A guard for a dead activity is worth nothing
+    // regardless, so refuse it here instead of paying for its exception.
+    if (owner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+      return
+    }
+    composeContent.setViewCompositionStrategy(DisposeOnLifecycleDestroyed(owner))
+    strategyArmed = true
+  }
+
+  /**
+   * Uninstall whatever strategy is installed, by installing one that observes
+   * nothing.
+   *
+   * Setting a strategy runs the previous strategy's uninstaller first, and that is
+   * the only call site for it in `AbstractComposeView` - which is why [drop] has to
+   * do this itself rather than trust `disposeComposition()` to let the host go.
+   * [DisposeWithTheHost] then leaves nothing registered: a dropped host is not in
+   * the activity any more, whether it is reused from the pool (whose only way back
+   * is an attach, and [onAttachedToWindow] arms) or thrown away.
+   */
+  private fun unarmCompositionStrategy() {
+    composeContent.setViewCompositionStrategy(DisposeWithTheHost)
+    strategyArmed = false
+  }
+
+  /**
+   * Take [watch] off the observer that holds it, if it is still on it.
+   *
+   * The observer captured at registration is the one holding the listener, so that
+   * is the one to ask - while it is alive. A `ViewTreeObserver` dies when a
+   * detached view's floating observer is merged into a window's, and the merge
+   * copies the listeners into the live destination, which is the current observer
+   * for a view that is now attached: hence the fallback. A merged listener that
+   * ended up in some *other* window's observer is beyond reach from here, and
+   * `ViewTreeObserver` throws for a listener it does not hold, so this stays a
+   * best-effort removal rather than one that can crash an unmount.
+   */
+  private fun unregisterPreDraw(watch: PreDrawWatch?) {
+    if (watch == null) {
+      return
+    }
+    val observer =
+      if (watch.observer.isAlive) {
+        watch.observer
+      } else if (isAttachedToWindow) {
+        viewTreeObserver
+      } else {
+        return
+      }
+    try {
+      observer.removeOnPreDrawListener(watch.listener)
+    } catch (_: IllegalStateException) {
+      // The listener is not in this observer: it went somewhere else with a merge.
+    }
   }
 
   /**
@@ -318,10 +461,9 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     val instanceId = sizingInstanceId
     sizingInstanceId = NitroUiSizing.NO_INSTANCE
     lastReportedSize = null
-    // Review N2: a flush listener registered on a `ViewTreeObserver` that never
-    // attaches again would leave this true forever, and this host would never
-    // schedule a flush after its first recycle. The listener itself dies with the
-    // (stale) observer, so resetting the flag costs nothing.
+    // A flush listener that never ran would leave this true forever, and a host
+    // that is recycled would then never schedule a flush again. [drop] has already
+    // taken the listener off its observer; clearing the flag keeps the two in step.
     flushScheduled = false
     if (instanceId != NitroUiSizing.NO_INSTANCE) {
       NitroUiSizing.forget(instanceId)
@@ -331,6 +473,15 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   // MARK: - View lifecycle
 
   override fun onAttachedToWindow() {
+    // The guard goes on before anything can compose, and this is the first moment
+    // it can: the child's attach - which is where `AbstractComposeView` creates its
+    // composition - is dispatched by `super`, and a measure while detached is
+    // declined by [onMeasure]. Arming here instead of in [prepareForRecycle] is
+    // what keeps a host that is in RN's recycling pool out of the activity's
+    // `LifecycleRegistry`: the pool is unbounded and RN empties it without a word
+    // to the views inside it, so a guard installed at pool entry would be a leak
+    // with no unmount to explain it (review B1 M1).
+    armCompositionStrategy()
     // Compose needs both owners and fails if either is missing, so fill any gap
     // first - and fill each gap separately, since a parent could set one and not
     // the other. Usually `ReactActivity`/react-native-screens already set both
@@ -445,7 +596,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       return
     }
     firstFrameWatchRegistered = true
-    observer.addOnPreDrawListener(
+    val listener =
       object : ViewTreeObserver.OnPreDrawListener {
         override fun onPreDraw(): Boolean {
           if (NitroUiSizing.hasPendingReports()) {
@@ -477,13 +628,12 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
         private fun unregister() {
           firstFrameWatchRegistered = false
-          val current = viewTreeObserver
-          if (current.isAlive) {
-            current.removeOnPreDrawListener(this)
-          }
+          unregisterPreDraw(firstFrameWatch)
+          firstFrameWatch = null
         }
       }
-    )
+    firstFrameWatch = PreDrawWatch(listener, observer)
+    observer.addOnPreDrawListener(listener)
   }
 
   /**
@@ -558,9 +708,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * Android skips the wrong-size frame: the correction is a Fabric state update,
    * so Yoga re-lays-out and RN draws again with the right frame. One listener per
    * host, dropped as soon as it has run; [flushScheduled] keeps a burst of reports
-   * from stacking listeners up. If this host detaches first the listener dies with
-   * its (stale) `ViewTreeObserver`, and the next report re-registers on a live one
-   * - a lost flush only means one frame drawn at the fallback size.
+   * from stacking listeners up. A host that detaches first does not get a free pass:
+   * the listener it left on that window's observer is removed by [drop], because the
+   * observer outlives the host and would otherwise hold it (review B1 M2). A lost
+   * flush only means one frame drawn at the fallback size.
    */
   private fun scheduleSizingFlush() {
     if (flushScheduled) {
@@ -571,18 +722,17 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       return
     }
     flushScheduled = true
-    observer.addOnPreDrawListener(
+    val listener =
       object : ViewTreeObserver.OnPreDrawListener {
         override fun onPreDraw(): Boolean {
           flushScheduled = false
-          val current = viewTreeObserver
-          if (current.isAlive) {
-            current.removeOnPreDrawListener(this)
-          }
+          unregisterPreDraw(flushWatch)
+          flushWatch = null
           return !NitroUiSizing.flush()
         }
       }
-    )
+    flushWatch = PreDrawWatch(listener, observer)
+    observer.addOnPreDrawListener(listener)
     // A pre-draw listener only runs when the window next traverses, and a quiet
     // window never decides to do that on its own: the listener above is a request
     // to be consulted at the next draw, not a request for one. A report that
@@ -847,4 +997,29 @@ internal fun NitroUiMeasuredRoot(
       )
     }
   }
+}
+
+/**
+ * A `ViewTreeObserver.OnPreDrawListener` and the observer it was registered on.
+ *
+ * The two belong together: `View.getViewTreeObserver()` hands a detached view a
+ * *new* floating observer, so the only handle on the observer that is actually
+ * holding the listener is the one taken when the listener went on it.
+ */
+private class PreDrawWatch(
+  val listener: ViewTreeObserver.OnPreDrawListener,
+  val observer: ViewTreeObserver,
+)
+
+/**
+ * A [ViewCompositionStrategy] that neither observes nor disposes.
+ *
+ * It exists so that installing it can uninstall something else: a strategy's
+ * uninstaller only ever runs when the next strategy is installed, and this is the
+ * cheapest strategy to be left with. The host owns the composition's lifetime and
+ * ends it in `NitroComposeHost.drop`, which is what the composition is disposed by
+ * from here on.
+ */
+private object DisposeWithTheHost : ViewCompositionStrategy {
+  override fun installFor(view: AbstractComposeView): () -> Unit = {}
 }
