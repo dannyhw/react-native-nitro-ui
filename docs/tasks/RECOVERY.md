@@ -16,7 +16,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | Task | Worktree / branch | Last commit | State | Next step |
 |---|---|---|---|---|
 | G3 Progress | — | merged into main (`7b91e95`) | Done | — |
-| G4 SegmentedControl | `nitro-ui-worktrees/G4` · `task/G4-segmented-control` | `415afb3` + uncommitted `docs/tasks/G4-segmented-control.review.md` | Review MERGE-AFTER-SMALL-FIXES; fix round 1 (Apex, `nitroui-G4-fix-r1`) running on iPhone Air + `nitroui_t02` | If lost: re-delegate fix round 1 from the review (F1 iOS tint doc, F2 Android clip doc, F3 take main's support.mjs, F4 test reds, report corrections). Then merge on green gates, then R2. |
+| G4 SegmentedControl | — | merged into main (`ea4c42d`) | Done | — |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
 ## Devices (D13)
