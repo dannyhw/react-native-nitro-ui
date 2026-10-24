@@ -32,3 +32,6 @@ etc/*.api.md
 
 # nitrogen rewrites nitro.json; formatting it would make `nitrogen:check` see drift.
 nitro.json
+
+# Storybook's generated requires file (S1) - see .gitignore.
+example/.rnstorybook/storybook.requires.*
