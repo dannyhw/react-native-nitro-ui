@@ -16,8 +16,8 @@
 | G2 | Button (owns R3 sizing test) | Apex | Opus | merged (1 impl + 1 fix round) |
 | T15 | Real-input verification (OS taps/drags on Switch, Slider; Button added after G2 merges) | Apex | — | merged (runner) |
 | FIX2 | Stale Yoga measurement after a correction (iOS Switch at 0 width after `value` update, found by T15) | Apex | Opus | merged (1 impl + 1 fix round; iOS+Android Sizing 24/24, real input 3/3 both) |
-| G4 | SegmentedControl (Picker → 0.2, D19) | Apex | Opus | review MERGE-AFTER-SMALL-FIXES (docs/test fixes, no native); fix round 1 running — merges on green gates, no re-review needed |
+| G4 | SegmentedControl (Picker → 0.2, D19) | Apex | Opus | merged (1 impl + 1 fix round; fix round comment-only in native) |
 | T15b | Add Button to the real-input runner + fix the Android Slider drag/JS-write test (red on main) | Apex | — | merged (real input 3/3 both platforms) |
 | G5 | DatePicker | — | — | moved to 0.2 (D19) |
 | R1 | Release readiness: gate hygiene (D21 timing tag, real-input Metro bug, Node 26 check) | Apex | Opus (orchestrator) | merged |
-| R2 | Release readiness 2: README + component docs, smoke with all 5 components, pack check, D18 baselines | Apex | orchestrator | brief written; starts after G3 + G4 merge |
+| R2 | Release readiness 2: README + component docs, smoke with all 5 components, pack check, D18 baselines | Apex | orchestrator | in progress |
