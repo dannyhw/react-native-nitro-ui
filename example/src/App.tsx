@@ -24,8 +24,16 @@ type Screen = 'switch' | 'slider' | 'button' | 'progress' | 'segmented';
  * here, so an `process.env`-based switch would need a Metro config for one
  * developer convenience. Task screenshots are taken with this flipped (see the
  * task report), which needs no Metro change and no rebuild of anything else.
+ *
+ * Keep the committed value a screen the window can go idle on, and land it back
+ * here after a screenshot session. The Progress screen draws two indeterminate
+ * indicators and starts its 60 Hz writer on mount, so on Android that window
+ * never idles: `uiautomator dump` answers "could not get idle state", and
+ * `bun run test:real-input:android` - which reads the screen that way - then
+ * never sees the tab bar and times out (A2 measured it: the same timeout on
+ * `main` and on this branch, and a dump that succeeds one tab over).
  */
-const DEFAULT_SCREEN: Screen = 'progress';
+const DEFAULT_SCREEN: Screen = 'switch';
 
 /**
  * The tab bar's top padding.
