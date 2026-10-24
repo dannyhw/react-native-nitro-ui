@@ -23,3 +23,5 @@
 | R2 | Release readiness 2: README + component docs, smoke with all 5 components, pack check, D18 baselines | Apex | orchestrator | merged (1 round; baselines measured but not minted — runner needs a full plan) |
 | S1 | React Native Storybook in the example app (showcase/tester) | Apex | orchestrator | merged (1 round; disabled bundle byte-identical, harness 99/99 + real-input 4/4 both) |
 | T16 | Spike: shared `<Host>` on Android, Switch only, bench vs expo shared host | Apex | orchestrator | done — Host beats expo shared host on Android mount memory (2.75x→0.87x) and UI CPU (1.50x→0.80x, noise-flagged), JS CPU 1.10x; report merged, code on branch `task/T16-host-spike` (b93b41b) |
+| A2 | Phase A: deferred small fixes (useSizingId leak, smoke per-control check, pack count, Storybook dark panel, progress docs) | Apex | orchestrator | in progress |
+| A1 | Phase A: committed bench baselines (full plan, 8 launches, both platforms, quiet machine) | Apex | orchestrator | after A2 |

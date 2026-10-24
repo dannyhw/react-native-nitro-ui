@@ -102,3 +102,11 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   immediate pushes, flushes, stale frames, event counts) everywhere; **wall-clock thresholds**
   (e.g. cold-batch `flushMs`) move behind a quiet-machine tag (`HARNESS_TIMING=1`, refused when
   load average ≥ 10) and are reported, not gated, otherwise. Done during release readiness.
+
+## D22 — No public release and no CI for now (2026-10-24)
+
+The human's call: the repo stays private (`dannyhw/react-native-nitro-ui`), nothing goes to npm, and
+all GitHub workflows (CI, Release, Bench, Smoke) are disabled. Local gates (`bun run check`, harness,
+real-input, smoke, bench) are the only gates. Phase A = committed bench baselines + deferred small
+fixes (A1/A2). 0.2 scope: Picker, DatePicker, Android over-wide content fix, opt-in Android `<Host>`
+(Switch first, then the rest), iOS mount profiling to decide an iOS Host.
