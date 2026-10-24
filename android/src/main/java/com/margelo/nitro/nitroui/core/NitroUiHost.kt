@@ -65,12 +65,14 @@ internal class NitroUiHostView(
   // Declared after [hostedVersion]: init blocks and property initializers run in
   // declaration order, and the listener writes that state.
   init {
-    // Observe the child set. `ViewGroup` has no overridable `onChildViewAdded` - it
-    // is not in the public SDK - so the seam is the hierarchy listener, which every
+    // Observe the child set. The seam is the hierarchy listener, which every
     // mutation path funnels through: `addView` in all its overloads and
     // `addViewInLayout` report from `addViewInner`, and the `removeView*` variants
-    // report from `removeViewsInternal`. Overriding the `addView` overloads by hand
-    // instead would mean guessing which set Fabric calls, and a wrong guess mounts a
+    // report from `removeViewsInternal`. `onViewAdded`/`onViewRemoved` are the other
+    // seam and work equally well - `@expo/ui` invalidates its recompose scope from
+    // them (`ExpoComposeView.onViewAdded`) - but this class overrides neither today,
+    // and one listener covers add and remove. Overriding the `addView` overloads by
+    // hand would mean guessing which set Fabric calls, and a wrong guess mounts a
     // blank control rather than failing loudly.
     //
     // RN touches this slot exactly once and only to clear it
