@@ -426,7 +426,7 @@ wait before its first check, which is a follow-up.
 > **Install** — `npm install react-native-nitro-ui react-native-nitro-modules`, then autolinking.
 > No config plugin, no Podfile or Gradle edits. Verified green for this release on Expo SDK 58
 > (RN 0.88) and React Native CLI 0.88.0, both platforms, and on RN CLI 0.86.3 on Android
-> (iOS 0.86 is verified in CI). RN ≥ 0.86 with the new architecture; iOS at RN's floor; Android
+> (iOS 0.86 is not yet verified: it hangs on the iOS 27 simulator even without this library). RN ≥ 0.86 with the new architecture; iOS at RN's floor; Android
 > `minSdkVersion` 24. Expo Go is not supported — Nitro Modules needs a dev build.
 >
 > **Performance** — measured against the same controls reached through `@expo/ui`, one shared

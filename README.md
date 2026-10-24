@@ -7,7 +7,7 @@ Most "native" component libraries re-implement a platform control in React
 Native and copy the screenshots. This one hosts the real thing: each control is
 a SwiftUI view or a Jetpack Compose composable inside a Nitro Hybrid View, so
 the toggle animates like Apple's, the slider takes drags the way `UISlider`
-does, the segmented row truncates labels the way the OS does, and VoiceOver and
+does, the iOS segmented row truncates labels the way the OS does, and VoiceOver and
 TalkBack get the control's own accessibility instead of an approximation of it.
 Layout still belongs to Yoga — the control measures itself, reports its size to
 the layout engine, and React never sees a native node. v0.1 ships five controls
@@ -65,10 +65,11 @@ run (`scripts/smoke/`, with `npm` and a Release build) against a fresh Expo SDK
 | RN CLI 0.88.0         | ✅  | ✅      |
 | RN CLI 0.86.3         | n/a | ✅      |
 
-RN 0.86.3 is supported (it is our floor) and its Android install is covered by
-a nightly smoke row, re-run for 0.1. Its iOS run is not verifiable on this machine's iOS 27
-simulator runtime — a fresh 0.86.3 app without this library hangs at launch
-there too — so it is verified in CI on an older runtime instead.
+RN 0.86.3 is supported (it is our floor); its Android install was re-run for
+0.1. Its iOS install is not verifiable on an iOS 27 simulator runtime — a fresh
+0.86.3 app without this library hangs at launch there too — so it has a row on
+an older runtime in the CI smoke workflow (`.github/workflows/smoke.yml`), which
+has not run yet.
 
 ### Expo (Continuous Native Generation)
 
@@ -311,8 +312,8 @@ The full list per control is in its doc; these are the ones that bite.
   platforms so the JS API means one thing.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules
   needs native code.
-- **RN 0.86 iOS is verified in CI, not on every dev machine** — see the
-  installation table above.
+- **RN 0.86 on iOS is not yet verified** — it hangs on the iOS 27 simulator
+  even without this library; the CI row for an older runtime has not run yet.
 - **`testID` lands on the host** on Android (`View.tag`): Compose has no test id,
   which is what `findNodeByName` and the harness read.
 - **Accessibility props belong on the control, not the box.** The label lives on
