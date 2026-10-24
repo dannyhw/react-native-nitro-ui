@@ -20,12 +20,13 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | R2 Release 0.1 | — | merged into main | Done. v0.1 ready locally; waiting on the human (repo/publish decision, Android D15 decision). | — |
 | S1 Storybook | — | merged | Done | — |
 | T16 Host spike | branch only (`b93b41b`, pushed) | report merged | Done | Human decides whether 0.2 ships an Android `<Host>`. |
+| A2 small fixes | `nitro-ui-worktrees/A2` · `task/A2-small-fixes` | from `9a1da40` | Implementation round running (Apex, `nitroui-A2-impl-r1`) on iPhone 17 + `nitroui_t01` | If lost: re-delegate from the brief. Then A1 baselines (quiet machine), then 0.2 (D22 scope). |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
 ## Devices (D13)
 
 - Lent to the separate RN Storybook fixes thread (not nitro-ui work): AVD `nitroui_t02` port 5572, adb 5042, Metro 8294; iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3`. Don't assign them to nitro-ui tasks.
-- free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
+- A2: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
 - Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
