@@ -22,14 +22,14 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | T16 Host spike | branch only (`b93b41b`, pushed) | report merged | Done | Human decides whether 0.2 ships an Android `<Host>`. |
 | A2 small fixes | — | merged | Done | — |
 | A1 baselines | — | report merged | Not minted (iOS busy; Android OOM) | iOS re-run in an idle window; Android after B1. |
-| B1 Android OOM | `nitro-ui-worktrees/B1` · `task/B1-android-mount-oom` | `e0efb23` + uncommitted review | Fix round 1 running (Apex, `nitroui-B1-fix-r1`) on `nitroui_t01` + iPhone 17 | If lost: re-delegate fix round 1 from the review (M1, M2, report corrections). Then narrow Opus re-review, merge, then C1. |
+| B1 Android OOM | — | merged | Done | Overnight baselines can mint Android too. C1 next (morning). |
 | P1 iOS profiling | — | report merged | Done (H3 dropped) | — |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
 ## Devices (D13)
 
 - Lent to the separate RN Storybook fixes thread (not nitro-ui work): AVD `nitroui_t02` port 5572, adb 5042, Metro 8294; iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3`. Don't assign them to nitro-ui tasks.
-- B1: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
+- Reserved for overnight A1b: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
 - Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
