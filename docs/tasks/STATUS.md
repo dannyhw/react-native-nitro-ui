@@ -25,5 +25,5 @@
 | T16 | Spike: shared `<Host>` on Android, Switch only, bench vs expo shared host | Apex | orchestrator | done — Host beats expo shared host on Android mount memory (2.75x→0.87x) and UI CPU (1.50x→0.80x, noise-flagged), JS CPU 1.10x; report merged, code on branch `task/T16-host-spike` (b93b41b) |
 | A2 | Phase A: deferred small fixes (useSizingId leak, smoke per-control check, pack count, Storybook dark panel, progress docs) | Apex | orchestrator | merged (1 round) |
 | A1 | Phase A: committed bench baselines (full plan, 8 launches, both platforms, quiet machine) | Apex | orchestrator | done — not minted: iOS refused (busy, load 10.5); Android blocked by OOM at N=200 → B1 |
-| B1 | Android OutOfMemoryError mounting 200 controls repeatedly (found by A1) | Apex | Opus | in progress |
+| B1 | Android OutOfMemoryError mounting 200 controls repeatedly (found by A1) | Apex | Opus | review MERGE-AFTER-SMALL-FIXES (root cause confirmed; M1 recycling re-arm, M2 pre-draw listener leak); fix round 1 running, re-review after |
 | P1 | iOS mount-cost profiling (0.2 wave 1) | Apex | orchestrator | done — iOS mount cost is the synchronous T11 first measure (UI thread), not hosting-controller creation or JS; H3 iOS Host no-go |
