@@ -348,6 +348,9 @@ notes that shaped these choices, and `docs/DECISIONS.md` for the calls.
 ## Contributing
 
 - [Development workflow](CONTRIBUTING.md#development-workflow)
+- [Storybook](example/README.md#storybook) - the example app is also a showcase
+  app: `bun run storybook:ios` / `bun run storybook:android` starts it, and
+  `bun run storybook` runs its Metro server separately
 - [Sending a pull request](CONTRIBUTING.md#sending-a-pull-request)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
