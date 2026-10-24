@@ -17,7 +17,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 |---|---|---|---|---|
 | G3 Progress | — | merged into main (`7b91e95`) | Done | — |
 | G4 SegmentedControl | — | merged into main (`ea4c42d`) | Done | — |
-| R2 Release 0.1 | `nitro-ui-worktrees/R2` · `task/R2-release-0.1` | from `5966064` | Implementation round running (Apex, `nitroui-R2-impl-r1`) on iPhone 17 + `nitroui_t01` | If lost: re-delegate R2 from its brief + report state. Orchestrator reviews (docs/scripts); then merge and hand back to the human — no push/publish. |
+| R2 Release 0.1 | — | merged into main | Done. v0.1 ready locally; waiting on the human (repo/publish decision, Android D15 decision). | — |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
 ## Devices (D13)
