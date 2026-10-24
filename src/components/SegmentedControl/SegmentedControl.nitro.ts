@@ -56,7 +56,8 @@ export interface NitroUiSegmentedControlProps
   disabled: boolean;
   /**
    * RN-processed (`processColor`) ARGB color, or `null` for the platform
-   * default: SwiftUI `.tint()` / the selected segment's content + border.
+   * default: the selected segment's container + border on Android. Applied on iOS
+   * as `.tint()`, which a segmented `Picker` ignores, so it is a no-op there.
    */
   tintColor: number | null;
   /** Forwarded to the native view so tests and a11y tools can find it. */

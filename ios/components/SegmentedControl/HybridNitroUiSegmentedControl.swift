@@ -120,7 +120,15 @@ struct SegmentedControlContent: NitroUIContent {
 }
 
 /// `.tint()` has no "unset" form, so the default keeps SwiftUI's accent colour.
-/// On a segmented `Picker` the tint is the selected segment's fill.
+///
+/// On a segmented `Picker` a per-instance `.tint(_:)` has **no visible effect**: the
+/// selected segment keeps the scheme's accent fill (measured on iOS 27, reviewed as G4
+/// F1). `tintColor` is therefore an Android-only prop — see
+/// `docs/components/segmented-control.md`. A per-instance iOS tint would mean drawing
+/// the row instead of hosting `Picker`; `UIAppearance` on `UISegmentedControl` is not a
+/// substitute, because it would restyle every segmented `Picker` in the app. The
+/// modifier stays so the prop has one honest code path on both platforms and a
+/// per-instance tint can be added here without changing the spec.
 private struct OptionalSegmentedTint: ViewModifier {
   let color: UIColor?
 
