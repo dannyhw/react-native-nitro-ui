@@ -47,6 +47,10 @@ class NitroUiPackage : BaseReactPackage() {
     HybridNitroUiButtonManager(),
     HybridNitroUiProgressManager(),
     HybridNitroUiSegmentedControlManager(),
+    // Not the generated `HybridNitroUiHostManager`: a Hybrid View is a leaf, so
+    // nitrogen emits a `SimpleViewManager` for it, and a container needs the
+    // `IViewGroupManager` half. See `NitroUiHostViewManager`.
+    NitroUiHostViewManager(),
   )
 
   companion object {

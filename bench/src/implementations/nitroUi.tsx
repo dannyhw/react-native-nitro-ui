@@ -1,5 +1,6 @@
 import {
   Button,
+  Host,
   Progress,
   SegmentedControl,
   Slider,
@@ -20,6 +21,7 @@ import {
   rowStyle,
   segmentedOptions,
   sliderValue,
+  stackStyle,
 } from './shared';
 
 /**
@@ -93,6 +95,53 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
     });
   }
   return marks;
+}
+
+/**
+ * `n` nitro-ui Switches inside **one** `<Host>` (T16 spike,
+ * `docs/tasks/T16-host-spike.md`): one Compose composition and one
+ * `AndroidComposeView` for the batch instead of one per control.
+ *
+ * The box is the `expo-ui-shared-host` arm's box (`stackStyle`), and the child's
+ * props are the `nitro-ui` arm's props - same `rowStyle`, same stable no-op
+ * handler - so the difference this cell prices is only *where the control composes*.
+ * That is deliberate: the Expo arm's children carry no box at all (a Compose child
+ * has no Yoga node to size), and giving this arm's children no box either would fold
+ * "no intrinsic sizing round trip" into a number that is supposed to be about
+ * compositions. The sizing consequence of that is real and belongs in the report, not
+ * in the ratio.
+ *
+ * `Host` stacks its children itself (a Compose `Column`), which is the same
+ * arrangement the Expo arm builds with an explicit `<Column>`.
+ */
+export function NitroUiHostList({
+  n,
+  value,
+  perfMarks,
+  component,
+}: BenchListProps) {
+  if (n === 0) {
+    return null;
+  }
+  if (component !== 'switch') {
+    // The plan should never ask (`BenchImplementation.components`); rendering an
+    // empty tree here would be a number nobody asked for.
+    throw new Error(`nitro-ui-host implements Switch only, got ${component}`);
+  }
+  return (
+    <Host style={stackStyle(n, component)}>
+      {range(n).map((index) => (
+        <Switch
+          key={index}
+          testID={`bench-nitro-ui-host-${String(index)}`}
+          value={value}
+          onValueChange={onValueChange}
+          nuiPerfId={perfMarks ? index : null}
+          style={rowStyle(component)}
+        />
+      ))}
+    </Host>
+  );
 }
 
 /**

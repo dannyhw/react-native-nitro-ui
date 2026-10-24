@@ -72,6 +72,9 @@ export const IMPLEMENTATIONS = [
   'expo-ui-host-per-control',
   'expo-ui-shared-host',
   'nitro-ui',
+  // T16 spike: nitro-ui's controls inside one shared `<Host>`. A reference arm like
+  // the two `expo-ui-*` ones - measured and reported, never gated.
+  'nitro-ui-host',
 ];
 
 /** Latency metrics, all nanoseconds, all smaller-is-better. */
