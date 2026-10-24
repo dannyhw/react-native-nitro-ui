@@ -16,7 +16,10 @@ value behind the event-count handshake) plus Button (a size that comes from prop
 - `src/components/SegmentedControl/SegmentedControl.nitro.ts` — the Hybrid View
   spec (`options`, `selectedIndex`, `defaultSelectedIndex`, `disabled`, `tintColor`,
   `accessibilityLabel`, `testID`, `onValueChange`) plus `NitroUiSegmentedControlSize`.
-  Every prop is `T | null` with an empty-array/`-1`-style sentinel — no `?:` (D7).
+  `selectedIndex`, `tintColor`, `testID`, `accessibilityLabel` and `nuiPerfId` are
+  `T | null`; `options`, `defaultSelectedIndex`, `mostRecentEventCount` and `disabled`
+  are plain `T` (they have no meaningful null). No `?:` on any prop except the
+  callback (D7/D7b).
 - `src/components/SegmentedControl/SegmentedControl.tsx` — the wrapper:
   `useControlled` + `useStableCallback` + `useProcessedColor`, the JS-side clamp, and
   `nuiSizingKey = "<count>|<escaped labels>"`.
@@ -69,9 +72,11 @@ value behind the event-count handshake) plus Button (a size that comes from prop
   missing native clamp from a JS one — which is why `clamps an index written straight
   to native` writes through the handle.
 - **`nuiSizingKey` = option count + escaped labels** (`'|'` separator, `\` → `\\`,
-  `|` → `\|`). Without the escape, `['a|b']` and `['a','b']` build one key and share a
-  cached size that is wrong for one of them for the life of the process. The count is
-  in front because escaping alone cannot tell `[]` from `['']` apart. `disabled` and
+  `|` → `\|`). Without the escape, the same-count pair `['aa|bb', 'c']` and
+  `['aa', 'bb|c']` build one key and share a cached size that is wrong for one of them
+  for the life of the process (a different-count pair like `['a|b']` and `['a','b']` is
+  already told apart by the prefix). The count is in front because escaping alone
+  cannot tell `[]` from `['']` apart. `disabled` and
   `tintColor` repaint and are deliberately not in the key.
 - **One declared fallback per component**, measured rather than guessed:
   `165 × 31` pt (iOS) and `256 × 48` dp (Android), both registered at startup in
@@ -85,9 +90,13 @@ value behind the event-count handshake) plus Button (a size that comes from prop
 - **Android renders no check icon.** M3's default `icon` draws a check on the selected
   segment only, which would make width depend on the selection and force
   `selectedIndex` into the sizing key. Labels only, like iOS.
-- **`tintColor` means one role per platform** and they are not the same role (iOS
-  `.tint()` paints the selected segment; Android replaces the selected segment's
-  container *and* border). Documented as a limit rather than faked into symmetry.
+- **`tintColor` is Android-only.** SwiftUI ignores `.tint()` on a `.segmented` `Picker`
+  (`F1`), so the prop has no visible effect on iOS: the selected segment keeps the
+  scheme's accent fill there. On Android it replaces the selected segment's container
+  *and* border. Documented as a limit in the API table, the platform mapping, the
+  limits list and both JSDoc blocks, and left in the spec rather than faked into
+  symmetry; a per-instance iOS tint is a follow-up (a custom segmented view, not
+  `UIAppearance`, which would repaint every `Picker` in the app).
 - **The two platforms do not share a segment-width rule** (Android gives equal
   shares, iOS uses SwiftUI's own distribution). Both grow with the labels, which is
   all the sizing key claims; documented in the limits.
@@ -106,10 +115,14 @@ value behind the event-count handshake) plus Button (a size that comes from prop
 | `bun run test:real-input:ios --control segmented-control` | **pass, exit 0** — iPhone Air, `testRealInputSegmentedControl` passed (35.0 s), `** TEST EXECUTE SUCCEEDED **` |
 | `bunx jest scripts/__tests__/bench-gate.test.js` | **pass** (part of `bun run test`) |
 
-`bun run check` and both real-input runs were re-run on the final tree (`dcc0397`,
-after the real-input teardown fix below), and the Android harness APK was checked
-byte-for-byte against the artifact built from it. The Android harness was also run
-once with failures that never came back; see **Observations**.
+`bun run check` and both real-input runs were re-run on the final tree of the
+implementation round (`dcc0397`, after the in-round real-input teardown fix below), and
+the Android harness APK was checked byte-for-byte against the artifact built from it.
+The Android harness was also run once with failures that never came back; see
+**Observations**.
+
+**Fix round 1 re-ran every gate above** after merging `main`, with the harness file
+changed (AGENTS.md: both platforms). See **Fix round 1** for the numbers.
 
 ## Tests, and what each is shown to fail on
 
@@ -122,14 +135,14 @@ once with failures that never came back; see **Observations**.
 | re-reports a key change that keeps the size (R3) | the box leaves the fallback when the new key measures what the old one did (the G2 F1 hook) |
 | keeps its size when the selection moves | selection is not in the key, and moving it does not resize |
 | clamps a selection the caller sends out of range | React's out-of-range index cannot select a segment that does not exist |
-| clamps an index written straight to native | the native clamp, which the JS clamp would otherwise hide |
+| clamps an index written straight to native | the `selectedIndex` **getter's** clamp on both platforms; it cannot see the `afterUpdate()` clamp that decides the painted segment (see mutation proof 9) |
 | clamps the selection and re-measures when the options shrink | the documented shrink rule + a re-measure in the same batch |
 | reads back what React sent | the handle reports the batch that landed, not a stale one |
-| keeps a caller width in charge and truncates the labels | `style.width` wins over the measured box; labels truncate |
+| keeps a caller width in charge | `style.width` wins over the measured box (iOS also truncates; Android clips both ends — F2) |
 | reports one event per selection, and nothing when disabled | the event, and the disabled path |
 | snaps back a selection React does not accept | the handshake: a rejected index returns to what React sends |
 | sizes 200 option lists, each at its own size | 200 configurations, each correct (cold-cache path at scale) |
-| survives remounts with the size of each mount | recycling / re-seeding |
+| survives remounts with the size and seed of each mount | recycling / re-seeding, plus the painted selection of a re-mounted uncontrolled control (proof 8) |
 | corrects a planted size that matches the current box (iOS measure signal) | D20: an equal-to-box planted size still triggers the re-measure |
 
 Deliberately absent: a suite-local `beforeAll` warm-up mount, and a second live
@@ -199,6 +212,72 @@ Deliberately absent: a suite-local `beforeAll` warm-up mount, and a second live
    is not something `uiautomator` can witness reliably, because both happen between two
    dumps.
 
+**Red runs added in fix round 1 (each break → run → restore, recorded per D17).** The
+three gaps the review named — a test that cites `noteContentSizeMayHaveChanged()` without
+ever having been shown to fail without it, the snap-back test's teeth, and a remount test
+that asserted geometry but not the selection.
+
+6. *`host.noteContentSizeMayHaveChanged()` deleted* from the iOS `options` setter
+   (`HybridNitroUiSegmentedControl.swift:235`). iOS only: the call has no Android
+   counterpart, because Compose re-measures by itself.
+
+   ```console
+   # iPhone Air
+   ● SegmentedControl · G4 › corrects a planted size that matches the current box (iOS measure signal)
+     expected false to be true
+   Tests: 1 failed, 13 passed, 14 total
+   ```
+
+   Exactly the test the comment above that call says exists for it, and only that test:
+   the claim is now backed by a red run instead of by assertion.
+7. *`reconcile()` suppressed* in `afterUpdate()` — run on **both** platforms.
+
+   ```console
+   # iPhone Air and nitroui_t02 — identical output
+   ● SegmentedControl · G4 › snaps back a selection React does not accept
+     Only 1 of 2 change events arrived: ["rejected:1"].
+   Tests: 1 failed, 13 passed, 14 total
+   ```
+
+   The failure mode is the one the test's comment describes: without the rollback the
+   second tap lands on a segment that is already selected, so it reports nothing and only
+   one of the two expected events ever arrives. One finding worth recording: commenting out
+   only the *body* of the reconcile branch — the copy back to `displayed` — stayed green on
+   Android, because the idempotent shrink-clamp block a few lines below re-derives the same
+   value. The rollback is defended by two code paths, so the mutation has to remove the
+   handshake read itself.
+8. *The uncontrolled seed pinned to segment 0*, on **both** platforms, at the seed branch of
+   `afterUpdate()` (the `seeded` line) — proving the selection assertion the remount test
+   gained.
+
+   ```console
+   # nitroui_t02 and iPhone Air — identical output
+   ● SegmentedControl · G4 › survives remounts with the size and seed of each mount
+     expected [ 'remount-proof:1', 'remount-kept:1' ] to deeply equal [ 'remount-proof:1' ]
+   Tests: 1 failed, 13 passed, 14 total
+   ```
+
+   The witness control behaved as designed: `remount-proof` (seeds 0) still reported index
+   1, which proves a harness tap reaches the control, so the empty log expected from
+   `remount-kept` (seeds 1, middle already selected) means something — and with the seed
+   wrong it reports a change it should not.
+   *What this does **not** prove*, stated plainly: the bug the test's comment describes —
+   `didApplyDefault` surviving a recycle — did not reproduce when mutated. Deleting
+   `didApplyDefault = false` from Android's `reset()` left the suite 14/14, because the
+   re-mounted control's model had the flag false anyway. So the assertion is shown to
+   detect "the wrong segment painted after a remount", which is all an outside observer can
+   see, and is not shown to detect that particular stale flag.
+9. *The `afterUpdate()` clamp block deleted* on **both** platforms — this one stayed
+   **green**: 14/14 on iPhone Air and 14/14 on `nitroui_t02`.
+
+   That is the evidence for rewording `clamps an index written straight to native` rather
+   than adding an assertion to it. Nothing in the suite can see the clamp that decides the
+   *painted* segment: the handle only reads the getter (which clamps on its own), and the
+   shrink test cannot see it either because the JS wrapper sends an already-clamped index.
+   The one purely-native path — an uncontrolled selection under a shrinking `options` — is
+   untested, and is recorded as a follow-up rather than papered over by a comment that
+   claims more than the test covers.
+
 ## Observations
 
 - **One Android harness run reported failures that never came back, and the cause is not
@@ -207,6 +286,13 @@ Deliberately absent: a suite-local `beforeAll` warm-up mount, and a second live
   average of 237. The failing set was not stable enough between the two looks to name a
   mechanism, so this is recorded as **unreproduced and unattributed**: nothing in G4 is
   believed to cause it, and no race has been proven either, so no lesson is claimed.
+  **The names of those 4 failures were never captured.** They were read off the console
+  and the log file for that run was later overwritten by a retry, so this report cannot
+  quote them and does not invent them. What the candidates are: several G4 tests assert
+  after a fixed `settle(500)`/`settle(600)` rather than a `pollUntil`, and `re-reports a
+  key change that keeps the size` (`:456`) and `corrects a planted size that matches the
+  current box` (`:1096`) are the two that would drop an event under load; the fix is to
+  poll in both (follow-up).
   What does hold up, and is what the Gates table rests on: the two clean runs used an APK
   identical to the artifact built from the reviewed commit, so 14/14 describes the
   shipped bytes.
@@ -271,7 +357,7 @@ the ratio uses both arms' paired data rather than two independent medians.
 | update N=50 | mounted | 20.93 ms | 15.43 ms | 14.11 ms | 50.40 ms | 3.64× — no verdict (probe) | 3.30× (nv) |
 | update N=50 | JS commit | 8.62 ms | 5.43 ms | 4.30 ms | **1.14 ms** | 0.27× (v) | 0.21× (v) |
 | update N=50 | JS CPU/op | 8.73 ms | 9.98 ms | 5.06 ms | **1.64 ms** | 0.33× (v) | 0.17× (v) |
-| update N=50 | UI CPU/op | 20.50 ms | 88.07 ms | 78.77 ms | 63.58 ms | **0.81× PASS** | **0.72× PASS** |
+| update N=50 | UI CPU/op | 20.50 ms | 88.07 ms | 78.77 ms | 63.58 ms | 0.81× — not like-for-like | 0.72× — not like-for-like |
 | memory N=200 | bytes/inst | 154.1 KiB | 543.1 KiB | 438.1 KiB | 360.2 KiB | **0.82× PASS** | **0.66× PASS** |
 
 `(nv)` = no verdict: one of the two columns was noisy within the run or its
@@ -290,7 +376,7 @@ sanity counters were non-zero; `(v)` = verdictable but not a D15 gate metric.
 | update N=50 | mounted | 21.24 ms | 15.55 ms | 23.61 ms | 51.84 ms | 2.21× — no verdict (noise) | 3.36× (nv) |
 | update N=50 | JS commit | 9.01 ms | 5.53 ms | 4.30 ms | **1.10 ms** | 0.25× (v) | 0.20× (v) |
 | update N=50 | JS CPU/op | 9.09 ms | 10.15 ms | 5.10 ms | **1.75 ms** | 0.35× (v) | 0.18× (v) |
-| update N=50 | UI CPU/op | 20.41 ms | 90.48 ms | 80.51 ms | 64.99 ms | **0.81× PASS** | **0.72× PASS** |
+| update N=50 | UI CPU/op | 20.41 ms | 90.48 ms | 80.51 ms | 64.99 ms | 0.81× — not like-for-like | 0.72× — not like-for-like |
 | memory N=200 | bytes/inst | 153.9 KiB | 543.4 KiB | 437.9 KiB | 359.6 KiB | **0.82× PASS** | **0.66× PASS** |
 
 ### Android — `nitroui_t02`, quiet (load 4.97, ART primed, `problems: none`)
@@ -306,7 +392,7 @@ sanity counters were non-zero; `(v)` = verdictable but not a D15 gate metric.
 | update N=50 | mounted | 29.48 ms | 20.45 ms | 20.11 ms | **5.20 ms** | 0.26× — no verdict (probe) | 0.26× (nv) |
 | update N=50 | JS commit | 10.00 ms | 8.02 ms | 6.08 ms | **1.30 ms** | 0.21× (v) | 0.16× (v) |
 | update N=50 | JS CPU/op | 11.15 ms | 9.46 ms | 7.50 ms | **2.14 ms** | 0.28× — no verdict (noise) | 0.23× (nv) |
-| update N=50 | UI CPU/op | 17.42 ms | 25.57 ms | 24.05 ms | **16.60 ms** | **0.71× PASS** | **0.66× PASS** |
+| update N=50 | UI CPU/op | 17.42 ms | 25.57 ms | 24.05 ms | **16.60 ms** | 0.71× — not like-for-like | 0.66× — not like-for-like |
 | memory N=200 | bytes/inst | 253.4 KiB | 462.3 KiB | 285.5 KiB | 311.9 KiB | **1.10× MISS** | **0.67× PASS** |
 
 The only noise flag in the Android `mount` cell is on `UI CPU per unmount` (teardown),
@@ -343,9 +429,23 @@ here carries a verdict.
   nitro-ui in the primary run, 14.4% shared-host in the repeat). The direction is
   consistently favourable (0.38×/1.00× presented, 0.73×/0.79× UI CPU) but D15 asks for
   a verdict, and there is none.
-- **Everything is well below `expo-ui-host-per-control`** — 0.15×–0.95× on the gate
-  metrics and 0.66×–0.67× on memory — which is the other half of the D15 target
-  ("well below `expo-ui-host-per-control`") and is met on both platforms.
+- **Against `expo-ui-host-per-control` the target is met on Android on all three gate
+  metrics** (mount presented 0.64×, mount UI CPU 0.55×, memory 0.67×). **On iOS it is
+  carried by memory alone** (0.66×, both runs): mount presented and mount UI CPU against
+  per-control are `(nv)` there, by the labels in the tables above, so they report a
+  direction (0.15×–0.50×) and no verdict. The `0.95×` that was quoted here before is
+  Android `mounted`, which is neither a gate metric nor "well below".
+
+**The `update` cells are not the brief's cell.** The brief asks bench to price "update
+K selection changes". `update.segmented-control` flips the `options` array with a
+constant `SEGMENTED_SELECTION` (`bench/src/implementations/shared.ts`), so it prices a
+**re-measure**, not a selection change — defensible, and arguably the more expensive of
+the two for this control, but it is a deviation and is named as one here. It is also not
+like-for-like against the reference arms: both `expo-ui` segmented arms key their
+children by **label** (`<Text key={label}>`, `<SegmentedButton key={label}>`), so every
+flip unmounts and remounts three children there while nitro-ui updates the same three in
+place. That is why the `update` UI CPU rows carry no PASS above. A selection-change cell,
+and index-keyed `expo-ui` arms, are follow-ups.
 
 So: **SegmentedControl meets D15 on iOS memory and on Android mount presented, misses
 Android mount UI CPU and Android memory, and has no verdictable iOS mount cell.** Per
@@ -361,8 +461,10 @@ than a third implementation round.
   entry. Memory and UI CPU/op are exactly the columns that bill for that, so
   Android's 1.10× memory and 1.33× mount UI CPU are T10's shape measured, not a
   SegmentedControl defect. Read the same trade the other way: giving each control its
-  own host the way `expo-ui-host-per-control` does costs 1.83× the memory and 2.56× the
-  mount UI CPU that nitro-ui pays.
+  own host the way `expo-ui-host-per-control` does costs **1.48× the memory and 1.83×
+  the mount UI CPU** that nitro-ui pays (Android: 462.3 against 311.9 KiB, 44.38 against
+  24.24 ms/op). The `1.83×`/`2.56×` this report quoted before were those arms divided by
+  `rn-core`, which answers a different question.
 - **It is not the widget.** Both `expo-ui` arms host the same `SingleChoiceSegmentedButtonRow`
   nitro-ui hosts, so on Android the 1.33× cannot be blamed on Compose's segmented row
   being expensive: the reference arm runs the same composables and pays less only
@@ -395,7 +497,7 @@ than a third implementation round.
   *cold* mount of any other width is corrected on a later frame — the D17 contract, spent
   in the warmups and outside the measured window.
 
-## Fix round 1 (1 of the 2 D19 allows): the real-input runner's teardown
+## In-round fix (implementation round, not a D19 fix round): the real-input runner's teardown
 
 Landing the Android real-input check found a real defect in the shared runner, not in
 the control. The check printed its verdict and then died:
@@ -418,24 +520,150 @@ that is already closed. The stream emits `error` with no listener, so Node exits
 one to anything reading the status, which is exactly what a check that exists to be
 trusted must not do.
 
-It is pre-existing (`support.mjs` is untouched by this branch's commits) and it is a
-race with the event loop emptying, which is why T15 never saw it: the 20-second `switch`
-check exits first and dies quietly, while the 60-second segmented check stays alive long
-enough to run the handler. That was confirmed rather than assumed — `--control switch`
-on the same tree exited 0 with the same code path, `--control segmented-control` exited
-1 before the fix and 0 after it. `end: false` leaves the log's lifecycle to the exit
-handler, which also skips the write if the stream is somehow closed already; the "metro
-exited with code …" line is still recorded.
+It is pre-existing, and it was already on the books: `docs/tasks/FOLLOWUPS.md:21` records
+`scripts/real-input/support.mjs:103` dying with `ERR_STREAM_WRITE_AFTER_END` when the
+script owns Metro, from T15b, with "pre-start Metro" as the workaround. So this is a
+known bug being fixed, not a bug T15 missed. What T15's run did establish is the timing
+half: the 20-second `switch` check exits before the handler runs, while the 60-second
+segmented check stays alive long enough to hit it. That was confirmed rather than
+assumed — `--control switch` on the same tree exited 0 with the same code path,
+`--control segmented-control` exited 1 before the fix and 0 after it. `end: false` leaves
+the log's lifecycle to the exit handler, which also skips the write if the stream is
+somehow closed already; the "metro exited with code …" line is still recorded.
 
-`support.mjs` is shared by both platforms, so both were re-run on the final tree
-(`dcc0397`): Android 13 assertions PASS at exit 0, iOS XCUITest PASS at exit 0.
+Two statements this report made about that fix were wrong, and both are corrected in fix
+round 1: `support.mjs` was untouched by this branch's commits only **until `dcc0397`**,
+which is the commit that added this branch's own fix; and the fix belongs to the
+**implementation round** (it landed inside the round, before review), not to a D19 fix
+round — this task still has both fix rounds available, and fix round 1 is the section
+below.
+
+`support.mjs` is shared by both platforms, so both were re-run on the final tree of that
+round (`dcc0397`): Android 13 assertions PASS at exit 0, iOS XCUITest PASS at exit 0.
+
+## Fix round 1 (1 of the 2 D19 allows): the review's findings
+
+Addresses `docs/tasks/G4-segmented-control.review.md`. Findings F1, F2 and F4, the report
+corrections the review listed, and the merge. No behaviour change: everything here is
+docs, JSDoc, harness, example, and two comment-only native edits.
+
+### Merge
+
+`main` (`bc29aaa`) merged as `b4b0222`. Twenty-three conflicts, resolved by union where
+both sides added (component registries, `nitro-ui.sizing.json`, the example and smoke
+`App.tsx`, the bench plans and `bench/baselines/renders.json`, the bench-gate tests, now
+five components) and by regeneration where the tool owns the file (`nitrogen` output,
+`etc/package-files.txt`, `etc/react-native-nitro-ui.api.md`).
+
+`scripts/real-input/support.mjs` took **main's** fix and dropped this branch's
+`{ end: false }`. Main's version is the better one: it never holds a `WriteStream` open
+at all — the log fd is closed right after `spawn`, and the `exit` handler appends with
+`fs.appendFileSync` — so there is no stream left to write after end, instead of a stream
+whose end is merely deferred. It also keeps the "metro exited with code …" line.
+
+`support.mjs` is shared by both platforms, so both real-input checks were re-run on the
+merged tree — that is what proves main's fix covers the segmented case rather than only
+the case R1 added:
+
+```console
+$ bun run test:real-input:ios --control segmented-control   # iPhone Air
+Test Case '-[…RealInputTests testRealInputSegmentedControl]' passed (36.629 seconds)
+    ** TEST EXECUTE SUCCEEDED **
+segmented-control: PASS
+real-input (ios): 1/1 controls passed          # exit 0
+
+$ bun run test:real-input:android --control segmented-control   # emulator-5572
+segmented-control: PASS   # 13 assertions, every value from uiautomator dump
+real-input (android): 1/1 controls passed      # exit 0
+```
+
+What `main` actually added over the `340e521` base is R1 (D21 timing gates, that
+`support.mjs` fix, the Node version check), docs, and the G3 Progress merge — which is why
+this suite was re-run: R1 changed the harness config, and `support.mjs` had to be resolved.
+Not a SwiftUI host change; see the corrected Known issues.
+
+One environment consequence of R1: the Node version check refuses Node 25/26 outright, so
+every harness and real-input command in this round ran under Node 24 (`v24.18.0`).
+
+### F1 — `tintColor` does nothing on iOS
+
+Accepted as measured: SwiftUI ignores a per-instance `.tint(_:)` on a `.segmented`
+`Picker`. No native workaround was attempted (no `UIAppearance`, which would restyle every
+segmented `Picker` in the app). Made honest in four places:
+
+- `docs/components/segmented-control.md` — the API row, both platform-mapping rows and the
+  limits bullet now say Android-only / no visible effect on iOS.
+- `src/components/SegmentedControl/SegmentedControl.tsx` and
+  `SegmentedControl/SegmentedControl.nitro.ts` — JSDoc.
+- This report's Decisions bullet and Known issues.
+- `ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift` — the
+  `OptionalSegmentedTint` doc comment claimed the opposite ("the tint is the selected
+  segment's fill"). Comment-only.
+
+### F2 — Android clips an over-wide row at both ends
+
+Accepted: Android measures the row unbounded and centres it in the box Yoga gives it, so a
+row wider than its box loses ink at *both* ends and the outer parts are untappable — it is
+not the truncation the test name claimed. The shared Android host is deliberately **not**
+touched this round: the same constraint path serves Button, so it is a 0.2 host change, not
+a SegmentedControl one. Corrected instead:
+
+- `docs/components/segmented-control.md` — the sizing paragraph and a limits bullet say
+  clipped-at-both-ends, and note the untappable outer edges.
+- The harness test is now `keeps a caller width in charge` (was "…and truncates the
+  labels"), with a comment that states what each platform does.
+- `example/src/SegmentedControlScreen.tsx` — the two rows that overflowed on this window
+  now use short labels (`['Yes','No','Ok','Later']`, `['Small','Medium','Large']`), and the
+  row that still demonstrates an over-wide list captions itself "(iOS truncates, Android
+  clips the ends)".
+- `HybridNitroUiSegmentedControl.kt` — the fallback KDoc quoted "411.43 dp for four long
+  ones" as a measured row width. 411.43 dp is this AVD's window: the clamped **box**, which
+  is the overflow case, not a measurement. Comment-only.
+
+### F4 — tests
+
+`example/__tests__/SegmentedControl.harness.tsx`:
+
+- `clamps an index written straight to native` — its comment claimed the native clamp
+  generally; the test reads back through the handle, so it covers the **getter's** clamp
+  and nothing else. Reworded to say exactly that, name the `afterUpdate()` clamp it cannot
+  see, and record the untested purely-native path. Reworded rather than extended: proof 9
+  shows a red assertion there is not reachable through the handle.
+- `survives remounts with the size and seed of each mount` — gained the selection
+  assertion the review asked for, with a witness control so an empty log means something
+  (proof 8).
+- The `no-shadow` lint warning at the old `:915` is fixed (`_row` / `_label`), and the
+  comment on `reads back what React sent` no longer calls a controlled control
+  uncontrolled.
+
+Red runs 6–9 above are this round's, each reverted.
+
+### Native diff
+
+Two files, both comment-only, no behaviour change: the Kotlin fallback KDoc and the Swift
+tint comment. Both were rebuilt and re-run because a comment still changes the artifact:
+14/14 on iPhone Air and 14/14 on `nitroui_t02` after them.
+
+### Gates, this round
+
+| Gate | Result |
+| --- | --- |
+| `bun run check` | **pass** — all thirteen steps on the merged tree with these changes: typecheck, bench typecheck ×2, eslint, prettier, jest (132 tests, 9 suites), `test:native` (C++/ASan+UBSan, Swift, Kotlin), `perf:renders` (5/5), nitrogen drift (139 files), autolinking, `bob build`, api-extractor, publint, manifest (333 files) |
+| `bunx react-native-harness --harnessRunner ios SegmentedControl.harness` | **14/14 pass** — iPhone Air (`331EF109-…`), Metro 8294 |
+| `bunx react-native-harness --harnessRunner android SegmentedControl.harness` | **14/14 pass** — `nitroui_t02` / `emulator-5572`, adb server 5042, Metro 8294 |
+| `bun run test:real-input:ios --control segmented-control` | **pass, exit 0** — merged tree, main's `support.mjs` |
+| `bun run test:real-input:android --control segmented-control` | **pass, exit 0** — merged tree, main's `support.mjs` |
+
+Harness and real-input both re-run on the merged tree with the harness file changed, which
+is what AGENTS.md asks for; no bench reruns this round, so the bench tables above still
+describe the `340e521`-base implementation round.
 
 ## Acceptance
 
 | Item (from the brief) | State |
 | --- | --- |
-| `bun run check` green | **pass** on the final tree (`dcc0397`) — all thirteen steps, native tests under ASan, `perf:renders` (SegmentedControl 6/6), nitrogen drift, autolinking, `bob build`, api-extractor, publint, manifest |
-| Harness green on both platforms, R3 included | 14/14 iPhone Air, 14/14 `nitroui_t02`, both on the reviewed bytes |
+| `bun run check` green | **pass** on the final tree of each round: `dcc0397` in the implementation round, and again on the merged fix-round tree (132 jest tests, native tests under ASan+UBSan, `perf:renders` 5/5, no nitrogen drift, manifest 333 files) |
+| Harness green on both platforms, R3 included | 14/14 iPhone Air, 14/14 `nitroui_t02`, in both rounds — each time against that round's bytes |
 | Bench tables | both platforms above, with verdict labels and the D15 read |
 | Screenshots iOS + Android, light + dark | `docs/tasks/G4-segmented-control/{ios,android}-{light,dark}.png`, from the example screen |
 | "menu open" screenshot | **not applicable to this control**: a segmented control has no menu. That item belongs to `Picker`, which is 0.2 (D19); the screenshot set here is the four the control can actually produce |
@@ -454,11 +682,12 @@ theirs.
 
 ## Known issues
 
-- **Merging `main` will need this suite re-run.** `main` moved from `340e521` to
-  `e99e237` while this task ran, and that includes FIX2 round 2 work on
-  `ios/core/NitroSwiftUIHost.mm` — the host this control's measure path runs through.
-  Nothing in the merge is expected to change SegmentedControl's behaviour, but the
-  suite here is the evidence that it does not, and it was measured against `340e521`.
+- **Merging `main` needed this suite re-run** — done in fix round 1, 14/14 on both
+  platforms. The base was `340e521`, which already contains FIX2; what `main` added
+  since is R1 (D21 timing gates, the `support.mjs` teardown fix, the Node version
+  check), docs, and the G3 Progress merge. So the reason to re-run was R1's harness
+  config plus resolving `support.mjs` onto main's fix — **not** a change to the SwiftUI
+  host this control's measure path runs through.
 - **The Android D15 misses are open**: mount UI CPU/op 1.33× and memory 1.10× against
   `expo-ui-shared-host`, verdictable in this run and repeated in the earlier busy one
   (1.43×, 1.08×).
@@ -474,9 +703,10 @@ theirs.
 - **One Android harness run reported 4 failures and never reproduced them** (see
   **Observations**). Recorded as unreproduced and unattributed; no cause is claimed.
 - **Deliberate cross-platform asymmetries, documented in `docs/components/segmented-control.md`
-  rather than faked into symmetry**: `tintColor` paints one role per platform and they are
-  not the same role; the two platforms do not share a segment-width rule (Android equal
-  shares, iOS SwiftUI's own distribution).
+  rather than faked into symmetry**: `tintColor` has a visible role on Android and none on
+  iOS (SwiftUI ignores `.tint` on a segmented `Picker`); the two platforms do not share a
+  segment-width rule (Android equal shares, iOS SwiftUI's own distribution); an over-wide
+  row truncates on iOS and is clipped at both ends on Android.
 - **`Picker` was not started.** It is 0.2 (D19): no spec, no wrapper, no docs page, no
   bench arm, and nothing here pre-shapes it beyond the shared core it will use.
 
@@ -496,9 +726,42 @@ theirs.
   every arm (41–64 of 80) makes `presented` permanently unverdictable for this component
   family on iOS. Worth a bench-instrument look: either the probe or the cell shape needs
   fixing, because it will silently cost every future segmented run its gate column.
-- **F5 — re-run the SegmentedControl harness on both platforms after `main` is merged**
-  (see Known issues; `NitroSwiftUIHost.mm` moved under this control).
+- **F5 — closed in fix round 1:** the harness was re-run on both platforms after merging
+  `main` (14/14 each), for the reason now stated in Known issues.
 - **F6 — `Picker` for 0.2.**
+
+From the review, one line each, recorded and not chased:
+
+- Core: Android `intrinsic` content larger than its box draws centred and clipped instead
+  of fitting. Record via intrinsics, place with bounded constraints (F2; also Button).
+- iOS: per-instance segmented tint (SwiftUI ignores `.tint` on a segmented `Picker`) (F1).
+- SegmentedControl: no test covers the native-only clamp (an uncontrolled selection while
+  `options` shrinks).
+- SegmentedControl iOS: the fallback is not OS-versioned (31 pt measured on iOS 27 only;
+  pre-26 heights are unverified, D14).
+- SegmentedControl iOS: an `accessibilityLabel` on a segmented `Picker` is unverified with
+  VoiceOver. No test reads it from the a11y tree.
+- SegmentedControl iOS: empty `options` with selection 0 logs SwiftUI's "selection is
+  invalid" warning on every body evaluation.
+- SegmentedControl: switching controlled→uncontrolled applies `defaultSelectedIndex` late
+  (`didApplyDefault` is still false). This mode switch is unsupported, but the jump is
+  surprising.
+- SegmentedControl harness: replace `settle(N)` + assert with `pollUntil` in `re-reports a
+  key change` and `corrects a planted size` (load tolerance).
+- SegmentedControl harness: `no-shadow` at `:915`, and the "Uncontrolled" comment on the
+  controlled `reads back what React sent` — both fixed in fix round 1.
+- Bench: add an `update.segmented-control` selection-change cell (the brief's ask), and key
+  the `expo-ui` segmented arms by index.
+- Example: the Android screenshots show a LogBox warning ("Open debugger to view warnings")
+  on the Segments tab. Identify it.
+- Docs: the four screenshots predate fix round 1's example rows; re-take them with the
+  LogBox finding resolved.
+- F1 canonical iOS segmented baseline (iPhone 17, quiet machine). F2 Android D15 misses
+  (mount UI CPU 1.33×, memory 1.10×). Both are host architecture, as for G1/G2.
+- F3 settle the iOS `mounted` 2.1–3.6× hypothesis with per-launch `sizingStats()` deltas
+  (same as G2).
+- F4 `presentedBeforeMount` non-zero on every iOS segmented arm, including rn-core 64/80.
+  Look at the bench instrument.
 
 ## Device and process hygiene
 
@@ -514,11 +777,15 @@ theirs.
   (`lsof` on 8294 returns nothing, and 8293 — G3's port — was never touched).
 - **Gradle daemons were left running on purpose.** `./gradlew --stop` would also stop the
   daemon another task's build is sharing, which is worse than an idle daemon.
+- **The screenshots are from the implementation round.** Fix round 1 changed two rows of
+  the example screen (F2), so `docs/tasks/G4-segmented-control/*.png` no longer show the
+  current labels; they still show the control honestly. Re-taking them is a
+  release-readiness chore, recorded in the follow-ups.
 - **This task's devices are down.** `nitroui_t02` was stopped by serial
   (`adb -s emulator-5572 emu kill`, server on 5042) and the iPhone Air by UDID
   (`xcrun simctl shutdown 331EF109-…`), after checking that no other process was using
-  either. Afterwards `adb devices` on 5042 is empty and the only booted simulator is
-  iPhone 17, which belongs to G3 and stays up.
+  either. Afterwards `adb devices` on 5042 is empty and no simulator this task started was
+  left running.
 
 ## Questions for orchestrator
 
