@@ -30,6 +30,10 @@ const IMPLEMENTATIONS: readonly ImplementationName[] = [
   'expo-ui-host-per-control',
   'expo-ui-shared-host',
   'nitro-ui',
+  // T16 spike arm: the library's own controls in one shared composition. It is a
+  // cell the arm itself refuses for any component but Switch
+  // (`BenchImplementation.components`), which is why it can sit in the shared plan.
+  'nitro-ui-host',
 ];
 
 /**

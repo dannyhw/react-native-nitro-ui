@@ -10,6 +10,8 @@
 // Forward declarations of C++ defined types
 // Forward declaration of `HybridNitroUiButtonSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
+// Forward declaration of `HybridNitroUiHostSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiHostSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec` to properly resolve imports.
@@ -29,6 +31,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 
 // Include C++ defined types
 #include "HybridNitroUiButtonSpec.hpp"
+#include "HybridNitroUiHostSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
@@ -59,6 +62,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridNitroUiButtonSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
+// Forward declaration of `HybridNitroUiHostSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiHostSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec_cxx` to properly resolve imports.

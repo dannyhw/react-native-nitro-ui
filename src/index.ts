@@ -29,6 +29,11 @@ export type {
 export { Slider, type SliderProps } from './components/Slider/Slider';
 export { Switch, type SwitchProps } from './components/Switch/Switch';
 
+// T16 spike: an opt-in shared native composition on Android. Exported on the spike
+// branch so the bench arm and the example screen can render it; whether it ships is
+// the report's recommendation.
+export { Host, type HostProps } from './components/Host/Host';
+
 export {
   SegmentedControl,
   type SegmentedControlChange,

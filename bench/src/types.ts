@@ -2,7 +2,11 @@ import type { ComponentType } from 'react';
 
 /** Every implementation the registry can measure. */
 export type ImplementationName =
-  'rn-core' | 'expo-ui-host-per-control' | 'expo-ui-shared-host' | 'nitro-ui';
+  | 'rn-core'
+  | 'expo-ui-host-per-control'
+  | 'expo-ui-shared-host'
+  | 'nitro-ui'
+  | 'nitro-ui-host';
 
 /**
  * Which control a launch renders. `switch` was the only component until G1 and
@@ -44,6 +48,16 @@ export interface BenchImplementation {
    */
   available: boolean;
   skipReason: string | null;
+  /**
+   * Which controls this arm renders, or `null` for every component the plan has.
+   *
+   * An arm that implements one component (T16's `nitro-ui-host`, Switch only) must
+   * not be launched on another component's cell: rendering nothing there would
+   * still produce a plausible-looking mount time for zero controls. `BenchApp`
+   * records a `skip` with the list instead, so the table says what was never
+   * measured.
+   */
+  components: readonly ComponentName[] | null;
   List: ComponentType<BenchListProps>;
   /**
    * Turn on this runtime's *own* native perf marks, for a diagnostic run
