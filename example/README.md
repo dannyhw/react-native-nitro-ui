@@ -107,7 +107,7 @@ scripts set is read by `withStorybook` in `metro.config.js`, and the inline
 `VAR=value` form works on every platform because bun runs scripts with
 [Bun Shell](https://bun.com/docs/runtime/shell).
 
-- **What is swapped** is the app *entry*: with the variable set, Metro resolves
+- **What is swapped** is the app _entry_: with the variable set, Metro resolves
   `index.js` to `.rnstorybook/index.tsx`, so Storybook's UI is what launches and
   `src/App.tsx` is never in the graph. Detection reads `package.json#main`
   relative to the Metro process, so start it from this directory.
