@@ -6,6 +6,10 @@
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "start": "react-native start",
+    "storybook": "STORYBOOK_ENABLED=true STORYBOOK_DISABLE_TELEMETRY=true react-native start",
+    "storybook:ios": "STORYBOOK_ENABLED=true STORYBOOK_DISABLE_TELEMETRY=true react-native run-ios",
+    "storybook:android": "STORYBOOK_ENABLED=true STORYBOOK_DISABLE_TELEMETRY=true react-native run-android",
+    "storybook:generate": "STORYBOOK_DISABLE_TELEMETRY=true sb-rn-get-stories",
     "build:android": "react-native build-android --extra-params \"--no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a\"",
     "build:ios": "react-native build-ios --mode Debug",
     "harness": "react-native-harness",
@@ -15,9 +19,17 @@
     "harness:cold:android": "react-native-harness --harnessRunner android ColdSizing"
   },
   "dependencies": {
+    "@gorhom/bottom-sheet": "^5.2.14",
+    "@react-native-community/datetimepicker": "^9.2.2",
+    "@react-native-community/slider": "^5.2.2",
     "react": "19.3.0",
     "react-native": "0.88.0",
-    "react-native-nitro-modules": "^0.37.1"
+    "react-native-gesture-handler": "^3.4.0",
+    "react-native-nitro-modules": "^0.37.1",
+    "react-native-reanimated": "^4.7.1",
+    "react-native-safe-area-context": "^5.10.1",
+    "react-native-svg": "^15.16.0",
+    "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -33,10 +45,14 @@
     "@react-native/jest-preset": "0.88.0",
     "@react-native/metro-config": "0.88.0",
     "@react-native/typescript-config": "0.88.0",
+    "@storybook/addon-ondevice-actions": "^10.7.0",
+    "@storybook/addon-ondevice-controls": "^10.7.0",
+    "@storybook/react-native": "^10.7.0",
     "@types/react": "^19.2.0",
     "react-native-builder-bob": "^0.44.1",
     "react-native-harness": "1.6.0",
-    "react-native-monorepo-config": "^0.4.0"
+    "react-native-monorepo-config": "^0.4.0",
+    "storybook": "^10.6.3"
   },
   "engines": {
     "node": ">= 22.11.0"
