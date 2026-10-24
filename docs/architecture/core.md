@@ -41,8 +41,10 @@ Each Hybrid View owns exactly one host, created with it and never replaced.
   view before it has a window, and `AbstractComposeView.onMeasure` is `final` and resolves the window's `ViewRecomposer`, so
   a host that *is* the Compose view dies inside a `Modal` (§10). The host's own `onMeasure`/`onLayout` decline while detached
   and run that measure at the first moment there is a window *and* a frame (`:278-332`). Lifecycle and saved-state owners are
-  filled only where the view has none, each gap separately (`:248-262`); the composition ends via
-  `DisposeOnLifecycleDestroyed` (`:140-144`) plus `disposeComposition()` in `drop()` — §6 says when that runs. The M3 theme
+  filled only where the view has none, each gap separately (`:248-262`); the composition ends in `drop()`, which both
+  `disposeComposition()` and *uninstalls* the `DisposeOnLifecycleDestroyed` strategy that was guarding it
+  (`android/.../nitroui/core/NitroComposeHost.kt:321-328`) — §6 says when that runs and why a strategy left installed
+  retains the whole host. The M3 theme
   is `remember`ed per `(context, dark)`, not per instance (`:386-402`).
 
 `grep -n "rootView ="` (iOS) and `grep -n "setContent"` (Android) may only ever hit init paths: no props update may
@@ -250,13 +252,37 @@ then calls `hybridView.prepareForRecycle()` (`:73-91`). So `drop()` → `dispose
 survive a recycle** — the next attach runs a measure (`:172-190`), and Compose builds a new composition there, reading the
 reset model from scratch.
 
-What recycling still saves: the `View`, the Hybrid Object, the host, the model, the activity/owner wiring from
-`onAttachedToWindow`, and the composition **strategy** stored on the view (`DisposeOnLifecycleDestroyed`). What it does
-not: the composition, the `Recomposer`, `NitroUiTheme`'s `remember`ed colour scheme (per composition), and any animation
-in flight — which is why `prepareForRecycle()` re-arms first-frame marking and the other per-mount flags
-(`android/.../nitroui/core/NitroComposeHost.kt:222-229`). The dispose is deliberate: not disposing in `drop()` leaks a
+What recycling still saves: the `View`, the Hybrid Object, the host, the model, and the activity/owner wiring from
+`onAttachedToWindow`. What it does not: the composition, the `Recomposer`, the composition **strategy** (see below),
+`NitroUiTheme`'s `remember`ed colour scheme (per composition), and any animation in flight — which is why
+`prepareForRecycle()` re-arms first-frame marking, the strategy, and the other per-mount flags
+(`android/.../nitroui/core/NitroComposeHost.kt:281-296`). The dispose is deliberate: not disposing in `drop()` leaks a
 composition on every real unmount, and with the flag off every unmount *is* real. Keeping the composition alive is T02's
 measurement with the flag on, not an assumption made here.
+
+### Android again: the strategy is a registration, and `drop()` has to undo it
+
+`DisposeOnLifecycleDestroyed` is the only strategy that is correct under RN: the default and
+`DisposeOnDetachedFromWindowOrReleasedFromPool` both dispose on **detach**, and RN detaches a mounted view for reasons
+that have nothing to do with unmounting it — a screen transition, `removeClippedSubviews`, the recycling pool — so either
+one throws the composition away mid-life. It is installed in `init` and needs a `LifecycleOwner` (§10).
+
+What its name does not say is that it is a **registration, not a property**. `AbstractComposeView.setViewCompositionStrategy`
+installs the strategy immediately, and the strategy it installs is a `LifecycleEventObserver` added to the owner's
+`LifecycleRegistry`; `LifecycleRegistry` holds its observers strongly, and the only code that ever removes one is the
+uninstaller `setViewCompositionStrategy` runs when the **next** strategy is installed. Neither `disposeComposition()` nor
+a detach nor a drop touches it (`androidx.compose.ui:ui` 1.12.1: `ViewCompositionStrategy.installForLifecycle`, and
+`AbstractComposeView.disposeComposition`/`setViewCompositionStrategy` — verified against the linked bytecode). So the
+activity keeps a strong path `mLifecycleRegistry → observer → ComposeView` for every control that was ever mounted, which
+is not "the composition is bounded by the activity" — it is **one leak per mount**. Measured at 8.18 MiB retained per
+cycle of 200 Switches, 3 `View`s and ~43 KiB per control, and it is what ran the bench's
+`mount.<component>:nitro-ui:200` out of a 192 MiB heap (`docs/tasks/B1-android-mount-oom.report.md`).
+
+Hence the rule: **whatever strategy a host installs, `drop()` uninstalls it**, by installing one that observes nothing
+(`DisposeWithTheHost`, `android/.../nitroui/core/NitroComposeHost.kt:342-360`, `:914-916`), and `prepareForRecycle()`
+re-arms it for the mount that follows. `disposeComposition()` first, then the uninstall — the strategy's setter wants no
+composition in flight, and a guard is worth nothing once the composition is gone. A host that is dropped and never reused
+then holds no registration anywhere; a control that is truly still mounted keeps its guard.
 
 ### iOS: same hooks, deeper reuse
 
@@ -285,6 +311,8 @@ Don't write a component that behaves differently because of it: both sides must 
   (`ios/components/Switch/HybridNitroUiSwitch.swift:235-238`, `android/.../HybridNitroUiSwitch.kt:265-268`). It runs
   before the reset and, on Android, is also the unmount path — cheap, and it must not destroy the host.
 - Re-arm every per-mount flag (animation suppression, `firstFrame`, cached content size).
+- Undo every registration something else holds: on Android that is the composition strategy, whose uninstaller only
+  the next `setViewCompositionStrategy` call runs (§6) — leaving it installed retains the host through the activity.
 
 ## 7. Sizing hooks in the hosts
 
@@ -468,6 +496,9 @@ measurable while being much harder to prove correct (`cpp/core/NitroUiPerf.hpp:9
 - **`DisposeOnLifecycleDestroyed` needs a `LifecycleOwner`** — cast the activity at runtime, do not assume it; and Compose
   needs the `SavedStateRegistryOwner` too, filled separately, because a parent may set one and not the other
   (`android/.../nitroui/core/NitroComposeHost.kt:248-262`).
+- **A `ViewCompositionStrategy` is an observer on somebody else's lifetime**, and `disposeComposition()` does not remove
+  it (§6): a control left installed after its drop is retained by the activity forever, and the retention is invisible in
+  the host — the leaking reference lives in the `LifecycleRegistry`. Uninstall on drop, re-arm on recycle.
 - **A per-mount flag that is never re-armed** (firstFrame) silently stops reporting for recycled views, which is most of a
   list.
 - **`testID` on the hosted content as well as the container** makes `findAllByTestId` return two elements.

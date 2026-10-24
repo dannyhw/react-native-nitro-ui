@@ -20,8 +20,10 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnLifecycleDestroyed
 import android.view.ViewTreeObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
@@ -197,7 +199,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     // The default strategy disposes on detach, which is wrong in RN: screen
     // transitions, `removeClippedSubviews` and the recycling pool all detach
     // views, and each detach would throw the composition away.
-    owner?.let { composeContent.setViewCompositionStrategy(DisposeOnLifecycleDestroyed(it)) }
+    armCompositionStrategy()
     addView(
       composeContent,
       LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
@@ -278,6 +280,11 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * this model from scratch.
    */
   fun prepareForRecycle() {
+    // [drop] uninstalled the strategy to get this host out of the activity's
+    // `LifecycleRegistry`; a host that is about to compose again needs its guard
+    // back. `prepareForRecycle` is the only way back from a [drop] that is not an
+    // unmount, so this is the only place that has to re-arm it.
+    armCompositionStrategy()
     model.reset()
     isDirty = true
     isMeasurePending = true
@@ -298,12 +305,67 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * unmount path. Disposing is still the right call: with the recycling flag
    * off - the default - every call here is an unmount, and a composition left
    * alive would be retained until the activity dies.
-   * `DisposeOnLifecycleDestroyed` is what bounds the other case.
+   *
+   * Disposing is not enough on its own. `AbstractComposeView` installs a
+   * [ViewCompositionStrategy] when it is set and uninstalls it from nowhere else -
+   * not from `disposeComposition()`, not from a detach - so the strategy installed
+   * in [init] outlives the composition by the whole life of the activity. What it
+   * installs is an observer on the activity's `LifecycleRegistry`, which holds its
+   * observers strongly: one unmounted host, one strong path
+   * `activity -> LifecycleRegistry -> observer -> ComposeView`, holding the view,
+   * its `AndroidComposeView` and the disposed composition's residue - three `View`s
+   * per control (host, `ComposeContent`, `AndroidComposeView`) and ~42 KiB. Measured
+   * on the churn gate at 8.18 MiB retained per cycle of 200 Switches, which is how
+   * `mount.<component>:nitro-ui:200` ran a 192 MiB heap out
+   * (`docs/tasks/A1-baselines.report.md`,
+   * `docs/tasks/B1-android-mount-oom.report.md`). Hence [unarmCompositionStrategy].
    */
   fun drop() {
     composeContent.disposeComposition()
+    // After the dispose, not before: a strategy must be set with no composition
+    // in flight, and the guard is worth nothing once the composition is gone.
+    unarmCompositionStrategy()
     contentSize = null
     releaseSizingInstance()
+  }
+
+  /**
+   * Install [DisposeOnLifecycleDestroyed] as the composition's guard.
+   *
+   * Compose's own default disposes on detach, which RN's detach behaviour makes
+   * wrong for us (see [init]), and the alternative `DisposeOnViewTreeLifecycleDestroyed`
+   * resolves the owner from the view tree, which for a view that is detached
+   * between screens is the same activity anyway. The strategy is the one
+   * Compose offers for a view with a 1-1 relationship with a [LifecycleOwner], and
+   * we do have that - for one mount. Keeping it installed after the mount is what
+   * leaks, so it is installed here and taken out again in
+   * [unarmCompositionStrategy]; no-op without a `LifecycleOwner`, as before.
+   */
+  private fun armCompositionStrategy() {
+    val owner = owner ?: return
+    // `installFor` throws rather than skip when the owner is already DESTROYED, and
+    // [prepareForRecycle] can run while an activity is being torn down (RN drops views
+    // as a surface stops). A guard for a dead activity is worth nothing regardless, so
+    // refuse it here instead of paying for its exception.
+    if (owner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+      return
+    }
+    composeContent.setViewCompositionStrategy(DisposeOnLifecycleDestroyed(owner))
+  }
+
+  /**
+   * Uninstall whatever strategy is installed, by installing one that observes
+   * nothing.
+   *
+   * Setting a strategy runs the previous strategy's uninstaller first, and that is
+   * the only call site for it in `AbstractComposeView` - which is why [drop] has to
+   * do this itself rather than trust `disposeComposition()` to let the host go.
+   * [DisposeWithTheHost] then leaves nothing registered: if the view is never
+   * attached again it retains nothing and observes nothing, and if it is (the
+   * recycle path), [armCompositionStrategy] has already put the guard back.
+   */
+  private fun unarmCompositionStrategy() {
+    composeContent.setViewCompositionStrategy(DisposeWithTheHost)
   }
 
   /**
@@ -847,4 +909,17 @@ internal fun NitroUiMeasuredRoot(
       )
     }
   }
+}
+
+/**
+ * A [ViewCompositionStrategy] that neither observes nor disposes.
+ *
+ * It exists so that installing it can uninstall something else: a strategy's
+ * uninstaller only ever runs when the next strategy is installed, and this is the
+ * cheapest strategy to be left with. The host owns the composition's lifetime and
+ * ends it in `NitroComposeHost.drop`, which is what the composition is disposed by
+ * from here on.
+ */
+private object DisposeWithTheHost : ViewCompositionStrategy {
+  override fun installFor(view: AbstractComposeView): () -> Unit = {}
 }
