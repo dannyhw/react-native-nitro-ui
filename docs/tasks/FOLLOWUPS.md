@@ -26,3 +26,4 @@
 - Core (0.2): Android `intrinsic` content wider than its box draws centred and clipped at both ends instead of truncating — record via intrinsics, place with bounded constraints (G4 F2; also affects Button). Documented as a known limitation for 0.1.
 - iOS SegmentedControl `tintColor` has no effect (SwiftUI ignores `.tint` on a segmented `Picker`); per-instance tint needs another approach (G4 F1).
 - G4 SegmentedControl follow-ups (review non-blocking list + fix round) are in docs/tasks/G4-segmented-control.report.md "Follow-ups".
+- R2 follow-ups are in docs/tasks/R2-release-0.1.report.md, incl.: no committed bench baselines yet (`--update-baseline` needs `--plan full --launches 8` on a quiet machine); smoke asserts ready line + no crash + screenshot, not testID reads; `manifest:check` counts `lib/typescript/src/tsdoc-metadata.json` that `npm pack`'s bob rebuild omits (332 vs 333 files); CI workflows have never run (no remote yet), incl. the RN 0.86 iOS smoke row.
