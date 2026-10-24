@@ -30,7 +30,7 @@ store. Options are plain strings in v0.1 — no icons, no per-option colours.
 | `defaultSelectedIndex` | `number \| undefined`           | `0`      | Seed for an uncontrolled control; ignored while `selectedIndex` is set. |
 | `onChange`             | `((e: {index, value}) => void) \| undefined` | — | One call per user selection, with the new index and its label.    |
 | `disabled`             | `boolean \| undefined`          | `false`  | SwiftUI `.disabled()` / Compose `enabled = false`.                |
-| `tintColor`            | `ColorValue \| undefined`       | platform | SwiftUI `.tint()` / the selected segment's container + border.    |
+| `tintColor`            | `ColorValue \| undefined`       | platform | **Android only**: the selected segment's container + border. iOS ignores it (see Limits). |
 | `style`                | `ViewStyle`                     | —        | Overrides the measured box (see Sizing).                          |
 | `testID`               | `string \| undefined`           | —        | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.     |
 | `accessibilityLabel`   | `string \| undefined`           | —        | Label of the group; the segments keep their own labels.           |
@@ -47,16 +47,16 @@ read-only plus `measureContent()`, and it runs once, when the view mounts.
 | --------------- | -------------------------------------------------- | ------------------------------------------------------------ |
 | Control         | `Picker(selection:) { … }.pickerStyle(.segmented)`  | `SingleChoiceSegmentedButtonRow` + one `SegmentedButton` each |
 | Host            | `UIHostingController` inside `NitroSwiftUIHost`     | `NitroComposeHost<M>: AbstractComposeView`                    |
-| Theme           | system traits, `.tint()`                            | `MaterialTheme` + dynamic color on Android 12+                |
-| Selected segment| the tint (default: the accent fill)                 | `activeContainerColor` + `activeBorderColor` (default: transparent) |
+| Theme           | system traits                                       | `MaterialTheme` + dynamic color on Android 12+                |
+| Selected segment| the scheme's accent fill; `tintColor` does nothing  | `activeContainerColor` + `activeBorderColor`, both from `tintColor` (default: transparent) |
 | Popup           | none — the control presents nothing                 | none — same                                                   |
 | Test id         | RN's `testID` → `accessibilityIdentifier`           | `host.tag` (Compose has no test id)                           |
 | Label           | `.accessibilityLabel(_:)` on the `Picker`           | `Modifier.semantics { contentDescription }` on the row        |
 | Recycle         | hosting controller reused                           | objects reused; composition rebuilt (`core.md` §6)            |
 
 Because the control presents nothing, this host needs no view-controller
-containment — unlike the `.menu` Picker, which is the 0.2 `Picker` component and
-will have to own one (`docs/tasks/G5-datepicker.md` territory).
+containment — unlike the `.menu` Picker, which is the 0.2 `Picker` component
+(`docs/tasks/G4-segmented-picker.md`, deferred by D19) and will have to own one.
 
 ## Selection
 
@@ -113,11 +113,11 @@ R3 verification DECISIONS D16 asks for, in
 The sizing key is `optionCount|label|label|…`
 (`src/components/SegmentedControl/SegmentedControl.tsx:128`), with every label
 escaped (`\` → `\\`, `|` → `\|`, `src/components/SegmentedControl/SegmentedControl.tsx:113`)
-so a label containing the separator cannot forge one. Without the escape
-`['a|b']` and `['a', 'b']` would build the same key and share one cached size, one
-of which is wrong for the life of the process. The count comes first because
-escaping alone cannot tell `[]` from `['']` apart once joined. `disabled` and
-`tintColor` repaint, they do not resize, and the text size / density / OS control
+so a label containing the separator cannot forge one. Without the escape, a
+same-count pair like `['aa|bb', 'c']` and `['aa', 'bb|c']` would build one key and
+share one cached size, one of which is wrong for the life of the process. The
+count comes first because escaping alone cannot tell `[]` from `['']` apart once
+joined. `disabled` and `tintColor` repaint, they do not resize, and the text size / density / OS control
 size are not in the key: native folds the environment in through the epoch
 (`docs/architecture/sizing.md`, "Building `nuiSizingKey`").
 
@@ -162,10 +162,17 @@ swallowed by the dedupe and stay at the fallback (G2's F1). D20 then keeps a
 corrected instance re-measuring on later props turns.
 
 A user `style` still wins: `width`, `height` or `flex` fixes the box and the
-control centres inside it, and a `width` narrower than the labels truncates them
-(one line, tail) instead of painting outside. The base style is `alignSelf:
-'flex-start'` (`src/components/SegmentedControl/SegmentedControl.tsx:144`) for the
-same reason `Switch` and `Button` have one: in a column, `alignItems: stretch`
+control centres inside it. What happens when the labels do not fit that box
+**differs per platform**: iOS hands the box to SwiftUI and the `Picker` squeezes
+its segments into it, so long labels truncate (one line, tail). Android measures
+its content unbounded and centres it in the Yoga box, so a row wider than the box
+is **clipped at both ends** — the cut-off parts of the outer segments are neither
+visible nor tappable. Keep option lists short enough for the available width on
+Android; see Limits.
+
+The base style is `alignSelf: 'flex-start'`
+(`src/components/SegmentedControl/SegmentedControl.tsx:144`) for the same reason
+`Switch` and `Button` have one: in a column, `alignItems: stretch`
 would decide the width for us and the measurement would never be asked for. Ask
 for a stretched row with `alignSelf: 'stretch'`.
 
@@ -222,14 +229,29 @@ drops the now-wrong cached sizes.
 ## Limits
 
 - No icons, no per-segment colours, no sublabels — `options` is `string[]` in v0.1.
-- `tintColor` means one role per platform, and they are not the same role: on iOS
-  it paints the selected segment (SwiftUI's `.tint`), on Android it replaces the
-  selected segment's container **and** border and leaves every other colour to the
-  scheme. Neither fakes the other.
+- `tintColor` is **Android-only**: it replaces the selected segment's container
+  **and** border and leaves every other colour to the scheme. On iOS it has **no
+  visible effect** — a SwiftUI segmented `Picker` ignores `.tint()` (and
+  `.accentColor`); the only per-control knob is
+  `UISegmentedControl.selectedSegmentTintColor`, which SwiftUI does not expose, so
+  setting it per instance would mean UIKit introspection or a global
+  `UISegmentedControl.appearance()`. We do neither: the iOS implementation still
+  applies `.tint()` (harmless, and the right call if SwiftUI ever honours it), and
+  the prop simply changes nothing there. A tinted row looks like the default one on
+  iOS.
 - The platforms do not agree on how a segment gets its width (equal shares on
-  Android, SwiftUI's own distribution on iOS), so a tinted row of unequal labels
-  looks different on each. Both grow with the labels, which is all the sizing key
+  Android, SwiftUI's own distribution on iOS), so a row of unequal labels looks
+  different on each. Both grow with the labels, which is all the sizing key
   claims.
+- **A row wider than its box is clipped on Android.** Android gives the Compose row
+  its measured (unbounded) size and places it centred in the Yoga box, so when the
+  labels want more width than the box has — a four-label row on a phone is enough —
+  both rounded end caps are cut off and the hidden part of the outer segments
+  cannot be tapped. iOS is fine here: the host proposes the box to SwiftUI and the
+  `Picker` compresses its segments, truncating labels instead. This is the shared
+  `intrinsic` host behaviour (it applies to `Button` too, where it is rarer), and
+  callers must keep option lists within the available width until the host fits
+  intrinsic content to its box.
 - One declared fallback pair per component, so the first instance of a wider option
   list starts from a 165 pt / 256 dp box and is corrected on the turn it measures
   (D17). A cold batch of 200 distinct option lists lands over several frames —

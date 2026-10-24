@@ -61,8 +61,14 @@ export interface SegmentedControlProps extends ViewProps {
   /** Disable interaction. Default: `false`. */
   disabled?: boolean | undefined;
   /**
-   * Accent colour: SwiftUI `.tint()` on iOS, the selected segment's content and
-   * border on Android. Default: the platform accent / Material 3 scheme.
+   * Accent colour of the selected segment on **Android** (its container and
+   * border). Default: the Material 3 scheme.
+   *
+   * It has **no visible effect on iOS**: a SwiftUI segmented `Picker` ignores
+   * `.tint()`, and the one per-control UIKit knob
+   * (`selectedSegmentTintColor`) is not reachable from SwiftUI without
+   * introspection. The prop is still sent, and a tinted control simply looks like
+   * the default one on iOS (`docs/components/segmented-control.md`, Limits).
    */
   tintColor?: ColorValue | undefined;
   /**
