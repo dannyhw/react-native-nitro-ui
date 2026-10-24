@@ -1,0 +1,93 @@
+/**
+ * The code blocks in README.md, as real components.
+ *
+ * README.md has one ```tsx block per component whose fence opens with
+ * `name=<region>`; the lines between `// #region <name>` and
+ * `// #endregion` here are what that block must contain, and
+ * `scripts/readme-examples-check.mjs` (part of `bun run check`) fails when the
+ * two drift apart. So the README is typechecked by `bun run check` with the rest
+ * of `example/src`, and a prop rename cannot survive silently into the docs.
+ *
+ * These are documentation fixtures, not screens: the app has its own per-tab
+ * screens in this folder, and nothing imports this file.
+ */
+import {
+  Button,
+  Progress,
+  SegmentedControl,
+  Slider,
+  Switch,
+} from 'react-native-nitro-ui';
+import { useState } from 'react';
+import { Text } from 'react-native';
+
+// #region switch
+export function WifiSettings() {
+  const [enabled, setEnabled] = useState(false);
+
+  return (
+    <>
+      <Text>Wi-Fi</Text>
+      <Switch
+        accessibilityLabel="Wi-Fi"
+        value={enabled}
+        onValueChange={setEnabled}
+      />
+    </>
+  );
+}
+// #endregion
+
+// #region slider
+export function VolumeSlider() {
+  const [volume, setVolume] = useState(0.5);
+
+  return (
+    <Slider
+      accessibilityLabel="Volume"
+      value={volume}
+      onValueChange={setVolume}
+      minimumValue={0}
+      maximumValue={1}
+      step={0.05}
+    />
+  );
+}
+// #endregion
+
+// #region progress
+export function UploadProgress({ fraction }: { fraction: number | null }) {
+  // `null` is indeterminate ("working"); a number 0…1 is a determinate bar.
+  return <Progress accessibilityLabel="Uploading" value={fraction} />;
+}
+// #endregion
+
+// #region button
+export function SaveButton() {
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <Button
+      title={saving ? 'Saving…' : 'Save'}
+      variant="filled"
+      size="medium"
+      disabled={saving}
+      onPress={() => setSaving(true)}
+    />
+  );
+}
+// #endregion
+
+// #region segmented-control
+export function ViewToggle() {
+  const [index, setIndex] = useState(0);
+
+  return (
+    <SegmentedControl
+      options={['Day', 'Week', 'Month']}
+      selectedIndex={index}
+      onChange={(event) => setIndex(event.index)}
+    />
+  );
+}
+// #endregion

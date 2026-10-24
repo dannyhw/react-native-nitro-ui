@@ -180,6 +180,25 @@ configuration change, and the epoch invalidation is what drops the now-wrong
 cached sizes (`docs/architecture/sizing.md` §9; the harness drives it through
 `invalidateSizingEnvironment()`).
 
+## Accessibility
+
+The button is the platform's, so its accessibility element is: a UIKit element
+with the button role and the label SwiftUI was given on iOS, the M3 button's
+semantics node on Android.
+
+- `accessibilityLabel` goes on the **control** (`.accessibilityLabel(_:)` /
+  `Modifier.semantics { contentDescription }`) and falls back to `title`, so a
+  plain Button is already announced. It is not part of the sizing key: it
+  repaints the label the reader hears, it does not resize the control.
+- The label must stay on the control — `accessible`, an `accessibilityRole` or
+  another a11y prop on the container can hide the button from VoiceOver /
+  TalkBack (`docs/architecture/core.md` §3). Style the box; do not re-role it.
+- `disabled` is the enable/disable API; `aria-label` / `aria-disabled` are not
+  translated, and there is no `ref` forwarding. A disabled button emits no
+  `onPress` at all, so nothing has to be announced as "did nothing".
+- `testID` is RN's own on iOS (`accessibilityIdentifier`); on Android it lands on
+  the host `View.tag`, because Compose has no test id.
+
 ## Behaviour notes
 
 - **One callback per tap.** `onPress` is a Nitro callback prop that is *always*
