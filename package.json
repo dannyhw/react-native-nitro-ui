@@ -57,7 +57,7 @@
     "publint": "publint --strict",
     "manifest:check": "node scripts/package-files.mjs",
     "manifest:update": "node scripts/package-files.mjs --update",
-    "check": "bun run typecheck && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check",
+    "check": "bun run typecheck && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check && bun run readme:check",
     "harness:ios": "bun --cwd example harness:ios",
     "harness:android": "bun --cwd example harness:android",
     "harness:cold:ios": "bun --cwd example harness:cold:ios",
@@ -72,7 +72,8 @@
     "perf:renders": "node scripts/perf/renders.mjs",
     "release": "release-it --only-version",
     "api-extractor": "api-extractor run --local --config etc/api-extractor.json",
-    "api-extractor:check": "api-extractor run --config etc/api-extractor.json"
+    "api-extractor:check": "api-extractor run --config etc/api-extractor.json",
+    "readme:check": "node scripts/readme-examples-check.mjs"
   },
   "keywords": [
     "react-native",

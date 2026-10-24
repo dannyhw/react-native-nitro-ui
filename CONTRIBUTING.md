@@ -57,6 +57,7 @@ Run from the repo root.
 | `bun run prepare`           | Build `lib/` with builder-bob (also runs `nitrogen`)                 |
 | `bun run publint`           | Validate `package.json` publish surface                              |
 | `bun run manifest:check`    | Tarball contents must equal `etc/package-files.txt`                  |
+| `bun run readme:check`      | README examples must equal `example/src/readme-examples.tsx`         |
 | `bun run manifest:update`   | Rewrite the manifest after an **intentional** publish-surface change |
 | `bun run harness:ios`       | On-device tests on iOS (see below)                                   |
 | `bun run harness:android`   | On-device tests on Android (see below)                               |
@@ -74,8 +75,18 @@ Run from the repo root.
 
 `bun run check` = typecheck → bench:typecheck → lint → format → test →
 perf:renders → nitrogen:check → autolinking:check → prepare → publint →
-manifest:check. `perf:renders` is part of `check` on purpose: render counts are
-deterministic, so they can block, unlike anything measured on a device.
+manifest:check → readme:check. `perf:renders` is part of `check` on purpose: render
+counts are deterministic, so they can block, unlike anything measured on a device.
+
+### Changing a README example
+
+Every TSX block in `README.md` opens its fence with `tsx name=<region>` and must be
+byte-identical to the `// #region <region>` block in
+`example/src/readme-examples.tsx` — the file that makes those snippets typechecked
+(`tsconfig.json` includes `example/src`). `bun run readme:check` compares the two and
+names the first differing line, so a prop rename cannot survive in the docs: change
+one side, run the script, and it goes red. Add a component by adding a region there
+and the matching block in the README.
 
 ### Changing the published surface
 
