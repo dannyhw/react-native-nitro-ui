@@ -47,6 +47,12 @@ export interface ProgressProps extends ViewProps {
    * `linear` bar fills on both platforms. Android draws the fraction either way.
    * `docs/components/progress.md` (Limits) says what was tried about it.
    *
+   * The other iOS half of that limit is the missing *animation*: with no `value`,
+   * a `linear` bar on iOS shows an **empty track and does not move** - UIKit's
+   * `UIProgressView` has no indeterminate mode, so there is nothing for the style
+   * to draw. Android animates an indeterminate bar in both shapes. Where the
+   * motion carries meaning, use a ring (or a `linear` bar on Android).
+   *
    * A plain `value`, not a controlled one: nothing on a Progress can be changed
    * by the user, so React always owns it and no `onValueChange` is needed
    * (`docs/architecture/core.md` §12). Writing it at 60 Hz costs one `number`
@@ -161,12 +167,19 @@ export function Progress({
   const processedTint = useProcessedColor(tintColor);
   const processedTrack = useProcessedColor(trackColor);
   const hybridRefCallback = useStableCallback(hybridRef);
-  // The id is minted per *native mount*: `key` below is the variant, so a variant
-  // change drops the old view, and the drop must not take the new mount's sizing
-  // ledger entry with it (`useSizingId`'s `configuration` contract; the harness's
+  // `key`, the `variant` prop and the sizing configuration are the same value,
+  // computed once: the native view is replaced exactly when the configuration
+  // changes, and never otherwise (`useSizingId`'s `configuration` contract). The
+  // spec types `variant` as a plain string, so the normalisation is what keeps a
+  // JS caller that bypasses the union (`variant={'round' as ProgressVariant}`)
+  // from minting an id - and leaking an engine entry - without a remount; see
+  // `Progress · sizing id follows the key` in `src/__tests__/useSizingId.test.tsx`.
+  // A variant change drops the old view, and the drop must not take the new
+  // mount's ledger entry with it (the harness's
   // `re-measures a variant change that starts from a poisoned guess` is the oracle).
-  const sizingId = useSizingId(variant);
   const isCircular = variant === 'circular';
+  const variantKey = isCircular ? 'circular' : 'linear';
+  const sizingId = useSizingId(variantKey);
 
   return (
     <NativeNitroUiProgress
@@ -179,8 +192,8 @@ export function Progress({
       // an unbounded question of a linear bar (which has no width of its own to
       // answer with) for the rest of its life. iOS reads the policy live, so the
       // same key costs it nothing it did not already do.
-      key={isCircular ? 'circular' : 'linear'}
-      variant={isCircular ? 'circular' : 'linear'}
+      key={variantKey}
+      variant={variantKey}
       value={value}
       tintColor={processedTint}
       trackColor={processedTrack}
