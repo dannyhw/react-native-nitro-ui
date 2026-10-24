@@ -7,6 +7,7 @@
 import { ColorValue } from 'react-native';
 import type { HybridObject } from 'react-native-nitro-modules';
 import { JSX } from 'react';
+import { ReactNode } from 'react';
 import { ViewProps } from 'react-native';
 
 // @public
@@ -44,6 +45,15 @@ export type ButtonSize = 'small' | 'medium' | 'large';
 
 // @public
 export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
+
+// @public
+export function Host(input: HostProps): JSX.Element;
+
+// @public
+export interface HostProps extends ViewProps {
+    // (undocumented)
+    children?: ReactNode;
+}
 
 // @public
 export interface NitroUiCore extends HybridObject<{

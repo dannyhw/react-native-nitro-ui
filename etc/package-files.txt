@@ -9,14 +9,17 @@ android/src/main/cpp/NitroUiSizingJni.cpp
 android/src/main/cpp/NitroUiSizingJni.hpp
 android/src/main/cpp/cpp-adapter.cpp
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiProgress.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt
+android/src/main/java/com/margelo/nitro/nitroui/NitroUiHostViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiSliderValue.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiDeclaredFallbacks.kt
+android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
@@ -30,6 +33,7 @@ cpp/core/NitroUiClock.hpp
 cpp/core/NitroUiPerf.hpp
 cpp/core/NitroUiSizing.hpp
 ios/components/Button/HybridNitroUiButton.swift
+ios/components/Host/HybridNitroUiHost.swift
 ios/components/Progress/HybridNitroUiProgress.swift
 ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift
 ios/components/Slider/HybridNitroUiSlider.swift
@@ -54,6 +58,14 @@ lib/module/components/Button/NativeNitroUiButton.js
 lib/module/components/Button/NativeNitroUiButton.js.map
 lib/module/components/Button/NitroUiButtonConfig.js
 lib/module/components/Button/NitroUiButtonConfig.js.map
+lib/module/components/Host/Host.js
+lib/module/components/Host/Host.js.map
+lib/module/components/Host/Host.nitro.js
+lib/module/components/Host/Host.nitro.js.map
+lib/module/components/Host/NativeNitroUiHost.js
+lib/module/components/Host/NativeNitroUiHost.js.map
+lib/module/components/Host/NitroUiHostConfig.js
+lib/module/components/Host/NitroUiHostConfig.js.map
 lib/module/components/Progress/NativeNitroUiProgress.js
 lib/module/components/Progress/NativeNitroUiProgress.js.map
 lib/module/components/Progress/NitroUiProgressConfig.js
@@ -114,6 +126,14 @@ lib/typescript/src/components/Button/NativeNitroUiButton.d.ts
 lib/typescript/src/components/Button/NativeNitroUiButton.d.ts.map
 lib/typescript/src/components/Button/NitroUiButtonConfig.d.ts
 lib/typescript/src/components/Button/NitroUiButtonConfig.d.ts.map
+lib/typescript/src/components/Host/Host.d.ts
+lib/typescript/src/components/Host/Host.d.ts.map
+lib/typescript/src/components/Host/Host.nitro.d.ts
+lib/typescript/src/components/Host/Host.nitro.d.ts.map
+lib/typescript/src/components/Host/NativeNitroUiHost.d.ts
+lib/typescript/src/components/Host/NativeNitroUiHost.d.ts.map
+lib/typescript/src/components/Host/NitroUiHostConfig.d.ts
+lib/typescript/src/components/Host/NitroUiHostConfig.d.ts.map
 lib/typescript/src/components/Progress/NativeNitroUiProgress.d.ts
 lib/typescript/src/components/Progress/NativeNitroUiProgress.d.ts.map
 lib/typescript/src/components/Progress/NitroUiProgressConfig.d.ts
@@ -168,6 +188,8 @@ nitrogen/generated/android/c++/JFunc_void_bool_double.hpp
 nitrogen/generated/android/c++/JFunc_void_double_double.hpp
 nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiHostSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiHostSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSegmentedControlSpec.cpp
@@ -188,6 +210,8 @@ nitrogen/generated/android/c++/JVariant_NullType_String.cpp
 nitrogen/generated/android/c++/JVariant_NullType_String.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.cpp
@@ -200,6 +224,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_bool_double.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_double_double.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiButtonSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiHostSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiProgressSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControlSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSliderSpec.kt
@@ -214,6 +239,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Variant_NullType_Str
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/nitrouiOnLoad.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiHostManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiHostStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiProgressManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiProgressStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSegmentedControlManager.kt
@@ -234,6 +261,8 @@ nitrogen/generated/ios/NitroUiAutolinking.mm
 nitrogen/generated/ios/NitroUiAutolinking.swift
 nitrogen/generated/ios/c++/HybridNitroUiButtonSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiButtonSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiHostSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiHostSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiProgressSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiProgressSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiSegmentedControlSpecSwift.cpp
@@ -243,6 +272,7 @@ nitrogen/generated/ios/c++/HybridNitroUiSliderSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.hpp
 nitrogen/generated/ios/c++/views/HybridNitroUiButtonComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiHostComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiProgressComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSegmentedControlComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSliderComponent.mm
@@ -252,6 +282,8 @@ nitrogen/generated/ios/swift/Func_void_bool_double.swift
 nitrogen/generated/ios/swift/Func_void_double_double.swift
 nitrogen/generated/ios/swift/HybridNitroUiButtonSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiButtonSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiHostSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiHostSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiProgressSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiProgressSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiSegmentedControlSpec.swift
@@ -271,6 +303,8 @@ nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiHostSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiHostSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiSegmentedControlSpec.cpp
@@ -288,6 +322,8 @@ nitrogen/generated/shared/c++/NitroUiSizingTraceEvent.hpp
 nitrogen/generated/shared/c++/NitroUiSliderSize.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.cpp
@@ -297,6 +333,7 @@ nitrogen/generated/shared/c++/views/HybridNitroUiSliderComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.hpp
 nitrogen/generated/shared/json/NitroUiButtonConfig.json
+nitrogen/generated/shared/json/NitroUiHostConfig.json
 nitrogen/generated/shared/json/NitroUiProgressConfig.json
 nitrogen/generated/shared/json/NitroUiSegmentedControlConfig.json
 nitrogen/generated/shared/json/NitroUiSliderConfig.json
@@ -308,6 +345,10 @@ src/components/Button/Button.nitro.ts
 src/components/Button/Button.tsx
 src/components/Button/NativeNitroUiButton.ts
 src/components/Button/NitroUiButtonConfig.ts
+src/components/Host/Host.nitro.ts
+src/components/Host/Host.tsx
+src/components/Host/NativeNitroUiHost.ts
+src/components/Host/NitroUiHostConfig.ts
 src/components/Progress/NativeNitroUiProgress.ts
 src/components/Progress/NitroUiProgressConfig.ts
 src/components/Progress/Progress.nitro.ts
