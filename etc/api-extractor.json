@@ -15,6 +15,10 @@
   "dtsRollup": {
     "enabled": false
   },
+  "tsdocMetadata": {
+    "enabled": true,
+    "tsdocMetadataFilePath": "<projectFolder>/.turbo/api-extractor-temp/tsdoc-metadata.json"
+  },
   "messages": {
     "extractorMessageReporting": {
       "ae-missing-release-tag": {
