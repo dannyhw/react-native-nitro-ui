@@ -4,8 +4,11 @@
  * A settings screen that is opened, closed and opened again is a mount loop, and
  * on Android every hosted control brings its own Compose composition. The bench
  * found that such a loop runs the Java heap out at `mount.<component>:nitro-ui:200`
- * (`docs/tasks/A1-baselines.report.md`): each cycle kept ~84 KiB of the ~132 KiB
- * each control had cost, so a 192 MiB heap died after a handful of cycles.
+ * (`docs/tasks/A1-baselines.report.md`): the bench retained 16.5 MiB per cycle of
+ * 200 controls, so a 192 MiB heap died after a handful of cycles. This file is the
+ * same leak measured in the harness, where it was 8.18 MiB per cycle (~42 KiB per
+ * control); the two runs are both measurements of it and the gap between them is
+ * not attributed.
  *
  * The gate is therefore retention, not duration: after a full collect, the Java
  * heap a churn loop is *holding* must not climb cycle over cycle. Wall-clock is
@@ -20,9 +23,10 @@
  *   an iteration. A transient allocation storm returns to the floor; a leak moves
  *   it.
  *
- * Android only: the leak is in the Compose hosting lifecycle, and iOS hosts
- * SwiftUI views with a different lifetime, so there is nothing here to assert on
- * iOS and the suite registers no test there.
+ * Android only: the leak is in the Compose hosting lifecycle, and iOS hosts SwiftUI
+ * views with a different lifetime, so there is nothing to assert there. The iOS
+ * branch registers one pending test that says so - see the `else` below, which also
+ * records why it cannot register nothing.
  */
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
@@ -48,8 +52,9 @@ const CYCLES = 3;
  * Placed between the two outcomes this gate has to tell apart: the leak measured
  * 8.18 MiB per cycle of 200 controls, and a loop that frees everything returns to
  * roughly the same floor (ART keeps a few hundred KiB of slack between collects).
- * Two MiB per cycle is 12x below the bug and well above the noise, so it is red
- * for the leak and green for the fix without riding on machine load.
+ * Two MiB per cycle is about 4x below that bug and far above the spread of the
+ * fixed runs (0.13 MiB), so it is red for the leak and green for the fix without
+ * riding on machine load.
  */
 const MAX_FLOOR_GROWTH_MIB_PER_CYCLE = 2;
 
