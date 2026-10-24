@@ -2,8 +2,12 @@
 
 **Branch:** `task/T16-host-spike` · **Device:** AVD `nitroui_t02` (`emulator-5572`, private adb server
 5042, Metro 8294) · **Platform:** Android only (D13). One round, no fix rounds (D19).
-Bench run: `bench/results/7d665f4-dirty-android-20261024T105128Z.{json,md,ndjson}` — the tree it
-measured is this branch's code (`2f2f0af`), reported under the sha it ran with.
+Bench run id `7d665f4-dirty-android-20261024T105128Z` (`quick`, started 2026-10-24T10:51:28Z, 264 s)
+— the tree it measured is this branch's code (`2f2f0af`), reported under the sha it ran with.
+**The raw `{json,md,ndjson}` artefacts are not on disk.** `bench/results/*` is gitignored
+(`.gitignore:102`), so the only copy lived in this task's worktree, and that checkout was pruned
+after the tree went clean. Nothing this report quotes is lost — every figure is transcribed into the
+tables below, and no committed baseline was touched — but the tables, not a file, are the record.
 
 ## Summary
 
@@ -342,3 +346,6 @@ where `<Host>` is required for the controls to render at all, which for us is op
    Host ships, an a11y-order test for hosted siblings vs surrounding RN views belongs with it.
 4. `example/src/HostScreen.tsx` is a spike screen, not a demo; if the component ships it should be
    rebuilt as part of the docs work.
+5. The run's raw artefacts are gone for the reason above, so these numbers cannot be re-tabulated
+   from disk — only re-measured, which needs the `nitro-ui-host` arm that exists only on this branch.
+   Re-run `bun bench --platform android --plan quick` on a quiet machine if 0.2 builds on them.
