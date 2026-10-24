@@ -106,3 +106,9 @@ bench/results/*
 # to `.reassure/output`; `scripts/perf/renders.mjs` reads `current.perf` from
 # there. Nothing in it is reviewable.
 .reassure/
+
+# Storybook (S1): `.rnstorybook/storybook.requires.*` is written by
+# `sb-rn-get-stories` / the `withStorybook` Metro wrapper on every start, from
+# `main.ts`. It is generated, so it stays out of the tree: `bun run
+# storybook:generate` recreates it, and Metro regenerates it on its own.
+example/.rnstorybook/storybook.requires.*
