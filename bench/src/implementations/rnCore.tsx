@@ -8,7 +8,15 @@ import {
 } from 'react-native';
 
 import type { BenchListProps } from '../types';
-import { buttonTitle, onValueChange, onPress, range, rowStyle } from './shared';
+import {
+  SEGMENTED_SELECTION,
+  buttonTitle,
+  onPress,
+  onValueChange,
+  range,
+  rowStyle,
+  segmentedOptions,
+} from './shared';
 
 /**
  * The control arm: what RN core itself offers for each component.
@@ -32,9 +40,53 @@ import { buttonTitle, onValueChange, onPress, range, rowStyle } from './shared';
  *   Padding and background are the minimum that makes it a button rather than
  *   tappable text - RN core owns no theme, so anything richer would be this
  *   arm's decoration, not the control's.
+ * - `segmented-control`: RN core has no segmented control either, so the
+ *   idiomatic core equivalent is a row of `Pressable`s, one `Text` each - which is
+ *   what a pure-JS implementation of this control is. Also a *floor*: it owns no
+ *   native control, and the segments are RN views rather than one hosted control,
+ *   which is exactly the cost this arm exists to make visible. One label pair
+ *   (`segmentedOptions`) and one selected index (`SEGMENTED_SELECTION`) are shared
+ *   with the other arms, so the row says the same words and paints the same
+ *   segment chosen.
  */
 export function RnCoreList({ n, value, component }: BenchListProps) {
   const style = rowStyle(component);
+  if (component === 'segmented-control') {
+    const options = segmentedOptions(value);
+    return (
+      <>
+        {range(n).map((index) => (
+          <View
+            key={index}
+            testID={`bench-rn-core-segmented-${String(index)}`}
+            style={[style, segmentedStyles.row]}
+          >
+            {options.map((label, segment) => (
+              <Pressable
+                key={label}
+                onPress={onPress}
+                style={
+                  segment === SEGMENTED_SELECTION
+                    ? segmentedStyles.selected
+                    : segmentedStyles.segment
+                }
+              >
+                <Text
+                  style={
+                    segment === SEGMENTED_SELECTION
+                      ? segmentedStyles.selectedLabel
+                      : segmentedStyles.label
+                  }
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ))}
+      </>
+    );
+  }
   if (component === 'button') {
     return (
       <>
@@ -111,4 +163,34 @@ const buttonStyles = StyleSheet.create({
     borderRadius: 8,
   },
   label: { color: '#FFFFFF' },
+});
+
+/**
+ * The minimum that makes the core floor read as one segmented control: a shared
+ * outline, a divider per segment, and a fill on the chosen one. Any richer and
+ * this arm would be drawing its own design rather than the control's.
+ */
+const segmentedStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: '#79747E',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  segment: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRightWidth: 1,
+    borderRightColor: '#79747E',
+  },
+  selected: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRightWidth: 1,
+    borderRightColor: '#79747E',
+    backgroundColor: '#E8DEF8',
+  },
+  label: { color: '#1D1B20' },
+  selectedLabel: { color: '#1D1B20', fontWeight: '600' },
 });

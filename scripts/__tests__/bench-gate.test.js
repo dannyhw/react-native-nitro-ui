@@ -1043,8 +1043,155 @@ describe('the Button cells (--component button)', () => {
     // up here as a shorter schedule, not a silent skip.
     const all = buildSchedule({ plan: 'quick' });
     expect(new Set(all.map((entry) => componentOf(entry.scenario)))).toEqual(
-      new Set(['switch', 'slider', 'button', 'progress'])
+      new Set(['switch', 'slider', 'button', 'progress', 'segmented-control'])
     );
-    expect(all.length).toBe(button.length * 4);
+    // Five components in the quick plan, each with the same three cells.
+    expect(all.length).toBe(button.length * 5);
+  });
+});
+
+/**
+ * The SegmentedControl cells (`bun bench --component segmented-control`, task G4).
+ *
+ * The same three claims the Button block makes, with a third component in the
+ * file: a gate that pairs an arm with a *different* component's `rn-core` control
+ * still produces confident, meaningless numbers, and G4 is the first component
+ * added since that rule was written - so it is the one that has to prove the rule
+ * still holds with five components in the plan rather than two.
+ */
+describe('the SegmentedControl cells (--component segmented-control)', () => {
+  /**
+   * A run holding Switch, Button and SegmentedControl cells at once.
+   *
+   * Three components with controls deliberately far apart (`mount` 100 us,
+   * `mount.button` 200 us, `mount.segmented-control` 300 us), and every arm
+   * exactly 1.1x over the control of *its own* cell. A gate that crossed the
+   * pairing would read 3.3x or 0.3x on the rows below, so 1.1 is only reachable
+   * through the right one.
+   */
+  function makeMixedRun(overrides = {}) {
+    const arms = {
+      'rn-core': {},
+      'expo-ui-host-per-control': { mounted: 210_000 },
+      'expo-ui-shared-host': { mounted: 80_000 },
+      'nitro-ui': { mounted: 110_000 },
+      ...overrides,
+    };
+    const scenarios = [
+      ['mount', 1],
+      ['mount.button', 2],
+      ['mount.segmented-control', 3],
+    ];
+    const records = [];
+    for (const [implementation, values] of Object.entries(arms)) {
+      for (const [scenario, scale] of scenarios) {
+        records.push(
+          ...cellRecords({
+            scenario,
+            implementation,
+            mounted: (values.mounted ?? 100_000) * scale,
+            presented: (values.presented ?? 130_000) * scale,
+          })
+        );
+        const action = scenarioActionOf(scenario);
+        const suffix = scenario === action ? '' : `.${componentOf(scenario)}`;
+        records.push(
+          ...memoryRecords({
+            scenario: `memory${suffix}`,
+            implementation,
+            ...values,
+          })
+        );
+      }
+    }
+    return {
+      platform: 'ios',
+      cells: aggregateRecords(records, { keepRaw: true }),
+    };
+  }
+
+  /** `makeMixedRun` restricted to the SegmentedControl component, as `--component segmented-control` runs it. */
+  function makeSegmentedRun(overrides = {}) {
+    const run = makeMixedRun(overrides);
+    return {
+      platform: 'ios',
+      cells: Object.fromEntries(
+        Object.entries(run.cells).filter(
+          ([key, cell]) =>
+            componentOf(cell.scenario ?? key) === 'segmented-control'
+        )
+      ),
+    };
+  }
+
+  it('divides a SegmentedControl arm by the SegmentedControl control', () => {
+    const table = ratioTable(makeMixedRun());
+    // 330 us over a 300 us control - and *not* 330 over the 100 us Switch
+    // control (3.3x) or the 200 us Button one (1.65x).
+    expect(
+      table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
+    expect(
+      table['mount.segmented-control:rn-core:50'].metrics.mountedNs.control
+    ).toBe(true);
+    // The other two components are still paired with their own controls, so this
+    // is a fourth row joining the table rather than a row that moved the others.
+    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
+      1.1,
+      4
+    );
+    expect(
+      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
+  });
+
+  it('is silent when nothing changed', () => {
+    const result = gate({
+      head: makeSegmentedRun(),
+      base: makeSegmentedRun(),
+    });
+    expect(result.failures).toEqual([]);
+  });
+
+  it('fails conclusively when the SegmentedControl arm doubles', () => {
+    const result = gate({
+      head: makeSegmentedRun({
+        'nitro-ui': { mounted: 440_000, presented: 520_000 },
+      }),
+      base: makeSegmentedRun(),
+    });
+    const mounted = result.failures.find(
+      (failure) => failure.metric === 'mountedNs'
+    );
+    expect(mounted).toBeDefined();
+    expect(mounted.implementation).toBe('nitro-ui');
+    expect(mounted.key).toBe('mount.segmented-control:nitro-ui:50');
+  });
+
+  it('never gates a SegmentedControl reference arm', () => {
+    const result = gate({
+      head: makeSegmentedRun({
+        'expo-ui-shared-host': { mounted: 640_000, presented: 780_000 },
+      }),
+      base: makeSegmentedRun(),
+    });
+    expect(
+      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
+    ).toEqual([]);
+  });
+
+  it('schedules every segmented cell and every arm', () => {
+    const segmented = buildSchedule({
+      plan: 'quick',
+      component: 'segmented-control',
+    });
+    expect([...new Set(segmented.map((entry) => entry.scenario))]).toEqual([
+      'mount.segmented-control',
+      'update.segmented-control',
+      'memory.segmented-control',
+    ]);
+    expect(new Set(segmented.map((entry) => entry.implementation))).toEqual(
+      new Set(IMPLEMENTATIONS)
+    );
   });
 });

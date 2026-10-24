@@ -30,6 +30,12 @@ export { Slider, type SliderProps } from './components/Slider/Slider';
 export { Switch, type SwitchProps } from './components/Switch/Switch';
 
 export {
+  SegmentedControl,
+  type SegmentedControlChange,
+  type SegmentedControlProps,
+} from './components/SegmentedControl/SegmentedControl';
+
+export {
   Button,
   type ButtonProps,
   type ButtonSize,

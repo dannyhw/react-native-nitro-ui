@@ -3,6 +3,7 @@ package com.margelo.nitro.nitroui.core
 import com.margelo.nitro.nitroui.HybridNitroUiButton
 import com.margelo.nitro.nitroui.HybridNitroUiProgress
 import com.margelo.nitro.nitroui.HybridNitroUiSlider
+import com.margelo.nitro.nitroui.HybridNitroUiSegmentedControl
 import com.margelo.nitro.nitroui.HybridNitroUiSwitch
 
 /**
@@ -35,5 +36,6 @@ object NitroUiDeclaredFallbacks {
     HybridNitroUiSlider.declareFallback()
     HybridNitroUiButton.declareFallback()
     HybridNitroUiProgress.declareFallback()
+    HybridNitroUiSegmentedControl.declareFallback()
   }
 }

@@ -1,6 +1,7 @@
 import {
   Button,
   Progress,
+  SegmentedControl,
   Slider,
   Switch,
   nitroUiCore,
@@ -8,13 +9,16 @@ import {
 
 import type { BenchListProps, BenchPerfMark } from '../types';
 import {
+  SEGMENTED_SELECTION,
   buttonTitle,
   onPress,
+  onSegmentChange,
   onSliderChange,
   onValueChange,
   progressValue,
   range,
   rowStyle,
+  segmentedOptions,
   sliderValue,
 } from './shared';
 
@@ -109,6 +113,28 @@ export function NitroUiList({
     return null;
   }
   const style = rowStyle(component);
+  if (component === 'segmented-control') {
+    // `segmentedOptions(value)` is the same list the other arms draw, so the
+    // `update` cell is a real options change here: the sizing key changes, the
+    // control re-measures, and the cost of that round trip is in the numbers.
+    // `disabled` and `tintColor` stay at their defaults - the arms compare each
+    // control's platform default, including the size that default measures.
+    return (
+      <>
+        {range(n).map((index) => (
+          <SegmentedControl
+            key={index}
+            testID={`bench-nitro-ui-segmented-${String(index)}`}
+            options={segmentedOptions(value)}
+            selectedIndex={SEGMENTED_SELECTION}
+            onChange={onSegmentChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
   if (component === 'button') {
     // `buttonTitle(value)` is the same string the other arms draw, so the
     // `update` scenario is a real title change here: the sizing key changes, the
