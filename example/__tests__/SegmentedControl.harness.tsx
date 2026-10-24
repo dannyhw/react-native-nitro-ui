@@ -599,15 +599,27 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('clamps an index written straight to native', async () => {
-    // The wrapper is the outer clamp: `SegmentedControl.tsx` clamps
-    // `selectedIndex`/`defaultSelectedIndex` before React ever sends them, so an
-    // app cannot ask native for index 9 of three segments. That leaves the native
-    // clamp - the one in `afterUpdate()`, next to the option list it belongs to
-    // (core.md section 3) - unreachable through the public API, and a prop write
-    // through the handle is the only door left to it. D14 keeps writes off the
-    // public surface for apps; this is the repo's own harness, and the write
-    // touches one thing: the handshake's raw `js` field, which is plain state on
-    // both platforms and never renders, so nothing is painted off the UI thread.
+    // What this covers, exactly: the `selectedIndex` **getter's** clamp. Both
+    // platforms normalise on read - Swift's `SegmentedControlModel.clamp(_:to:)` in
+    // the getter, Kotlin's `model.clampToDouble` in the setter that answers the read -
+    // and the handle is the only way to read the number back, so this is the test that
+    // proves a read cannot answer with an index that has no segment.
+    //
+    // What it cannot cover: the idempotent clamp at the end of `afterUpdate()`
+    // (`shown` on both platforms), which is what decides the *painted* segment. Nothing
+    // here can see it - the handle only ever reads the getter (which clamps anyway),
+    // the shrink test cannot either because the JS wrapper sends an already-clamped
+    // index, and with both `afterUpdate()` clamps deleted this suite stayed green on
+    // both platforms (proof 9 in the report). The one path that is purely native - an
+    // uncontrolled selection under a shrinking `options` - has no test (follow-up).
+    //
+    // The write through the handle is still the point: the wrapper clamps
+    // `selectedIndex`/`defaultSelectedIndex` before React sends them, so an app
+    // cannot ask native for index 9 of three segments, and this is the only door
+    // left. D14 keeps writes off the public surface for apps; this is the repo's own
+    // harness, and the write touches one thing: the handshake's raw `js` field,
+    // which is plain state on both platforms and never renders, so nothing is
+    // painted off the UI thread.
     const { unmount } = await render(
       <SegmentedControl
         options={['One', 'Two', 'Three']}
@@ -705,7 +717,8 @@ describe('SegmentedControl · G4', () => {
     expect(handle?.disabled).toBe(true);
     expect(handle?.tintColor).toBe(tint);
     expect(handle?.accessibilityLabel).toBe('View mode');
-    // Uncontrolled: `null` is the "native owns it" spelling, not an absent prop.
+    // Controlled, and no event has happened yet: `0` is "JS has echoed nothing",
+    // the handshake's floor - not an absent prop (the wrapper always sends it).
     expect(handle?.mostRecentEventCount).toBe(0);
 
     await rerender(
@@ -723,10 +736,17 @@ describe('SegmentedControl · G4', () => {
     unmount();
   });
 
-  it('keeps a caller width in charge and truncates the labels', async () => {
-    // A measured size is not an override: `width` fixes the box, and the labels
-    // have to fit inside it rather than paint past it (core.md section 7's
-    // hit-test story, in the other direction).
+  it('keeps a caller width in charge', async () => {
+    // A measured size is not an override: a `width` from the caller fixes the box,
+    // and this asserts the box - 140, not the ~330 the labels want.
+    //
+    // It deliberately does not claim what each platform then *draws*. iOS hands the
+    // box to SwiftUI, whose segmented `Picker` compresses the segments and truncates
+    // the labels. Android measures the row unbounded and centres it in the box, so a
+    // too-narrow box clips the row at both ends and the hidden part of the outer
+    // segments cannot be tapped (`docs/components/segmented-control.md`, Limits).
+    // Neither is observable through the handle, and the shared host's fix is a 0.2
+    // follow-up, so the honest name here is the box.
     const { unmount } = await render(
       <SegmentedControl
         options={['January', 'February', 'March', 'April']}
@@ -909,10 +929,10 @@ describe('SegmentedControl · G4', () => {
     // neighbour's box. Each row's option list differs by its number, so no two
     // share a key, and each row is one *different number of segments* as well
     // (1 + index % 3), which a key without the option count would collapse.
-    const lists: string[][] = Array.from({ length: 200 }, (_, index) =>
+    const lists: string[][] = Array.from({ length: 200 }, (_row, index) =>
       Array.from(
         { length: 1 + (index % 3) },
-        (_, part) => `R${String(index + 1)}${'ab'[part] ?? ''}`
+        (_label, part) => `R${String(index + 1)}${'ab'[part] ?? ''}`
       )
     );
     poisonConfigurations(lists.slice(0, 20).map(sizingKey));
@@ -982,11 +1002,14 @@ describe('SegmentedControl · G4', () => {
     expect(d.cachedSizes).toBeGreaterThanOrEqual(200);
   });
 
-  it('survives remounts with the size of each mount', async () => {
+  it('survives remounts with the size and seed of each mount', async () => {
     // `RecyclableView` plus a fresh mount per cycle: the box must follow the option
     // list of *this* mount, never the previous one's - a stale model, or a sizing
-    // id the host kept, both look like this from outside. The seed index moves too,
-    // so a model that is not reset would also show up as a wrong selection.
+    // id the host kept, both look like this from outside.
+    //
+    // The seed is the half no geometry query can see, and an uncontrolled control
+    // hides it from the handle too (`selectedIndex` reads `null` because React never
+    // sent one), so it gets its own oracle at the end of this test.
     const cases: { options: string[]; defaultSelectedIndex: number }[] = [
       { options: ['First'], defaultSelectedIndex: 0 },
       { options: ['Second', 'with a longer label'], defaultSelectedIndex: 1 },
@@ -1012,12 +1035,63 @@ describe('SegmentedControl · G4', () => {
       await waitForBox(testId, size, `mount ${String(index)}`);
       expect(sameSize(sizeOf(testId), WRONG_SIZE)).toBe(false);
       expect(handles.get(testId)?.options).toEqual(testCase.options);
-      // The seed is applied to this mount only: a model that survived the recycle
-      // would still report the previous case's list or selection.
+      // What the handle can say about the seed of an uncontrolled mount: React sent
+      // no index, so there is nothing to read back. The seed itself is proven below.
       expect(handles.get(testId)?.selectedIndex).toBeNull();
       unmount();
       await settle(100);
     }
+
+    // Does *this* mount apply its own `defaultSelectedIndex`, or is the model still
+    // the previous mount's? A model whose `didApplyDefault` survived the recycle
+    // never applies the seed again, and it shows up as the wrong segment painted -
+    // invisible to the handle and to the box. The oracle is the tap-twice rule
+    // (`Selection` in the docs page): a tap on the segment that is already selected
+    // reports nothing, on both platforms.
+    //
+    // Two controls, mounted, unmounted and mounted again:
+    //  - `remount-proof` seeds 0, so pressing its middle segment *must* report
+    //    index 1. That is the witness that a harness tap reaches a segmented control
+    //    in this row at all - without it, an empty log below would prove nothing.
+    //  - `remount-kept` seeds 1, so pressing its middle segment must report
+    //    *nothing*: the middle is already this mount's selection. A recycled model
+    //    that skipped the seed is displaying segment 0, and that press reports one.
+    const seedPair = () => (
+      <View style={rowStyle}>
+        <SegmentedControl
+          options={['1', '2', '3']}
+          defaultSelectedIndex={1}
+          onChange={recordChange('remount-kept')}
+          testID="remount-kept"
+          hybridRef={captureHybrid('remount-kept')}
+        />
+        <SegmentedControl
+          options={['1', '2', '3']}
+          defaultSelectedIndex={0}
+          onChange={recordChange('remount-proof')}
+          testID="remount-proof"
+          hybridRef={captureHybrid('remount-proof')}
+        />
+      </View>
+    );
+
+    const first = await render(seedPair(), { timeout: 20000 });
+    await waitForTestId('remount-kept');
+    await waitForTestId('remount-proof');
+    first.unmount();
+    await settle(150);
+
+    const second = await render(seedPair(), { timeout: 20000 });
+    const kept = await waitForTestId('remount-kept');
+    const proof = await waitForTestId('remount-proof');
+
+    await userEvent.press(proof);
+    expect(await waitForEvents(1)).toEqual(['remount-proof:1']);
+
+    await userEvent.press(kept);
+    await settle(250);
+    expect(eventLog).toEqual(['remount-proof:1']);
+    second.unmount();
   });
 
   it('corrects a planted size that matches the current box (iOS measure signal)', async () => {
