@@ -35,3 +35,6 @@
 - A2 follow-ups (docs/tasks/A2-small-fixes.report.md): fake dark card still in Switch/Progress/SegmentedControl stories; S1 report's real-input Android PASS claim was not reproducible (red twice before A2's default-screen fix); harness needs an absolute `HARNESS_APP_PATH` (relative aborts with an opaque AbortError).
 - Bench load guard samples load only at the end of a run (A1); a 3-hour run can pass/fail on its last minute. Consider sampling through the run.
 - iOS committed baseline still unminted: needs a ~3 h `--plan full --launches 8` run in a genuinely idle window (A1 refusal at load 10.5/14).
+- iOS bench `mounted` measures work placed inside the mount transaction, so it penalises our synchronous T11 first measure while the shared host defers equivalent SwiftUI work past it (P1: nitro-ui ~30 % less total main-thread work than expo shared host on Switch, yet 5.2× `mounted`). Re-scope the gate to total main-thread work per mount, keep `mounted` as a reported metric.
+- P1 cheap win to verify: a public SwiftUI hosting view type (claimed `UIHostingView`, iOS 18+) instead of `UIHostingController` for the 46–59 KiB/instance heap share — check the SDK first.
+- README Performance paragraph on iOS `mounted` attributes it to per-instance `UIHostingController` creation — wrong per P1 (it is the synchronous first measure). Fix in R3.

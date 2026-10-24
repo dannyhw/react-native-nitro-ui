@@ -12,7 +12,7 @@ first, then the rest), iOS mount profiling to decide an iOS Host. Per task: 1 im
 | 2 | **G5** DatePicker (brief exists, refresh before start) | both | C1 |
 | 3 | **H1** Android `<Host>` productionised for Switch, D17 rule for hosted controls | Android | C1 |
 | 3 | **H2** Host support for Slider, Progress, Button, SegmentedControl, Picker, DatePicker | Android | H1, G5, G6 |
-| 3 | **H3** iOS `<Host>` — only if P1 says it pays | iOS | P1, H1 |
+| 3 | ~~**H3** iOS `<Host>`~~ — dropped: P1 no-go (iOS cost is the synchronous first measure, not hosting) | iOS | — |
 | 4 | **R3** 0.2 readiness: docs, stories, smoke, baselines refresh, changelog | both | all |
 
 Device pairs: nitro-ui owns iPhone 17 + `nitroui_t01`; iPhone Air + `nitroui_t02` are lent to the

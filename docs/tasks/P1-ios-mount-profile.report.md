@@ -306,3 +306,13 @@ and §7 prices it honestly.
 ## 10. Questions for orchestrator
 
 None — the brief's question is answered and the H3 decision is decidable from this report.
+
+## Orchestrator note (on merge)
+
+Accepted: iOS mount cost is UI-thread, dominated by the T11 first measure
+(`measureFittingSize → layoutBelowIfNeeded`, 44.8 % of the mounting transaction on Switch), not
+`UIHostingController` creation and not JS/commit. This supersedes R2's README attribution and T16's
+iOS estimate. **H3 (iOS `<Host>`) is dropped from 0.2.** Two caveats: the 44.8 % is traced on Switch
+only; and "`UIHostingView` (iOS 18+)" must be checked against the public SDK before anyone builds on
+it — SwiftUI's hosting view has historically been private (`_UIHostingView`); if no public type
+exists, cheap win 2 is void.
