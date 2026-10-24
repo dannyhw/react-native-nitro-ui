@@ -27,6 +27,9 @@ TARBALL_DIR="${SMOKE_TARBALL_DIR:-$SMOKE_TMP/tarballs}"
 KEEP_TMP="${KEEP_TMP:-0}"
 READY_PATTERN="${READY_PATTERN:-NITRO_UI_SMOKE_READY}"
 READY_TIMEOUT="${READY_TIMEOUT:-180}"   # seconds to wait for the ready log line
+# The app's own "the core answered, but a control still has no box" line. Seeing
+# it fails the run immediately instead of waiting out READY_TIMEOUT.
+PENDING_PATTERN="${PENDING_PATTERN:-NITRO_UI_SMOKE_PENDING}"
 BOOT_TIMEOUT="${BOOT_TIMEOUT:-300}"     # seconds to wait for the emulator to boot
 SKIP_PACK="${SKIP_PACK:-0}"             # 1 = reuse a tarball instead of packing
 # Shut down devices this run booted when it finishes (AGENTS.md). Set 0 to keep
@@ -122,6 +125,25 @@ fail() {
 trap 'code=$?; cleanup_all; [ $code -ne 0 ] && [ -n "${SCRIPT_NAME:-}" ] && echo "smoke: $SCRIPT_NAME exited with code $code (artifacts: $ARTIFACTS)" || true' EXIT
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"; }
+
+# The readiness assertion, shared by BOTH platform paths (never grep the ready
+# pattern inline - that is how the gate ended up asserting nothing about
+# layout). `scripts/smoke/lib.mjs` owns the contract: the ready line must carry
+# one `name=WxH` box per control, each greater than zero, and
+# `scripts/__tests__/smoke-ready-line.test.js` proves that assertion can fail.
+# Called once the app has printed either signal, so it runs in both the pass
+# case and the fast-fail case; it exits non-zero - one line per problem, plus
+# the app's own PENDING line - when a control has no box.
+verify_ready_line() { # <logfile> <platform-label>
+  local log=$1 platform=$2 out
+  require_cmd node
+  if out=$(node "$SMOKE_ROOT/scripts/smoke/ready-line.mjs" "$log" 2>&1); then
+    log "$platform ready line: $out"
+  else
+    fail "$platform ready line failed the layout contract:
+$out"
+  fi
+}
 
 # Fresh unique working dir for one consumer app (labelled, easy to spot).
 mk_run_dir() { # mk_run_dir <label>  -> echoes the path
@@ -301,7 +323,13 @@ install_start_verify_android() { # <app-dir> <screenshot-name>
   local start ready
   start=$(date +%s); ready=0
   while [ $(( $(date +%s) - start )) -lt "$READY_TIMEOUT" ]; do
-    grep -q "$READY_PATTERN" "$logcat" && { ready=1; break; }
+    if grep -qE "$READY_PATTERN|$PENDING_PATTERN" "$logcat"; then
+      # Passes only when every control reported a non-zero box. A PENDING line
+      # (or a malformed READY line) fails here, with the sizes in the message.
+      verify_ready_line "$logcat" Android
+      ready=1
+      break
+    fi
     app_crash_seen "$logcat" "$pkg" &&
       fail "app crashed, see $logcat"
     sleep 1
@@ -311,7 +339,7 @@ install_start_verify_android() { # <app-dir> <screenshot-name>
   adb -s "$EMULATOR_SERIAL" exec-out screencap -p >"$ARTIFACTS/$shot"
   # A crash can also land after the ready line - check once more before passing.
   app_crash_seen "$logcat" "$pkg" && fail "app crashed after the ready line, see $logcat"
-  log "Android OK ($pkg) - ready line seen, screenshot: $ARTIFACTS/$shot"
+  log "Android OK ($pkg) - all controls laid out, screenshot: $ARTIFACTS/$shot"
 }
 
 # -------------------------------------------------------------------- iOS ---
@@ -366,7 +394,12 @@ install_start_verify_ios() { # <app.app-path> <screenshot-name>
   local start ready fatal
   start=$(date +%s); ready=0; fatal=0
   while [ $(( $(date +%s) - start )) -lt "$READY_TIMEOUT" ]; do
-    grep -q "$READY_PATTERN" "$runtime_log" && { ready=1; break; }
+    if grep -qE "$READY_PATTERN|$PENDING_PATTERN" "$runtime_log"; then
+      # The same assertion as Android - see verify_ready_line.
+      verify_ready_line "$runtime_log" iOS
+      ready=1
+      break
+    fi
     if grep -qE "Unhandled JS Exception|RCTFatal|Fatal error" "$runtime_log"; then
       fatal=1; break
     fi
@@ -378,7 +411,7 @@ install_start_verify_ios() { # <app.app-path> <screenshot-name>
   [ $fatal -eq 1 ] && fail "iOS app hit a fatal JS error, see $runtime_log"
   [ $ready -eq 1 ] ||
     fail "no '$READY_PATTERN' in os_log within ${READY_TIMEOUT}s (screenshot: $ARTIFACTS/$shot), see $runtime_log"
-  log "iOS OK ($bundle_id) - ready line seen in os_log, screenshot: $ARTIFACTS/$shot"
+  log "iOS OK ($bundle_id) - all controls laid out in os_log, screenshot: $ARTIFACTS/$shot"
 }
 
 cleanup_app() { # cleanup_app <app-dir>

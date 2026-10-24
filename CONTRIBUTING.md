@@ -309,21 +309,43 @@ manual native change, that is a library bug - fix the library, never work
 around it in the scripts.
 
 One signal, both platforms: `scripts/smoke/App.tsx` logs
-`NITRO_UI_SMOKE_READY` once the native core answers, and RN routes `console.*`
-to a host-readable stream in **every** build configuration - Android logcat,
-and on iOS `os_log` under subsystem `com.facebook.react.log` (`console.log` maps
-to `INFO`, so the stream needs `--level info`):
+`NITRO_UI_SMOKE_READY` once the native core answers **and** every control has
+been laid out with a non-zero size, and RN routes `console.*` to a host-readable
+stream in **every** build configuration - Android logcat, and on iOS `os_log`
+under subsystem `com.facebook.react.log` (`console.log` maps to `INFO`, so the
+stream needs `--level info`):
 
 ```sh
 xcrun simctl spawn "$IOS_SIM_UDID" log stream --level info --style compact \
   --predicate 'subsystem == "com.facebook.react.log"'
 ```
 
+That line is asserted, not just grepped - it carries the box each control got:
+
+```
+NITRO_UI_SMOKE_READY switch=30x20 slider=310x20 button=88x36 progress=310x4 segmented-control=214x32
+```
+
+`scripts/smoke/lib.mjs` owns the contract (five `name=WxH` boxes, each greater
+than `0x0`; a number may be fractional, because `onLayout` reports computed
+layout metrics - `52.19047546386719x48` on a density-scaled Android display,
+`61x34.333343505859375` for a Button sized by its font on iOS) and
+`scripts/smoke/ready-line.mjs` is the command both platform
+paths call, so iOS and Android cannot drift apart and a control that mounts at
+`0x0` - a sizing regression, a hosting change, a `measureContent()` that answers
+0 - fails the run instead of turning the screen red. If the core answers and a
+control still has no box after 6 s, the app logs `NITRO_UI_SMOKE_PENDING` with
+the sizes it saw, and the runner fails on that immediately rather than waiting
+out `READY_TIMEOUT`. `scripts/__tests__/smoke-ready-line.test.js` (in
+`bun run check`) is the proof the assertion can fail, including on the bare
+`NITRO_UI_SMOKE_READY` line this gate used to accept.
+
 The same stream fails the run fast on `Unhandled JS Exception` / `RCTFatal`
 instead of waiting out the timeout. The app also paints its background white
-while starting, **red** when ready and **blue** on a failed core call, so a
-screenshot is readable by a human without being the machine channel. Never
-launch with `simctl launch --console-pty`: it does not carry `os_log`.
+while starting, **red** when ready, **amber** while a control still has no box
+and **blue** on a failed core call, so a screenshot is readable by a human
+without being the machine channel. Never launch with `simctl launch
+--console-pty`: it does not carry `os_log`.
 
 ```sh
 IOS_SIM_UDID=<udid> ANDROID_AVD=<avd> EMULATOR_PORT=5574 \
@@ -364,11 +386,15 @@ single source of truth for what a consumer must be able to render. Its rules:
 
 - render **every** component the package exports exactly once, each with a
   `SMOKE-` testID;
-- log `NITRO_UI_SMOKE_READY` exactly once, after mount and after
-  `nitroUiCore.now()` answers, and flip the background to red;
-- **adding a component = add its import + one JSX line** in the marked list.
-  Do not touch the ready-line logic. Components that need state get their own
-  small probe component above the list (one `useState` + the render call).
+- log `NITRO_UI_SMOKE_READY <control>=<W>x<H> …` exactly once, after mount,
+  after `nitroUiCore.now()` answers and after every control has reported a
+  non-zero `onLayout` box, and flip the background to red;
+- **adding a component = add its import + one JSX line (with its `onLayout`) in
+  the marked list + its name to `SMOKE_CONTROLS`** in this file _and_ in
+  `scripts/smoke/lib.mjs`. Do not touch the ready-line logic. Components that
+  need state get their own small probe component above the list (one `useState`
+  and the render call). `smoke-ready-line.test.js` fails `check` if the two
+  lists ever disagree.
 - it is typechecked by `bun run check` (`tsconfig.json` includes
   `scripts/smoke`), so a public-API rename fails the static gate instead of
   surfacing ten minutes into a smoke run.
