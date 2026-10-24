@@ -5,7 +5,7 @@
  * harness/benchmark handles, not app API (DECISIONS D14).
  */
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { Button } from 'react-native-nitro-ui';
 import { fn } from 'storybook/test';
 
@@ -280,45 +280,57 @@ export const Sizing: Story = {
 };
 
 /**
- * Both surfaces on one screen. The buttons resolve their own colours from the OS
- * appearance; the cards only change what is behind them.
+ * The buttons as the current appearance draws them, plus the note about why a
+ * story cannot show two appearances at once. A component (not an inline
+ * `render`) because it reads the appearance with a hook.
+ */
+function AppearancePanel({ title }: { title: string }) {
+  const scheme = useColorScheme();
+  return (
+    <Showcase>
+      <Column
+        label={`palette as drawn on the ${scheme == null ? 'light' : scheme} appearance`}
+      >
+        <Button title={title} />
+        <Button title={title} variant="outlined" />
+        <Button disabled title={title} />
+        <Button disabled title={title} variant="outlined" />
+      </Column>
+      <Note>
+        These are drawn by the toolkit in the appearance the device is in. This
+        is one appearance, not two surfaces: React Native cannot override the
+        appearance for a subtree, so a black card behind a light-scheme button
+        is a black card, not dark mode. Switch the device to Dark Mode to see
+        this story dark - the light/dark pair lives in
+        docs/components/button.md.
+      </Note>
+    </Showcase>
+  );
+}
+
+/**
+ * The button palette comes from the OS appearance, and this story shows the one
+ * the device is set to.
+ *
+ * It used to draw the same row twice, the second time on a black card labelled
+ * "on a dark surface". That was not dark mode: only the card's background
+ * changed, so the light-palette buttons - a *disabled* one most of all, which is
+ * light-on-light by design - were near-invisible against the black. React Native
+ * 0.88 has no per-subtree appearance override (no `overrideAppearance` prop;
+ * `Appearance.setColorScheme()` is app-wide), so a story cannot honestly paint a
+ * dark panel. Change the device appearance instead - `xcrun simctl ui <udid>
+ * appearance dark` on iOS, `adb -s <serial> shell cmd uimode night yes` on
+ * Android - and this screen follows. `docs/components/button.md` has the real
+ * light/dark pair, captured that way.
  */
 export const Appearances: Story = {
-  render: ({ title }) => (
-    <Showcase>
-      <Column label="on a light surface">
-        <View style={[styles.card, styles.light]}>
-          <Button title={title} />
-          <Button title={title} variant="outlined" />
-          <Button disabled title={title} />
-        </View>
-      </Column>
-      <Column label="on a dark surface">
-        <View style={[styles.card, styles.dark]}>
-          <Button title={title} />
-          <Button title={title} variant="outlined" />
-          <Button disabled title={title} />
-        </View>
-      </Column>
-    </Showcase>
-  ),
+  render: ({ title }) => <AppearancePanel title={title} />,
 };
 
 const styles = StyleSheet.create({
   baseline: {
     fontSize: 13,
     opacity: 0.7,
-  },
-  card: {
-    borderRadius: 12,
-    gap: 12,
-    padding: 14,
-  },
-  dark: {
-    backgroundColor: '#000000',
-  },
-  light: {
-    backgroundColor: '#ffffff',
   },
   pair: {
     alignItems: 'center',
