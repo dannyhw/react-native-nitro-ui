@@ -24,7 +24,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 
 ## Devices (D13)
 
-- free: AVD `nitroui_t02` port 5572, adb 5042, Metro 8294; iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3`.
+- Lent to the separate RN Storybook fixes thread (not nitro-ui work): AVD `nitroui_t02` port 5572, adb 5042, Metro 8294; iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3`. Don't assign them to nitro-ui tasks.
 - free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
 - Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
 
