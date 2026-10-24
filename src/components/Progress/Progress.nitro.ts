@@ -41,8 +41,11 @@ export interface NitroUiProgressProps
    *
    * iOS draws it for a `linear` bar only: a circular `ProgressView` spins whatever
    * value it is handed, so the fraction reaches accessibility and not the ring
-   * (`docs/components/progress.md`, Limits). It is sent either way - clamping and
-   * the a11y value depend on it.
+   * (`docs/components/progress.md`, Limits). The same page's other iOS limit
+   * belongs to `null`: UIKit's `UIProgressView` has no indeterminate mode, so a
+   * value-less `linear` bar on iOS paints an empty track and does not animate
+   * (Android animates both shapes). It is sent either way - clamping and the a11y
+   * value depend on it.
    */
   value: number | null;
   /**
