@@ -57,7 +57,7 @@ to use one slider, and no Podfile or Gradle edits are needed either way.
 React Native autolinks the native code: no config plugin, no Podfile or Gradle
 edits, no manual linking. The steps below are the ones our consumer smoke tests
 run (`scripts/smoke/`, with `npm` and a Release build) against a fresh Expo SDK
-58 app and fresh React Native CLI apps, verified green on:
+58 app and fresh React Native CLI apps, and every row below was re-run for 0.1:
 
 | Consumer              | iOS | Android |
 | --------------------- | --- | ------- |
@@ -66,7 +66,7 @@ run (`scripts/smoke/`, with `npm` and a Release build) against a fresh Expo SDK
 | RN CLI 0.86.3         | n/a | ✅      |
 
 RN 0.86.3 is supported (it is our floor) and its Android install is covered by
-a nightly smoke row. Its iOS run is not verifiable on this machine's iOS 27
+a nightly smoke row, re-run for 0.1. Its iOS run is not verifiable on this machine's iOS 27
 simulator runtime — a fresh 0.86.3 app without this library hangs at launch
 there too — so it is verified in CI on an older runtime instead.
 
@@ -237,29 +237,56 @@ three arms in the same run, on the same device, in Release builds:
   for all of them. This is the arm worth being measured against, and the target
   is ≤ 1.0× on mount latency, UI CPU and memory.
 
-The honest summary, from the release-readiness runs and the merged component
-reports (`mount presented` / `mount UI CPU` / `memory` vs `expo-ui-shared-host`):
+The release-readiness runs for 0.1 — `bun bench --plan quick`, one run per
+component, on one commit, on an iPhone 17 simulator and an API 35 emulator whose
+ART state was primed to `speed-profile` — measured against `expo-ui-shared-host`
+(`✓` meets the ≤ 1.0× target, `✗` misses it, `n/v` means the harness's own rules
+deny that cell a verdict: the frame probe's sanity counters were non-zero, or the
+per-launch spread was over 10 %, so the number is a measurement and not a pass):
 
-| Platform    | Where we meet or beat the shared host                                                                                                                       | Where we miss                                                                                                                                                                                                              |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **iOS**     | memory on `SegmentedControl` (0.82×, two runs); the whole update path (`Progress` 0.53× mounted, `Switch` and `Slider` UI CPU ≤ 0.8×); JS commit everywhere | memory on the other four components, 1.35–1.45× (+45 KiB per control); mount latency and UI CPU have **no verdict** — the frame probe's sanity counters are non-zero on every arm, so the direction (≤ 1.0×) is not a pass |
-| **Android** | mount latency at parity or better (0.81–1.11×)                                                                                                              | mount UI CPU, 1.14–1.56×; memory, 1.10–2.52× (`Switch` worst, 134 KiB vs 53 KiB per instance)                                                                                                                              |
+| Component          | iOS presented | iOS UI CPU  | iOS memory | Android presented | Android UI CPU | Android memory |
+| ------------------ | ------------- | ----------- | ---------- | ----------------- | -------------- | -------------- |
+| `Switch`           | 0.31× `n/v`   | 0.74× ✓     | 0.99× ✓    | 1.00× ✓           | 1.64× ✗        | 2.74× ✗        |
+| `Slider`           | 0.34× `n/v`   | 0.81× ✓     | 1.44× ✗    | 1.01× ✗           | 1.56× ✗        | 2.57× ✗        |
+| `Progress`         | 0.45× `n/v`   | 1.11× ✗     | 1.36× ✗    | 0.95× ✓           | 0.93× ✓        | 1.61× `n/v`    |
+| `Button`           | 0.49× `n/v`   | 1.23× `n/v` | 1.35× ✗    | 1.01× ✗           | 1.52× ✗        | 2.50× ✗        |
+| `SegmentedControl` | 1.00× `n/v`   | 0.68× ✓     | 0.83× ✓    | 1.31× ✗           | 1.28× ✗        | 1.09× ✗        |
 
-Against `expo-ui-host-per-control` we are **below** the reference on every gated
-metric on both platforms (typically 0.5–0.8×), which is the other half of the
-target.
+Reading it honestly: on **Android** the memory bill is the consistent miss — 2.5×
+for three of the five controls (Switch costs 141 KiB per instance where the shared
+host costs 52 KiB) — and mount UI CPU runs 1.28–1.64×, with `Progress` the only
+control that meets both. On **iOS** mount `presented` never carries a verdict (the
+frame lands early on every arm, so a 0.31× direction is not a pass), mount UI CPU
+meets on three controls and misses on `Progress`, and memory is a per-control
+affair: `Switch` at parity, `SegmentedControl` 17 % below the shared host, and
++44 to +80 KiB per instance on the other three. On the update path, presented is 1.00× parity on
+iOS and 0.43–1.02× on Android (`Slider`'s 1.02× is the one miss), iOS UI CPU meets on
+four of five (0.73–0.87×, `Button` 1.48×), and Android update UI CPU is still above the
+shared host on all four controls whose update cell is comparable (1.01–1.87×).
 
-The misses are one architectural bill, not five separate ones: `expo-ui` pays
-**one** hosting subtree for all N controls, while every control in this library
-owns its `UIHostingController` / Compose `AbstractComposeView`, view model and
-sizing entry — that is the +45 KiB per instance on iOS, the 134 KiB on Android,
-and most of the extra UI CPU per mount. T13 measured what is left after the
-framework's own sharing (Compose owner services are already per-window) and the
-only remaining lever is an opt-in Expo-style shared `<Host>` container, which is
-a public-API decision for 0.2 (DECISIONS D19: documented with a follow-up, not
-chased). Absolute numbers, per-launch spreads and the noise flags are in
-`docs/architecture/benchmarks.md` and the reports in `docs/tasks/`; committed
-ratio baselines live in `bench/baselines/`.
+Against `expo-ui-host-per-control` — the same one-host-per-control shape, reached
+through `@expo/ui` — we are below it on every cell that carries a verdict:
+Android presented 0.66–0.94×, UI CPU 0.40–0.60×, memory 0.56–0.82×; iOS UI CPU
+0.38–0.53× and memory 0.66–0.87× (its presented cells reach 1.00× on
+`Button` rather than beating the arm, and the probe denies all five a verdict). One axis runs the other way, and it is iOS-only:
+the time spent _inside_ the mount callback is 2.0–5.3× the shared host and
+1.12–1.41× the per-control arm on every cell that carries a verdict (the fifth,
+`Button`, is noise-flagged at 3.06× / 0.91×), because creating a
+`UIHostingController` per instance is work the other arms amortise or never do. That one is profiled as a
+follow-up, not papered over.
+
+The memory and UI-CPU misses are one architectural bill, not five separate ones:
+`expo-ui` pays **one** hosting subtree for all N controls, while every control in
+this library owns its `UIHostingController` / Compose `AbstractComposeView`, view
+model and sizing entry — that is the +44…+80 KiB per instance on iOS and the
++26…+112 KiB on Android, and most of the extra UI CPU per mount. T13 measured what
+is left after the framework's own sharing (Compose owner services are already
+per-window) and the only remaining lever is an opt-in Expo-style shared `<Host>`
+container, which is a public-API decision for 0.2 (DECISIONS D19: documented with
+a follow-up, not chased). Absolute numbers, per-launch spreads and the noise flags
+for these runs are in `docs/tasks/R2-release-0.1.report.md`, the per-component
+history in `docs/tasks/`, and committed ratio baselines (which need a `--plan full
+--launches 8` run to mint — see the report) live in `bench/baselines/`.
 
 ## Known limitations
 
