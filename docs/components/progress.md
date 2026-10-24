@@ -163,7 +163,7 @@ measurement is a follow-up.
 The flag is *what the view was asked to do*, which on Android is what the pixels
 do and on iOS is not always: SwiftUI ignores it in both directions, once for each
 kind of circular/linear limit above. A determinate ring reports `false` and spins
-anyway; an indeterminate bar reports `true` and does not move (next bullet). The
+anyway; an indeterminate bar reports `true` and does not move (see Limits). The
 harness asserts the flag, never the motion, and no test here watches pixels move.
 
 ### What we do not do
@@ -217,7 +217,8 @@ that says so.
     40 dp on Android, so a ring would resize the moment a value arrived — the exact
     box-moving behaviour `docs/architecture/sizing.md` §5 and DECISIONS D20 exist to
     prevent — and it needs iOS 16 while this library builds for 15.1. Forcing it back
-    to 20 pt costs the `frame()`/`controlSize` tricks the next bullet rules out.
+    to 20 pt costs the `frame()`/`controlSize` tricks the "No size or thickness
+    control" bullet below rules out.
   - What is left is our own drawing: a `ProgressViewStyle` or an arc we render. That
     buys a real determinate ring at the price of "the drawing is the platform's", so
     it is a decision for a reviewer, not a fix for a fix round.
@@ -225,10 +226,12 @@ that says so.
   visibly animate.** It is pixel-identical to the same bar at `value={0}`: rows
   `1024`–`1046` of three simulator screenshots taken 600 ms apart are
   byte-identical, while the rows of the ring below them differ — so this is
-  measured, not inferred. The likely cause is the same fight the next bullet
-  describes: our bar is 4 pt tall, and `UIProgressView`'s indeterminate stripes
-  need more height than that to draw. Use a ring (or a `linear` bar on Android)
-  where indeterminate motion carries meaning.
+  measured, not inferred. Nothing is being clipped or hidden by our sizing
+  either: UIKit's `UIProgressView` has no indeterminate mode to draw (its
+  `isIndeterminate` is read-only and never true), so a value-less linear
+  `ProgressView` on iOS has no animation to show and paints the track it would
+  have filled. Use a ring (or a `linear` bar on Android) where indeterminate
+  motion carries meaning.
 - **No size or thickness control.** Neither toolkit lets us set a
   `ProgressView`'s thickness or ring diameter through an API we consider stable
   (`controlSize` and `frame()` fight the control's own measurement here), so the

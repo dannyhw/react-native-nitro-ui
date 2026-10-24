@@ -30,6 +30,7 @@ controls it wraps (UIKit `UISwitch`, Compose `Switch`, React Native's own
 | `accessibilityLabel` | `string \| undefined`               | —         | Label of the control itself.                                        |
 | `hybridRef`          | `(view: handle) => void`            | —         | **Internal.** Read-only handle for this repo's harness and benchmarks. |
 | `nuiPerfId`          | `number \| null \| undefined`       | `null`    | **Internal.** Instance id for perf marks; `null` disables marks.        |
+| `nuiTestWidth`       | `number \| null \| undefined`       | `null`    | **Internal, temporary.** Test-only size-affecting prop so the sizing harness can drive a real size change through a prop (T11 review S1). Not app API; it goes away once the Button harness covers that case. |
 
 `Switch` is a `View`, so any other `ViewProps` (`accessibilityRole`,
 `onLayout`, …) work as usual.
@@ -116,6 +117,26 @@ changes size with font scale, measured at Android `font_scale 1.3` and iOS
 Accessibility Large (61 × 28 and 52.19 × 48 both unchanged). The environment epoch
 still fires on a real trait or configuration change — it just has nothing to
 invalidate here. See `docs/architecture/sizing.md` §9.
+
+## Accessibility
+
+The control is the platform's, so the accessibility element is too: iOS hands
+over the Toggle's own element — role, value and activation are SwiftUI's — and
+Android hands over the M3 Switch's semantics node. Nothing about being a toggle
+is re-implemented in JS.
+
+- `accessibilityLabel` goes on the **control**: `.accessibilityLabel(_:)` on the
+  Toggle, `Modifier.semantics { contentDescription }` on the Switch. The label
+  must stay on the control — putting `accessible`, an `accessibilityRole` or
+  another a11y prop on the container can hide that control from VoiceOver /
+  TalkBack (`docs/architecture/core.md` §3). Style the box; do not re-role it.
+- `disabled` is the enable/disable API; `aria-label` / `aria-disabled` are not
+  translated, and there is no `ref` forwarding.
+- `testID` is RN's own on iOS (`accessibilityIdentifier`); on Android it lands on
+  the host `View.tag`, because Compose has no test id.
+- Dynamic type does not change this control's size — measured at Android
+  `font_scale 1.3` and iOS Accessibility Large, 61 × 28 and 52.19 × 48 both
+  unchanged (Sizing above).
 
 ## Behaviour notes
 
