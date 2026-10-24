@@ -17,12 +17,13 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 |---|---|---|---|---|
 | G3 Progress | — | merged into main (`7b91e95`) | Done | — |
 | G4 SegmentedControl | — | merged into main (`ea4c42d`) | Done | — |
+| R2 Release 0.1 | `nitro-ui-worktrees/R2` · `task/R2-release-0.1` | from `5966064` | Implementation round running (Apex, `nitroui-R2-impl-r1`) on iPhone 17 + `nitroui_t01` | If lost: re-delegate R2 from its brief + report state. Orchestrator reviews (docs/scripts); then merge and hand back to the human — no push/publish. |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
 ## Devices (D13)
 
-- G4 (free now; reuse for its fix round): iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3`, AVD `nitroui_t02` port 5572, adb 5042, Metro 8294.
-- R1 → then G3 fix round: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
+- free: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3`, AVD `nitroui_t02` port 5572, adb 5042, Metro 8294.
+- R2: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
 - Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
