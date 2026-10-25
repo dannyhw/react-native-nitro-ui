@@ -435,7 +435,15 @@ class HybridNitroUiSwitch(
       // and Compose's own measure pass reports the new intrinsic size, which the
       // host hands to the sizing engine. No `invalidateContentSize` here - Compose
       // is the one that measures.
+      //
+      // `markDirty` is still required, as it is for every prop that renders: it is
+      // what makes the batch's `commit()` apply the write in this turn rather than
+      // at some later global apply, and `NitroComposeHost` counts that apply as the
+      // moment its rendered content changed (a content it measured at its box's
+      // width would otherwise never be measured honestly again). iOS does the same
+      // here with `markDirty()` plus `noteContentSizeMayHaveChanged()`.
       model.testWidth = next.asSecondOrNull()
+      host.markDirty()
     }
 
   override var nuiSizingId: Double

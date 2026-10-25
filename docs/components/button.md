@@ -165,7 +165,11 @@ bounds or traits move.
 
 A user `style` still wins: `width`, `height` or `flex` fixes the box and the
 control centres inside it, and a `width` narrower than the label truncates it
-(one line, tail) instead of painting outside. The cross axis is the documented
+(one line, tail) instead of painting outside — on Android since C1, which until
+then measured the title unbounded, centred it in the box and let the host clip
+both ends. The *placement* is at the box's width; the size the control reports is
+still the title's intrinsic one, so a long title is never cached at a narrow box.
+The cross axis is the documented
 difference from stock RN: once the engine has written a size, Yoga has nothing
 left to stretch, so a parent's `alignItems: 'stretch'` does not widen a Button —
 ask for it with `alignSelf: 'stretch'`. The base style is `alignSelf:

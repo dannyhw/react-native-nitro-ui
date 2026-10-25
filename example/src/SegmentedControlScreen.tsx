@@ -34,13 +34,11 @@ function useTopInset() {
  * The option list that rotates on a timer: three different widths, so the
  * control's measured width has to follow the labels (`nuiSizingKey`).
  *
- * Every set here fits the screen on purpose. Android gives a segmented row its
- * measured width and centres it in the Yoga box, so a row wider than the screen is
- * drawn clipped at both ends and the cut-off part of the outer segments cannot be
- * tapped (`docs/components/segmented-control.md`, Limits). "The labels overflow the
- * window" is therefore not a state this screen should show as ordinary; the
- * "Long labels" row below is where the too-narrow-box case lives, under a width the
- * caller asked for.
+ * Every set here fits the screen on purpose. A row that has to be squeezed into a
+ * narrower box still fits it now, but Material 3 shares the row's width equally, so
+ * its labels collapse to ellipses (`docs/components/segmented-control.md`, Limits) -
+ * worth demoing once, on the "Long labels" row below, under a width the caller asked
+ * for, and not as the ordinary state of this screen.
  */
 const OPTION_SETS: readonly string[][] = [
   ['One', 'Two', 'Three'],
@@ -260,8 +258,7 @@ export default function SegmentedControlScreen() {
         />
 
         <Text style={[styles.section, { color: ink.ink }]}>
-          Long labels under a caller&apos;s width (iOS truncates, Android clips
-          the ends)
+          Long labels under a caller&apos;s width (both platforms truncate them)
         </Text>
         <SegmentedControl
           options={[
