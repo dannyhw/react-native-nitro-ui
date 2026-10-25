@@ -27,3 +27,6 @@
 | A1 | Phase A: committed bench baselines (full plan, 8 launches, both platforms, quiet machine) | Apex | orchestrator | done — not minted: iOS refused (busy, load 10.5); Android blocked by OOM at N=200 → B1 |
 | B1 | Android OutOfMemoryError mounting 200 controls repeatedly (found by A1) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE) — 0.1 Android host leaked every mounted control until Activity destroy; fixed |
 | P1 | iOS mount-cost profiling (0.2 wave 1) | Apex | orchestrator | done — iOS mount cost is the synchronous T11 first measure (UI thread), not hosting-controller creation or JS; H3 iOS Host no-go |
+| A1b | Overnight baselines retry | Apex | orchestrator | merged — **Android baseline minted** (load 2.39, 1120/1120); iOS refused 7.60 vs 7.0 at run end → R4 then one more overnight attempt |
+| R4 | Bench load guard samples the whole run (median/≥10 % rule) | Apex | orchestrator | in progress |
+| C1 | Android intrinsic content wider than its box fits instead of clipping (0.2 wave 1) | Apex | Opus | in progress |
