@@ -273,8 +273,18 @@ Exit codes: `0` ok, `1` conclusive regression, `2` the run could not be judged
 
 Refresh baselines in a dedicated commit with `--plan full --launches 8` on a
 clean tree and an idle machine; `--update-baseline` refuses otherwise and prints
-why (dirty tree, `problems`, load average over 0.5 x cores, missing load
-average).
+why (dirty tree, `problems`, a busy run, missing load average).
+
+"Busy" is judged over the run, not at the moment it happens to end (R4): the
+runner samples `os.loadavg()[0]` every `LOAD_SAMPLE_INTERVAL_MS` (30 s) and at
+every launch boundary, and stores `{ count, ceiling, median, p90, max, over,
+overFraction }` in `machine.loadSamples`. It refuses when the **median** sample
+or **more than 10 %** of the samples exceed the ceiling of 0.5 x core count, and
+it refuses `--update-baseline` **before the run starts** when `loadavg1` is
+already over the ceiling. The reason is A1b's iOS run: 154 quiet minutes,
+`load5` 4.06 against a 7.0 ceiling, and a single final sample of 7.60 threw the
+run away. Results files from before the sampler have only the instant they
+recorded, so they keep the single-sample rule.
 
 Every run also records what machine produced it - hostname, core count, CPU
 model (`os.cpus()[0].model`), load averages, RAM, Xcode version or Android image
@@ -450,7 +460,7 @@ Raw results are uploaded as artifacts instead of going into git.
 | `mount` crashes on iOS with a promise mutex abort | A freed frame-context; contexts are `shared_ptr` captured by both the display-link and fallback timers. |
 | `presented` missing on most samples (`missingPresented` high) | A metric over 10 % missing prints `n/a` and is ungated, so this row means "go look", not "read the survivors". Until T02 round 4 the dominant cause was the Android probe itself: its vsync filter rejected the very frame that presents a Fabric mount, and only cells whose screen invalidated *again* (the Switch's thumb animation on `update`) ever produced a sample - static `mount` cells timed out at ~80/80 on every arm, which is deterministic, not selective. Check the build predates that fix before chasing machine causes: the listener needs a focused window, and both platforms give up after 2 s (`FRAME_TIMEOUT_MS`) and answer `-1`, so confirm the app was in the foreground and re-run. |
 | Android launch ~5-10x slower than usual, frame signals missing | The AVD may be booting without a host GPU (`hw.gpu.enabled=no` in `~/.android/avd/<name>.avd/config.ini` - `avdmanager create` can leave it, and the runner does not boot Android devices, so nothing corrects it). Boot it yourself with `emulator -avd <name> -port <port> -gpu host`. |
-| `--update-baseline` refused | The tree was dirty, the run had `problems`, or `loadavg1` was over 0.5 x the core count. Wait for a quiet machine; `--force` is for experiments only. |
+| `--update-baseline` refused | The tree was dirty, the run had `problems`, or the machine was busy: more than 10 % of the run's load samples over 0.5 x the core count (R4). The refusal prints the median, the count and the share, so you can tell a busy run from one noisy minute. When it refuses *before* the run starts, the machine was already over the ceiling - wait for it to settle; `--force` is for experiments only. |
 | `--check` says no baseline | Baselines are per canonical device (`bench/baselines/README.md`). Use `--compare <ref>` on other hardware. |
 | Stale native code despite editing sources | `build.mjs` rebuilds when any source is newer than the artifact; `--prebuild` forces a full CNG regen. |
 | Emulator vanished mid-run (`device not found`) | qemu aborts occasionally on macOS. Re-run the same command: each cell is independent and results are per-file. |
