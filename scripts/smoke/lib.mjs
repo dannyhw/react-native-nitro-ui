@@ -40,6 +40,7 @@ export const SMOKE_CONTROLS = Object.freeze([
   'button',
   'progress',
   'segmented-control',
+  'picker',
 ]);
 
 /** The readiness signal on both platforms (also the default `READY_PATTERN`). */

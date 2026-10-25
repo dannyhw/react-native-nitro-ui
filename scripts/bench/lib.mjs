@@ -133,6 +133,9 @@ export const PLANS = {
     { scenario: 'mount.segmented-control', n: 50 },
     { scenario: 'update.segmented-control', n: 50 },
     { scenario: 'memory.segmented-control', n: 200 },
+    { scenario: 'mount.picker', n: 50 },
+    { scenario: 'update.picker', n: 50 },
+    { scenario: 'memory.picker', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -170,6 +173,13 @@ export const PLANS = {
     { scenario: 'update.segmented-control', n: 50 },
     { scenario: 'memory.segmented-control', n: 200 },
     { scenario: 'leak.segmented-control', n: 200 },
+    { scenario: 'mount.picker', n: 1 },
+    { scenario: 'mount.picker', n: 50 },
+    { scenario: 'mount.picker', n: 200 },
+    { scenario: 'update.picker', n: 1 },
+    { scenario: 'update.picker', n: 50 },
+    { scenario: 'memory.picker', n: 200 },
+    { scenario: 'leak.picker', n: 200 },
   ],
 };
 

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from '@jest/globals';
 
 import { NitroUiButtonConfig } from '../components/Button/NitroUiButtonConfig';
+import { NitroUiPickerConfig } from '../components/Picker/NitroUiPickerConfig';
 import { NitroUiProgressConfig } from '../components/Progress/NitroUiProgressConfig';
 import { NitroUiSegmentedControlConfig } from '../components/SegmentedControl/NitroUiSegmentedControlConfig';
 import { NitroUiSliderConfig } from '../components/Slider/NitroUiSliderConfig';
@@ -25,6 +26,7 @@ const generatedDir = join(
  */
 const copies: Record<string, unknown> = {
   'NitroUiButtonConfig.json': NitroUiButtonConfig,
+  'NitroUiPickerConfig.json': NitroUiPickerConfig,
   'NitroUiProgressConfig.json': NitroUiProgressConfig,
   'NitroUiSegmentedControlConfig.json': NitroUiSegmentedControlConfig,
   'NitroUiSliderConfig.json': NitroUiSliderConfig,

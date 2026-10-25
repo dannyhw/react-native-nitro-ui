@@ -1,6 +1,9 @@
 import {
   Button,
   Column,
+  DropdownMenuItem,
+  ExposedDropdownMenu,
+  ExposedDropdownMenuBox,
   Host,
   LoadingIndicator,
   SegmentedButton,
@@ -8,24 +11,84 @@ import {
   Slider,
   Switch,
   Text,
+  TextField,
   useNativeState,
 } from '@expo/ui/jetpack-compose';
-import { useEffect } from 'react';
+import { menuAnchor } from '@expo/ui/jetpack-compose/modifiers';
+import { useCallback, useEffect, useState } from 'react';
 
 import type { BenchListProps } from '../types';
 import {
   SEGMENTED_SELECTION,
   buttonTitle,
   onPress,
+  onPickerChange,
   onSliderChange,
   onValueChange,
   progressValue,
   range,
   rowStyle,
+  pickerOptions,
+  pickerSelection,
   segmentedOptions,
   sliderValue,
   stackStyle,
 } from './shared';
+
+/**
+ * Module-level so the anchor gets the same `modifiers` array identity every render
+ * (T02 review NIT), the way the other arms' modifier arrays are built.
+ */
+const MENU_ANCHOR = menuAnchor();
+
+/**
+ * Material 3's exposed dropdown menu - the control `nitro-ui`'s Android Picker is,
+ * composed out of the same primitives through Expo's bridge (`@expo/ui`'s own
+ * `Picker` renders exactly this shape).
+ *
+ * Like `BenchProgress`, the anchor's text reaches Compose through a write to a
+ * native observable rather than through a prop diff: Material 3's text field owns
+ * its own string, so the chosen title has to be pushed to it. That is a different
+ * shape of update from `nitro-ui`'s one prop commit, and it is what this runtime
+ * costs, so the arm renders what the library offers rather than something it is
+ * not.
+ *
+ * The expanded state is React's own: `ExposedDropdownMenuBox` is controlled, and a
+ * menu that no check opens stays shut in every cell - the bench measures mounting
+ * the box and the items, which is what a list of mounted pickers costs.
+ */
+function BenchPicker({ value }: { value: boolean }) {
+  const options = pickerOptions();
+  const selection = pickerSelection(value);
+  const title = useNativeState<string>(options[selection] ?? '');
+  const [expanded, setExpanded] = useState(false);
+  // Hoisted, so the arm pays no per-render callback identity (the rule every other
+  // arm follows) while still answering the menu's own dismiss and choose events.
+  const dismiss = useCallback(() => {
+    setExpanded(false);
+  }, []);
+  const choose = useCallback(() => {
+    onPickerChange();
+    setExpanded(false);
+  }, []);
+  useEffect(() => {
+    title.value = options[selection] ?? '';
+  }, [title, options, selection]);
+  return (
+    <ExposedDropdownMenuBox expanded={expanded} onExpandedChange={setExpanded}>
+      <TextField value={title} readOnly modifiers={[MENU_ANCHOR]} />
+      <ExposedDropdownMenu expanded={expanded} onDismissRequest={dismiss}>
+        {options.map((label) => (
+          <DropdownMenuItem key={label} onClick={choose}>
+            <DropdownMenuItem.Text>
+              <Text>{label}</Text>
+            </DropdownMenuItem.Text>
+          </DropdownMenuItem>
+        ))}
+      </ExposedDropdownMenu>
+    </ExposedDropdownMenuBox>
+  );
+}
 
 /**
  * `@expo/ui` worst case for the library: one Compose hosting view per control
@@ -54,6 +117,10 @@ export function ExpoUiHostPerControlList({
         ) : component === 'segmented-control' ? (
           <Host key={index} matchContents style={style}>
             <BenchSegmented value={value} />
+          </Host>
+        ) : component === 'picker' ? (
+          <Host key={index} style={style}>
+            <BenchPicker value={value} />
           </Host>
         ) : (
           <Host key={index} style={style}>
@@ -178,6 +245,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
             <BenchButton key={index} value={value} />
           ) : component === 'segmented-control' ? (
             <BenchSegmented key={index} value={value} />
+          ) : component === 'picker' ? (
+            <BenchPicker key={index} value={value} />
           ) : component === 'slider' ? (
             <BenchSlider key={index} value={value} />
           ) : component === 'progress' ? (

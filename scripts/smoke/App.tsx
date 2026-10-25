@@ -1,6 +1,7 @@
 import {
   Button,
   nitroUiCore,
+  Picker,
   Progress,
   SegmentedControl,
   Slider,
@@ -57,6 +58,7 @@ const SMOKE_CONTROLS = [
   'button',
   'progress',
   'segmented-control',
+  'picker',
 ] as const;
 
 type SmokeControl = (typeof SMOKE_CONTROLS)[number];
@@ -229,6 +231,11 @@ export default function App(): React.ReactElement {
           onLayout={measureFor('segmented-control')}
           options={['One', 'Two', 'Three']}
           testID="SMOKE-segmented-control"
+        />
+        <Picker
+          onLayout={measureFor('picker')}
+          options={['One', 'Two', 'Three']}
+          testID="SMOKE-picker"
         />
       </ScrollView>
     </View>
