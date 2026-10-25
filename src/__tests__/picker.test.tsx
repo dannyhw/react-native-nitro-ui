@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from '@jest/globals';
-import { render, type RenderResult } from '@testing-library/react-native';
+import { act, render, type RenderResult } from '@testing-library/react-native';
 
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
 import { Picker } from '../components/Picker/Picker';
@@ -16,12 +16,20 @@ import { Picker } from '../components/Picker/Picker';
  * the key here and deliberately not there. Two configurations that share a key
  * share one cached size for the life of the process.
  */
+// Ids the fake native core hands out. One counter for the file: `nitroUiCore`
+// caches its native object on first use, so the factory registered below is the
+// only one ever called, and a test must never assert an absolute id.
+let mockIds = 0;
+function nextMockId(): number {
+  return ++mockIds;
+}
+
 beforeEach(() => {
   // `useSizingId` asks native for an instance id; the root mock keeps a registry
-  // of fakes for exactly that.
-  nitroUiHybridObjects.NitroUiCore = () => ({
-    nextSizingId: () => 1,
-  });
+  // of fakes for exactly that. The fake hands out a fresh id per mint, like the
+  // real core, because the id is part of the contract: it belongs to a native
+  // *mount*, so a test that remounts the view has to see it move.
+  nitroUiHybridObjects.NitroUiCore = () => ({ nextSizingId: nextMockId });
 });
 
 /**
@@ -213,6 +221,47 @@ describe('Picker · selection', () => {
         'variant',
       ].sort()
     );
+  });
+});
+
+describe('Picker · uncontrolled key', () => {
+  it('names the picked title, and only the picked title of the current mount', async () => {
+    // An uncontrolled control has no `selectedIndex` to name its own selection, so
+    // the wrapper keeps the index native last reported and the key names that title
+    // (G6 review M1). A variant change replaces the native view (G6 review M2), and
+    // the fresh mount re-seeds from `defaultSelectedIndex`, so the choice belongs to
+    // the mount that made it: after menu -> wheel -> menu the key has to name the
+    // default again. Matching the remembered choice on the *variant* instead of the
+    // mount puts `sel:Three` on a view painting `One`, and the new mount's first
+    // width then lands in `One`'s cache entry - the exact poison M1 is about.
+    const OPTIONS = ['One', 'Two', 'Three'];
+    const view = await render(<Picker options={OPTIONS} testID="rt" />);
+    const reportedByNative = (
+      nativeProps(view, 'rt').onValueChange as {
+        f: (index: number, eventCount: number) => void;
+      }
+    ).f;
+
+    // A real choice, reported by native: the key follows the title now on screen.
+    await act(async () => {
+      reportedByNative(2, 1);
+    });
+    expect(keyOf(view, 'rt')).toBe('menu|3|One|Two|Three|sel:Three|lbl:');
+
+    const firstId = nativeProps(view, 'rt').nuiSizingId;
+
+    // -> wheel: a different control, and a different key.
+    await view.rerender(
+      <Picker options={OPTIONS} variant="wheel" testID="rt" />
+    );
+    expect(keyOf(view, 'rt')).toBe('wheel|3|One|Two|Three|sel:One|lbl:');
+
+    // -> menu again. Same key as the first mount, so the same size: and a stale
+    // `sel:Three` here would file this mount's widths under a title it never
+    // painted, poisoning the entry the first mount left correct.
+    await view.rerender(<Picker options={OPTIONS} testID="rt" />);
+    expect(nativeProps(view, 'rt').nuiSizingId).not.toBe(firstId);
+    expect(keyOf(view, 'rt')).toBe('menu|3|One|Two|Three|sel:One|lbl:');
   });
 });
 

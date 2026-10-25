@@ -265,6 +265,21 @@ export function Picker({
   // an event reports the labels that were on screen when the choice happened. If
   // `options` shrank between the choice and the event, the label is `''` - the
   // index is what the app gets, and it is the one that cannot be stale.
+  // `key`, the `variant` prop and the sizing configuration are one value, computed
+  // once: the native view is replaced exactly when the variant changes and never
+  // otherwise. Android needs it - its measured root decides between the `intrinsic`
+  // and the `fillWidth` question when the composition is built and never re-asks, so
+  // a menu that became a wheel at runtime would go on answering the unbounded
+  // question for the life of the mount (G6 review M2) - and `useSizingId` takes it
+  // for the reason on that hook: the dropped view's `onDropView` must not end the
+  // ledger entry the new mount just filed. Same rule as `Progress.tsx`, which this
+  // control's policy switch was copied from. iOS reads the policy live, so the key
+  // costs it nothing it did not already do.
+  //
+  // Computed before the choice below, because the choice is stamped with the id: the
+  // id is what makes "which mount made this choice" answerable.
+  const variantKey = nativeVariant;
+  const sizingId = useSizingId(variantKey);
   // What an uncontrolled control showed its user last.
   //
   // Native owns the displayed index (core.md section 4) and an uncontrolled choice
@@ -276,11 +291,17 @@ export function Picker({
   // discrete control costs everywhere else, and it is what lets the host answer the
   // new title's size under the new title's key.
   //
-  // It is stored with the variant it was made under, because a variant change
-  // remounts the native view (below) and the fresh mount re-seeds from
+  // It is stored with the id of the mount that made it, because a variant change
+  // remounts the native view and the fresh mount re-seeds from
   // `defaultSelectedIndex`: a choice from the old mount no longer names anything.
+  // The id, and not the variant, is the thing to compare: a variant change that
+  // comes back round re-creates a view whose variant *matches* while its content is
+  // the seed again (G6 round-2 review N1), so a remembered choice then names a title
+  // native is not painting, and the fresh mount's first width lands in the cache
+  // entry of the title it replaced. `useSizingId` never reuses an id, so matching on
+  // it can only ever match the mount that made the choice.
   const [lastChoice, setLastChoice] = useState<{
-    readonly variant: string;
+    readonly sizingId: number;
     readonly index: number;
   } | null>(null);
   const controlled = useControlled<number>(
@@ -288,27 +309,15 @@ export function Picker({
     clampToOptions(defaultSelectedIndex, optionCount),
     (index) => {
       if (selectedIndex === undefined) {
-        setLastChoice({ variant: nativeVariant, index });
+        setLastChoice({ sizingId, index });
       }
       onChange?.({ index, value: safeOptions[index] ?? '' });
     }
   );
   const processedTint = useProcessedColor(tintColor);
   const hybridRefCallback = useStableCallback(hybridRef);
-  // `key`, the `variant` prop and the sizing configuration are one value, computed
-  // once: the native view is replaced exactly when the variant changes and never
-  // otherwise. Android needs it - its measured root decides between the `intrinsic`
-  // and the `fillWidth` question when the composition is built and never re-asks, so
-  // a menu that became a wheel at runtime would go on answering the unbounded
-  // question for the life of the mount (G6 review M2) - and `useSizingId` takes it
-  // for the reason on that hook: the dropped view's `onDropView` must not end the
-  // ledger entry the new mount just filed. Same rule as `Progress.tsx`, which this
-  // control's policy switch was copied from. iOS reads the policy live, so the key
-  // costs it nothing it did not already do.
-  const variantKey = nativeVariant;
-  const sizingId = useSizingId(variantKey);
   const chosenIndex =
-    lastChoice !== null && lastChoice.variant === variantKey
+    lastChoice !== null && lastChoice.sizingId === sizingId
       ? lastChoice.index
       : null;
   // The index the control will actually show, resolved once: native clamps the
