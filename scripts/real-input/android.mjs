@@ -603,11 +603,14 @@ const CHECKS = {
     //    real tap measures that. What the tree says is checked separately, in step 8
     //    below, from the same dump. (Until M3 these two steps had a worse reason to
     //    be split: the anchor was two nodes, and the one carrying the picker's name
-    //    was the React Native host view - RN copies the `accessibilityLabel` base prop
-    //    onto the container and knows nothing about `disabled`, so it read
-    //    `enabled=true` on a disabled control. That was never Compose deriving
-    //    `isEnabled` from unmerged children: `ui-android-1.11.4` reports
-    //    `enabled = !config.contains(Disabled)`. See `docs/components/picker.md`.)
+    //    read `enabled=true` on a disabled control. That node sat *inside* the
+    //    `EditText`, so it was a Compose semantics node of the anchor and not the
+    //    React Native host container - a container cannot nest inside what it
+    //    contains - and *why* it answered `enabled=true` was never established. What
+    //    it was not is Compose deriving `isEnabled` from unmerged children:
+    //    `ui-android-1.11.4` reports `enabled = !config.contains(Disabled)`. Nothing
+    //    here depends on the answer now, and step 8 counts the named nodes so a second
+    //    one cannot come back unnoticed. See `docs/components/picker.md`.)
     const locked = await t.requireControlOnScreen('Real-input disabled picker');
     await t.tapNode(locked);
     t.log.checkEquals(

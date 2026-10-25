@@ -256,19 +256,23 @@ SegmentedControl can say (G4's F1: a SwiftUI *segmented* `Picker` ignores
   `uiautomator dump` on `nitroui_t01`: the control used to appear as two nodes — the
   focusable `android.widget.EditText` showing the title with `content-desc=""`, and a
   separate `android.view.View` carrying the name with `clickable=false` and
-  `enabled=true` *even when the picker was disabled*. That second node is the React
-  Native host view: `accessibilityLabel` is also an RN base prop, so RN puts it on the
-  container as `contentDescription`, and RN knows nothing about `disabled`. (An earlier
-  version of this page blamed Compose's unmerged-children rule for that `enabled=true`;
+  `enabled=true` *even when the picker was disabled*. That second node is a **Compose
+  semantics node of the anchor**: the pre-fix dumps nest it *inside* the `EditText`, and
+  the React Native host container would be an *ancestor* of the field, not a child of it.
+  (An earlier version of this page called it the RN host container, and before that
+  blamed Compose's unmerged-children rule for the `enabled=true`; neither holds —
   `ui-android-1.11.4` reports `enabled = !config.contains(Disabled)`, so a Compose node
-  carrying `disabled()` cannot say `true`.) After the fix one node carries it all:
+  carrying `disabled()` cannot say `true`, and a container cannot nest inside what it
+  contains.) *Why* that node answered `enabled=true` was never established, and the fix
+  does not need to know: one node cannot disagree with itself. After the fix one node
+  carries it all:
   `android.widget.Spinner`, `clickable=true`, the name in `content-desc`, the title as
   its text, and `enabled=false` when disabled — which is what
   `scripts/real-input/android.mjs` now asserts from a dump. Two residuals, both stated
-  rather than hidden: the host view still gets RN's `contentDescription` (every control
-  with an `accessibilityLabel` prop has the same, so it is a core question, not
-  Picker's), and the merged node is not `focusable`. The functional refusal — a real
-  tap on a disabled field opens no menu — is measured too.
+  rather than hidden: the old second node's `enabled=true` is unexplained (nothing in
+  this control depends on it now, and step 8 counts the nodes so a second one cannot
+  come back unnoticed), and the merged node is not `focusable`. The functional refusal —
+  a real tap on a disabled field opens no menu — is measured too.
 
 ## Behaviour notes
 
