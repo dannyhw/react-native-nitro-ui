@@ -215,9 +215,12 @@ final class DatePickerModel: NitroUiModel {
   /// control holds while moving too little to change the first part - widening
   /// `maximumDate` by an hour inside one day and sending a value in that hour is exactly
   /// the crash above - and that value needs a control that is not holding the old bound.
-  /// Such a re-identification rebuilds once more than the bounds alone ask for (the new
-  /// control records the bounds it was built from, so the escape stops applying right
-  /// after); the alternative is the assert.
+  /// Such a re-identification rebuilds once more than the bounds alone ask for; the
+  /// alternative is the assert. Caveat (G5 re-review 2): `builtBounds` is recorded by an
+  /// `.onAppear` that sits outside `.id(_:)`, so it holds the bounds at first appearance,
+  /// not at the last rebuild - after the bounds widen, a value crossing the old bound
+  /// rebuilds once per crossing (never per render). Follow-up: move the recording inside
+  /// `.id(_:)`.
   ///
   /// Applied as `.id(_:)` to the control itself. One level out, on `PlatformPicker`, the
   /// same key was measured to assert in `UICalendarView _setVisibleMonth:` - the fresh
