@@ -1481,14 +1481,20 @@ describe('the Picker cells (--component picker)', () => {
   /** `makeMixedRun` restricted to the Picker component, as `--component picker` runs it. */
   function makePickerRun(overrides = {}) {
     const run = makeMixedRun(overrides);
-    return {
-      platform: 'ios',
-      cells: Object.fromEntries(
-        Object.entries(run.cells).filter(
-          ([key, cell]) => componentOf(cell.scenario ?? key) === 'picker'
-        )
-      ),
-    };
+    const cells = Object.fromEntries(
+      Object.entries(run.cells).filter(
+        ([key, cell]) => componentOf(cell.scenario ?? key) === 'picker'
+      )
+    );
+    // A run that came back empty would make every `gate()` assertion below pass
+    // by saying nothing, so the filter itself is part of what is under test.
+    if (Object.keys(cells).length === 0) {
+      throw new Error(
+        'the component-scoped filter found no Picker cells - ' +
+          '`componentOf` is crossed, and these cases would be vacuous'
+      );
+    }
+    return { platform: 'ios', cells };
   }
 
   it('divides a Picker arm by the Picker control, never another control', () => {
