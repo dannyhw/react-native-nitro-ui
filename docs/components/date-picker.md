@@ -24,11 +24,11 @@ const [date, setDate] = useState(new Date());
 | `variant`          | `'compact' \| 'inline' \| 'wheel'`  | `'compact'` | How it is presented. The most size-affecting prop. |
 | `minimumDate`      | `Date \| undefined`                 | —         | Lower bound. `undefined` → `null` on the wire → *no lower bound*. |
 | `maximumDate`      | `Date \| undefined`                 | —         | Upper bound, same spelling. |
-| `disabled`         | `boolean \| undefined`              | `false`   | SwiftUI `.disabled()` / Compose `enabled = false`; no events while set. |
+| `disabled`         | `boolean \| undefined`              | `false`   | No events while set. iOS: SwiftUI `.disabled()`. Android: the `compact` field's `enabled = false`; the M3 `DatePicker`/`TimePicker` take no `enabled`, so a disabled picker is dimmed, offered to TalkBack as one disabled node, and swallows touches. |
 | `tintColor`        | `ColorValue \| undefined`           | platform  | iOS accent (field text, selected day, wheel highlight) / M3 primary (headline, selected day, dial, field outline). |
 | `style`            | `ViewStyle`                         | —         | Overrides the measured box (see Sizing). |
 | `testID`           | `string \| undefined`               | —         | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`. |
-| `accessibilityLabel` | `string \| undefined`             | —         | The *label*; the platform control supplies the localised *value*. |
+| `accessibilityLabel` | `string \| undefined`             | —         | The *label* of the control, not of a box around it. The localised *value* is announced too: by the platform picker on the picker variants, by the field's own announcement on `compact` (which is our control on both platforms). |
 | `hybridRef`        | `(view: handle) => void`            | —         | **Internal.** Read-only handle for this repo's harness and benchmarks. |
 | `nuiPerfId`        | `number \| null \| undefined`       | `null`    | **Internal.** Instance id for perf marks. |
 
@@ -48,9 +48,13 @@ A date crosses the bridge as **milliseconds since the epoch** — one absolute i
 format to argue about. The device's time zone and calendar decide how it is *shown* and
 what "the same day" means, and `onChange` reports an instant rather than a `y/m/d`
 triple. Nothing normalises to UTC midnight on the way in or out, so a value survives a
-DST boundary unchanged (`2026-03-29T00:30` in Lisbon stays `00:30` local across the
-change — the harness pins this). Android's `DatePickerState` internally stores UTC
-midnight of the selected local day; that conversion lives in one place next to the clamp.
+DST boundary unchanged: `2026-03-29 12:30` in a zone that changes on that date stays
+`12:30` local, and so does an instant whose *local* day is not its UTC day (`01-05 23:45`
+in Lisbon is `23:45` local, `01-06` in UTC). The harness does not set the zone — it
+refuses to run vacuously instead, failing if the device's January and July offsets are
+equal and logging the zone on every case. Android's `DatePickerState` internally stores
+UTC midnight of the selected local day; that conversion lives in one place next to the
+clamp, and the pick test is routed through it.
 
 ## Platform mapping
 
@@ -64,7 +68,7 @@ midnight of the selected local day; that conversion lives in one place next to t
 | Bounds | `DatePicker(in: ClosedRange<Date>)` | `SelectableDates` + the calendar's `yearRange` |
 | Host | `UIHostingController` inside `NitroSwiftUIHost`, plus containment for the popover (`needsContainment`) | `NitroComposeHost<M>: AbstractComposeView`; the dialog is composed from `model.presented` inside that composition |
 | Test id | RN `testID` → `accessibilityIdentifier` | `host.tag` (Compose has no test id) |
-| Recycle | hosting controller reused; popover closed | composition reused; dialog composed away |
+| Recycle | hosting controller reused; popover closed before the state resets | same host reused; the model resets and the `Dialog` stops being composed. `onDropView` *disposes* the composition — nothing of the dropped mount survives it |
 
 The `compact` field is ours on both platforms rather than the platform's own compact
 style, for three reasons that all matter more than the ~25 lines it costs:
@@ -90,16 +94,22 @@ behind either way.
   box, so they cannot correct each other's width back and forth; had the value been in
   the key, a list of rows would add a cache entry per date ever rendered and every value
   change would be a cold configuration. The visible cost is that the field is wider than
-  today's date needs; on Android the probe is an invisible `Text` that the real value is
-  overlaid on (`matchParentSize`, `clearAndSetSemantics`), so it is right for the current
-  locale and font scale with no measuring cache of its own.
+  today's date needs; on Android the probe is an invisible `Text` (`alpha(0f)`,
+  `clearAndSetSemantics`) stacked with the real value in one `Box`, so the field is
+  `max(probe, value)` in the width Compose itself measures — right for the current locale
+  and font scale, with no measuring cache of its own.
 - **`inline` and `wheel` are `fillWidth`:** the box's width, and the height the picker
   asks for at that width (a graphical calendar's own width is fixed at 320 pt so a day
   cell stays a touch target, and the popover is not in the React Native layout at all).
 - Declared fallbacks (the D17 first-frame size for a cold configuration, registered at
-  startup by `NitroUiDeclaredFallbacks`): **118 × 36 pt** on iOS, **150 × 40 dp** on
+  startup by `NitroUiDeclaredFallbacks`): **103 × 36.33 pt** on iOS, **131 × 48 dp** on
   Android — the `compact` `date` field, which is the default configuration and the one a
-  cold mount is most likely to be. `nitroUiCore.prewarm` is the way to make a first mount exact.
+  cold mount is most likely to be. Both are the size the control measures on the gate
+  device (the harness logs `field=103.00x36.33` / the Android box is 48 dp tall because
+  Material 3 puts a 48 dp interactive minimum under a 40 dp outline), so a cold mount is
+  laid out at its own size and pays no correction. The width is locale-dependent — a
+  locale whose date format is wider costs that configuration's first instance one
+  horizontal correction — and `nitroUiCore.prewarm` is the way to make even that exact.
 - Because the width never comes from the value, a value change is a props-only turn: no
   re-measure, no correction. Changing `mode` or `variant` does re-measure (different
   key, and `variant` also moves the sizing policy), and that costs the D17 one frame.
@@ -112,21 +122,46 @@ accepts a `value` write once JS has processed that many of its own events
 is still showing, and the field snaps back. Selecting the instant that is already
 displayed reports nothing — on both platforms (Android's `TimePickerState` would
 otherwise fire a no-op). `minimumDate` / `maximumDate` are enforced three times over: the
-platform control cannot show a day outside the range, native clamps any incoming value
-into it, and the JS wrapper clamps before sending.
+platform control is told about them (iOS `DatePicker(in:)`; Android `SelectableDates`,
+which *greys* days outside the range rather than hiding them, plus the calendar's
+`yearRange`), native clamps any incoming value into it, and the JS wrapper clamps before
+sending.
+
+Changing the bounds **re-creates the platform control on both platforms**, which costs
+that calendar its own page and nothing else. Android has to: its `DatePickerState` reads
+`yearRange` and `selectableDates` once, at construction, so bounds that arrive later
+would otherwise grey out the wrong days and — worse — a value whose year the old range
+does not cover is *stored as no selection at all*, leaving a calendar with no lit day and
+a field that reads one. iOS has to for a different reason: `UIDatePicker` applies a new
+`date` before a new `maximumDate`, so an update that moves the value past the *old* upper
+bound gets clamped by UIKit mid-update, and the reload that follows asserts in
+`UICalendarView._setVisibleMonth:` (a crash, not a glitch). A control rebuilt from the
+new bounds has both bounds before it has a value to clamp.
 
 An uncontrolled picker seeds from `defaultValue` (or the mount moment) once; a remount
 starts from its own default, not from what the previous mount ended with.
 
 ## Accessibility
 
-Both platforms give their picker a localised value announcement of its own ("Saturday,
-14 March 2026", "3:00 PM"), which is what the brief asks for; `accessibilityLabel` is the
-*label* that makes the announcement say what the field is. iOS gets it through the
-`DatePicker` title (hidden visually with `labelsHidden()`) and through the field's button;
-Android through `contentDescription` semantics, with the invisible width probe wrapped in
-`clearAndSetSemantics` so TalkBack never reads a date nobody picked. `disabled` is exposed
-as a disabled element on both.
+A screen-reader user hears a *label* and a *localised value* ("Saturday, 14 March 2026",
+"3:00 PM") from the one node that is the control, on every variant.
+
+- **Where the label goes.** `accessibilityLabel` is applied to the control — iOS's field
+  `Button` / `DatePicker`, Android's `OutlinedButton` / `DatePicker` / `TimePicker` — and
+  never to a box around it. A container `contentDescription` is a stop of its own, so the
+  user hears the label and then arrives at a nameless control (`docs/architecture/core.md`
+  §3 bans it; SF2 found it here).
+- **Where the value comes from.** On the picker variants the platform control already
+  knows its value. The `compact` field is ours on both platforms, so it announces the same
+  localised string it paints: iOS through `accessibilityValue`, Android through
+  `stateDescription` (with a `contentDescription` set, TalkBack reads that as the node's
+  name and would otherwise never say the day).
+- **`disabled`.** Exposed on the node the user is on, not only on an ancestor. Android's
+  pickers have no `enabled`, so a disabled inline/wheel picker replaces its subtree's
+  semantics with one disabled node and swallows touches at the initial pointer pass —
+  otherwise TalkBack offers every day cell of a disabled calendar as an enabled button.
+- The invisible width probe is `clearAndSetSemantics`, so TalkBack never reads a date
+  nobody picked.
 
 ## Limits
 
@@ -134,12 +169,17 @@ as a disabled element on both.
   combined date+time control**: `datetime` is a date dialog followed by a time dialog, and
   the inline form of `datetime` shows the calendar only.
 - **Android's Material 3 pickers are dialogs or full inline calendars** — there is no
-  small inline field, and `DatePickerDialog` is modal. `variant: 'inline'` with `disk`
-  behaviour, year-picker mode and the M3 time "input" toggle are not exposed.
+  small inline field, and `DatePickerDialog` is modal. Nothing else of theirs is exposed:
+  not the calendar's year-picker *mode toggle* (it swaps the grid for text entry, which is
+  a keyboard nobody asked for), nor the time picker's text-input toggle, nor a `TimePicker`
+  in the dialog's date step.
 - The `compact` field's width is the widest value the mode can produce, not the current
   one. That is the trade described in Sizing, not a bug to file.
 - Locale and time zone come from the device; there is no `locale` or `timeZone` prop, and
   no custom format string (the field text is `.medium` date + `.short` time, per mode).
 - The calendar's tappable area, week-start, era and calendar system are the platform's.
-- The picker does not validate that `minimumDate <= maximumDate`; an inverted range is an
-  empty range on both platforms and shows as an unselectable picker.
+- The picker does not validate that `minimumDate <= maximumDate`. The clamp applies the
+  upper bound and then the lower one, so an inverted range is **not** empty: the lower
+  bound wins and the control settles on `minimumDate` (both platforms, and JS agrees).
+  A greyed calendar grid on Android is what that looks like, because no day is inside the
+  range — while the *value* is `minimumDate`, and selecting it reports nothing.

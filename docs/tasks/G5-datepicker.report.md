@@ -27,8 +27,9 @@ mode × variant matrix and the two Android gaps.
   `NativeNitroUiDatePicker.ts`, `NitroUiDatePickerConfig.ts`, `DatePicker.perf-test.tsx`
 - `src/index.ts` (public export), `nitro.json`, `nitro-ui.sizing.json`,
   `nitrogen/generated/**` (regenerated, no drift)
-- `ios/components/DatePicker/HybridNitroUiDatePicker.swift` (new, 1232 lines)
-- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt` (new, 1386 lines)
+- `ios/components/DatePicker/HybridNitroUiDatePicker.swift` (new; 1355 lines after fix round 1)
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt` (new; 1721 lines
+  after fix round 1)
 - `ios/core/NitroSwiftUIHost.swift`: `+12` lines — a `containingViewController` accessor,
   the only core change. A component that presents needs the containment the host already
   creates (`needsContainment`); nothing else in the library uses it, and no shipped
@@ -37,7 +38,7 @@ mode × variant matrix and the two Android gaps.
   `NitroUiPackage.kt`: register the component and its declared fallback.
 
 **Tests, harness, bench, example**
-- `example/__tests__/DatePicker.harness.tsx` — 11 on-device tests
+- `example/__tests__/DatePicker.harness.tsx` — 12 on-device tests
 - `example/src/DatePickerScreen.tsx`, `example/src/App.tsx` (Date tab),
   `example/src/stories/DatePicker.stories.tsx` (Playground + showcases, S1's layout)
 - `scripts/real-input/{controls,android,uiautomator}.mjs`,
@@ -108,6 +109,8 @@ mode × variant matrix and the two Android gaps.
 
 ## Gates
 
+These are the gates as they stood before the review; fix round 1 re-ran every one of them and its results are in its own section.
+
 | Gate | Result |
 | --- | --- |
 | Harness, iOS (iPhone Air, Node 24, absolute `HARNESS_APP_PATH`) | **pass** — `DatePicker` 11/11; whole suite 114 passed, 1 skipped of 115 (`HARNESS_TIMING` unset, D21). Re-run after the `main` merge and after fix round 1; no iOS source changed in the fix |
@@ -139,13 +142,25 @@ platform whose code it breaks; the tree was restored and re-run green after each
 | 2 | reports a pick once, and nothing for the same day | iOS: same-value suppression removed; Android: same → ✕ | ✕ both |
 | 3 | reverts a pick the parent refuses | Android: the handshake never reverts | ✕ 4 failed |
 | 4 | clamps a value and a pick to `minimumDate`/`maximumDate` | iOS: no clamping (Android twin ✕ too) | ✕ both |
-| 5 | round-trips an instant across a DST boundary | Android: resolve the calendar fields in UTC | ✕ 4 failed |
-| 6 | presents nothing after the mount that opened it is gone | both: a presentation that outlives its mount (the B1 failure mode) | ✕ both |
+| 5 | round-trips an instant across a DST boundary | Android: resolve the calendar fields in UTC | ✕ 4 failed — **superseded**: that mutation priced the test seam; deleting the real UTC-midnight conversion stayed green (M6) |
+| 6 | presents nothing after the mount that opened it is gone | both: a presentation that outlives its mount (the B1 failure mode) | ✕ both — **superseded**: the reds used a clickable overlay in the app's own window, and the real dialog leak (`android-t6b`) passed 11/11 (M5) |
 | 7 | is inert while disabled | iOS: `disabled` guard removed | ✕ both |
 | 8 | gives two compact pickers one box, whatever dates they show | Android: the width probe follows the value | ✕ 1 failed |
 | 9 | keeps a date field and a time field at their own boxes | `sizingVariantFor` drops `mode` from the key | ✕ |
 | 10 | re-measures the field when the mode changes | iOS: the mode setter stops asking for a re-measure | ✕ 1 failed |
-| 11 | starts a remount from its own default, not the previous mount's | iOS: `didApplyDefault` survives the recycle; Android: native never applies its default | ✕ both |
+| 11 | starts a remount from its own default, not the previous mount's | iOS: `didApplyDefault` survives the recycle; Android: native never applies its default | ✕ both — **disclosure**: the Android half was the model's default path, not the recycle. `android-t10` (didApplyDefault survives `prepareForRecycle`) was green, because view recycling is off by default in this example app (`core.md` §6) |
+
+Row 12 is missing on purpose: the suite had eleven tests when this table was written. The
+twelfth, `shows the month the value is in, and moves the page with it`, is the review's M1 guard
+and is shown red in fix round 1's section.
+
+Rows 5, 6 and 11 are marked as superseded after the review: the kept logs
+(`/tmp/g5-red-android-android-t5.log`, `/tmp/g5-red-android-android-t6b.log`,
+`/tmp/g5-red-android-android-t10.log`) show the *named* failures staying green, and the reds
+above came from substitutes — a mutation of the test seam's own calendar arithmetic, and a
+clickable `View` added to the app window on each platform. Fix round 1 rebuilt all three
+guards so the property named in the row is the property priced; its table has the runs that
+hold.
 
 The sizing suite's own poison (a `seedSizingSize` no date picker has, then an environment
 bump) is what makes #1, #8, #9 and #10 able to fail at all: with a correct fallback a
@@ -158,7 +173,9 @@ passing). Shown red by making `componentOf` answer `segmented-control` for a
 `schedules every date-picker cell and every arm` go red (the ratio becomes 1.47×, the
 schedule becomes empty), then green again on restore.
 
-## Fix round 1
+## Fix pass before the review: the compact field ellipsized its value
+
+(D19 does not count this as a fix round - it landed inside the implementation window, before the review. The review's fix round is the section after this one.)
 
 The compact field ellipsized its own value on Android: the Date screen's real-input field
 rendered `Oct 25, 20…` inside a 120.76 dp box (`/tmp/g5-realinput-android.log`:
@@ -203,6 +220,360 @@ same field is now 131.05 dp, the width of the widest date the mode formats), and
 check`. The iOS harness was re-run after merging `main` (114 passed, 1 skipped) and the Android
 whole-suite green run above is also post-`main`-merge, so C1's `NitroComposeHost` change is
 covered on both platforms.
+
+## Fix round 1 — the review's M1–M7 (this round)
+
+The review (`docs/tasks/G5-datepicker.review.md`, verdict NEEDS-WORK) is the brief for this
+section. All seven must-fixes are in, each guard shown red against the thing it is supposed to
+price, and the report/doc claims the review listed are corrected throughout this file and
+`docs/components/date-picker.md`. One thing the review asked for could not be shown red on iOS,
+and M5 says so plainly instead of claiming a run that did not happen.
+
+Files this round: `HybridNitroUiDatePicker.kt` (1721 lines), `HybridNitroUiDatePicker.swift`
+(1355), `DatePicker.harness.tsx` (1462, 12 tests), `RealInputTests.swift`,
+`example/src/DatePickerScreen.tsx`, `docs/components/date-picker.md`, this report, the two
+retaken Android screenshots, and `bench/src/implementations/expoUi.android.tsx` (a comment).
+
+### M1 — the calendar opens on the value's month, and a bounds change rebuilds it
+
+The second positional argument of `rememberDatePickerState` is `initialDisplayedMonthMillis`,
+not a minimum, so the call that read like a minimum left Material 3 to fall back to `today`
+(or to the minimum). `android-dialog.png` on `d113c79` is the record: July's header over an
+October grid. And `rememberDatePickerState`'s `rememberSaveable` has an empty inputs array, so
+the state read its month, year range and selectable days once and never again.
+
+In `HybridNitroUiDatePicker.kt`:
+
+- both date arms now name the argument — `initialDisplayedMonthMillis =
+  model.toUtcMonthStartOfLocalDay(shown)` (inline `:1019`, dialog `:1076`);
+- `key(model.minimum, model.maximum, yearRange) { rememberDatePickerState(…) }`, so React
+  widening the range re-creates the state instead of leaving a calendar whose new value falls
+  outside its `yearRange` — which Material 3 stores as *no selection at all*, showing no lit
+  day while the field reads a date;
+- `syncDatePicker` moves the page when the value moves (`:1229`), because a page is a property
+  of the state, not of the model, and the seed is read once;
+- the review's other suggestion — assign `state.selectableDates` in an effect keyed on the bounds
+  — is not available on the public type: `DatePickerState` exposes `yearRange` and `selectableDates`
+  as read-only (`yearRange` has no setter anywhere public), and `rememberDatePickerState` hands back
+  the interface. The rebuild is the route that covers both facts at once, and it is what
+  `fr2-m1c` prices. The comment at `:1009` records the reason rather than leaving a reader to
+  rediscover it;
+- new `publishCalendarFacts` (`:1190`) publishes the calendar's own displayed month and whether
+  it holds a selection, as two extra fields of `nuiTestStateReport`:
+  `"<ms>|<presented>|<calMonth>|<hasSelection>|<livePresentations>"`. Without them the page and
+  the lost-selection failure are invisible to the harness;
+- the two comments claiming the state "keys its state on the object" now say what is true.
+
+**New test** `shows the month the value is in, and moves the page with it`. The three months are
+derived from the device clock — value three months out, minimum four months before that, rerender
+eleven months further — because with the positional bug the page lands on *today's* month, so a
+hardcoded July would pass by luck in July. It asserts the page equals the value's month, that a
+bounds change keeps the selection lit (the `hasSelection` oracle, which is what the `key()`
+rebuild has to satisfy), and that a rerendered value moves the page.
+
+| Mutation | Red |
+| --- | --- |
+| `fr2-m1a` — `initialDisplayedMonthMillis` back to `null` (the pre-fix shape) | ✕ 1 failed — `"page-plain" … is not showing 2027-01 … (month 2026-10)` |
+| `fr2-m1b` — the page-sync effect no longer writes `displayedMonthMillis` | ✕ 1 failed |
+| `fr2-m1c` — the `key(…)` wrapper removed | ✕ 1 failed |
+
+`/tmp/g5-fr2-red-and-fr2-m1{a,b,c}.log`, and `fr2-m1a` re-run at 18:00 in
+`/tmp/g5-fr2-red-android-fr2-m1a.log`. All three on `shows the month the value is in…`,
+1 failed / 11 passed.
+
+The same A/B as M2's — reviewed Kotlin installed, then this round's, one Metro, same JS
+(`/tmp/g5-fr3-ab.log`, dumps as above) — puts the bug and the fix on the same screen. The inline
+calendar at the top of the Dates screen holds `2026-01-01`:
+
+| the calendar's own month header, from `uiautomator` | reviewed build | this round |
+| --- | --- | --- |
+| headline `Current selection: Thursday, January 1, 2026` | `October 2026` | `January 2026` |
+| headline `Current selection: Saturday, July 4, 2026` | `October 2026` (both calendars) | `July 2026` |
+
+Reviewed: the header is the device's month, not the value's — today's month on the day the gate
+ran, exactly as `android-dialog.png` on `d113c79` shows. This round: the header is the value's
+month in every case, and the compact dialog opened from the labelled field dumps headline
+`Jul 4, 2026` over a `July 2026` grid (`/tmp/g5-ab-uia-after-dialog.xml`).
+
+The two Android screenshots are retaken on the fixed build, and their captions say what to look
+at. The iOS side of M1 got its own fix (see the crash note in M1-iOS below).
+
+**M1-iOS.** The same class, different mechanism: `UIDatePicker` applies a new `date` *before* a
+new `maximumDate`, so a write that moves the value past the old upper bound gets clamped by
+UIKit mid-update and the following reload asserts in `UICalendarView._setVisibleMonth:` — a
+SIGABRT, not a glitch — two reports are kept,
+`~/Library/Logs/DiagnosticReports/NitroUiExample-2026-10-25-160158.ips` and `-160432.ips`, each
+aborting with `-[UICalendarView _setVisibleMonth:animated:]` at the top of the UIKit frames
+under `_UIDatePickerCalendarView _reload`. `.id(boundsIdentity)` (`:493`) rebuilds the control
+from the new bounds before it has a value to clamp. `fr2-m1ios-id` is the mutation that removes
+the line; it aborts the app rather than failing an assertion, so it is kept rather than queued
+here. `docs/components/date-picker.md` documents why both platforms re-create the control on a
+bounds change.
+
+### M2 — Android: the label is on the control, and a disabled picker is one disabled node
+
+`semantics { contentDescription = label }` and `disabled()` sat on the container `Box`, which is
+the SF2 finding again: TalkBack got a stop named "Departure", then a nameless `Oct 25, 2026,
+button`. And the inline variant had no input blocking at all, behind a `[blockedInputModifier]`
+reference to a modifier that did not exist.
+
+- `Modifier.nuiFieldSemantics(label, value, enabled)` (`:809`) goes on the `OutlinedButton`
+  itself: `contentDescription` = label, `stateDescription` = the same localised string the field
+  paints, `disabled` when disabled. `stateDescription` is not decoration — with a
+  `contentDescription` set, TalkBack reads that as the node's *name* and drops the text, so
+  without it the field says what it is and never what it holds.
+- `Modifier.nuiControlSemantics` (`:821`) does the same for the `DatePicker` / `TimePicker`
+  nodes, and when disabled adds `nuiBlockInput()` (an `Initial` pointer-input pass) plus
+  `clearAndSetSemantics { disabled(); … }`, so the calendar becomes one disabled node instead of
+  a tree of 120 nodes whose 34 day cells stay enabled and activatable (measured below).
+- The container `Box` carries no semantics; the dangling reference now points at `nuiBlockInput`.
+
+The harness has no a11y query, so this is read the way the real-input script reads Android:
+`uiautomator dump` of the Dates screen, taken twice — once with the reviewed `d113c79` Kotlin built
+and installed, once with this round's — so the comparison measures the difference instead of reading
+the diff. `/tmp/g5-fr3-ab.sh` does it; its log records for each phase the md5 of the Kotlin it
+compiled (`c161062a…` reviewed / `fdec2f70…` this round), the md5 of the APK gradle produced, and the
+md5 the device reported for the APK at its installed path (`9eb190aa…` installed 19:40:22,
+`d9e51491…` installed 19:42:08 — the same two pairs), so "which build is on the screen" is not an
+assumption. One Metro served 8294 for both phases, so the JS is byte-identical across them and only
+the Kotlin differs. The trees are `/tmp/g5-ab-uia-before-{top,bottom}.xml` and their `-after-` twins
+(+ `scroll0…9` and `after-dialog`), and `/tmp/g5-ab-analyze.py` recomputes every count below.
+
+Two things about this measurement are worth recording, because the first attempt at it was wrong and
+an earlier draft of this section quoted that attempt. (a) The first run lost the Metro port to a
+server another process owned, the app fell back to `loadScriptFromAssets` and drew the RedBox, and
+the "before" and "after" files were copies of one older good dump — which is why they were
+byte-identical; those files are withdrawn and nothing below rests on them. (b) Matching
+`<node … />` with a regex sees only *leaf* nodes: the top of this screen is 184 nodes, not the 110
+that regex counts, and the label nodes are all parents. Both mistakes read as "no difference".
+
+**The label: the name moves from above the control into it.** At the labelled `compact` field's
+frame — `[42,771][386,897]` for the `Real-input date picker` row, and `[42,2256][386,2382]` =
+344 × 126 px = 131.05 × 48 dp for `Departure date`, the field's measured control box:
+
+```
+d113c79   View desc='Real-input date picker' [42,771][386,897]      <- the container, not pressable
+            View clickable=true [42,772][386,897]                   <- what a finger presses: nameless
+              TextView 'Oct 25, 2026' · Button [42,771][386,897]
+this round View clickable=true [42,771][386,897]                    <- one pressable node
+              View desc='Real-input date picker' · TextView 'Oct 25, 2026' · Button
+```
+
+In the reviewed build the name sits on a non-pressable node one level *above* the pressable one,
+which holds the value and the button role and carries no name — the two-stop shape `core.md` §3
+bans, and what the review predicted from `:726-729`. On this round's tree the pressable node has
+name, value and role inside it, which is what Compose merges into one TalkBack stop. Measured on the
+device with only the Kotlin changed; `/tmp/g5-fr3-ab.log`'s `LABELLED CONTROL` and `ancestors` lines
+print the chains.
+
+**`disabled` reaches the inline calendar.** At the disabled inline picker's frame,
+`[42,0][1038,537]` in both builds' bottom dumps (both scroll to the same stop, so the frames line
+up):
+
+| | nodes under the frame | `clickable=true` | the frame's own node |
+| --- | --- | --- | --- |
+| `d113c79` | 120 | 34 | unnamed, `enabled=true` |
+| this round | 3 | 0 | `desc='Jul 4, 2026'`, `enabled=false`, no children |
+
+Those 34 clickable nodes are M3's day cells — Canvas-drawn, so they carry no text (an earlier draft
+queried 1-2 digit *text* cells, found none, and wrongly read that as no cells). Reviewed: one
+disabled ancestor that says nothing about them and 34 enabled, activatable cells under it. This
+round: `clearAndSetSemantics` leaves the calendar as exactly one node, disabled and named with the
+localised value, and `nuiBlockInput` is what keeps a finger out of it — the harness's disabled case
+is the behavioural half of that claim. The enabled calendar two rows up (`[42,795][1038,2139]`) is
+the control for the change and is identical in both dumps: 121 nodes, 34 clickable, 12 with a
+`contentDescription` (`January 2026`, the seven weekday headers, `Change to previous month` and its
+neighbours, the headline), 0 disabled.
+
+**What these dumps still cannot show.** `uiautomator`'s XML has no attribute for `stateDescription`,
+so the value half of `nuiFieldSemantics` is evidenced by the code and by the iOS half of the same
+bug, where XCUITest does print the value (M3). The dumps also cannot show TalkBack speaking — they
+show the tree it walks.
+
+### M3 — iOS: a labelled compact field announces the localised date as its value
+
+`OptionalDatePickerAccessibility` calls `content.accessibilityLabel(label)` on the whole content,
+and for `compact` that content is our own `Button`, whose only accessible text was the date —
+so the label *replaced* it and VoiceOver said "Departure, button" and nothing else. The field now
+adds `.accessibilityValue(Text(NitroUiDatePickerField.label(millis:mode:)))` (`:440`), the same
+localised string it paints, keeping the label as the label. The `.graphical` / `.wheel` variants
+were already fine (SwiftUI keeps the value).
+
+Verified in the UI test, on the labelled `low-date` row: it reads the innermost `.button` in the
+`testID` subtree and asserts `label == "Departure date"` and that `value` contains the year, and
+prints the subtree it walked (`real-input low row a11y …` in `.real-input/ios/xcodebuild-test.log`)
+so the tree a screen reader walks is written down. Quoted from the unmutated run of the final tree
+(`testRealInputDatePicker` passed in 117.4 s; the log is copied out of `.real-input/`, which every
+later run overwrites, to `/tmp/g5-fr3-ios-ri-1921-test.log`):
+
+```
+a11y [the testID node]:  id="low-date" label="Departure date" value=""            frame=(16.0, 825.33, 103.0, 36.67)
+a11y [descendant ×3]:    label=""                                                   (the RN wrappers, no text)
+a11y [descendant]:       type=9 label="Departure date" value="4 Jul 2026"  frame=(16.0, 825.67, 103.0, 36.33)
+```
+
+The last line is the node VoiceOver stops on — label *and* localised date, en-GB spelling. The
+first is what the fix replaced: a wrapper that carries the label and no value, which is the SF2
+shape with the roles swapped. `fr2-m3` (delete the `.accessibilityValue` modifier, rebuild, reinstall) makes the assertion red on the device — `testRealInputDatePicker` **failed** in 68.8 s with
+
+> `RealInputTests.swift:523: … XCTAssertTrue failed - the labelled compact field announced
+> value="Optional()", which is not a date: with a label set the label *replaces* the control's own
+> text, so the localised day has to be announced as the value …`
+
+and `real-input (ios): 0/1 controls passed` (`/tmp/g5-fr2-red-ios-fr2-m3.log`, 19:01). The same
+command on the unmutated tree, minutes earlier, is the pass quoted in the gate table (124.8 s,
+`/tmp/g5-fr2-red-ios-fr2-baseline.log`), so the only difference is the modifier.
+
+### M4 — iOS: the popover may point up or down, and the bottom-of-screen case is on the device
+
+`permittedArrowDirections = .up` let UIKit shrink the bubble to the room *below* the field, and
+the comment's reason ("a bubble that flipped above the field would point at the tab bar") is
+simply wrong — a bubble above the field points down at the field. Now `[.up, .down]` (`:794`),
+with the comment fixed.
+
+`example/src/DatePickerScreen.tsx` gained a last row, `low-date`, and `assertLowRowField()` in
+`RealInputTests.swift` drives a finger case at it: it scrolls until the page stops moving,
+asserts the field is below the mid-line with under 250 pt under it (so the check cannot pass on
+a screen that did not scroll into the case), presses it with a real tap, then asserts three
+things about the bubble: at least 300 pt wide (seven tappable columns), at least 250 pt tall (not
+compressed into the room under the field), and `maxY <= field.minY + 8` — with that little room
+below, the bubble has to be *above* the field, pointing down at it. That last one is the
+assertion `.up`-only fails: UIKit keeps the popover below a field when it may not flip, however
+little room is down there. It also counts the day cells in the calendar it presented.
+
+On device (iPhone Air, 420 × 912 pt, same kept log):
+
+```
+real-input low row: field=(16.0, 825.33, 103.0, 36.67) screen=(0,0,420,912) roomBelow=50.0
+real-input low row: press 2 -> popovers=1 windows=2
+real-input low row: popover=(10.0, 488.33, 336.0, 337.0)
+```
+
+The field's last row sits 50 pt off the bottom — the case the review asked for — and the bubble
+is 336 × 337 with its bottom edge at y 825.3, exactly the field's top edge: it flipped above and
+points down at the field. `fr2-m4` (`permittedArrowDirections = .up`) leaves UIKit no choice but
+to keep it below and squeeze 337 pt into 50, which fails both the height and the `maxY` assertion.
+The first press of that run did not present anything and the second did (`press 1 ->
+popovers=0`), which is why the helper retries rather than assuming one tap lands.
+
+`fr2-m4` (`permittedArrowDirections = .up`) was then run on the device, and it is red exactly
+where the review said it would be — `testRealInputDatePicker` **failed** in 98.5 s:
+
+> `RealInputTests.swift:575: XCTAssertGreaterThanOrEqual failed: ("15.999677…") is less than
+> ("250.0`) — the last row presented a popover **16.0 pt tall into 50.0 pt of room**: UIKit
+> compressed the calendar into the space under the field instead of putting the bubble above
+> it, and the month a finger has to use is cut off
+
+(`real-input (ios): 0/1 controls passed`, `/tmp/g5-fr2-red-ios-fr2-m4.log`, 19:03). A 337 pt
+calendar rendered as a 16 pt strip: the whole month is gone, which is the user-visible cost
+of the one-direction list. The same binary minutes earlier, with `[.up, .down]`, is the pass
+above (`/tmp/g5-fr2-red-ios-fr2-baseline.log`).
+
+### M5 — the leak test counts live presentations
+
+The witness-press oracle could not see an Android dialog: a `Dialog` is a separate window and the
+harness dispatches its touch into the app's own, which is exactly why the kept `android-t6b` run
+passed 11/11. The assertion is now structural, in the one place that survives a drop:
+
+- Android: `DatePickerModel.livePresentations`, an `AtomicInteger` incremented and released by a
+  `DisposableEffect` inside `Presentation` — the composition that owns the window;
+- iOS: a process-wide counter in `NitroUiDatePickerPresentation`, opened by a `countedOpen`
+  ticket in `present`'s completion and closed in `presentationControllerDidDismiss` or
+  `dismissNow`'s completion, one decrement per presentation;
+- both are the fifth field of `nuiTestStateReport`, and the harness reads it through a *fresh*
+  mount after the drop (the dropped view has no handle left). It also asserts the count is 1
+  while the dialog is open, so a counter stuck at zero cannot satisfy the rest vacuously. The
+  witness press stays as the second signal — "is it in the way", not "is it there".
+
+| Mutation | Red |
+| --- | --- |
+| `fr2-m5-android` = `android-t6b` — `onDropView` neither closes the dialog nor disposes the composition (the real B1 shape) | ✕ 1 failed — the live-presentations assertion |
+| `fr2-m5-iosf` — iOS `countOpened()` stops counting | ✕ 2 failed |
+| `fr2-m5-ios`/`iosb`/`iosc`/`iosd`/`iose` — the iOS closing sites removed, in five shapes | ✓ stayed green |
+
+Those last five are the honest half of M5: **the iOS twin of `android-t6b` cannot be shown red
+here, because on iOS that mutation does not leak.** UIKit tears the popover down with the host
+view, `presentationControllerDidDismiss` runs, and the counter really does fall back to 0. The
+iOS counter is still worth having — it is what turns "we assume SwiftUI owns this" into a number
+the test reads — but the Android half is the one the review's named failure mode is guarded on,
+and this report does not claim an iOS red that did not happen.
+`/tmp/g5-fr2-red-and-fr2-m5and.log`, `/tmp/g5-fr2-red-ios-fr2-m5-iosf.log`.
+
+### M6 — the DST test exercises the conversion, and the zone is asserted
+
+The pick direction used to run the *test seam's* own `Calendar` arithmetic (`resolveTestSelection`),
+never the `toUtcMidnightOfLocalDay` / `fromUtcMidnightKeepingTimeOfDay` pair that a real tap runs —
+which is why deleting the conversion (`android-t5`) stayed green with 11 passing.
+
+- `nuiTestSelect` now routes the day through the picker's own path:
+  `applyUserSelection(fromUtcMidnightKeepingTimeOfDay(toUtcMidnightOfLocalDay(…), displayed))`.
+- `dst-set` has an `onChange` recorder and asserts `eventLog` stays empty: a conversion that
+  reads the wrong day makes the control *emit* the instant it was just handed, which a polling
+  test cannot see and this one can.
+- The zone is asserted rather than assumed: the test fails loudly if the device's January and
+  July `getTimezoneOffset()` are equal, fails if none of its seven instants has a local day that
+  differs from its UTC day, and logs the zone on both platforms. The kept runs show
+  `dst zone: Wed Jul 01 2026 GMT+0100 winterOffset=0 summerOffset=-60` and
+  `dst cases: 1 of 7 cross a UTC day` — so the discriminating instant is doing work on both.
+  Both gate devices are on the host's zone, `Europe/Lisbon` (`winterOffset=0` / `summerOffset=-60`
+  is WET/WEST), which is *verified* by that assertion rather than pinned by the suite — and the
+  gate ran on 25 October, the day the offset actually changes here, so `AUTUMN_EVE`/`AUTUMN_DAY`
+  sit on either side of a real transition. Pinning it would need a device-wide `time_zone` change
+  and a re-run of every other gate on this tree for it; asserting it is what makes a future
+  non-DST environment fail loudly instead of passing quietly, which is the property M6 asked for.
+- `fr2-m6` (the same patch as `android-t5`: the conversion returns the raw millis) is
+  **✕ 1 failed**, on `round-trips an instant across a DST boundary`
+  (`/tmp/g5-fr2-red-and-fr2-m6.log`).
+- `docs/components/date-picker.md` no longer claims the harness pins Lisbon at `00:30`; it says
+  the suite refuses to run vacuously and logs the zone.
+
+### M7 — the declared fallbacks are measured, final, and registered
+
+`TODO(G5)` and `PROVISIONAL (G5)` are gone. Both files now state where the number came from:
+
+- Android **131 × 48 dp** (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`, `:1385`), from the harness
+  log `variants (android, …): field=131.05x48.00`. `131.0` is inside the sizing engine's 0.5 dp
+  epsilon (`cpp/NitroUiSizingEngine.hpp:170`), so the cold mount is laid out at its own size and
+  pays no correction; the height was the wrong one before — 40 dp, Material's outline, under a
+  control that is 48 dp because M3 puts an interactive minimum under it. The comment no longer
+  calls 150 "Material 3's own floor (40 dp)".
+- iOS **103 × 36.33 pt** (`fallbackSize`, `:968`), from `variants (ios, …): field=103.00x36.33`.
+  The review asked for the `en_US` number; the gate simulator's `AppleLocale` is `en_PT`, so the
+  declared pair is what the control measures *there* — the configuration the gates actually run.
+  The same field measures 107.00 pt under `en_US`, which the code comment says. The height (36.33)
+  is the locale-independent one, and it is the number M7 called wrong on Android. An `en_US` cold
+  `compact` `date` mount is therefore laid out 4 pt narrow for its first frame and pays one
+  horizontal correction — the safe direction to be wrong in (`core.md` §7: the failure mode worth
+  avoiding is a control that is too small, which truncates a month name and shrinks a hit target).
+- Both are registered in `NitroUiDeclaredFallbacks.{kt,swift}`, and the width stays locale-dependent
+  by design (it is a probe, not a constant), which the page now says.
+- What prices this, and what does not: the numbers come from the device log quoted above, and the
+  sizing suite's poison (a `seedSizingSize` no date picker has — `WRONG_SIZE` = 13.25 × 66.5, then
+  three corrections demanded) is what keeps "the engine outranks a wrong fallback" honest. Nothing
+  in the DatePicker suite asserts the *first frame* of a cold mount, which is the assertion that
+  would move if these two numbers drifted: `ColdSizing.harness.tsx` (T14's, run by
+  `harness:cold:ios` / `harness:cold:android`) covers Slider and Switch only, and adding a third
+  component there is that file's owner's call — recorded as a follow-up rather than done here.
+
+### Gates on this round's tree
+
+| Gate | Result |
+| --- | --- |
+| `bun run check` | **pass** — exit 0 on this round's tree at `load1` 4.9: typecheck, bench typecheck (both tsconfigs), eslint, prettier, jest (176 tests / 11 suites, 184 s), `test:native`, `perf:renders`, nitrogen drift, autolinking, `prepare`, api-extractor, publint, package-files (375 files), readme examples (`/tmp/g5-fr3-check.log`) |
+| Harness `DatePicker`, iOS (iPhone Air, Node 24, absolute `HARNESS_APP_PATH`) | **pass** — 12/12 (`/tmp/g5-fr2-ios-base.log`) |
+| Harness `DatePicker`, Android (`emulator-5572`, adb 5042) | **pass** — 12/12 (`/tmp/g5-fr2-and-base2.log`) |
+| Harness, whole suite, iOS | **pass** — 115 passed, 1 suite skipped (`MountChurn.harness.tsx`'s "is Android-only" placeholder, skipped by every earlier iOS run here too), 99.9 s, on the `.app` built from this tree at 18:17 (Node 24, absolute `HARNESS_APP_PATH`, `HARNESS_TEST_TIMEOUT=90000`; `/tmp/g5-fr3-ios-full.log`) |
+| Harness, whole suite, Android | **pass** — 116/116, 9 suites, this round's APK (`/tmp/g5-fr3-and-full2.log`). The first run of this gate, at 18:39 with `load1` 10.35 / `load5` 44.42, was 115/116: `Progress > honours an explicit size instead of its own box` hit its 1000 ms render timeout. `Progress.harness.tsx` is not a file this round touched, the same suite was 116/116 at `load1` 3.10 earlier on the same code (`/tmp/g5-fr5-and-full.log`) and green again minutes later on this tree, so the failure was the host. A render timeout under 14x that load is an environment failure, and it is recorded here rather than hidden behind the green re-run. |
+| Real-input `--control date-picker`, iOS | **pass** — `testRealInputDatePicker` passed in 117.4 s, `** TEST EXECUTE SUCCEEDED **`, `real-input (ios): 1/1 controls passed`, on the unmutated tree at 19:26 (`/tmp/g5-fr3-ios-ri-1921.log`; the detailed xcodebuild log is copied to `/tmp/g5-fr3-ios-ri-1921-test.log`, which holds the a11y subtree and the popover frame quoted above — `.real-input/ios/` is overwritten by every later run). An earlier build of the same round also passed in 54.0 s |
+| Real-input `--control date-picker`, Android | **pass** — `real-input (android): 1/1 controls passed` on this round's unmutated build, including a real `input tap` on a dialog day reaching JS (`Friday, October 16, 2026` → `2026-10-16`) and the refusing-parent case (`/tmp/g5-fr2-red-android-fr2-baseline.log`, 18:41) |
+| `bun bench --component date-picker --plan quick`, both platforms | [[GATE-BENCH]] |
+
+Two notes on how these were run, because both bit here. The real-input scripts refuse Node 26
+(`scripts/node-version.mjs` pins 24.22.1), so every one of them goes through
+`fnm exec --using 24 --`. And the harness's `platformReadyTimeout` is a 300 s constant on this
+branch: one Android run died on it at `load1` ≈ 189, which is an environment failure and not a
+test failure — the re-run in a lull is the one quoted. `HARNESS_TEST_TIMEOUT` *is* env-tunable in
+the committed config, and that is what a loaded host needs raised.
 
 ## Bench
 
@@ -278,6 +649,9 @@ most of the afternoon, and the human's own sessions keep load1 in the tens. See 
   field's box from 120.76 dp to 131.05 dp. Both touch what the Android cells measure, so the
   Android table in particular is a direction that has since moved. See Questions.
 
+Fix round 1 re-ran both platforms from a clean tree; those cells are in its section, and the
+two tables above stay as the history of what the pre-review build measured.
+
 ## Screenshots
 
 `docs/tasks/G5-datepicker/`, on the Date screen (`example/src/DatePickerScreen.tsx`) of the
@@ -298,9 +672,12 @@ frames are from the fix-round build.
   each field wide enough for what it shows. The `datetime` field is the widest string the
   probe has to cover, which is what fix round 1 is about.
 - `android-dialog.png` - `DatePickerDialog` opened from the compact date field: scrim, header,
-  calendar, Cancel/OK, with the three compact fields still readable behind it.
+  calendar, Cancel/OK, with the three compact fields still readable behind it. Retaken for fix
+  round 1 (M1): the header reads `Jul 4, 2026` and the grid is July 2026 with day 4 lit, and the
+  background inline calendar is on the same month as its own value. The frame on `d113c79` had
+  July's header over an October grid - the review's M1, which that file was the evidence for.
 - `android-inline.png` - the inline `DatePicker` (its header and calendar) and the inline
-  `TimePicker` under it.
+  `TimePicker` under it. Also retaken: the calendar's page is the value's month.
 - `android-wheel.png` - the wheel section, where Android has no wheel and renders the inline
   picker instead, and the disabled row below: both variants dimmed and still laid out.
 - `android-dark.png` - the top of the screen in dark mode. `Oct 25, 2026` is today's date: the
@@ -330,24 +707,73 @@ frames are from the fix-round build.
   every bench build rewrites `example/ios/Podfile.lock`'s `COCOAPODS:` stamp from 1.17.0 to
   the 1.15.2 on `PATH`. Nothing else changes; it just lands in someone's diff. One-line fix
   in the bench infra, not in my scope.
-- **The Android `expo-ui` date-picker arm is not like-for-like** (documented in
-  `bench/src/implementations/expoUi.android.tsx`): `@expo/ui` exposes no dialog/field form
-  of the picker — only the inline `DateTimePicker` and whole dialogs — so that arm renders
-  an inline M3 calendar while every other arm renders a compact field. The Android
-  date-picker rows are a direction, not a ratio to compare with G4's rows. Its
-  `initialDate` is also a seed, not a controlled value, so `update.date-picker` prices the
-  props write there and a native value change here.
+- **There is no Android `expo-ui` date-picker arm at all.** `@expo/ui` exposes no dialog or
+  field form of the picker on Android, so `expoUi.android.tsx` throws `unsupportedDatePicker()`
+  and `scripts/bench/lib.mjs` lists the arm under `ARMS_WITHOUT_COMPONENT` and never schedules
+  it. The Android table has `rn-core` and `nitro-ui` rows only, which is why it is not a ratio
+  to compare with G4's four-arm tables. Fix round 1 rewrote the arm's header comment, which
+  used to describe an inline M3 calendar that does not exist.
 - **iOS `presented` stays a frame-quantised column** for this control too
   (`benchmarks.md`'s noisiest column); the same caveat G1–G4 recorded applies.
 - `NitroUiIntrinsicProps`' doc comment still says `prewarmSizing`; the exported name is
   `prewarm`. One-word doc fix, left for whoever touches that file.
 - The Android `compact` field is an M3 `OutlinedButton`, which is the closest thing to
-  iOS's field but not the same widget (M3 has no date *field* control). The 40 dp height
-  and the probe-driven width are its own metrics, not iOS's 36/118: real-input measures it at
-  131.05 dp for `date` mode in the emulator's `en_US`, and that number moves with the locale's
+  iOS's field but not the same widget (M3 has no date *field* control). The 48 dp height
+  and the probe-driven width are its own metrics, not iOS's 103 x 36.33: real-input measures it
+  at 131.05 x 48.00 dp for `date` mode in the emulator's `en_US` (48 dp, not 40, because Material
+  3 puts an interactive minimum under the 40 dp outline), and that width moves with the locale's
   date format, which is exactly why it is a probe rather than a constant.
 
-## Questions for orchestrator
+### Non-blocking, recorded and deliberately not fixed (the review's list, one line each)
+
+- **Android `DateFormat` cache key.** `DatePickerFieldText` caches by `(mode, locale)`, and a
+  `DateFormat` captures `TimeZone.getDefault()` when built, so a zone change while the app runs
+  leaves `time`/`datetime` fields formatting in the old zone; the key needs the zone id (`:469`).
+- **iOS formatter time zone.** `NitroUiDatePickerField`'s formatters do not set
+  `timeZone = .autoupdatingCurrent`, which is the same class of staleness stated explicitly.
+- **iOS width cache vs Bold Text.** The field-width cache key omits the legibility weight, so
+  Bold Text keeps the cached width; `preferredFont(forTextStyle:compatibleWith:)` would fix it.
+- **iOS 520 pt width clamp.** `datetime` truncates at the accessibility Dynamic Type sizes; either
+  document it or drop the cap and let C1's fitting handle it.
+- **An open Android dialog ignores a programmatic `value`.** The dialog state is seeded once, so
+  pressing OK unchanged emits the stale date as a user pick.
+- **A `disabled` flip while a popover/dialog is open leaves it open.** Picks are refused; the UI
+  stays live. `afterUpdate()` could close the presentation.
+- **iOS: a failed `present()` leaves `presented == true`**, so every later tap is a no-op until
+  the mount is recycled; the flag should be written back when nothing was presented.
+- **iOS: a recycled mount pressed inside the ~500 ms deferred-dismiss window** cancels that
+  dismiss and leaves an invisible popover counted as open; un-hiding in `presentIsolated()`
+  would cover it.
+- **Neither popover nor dialog content applies `.disabled`** to its own subtree.
+- **Android's disabled `compact` field is dimmed twice** — `alpha(0.38)` over M3's own disabled
+  colours, ≈ 0.14 effective.
+- **The `tintColor` "wheel highlight" claim in the docs table is unverified** (the G4 F1 class):
+  no tinted wheel is on the example screen and `ios-wheel.png` shows the system grey.
+- **A `variant` change remounts**, so an uncontrolled picker resets to `defaultValue` while JS
+  still holds the previous `mostRecentEventCount` and the new native view starts at 0 — a short
+  window where a stale controlled write is accepted.
+- **Per-pass key-string allocation**: `toLanguageTag()` / `Locale.current.identifier` twice per
+  recomposition or `body` pass, plus several `Calendar`s per recomposition on Android's inline
+  path. Cheap, avoidable.
+- **Android real-input `openAndPick` retries with day offsets `[0, 7, -7]`**, so "a second pick is
+  a fresh selection" is not the oracle it reads as; picking the same cell twice with no retry
+  would be.
+- **iOS real-input reads `Echo.rejectValue`** (JS state) for the snap-back, which is trivially
+  true, and never reads native's displayed value.
+- **Test 11 cannot see an Android recycle bug** because view recycling is off by default in this
+  example app (`core.md` §6) — the same disclosure as mutation row 11.
+- **Stale Swift comments**: `DatePickerModel.presented` / `presentationHandler` (`:53-72`) and the
+  `prepareForRecycle` comment (`:1229`) still describe SwiftUI owning the dismissal, which
+  predates the UIKit presentation.
+- **`ColdSizing.harness.tsx` has no DatePicker entry**, so no test asserts that a cold first
+  DatePicker mounts at its declared `131 × 48` / `103 × 36.33` (M7's numbers are measured, not
+  asserted). A third cold component in that file — run through `harness:cold:*`, which is the only
+  invocation where "nothing has been measured yet" is true — is the natural next step.
+- **Merging with G6** touches 34 shared files; `nitrogen/generated/**` should be regenerated with
+  `bun run nitrogen` rather than hand-merged, and `bench-gate.test.js` / `smoke-ready-line.test.js`
+  re-run because both branches edit the component list and the ready-line order.
+
+## Questions for orchestrator — and the answers
 
 1. **Bench re-run: when, and does Android get one too?** Every date-picker row on this branch
    came from `fd55c1a-dirty` at a load the runner itself flagged as non-verdictable, and both
@@ -357,21 +783,30 @@ frames are from the fix-round build.
    release-readiness run with the other five components; (c) accept the rows as directional and
    say so in `benchmarks.md`. **Recommend (a)**, and (b) for the other components - a re-run of
    one component while the others stay old is honest as long as the table says so.
+   **Answer:** (a), in this round - both platforms, `--plan quick`, from a clean tree, outside
+   the quiet window, labelled with the load it was taken at. Only the DatePicker cells matter.
 2. **Who runs `bun run smoke:rn-cli` and `smoke:expo`?** G4 and I both stopped at the same
    place: the per-control ready line is updated and unit-tested, but the pack + Expo + RN-CLI
    cycle is a release-readiness gate, and it is not cheap. **Recommend** one scheduled task
    before 0.2 rather than leaving each component task to guess.
+   **Answer:** deferred to release prep (R3). DatePicker's line in `scripts/smoke/App.tsx` and
+   its per-control layout check are in this branch and unit-tested; the suites are not run here.
 3. **The Android `expo-ui` date-picker arm.** `@expo/ui` has no dialog or field form of the
-   picker on Android, so that arm renders an inline M3 calendar while every other arm renders a
-   compact field, and its `initialDate` is a seed rather than a controlled value, so
-   `update.date-picker` prices a props write there and a native value change here. Keep it with
-   that caveat in the arm file and in the results header, or drop the rows so nobody reads a
-   ratio into them? **Recommend keep + a header line**, because dropping it silently would make
-   the Android table look comparable to G4's.
+   picker on Android. `expoUi.android.tsx` therefore throws `unsupportedDatePicker()` and
+   `scripts/bench/lib.mjs` keeps the arm in `ARMS_WITHOUT_COMPONENT`, so **it is never rendered
+   on any launch** - the earlier text here, which said the arm renders an inline M3 calendar
+   while the other arms render a field, described a bench arm that does not exist (review,
+   report-claims 4). Keep the throwing arm with a header caveat, or drop it? **Recommend keep +
+   a header line**, because deleting it silently would make the Android table look comparable to
+   G4's four-arm tables.
+   **Answer:** keep it, fix the description, and say plainly that it never renders. Done in
+   fix round 1: the arm's header comment now says so, and so does the follow-up above.
 4. **`scripts/bench/build.mjs` runs plain `pod install`, not `bundle exec pod install`**, so
    every bench build rewrites the `COCOAPODS:` stamp in `example/ios/Podfile.lock` from 1.17.0
    to the 1.15.2 on `PATH` and lands in someone's diff. One-line fix, in bench infra rather
    than in this component. **Recommend** a small follow-up task; I have not touched it.
+   **Answer:** leave it - the stamp is already recorded in `FOLLOWUPS.md` for whoever owns the
+   bench infra.
 
 Nothing here blocks reviewing the component: the gates that cover it are green on the final
 build and the four items are all "who owns the next run".
