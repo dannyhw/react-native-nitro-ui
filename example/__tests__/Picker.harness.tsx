@@ -1597,6 +1597,66 @@ describe('Picker · G6', () => {
     unmount();
   });
 
+  it('goes on reporting its size after a re-tap of the row already shown', async () => {
+    // The same rule on the ordinary path: a refused press leaves no hold behind, so an
+    // app that then changes something about the control's content still gets its size
+    // reported. Nothing here needs the pick's window - which is what makes this the
+    // case an app actually hits.
+    const SHORT = ['One', 'Two', 'Three'];
+    const LONG = [LONG_TITLE, 'Two', 'Three'];
+    poisonConfigurations([
+      sizingKey(SHORT, 0, null, 'menu'),
+      sizingKey(LONG, 0, null, 'menu'),
+    ]);
+    const { rerender, unmount } = await render(
+      <Picker
+        options={SHORT}
+        onChange={recordChange('re-tap')}
+        testID="re-tap"
+        hybridRef={captureHybrid('re-tap')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('re-tap');
+    const shortSize = await waitForMeasured('re-tap', 'the short title');
+    await waitForBox('re-tap', shortSize, 'the short title');
+    await settle(200);
+    armTrace();
+    const before = stats();
+
+    // Press the row that is already shown: the list closes, nothing is emitted, and no
+    // batch follows - so nothing may be held back on its account.
+    await pickRow('re-tap', 0);
+    expect(eventLog).toEqual([]);
+    expect(sameSize(sizeOf('re-tap'), shortSize)).toBe(true);
+
+    // Now the size really does move, and the engine has to hear about it.
+    await rerender(
+      <Picker
+        options={LONG}
+        onChange={recordChange('re-tap')}
+        testID="re-tap"
+        hybridRef={captureHybrid('re-tap')}
+      />
+    );
+    const longSize = await waitForRemeasure(
+      're-tap',
+      shortSize,
+      'the long title the new options brought'
+    );
+    await waitForBox('re-tap', longSize, 'the box following the new title');
+    await settle(300);
+    const after = delta(before, stats());
+    console.log(
+      `re-tap then resize: short=${describeSize(shortSize)} ` +
+        `long=${describeSize(longSize)} box=${describeSize(sizeOf('re-tap'))} ` +
+        `delta=${JSON.stringify(after)}`
+    );
+    expect(after.corrections).toBeGreaterThan(0);
+    expect(sameSize(sizeOf('re-tap'), longSize)).toBe(true);
+    unmount();
+  });
+
   // MARK: - M2: a variant change is a different control, not a repaint
 
   it('asks a wheel the box question after a variant change', async () => {
