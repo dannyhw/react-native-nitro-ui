@@ -1,0 +1,25 @@
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.96/4.03 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/SegmentedControl.harness.tsx
+  ● SegmentedControl · G4 › fits a row whose box comes from a narrow parent, not from a width
+
+    expected [ 'clamped:5', 'clamped:0', …(2) ] to deeply equal [ 'clamped:5', 'clamped:0', …(2) ]
+
+      [0m [90m 321 |[39m   [36mawait[39m userEvent[33m.[39mpressAt(box[33m![39m[33m.[39mx [33m+[39m box[33m![39m[33m.[39mwidth [33m-[39m [35m2[39m[33m,[39m box[33m![39m[33m.[39my [33m+[39m box[33m![39m[33m.[39mheight [33m/[39m [35m2[39m)[33m;[39m
+       [90m 322 |[39m   [36mawait[39m userEvent[33m.[39mpressAt(box[33m![39m[33m.[39mx [33m+[39m [35m2[39m[33m,[39m box[33m![39m[33m.[39my [33m+[39m box[33m![39m[33m.[39mheight [33m/[39m [35m2[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 323 |[39m   expect([36mawait[39m waitForEvents(expected[33m.[39mlength))[33m.[39mtoEqual([[33m...[39mexpected])[33m;[39m
+       [90m     |[39m                                                       [31m[1m^[22m[39m
+       [90m 324 |[39m }
+       [90m 325 |[39m
+       [90m 326 |[39m [36mconst[39m rowStyle[33m:[39m [33mStyleProp[39m[33m<[39m[33mViewStyle[39m[33m>[39m [33m=[39m { gap[33m:[39m [35m6[39m }[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 17 skipped, 18 total
+Snapshots:   0 total
+Time:        5.377 s, estimated 13 s
+Ran all test suites matching SegmentedControl with tests matching "narrow parent".
