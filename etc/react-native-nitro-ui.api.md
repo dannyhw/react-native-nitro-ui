@@ -117,6 +117,49 @@ export interface NitroUiSizingTraceEvent {
 }
 
 // @public
+export function Picker(input: PickerProps): JSX.Element;
+
+// @public
+export interface PickerChange {
+    index: number;
+    value: string;
+}
+
+// @public
+export interface PickerProps extends ViewProps {
+    accessibilityLabel?: string | undefined;
+    defaultSelectedIndex?: number | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly options: string[];
+        readonly selectedIndex: number | null;
+        readonly mostRecentEventCount: number;
+        readonly variant: string;
+        readonly label: string | null;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+    }) => void) | undefined;
+    label?: string | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onChange?: ((event: PickerChange) => void) | undefined;
+    options: string[];
+    selectedIndex?: number | undefined;
+    testID?: string | undefined;
+    tintColor?: ColorValue | undefined;
+    variant?: PickerVariant | undefined;
+}
+
+// @public
+export type PickerVariant = 'menu' | 'wheel';
+
+// @public
 export function prewarm(componentNames: readonly string[]): number;
 
 // @public

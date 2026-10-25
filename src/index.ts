@@ -43,6 +43,13 @@ export {
 } from './components/Button/Button';
 
 export {
+  Picker,
+  type PickerChange,
+  type PickerProps,
+  type PickerVariant,
+} from './components/Picker/Picker';
+
+export {
   Progress,
   type ProgressProps,
   type ProgressVariant,

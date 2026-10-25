@@ -67,6 +67,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiSegmentedControl"
       }
+    },
+    "NitroUiPicker": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiPicker"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiPicker"
+      }
     }
   },
   "ignorePaths": [

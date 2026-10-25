@@ -71,4 +71,16 @@ public final class NitroUiAutolinking {
   public static func isNitroUiSegmentedControlRecyclable() -> Bool {
     return HybridNitroUiSegmentedControl.self is any RecyclableView.Type
   }
+  
+  public static func createNitroUiPicker() -> bridge.std__shared_ptr_HybridNitroUiPickerSpec_ {
+    let hybridObject = HybridNitroUiPicker()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiPickerSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiPickerRecyclable() -> Bool {
+    return HybridNitroUiPicker.self is any RecyclableView.Type
+  }
 }

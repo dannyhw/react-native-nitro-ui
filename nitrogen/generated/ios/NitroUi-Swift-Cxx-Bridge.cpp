@@ -9,6 +9,7 @@
 
 // Include C++ implementation defined types
 #include "HybridNitroUiButtonSpecSwift.hpp"
+#include "HybridNitroUiPickerSpecSwift.hpp"
 #include "HybridNitroUiProgressSpecSwift.hpp"
 #include "HybridNitroUiSegmentedControlSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
@@ -42,6 +43,30 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return swiftPart.toUnsafe();
   }
   
+  // pragma MARK: std::function<void(double /* index */, double /* eventCount */)>
+  Func_void_double_double create_Func_void_double_double(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroUi::Func_void_double_double::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](double index, double eventCount) mutable -> void {
+      swiftClosure.call(index, eventCount);
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiPickerSpec>
+  std::shared_ptr<HybridNitroUiPickerSpec> create_std__shared_ptr_HybridNitroUiPickerSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiPickerSpec_cxx swiftPart = NitroUi::HybridNitroUiPickerSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiPickerSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiPickerSpec_(std__shared_ptr_HybridNitroUiPickerSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiPickerSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiPickerSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiPickerSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiPickerSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNitroUiProgressSpec>
   std::shared_ptr<HybridNitroUiProgressSpec> create_std__shared_ptr_HybridNitroUiProgressSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     NitroUi::HybridNitroUiProgressSpec_cxx swiftPart = NitroUi::HybridNitroUiProgressSpec_cxx::fromUnsafe(swiftUnsafePointer);
@@ -56,14 +81,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
     #endif
     NitroUi::HybridNitroUiProgressSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
-  }
-  
-  // pragma MARK: std::function<void(double /* index */, double /* eventCount */)>
-  Func_void_double_double create_Func_void_double_double(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = NitroUi::Func_void_double_double::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](double index, double eventCount) mutable -> void {
-      swiftClosure.call(index, eventCount);
-    };
   }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiSegmentedControlSpec>

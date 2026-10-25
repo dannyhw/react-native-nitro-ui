@@ -3,5 +3,6 @@
   "HybridNitroUiSwitch": "intrinsic",
   "HybridNitroUiSlider": "fillWidth",
   "HybridNitroUiButton": "intrinsic",
-  "HybridNitroUiSegmentedControl": "intrinsic"
+  "HybridNitroUiSegmentedControl": "intrinsic",
+  "HybridNitroUiPicker": "intrinsic"
 }
