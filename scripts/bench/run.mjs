@@ -49,13 +49,15 @@ import {
   MARK_CAPABLE_IMPLEMENTATIONS,
   PLANS,
   SCHEMA_VERSION,
-  UNQUIET_LOAD_RATIO,
+  LOAD_SAMPLE_INTERVAL_MS,
   aggregateRecords,
   baselineNoise,
   baselineTable,
   buildSchedule,
+  createLoadSampler,
   isCompatibleBaseline,
   launchPlanString,
+  loadBlocker,
   resultsFileName,
   componentOf,
   scenarioActionOf,
@@ -131,13 +133,19 @@ function tryExec(command, args) {
 }
 
 /**
- * Who ran this, on what, and how busy they were (T02 review S10, D9).
+ * Who ran this, on what, and how busy they were (T02 review S10, D9, R4).
  *
  * A baseline is only meaningful if it says so: the load average decides whether
  * the run may mint one at all, and the OS runtime is part of the device key
  * because a runtime change breaks comparability sooner than a device change.
+ *
+ * `load` is the sampler that ran with the run, so the file carries the load of
+ * the whole run (`loadSamples`) and not just the instant this function happens to
+ * be called in. `loadavg1`/`loadavg5` stay what they always were - the end-of-run
+ * instant, which is all a results file from before R4 had, and what
+ * `bench/tools/arm-ratios.mjs` and the markdown report already read.
  */
-function collectMachine(platform, device) {
+function collectMachine(platform, device, load) {
   const loadavg = os.loadavg();
   const cpuCount = os.cpus().length;
   const machine = {
@@ -153,12 +161,12 @@ function collectMachine(platform, device) {
     cpuModel: os.cpus()[0]?.model ?? null,
     loadavg1: loadavg[0] ?? null,
     loadavg5: loadavg[1] ?? null,
+    loadSamples: load?.summary({ cpuCount }) ?? null,
     totalMemoryGb: Math.round((os.totalmem() / 1024 ** 3) * 10) / 10,
     xcode: tryExec('xcodebuild', ['-version'])?.split('\n')[0] ?? null,
   };
   machine.quiet =
-    isNumberLike(machine.loadavg1) &&
-    machine.loadavg1 <= cpuCount * UNQUIET_LOAD_RATIO;
+    isNumberLike(machine.loadavg1) && loadBlocker(machine) === null;
   if (platform === 'ios') {
     machine.simRuntime = device.runtime ?? null;
   } else {
@@ -522,11 +530,20 @@ function summarize(records) {
   return `${String(iterations)} iterations${blind > 0 ? `, ${String(blind)} without a mount signal` : ''}`;
 }
 
-async function drive({ target, schedule }) {
+/**
+ * Run the schedule, sampling the machine as it goes.
+ *
+ * `sample` is called at every launch boundary: installing, launching and
+ * terminating an app is where a busy host shows up in the load, and on a run
+ * whose launches each outlast the sampling interval it is the only sampling there
+ * is.
+ */
+async function drive({ target, schedule, sample = () => {} }) {
   const records = [];
   const problems = [];
   for (let index = 0; index < schedule.length; index++) {
     const entry = schedule[index];
+    sample();
     const label = `${launchPlanString(entry)} launch ${String(entry.launch + 1)}/${String(schedule.filter((other) => other.scenario === entry.scenario && other.implementation === entry.implementation && other.n === entry.n).length)}`;
     process.stderr.write(
       `[${String(index + 1)}/${String(schedule.length)}] ${label} ... `
@@ -585,6 +602,26 @@ export async function main(argv) {
     log('--launches must be a positive integer');
     process.exitCode = 2;
     return;
+  }
+
+  // Fail fast on the load the run starts with (R4). A `--update-baseline` run has
+  // to stay quiet for hours, so a machine that is already over the ceiling when
+  // the command starts has no realistic chance of minting: say so in a second
+  // instead of after a three-hour plan. Local feedback runs are not refused -
+  // their ratios are same-run pairs, and a busy machine is information there, not
+  // a disqualification.
+  if (argv.includes('--update-baseline') && !argv.includes('--force')) {
+    const blocker = loadBlocker({
+      loadavg1: os.loadavg()[0] ?? null,
+      cpuCount: os.cpus().length,
+    });
+    if (blocker != null) {
+      log(
+        `--update-baseline refused before the run started (pass --force to override):\n  - ${blocker}`
+      );
+      process.exitCode = 2;
+      return;
+    }
   }
 
   const device =
@@ -661,7 +698,25 @@ export async function main(argv) {
   const art = (await target.install()) ?? null;
 
   const started = Date.now();
-  const { records, problems } = await drive({ target, schedule });
+  // Sample the whole run rather than its last minute (R4): on a timer, so a long
+  // or stalled launch is still covered, and at each launch boundary from drive().
+  const load = createLoadSampler(() => os.loadavg()[0]);
+  load.sample();
+  const loadTick = setInterval(() => {
+    load.sample();
+  }, LOAD_SAMPLE_INTERVAL_MS);
+  loadTick.unref?.();
+  let records;
+  let problems;
+  try {
+    ({ records, problems } = await drive({
+      target,
+      schedule,
+      sample: () => load.sample(),
+    }));
+  } finally {
+    clearInterval(loadTick);
+  }
   const resultsName = resultsFileName(
     shortSha(),
     platform,
@@ -688,7 +743,7 @@ export async function main(argv) {
     clock: Object.values(cells)[0]?.clock ?? null,
     createdAt: new Date().toISOString(),
     durationMs: Date.now() - started,
-    machine: collectMachine(platform, device),
+    machine: collectMachine(platform, device, load),
     problems,
     cells,
   };

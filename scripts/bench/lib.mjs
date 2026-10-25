@@ -45,6 +45,18 @@ export const MAX_MISSING_SAMPLE_RATIO = 0.1;
  */
 export const UNQUIET_LOAD_RATIO = 0.5;
 /**
+ * How often a running bench takes a load sample in addition to the one at every
+ * launch boundary (R4). The guard used to read a single `os.loadavg()` taken
+ * when the run *ended*, so three quiet hours were judged by their last minute.
+ */
+export const LOAD_SAMPLE_INTERVAL_MS = 30_000;
+/**
+ * How much of a run may sit over the ceiling before the run counts as busy (R4).
+ * A bench run is dozens of minutes of short bursts, so the odd spike - a daemon,
+ * a Spotlight pass - is not the machine being busy *for the run*.
+ */
+export const LOAD_OVER_CEILING_FRACTION = 0.1;
+/**
  * A committed baseline is a `full` plan at 8 launches or more
  * (bench/baselines/README.md): a `quick` plan is local feedback, and 4 launches
  * give a within-run spread too wide for a ratio to be a threshold.
@@ -1353,6 +1365,121 @@ export function gate({
 }
 
 /**
+ * The load average a machine may mint a baseline at (D9): 0.5 x core count.
+ */
+export function loadCeiling(cpuCount) {
+  return isNumber(cpuCount) ? cpuCount * UNQUIET_LOAD_RATIO : null;
+}
+
+function roundLoad(value) {
+  return isNumber(value) ? Math.round(value * 1e4) / 1e4 : null;
+}
+
+/** Whether `value` is what `summarizeLoadSamples()` records for a run. */
+function isLoadSummary(value) {
+  return (
+    value != null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    isNumber(value.count) &&
+    value.count > 0 &&
+    isNumber(value.median) &&
+    isNumber(value.ceiling)
+  );
+}
+
+/**
+ * Summarise a run's load samples compactly enough to live in a committed
+ * baseline: the run is described by five numbers instead of ~1 500 of them.
+ *
+ * Returns null when there is nothing to summarise or the ceiling is unknown,
+ * which is what keeps a results file from before R4 on the old rule.
+ */
+export function summarizeLoadSamples(samples, { cpuCount } = {}) {
+  const ceiling = loadCeiling(cpuCount);
+  const values = (Array.isArray(samples) ? samples : []).filter(isNumber);
+  if (ceiling == null || values.length === 0) {
+    return null;
+  }
+  const over = values.filter((value) => value > ceiling).length;
+  return {
+    count: values.length,
+    ceiling: roundLoad(ceiling),
+    median: roundLoad(median(values)),
+    p90: roundLoad(percentile(values, 0.9)),
+    max: roundLoad(Math.max(...values)),
+    over,
+    overFraction: roundLoad(over / values.length),
+  };
+}
+
+/**
+ * A load sampler the runner can drive from launch boundaries and a timer.
+ *
+ * `readLoad` is injected so this stays free of `node:os` like the rest of the
+ * file, and so a test can hand it a load curve and see what the run recorded.
+ */
+export function createLoadSampler(readLoad) {
+  if (typeof readLoad !== 'function') {
+    throw new TypeError('createLoadSampler() needs a readLoad() function');
+  }
+  const samples = [];
+  return {
+    samples,
+    sample() {
+      const value = readLoad();
+      if (isNumber(value)) {
+        samples.push(value);
+      }
+      return value;
+    },
+    summary({ cpuCount }) {
+      return summarizeLoadSamples(samples, { cpuCount });
+    },
+  };
+}
+
+/**
+ * Why this run's load disqualifies it as baseline material, or null when it does
+ * not (D9 + R4).
+ *
+ * R4: the rule judges **the run, not its last minute**. A run that recorded
+ * samples is refused when the median is over the ceiling, or when more than
+ * `LOAD_OVER_CEILING_FRACTION` of the samples are. A1b's iOS run is the case the
+ * single sample got wrong: `full` plan, 1120 launches, no problems, load5 4.06
+ * against a 7.0 ceiling - and it was refused by a `loadavg1` of 7.60 measured in
+ * the final minute of a 154-minute run.
+ *
+ * Results files from before the sampler keep the single-sample rule: a lone load
+ * average is all they have, and re-judging them with a rule nobody measured
+ * would quietly re-qualify runs that were never sampled.
+ */
+export function loadBlocker(machine) {
+  const source = machine ?? {};
+  const ceiling = loadCeiling(source.cpuCount);
+  if (isLoadSummary(source.loadSamples) && ceiling != null) {
+    const samples = source.loadSamples;
+    if (samples.median > ceiling) {
+      return `the machine was busy for half the run: median load average ${samples.median.toFixed(2)} over ${String(source.cpuCount)} cores (ceiling ${ceiling.toFixed(1)}, ${String(samples.count)} samples, max ${samples.max.toFixed(2)})`;
+    }
+    if (samples.overFraction > LOAD_OVER_CEILING_FRACTION) {
+      return `the machine was busy for ${String(Math.round(samples.overFraction * 100))}% of the run: ${String(samples.over)} of ${String(samples.count)} load samples over ${ceiling.toFixed(1)} (ceiling for ${String(source.cpuCount)} cores), median ${samples.median.toFixed(2)}`;
+    }
+    return null;
+  }
+  if (isNumber(source.loadavg1) && isNumber(source.cpuCount)) {
+    if (source.loadavg1 > ceiling) {
+      return `the machine was busy: load average ${source.loadavg1.toFixed(2)} over ${String(source.cpuCount)} cores (ceiling ${ceiling.toFixed(1)})`;
+    }
+    return null;
+  }
+  if (source.loadavg1 == null) {
+    return 'the run did not record a load average';
+  }
+  return null;
+}
+
+/**
  * Whether a run may mint a committed baseline (D9 + T02 review S10): clean tree,
  * every launch completed, an idle machine, and on Android an app that is actually
  * compiled. `--force` overrides, loudly.
@@ -1404,17 +1531,9 @@ export function baselineBlockers(run) {
     );
   }
   const machine = run.machine ?? {};
-  if (isNumber(machine.loadavg1) && isNumber(machine.cpuCount)) {
-    const ceiling = machine.cpuCount * UNQUIET_LOAD_RATIO;
-    if (machine.loadavg1 > ceiling) {
-      reasons.push(
-        `the machine was busy: load average ${machine.loadavg1.toFixed(2)} over ${String(
-          machine.cpuCount
-        )} cores (ceiling ${ceiling.toFixed(1)})`
-      );
-    }
-  } else if (machine.loadavg1 == null) {
-    reasons.push('the run did not record a load average');
+  const load = loadBlocker(machine);
+  if (load != null) {
+    reasons.push(load);
   }
   // The ART compile state is a comparability regime, not a detail: with the
   // baseline profile in force (`speed-profile`) versus left at `verify`, T12
