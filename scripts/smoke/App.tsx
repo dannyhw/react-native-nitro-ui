@@ -1,5 +1,6 @@
 import {
   Button,
+  DatePicker,
   nitroUiCore,
   Progress,
   SegmentedControl,
@@ -57,6 +58,7 @@ const SMOKE_CONTROLS = [
   'button',
   'progress',
   'segmented-control',
+  'date-picker',
 ] as const;
 
 type SmokeControl = (typeof SMOKE_CONTROLS)[number];
@@ -64,7 +66,7 @@ type SmokeControl = (typeof SMOKE_CONTROLS)[number];
 const READY_PREFIX = 'NITRO_UI_SMOKE_READY';
 const PENDING_PREFIX = 'NITRO_UI_SMOKE_PENDING';
 
-/** How long to wait for the five boxes once the core answered. */
+/** How long to wait for every box once the core answered. */
 const LAYOUT_TIMEOUT_MS = 6000;
 
 interface Box {
@@ -145,7 +147,7 @@ export default function App(): React.ReactElement {
     };
   }, []);
 
-  // The ready line, once: core answered, and all five have a non-zero box.
+  // The ready line, once: core answered, and every control has a non-zero box.
   React.useEffect(() => {
     if (status !== 'ready' || announcedReady.current) {
       return;
@@ -229,6 +231,10 @@ export default function App(): React.ReactElement {
           onLayout={measureFor('segmented-control')}
           options={['One', 'Two', 'Three']}
           testID="SMOKE-segmented-control"
+        />
+        <DatePicker
+          onLayout={measureFor('date-picker')}
+          testID="SMOKE-date-picker"
         />
       </ScrollView>
     </View>
