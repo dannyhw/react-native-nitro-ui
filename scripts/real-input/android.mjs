@@ -483,8 +483,182 @@ const CHECKS = {
       t.requireEcho(ECHO.rejectValue),
       PINNED
     );
+
+    // The inline calendar's own write guard: a tap back onto the day the model last
+    // wrote has to reach JS. The dialog above cannot show this (its selection is
+    // provisional and the model is written once, on OK), and `nuiTestSelect` cannot
+    // reach it either: the test seam writes through the model, which is exactly what
+    // the guard exists to ignore. So it is the inline calendar, tapped for real.
+    await tapBackToTheDisplayedDay(t);
   },
 };
+
+/**
+ * Tap back onto the day an inline calendar is showing, and require that JS is told.
+ *
+ * `syncDatePicker` remembers the day it last wrote into Material 3's state so that
+ * `LaunchedEffect(selected)` can tell the model's own write from a person's tap.
+ * Writing that memory only on the branch that *had* to write left it on the day from
+ * before an accepted pick - and the next tap, back onto that day, then reads as the
+ * model's own write: nothing is emitted, and the calendar snaps forward under the
+ * finger. A pick the parent accepted needs no write, which is precisely the case the
+ * memory was missing.
+ *
+ * Aimed by the accessibility tree, asserted only through the app's own hand-written
+ * echoes (`change-count`, `controlled-value`): the cells call themselves "Thursday,
+ * January 1, 2026", and the only thing read out of that is the day and year at its
+ * end, so no locale can move an assertion.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+async function tapBackToTheDisplayedDay(t) {
+  const COUNT = 'change-count';
+  const VALUE = 'controlled-value';
+  // The tab bar is pinned to the top of the window and draws over whatever the page
+  // scrolls under it: a "cell" up there is a tab as far as `adb shell input` is
+  // concerned, so the band a tap may aim at starts below it.
+  const bandTop = 250;
+
+  // The echoes that say what a tap did sit under a calendar taller than the screen,
+  // so scroll until they are readable at all...
+  for (
+    let attempt = 0;
+    attempt < 6 && t.nodeByTestId(VALUE) == null;
+    attempt += 1
+  ) {
+    await t.scrollPage(350);
+  }
+  if (t.nodeByTestId(VALUE) == null) {
+    t.log.abort(
+      `no "${VALUE}" echo on screen after scrolling the date-picker page - the ` +
+        'inline calendar cannot be checked without the text that says what a tap did'
+    );
+  }
+  const baseline = t.requireEcho(VALUE);
+  const shown = baseline.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (shown == null) {
+    t.log.abort(
+      `"${VALUE}" reads "${baseline}", which is not Y-M-D as this screen writes it`
+    );
+  }
+  const shownDay = Number(shown[3]);
+  const shownYear = Number(shown[1]);
+
+  // ...then ease back up until the *first* cell of the grid is inside the band. The
+  // first cell of a Material 3 page is its 1st, so when that cell is also the day the
+  // value names, the grid is on the value's month and `a` is the day to come back to.
+  /** @type {{ a: import('./uiautomator.mjs').UiautomatorNode, b: import('./uiautomator.mjs').UiautomatorNode, bDay: number } | null} */
+  let aimed = null;
+  for (let attempt = 0; attempt < 8 && aimed == null; attempt += 1) {
+    const echoNode = t.nodeByTestId(VALUE);
+    if (echoNode != null) {
+      const cells = t
+        .dump()
+        .filter(
+          (node) =>
+            isDayCell(node) &&
+            node.bounds.y1 >= bandTop &&
+            node.bounds.y2 <= echoNode.bounds.y1
+        )
+        .sort(
+          (left, right) =>
+            left.bounds.y1 - right.bounds.y1 || left.bounds.x1 - right.bounds.x1
+        );
+      const first = cells[0];
+      const firstDay = dayNumberAtEnd(first?.text ?? '');
+      if (
+        first != null &&
+        cells.length >= 14 &&
+        firstDay === shownDay &&
+        yearAtEnd(first.text) === shownYear
+      ) {
+        const far = cells.find((node) => {
+          const day = dayNumberAtEnd(node.text);
+          return day != null && Math.abs(day - shownDay) >= 7;
+        });
+        const last = cells[cells.length - 1];
+        const b = far ?? (dayNumberAtEnd(last.text) !== shownDay ? last : null);
+        if (b != null) {
+          aimed = { a: first, b, bDay: dayNumberAtEnd(b.text) ?? -1 };
+        }
+      }
+      t.log.note(
+        `grid: ${String(cells.length)} cells in the band, first = ` +
+          `"${first?.text ?? '-'}", value = "${baseline}"`
+      );
+    }
+    if (aimed == null) {
+      await t.scrollPage(-250);
+    }
+  }
+  if (aimed == null) {
+    t.log.abort(
+      `never found a month grid whose first cell is the value's own day ` +
+        `("${baseline}") with another day at least a week away on screen`
+    );
+  }
+  const { a, b, bDay } = aimed;
+
+  // The day the control was built with is the day its guard remembers, so tapping it
+  // first is the documented no-op - the same instant twice is not a change on either
+  // platform. It is also this check's own proof that `a` is the cell the model holds,
+  // which is what makes the red below about the fix and not about the aim.
+  await t.tapNode(a);
+  t.requireEchoToStay(
+    COUNT,
+    '0',
+    'a tap on the day the calendar already shows'
+  );
+
+  await t.tapNode(b);
+  t.waitForEcho(COUNT, '1', `a real tap on another day (day ${String(bDay)})`);
+  const afterB = t.requireEcho(VALUE);
+  t.log.check(
+    `the tap moved the value it is echoing: "${afterB}" is not "${baseline}"`,
+    afterB !== baseline
+  );
+
+  // The bug: back onto the day it came from. With the memory written only where a
+  // write happened, this emitted nothing and the calendar snapped forward again.
+  await t.tapNode(a);
+  t.waitForEcho(
+    COUNT,
+    '2',
+    'the tap back onto the previous day - the snap-back leaves this at 1'
+  );
+  t.log.checkEquals(
+    'and the day it accepted is the instant that day echoed before, time of day kept',
+    t.requireEcho(VALUE),
+    baseline
+  );
+
+  // The guard is not simply gone: the pick after the returned one is still a fresh
+  // selection, and one write per pick is what the exact counts above say.
+  await t.tapNode(b);
+  t.waitForEcho(COUNT, '3', 'a pick after the returned one to be fresh');
+}
+
+/**
+ * The day of month at the end of a Material 3 day cell's own name, or `null`.
+ *
+ * Cells name themselves with a localised date - "Thursday, January 1, 2026", and
+ * "Today, Sunday, October 25, 2026" for today - whose last two numbers are the day
+ * and the year in every locale this emulator offers. Only those are read.
+ *
+ * @param {string} label
+ */
+function dayNumberAtEnd(label) {
+  const match = label.match(/(\d{1,2})\D{0,3}\d{4}\s*$/);
+  return match == null ? null : Number(match[1]);
+}
+
+/**
+ * @param {string} label
+ */
+function yearAtEnd(label) {
+  const match = label.match(/(\d{4})\s*$/);
+  return match == null ? null : Number(match[1]);
+}
 
 /**
  * Open a `compact` picker's dialog, tap one day cell, and confirm.
@@ -1038,6 +1212,25 @@ function makeContext(harness, log) {
     },
 
     /**
+     * A fresh accessibility tree, for a check that has to look at several things in
+     * one breath - which half of a calendar is on screen, for instance.
+     */
+    dump() {
+      return harness.hierarchy();
+    },
+
+    /**
+     * The node React Native gives an on-screen `testID`, or `null` when nothing on
+     * screen carries it. `requireEcho` reads the same node's text and aborts; this
+     * is for scrolling, where "not yet" is the expected answer.
+     *
+     * @param {string} testID
+     */
+    nodeByTestId(testID) {
+      return findByTestId(harness.hierarchy(), testID);
+    },
+
+    /**
      * @param {import('./uiautomator.mjs').UiautomatorNode} node
      */
     async tapNode(node) {
@@ -1064,6 +1257,27 @@ function makeContext(harness, log) {
      */
     async settle(ms) {
       await sleep(ms);
+    },
+
+    /**
+     * Scroll the page by `pixels` with one swipe (negative scrolls up).
+     *
+     * The swipe is aimed at the empty strip at the right edge of the window,
+     * outside the page's content column. Anywhere else it could start on a day
+     * cell, and Material 3's calendar is itself a vertical scroller: a swipe that
+     * starts there turns the calendar to another month instead of scrolling the
+     * page, which would move the grid the check is about to tap.
+     *
+     * @param {number} pixels
+     */
+    async scrollPage(pixels) {
+      const nodes = harness.hierarchy();
+      const width = Math.max(...nodes.map((node) => node.bounds.x2), 1);
+      const height = Math.max(...nodes.map((node) => node.bounds.y2), 1);
+      const x = width - 8;
+      const from = height * 0.7;
+      harness.swipe(x, from, x, from - pixels, 400);
+      await sleep(500);
     },
 
     /**

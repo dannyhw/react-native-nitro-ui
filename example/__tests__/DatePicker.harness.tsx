@@ -94,13 +94,14 @@ type DatePickerHandle = {
   ): void;
   nuiTestPresent(): void;
   /**
-   * `"<displayed millis>|<presented 0|1>|<calendar month>|<calendar has selection>|<live presentations>"`.
+   * `"<displayed millis>|<presented 0|1>|<calendar month>|<calendar has selection>|<live presentations>|<control builds>"`.
    *
    * The middle two are the composed *calendar's* own facts and Android's only:
    * Material 3's `DatePickerState` publishes a displayed month and a nullable
    * selection, SwiftUI's `DatePicker` publishes neither, so iOS reports `-1` for both
-   * (see `readReport()` in `HybridNitroUiDatePicker.swift`). The last field is
-   * process-wide on both platforms.
+   * (see `readReport()` in `HybridNitroUiDatePicker.swift`). The fifth field is
+   * process-wide on both platforms; the sixth counts this mount's own platform-control
+   * builds, which is what a rebuild is measured by (`keeps the live control…`).
    */
   nuiTestStateReport(): string;
 };
@@ -181,6 +182,13 @@ type Report = {
   calendarHasSelection: number;
   /** Presentations open in this whole process, from any mount, present or gone. */
   livePresentations: number;
+  /**
+   * How many times this mount built its platform control. It moves exactly when a
+   * bounds change rebuilt the live control (Android's `key(...)`, iOS's `.id(...)`),
+   * which is the only honest way to see a rebuild: the page and selection a rebuild
+   * throws away are both re-derived from the value, so nothing else can read it.
+   */
+  controlBuilds: number;
 };
 
 function reportOf(testId: string): Report {
@@ -191,6 +199,7 @@ function reportOf(testId: string): Report {
     calendarMonthUtc,
     calendarHasSelection,
     livePresentations,
+    controlBuilds,
   ] = raw.split('|');
   return {
     millis: Number(millis),
@@ -198,6 +207,7 @@ function reportOf(testId: string): Report {
     calendarMonthUtc: Number(calendarMonthUtc),
     calendarHasSelection: Number(calendarHasSelection),
     livePresentations: Number(livePresentations),
+    controlBuilds: Number(controlBuilds),
   };
 }
 
@@ -926,6 +936,196 @@ describe('DatePicker · G5', () => {
         `moved=${moved.toISOString()} ` +
         `plain=${handles.get('page-plain')?.nuiTestStateReport() ?? '-'} ` +
         `bounded=${handles.get('page-bounded')?.nuiTestStateReport() ?? '-'}`
+    );
+    unmount();
+  });
+
+  it('keeps the live control when a re-render sends a new bound instant', async () => {
+    // `minimumDate={new Date()}` is the first example in
+    // `docs/components/date-picker.md`, and it hands the control a *new instant* on
+    // every render. Bounds reach a mounted calendar by rebuilding it - Material 3's
+    // state reads `selectableDates`/`yearRange` once, and SwiftUI's control asserts when
+    // a new date is clamped by a bound it still holds - so keying that rebuild on the
+    // raw instants made every parent render (and every pick, which re-renders through
+    // the same props) tear the platform control down: the month the user turned to, the
+    // wheel's position, and an open dialog's or popover's pending selection with it.
+    //
+    // `controlBuilds` counts the platform controls this mount built, read once it has
+    // stopped moving (`settledBuilds`). It has to stand still across re-renders that
+    // only moved a bound's millisecond: an identity keyed on the raw instants makes
+    // every one of them a new control, and everything the user had - the month they
+    // turned to, an open dialog's pending selection - goes with it. A bound that moves
+    // as far as the control can see must still get through; the two platforms let it
+    // through differently enough that the test asserts each one's mechanism rather
+    // than forcing one number on both (see the bound-that-moved step below).
+    const value = new Date(2026, 6, 4, 12, 0);
+    // The bound these assertions move along: `tick` is a few milliseconds (a new
+    // instant inside one minute) or whole days (a bound the control can see).
+    const baseMinimum = new Date(2026, 0, 1, 0, 0).getTime();
+    const DAY = 86400000;
+    // A different month, sent while the `compact` field's dialog is open. A rebuild
+    // re-seeds the dialog's page from the value, so Android can see the same regression
+    // the way a user does - through the page it is showing - not only through the count.
+    const laterValue = new Date(2026, 8, 15, 9, 0);
+    const isAndroid = Platform.OS === 'android';
+    const reportText = (testId: string) =>
+      handles.get(testId)?.nuiTestStateReport() ?? '<no handle>';
+
+    const tree = (tick: number, dialogValue: Date, maximum?: Date) => (
+      <View style={columnStyle}>
+        <DatePicker
+          value={value}
+          variant="inline"
+          minimumDate={new Date(baseMinimum + tick)}
+          testID="fresh-inline"
+          hybridRef={captureHybrid('fresh-inline')}
+        />
+        <DatePicker
+          value={dialogValue}
+          minimumDate={new Date(baseMinimum + tick)}
+          maximumDate={maximum}
+          testID="fresh-dialog"
+          hybridRef={captureHybrid('fresh-dialog')}
+        />
+      </View>
+    );
+
+    const { rerender, unmount } = await render(tree(0, value), {
+      timeout: 20000,
+    });
+    await waitForTestId('fresh-inline');
+    await waitForTestId('fresh-dialog');
+    await waitForDisplayed('fresh-inline', value.getTime(), 'the seed');
+
+    // The instrument first: the sixth field has to be readable and counting, because a
+    // missing one would make every assertion below vacuous. And it has to be read once it
+    // has *stopped moving*: a mount is built again while its props land - the bounds
+    // arrive after the first commit, and on iOS a value still outside the bounds the
+    // control was built with is one more reason to rebuild - so a baseline sampled too
+    // early would be a race, not an assertion. What a re-render may not do is add to the
+    // settled number, which is why every assertion below is against a baseline.
+    const settledBuilds = async (testId: string) => {
+      const QUIET_POLLS = 15;
+      let previous = -1;
+      let quiet = 0;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await sleep(100);
+        const now = reportOf(testId).controlBuilds;
+        quiet = now >= 1 && now === previous ? quiet + 1 : 0;
+        previous = now;
+        if (quiet >= QUIET_POLLS) {
+          console.log(`settled platform builds (${testId}): ${String(now)}`);
+          return now;
+        }
+      }
+      throw new Error(
+        `"${testId}" never settled on a platform-build count: its report is ` +
+          `"${reportText(testId)}" - still changing after 12s, so there is no ` +
+          `baseline for the re-render assertions to be made against.`
+      );
+    };
+    const buildsInline0 = await settledBuilds('fresh-inline');
+
+    for (const tick of [1, 2, 3]) {
+      await rerender(tree(tick, value));
+    }
+    await waitForDisplayed(
+      'fresh-inline',
+      value.getTime(),
+      'the fresh-instant re-renders'
+    );
+    expect(reportOf('fresh-inline').controlBuilds).toBe(buildsInline0); // a millisecond of a bound is not a new calendar
+
+    // The presentation is where a rebuild costs the most, so it gets its own half: open
+    // it, re-render under it, and the control the user is interacting with has to still
+    // be the one they started with.
+    handles.get('fresh-dialog')?.nuiTestPresent();
+    await waitForPresented('fresh-dialog', true, 'the field press');
+    await waitForLivePresentations('fresh-dialog', 1, 'the open presentation');
+    const buildsOpen = await settledBuilds('fresh-dialog');
+    if (isAndroid) {
+      await waitForMonth('fresh-dialog', 2026, 7, 'the dialog as it opened');
+    }
+
+    // Two more renders under the open presentation, and a value that moved to another
+    // month while it was up: a value-only change is not a rebuild either, so the page
+    // the dialog opened on stays put until a *bound* moves.
+    for (const tick of [4, 5]) {
+      await rerender(tree(tick, laterValue));
+    }
+    await waitForDisplayed(
+      'fresh-dialog',
+      laterValue.getTime(),
+      'the value moved under the open dialog'
+    );
+    expect(reportOf('fresh-dialog').controlBuilds).toBe(buildsOpen); // the open presentation was not rebuilt
+    if (isAndroid) {
+      // The user's view of the same fact: a rebuild would re-seed the page from the
+      // value, so this July page is the dialog's own selection surviving the re-render.
+      await waitForMonth(
+        'fresh-dialog',
+        2026,
+        7,
+        'the dialog after a millisecond-only bound move'
+      );
+    }
+
+    // A bound that moved as far as the control can see still has to be *in force*, and
+    // it is asserted here as something a user can see: `maximumDate` moves to the day
+    // before the dialog's value, so the value has to be clamped down onto it. A re-key
+    // that dropped the bound instead of moving with it would leave the value sitting
+    // past its maximum.
+    //
+    // Android also gets the rebuild itself, because that is how a bound arrives there:
+    // Compose's `key(selectable, yearRange)` re-creates the control and the count sees
+    // it, which is what makes the Android half of this test red against the raw instants.
+    // iOS gets no rebuild assertion. Its counter counts *appearances*, and an `.id(_:)`
+    // change on a control that is already on screen was measured not to move it in
+    // either direction - the raw bound instants give the same settled number as the
+    // day-granular key - so on iOS the number can only say "nothing was put on screen
+    // again", never "the control survived". What iOS asserts instead is the contract the
+    // rebuild exists for: the presentation stays up, and the new bound is in force a
+    // moment later. The one case where iOS genuinely needs a *fresh* control - a value
+    // the live control would clamp against a bound it still holds - is the escape clause
+    // of `controlIdentity`, driven by the `shows the month the value is in...` test.
+    const clampedMaximum = new Date(laterValue.getTime() - DAY);
+    await rerender(tree(6 + DAY, laterValue, clampedMaximum));
+    await waitForLivePresentations(
+      'fresh-dialog',
+      1,
+      'the presentation across a bound that moved'
+    );
+    await waitForDisplayed(
+      'fresh-dialog',
+      clampedMaximum.getTime(),
+      'a maximum a day before the value'
+    );
+    if (isAndroid) {
+      for (const [testId, baseline] of [
+        ['fresh-dialog', buildsOpen],
+        ['fresh-inline', buildsInline0],
+      ] as const) {
+        await pollUntil(
+          () =>
+            reportOf(testId).controlBuilds > baseline
+              ? reportOf(testId).controlBuilds
+              : null,
+          () =>
+            new Error(
+              `a whole day of movement in \`minimumDate\` did not rebuild ` +
+                `"${testId}": "${reportText(testId)}" still reports ` +
+                `${String(reportOf(testId).controlBuilds)} builds, want more than ` +
+                `${String(baseline)}. A calendar that never rebuilds cannot take new ` +
+                `bounds, and Material 3's state reads them once.`
+            )
+        );
+      }
+    }
+    console.log(
+      `re-render bounds (${Platform.OS}, ${zoneNote()}): ` +
+        `value=${value.toISOString()} later=${laterValue.toISOString()} ` +
+        `inline=${reportText('fresh-inline')} ` +
+        `dialog=${reportText('fresh-dialog')}`
     );
     unmount();
   });
