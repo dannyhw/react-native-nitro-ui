@@ -320,7 +320,11 @@ async function pressBothEnds(
   expect(box).not.toBeNull();
   await userEvent.pressAt(box!.x + box!.width - 2, box!.y + box!.height / 2);
   await userEvent.pressAt(box!.x + 2, box!.y + box!.height / 2);
-  expect(await waitForEvents(expected.length)).toEqual([...expected]);
+  // Joined, so a red run says which segment got the tap: the harness prints an
+  // array diff abbreviated (`…(2)`), which hides exactly the fact under test.
+  expect((await waitForEvents(expected.length)).join(',')).toEqual(
+    [...expected].join(',')
+  );
 }
 
 const rowStyle: StyleProp<ViewStyle> = { gap: 6 };
