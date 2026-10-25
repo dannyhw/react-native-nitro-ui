@@ -263,6 +263,36 @@ internal class DatePickerModel : NitroUiModel() {
     val livePresentations = AtomicInteger(0)
   }
 
+  /**
+   * How many Material 3 calendar states this mount has built - the last field of
+   * [readReport].
+   *
+   * A rebuild is what a bounds change costs a calendar (see the `key(...)` at each
+   * `rememberDatePickerState` call site): the page the user turned to and an open
+   * dialog's provisional pick go with it. That is the right price for a *day* of
+   * movement in a bound and the wrong price for a millisecond of it, and the only
+   * honest way to say which one a re-render cost is to count them. Not observed state
+   * on purpose: nothing may recompose because a counter moved, and the counter is
+   * incremented from inside a `key` block, which runs during composition.
+   */
+  private val controlBuilds = AtomicInteger(0)
+
+  /**
+   * The control last counted, by identity. A rebuild is a *new* state object; a
+   * recomposition of the one already there is not, and Compose may run a composition
+   * more than once - so the count is keyed on the object rather than on how often a
+   * block ran. Written from the main thread only, like the composition itself.
+   */
+  private var countedControl: Any? = null
+
+  /** One platform control built (see [controlBuilds]); counted once per control. */
+  fun noteControlBuild(control: Any) {
+    if (countedControl !== control) {
+      countedControl = control
+      controlBuilds.incrementAndGet()
+    }
+  }
+
   // MARK: - Bounds
 
   /**
@@ -387,16 +417,18 @@ internal class DatePickerModel : NitroUiModel() {
 
   /**
    * The last published report, as
-   * `"<displayed ms>|<presented>|<calendar month>|<calendar has selection>|<live presentations>"`.
+   * `"<displayed ms>|<presented>|<calendar month>|<calendar has selection>|<live presentations>|<calendar builds>"`.
    * Safe from any thread.
    *
    * The first two fields are published (they are model state); the calendar pair is
    * published by the calendar's own effect; the presentation count is read live,
-   * because it is process-wide state that this mount does not own.
+   * because it is process-wide state that this mount does not own; the build count is
+   * read live too, because the point of reading it is to compare it before and after a
+   * re-render.
    */
   fun readReport(): String =
     synchronized(reportLock) {
-      "$report|$calendarMonthUtcMillis|$calendarHasSelection|${livePresentations.get()}"
+      "$report|$calendarMonthUtcMillis|$calendarHasSelection|${livePresentations.get()}|${controlBuilds.get()}"
     }
 
   // MARK: - Material 3's calendar arithmetic
@@ -1012,11 +1044,16 @@ private class DatePickerHost(
       // `selectableDates` as read-only properties (the setter for the latter is only
       // on the internal `BaseDatePickerStateImpl`) - so React widening the range has
       // to produce a new state, which is what `key` does. The key is the pair of
-      // bounds the state was built from, plus the range derived from them: a change
-      // to `minimumDate`/`maximumDate` then costs the calendar its scroll position,
-      // which is the honest trade - a calendar offering days this control would clamp
-      // away is not the same calendar.
-      val state = key(model.minimum, model.maximum, yearRange) {
+      // keys the state consumes: the `SelectableDates` built from the bounds and the
+      // navigable year range. Both are *day*-granular - `selectable` is `remember`ed on
+      // the bounds' UTC-midnight days, `yearRange` is a pair of years - which is exactly
+      // how far a bound reaches this calendar, so a real change to
+      // `minimumDate`/`maximumDate` costs the calendar its scroll position: the honest
+      // trade, because a calendar offering days this control would clamp away is not the
+      // same calendar. Keying the raw bound instants instead costs a rebuild on *every*
+      // parent render for the `minimumDate={new Date()}` idiom the docs lead with, which
+      // throws away the page the user turned to and an open dialog's provisional pick.
+      val state = key(selectable, yearRange) {
         rememberDatePickerState(
           initialSelectedDateMillis = shownDayUtcMidnight,
           // Named, because the second positional argument is *not* a minimum: it is
@@ -1026,7 +1063,7 @@ private class DatePickerHost(
           initialDisplayedMonthMillis = model.toUtcMonthStartOfLocalDay(shown),
           yearRange = yearRange,
           selectableDates = selectable,
-        )
+        ).also { model.noteControlBuild(it) }
       }
       syncDatePicker(model, state)
       // No mode toggle: it switches the calendar to a *text entry* form, which is a
@@ -1073,7 +1110,10 @@ private class DatePickerHost(
     if (step == Step.Date) {
       val yearRange = remember(model.minimum, model.maximum, model.displayed) { model.dateYearRange() }
       val selectable = model.rememberSelectableDates()
-      val state = key(model.minimum, model.maximum, yearRange) {
+      // Day-granular, for the same reason as the inline calendar's: keying the raw
+      // bound instants makes every parent render a rebuild, and inside an open dialog
+      // a rebuild discards the selection the user has provisionally made.
+      val state = key(selectable, yearRange) {
         rememberDatePickerState(
           initialSelectedDateMillis = model.toUtcMidnightOfLocalDay(model.displayed),
           // Named, and the dialog needs it most: with the second argument positional
@@ -1082,7 +1122,7 @@ private class DatePickerHost(
           initialDisplayedMonthMillis = model.toUtcMonthStartOfLocalDay(model.displayed),
           yearRange = yearRange,
           selectableDates = selectable,
-        )
+        ).also { model.noteControlBuild(it) }
       }
       // The dialog's *selection* stays provisional until OK, so nothing here syncs it
       // back into the model; what it does publish is the page and whether a day is lit,
@@ -1238,8 +1278,14 @@ private fun syncDatePicker(
       model.applyUserSelection(model.fromUtcMidnightKeepingTimeOfDay(picked, model.displayed))
     }
     val wanted = model.toUtcMidnightOfLocalDay(model.displayed)
+    // Record the day the state holds *whether or not* this block had to write it. A
+    // pick the model accepted needs no write, so writing only inside the `if` left
+    // `pushed` on the day before the tap - and the next tap, back onto that day, then
+    // read as the model's own write: nothing was emitted, and the calendar snapped
+    // forward again under the finger. The race the guard exists for stays closed
+    // because `pushed` is still set before every write this control makes.
+    pushed.value = wanted
     if (state.selectedDateMillis != wanted) {
-      pushed.value = wanted
       state.selectedDateMillis = wanted
     }
   }
@@ -1276,8 +1322,10 @@ private fun syncTimePicker(
     // Same snap-back: a pick the model refused must not stay painted on the dial.
     val fields = model.localFields(model.displayed)
     val wanted = Pair(fields.get(Calendar.HOUR_OF_DAY), fields.get(Calendar.MINUTE))
+    // Recorded unconditionally, exactly as in `syncDatePicker`: a dial returned by
+    // hand to the hour it started on is a pick, not the model's own write.
+    pushed.value = wanted
     if (state.hour != wanted.first || state.minute != wanted.second) {
-      pushed.value = wanted
       state.hour = wanted.first
       state.minute = wanted.second
     }

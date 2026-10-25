@@ -128,7 +128,15 @@ which *greys* days outside the range rather than hiding them, plus the calendar'
 sending.
 
 Changing the bounds **re-creates the platform control on both platforms**, which costs
-that calendar its own page and nothing else. Android has to: its `DatePickerState` reads
+that calendar its own page and nothing else — where "changed" means moved as far as the
+control can see: a **day** for a picker that shows no time, and a **minute** for one that
+shows one. `minimumDate={new Date()}` is the first example on this page and hands the
+control a new instant on every render; keying the rebuild on that instant would throw away
+the page the user turned to, a wheel's scroll position and an open dialog's provisional
+pick on every parent render, and none of those is a day of movement in a bound. iOS also
+rebuilds when the value has left the range the control on screen was built with, which is
+the crash below and too narrow a change to catch by granularity alone.
+Android has to: its `DatePickerState` reads
 `yearRange` and `selectableDates` once, at construction, so bounds that arrive later
 would otherwise grey out the wrong days and — worse — a value whose year the old range
 does not cover is *stored as no selection at all*, leaving a calendar with no lit day and

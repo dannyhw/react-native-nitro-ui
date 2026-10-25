@@ -155,8 +155,120 @@ final class DatePickerModel: NitroUiModel {
     // then the process-wide count of live presentations, read live rather than
     // published: a dropped mount has nothing left to publish, which is exactly the
     // case the count exists for.
-    return "\(report)|-1|-1|\(NitroUiDatePickerPresentation.livePresentations)"
+    // The last field is this mount's own count of platform controls it has built
+    // (`controlBuilds`), which is how "a re-render must not re-create the control" is
+    // tested: the number has to move when a bound really moved, and must not when only
+    // the bound's millisecond did.
+    return "\(report)|-1|-1|\(NitroUiDatePickerPresentation.livePresentations)|\(controlBuilds)"
   }
+
+  /// How many times the platform control was built by this mount. See ``readReport()``.
+  ///
+  /// Counted by ``noteControlBuilt(minimum:maximum:)`` from the control's own
+  /// appearance. Plain (not published): it is read after the fact, and nothing may
+  /// recompose because it moved.
+  var controlBuilds = 0
+
+  /// The bounds the control that is on screen was built with, and nil before the first
+  /// one appeared. Recorded by ``noteControlBuilt(minimum:maximum:)``, which the control
+  /// itself calls when it appears - so it describes the live control rather than what
+  /// React last sent, which is the comparison ``controlIdentity`` needs.
+  private(set) var builtBounds: (minimum: Double?, maximum: Double?)?
+
+  /// A platform control appeared, built from these bounds.
+  ///
+  /// `controlBuilds` counts appearances, the closest thing SwiftUI offers to "this
+  /// control was re-built": a control that survives a render does not appear again, and
+  /// one that a re-identification replaces does. It is not the identity string itself -
+  /// changing an `.id(_:)` on a control that is already on screen can update the live
+  /// one in place - so the number only ever means *more or fewer than the same renders
+  /// produced before it*, which is how the harness reads it.
+  func noteControlBuilt(minimum: Double?, maximum: Double?) {
+    controlBuilds += 1
+    builtBounds = (minimum, maximum)
+  }
+
+  /// What the platform control's SwiftUI identity is keyed on.
+  ///
+  /// Re-identifying is not a style choice: `UIDatePicker` applies a new `date` *before*
+  /// a new `maximumDate`, and a date outside the bounds it still holds is clamped - a
+  /// clamp UIKit reports as a selection change from inside its own update, whose reload
+  /// then asserts in `UICalendarView _setVisibleMonth:` (SIGABRT; see the
+  /// `shows the month the value is in...` harness test, which does exactly this:
+  /// `maximumDate` to 31 Dec 2028 together with a value in March 2028). A *fresh*
+  /// control starts unbounded, so both bounds land before anything can be clamped - and
+  /// a rebuild resets that calendar's own page and a wheel's scroll position, which is
+  /// the price documented on the page.
+  ///
+  /// The price is only worth paying when something actually moved for the control.
+  /// Keying it on the raw bound instants made *every* parent render a rebuild, because
+  /// `minimumDate={new Date()}` - the first example in `docs/components/date-picker.md` -
+  /// sends a new millisecond each time. So: two parts.
+  ///
+  /// The bounds, at the granularity the control itself has - the local day for a picker
+  /// that shows no time, the minute for one that does (``components``). Below that step
+  /// the control cannot offer a different day or minute, so a smaller move is not a
+  /// reason to take the caller's page or scroll position away from them.
+  ///
+  /// And one escape: a value that has left the range the control *on screen* was built
+  /// with. A bound can move enough to put the clamped value outside the range the live
+  /// control holds while moving too little to change the first part - widening
+  /// `maximumDate` by an hour inside one day and sending a value in that hour is exactly
+  /// the crash above - and that value needs a control that is not holding the old bound.
+  /// Such a re-identification rebuilds once more than the bounds alone ask for (the new
+  /// control records the bounds it was built from, so the escape stops applying right
+  /// after); the alternative is the assert.
+  ///
+  /// Applied as `.id(_:)` to the control itself. One level out, on `PlatformPicker`, the
+  /// same key was measured to assert in `UICalendarView _setVisibleMonth:` - the fresh
+  /// control is asked for a month its own bounds exclude as it goes on screen.
+  var controlIdentity: String {
+    var identity = granularBoundsIdentity
+    guard let built = builtBounds else {
+      return identity
+    }
+    let lower = built.minimum ?? -.greatestFiniteMagnitude
+    let upper = max(built.maximum ?? .greatestFiniteMagnitude, lower)
+    let shown = state.displayed
+    if shown < lower || shown > upper {
+      identity += "|outside"
+    }
+    return identity
+  }
+
+  /// ``controlIdentity``'s first part: the two bounds, rounded down to the step the
+  /// control shows. An unbounded picker has no part of its own, so the common case
+  /// never re-identifies.
+  private var granularBoundsIdentity: String {
+    let calendar = Calendar.current
+    let showsTime = components != .date
+    let step: Set<Calendar.Component> = showsTime
+      ? [.year, .month, .day, .hour, .minute]
+      : [.year, .month, .day]
+    func bucket(_ millis: Double?) -> String {
+      guard let millis else {
+        return "none"
+      }
+      let parts = calendar.dateComponents(step, from: DatePickerModel.date(millis))
+      let day = "\(parts.year ?? 0)-\(parts.month ?? 0)-\(parts.day ?? 0)"
+      return showsTime ? "\(day)T\(parts.hour ?? 0):\(parts.minute ?? 0)" : day
+    }
+    return "min:\(bucket(minimum)) max:\(bucket(maximum))"
+  }
+
+  /// Which components the mode shows. `'date'` is the default for anything unrecognised,
+  /// which is what makes a typo on the wire a date picker rather than a crash.
+  var components: DatePickerComponents {
+    switch mode {
+    case "time":
+      return .hourAndMinute
+    case "datetime":
+      return [.date, .hourAndMinute]
+    default:
+      return .date
+    }
+  }
+
 
   // MARK: - Interaction
 
@@ -477,46 +589,15 @@ private struct PlatformPicker: View {
       model.accessibilityLabel ?? "",
       selection: selection,
       in: selectableRange,
-      displayedComponents: components
+      displayedComponents: model.components
     )
     .labelsHidden()
-    // Re-identified whenever the bounds move. Not a style choice: `UIDatePicker`
-    // applies a new `date` *before* a new `maximumDate`, and a date outside the bounds
-    // it still holds is clamped - a clamp UIKit reports as a selection change from
-    // inside its own update, whose reload then asserts in `UICalendarView
-    // _setVisibleMonth:` (SIGABRT; see the `shows the month the value is in…` harness
-    // test, which does exactly this: `maximumDate` to 31 Dec 2028 together with a value
-    // in March 2028). A *fresh* control starts unbounded, so both bounds land before
-    // anything can be clamped. Same shape as Android's `key(minimum, maximum,
-    // yearRange)`; the cost is that a bounds change resets that calendar's own page,
-    // which is documented on the page.
-    .id(boundsIdentity)
-  }
-
-  /// What the platform control's SwiftUI identity is keyed on: the bounds, exactly as
-  /// ``selectableRange`` reads them. Empty for an unbounded picker, so the common case
-  /// never re-identifies.
-  private var boundsIdentity: String {
-    guard let minimum = model.minimum else {
-      return model.maximum.map { "max:\($0)" } ?? ""
-    }
-    guard let maximum = model.maximum else {
-      return "min:\(minimum)"
-    }
-    return "\(minimum):\(maximum)"
-  }
-
-  /// Which components the mode shows. `'date'` is the default for anything unrecognised,
-  /// which is what makes a typo on the wire a date picker rather than a crash.
-  private var components: DatePickerComponents {
-    switch model.mode {
-    case "time":
-      return .hourAndMinute
-    case "datetime":
-      return [.date, .hourAndMinute]
-    default:
-      return .date
-    }
+    // Re-identified by ``DatePickerModel/controlIdentity``, and only there: the same
+    // key, applied one level out to `PlatformPicker` from its call sites, was measured
+    // to assert in `UICalendarView _setVisibleMonth:` - which is the failure the
+    // identity exists to avoid.
+    .id(model.controlIdentity)
+    .onAppear { model.noteControlBuilt(minimum: model.minimum, maximum: model.maximum) }
   }
 
   /// The bounds, as the range SwiftUI's `DatePicker(in:)` wants.
@@ -939,7 +1020,11 @@ final class HybridNitroUiDatePicker: HybridNitroUiDatePickerSpec, RecyclableView
   /// `en_US`, and `mode = "time"` measures 48.00 here against 72.00 there. A locale
   /// wider than this one costs that configuration's first instance one horizontal
   /// correction, which is the documented price of a sizing key that excludes the
-  /// value - and it is the safe direction to be wrong in.
+  /// value. That is a price, not a safe side: `core.md` section 7 says neither
+  /// direction is safe - too narrow is the dead-touch story, and too wide is dead
+  /// padding beside the control - so the honest statement is how far wrong this
+  /// pair can be for a configuration it was not measured in (4 pt narrow for
+  /// `en_US`), not that being wrong there is free.
   ///
   /// As everywhere else, a fallback *smaller* than the control is the dead-touch
   /// story in `core.md` §7, and a `compact` field that is 44 pt wide for one frame
