@@ -892,18 +892,75 @@ describe('Button · G2', () => {
     // A measured size is not an override: `width` fixes the box, and the title has
     // to truncate inside it rather than paint outside (core.md §7's hit-test
     // story, in the other direction).
+    //
+    // What this can *assert* is the two ends of that rule, because the truncated
+    // label itself is not readable from here - Compose's `Text` and SwiftUI's
+    // label are both inside their hosting view, and `queryByTestId` only answers
+    // for real Views:
+    //  - the box is the caller's 120, and `measureContent()` is still the title's
+    //    intrinsic width. A host that starts reporting the *placement* size (the way
+    //    Android's did before T11 measured unbounded) puts 120 in the cache under
+    //    this title, and that is the failure worth a test: every later Button with
+    //    this title is 120 dp wide forever;
+    //  - on Android the tap still lands. Truncation must not shrink the button out
+    //    of its own box, and a barometer `Pressable` next to it says whether an
+    //    empty log would mean the control or the tap.
+    // Whether the label ends with an ellipsis or with a cut is what the screenshots
+    // in `docs/tasks/C1-android-overwide/` show.
+    const rnPresses: string[] = [];
     const { unmount } = await render(
-      <Button
-        title="A title far too long for the box it was given"
-        testID="capped"
-        style={{ width: 120 }}
-        hybridRef={captureHybrid('capped')}
-      />
+      <View style={rowStyle}>
+        <Pressable
+          testID="capped-barometer"
+          onPress={(): void => {
+            rnPresses.push('tap');
+          }}
+        >
+          <Text>Barometer</Text>
+        </Pressable>
+        <Button
+          title="A title far too long for the box it was given"
+          onPress={recordPress('capped')}
+          testID="capped"
+          style={{ width: 120 }}
+          hybridRef={captureHybrid('capped')}
+        />
+      </View>,
+      { timeout: 20000 }
     );
     await waitForTestId('capped');
     const box = sizeOf('capped');
     expect(box).not.toBeNull();
     expect(Math.abs(box!.width - 120) < 0.6).toBe(true);
+    const intrinsic = await waitForMeasured('capped', 'a long title');
+    expect(intrinsic.width).toBeGreaterThan(box!.width + 20);
+
+    await userEvent.press(await waitForTestId('capped-barometer'));
+    await pollUntil(
+      () => (rnPresses.length > 0 ? true : null),
+      () =>
+        new Error(
+          'The harness tap reached neither the RN Pressable in this row nor ' +
+            'anything else: this test cannot judge a button press.'
+        ),
+      5000
+    );
+    if (Platform.OS === 'android') {
+      await userEvent.press(await waitForTestId('capped'));
+      expect(await waitForPresses(1)).toEqual(['capped']);
+    } else {
+      // No harness tap reaches a hosted SwiftUI Button, for the reason written out
+      // in `fires onPress once per tap and nothing when disabled`: the synthesised
+      // touch carries no HID event, and SwiftUI's button gesture environment
+      // refuses it. So the "still tappable once truncated" half of this contract
+      // can only be asserted from here on Android; on iOS it stays with the manual
+      // tap that `docs/tasks/G2-button.report.md` still has open.
+      console.log(
+        `iOS: harness taps delivered to the Button = ${String(pressLog.length)} ` +
+          `(barometer ${String(rnPresses.length)}); not deliverable to a hosted ` +
+          'SwiftUI Button, so this asserts the box and the reported size only'
+      );
+    }
     unmount();
   });
 
