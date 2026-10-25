@@ -41,6 +41,7 @@ import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import {
   findByDescription,
   findByTestId,
+  findAllByText,
   findTab,
   parseHierarchy,
 } from './uiautomator.mjs';
@@ -66,7 +67,13 @@ const ECHO = {
   segmentedEvents: 'real-input-segmented-events',
   rejectEvents: 'real-input-reject-events',
   rejectValue: 'real-input-reject-value',
+  pickerIndex: 'real-input-picker-index',
+  pickerEvents: 'real-input-picker-events',
+  pickerGone: 'real-input-drop-gone',
 };
+
+/** The system Back key, which is how a person dismisses an open popup. */
+const KEY_BACK = 4;
 
 /** How long a control gets to react to a gesture it should have answered. */
 const REACT_TIMEOUT = Number(process.env.REAL_INPUT_TIMEOUT ?? 8000);
@@ -374,6 +381,246 @@ const CHECKS = {
       '0'
     );
   },
+  /**
+   * A menu picker: a real tap must open a popup, a real tap on a row must bring the
+   * choice back to JS, a refused choice must go away again, and a popup that outlives
+   * the view that opened it must not survive it.
+   *
+   * Two things about a popup decide every assertion here, both measured on
+   * `nitroui_t01` rather than assumed:
+   *
+   *  - While the popup is open, `uiautomator dump` returns *its* tree - the app
+   *    window's own `Text`s (the echoes) are not in that dump. So a check reads the
+   *    popup's rows while it is open and reads echoes only once it is shut, which is
+   *    also how it looks to a person: a menu covers the screen it belongs to.
+   *  - The popup is a window of its own (`Window{... u0 Pop-Up Window}` owned by this
+   *    activity), so `popupWindowCount()` is a reading that survives the popup leaving
+   *    the accessibility tree - the only way to see a popup that leaked.
+   */
+  'picker': async (t) => {
+    // The three titles of `real-input-picker`, spelled as `PickerScreen` spells
+    // them. None appears anywhere else on the screen, which is what lets a text
+    // match name a popup row.
+    const FIRST = 'Onyx';
+    const LONGEST = 'A considerably longer mineral name';
+    const control = await t.requireControl('Real-input picker');
+    const widthBefore = control.bounds.width;
+
+    t.log.checkEquals(
+      'the Picker has reported no index before a touch',
+      t.requireEcho(ECHO.pickerIndex),
+      '-'
+    );
+    t.log.checkEquals(
+      'no change has been reported before a touch',
+      t.requireEcho(ECHO.pickerEvents),
+      '0'
+    );
+    t.log.checkEquals(
+      'no popup window belongs to the app before a touch',
+      t.popupWindowCount(),
+      0
+    );
+
+    // 1. Opening. A tap on the anchor opens a list - and the control is not
+    //    expected to treat that as a choice (asserted after it closes, below).
+    await t.tapNode(control);
+    t.log.checkEquals(
+      'a real tap on the anchor opens the menu as a popup window',
+      t.popupWindowCount(),
+      1
+    );
+    // Wait for the dump to carry the menu's rows before asking it about
+    // selection - the popup owns the tree only while it is open.
+    t.waitForOption(LONGEST, 'the menu to open');
+    t.log.check(
+      `the open menu marks the current choice ("${FIRST}") selected to TalkBack`,
+      t.optionIsSelected(FIRST)
+    );
+
+    // 2. Back dismisses without choosing - the platform's own way out of a menu.
+    await t.pressBack();
+    t.log.checkEquals(
+      'Back shuts the popup (no window left behind)',
+      t.popupWindowCount(),
+      0
+    );
+    t.log.checkEquals(
+      'opening and dismissing reported no selection - a menu is not a choice',
+      t.requireEcho(ECHO.pickerEvents),
+      '0'
+    );
+    t.log.checkEquals(
+      'and the anchor still shows the title it started with',
+      t.anchorTitle('Real-input picker'),
+      FIRST
+    );
+
+    // 2b. The way out that changes nothing: the row already on show. It closes the
+    //       menu and reports no choice. Android suppresses that no-op on purpose,
+    //       and G6 measured that iOS reports it unless told not to, so both
+    //       platforms carry this check (`HybridNitroUiPicker.swift`).
+    await t.tapNode(t.requireControlAt('Real-input picker', control));
+    await t.tapNode(
+      t.waitForOption(FIRST, 'the menu to show the current choice')
+    );
+    t.log.checkEquals(
+      'tapping the row that is already chosen closes the menu',
+      t.popupWindowCount(),
+      0
+    );
+    t.log.checkEquals(
+      'and a choice that changed nothing reports nothing',
+      t.requireEcho(ECHO.pickerEvents),
+      '0'
+    );
+
+    // 3. Choosing. The rows are the popup's, so this tap is aimed at a node that
+    //    only exists while the menu is open.
+    await t.tapNode(t.requireControlAt('Real-input picker', control));
+    await t.tapNode(t.waitForOption(LONGEST, 'the menu to open again'));
+    t.log.checkEquals(
+      'a real tap on a menu row reaches JS as index 2',
+      t.waitForEcho(ECHO.pickerIndex, '2', 'a real tap on the row to register'),
+      '2'
+    );
+    t.log.checkEquals(
+      'one choice reports one change',
+      t.requireEcho(ECHO.pickerEvents),
+      '1'
+    );
+    t.log.checkEquals('choosing closes its own popup', t.popupWindowCount(), 0);
+
+    // 4. The box follows a title that moved with no React render: this picker is
+    //    uncontrolled, so nothing told React the title changed, and `nuiSizingKey`
+    //    still names the title it was built with. Growing is therefore the host's
+    //    own measure signal at work - the same signal `Picker.harness.tsx` cannot
+    //    reach, because a harness press never gets into a popup.
+    const widthAfter = t.anchorWidth('Real-input picker');
+    t.log.checkEquals(
+      `the anchor now paints the title that was chosen ("${LONGEST}")`,
+      t.anchorTitle('Real-input picker'),
+      LONGEST
+    );
+    t.log.check(
+      `the control grew to fit it (${String(widthBefore)} dp -> ` +
+        `${String(widthAfter)} dp), with no render to ask for`,
+      widthAfter != null && widthAfter > widthBefore + 20
+    );
+
+    // 5. A choice the parent refuses. Native paints it first (core.md section 4),
+    //    so the second tap is the oracle: it can only be a fresh choice if the
+    //    refused one went back to what the parent keeps sending.
+    const rejecting = await t.requireControl('Real-input rejecting picker');
+    t.log.checkEquals(
+      'the refusing parent pins its Picker at index 0',
+      t.requireEcho(ECHO.rejectValue),
+      '0'
+    );
+    await t.tapNode(rejecting);
+    await t.tapNode(
+      t.waitForOption('Ridge', 'the refusing picker menu to open')
+    );
+    t.log.checkEquals(
+      'a real tap on the controlled picker still reaches JS - native paints optimistically',
+      t.waitForEcho(ECHO.rejectEvents, '1', 'the controlled tap to register'),
+      '1'
+    );
+    t.log.checkEquals(
+      'the parent never accepted the change, so the index it sends is still 0',
+      t.requireEcho(ECHO.rejectValue),
+      '0'
+    );
+    t.log.checkEquals(
+      "the refused title went away: the anchor shows the parent's title again",
+      t.anchorTitle('Real-input rejecting picker'),
+      'Summit'
+    );
+    await t.tapNode(
+      t.requireControlAt('Real-input rejecting picker', rejecting)
+    );
+    await t.tapNode(
+      t.waitForOption('Ridge', 'the refusing picker menu to reopen')
+    );
+    t.log.checkEquals(
+      'tapping the refused row again is a fresh choice, which is only true if the refused one was rolled back',
+      t.waitForEcho(ECHO.rejectEvents, '2', 'the repeated tap to register'),
+      '2'
+    );
+    t.log.checkEquals('choosing shut that popup too', t.popupWindowCount(), 0);
+
+    // 6. The leak case (B1's shape, for popups): open a menu, then have React take
+    //    the view away underneath it, three times. Each cycle ends with no popup
+    //    window owned by the app - a popup that survives its view is invisible in
+    //    the accessibility tree, so the window table is what is read.
+    for (let cycle = 1; cycle <= 3; cycle += 1) {
+      const dropControl = await t.requireControl('Real-input drop picker');
+      const dropButton = t.waitForNode(
+        ECHO.pickerGone.replace('-gone', '-button'),
+        'the unmount button'
+      );
+      await t.tapNode(dropButton);
+      await t.tapNode(dropControl);
+      // Read the window table, not the accessibility dump: `dump` costs around a
+      // second under load and can miss a menu that is open for less, while the
+      // window table is one cheap query that says the same thing - a popup of this
+      // app's is on screen. Steps 1-3 already proved such a popup carries rows.
+      t.log.checkEquals(
+        `cycle ${String(cycle)}: the drop picker's menu is open as a popup window`,
+        t.popupWindowCount(),
+        1
+      );
+      // The unmount is on a timer inside the app (2.5 s), so the menu is definitely
+      // open when the view goes away - a second real tap would only have dismissed it.
+      t.waitForNode(
+        ECHO.pickerGone,
+        `cycle ${String(cycle)}: the picker to unmount`
+      );
+      t.log.checkEquals(
+        `cycle ${String(cycle)}: unmounting with the menu open leaves no popup window`,
+        t.popupWindowCount(),
+        0
+      );
+      if (cycle < 3) {
+        await t.tapNode(
+          t.waitForNode(
+            ECHO.pickerGone.replace('-gone', '-remount'),
+            'the remount button'
+          )
+        );
+      }
+    }
+
+    // 7. A disabled picker refuses a real touch. `menuAnchor(enabled = false)`
+    //    means the anchor is never asked to open, so the window table is the
+    //    witness - and the ordinary picker beside it, tapped the same way, is what
+    //    turns "nothing happened" into "this one refused".
+    //
+    //    The accessibility `enabled` flag is deliberately not the witness:
+    //    measured on `nitroui_t01`, Compose renders the anchor as two nodes - M3's
+    //    merged field node, which does report `enabled=false`, and the node that
+    //    carries this control's `contentDescription`, which reports `enabled=true`
+    //    even with `Disabled` in its semantics (`HybridNitroUiPicker.kt`). Reading
+    //    the first would claim more than the second grants; the gap is reported.
+    const locked = await t.requireControlOnScreen('Real-input disabled picker');
+    await t.tapNode(locked);
+    t.log.checkEquals(
+      'a real tap on the disabled picker opens no menu',
+      t.popupWindowCount(),
+      0
+    );
+    const unlocked = await t.requireControlOnScreen(
+      'Real-input enabled picker'
+    );
+    await t.tapNode(unlocked);
+    t.log.checkEquals(
+      'the ordinary picker, tapped the same way, opens one - so the line above measured a refusal',
+      t.popupWindowCount(),
+      1
+    );
+    await t.pressBack();
+    t.log.checkEquals('and that menu goes away again', t.popupWindowCount(), 0);
+  },
 };
 
 async function main() {
@@ -499,9 +746,12 @@ class DeviceHarness {
   }
 
   /**
-   * @returns {number}
+   * The screen size in pixels, from `wm size`. A swipe is a pair of absolute
+   * coordinates, so a scroll has to know the screen it is scrolling.
+   *
+   * @returns {{ width: number, height: number }}
    */
-  displayHeight() {
+  screenSize() {
     const size = this.shell('wm size');
     const match = size.stdout.match(/(\d+)x(\d+)/);
     if (match == null) {
@@ -509,7 +759,21 @@ class DeviceHarness {
         `real-input: \`adb shell wm size\` said nothing useful: ${size.stdout.trim()}`
       );
     }
-    return Number(match[2]);
+    return { width: Number(match[1]), height: Number(match[2]) };
+  }
+
+  /**
+   * @returns {number}
+   */
+  displayHeight() {
+    return this.screenSize().height;
+  }
+
+  /**
+   * @returns {number}
+   */
+  displayWidth() {
+    return this.screenSize().width;
   }
 
   /**
@@ -648,7 +912,7 @@ class DeviceHarness {
   /**
    * The example's three tabs are its only navigation.
    *
-   * @param {'switch' | 'slider' | 'button' | 'segmented'} screen
+   * @param {'switch' | 'slider' | 'button' | 'segmented' | 'picker'} screen
    */
   async goToScreen(screen) {
     const label = {
@@ -656,12 +920,14 @@ class DeviceHarness {
       slider: 'Slider',
       button: 'Button',
       segmented: 'Segments',
+      picker: 'Picker',
     }[screen];
     const anchor = {
       switch: ECHO.switchValue,
       slider: ECHO.sliderStart,
       button: ECHO.buttonCount,
       segmented: ECHO.segmentedIndex,
+      picker: ECHO.pickerIndex,
     }[screen];
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
@@ -732,6 +998,59 @@ class DeviceHarness {
    */
   tapAt(x, y) {
     this.shell(`input tap ${String(Math.round(x))} ${String(Math.round(y))}`);
+  }
+
+  /**
+   * Press a system key, which is the only way to dismiss a popup the way a person
+   * does - a synthetic touch outside it would first have to land somewhere that is
+   * not the popup, and on Android a back key press is also the case the brief asks
+   * the control to handle.
+   *
+   * @param {number} keyCode e.g. 4 for `KEYCODE_BACK`
+   */
+  key(keyCode) {
+    this.shell(`input keyevent ${String(keyCode)}`);
+  }
+
+  /**
+   * How many popup windows this app owns.
+   *
+   * The B1 lesson: nothing per-mount may attach to the Activity or the window
+   * without being released, and a popup window is exactly such a thing - a leak is
+   * invisible in the accessibility tree once the view that owned it is gone, but a
+   * window the app no longer needs is still a window. Measured shape of
+   * `dumpsys window windows` on `nitroui_t01`: one Compose popup is
+   * `Window #N Window{... u0 Pop-Up Window}:`, whose record names the owning
+   * activity (`mActivityRecord=ActivityRecord{... nitroui.example/.MainActivity}`),
+   * so counting records that are popups *and* name this app counts this app's
+   * popups and nobody else's.
+   *
+   * @returns {number}
+   */
+  popupWindowCount() {
+    const dump = this.shell('dumpsys window windows').stdout;
+    let count = 0;
+    let isPopup = false;
+    let namesApp = false;
+    const flush = () => {
+      if (isPopup && namesApp) {
+        count += 1;
+      }
+    };
+    for (const line of dump.split('\n')) {
+      const header = line.match(/^\s*Window #\d+ Window\{([^}]*)\}/);
+      if (header != null) {
+        flush();
+        isPopup = header[1].includes('Pop-Up');
+        namesApp = header[1].includes(this.bundleId);
+        continue;
+      }
+      if (isPopup && !namesApp && line.includes(this.bundleId)) {
+        namesApp = true;
+      }
+    }
+    flush();
+    return count;
   }
 
   /**
@@ -833,6 +1152,39 @@ function makeContext(harness, log) {
           `${node.bounds.x2},${node.bounds.y2}`
       );
       return node;
+    },
+
+    /**
+     * Scroll the screen until this control is on it, then look it up.
+     *
+     * `uiautomator dump` lists no off-screen nodes, so a row below the fold is not
+     * merely unhittable - it is absent from the tree. Evidence that lives at the
+     * bottom of a screen therefore has to be scrolled to, exactly as a person
+     * scrolls to it, and this says so instead of failing with "not in the tree".
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     */
+    async requireControlOnScreen(description) {
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        const node = findByDescription(harness.hierarchy(), description);
+        if (node != null) {
+          if (attempt > 0) {
+            log.note(
+              `"${description}" needed ${String(attempt)} scroll` +
+                `${attempt === 1 ? '' : 's'} to come on screen`
+            );
+          }
+          log.note(
+            `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
+              `${node.bounds.x2},${node.bounds.y2}`
+          );
+          return node;
+        }
+        const { width, height } = harness.screenSize();
+        harness.swipe(width / 2, height * 0.7, width / 2, height * 0.32, 400);
+        await sleep(400);
+      }
+      return this.requireControl(description);
     },
 
     /**
@@ -960,6 +1312,153 @@ function makeContext(harness, log) {
      * @param {number | null} previous
      * @param {string} description
      */
+    /**
+     * Look a control up again, and say if it moved.
+     *
+     * A picker's anchor moves on purpose when the chosen title is wider than the
+     * last one, so "it moved" is not a failure here (that is what the growth
+     * assertion is for) - but a tap aimed at stale bounds would be, so every
+     * second touch on the same control is aimed at the box it has now.
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     * @param {import('./uiautomator.mjs').UiautomatorNode} previous where it was
+     */
+    requireControlAt(description, previous) {
+      const node = this.requireControl(description);
+      if (this.boundsText(node) !== this.boundsText(previous)) {
+        this.log.note(
+          `"${description}" moved from ${this.boundsText(previous)} to ` +
+            `${this.boundsText(node)} - the tap is aimed at the new box`
+        );
+      }
+      return node;
+    },
+
+    /**
+     * Wait for a React Native view with this `testID`, and hand back its node.
+     *
+     * For the app's own chrome (the buttons on the example's screens), which - unlike
+     * a hosted control - is a React Native view and so carries a `resource-id`.
+     *
+     * @param {string} testID
+     * @param {string} description
+     */
+    waitForNode(testID, description) {
+      /** @type {import('./uiautomator.mjs').UiautomatorNode | null} */
+      let found = null;
+      until(() => {
+        found = findByTestId(harness.hierarchy(), testID) ?? null;
+        return found != null;
+      }, `${description} - no view with testID "${testID}"`);
+      return /** @type {import('./uiautomator.mjs').UiautomatorNode} */ (found);
+    },
+
+    /**
+     * The app's popup windows right now - the leak oracle, explained on
+     * `DeviceHarness.popupWindowCount`.
+     */
+    popupWindowCount() {
+      return harness.popupWindowCount();
+    },
+
+    /**
+     * Press Back.
+     */
+    async pressBack() {
+      harness.key(KEY_BACK);
+      await sleep(400);
+    },
+
+    /**
+     * Wait for an option row of an open popup to be on screen, and hand back the
+     * node so a check can tap it.
+     *
+     * The rows are the popup's own: a Compose popup is a window of its own, and
+     * while it is open `uiautomator dump` returns that window's tree, which is why
+     * a check may not read an echo (an app-window `Text`) with a menu open and must
+     * not - the popup is the only thing on screen a person could be reading either.
+     *
+     * @param {string} text the option's label
+     * @param {string} description what should have happened
+     */
+    waitForOption(text, description) {
+      /** @type {import('./uiautomator.mjs').UiautomatorNode | null} */
+      let found = null;
+      until(() => {
+        found = findAllByText(harness.hierarchy(), text)[0] ?? null;
+        return found != null;
+      }, `${description} - no popup row labelled "${text}"`);
+      return /** @type {import('./uiautomator.mjs').UiautomatorNode} */ (found);
+    },
+
+    /**
+     * Whether the popup marks this option as the chosen one.
+     *
+     * The library publishes the selection as a Compose `selected` semantic on the
+     * row; measured on the running app, that reaches the accessibility dump as
+     * `checked="true"` on a `checkable` row that wraps the option's `Text`. This
+     * reads the row the label sits in, so the claim is about the row a screen
+     * reader stops on, not about a node the check invented.
+     *
+     * @param {string} text the option's label
+     */
+    optionIsSelected(text) {
+      const nodes = harness.hierarchy();
+      const label = findAllByText(nodes, text)[0];
+      if (label == null) {
+        return false;
+      }
+      const { cx, cy } = label.bounds;
+      const row = nodes.find(
+        (node) =>
+          node.checkable === 'true' &&
+          node.bounds.x1 <= cx &&
+          cx <= node.bounds.x2 &&
+          node.bounds.y1 <= cy &&
+          cy <= node.bounds.y2
+      );
+      return row != null && row.checked === 'true';
+    },
+
+    /**
+     * The title a picker's anchor is showing.
+     *
+     * Measured on the running app: the Material 3 field that acts as the anchor is
+     * an `EditText` node whose bounds are exactly those of the node carrying the
+     * control's `content-desc`, and its `text` is the selected option. So this is
+     * the only way to ask what the control paints, and it matters most for an
+     * uncontrolled picker - whose title moves with no React render behind it.
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     */
+    anchorTitle(description) {
+      const nodes = harness.hierarchy();
+      const control = findByDescription(nodes, description);
+      if (control == null) {
+        return null;
+      }
+      const field = nodes.find(
+        (node) =>
+          node.text !== '' &&
+          node.bounds.x1 === control.bounds.x1 &&
+          node.bounds.y1 === control.bounds.y1 &&
+          node.bounds.x2 === control.bounds.x2 &&
+          node.bounds.y2 === control.bounds.y2
+      );
+      return field == null ? null : field.text;
+    },
+
+    /**
+     * The width of a control's box, so a check can say "the control grew to fit the
+     * title it now shows" in one number.
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     */
+    anchorWidth(description) {
+      const node = findByDescription(harness.hierarchy(), description);
+      return node == null ? null : node.bounds.width;
+    },
+
     waitForValueToRise(testID, previous, description) {
       until(
         () => {

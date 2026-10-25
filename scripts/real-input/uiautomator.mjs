@@ -24,6 +24,9 @@
  * @property {string} contentDesc
  * @property {string} enabled
  * @property {string} clickable
+ * @property {string} checkable
+ * @property {string} checked
+ * @property {string} selected
  * @property {{ x1: number, y1: number, x2: number, y2: number, cx: number, cy: number, width: number, height: number }} bounds
  */
 
@@ -45,6 +48,14 @@ export function parseHierarchy(xml) {
       contentDesc: attributes['content-desc'] ?? '',
       enabled: attributes.enabled ?? '',
       clickable: attributes.clickable ?? '',
+      checkable: attributes.checkable ?? '',
+      // A popup row's answer to "is this the chosen one". Measured on the running
+      // app: the library's Compose `semantics { selected = true }` reaches the dump
+      // as `checked="true"` on that row (with `checkable="true"` on every row),
+      // which is what `CHECKS.picker` reads to say the selected option is
+      // announced - rather than asserting it from a comment.
+      checked: attributes.checked ?? '',
+      selected: attributes.selected ?? '',
       bounds: parseBounds(attributes.bounds ?? ''),
     };
   });
@@ -108,6 +119,23 @@ export function findByTestId(nodes, testID) {
  */
 export function findByDescription(nodes, description) {
   return nodes.find((node) => node.contentDesc === description);
+}
+
+/**
+ * Every node that renders exactly this text.
+ *
+ * A picker's option rows are the case: they are Compose `Text`s in a popup of
+ * their own, so they carry neither a `testID` (not a React Native view) nor a
+ * `content-desc` (the library labels the control that opens the list, not the
+ * rows). While a popup is open it is the only window in the dump, measured -
+ * which is what makes a text match unambiguous. See `CHECKS.picker`.
+ *
+ * @param {UiautomatorNode[]} nodes
+ * @param {string} text
+ * @returns {UiautomatorNode[]}
+ */
+export function findAllByText(nodes, text) {
+  return nodes.filter((node) => node.text === text);
 }
 
 /**

@@ -23,6 +23,7 @@ const SUFFIXED_COMPONENTS: readonly Exclude<ComponentName, 'switch'>[] = [
   'button',
   'progress',
   'segmented-control',
+  'picker',
 ];
 
 const IMPLEMENTATIONS: readonly ImplementationName[] = [
