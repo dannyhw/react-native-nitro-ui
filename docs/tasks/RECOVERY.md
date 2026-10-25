@@ -24,7 +24,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | A1 baselines | — | report merged | Not minted (iOS busy; Android OOM) | iOS re-run in an idle window; Android after B1. |
 | B1 Android OOM | — | merged | Done | — |
 | A1b overnight baselines | — | merged | Android minted; iOS refused (end-of-run load) | One more overnight iOS attempt after R4 merges; if refused again, stop — iOS stays on `--compare`. |
-| R4 load guard | `nitro-ui-worktrees/R4` · `task/R4-load-guard` | from main | Running (Apex, `nitroui-R4-impl-r1`), no devices | If lost: re-delegate from brief. |
+| R4 load guard | — | merged | Done | iOS overnight attempt scheduled 01:00 2026-10-26. |
 | C1 Android over-wide | `nitro-ui-worktrees/C1` · `task/C1-android-overwide` | from main | Running (Apex, `nitroui-C1-impl-r1`) on `nitroui_t01` + iPhone 17 | If lost: re-delegate from brief; Opus review after (native). |
 | P1 iOS profiling | — | report merged | Done (H3 dropped) | — |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
