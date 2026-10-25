@@ -1,0 +1,25 @@
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.35/3.28 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Button.harness.tsx
+  ● Button · G2 › keeps a caller width in charge and truncates the label
+
+    expected 120 to be greater than 140
+
+      [0m [90m 934 |[39m     expect([33mMath[39m[33m.[39mabs(box[33m![39m[33m.[39mwidth [33m-[39m [35m120[39m) [33m<[39m [35m0.6[39m)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 935 |[39m     [36mconst[39m intrinsic [33m=[39m [36mawait[39m waitForMeasured([32m'capped'[39m[33m,[39m [32m'a long title'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 936 |[39m     expect(intrinsic[33m.[39mwidth)[33m.[39mtoBeGreaterThan(box[33m![39m[33m.[39mwidth [33m+[39m [35m20[39m)[33m;[39m
+       [90m     |[39m                                            [31m[1m^[22m[39m
+       [90m 937 |[39m
+       [90m 938 |[39m     [36mawait[39m userEvent[33m.[39mpress([36mawait[39m waitForTestId([32m'capped-barometer'[39m))[33m;[39m
+       [90m 939 |[39m     [36mawait[39m pollUntil([0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 11 passed, 12 total
+Snapshots:   0 total
+Time:        12.322 s
+Ran all test suites matching Button.

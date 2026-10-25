@@ -297,12 +297,13 @@ idle-machine guard.
 
 The full list per control is in its doc; these are the ones that bite.
 
-- **Android clips content that is wider than its box.** An over-wide
-  `SegmentedControl` row or `Button` is placed centred at its measured width, so
-  both rounded ends are cut off and the hidden part of the outer segments cannot
-  be tapped. Keep option lists and titles within the available width; fitting
-  intrinsic content to its box is a 0.2 fix. iOS is unaffected (it compresses and
-  truncates labels instead).
+- **An over-wide row still reads badly on Android.** `SegmentedControl` and
+  `Button` now fit what they are given: content wider than its box is laid out at
+  the box's width, where it used to be drawn at its measured width, centred, with
+  both ends cut off and the hidden part of the outer segments untappable. Fitting
+  is not the same as legible, though - Material 3 shares a row's width equally
+  between its segments, so four labels in 140 dp each collapse to an ellipsis.
+  Keep option lists and titles within the available width.
 - **iOS `SegmentedControl` ignores `tintColor`.** A SwiftUI segmented `Picker`
   ignores `.tint()`, so a tinted row looks like the default one on iOS. It works
   on Android.

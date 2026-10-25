@@ -25,7 +25,8 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | B1 Android OOM | — | merged | Done | — |
 | A1b overnight baselines | — | merged | Android minted; iOS refused (end-of-run load) | One more overnight iOS attempt after R4 merges; if refused again, stop — iOS stays on `--compare`. |
 | R4 load guard | — | merged | Done | iOS overnight attempt scheduled 01:00 2026-10-26. |
-| C1 Android over-wide | `nitro-ui-worktrees/C1` · `task/C1-android-overwide` | `9b563b6` + uncommitted review | Fix round 1 running (Apex, `nitroui-C1-fix-r1`) on `nitroui_t01` + iPhone 17; must stop by 00:45 | If lost: re-delegate fix round 1 from the review (M1 re-fit, M2 per-update cost + bench, M3 claims). Then Opus re-review. Then G6 + G5 (wave 2). |
+| C1 Android over-wide | — | merged | Done | — |
+| G6 Picker | `nitro-ui-worktrees/G6` · `task/G6-picker` | from main | Implementation round running (Apex, `nitroui-G6-impl-r1`) on iPhone 17 + `nitroui_t01`; no device work 00:45–05:00 | If lost: re-delegate from brief. Opus review after. |
 | G5 DatePicker | `nitro-ui-worktrees/G5` · `task/G5-datepicker` | from main | Implementation round running (Apex, `nitroui-G5-impl-r1`) on iPhone Air + `nitroui_t02`; no device work 00:45–05:00 | If lost: re-delegate from brief. Merge main after C1 lands. Opus review after. |
 | P1 iOS profiling | — | report merged | Done (H3 dropped) | — |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
@@ -33,7 +34,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 ## Devices (D13)
 
 - G5: AVD `nitroui_t02` port 5572, adb 5042, Metro 8294; iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` (taken back from the idle Storybook thread 2026-10-25).
-- C1: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
+- G6: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
 - Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these

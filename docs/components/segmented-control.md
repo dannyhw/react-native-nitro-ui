@@ -162,13 +162,18 @@ swallowed by the dedupe and stay at the fallback (G2's F1). D20 then keeps a
 corrected instance re-measuring on later props turns.
 
 A user `style` still wins: `width`, `height` or `flex` fixes the box and the
-control centres inside it. What happens when the labels do not fit that box
-**differs per platform**: iOS hands the box to SwiftUI and the `Picker` squeezes
-its segments into it, so long labels truncate (one line, tail). Android measures
-its content unbounded and centres it in the Yoga box, so a row wider than the box
-is **clipped at both ends** — the cut-off parts of the outer segments are neither
-visible nor tappable. Keep option lists short enough for the available width on
-Android; see Limits.
+control centres inside it. When the labels do not fit that box, both platforms
+lay the row out **at the box's width** and let the control truncate it: iOS hands
+the box to SwiftUI and the `Picker` squeezes its segments into it, and Android
+measures the composition a second time with the box's constraints and places that
+answer (`NitroUiMeasuredRoot`). Only the drawing is placed at the box — the size
+the control *reports* stays the unbounded one, because a row squeezed into a
+narrow box would otherwise be cached at that width forever
+(`docs/architecture/core.md` §7). What still differs per platform is how much of
+each label survives: Material 3 shares the row's width equally between segments,
+so four labels in a 140 dp box each collapse to an ellipsis, while SwiftUI
+distributes the widths its own way. Keep option lists short enough to read; see
+Limits.
 
 The base style is `alignSelf: 'flex-start'`
 (`src/components/SegmentedControl/SegmentedControl.tsx:144`) for the same reason
@@ -243,15 +248,19 @@ drops the now-wrong cached sizes.
   Android, SwiftUI's own distribution on iOS), so a row of unequal labels looks
   different on each. Both grow with the labels, which is all the sizing key
   claims.
-- **A row wider than its box is clipped on Android.** Android gives the Compose row
-  its measured (unbounded) size and places it centred in the Yoga box, so when the
-  labels want more width than the box has — a four-label row on a phone is enough —
-  both rounded end caps are cut off and the hidden part of the outer segments
-  cannot be tapped. iOS is fine here: the host proposes the box to SwiftUI and the
-  `Picker` compresses its segments, truncating labels instead. This is the shared
-  `intrinsic` host behaviour (it applies to `Button` too, where it is rarer), and
-  callers must keep option lists within the available width until the host fits
-  intrinsic content to its box.
+- **A row wider than its box fits on Android, and reads badly.** The host used to
+  give the Compose row its measured (unbounded) size and place it centred in the
+  Yoga box, so when the labels wanted more width than the box has — a four-label
+  row on a phone is enough — both rounded end caps were cut off and the hidden
+  part of the outer segments could not be tapped. It now measures the row a second
+  time at the box's width and places *that*, so the row is inside the box, both
+  end caps are drawn and every segment is tappable — which is what iOS has always
+  done by proposing the box to SwiftUI. Fitting is not legibility: Material 3
+  splits the row's width equally, so four options in a 140 dp box each show an
+  ellipsis (`docs/tasks/C1-android-overwide/android-after.png`, before it
+  `…/android-before.png`). This is shared `intrinsic` host behaviour (it applies to
+  `Button` too, where the label usually survives). Keep option lists within the
+  available width.
 - One declared fallback pair per component, so the first instance of a wider option
   list starts from a 165 pt / 256 dp box and is corrected on the turn it measures
   (D17). A cold batch of 200 distinct option lists lands over several frames —
