@@ -1,0 +1,23 @@
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 13.96/9.98 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Runner android ready
+
+FAIL __tests__/SegmentedControl.harness.tsx
+  ● SegmentedControl · G4 › fits an over-wide row into the box the caller gave it
+
+    expected [ 'overwide:2' ] to deeply equal [ 'overwide:3' ]
+
+      [0m [90m 807 |[39m     [90m// and the left edge is the first, if the row was laid out at 140 dp.[39m
+       [90m 808 |[39m     [36mawait[39m userEvent[33m.[39mpressAt(box[33m![39m[33m.[39mx [33m+[39m box[33m![39m[33m.[39mwidth [33m-[39m [35m2[39m[33m,[39m box[33m![39m[33m.[39my [33m+[39m box[33m![39m[33m.[39mheight [33m/[39m [35m2[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 809 |[39m     expect([36mawait[39m waitForEvents([35m1[39m))[33m.[39mtoEqual([[32m'overwide:3'[39m])[33m;[39m
+       [90m     |[39m                                           [31m[1m^[22m[39m
+       [90m 810 |[39m
+       [90m 811 |[39m     [36mawait[39m userEvent[33m.[39mpressAt(box[33m![39m[33m.[39mx [33m+[39m [35m2[39m[33m,[39m box[33m![39m[33m.[39my [33m+[39m box[33m![39m[33m.[39mheight [33m/[39m [35m2[39m)[33m;[39m
+       [90m 812 |[39m     expect([36mawait[39m waitForEvents([35m2[39m))[33m.[39mtoEqual([[32m'overwide:3'[39m[33m,[39m [32m'overwide:0'[39m])[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        16.728 s
+Ran all test suites matching SegmentedControl.

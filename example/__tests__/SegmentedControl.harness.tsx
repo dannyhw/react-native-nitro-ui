@@ -145,6 +145,16 @@ function sizeOf(testId: string): Size | null {
   return harnessUi.queryByTestId(testId);
 }
 
+/**
+ * The same box with its position, for a test that taps at an edge of it.
+ *
+ * `sizeOf` answers with a `Size` because that is all a sizing assertion reads; the
+ * coordinates are screen dp, the unit `userEvent.pressAt` takes.
+ */
+function boxOf(testId: string): ViewInfo | null {
+  return harnessUi.queryByTestId(testId);
+}
+
 function measured(testId: string): Size | null {
   return handles.get(testId)?.measureContent() ?? null;
 }
@@ -740,13 +750,12 @@ describe('SegmentedControl · G4', () => {
     // A measured size is not an override: a `width` from the caller fixes the box,
     // and this asserts the box - 140, not the ~330 the labels want.
     //
-    // It deliberately does not claim what each platform then *draws*. iOS hands the
-    // box to SwiftUI, whose segmented `Picker` compresses the segments and truncates
-    // the labels. Android measures the row unbounded and centres it in the box, so a
-    // too-narrow box clips the row at both ends and the hidden part of the outer
-    // segments cannot be tapped (`docs/components/segmented-control.md`, Limits).
-    // Neither is observable through the handle, and the shared host's fix is a 0.2
-    // follow-up, so the honest name here is the box.
+    // Both platforms then *draw* the box: iOS hands it to SwiftUI, whose segmented
+    // `Picker` compresses the segments and truncates the labels, and Android
+    // re-measures the row with it before placing it (`NitroUiMeasuredRoot`), which
+    // is what the test below is about. What stays unobservable through the handle is
+    // the *truncation itself* - Compose's segments are virtual nodes, so the honest
+    // claim here is still the box, and the row inside it is the next test's job.
     const { unmount } = await render(
       <SegmentedControl
         options={['January', 'February', 'March', 'April']}
@@ -759,6 +768,48 @@ describe('SegmentedControl · G4', () => {
     const box = sizeOf('capped');
     expect(box).not.toBeNull();
     expect(Math.abs(box!.width - 140) < 0.6).toBe(true);
+    unmount();
+  });
+
+  it('fits an over-wide row into the box the caller gave it', async () => {
+    // The other half of a caller's width. The labels want ~330 dp and the box is
+    // 140, and what the user gets has to be a 140 dp row: four segments inside the
+    // box, each one reachable. Before the host asked for a *placement* measure with
+    // the box's constraints, Android drew the row at its intrinsic width centred in
+    // the box and clipped both ends - the outer segments were cut off, and the part
+    // of them that was visible was a neighbour's.
+    //
+    // The tap is the oracle because it cannot lie about which segment is where: the
+    // two outer segments are the only things at the two edges of the box, and the
+    // harness dispatches real MotionEvents from the window root, so Compose
+    // hit-tests this the way a finger is hit-tested. The reported size is asserted
+    // in the same breath - placement must not become the report, or 140 goes into
+    // the cache under this option list and every later row with these labels is
+    // laid out at 140 (the exact pre-T11 bug `docs/architecture/sizing.md` §3).
+    const { unmount } = await render(
+      <SegmentedControl
+        options={['January', 'February', 'March', 'April']}
+        onChange={recordChange('overwide')}
+        testID="overwide"
+        style={{ width: 140 }}
+        hybridRef={captureHybrid('overwide')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('overwide');
+    const box = boxOf('overwide');
+    expect(box).not.toBeNull();
+    expect(Math.abs(box!.width - 140) < 0.6).toBe(true);
+    const intrinsic = await waitForMeasured('overwide', 'four long options');
+    expect(intrinsic.width).toBeGreaterThan(box!.width + 20);
+
+    // Uncontrolled, so native owns the result: the right edge is the last segment
+    // and the left edge is the first, if the row was laid out at 140 dp.
+    await userEvent.pressAt(box!.x + box!.width - 2, box!.y + box!.height / 2);
+    expect(await waitForEvents(1)).toEqual(['overwide:3']);
+
+    await userEvent.pressAt(box!.x + 2, box!.y + box!.height / 2);
+    expect(await waitForEvents(2)).toEqual(['overwide:3', 'overwide:0']);
     unmount();
   });
 

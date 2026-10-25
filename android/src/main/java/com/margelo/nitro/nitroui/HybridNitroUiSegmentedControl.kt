@@ -393,8 +393,9 @@ class HybridNitroUiSegmentedControl(
      * The width moves with the labels - 75.05 dp for one short segment (a segment
      * never shrinks below `ButtonDefaults.MinWidth`), and four long labels want
      * more than this AVD's 411.43 dp window: that number is the box Yoga clamped
-     * the row to, not a measured row width (a row wider than its box is drawn
-     * centred and clipped - `docs/components/segmented-control.md`, Limits). A
+     * the row to, not a measured row width (the row reports what it wants and is
+     * laid out at the box - `NitroUiMeasuredRoot`, and
+     * `docs/components/segmented-control.md`, Limits). A
      * wrong fallback costs a cold configuration a single frame's horizontal gap.
      * Rounded *up* rather than to nearest: a box smaller than the control is the
      * dead-touch story in `core.md` section 7.
