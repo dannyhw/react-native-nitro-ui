@@ -29,4 +29,4 @@
 | P1 | iOS mount-cost profiling (0.2 wave 1) | Apex | orchestrator | done — iOS mount cost is the synchronous T11 first measure (UI thread), not hosting-controller creation or JS; H3 iOS Host no-go |
 | A1b | Overnight baselines retry | Apex | orchestrator | merged — **Android baseline minted** (load 2.39, 1120/1120); iOS refused 7.60 vs 7.0 at run end → R4 then one more overnight attempt |
 | R4 | Bench load guard samples the whole run (median/≥10 % rule) | Apex | orchestrator | merged (1 round) |
-| C1 | Android intrinsic content wider than its box fits instead of clipping (0.2 wave 1) | Apex | Opus | review NEEDS-WORK (fit lost after first relayout; M2 per-update cost unmeasured); fix round 1 running, re-review after |
+| C1 | Android intrinsic content wider than its box fits instead of clipping (0.2 wave 1) | Apex | Opus | fix round 1 done @ `9332831` (re-fit from measure, cost gated to fitted rows; Android 104/104, iOS 103+1 skip); Opus re-review running |
