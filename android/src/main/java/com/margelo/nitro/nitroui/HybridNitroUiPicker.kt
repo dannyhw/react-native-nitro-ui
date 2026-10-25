@@ -1,6 +1,7 @@
 package com.margelo.nitro.nitroui
 
 import android.app.Activity
+import android.os.Looper
 import android.view.View
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.ColorScheme
@@ -20,10 +21,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
@@ -110,6 +118,15 @@ internal class PickerModel : NitroUiModel() {
   var accessibilityLabel by mutableStateOf<String?>(null)
 
   /**
+   * What the last pick painted, or `null` when no pick is waiting for a batch.
+   *
+   * Not observed - nothing renders from it. Written by [applyUserSelection] and
+   * read once by `afterUpdate`, which answers it and clears it, so a stamp never
+   * outlives the batch it was read for.
+   */
+  var pickStamp: PickerPickStamp? = null
+
+  /**
    * The size configuration React sent. The sizing engine reads the key out of
    * Fabric state itself; the host only needs to hear that it changed (see
    * [NitroComposeHost.noteSizingKeyChanged]).
@@ -149,6 +166,7 @@ internal class PickerModel : NitroUiModel() {
     enabled = true
     tintColor = null
     accessibilityLabel = null
+    pickStamp = null
     sizingKey = ""
     state.displayed = 0.0
     state.js = null
@@ -185,7 +203,72 @@ internal class PickerModel : NitroUiModel() {
 
   /** [clamp] for the raw handshake value, which is what gets stored back. */
   fun clampToDouble(index: Double): Double = clamp(index).toDouble()
+
+  /**
+   * The user chose [index] - close the list, paint it and emit it.
+   *
+   * The one place a pick is applied, so the popup's row and the `nuiTestSelect`
+   * harness hook cannot disagree about what a choice means.
+   *
+   * The popup closes first, whatever the choice does: it must not survive the press
+   * that made the choice, and must not stay open when the press changed nothing. A
+   * choice that changes nothing then reports nothing, so that `onChange` means the
+   * selection moved on both platforms - G6 measured that a SwiftUI `.menu` Picker
+   * does *not* give this for free, so iOS guards it in its own binding and the pair
+   * is what makes a refused choice observable: only a rolled-back selection makes
+   * the next tap on that row a fresh choice. A disabled control is inert, and the
+   * index is clamped before anything is compared - a list that shrank under an open
+   * popup has rows that no longer address anything.
+   */
+  fun applyUserSelection(index: Int) {
+    expanded = false
+    if (!enabled) {
+      return
+    }
+    val chosen = clamp(index.toDouble())
+    if (chosen == displayed) {
+      return
+    }
+    // Native is optimistic: paint the new title now, before React has seen the
+    // event, so there is no visual latency (core.md section 4).
+    val eventCount = state.user(chosen.toDouble())
+    displayed = chosen
+    pickStamp = PickerPickStamp(chosen, options, variant, label)
+    onChange?.invoke(chosen.toDouble(), eventCount.toDouble())
+  }
+
+  /**
+   * Whether [stamp] is still what this model shows: the same choices, variant and
+   * label, with the pick's own index still the one on screen.
+   *
+   * This is the question the held size report needs answered before it is filed. A
+   * pick, a changed `options` list and a changed label can all arrive in one batch,
+   * and a size measured while the pick painted is not a fact about any of the others
+   * - filing it would put a width this control never measured under a configuration
+   * that never had it.
+   */
+  fun pickIsStillShown(stamp: PickerPickStamp?): Boolean =
+    stamp != null &&
+      displayed == stamp.index &&
+      variant == stamp.variant &&
+      label == stamp.label &&
+      options.contentEquals(stamp.options)
 }
+
+/**
+ * What a pick painted, in the terms that decide what the control measures.
+ *
+ * Plain state on [PickerModel], set at the pick and read by the next batch - see
+ * [PickerModel.pickIsStillShown]. The options array is the one the pick saw, and the
+ * `options` setter keeps the instance when an equal list is re-sent, so the compare
+ * is a `contentEquals` over a handful of short strings.
+ */
+internal class PickerPickStamp(
+  val index: Int,
+  val options: Array<String>,
+  val variant: String,
+  val label: String?,
+)
 
 /**
  * The library's `TextFieldColors`, so that a *tinted* Picker costs one colour set
@@ -296,6 +379,22 @@ private class PickerHost(
   activity: Activity?,
   model: PickerModel,
 ) : NitroComposeHost<PickerModel>(context, activity, model) {
+  /**
+   * The user chose [index] - hold the size report the paint is about to cause, then
+   * apply the choice.
+   *
+   * The one entry point for "a row was pressed", so the popup's row and the
+   * `nuiTestSelect` harness hook cannot diverge. The hold is what makes a choice
+   * safe to report late: the row paints a new title immediately, and the
+   * `nuiSizingKey` that names that title only arrives with the next props batch, so
+   * a size measured in between would be filed against the title the choice replaced
+   * (`NitroComposeHost.holdSizingReports`, G6 review M1).
+   */
+  fun choose(index: Int) {
+    holdSizingReports()
+    model.applyUserSelection(index)
+  }
+
   @OptIn(ExperimentalMaterial3Api::class)
   @Composable
   override fun Component(model: PickerModel) {
@@ -341,30 +440,44 @@ private class PickerHost(
             ExposedDropdownMenuAnchorType.PrimaryNotEditable,
             enabled = enabled,
           )
-          .then(
-            if (spokenLabel != null || !enabled) {
-              Modifier.semantics {
-                if (spokenLabel != null) {
-                  contentDescription = spokenLabel
-                }
-                // State the refusal in the semantics tree, as the Slider does
-                // (`HybridNitroUiSlider.kt`). Measured on `nitroui_t01`: Compose
-                // renders the anchor as two accessibility nodes - M3's merged
-                // field node, which already reports `enabled=false`, and this one,
-                // which still reports `enabled=true` even with `Disabled` set on
-                // it (Compose derives `isEnabled` for a node from its unmerged
-                // *children*, and this one has none). So this line is what the
-                // semantics tree says, not yet what a screen reader hears; the
-                // functional refusal (a disabled anchor never opens a menu) is what
-                // `scripts/real-input/android.mjs` proves.
-                if (!enabled) {
-                  disabled()
-                }
+          // One accessibility node for the control, carrying its name, its value,
+          // its role and its state.
+          //
+          // `clearAndSetSemantics` rather than `semantics`, and that is the fix:
+          // `semantics` adds a node *beside* the text field's own, and the field is
+          // the node TalkBack stops on - the one that reads the value with no name
+          // (G6 review M3, read out of `uiautomator dump`). Clearing also drops the
+          // click `menuAnchor` contributed, so the action is stated here: same
+          // effect, open the list, and the disabled control gets `disabled()` with
+          // no action at all. Pointer input is untouched - `menuAnchor` still
+          // handles a real tap - so what changes is only what the tree reports.
+          .clearAndSetSemantics {
+            // The name: an explicit `accessibilityLabel`, else the visible `label`,
+            // else the title itself, so the node a screen reader lands on always
+            // says what the control is. The value is the title, stated separately.
+            contentDescription = spokenLabel ?: selectedText
+            // The value, as the node's own text - not only as `stateDescription`.
+            // Measured on `nitroui_t01`: clearing the field's semantics also clears
+            // the text M3's own dump read the selected title out of, and
+            // `uiautomator dump` does not print `stateDescription` at all, so a
+            // value that lives only there is uncheckable and unreadable to the
+            // tools that read the tree. `Text` reaches both.
+            this[SemanticsProperties.Text] = listOf(AnnotatedString(selectedText))
+            stateDescription = selectedText
+            role = Role.DropdownList
+            if (enabled) {
+              onClick {
+                model.expanded = true
+                true
               }
             } else {
-              Modifier
-            },
-          )
+              // Measured on `nitroui_t01` after this change: the node a press reaches
+              // now says `enabled=false` for a disabled picker, because it is this
+              // node - Compose reports `enabled` as "not carrying `Disabled`", and
+              // this one carries it.
+              disabled()
+            }
+          }
       OutlinedTextField(
         value = selectedText,
         // `readOnly` makes this a no-op for real, and `onValueChange` exists only
@@ -407,27 +520,7 @@ private class PickerHost(
           val isSelected = index == selectedIndex
           DropdownMenuItem(
             text = { Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            onClick = {
-              // Close first, whatever the choice does: the popup must not survive
-              // the press that made the choice, and must not stay open when the
-              // press changed nothing.
-              model.expanded = false
-              if (index == model.displayed) {
-                // No event for a choice that changed nothing, so that `onChange`
-                // means the selection moved on both platforms. G6 measured that a
-                // SwiftUI `.menu` Picker does *not* give this for free - its
-                // binding writes for the row already on show too - so iOS guards
-                // it in its own setter (`HybridNitroUiPicker.swift`) and the pair is
-                // what makes a refused choice observable: only a rolled-back
-                // selection makes the next tap on that row a fresh choice.
-                return@DropdownMenuItem
-              }
-              // Native is optimistic: paint the new title now, before React has seen
-              // the event, so there is no visual latency (core.md section 4).
-              val eventCount = model.state.user(index.toDouble())
-              model.displayed = index
-              model.onChange?.invoke(index.toDouble(), eventCount.toDouble())
-            },
+            onClick = { choose(index) },
             enabled = enabled,
             // The selected row says so to TalkBack. Material 1.4's
             // `DropdownMenuItem` has no `selected` argument, and a check mark would
@@ -749,6 +842,14 @@ class HybridNitroUiPicker(
     // already showed. It does not close itself here (the user did not ask it to),
     // but an index that no longer exists can leave it pointing at nothing, and the
     // rows recompose from `options` anyway.
+    // The batch a held size report was waiting for has landed. Whether it is the
+    // batch that report belongs to is what the stamp is for: the index the batch
+    // settled on, the choices, the variant and the label all have to be the ones the
+    // pick painted, or the held width is a fact about other content
+    // (`NitroComposeHost.releaseSizingReports`).
+    val stamped = model.pickStamp
+    model.pickStamp = null
+    host.releaseSizingReports(model.pickIsStillShown(stamped))
     host.commit()
   }
 
@@ -781,5 +882,31 @@ class HybridNitroUiPicker(
   override fun measureContent(): NitroUiPickerSize {
     val size = host.contentSize ?: return NitroUiPickerSize(0.0, 0.0)
     return NitroUiPickerSize(size.width, size.height)
+  }
+
+  /**
+   * Press the row for [index], through the same path a real row press takes.
+   *
+   * Test-only; see the spec for why it exists. Props arrive on the UI thread and a
+   * `hybridRef` call can arrive on the JS thread; the model is UI-thread state, so
+   * this hops when needed and runs inline when the call is already where the model
+   * lives. Never a synchronous wait: JS must not block on the UI thread
+   * (core.md section 5).
+   */
+  override fun nuiTestSelect(index: Double) {
+    val run = {
+      host.choose(model.clamp(index))
+      // The half a press gets for free: its handler runs inside Compose's input
+      // handling, which applies the snapshot the handler wrote. This is a plain
+      // UI-thread post, so without the apply the choice would not paint (and would
+      // not measure) until the next props batch - a different ordering from a press,
+      // which is the one thing a test hook may not be.
+      host.applyModelWrites()
+    }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      run()
+    } else {
+      host.post { run() }
+    }
   }
 }

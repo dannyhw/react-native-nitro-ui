@@ -50,6 +50,12 @@ export interface NitroUiPickerHandle {
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
   measureContent(): NitroUiPickerSize;
+  /**
+   * Test-only: press the row for `index` through the same path a real row press
+   * takes. `@internal` (D14) - the harness uses it because it cannot reach a row
+   * in a popup; apps must not.
+   */
+  nuiTestSelect(index: number): void;
 }
 
 /**

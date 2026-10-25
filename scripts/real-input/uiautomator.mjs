@@ -24,6 +24,7 @@
  * @property {string} contentDesc
  * @property {string} enabled
  * @property {string} clickable
+ * @property {string} focusable
  * @property {string} checkable
  * @property {string} checked
  * @property {string} selected
@@ -48,6 +49,11 @@ export function parseHierarchy(xml) {
       contentDesc: attributes['content-desc'] ?? '',
       enabled: attributes.enabled ?? '',
       clickable: attributes.clickable ?? '',
+      // Whether the node offers itself for accessibility focus. TalkBack's focus
+      // search is broader than this flag, but it is the one a dump can be read
+      // for, and `CHECKS.picker` uses it to say which node a screen reader is
+      // invited to stop on.
+      focusable: attributes.focusable ?? '',
       checkable: attributes.checkable ?? '',
       // A popup row's answer to "is this the chosen one". Measured on the running
       // app: the library's Compose `semantics { selected = true }` reaches the dump
@@ -119,6 +125,22 @@ export function findByTestId(nodes, testID) {
  */
 export function findByDescription(nodes, description) {
   return nodes.find((node) => node.contentDesc === description);
+}
+
+/**
+ * Every node that publishes this `accessibilityLabel` as its `content-desc`.
+ *
+ * `findByDescription` answers "where is the control"; this answers "how many nodes
+ * carry its name", which is the accessibility question: a name that appears twice
+ * is a control TalkBack announces twice, once on a node with the value and once on
+ * a node without it (G6 review M3).
+ *
+ * @param {UiautomatorNode[]} nodes
+ * @param {string} description
+ * @returns {UiautomatorNode[]}
+ */
+export function findAllByDescription(nodes, description) {
+  return nodes.filter((node) => node.contentDesc === description);
 }
 
 /**

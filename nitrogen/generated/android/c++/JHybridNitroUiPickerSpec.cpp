@@ -213,5 +213,9 @@ namespace margelo::nitro::nitroui {
     auto __result = method(_javaPart);
     return __result->toCpp();
   }
+  void JHybridNitroUiPickerSpec::nuiTestSelect(double index) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(double /* index */)>("nuiTestSelect");
+    method(_javaPart, index);
+  }
 
 } // namespace margelo::nitro::nitroui

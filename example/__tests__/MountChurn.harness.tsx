@@ -23,6 +23,13 @@
  *   an iteration. A transient allocation storm returns to the floor; a leak moves
  *   it.
  *
+ * The file gates two controls, because the second one adds a failure mode the first
+ * cannot show: a `Picker`'s menu is a Compose `Popup` - a real `PopupWindow` in the
+ * window list - and it is a child of the composition, so the composition that a leak
+ * retains also retains the popup of a control that is already gone. The Picker cycle
+ * therefore opens one menu and unmounts the tree while it is open, which is the
+ * `onDropView` → `host.drop()` path (G6, review M4).
+ *
  * Android only: the leak is in the Compose hosting lifecycle, and iOS hosts SwiftUI
  * views with a different lifetime, so there is nothing to assert there. The iOS
  * branch registers one pending test that says so - see the `else` below, which also
@@ -38,7 +45,8 @@ import {
   it,
   render,
 } from 'react-native-harness';
-import { Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { Picker, Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { userEvent } from '@react-native-harness/ui';
 
 /** Controls per cycle: the N the bench died at. */
 const COUNT = 200;
@@ -146,6 +154,48 @@ async function churnCycle(prefix: string) {
   await settle(300);
 }
 
+/** The three titles every churned Picker shows - one configuration per row mod 3. */
+const PICKER_OPTIONS = ['Cinder', 'Mica', 'Shale'];
+
+/**
+ * Mount `COUNT` Pickers, open one of their menus, and unmount the lot.
+ *
+ * Same shape as [churnCycle], with one addition: the menu of the first row is open
+ * when the tree goes away. A `PopupWindow` is owned by the composition, and the
+ * composition is owned by `host.drop()` in `onDropView`, so this is the churn that
+ * fails if that call is ever dropped - the window and everything behind it stay
+ * reachable from the window's own list.
+ */
+async function churnPickerCycle(prefix: string) {
+  const { unmount } = await render(
+    <View>
+      {Array.from({ length: COUNT }, (_, index) => index).map((row) => (
+        <Picker
+          key={row}
+          options={PICKER_OPTIONS}
+          defaultSelectedIndex={row % PICKER_OPTIONS.length}
+          testID={`${prefix}-${String(row)}`}
+        />
+      ))}
+    </View>,
+    // 200 Material fields need the same generous wait the Switches do.
+    { timeout: 40000 }
+  );
+  await waitForTestId(`${prefix}-${String(COUNT - 1)}`, 30000);
+  await settle(300);
+  // The anchor is in the app's window, so a real press reaches it (only the popup's
+  // rows do not, which is why the pick itself is a `nuiTestSelect`/real-input case).
+  const anchor = harnessUi.queryByTestId(`${prefix}-0`);
+  expect(anchor).not.toBeNull();
+  await userEvent.pressAt(
+    anchor!.x + anchor!.width / 2,
+    anchor!.y + anchor!.height / 2
+  );
+  await settle(400);
+  unmount();
+  await settle(300);
+}
+
 afterEach(() => {
   cleanup();
 });
@@ -204,6 +254,45 @@ if (Platform.OS === 'android') {
       expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
       expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
     });
+
+    const pickerTitle =
+      `keeps the post-GC heap floor flat across ${String(CYCLES)} churn cycles ` +
+      `of ${String(COUNT)} Pickers, one with its menu open`;
+    it(pickerTitle, async () => {
+      nitroUiCore.prewarmSizing(['NitroUiPicker']);
+      await churnPickerCycle('picker-warmup');
+      const statsBefore = nitroUiCore.sizingStats();
+      const floors: HeapStats[] = [];
+      for (let cycle = 0; cycle < CYCLES; cycle += 1) {
+        await churnPickerCycle(`picker-churn-${String(cycle)}`);
+        floors.push(await heapStats());
+      }
+      const first = floors[0];
+      const last = floors[floors.length - 1];
+      if (first == null || last == null) {
+        throw new Error(
+          `Expected ${String(CYCLES)} heap floors, read ${String(floors.length)}.`
+        );
+      }
+      const after = nitroUiCore.sizingStats();
+      const corrections =
+        after.correctionsImmediate -
+        statsBefore.correctionsImmediate +
+        (after.correctionsBatched - statsBefore.correctionsBatched);
+      const growthMib = toMib(
+        (last.usedBytes - first.usedBytes) / (floors.length - 1)
+      );
+      console.log(
+        `picker churn: N=${String(COUNT)} cycles=${String(floors.length)} ` +
+          `floorsMiB=[${floors.map((f) => toMib(f.usedBytes)).join(', ')}] ` +
+          `growthMiBPerCycle=${String(growthMib)} ` +
+          `maxHeapMiB=${String(toMib(last.maxBytes))} ` +
+          `corrections=${String(corrections)}`
+      );
+      expect(corrections).toBe(0);
+      expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
+      expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
+    });
   });
 } else {
   /**
@@ -216,6 +305,10 @@ if (Platform.OS === 'android') {
    * pending test: visible in the report, and honest about why it did not run.
    */
   describe('Mount churn (B1)', () => {
-    it.skip('is Android-only: the gate measures the Compose hosting lifecycle', () => {});
+    it.skip(
+      'is Android-only: the gate measures the Compose hosting lifecycle, ' +
+        'Picker popup included',
+      () => {}
+    );
   });
 }

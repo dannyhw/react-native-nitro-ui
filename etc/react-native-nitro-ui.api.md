@@ -144,6 +144,7 @@ export interface PickerProps extends ViewProps {
             width: number;
             height: number;
         };
+        nuiTestSelect(index: number): void;
     }) => void) | undefined;
     label?: string | undefined;
     // @internal

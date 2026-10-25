@@ -396,22 +396,19 @@ final class RealInputTests: XCTestCase {
 
     // 0. The control for every claim made below about a presented menu.
     //
-    //    Step 7 reads this screen's heartbeat while a menu is open, and a reading of
-    //    "not moving" is only evidence if the same reading moves when nothing is
-    //    presented. So take it here, once, before anything is opened: it has to change
-    //    within 4 s. (The first version of that reading took the anchor's
+    //    Step 7 reads this screen's heartbeat while a menu is open, and that reading
+    //    is only evidence if the same screen is seen to beat when nothing is
+    //    presented. So watch it here, once, before anything is opened: it has to move
+    //    inside the window. (The first version of that reading took the anchor's
     //    accessibility label, which says "Choice, Choice" whatever is selected - an
-    //    unfalsifiable witness this assertion is what keeps out.)
-    let beatStart = tickerTitle()
-    Thread.sleep(forTimeInterval: 4)
-    let beatLater = tickerTitle()
-    print(
-      "real-input (ios): heartbeat with nothing presented: \"\(beatStart)\" then \"\(beatLater)\""
-    )
-    XCTAssertNotEqual(
-      beatStart,
-      beatLater,
-      "the screen's own option ticker should repaint within 4s while nothing is presented (both readings \"\(beatStart)\") - a heartbeat that does not beat here makes step 7's frozen reading prove nothing"
+    //    unfalsifiable witness this assertion is what keeps out. The second version
+    //    took a single pair of readings 4 s apart, which aliases with the 6 s
+    //    rotation - see `tickerBeat`.)
+    let beat = tickerBeat()
+    print("real-input (ios): heartbeat with nothing presented: \(beat.readings)")
+    XCTAssertTrue(
+      beat.moved,
+      "the screen's own option ticker should repaint within 8s while nothing is presented (readings \(beat.readings)) - a heartbeat that does not beat here makes step 7's reading prove nothing"
     )
 
     // 1. Opening. The rows exist only while the menu is open, which is also the
@@ -543,16 +540,13 @@ final class RealInputTests: XCTestCase {
       )
       try required("real-input-drop-picker", as: "the drop Picker").centre.tap()
       _ = try waitForOption("Beta", "cycle \(cycle): the drop Picker's menu to open")
-      let whileOpen = tickerTitle()
-      Thread.sleep(forTimeInterval: 3)
-      let afterWait = tickerTitle()
+      let beatWhileOpen = tickerBeat()
       print(
-        "real-input (ios): cycle \(cycle): with the menu open the screen's heartbeat still moves: \"\(whileOpen)\" then \"\(afterWait)\""
+        "real-input (ios): cycle \(cycle): with the menu open the screen's heartbeat: \(beatWhileOpen.readings)"
       )
-      XCTAssertNotEqual(
-        afterWait,
-        whileOpen,
-        "cycle \(cycle): the app's own 2s ticker should repaint while the menu is open - it moved in step 0 with nothing presented, so if it stands still here then the unmount asserted below is not evidence about this library"
+      XCTAssertTrue(
+        beatWhileOpen.moved,
+        "cycle \(cycle): the app's own 2s ticker should repaint while the menu is open (readings \(beatWhileOpen.readings)) - it moved in step 0 with nothing presented, so if it stands still here then the unmount asserted below is not evidence about this library"
       )
       // The view is taken away with the menu still open: nothing closes it first.
       XCTAssertEqual(
@@ -804,6 +798,34 @@ final class RealInputTests: XCTestCase {
       return drawn.joined(separator: "|")
     }
     return anchor.label
+  }
+
+  /// Watch the ticker for a window and report whether it moved, with what was seen.
+  ///
+  /// One pair of readings cannot decide anything here. The rotation repeats every
+  /// 6 s (three sets, 2 s each), and every reading costs a XCUITest query - about a
+  /// second on a loaded machine - so a pair "4 s apart" is really 5-6 s apart, and
+  /// once the gap reaches 6 s both readings land on the same set: a screen that is
+  /// beating reads as a frozen one. That is what a red step 0 looked like when the
+  /// machine was busy with another task's build. Sampling once a second for longer
+  /// than a full cycle cannot alias, whatever the phase or the load, and it returns
+  /// as soon as the screen visibly moves.
+  private func tickerBeat(
+    window: TimeInterval = 8
+  ) -> (moved: Bool, readings: String) {
+    var seen: [String] = []
+    let deadline = Date().addingTimeInterval(window)
+    while Date() < deadline {
+      let reading = tickerTitle()
+      if seen.last != reading {
+        seen.append(reading)
+        if seen.count > 1 {
+          break
+        }
+      }
+      Thread.sleep(forTimeInterval: 1)
+    }
+    return (seen.count > 1, "\"\(seen.joined(separator: "\" then \""))\"")
   }
 
   /// Tap a button until the echo it is meant to raise appears.

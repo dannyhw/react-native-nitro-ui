@@ -48,18 +48,6 @@ final class PickerModel: NitroUiModel {
   var sizingKey = ""
   /// `onValueChange`, wired through a stable JS callback.
   var onChange: ((_ index: Double, _ eventCount: Double) -> Void)?
-  /// Wiring from the Hybrid View: "the user just moved the selection, so the
-  /// width may have moved with it, and no props batch is coming".
-  ///
-  /// A menu button is as wide as the title it shows, and an **uncontrolled** pick
-  /// changes that title with no React render at all - which means no new
-  /// `nuiSizingKey` either, so the engine cannot be told through props that this
-  /// instance has a new width to report. The Hybrid answers it from native
-  /// instead (see `HybridNitroUiPicker.init`). Kept for the life of the host
-  /// rather than the mount: it is wiring to the host, not per-mount state, and it
-  /// holds the host weakly, so it cannot keep a dropped view alive.
-  var onSelectionPaintedByUser: (() -> Void)?
-
   override init() {
     super.init()
   }
@@ -89,6 +77,44 @@ final class PickerModel: NitroUiModel {
       return 0
     }
     return rounded > Double(optionCount - 1) ? Double(optionCount - 1) : rounded
+  }
+
+  /// The user chose `requested` - paint it and emit it.
+  ///
+  /// The one place a pick is applied, so the SwiftUI binding and the
+  /// `nuiTestSelect` harness hook cannot disagree about what a choice means.
+  ///
+  /// A pick that changes nothing is not a change. Measured on iPhone 17 in G6, a
+  /// `.menu` Picker writes its binding even when the row the user tapped is the
+  /// one already on show - so the guard has to live here, or iOS reports a choice
+  /// Android refuses to report and the two platforms disagree about what
+  /// `onChange` means (`HybridNitroUiPicker.kt`). It is also what makes a refused
+  /// choice observable: only a rolled-back selection makes the *next* tap on that
+  /// row a fresh choice.
+  ///
+  /// The index is clamped first and a disabled control is inert: the binding
+  /// cannot normally emit either (SwiftUI's `.disabled` stops it, and a row that
+  /// is not in `options` has no tag), but a menu that stays open while `disabled`
+  /// flips or `options` shrinks can, and an emitted index has to exist in the list
+  /// the wrapper reads the label out of.
+  func applyUserSelection(_ requested: Double) {
+    guard !disabled else { return }
+    let index = Self.clamp(requested, to: options.count)
+    guard index != state.displayed else { return }
+    let eventCount = state.user(index)
+    objectWillChange.send()
+    onChange?(index, Double(eventCount))
+    // And nothing about sizing. The width follows the title, so a choice looks like
+    // a size change that no props batch has named yet - and answering it here is
+    // what poisoned the cache (G6 review M1): the engine files a report under the
+    // key of the last shadow measure, which still names the title this choice
+    // replaced. Measured on iPhone 17, the deferred measure this used to schedule
+    // could not even answer the new title - `sizeThatFits` on the next turn still
+    // saw the layout of the previous one - so it cost a measure and reported the
+    // *old* width under the old key. The batch that re-keys the instance measures
+    // instead: `noteSizingKeyChanged()` plus the box the engine then gives it. A
+    // rejected choice needs nothing either - the rollback re-measures through
+    // `shown != beforeShown` under the key that still names the right title.
   }
 }
 
@@ -155,22 +181,7 @@ struct PickerContent: NitroUIContent {
   private var selection: Binding<Int> {
     Binding(
       get: { Int(model.state.displayed) },
-      set: { requested in
-        // A pick that changes nothing is not a change. Measured on iPhone 17 in
-        // G6, a `.menu` Picker writes its binding even when the row the user
-        // tapped is the one already on show - so the guard has to live here, or
-        // iOS reports a choice Android refuses to report and the two platforms
-        // disagree about what `onChange` means (`HybridNitroUiPicker.kt`). It is
-        // also what makes a refused choice observable: only a rolled-back
-        // selection makes the *next* tap on that row a fresh choice.
-        guard Double(requested) != model.state.displayed else { return }
-        let eventCount = model.state.user(Double(requested))
-        model.objectWillChange.send()
-        model.onChange?(Double(requested), Double(eventCount))
-        // Last, so the size question is asked after the paint and the emit: see
-        // ``PickerModel/onSelectionPaintedByUser``.
-        model.onSelectionPaintedByUser?()
-      }
+      set: { requested in model.applyUserSelection(Double(requested)) }
     )
   }
 }
@@ -264,15 +275,6 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
   override init() {
     host = NitroSwiftUIHost(model: PickerModel())
     super.init()
-    // The one measure point no props batch can provide: an uncontrolled pick
-    // repaints a wider or narrower title and re-renders nothing in React, so no
-    // key change and no commit will ask SwiftUI for a size. Deferred to the next
-    // turn because the binding setter runs *inside* SwiftUI's update, and asking
-    // `sizeThatFits` there answers a layout that is still being written. This is
-    // one measure per user choice, never per commit or per frame.
-    host.model.onSelectionPaintedByUser = { [weak host] in
-      DispatchQueue.main.async { host?.invalidateContentSize() }
-    }
     // The fitting size is both measured and pushed (docs/architecture/sizing.md).
     host.wantsContentSize = true
     host.sizingPolicy = .intrinsic
@@ -532,6 +534,21 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
       return NitroUiPickerSize(width: 0, height: 0)
     }
     return NitroUiPickerSize(width: Double(size.width), height: Double(size.height))
+  }
+
+  /// Press the row for `index`, through the same path a real row press takes.
+  ///
+  /// Test-only; see the spec for why it exists. Hops to the main thread because
+  /// JS calls it and a real press runs on the UI thread (core.md §5), and the hop
+  /// is what keeps the timing of a real pick rather than flattening it.
+  func nuiTestSelect(index: Double) throws {
+    let model = host.model
+    let run = { model.applyUserSelection(index) }
+    if Thread.isMainThread {
+      run()
+    } else {
+      DispatchQueue.main.async { run() }
+    }
   }
 
   private var model: PickerModel {

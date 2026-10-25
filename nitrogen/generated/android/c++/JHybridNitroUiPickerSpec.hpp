@@ -82,6 +82,7 @@ namespace margelo::nitro::nitroui {
   public:
     // Methods
     NitroUiPickerSize measureContent() override;
+    void nuiTestSelect(double index) override;
 
   private:
     jni::global_ref<JHybridNitroUiPickerSpec::JavaPart> _javaPart;
