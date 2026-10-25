@@ -22,7 +22,8 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | T16 Host spike | branch only (`b93b41b`, pushed) | report merged | Done | Human decides whether 0.2 ships an Android `<Host>`. |
 | A2 small fixes | — | merged | Done | — |
 | A1 baselines | — | report merged | Not minted (iOS busy; Android OOM) | iOS re-run in an idle window; Android after B1. |
-| B1 Android OOM | — | merged | Done | Overnight baselines can mint Android too. C1 next (morning). |
+| B1 Android OOM | — | merged | Done | — |
+| A1b overnight baselines | `nitro-ui-worktrees/A1b` · `task/A1b-baselines` | from `3533d64` | Running since 01:00 (Apex, `nitroui-A1b-2026-10-25`) on iPhone 17 then `nitroui_t01` | If lost: re-run only in a quiet window. Then C1 (morning). Also: a stray `nitro-ui-worktrees/T16` worktree exists with commit 5601f61 on `task/T16-host-spike` — push the branch and remove the worktree. |
 | P1 iOS profiling | — | report merged | Done (H3 dropped) | — |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
