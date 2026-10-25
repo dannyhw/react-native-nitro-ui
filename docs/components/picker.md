@@ -117,15 +117,30 @@ on the activity, window or a `ViewTreeObserver` may outlive the view.
 - **Back dismisses it** on Android (`onDismissRequest` fires for the back gesture,
   for an outside tap and for the composition going away); tapping outside dismisses
   on both platforms.
-- **Unmounting while open** is a tested case on both platforms —
-  `does not treat opening as a choice, and survives going away while open` in
-  `example/__tests__/Picker.harness.tsx`, and the `scripts/real-input` cycles that
-  count popup windows before and after: opening adds one, unmounting leaves none.
+- **Unmounting while open** is a tested case on both platforms — but no harness
+  test can be that case. The harness can press an anchor open, yet it only observes
+  its own view tree, so a popup that outlived its view would pass anything it could
+  assert. What covers it is the counting kind of check: the `scripts/real-input`
+  cycles that compare the window list before and after (opening adds one popup,
+  unmounting leaves none, three cycles on each platform), and the Android `MountChurn`
+  Picker case in `example/__tests__/MountChurn.harness.tsx`, which presses one anchor
+  of 200 mounted Pickers open, unmounts them and asserts the post-GC heap floor stays
+  flat across cycles. The in-app test (`does not treat opening as a choice, and the
+  next mount sizes normally after going away mid-menu` in
+  `example/__tests__/Picker.harness.tsx`) is named for what it can assert, which is
+  those two things and not the popup.
 
 ## Sizing
 
 `menu` is `intrinsic`; `wheel` is `fillWidth` with a platform height — the same
-two-policy switch Progress makes between its linear and circular shapes. A menu is
+two-policy switch Progress makes between its linear and circular shapes, taken with the
+remount that makes the switch work: the native view is keyed on the variant and the
+sizing id is taken per variant (`key={variant}` with `useSizingId(variant)`, exactly as
+`src/components/Progress/Progress.tsx` does). Android needs that because its host
+decides which measure question to ask when the composition is built and never re-asks,
+so a menu that became a wheel in place would go on answering the unbounded one. A
+variant change is therefore a fresh mount — an uncontrolled picker re-seeds from
+`defaultSelectedIndex`. A menu is
 as wide as **the title it is showing**, which is the one thing that makes this key
 different from `SegmentedControl`'s: a segment row is the same width whichever
 segment is chosen, a menu button is not, so the selected label is in the key.
@@ -174,12 +189,28 @@ when `nuiSizingKey` changes, so a new configuration that happens to measure exac
 what the old one did still gets its correcting report through (G2's F1), and D20
 keeps a corrected instance re-measuring on later props turns.
 
-There is one measure point no props batch can provide: an **uncontrolled** pick
-paints a different title with no React render at all, so no new `nuiSizingKey`
-arrives either. The Hybrid View listens for the native selection instead and asks
-for a measure from there — deferred one turn, because the binding setter runs inside
-SwiftUI's own update. That path is what the `update` benchmark cell and the real-input
-`menu box follows a picked title` case exercise.
+There is one measure point no props batch can provide: a **pick** paints a new title
+before any render, so the `nuiSizingKey` that names it has not arrived yet — and a
+report filed in that moment would be filed under the title that is no longer drawn,
+which is how a cache entry ends up holding another configuration's width. Two rules keep
+the key and the pixels together:
+
+- **The wrapper knows which title is shown.** `shownIndex` is the controlled value where
+  there is one, and otherwise the last index native reported, held in wrapper state. An
+  uncontrolled pick costs one React render — what a discrete control costs everywhere
+  else — and the key names the title the control is painting.
+- **A pick's report waits for the key that names it.** Android arms
+  `holdSizingReports()` in the row's `onClick`: the composition still measures, but the
+  host keeps that size until `afterUpdate()` — the batch that carries the new key —
+  and files it there (`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt`).
+  iOS needs no hold and no longer asks for that measure at all: the echo batch re-keys,
+  and the key change is what re-measures. A *refused* pick still re-measures at once,
+  under the key that did not change, for the content that key names.
+
+The `update` benchmark cell drives `selectedIndex` from JS, so it exercises the props
+path rather than a pick; the pick path is exercised by the `nuiTestSelect` hook (the
+harness runs a row's own code path) and by the real-input `menu box follows a picked
+title` case.
 
 **Over-wide content fits its box** (C1): a menu wider than the caller's box is
 measured a second time at the box's width and placed at that width, so the field,
@@ -210,22 +241,34 @@ SegmentedControl can say (G4's F1: a SwiftUI *segmented* `Picker` ignores
 ## Accessibility
 
 - The control is **a button that opens a list**: iOS gets a menu-style `Picker` with
-  `.accessibilityLabel(accessibilityLabel ?? label)`; Android puts `contentDescription`
-  on the anchor's semantics node, which is the thing the label describes — the rows
-  are in a popup of their own.
+  `.accessibilityLabel(accessibilityLabel ?? label)`. Android makes the anchor **one**
+  semantics node carrying the name, the value, the role and the enabled state
+  (`clearAndSetSemantics` on the anchor modifier, `menuAnchor` kept for pointer input),
+  because the anchor is the thing the label describes — the rows are in a popup of
+  their own.
 - **The selected option is announced.** On iOS that is SwiftUI's own menu (it draws
   the check mark too, visible in
   `docs/tasks/G6-picker/ios-light-menu-open.png`). On Android Material 1.4's
   `DropdownMenuItem` has no `selected` argument and a check mark would be an
   affordance iOS does not have, so it is semantics only: `selected = isSelected` on
   the row.
-- **Disabled is exposed** — and the honest version of that claim: Compose renders the
-  anchor as two accessibility nodes, and the extra semantics node still reports
-  `enabled = true` even with `disabled()` set on it (Compose derives `isEnabled` from
-  a node's unmerged children, and it has none). M3's merged field node does report
-  `enabled = false`. So the semantics line is what the tree says; what a screen reader
-  hears may differ, and the functional refusal — a real tap on a disabled field opens
-  no menu — is what `scripts/real-input/android.mjs` measures.
+- **Disabled is exposed on the node a screen reader lands on.** Read out of
+  `uiautomator dump` on `nitroui_t01`: the control used to appear as two nodes — the
+  focusable `android.widget.EditText` showing the title with `content-desc=""`, and a
+  separate `android.view.View` carrying the name with `clickable=false` and
+  `enabled=true` *even when the picker was disabled*. That second node is the React
+  Native host view: `accessibilityLabel` is also an RN base prop, so RN puts it on the
+  container as `contentDescription`, and RN knows nothing about `disabled`. (An earlier
+  version of this page blamed Compose's unmerged-children rule for that `enabled=true`;
+  `ui-android-1.11.4` reports `enabled = !config.contains(Disabled)`, so a Compose node
+  carrying `disabled()` cannot say `true`.) After the fix one node carries it all:
+  `android.widget.Spinner`, `clickable=true`, the name in `content-desc`, the title as
+  its text, and `enabled=false` when disabled — which is what
+  `scripts/real-input/android.mjs` now asserts from a dump. Two residuals, both stated
+  rather than hidden: the host view still gets RN's `contentDescription` (every control
+  with an `accessibilityLabel` prop has the same, so it is a core question, not
+  Picker's), and the merged node is not `focusable`. The functional refusal — a real
+  tap on a disabled field opens no menu — is measured too.
 
 ## Behaviour notes
 
@@ -273,3 +316,6 @@ SegmentedControl can say (G4's F1: a SwiftUI *segmented* `Picker` ignores
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated.
 - One declared fallback pair per component, so the first instance of a long-title
   list starts from a 72 pt / 280 dp box and is corrected the turn it measures (D17).
+  A cold iOS `wheel` pays the same cost in the other axis — its first frame is the
+  menu's 35 pt height against its own 216 — while Android is accurate for both
+  variants because both are 56 dp tall.
