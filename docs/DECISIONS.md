@@ -22,6 +22,13 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
     noise is judged within the run per (scenario, metric), not by absolute drift vs baseline.
   - Committed baselines are ratio-only, produced on a clean tree, on an idle machine (record load
     average; refuse when busy), in a dedicated commit. Absolute numbers/trends live in CI artifacts.
+  - **R4 amendment - the idle rule judges the run, not its last minute.** The runner samples
+    `load1` every 30 s and at every launch boundary and records `{ count, ceiling, median, p90,
+    max, over, overFraction }`; a run is refused when its **median** is over 0.5 x cores or when
+    **more than 10 %** of the samples are, and `--update-baseline` also refuses *before starting*
+    when `load1` is already over the ceiling (fail fast rather than burn three hours). Results
+    files without samples keep the single-sample rule. Learned from A1/A1b: two complete,
+    problem-free iOS runs were refused by the load of their final minute.
   - Device keys = platform + OS runtime + device class (e.g. `ios27-sim-iphone17`,
     `android35-emu-pixel9`). One canonical device per platform; other hardware uses `--compare`.
   - Locally and on hosted CI, benchmarks **inform review**; they block only on a clear regression

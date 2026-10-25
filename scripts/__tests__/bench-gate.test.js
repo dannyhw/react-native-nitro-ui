@@ -32,12 +32,18 @@ import {
   cellKey,
   comparableMetrics,
   componentOf,
+  createLoadSampler,
   gate,
   IMPLEMENTATIONS,
   incompleteMetrics,
   launchPlanString,
+  loadBlocker,
+  loadCeiling,
   scenarioActionOf,
+  summarizeLoadSamples,
   MAX_MISSING_SAMPLE_RATIO,
+  LOAD_OVER_CEILING_FRACTION,
+  LOAD_SAMPLE_INTERVAL_MS,
   noiseTable,
   ratioTable,
 } from '../bench/lib.mjs';
@@ -546,6 +552,212 @@ describe('benchmark gate', () => {
       machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
     };
     expect(baselineBlockers(cleanIos)).toEqual([]);
+  });
+});
+
+/**
+ * The idle-machine rule judges **the run, not its last minute** (R4).
+ *
+ * A1b's iOS run is the fixture this block is written against: `--plan full`, 1120
+ * launches over 154 minutes, no problems, `load5` 4.06 against a 7.0 ceiling - and
+ * a single `loadavg1` of 7.60 taken in its final minute is what refused it.
+ *
+ * The fixtures deliberately never sit on the answer (AGENTS.md): the quiet band is
+ * 1.6-5.0, the ceiling is 7.0, the busy band is 8.4-13.6, so a rule that read the
+ * wrong quantile, the wrong comparison, or the wrong field could not produce these
+ * verdicts by accident. The two boundary tests are the only places a value touches
+ * a threshold, and they are named for it.
+ */
+describe('the idle-machine rule samples the run (R4)', () => {
+  const CPU_COUNT = 14;
+  const CEILING = loadCeiling(CPU_COUNT);
+  /** A1b's iOS run: three quiet hours, then one noisy minute at the very end. */
+  const A1B_SPIKE = 7.6;
+
+  const quiet = (count) =>
+    Array.from(
+      { length: count },
+      (_, index) => 1.6 + (index % 10) * 0.38 // 1.6 .. 4.96
+    );
+  const busy = (count) =>
+    Array.from(
+      { length: count },
+      (_, index) => 8.4 + (index % 10) * 0.58 // 8.4 .. 13.62
+    );
+
+  function sampledRun({ samples, loadavg1 }) {
+    const loadSamples = summarizeLoadSamples(samples, { cpuCount: CPU_COUNT });
+    const machine = {
+      cpuCount: CPU_COUNT,
+      loadavg1,
+      loadavg5: 4.06,
+      loadSamples,
+    };
+    machine.quiet = loadBlocker(machine) === null;
+    return { ...baselineRun(), machine };
+  }
+
+  it('accepts a run that was quiet from start to finish', () => {
+    const run = sampledRun({ samples: quiet(180), loadavg1: 2.4 });
+    expect(run.machine.loadSamples).toMatchObject({ count: 180, over: 0 });
+    expect(run.machine.quiet).toBe(true);
+    expect(baselineBlockers(run)).toEqual([]);
+  });
+
+  /**
+   * The bug: one sample at the end of a 154-minute run. The spike is still
+   * recorded and still visible in `max`, it just cannot condemn the run.
+   */
+  it('accepts the shape that refused A1b - quiet for hours, a spike at the end', () => {
+    const run = sampledRun({
+      samples: [...quiet(300), A1B_SPIKE, A1B_SPIKE],
+      loadavg1: A1B_SPIKE,
+    });
+    expect(run.machine.loadSamples).toMatchObject({
+      count: 302,
+      over: 2,
+      max: A1B_SPIKE,
+    });
+    expect(baselineBlockers(run)).toEqual([]);
+    expect(run.machine.quiet).toBe(true);
+    // The same instant, read the way the guard used to read it, is a refusal.
+    expect(loadBlocker({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })).toContain(
+      'load average 7.60'
+    );
+  });
+
+  it('refuses a run that was busy for more than half of it', () => {
+    const run = sampledRun({
+      samples: [...quiet(45), ...busy(55)],
+      loadavg1: 3.0, // the last minute was fine; the run was not
+    });
+    const reasons = baselineBlockers(run);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toContain('busy for half the run');
+    expect(reasons[0]).toContain('median load average');
+    expect(run.machine.quiet).toBe(false);
+  });
+
+  /**
+   * The case a single sample cannot see at all: the machine settles down again, so
+   * the end-of-run load average is quiet, but a seventh of the run was spent over
+   * the ceiling. This is the test the old rule fails on its own terms.
+   */
+  it('refuses a run with more than 10 % of its samples over the ceiling', () => {
+    const run = sampledRun({
+      samples: [...quiet(88), ...busy(12)],
+      loadavg1: 2.9,
+    });
+    expect(run.machine.loadSamples.overFraction).toBeCloseTo(0.12, 10);
+    expect(CEILING).toBeCloseTo(7, 10);
+    const reasons = baselineBlockers(run);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toContain('12 of 100 load samples');
+    expect(reasons[0]).toContain('12% of the run');
+    expect(run.machine.quiet).toBe(false);
+  });
+
+  /**
+   * Boundary: the allowance is *more than* 10 %, so exactly a tenth stays mintable
+   * and the sample after it does not.
+   */
+  it('allows exactly 10 % of the samples over the ceiling and refuses the next one', () => {
+    expect(LOAD_OVER_CEILING_FRACTION).toBeCloseTo(0.1, 10);
+    const exactlyTen = baselineBlockers(
+      sampledRun({ samples: [...quiet(90), ...busy(10)], loadavg1: 2.9 })
+    );
+    expect(exactlyTen).toEqual([]);
+    const eleven = baselineBlockers(
+      sampledRun({ samples: [...quiet(89), ...busy(11)], loadavg1: 2.9 })
+    );
+    expect(eleven).toHaveLength(1);
+    expect(eleven[0]).toContain('of the run');
+  });
+
+  /**
+   * Boundary: "over the ceiling" is strictly over, so a machine sitting exactly on
+   * its ceiling for the whole run is still an idle machine.
+   */
+  it('does not count a sample that sits exactly on the ceiling as over it', () => {
+    const run = sampledRun({
+      samples: Array.from({ length: 120 }, () => CEILING),
+      loadavg1: CEILING,
+    });
+    expect(run.machine.loadSamples).toMatchObject({ over: 0, median: CEILING });
+    expect(baselineBlockers(run)).toEqual([]);
+  });
+
+  it('keeps the single-sample rule for files recorded before the sampler', () => {
+    // The two real A1b numbers, read from a file that has no samples at all.
+    expect(
+      baselineBlockers({
+        ...baselineRun(),
+        machine: { cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE },
+      })
+    ).toEqual([
+      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)',
+    ]);
+    expect(
+      baselineBlockers({
+        ...baselineRun(),
+        machine: { cpuCount: CPU_COUNT, loadavg1: 2.39 },
+      })
+    ).toEqual([]);
+    // A file with no load recorded at all is still refused, samples or not.
+    expect(
+      baselineBlockers({ ...baselineRun(), machine: { cpuCount: CPU_COUNT } })
+    ).toContain('the run did not record a load average');
+    const withEmptySamples = {
+      ...baselineRun(),
+      machine: {
+        cpuCount: CPU_COUNT,
+        loadavg1: A1B_SPIKE,
+        loadSamples: null,
+      },
+    };
+    expect(baselineBlockers(withEmptySamples)).toEqual([
+      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)',
+    ]);
+  });
+
+  it('samples the load every 30 s', () => {
+    expect(LOAD_SAMPLE_INTERVAL_MS).toBe(30_000);
+  });
+
+  it('records one sample per call and ignores a failed read', () => {
+    const reads = [2.5, 3.5, Number.NaN, undefined, 4.5];
+    let call = 0;
+    const sampler = createLoadSampler(() => reads[call++]);
+    for (let index = 0; index < reads.length; index += 1) {
+      sampler.sample();
+    }
+    expect(sampler.samples).toEqual([2.5, 3.5, 4.5]);
+    expect(sampler.summary({ cpuCount: CPU_COUNT })).toMatchObject({
+      count: 3,
+      median: 3.5,
+      over: 0,
+    });
+    // Nothing sampled: nothing to judge, so the caller falls back to the old rule.
+    expect(
+      createLoadSampler(() => Number.NaN).summary({ cpuCount: CPU_COUNT })
+    ).toBeNull();
+    expect(() => createLoadSampler()).toThrow(TypeError);
+  });
+
+  it('summarises a run as count, median, p90, max and the share over', () => {
+    const samples = Array.from({ length: 20 }, (_, index) => index + 1);
+    expect(summarizeLoadSamples(samples, { cpuCount: 20 })).toMatchObject({
+      count: 20,
+      ceiling: 10,
+      median: 10.5,
+      p90: 19,
+      max: 20,
+      over: 10,
+      overFraction: 0.5,
+    });
+    expect(summarizeLoadSamples([], { cpuCount: 20 })).toBeNull();
+    // No core count means no ceiling, which means no sampled verdict.
+    expect(summarizeLoadSamples(samples, {})).toBeNull();
   });
 });
 

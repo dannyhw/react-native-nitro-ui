@@ -348,6 +348,26 @@ export function detailSections(run) {
   return sections.join('\n');
 }
 
+/**
+ * What the run's load samples say (R4).
+ *
+ * The headline `load average` is the end-of-run instant - the number that refused
+ * A1b's iOS baseline in its last minute - so this is the part that describes the
+ * 154 minutes around it. Empty for a results file from before the sampler
+ * existed, which is honest: such a file has nothing to say about the middle of its
+ * own run.
+ */
+function loadSamplesNote(samples) {
+  const keys = ['count', 'median', 'p90', 'max', 'overFraction', 'ceiling'];
+  if (
+    samples == null ||
+    !keys.every((key) => typeof samples[key] === 'number')
+  ) {
+    return '';
+  }
+  return `, sampled ${String(samples.count)}x: median ${samples.median.toFixed(2)} / p90 ${samples.p90.toFixed(2)} / max ${samples.max.toFixed(2)}, ${(samples.overFraction * 100).toFixed(1)}% over ${samples.ceiling.toFixed(1)}`;
+}
+
 /** Human summary of run metadata, so a pasted table explains itself. */
 export function runHeader(run) {
   const cells = cellsFrom(run);
@@ -380,7 +400,7 @@ export function runHeader(run) {
   if (machine.cpuCount != null) {
     const cpu = machine.cpuModel != null ? ` (${machine.cpuModel})` : '';
     lines.push(
-      `- machine: \`${machine.hostname}\`, ${String(machine.cpuCount)} cores${cpu}, load average ${machine.loadavg1?.toFixed(2)} / ${machine.loadavg5?.toFixed(2)}${machine.quiet === false ? ' **(busy)**' : ''}`
+      `- machine: \`${machine.hostname}\`, ${String(machine.cpuCount)} cores${cpu}, load average ${machine.loadavg1?.toFixed(2)} / ${machine.loadavg5?.toFixed(2)}${loadSamplesNote(machine.loadSamples)}${machine.quiet === false ? ' **(busy)**' : ''}`
     );
   }
   if (machine.osVersion != null) {
