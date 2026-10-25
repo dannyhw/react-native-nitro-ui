@@ -387,3 +387,237 @@ light one is the evidence for the over-wide menu being fitted and ellipsised.
 3. **Android's disabled-state semantics node** (`enabled = true` on the unmerged anchor
    node) — is that worth a core-level ticket, since any future Compose control with a merged
    field will show the same split? Today it is documented for Picker only.
+
+---
+
+## Fix round 1 — the review's M1–M4 (2026-10-25)
+
+Verdict on `0be0d31` was **NEEDS-WORK**. `docs/tasks/G6-picker.review.md` is committed with the
+first fix commit. `task/G5-datepicker` is *not* merged: this branch is still on main `d21f0ce`,
+and the review's merge plan stands.
+
+The machine was busy the whole round (`load1` 21–206 over 14 cores — another task's builds plus
+the human's own work), so `HARNESS_TIMING=unset` again and the bench was left for the
+quiet-window run, as the review's Q1 answer directs.
+
+### M1 — a size report may only be filed under a key that names what it measured
+
+Three changes, as recommended:
+
+- **JS: the key follows the shown title in both modes** (`src/components/Picker/Picker.tsx`).
+  An uncontrolled control keeps the index native last reported in wrapper state (`lastChoice`,
+  stored together with the variant it was made under), and `shownIndex` reads it. That costs
+  one React render per uncontrolled choice — what a discrete control costs everywhere else —
+  and is now said in `docs/components/picker.md`. `perf:renders` is unchanged (6/6, Picker
+  still 6 renders, `mount+0 redundant`): its scenario drives `selectedIndex` from JS, so it
+  never takes the path that re-renders.
+- **iOS: the pick-time measure is gone** (`ios/components/Picker/HybridNitroUiPicker.swift`).
+  `onSelectionPaintedByUser` and its `DispatchQueue.main.async` are deleted; the echo batch
+  re-keys and `noteSizingKeyChanged()` measures under the new key, while a *refused* choice
+  still re-measures at once through `shown != beforeShown`, under the key that did not change.
+  This also removes the review's third non-blocking item: a deferred measure that could land on
+  a host that had since been dropped or recycled. A pick now lives in one function,
+  `PickerModel.applyUserSelection`, which is also where the two guards the review listed as
+  non-blocking went (`inert while disabled`, index clamped against `options`) — the harness
+  hook made that function the shared entry point, so the guards belong there and not beside it.
+- **Android: a pick's report waits for the batch that names it**
+  (`android/…/HybridNitroUiPicker.kt`, `android/…/core/NitroComposeHost.kt`). The row's
+  `onClick` calls `holdSizingReports()`: the composition keeps measuring and `contentSize`
+  stays current for `measureContent()`, but the engine is skipped until `afterUpdate()` calls
+  `releaseSizingReports(model.pickIsStillShown(stamp))`. `PickerPickStamp` (index, options,
+  variant, label) is what stops a held width being filed under a configuration that is not the
+  one the pick painted — a pick, a changed option list and a changed label can all arrive in
+  one batch. The held size is *filed*, not re-measured: a measure asked for at the release
+  answers the replaced title (a props batch measures this host before its own recomposition —
+  the reason `contentRevision` exists) or answers nothing at all (content wider than its box is
+  placed *at* the box, so the bounded pass never reaches `NitroUiMeasuredRoot`'s gate). Both
+  were measured on `nitroui_t01` before this shape was chosen: the first left the real-input
+  picker ellipsising its title for the rest of the mount, the second put the declared-fallback
+  frame into "re-keys the size of an uncontrolled pick". `apply()` and `prepareForRecycle()`
+  clear the hold, so B1's lifecycle rules are untouched, and the hold costs nothing on an
+  ordinary props turn.
+
+The test hook the harness needed: `nuiTestSelect(index)` on the spec (`@internal`, D14, deleted
+when a harness can press a popup row). Both platforms run the row's own path —
+`PickerModel.applyUserSelection` on iOS, `PickerHost.choose` on Android — with the explicit
+main/UI hop core.md §5 asks for, so a hook call keeps a real press's timing instead of
+flattening it. Android's also calls `NitroComposeHost.applyModelWrites()`: a plain UI-thread
+post is not inside Compose's input handling, and without the snapshot apply the choice would
+paint a batch later than a press does — a different ordering, which is the one thing a test
+hook may not be.
+
+New on-device tests, both platforms: `files a real pick under the key of the title the pick
+shows`, `leaves the width of each title in the cache after a pick`, `re-keys the size of an
+uncontrolled pick, with no render to ask for it`, `holds a pick's report until the batch that
+names the title`, `grows an unpoisoned pick whose new configuration starts at the fallback`.
+
+### M2 — a variant change is a fresh mount
+
+`Picker.tsx` computes `variantKey = nativeVariant` once and uses it for all three things
+Progress uses it for: `key={variantKey}`, the `variant` prop, and `useSizingId(variantKey)`.
+Android needs it because its measured root decides `intrinsic` vs `fillWidth` when the
+composition is built and never re-asks; iOS reads the policy live, so the key costs it nothing.
+Stated consequence: an uncontrolled picker re-seeds from `defaultSelectedIndex` across a
+variant change (which is why `lastChoice` carries the variant it was made under). New tests
+rerender one instance inside a 330 box in both directions, on both platforms.
+
+### M3 — the Android anchor is one accessibility node
+
+`clearAndSetSemantics` on the anchor modifier, `menuAnchor` kept for pointer input: the node
+carries the name (`accessibilityLabel ?? label ?? title`), the value (the title as the node's
+own `Text`, because `uiautomator dump` never prints `stateDescription`), `Role.DropdownList`,
+and the open action — or `disabled()` with no action at all. Read out of a dump on
+`nitroui_t01`, a picker is now one node: `android.widget.Spinner`, `clickable=true`,
+`content-desc` = the name, `text` = the title, and `enabled=false` when disabled.
+`CHECKS.picker` step 8 asserts six facts about it and *notes* `focusable=false` instead of
+asserting it, because that is what the tree says and the fix does not claim otherwise.
+
+The wrong `enabled=true` explanation is gone from all four places the review named:
+`HybridNitroUiPicker.kt`, `scripts/real-input/android.mjs` step 7, `docs/components/picker.md`,
+and decision 6 below. The remaining half — RN copying the `accessibilityLabel` base prop onto
+the host container, which is why a *second* node carries the name at all — is core, affects
+every control with that prop, and is **not** touched here.
+
+### M4 — reds that were missing, a leak case that can see a leak, and claims that match
+
+- **Android Picker case in `MountChurn`** (`example/__tests__/MountChurn.harness.tsx`): 200
+  Pickers per cycle, one anchor opened by a real press (the anchor is in the app's window, so
+  it is reachable — only popup rows are not), unmount, then the post-GC heap floor asserted
+  flat across cycles, with `corrections == 0`. This is the case that can see the leak, and it
+  goes red with `onDropView`'s `host.drop()` skipped.
+- **The iOS twin cannot be shown red, and now says so.** The same mutation compiled
+  (`** TEST BUILD SUCCEEDED **`) and `testRealInputPicker` passed anyway. iOS's menu is
+  presented inside the hosted view, so every witness that test has — rows exist, a later mount
+  measures — is blind to a leaked containment. `docs/components/picker.md` now names the
+  Android window table and the churn floor as the leak coverage, and the harness case is
+  renamed `does not treat opening as a choice, and the next mount sizes normally after going
+  away mid-menu`: what it asserts, and nothing about popups.
+- **The recycle reset** cannot be shown red on a device: with `didApplyDefault` left `true`,
+  the on-device `survives remounts…` case stays green, because nothing the harness mounts is a
+  recycling container — `prepareForRecycle` never runs during those 200 mounts. The JVM twin
+  `android/src/test/java/com/margelo/nitro/nitroui/PickerModelTest.kt` (run by
+  `test:native:android`, still not by `check`) is what can guard it: the reset leaves nothing
+  of the mount before it, the uncontrolled seed is applicable again afterwards, and what a pick
+  means (`applyUserSelection`, `pickIsStillShown`) is asserted directly rather than through a
+  popup no harness can press.
+- **Android's window-table step itself was never shown red**: with `host.drop()` skipped the
+  real-input run dies at step 3 (`a real tap on a menu row reaches JS as index 2` — saw null),
+  so the unmount cycles are never reached. Recorded, not smoothed over: the leak gate is the
+  churn case, and the three real-input cycles stay a measurement.
+
+### Files this round
+
+- **Wrapper and spec**: `src/components/Picker/Picker.tsx` (M1 `lastChoice`, M2 `variantKey`), `src/components/Picker/Picker.nitro.ts` + `NativeNitroUiPicker.ts` and the regenerated `nitrogen/generated/**` + `etc/react-native-nitro-ui.api.md` (the `nuiTestSelect` test hook, `@internal`, D14).
+- **iOS**: `ios/components/Picker/HybridNitroUiPicker.swift` — the pick-time measure is gone; `PickerModel.applyUserSelection` owns the pick and its guards.
+- **Android**: `HybridNitroUiPicker.kt` — `PickerPickStamp`, `pickIsStillShown`, the M3 anchor semantics; `core/NitroComposeHost.kt` — the small `holdSizingReports()` / `releaseSizingReports()` pair plus `applyModelWrites()`, cleared by `apply()` and `prepareForRecycle()`.
+- **Tests**: `example/__tests__/Picker.harness.tsx` (+569 lines, both platforms), `example/__tests__/MountChurn.harness.tsx` (the Picker churn case), `example/ios/NitroUiExampleUITests/RealInputTests.swift` (M1 cases, `tickerBeat()`), `scripts/real-input/android.mjs` (steps 7–8) + `uiautomator.mjs` (`focusable`, `findAllByDescription`), and the new JVM twin `android/src/test/java/com/margelo/nitro/nitroui/PickerModelTest.kt`.
+- **Docs**: `docs/components/picker.md`, one sentence in `docs/architecture/sizing.md` §5 (the review's Q2 answer: the table selects the intrinsic shadow node and names the default policy; the policy that applies is the one the host reports — Progress, Picker).
+
+### Reds in the fix round
+
+Each row is either a new test run against `0be0d31` ("before") or a one-line break in the fix
+("mutant"), with the log on disk. The last two rows also carry the round-2 re-confirmation taken
+after the clean restore, so every red here has been seen twice or is marked as unable to go red.
+
+| # | Broken | Red |
+| --- | --- | --- |
+| R1-a | `files a real pick under the key of the title the pick shows`, `leaves the width of each title in the cache after a pick`, `re-keys the size of an uncontrolled pick, with no render to ask for it` run against `0be0d31` | iOS **3 failed / 21** (`/tmp/g6fix-red-ios.log`); Android **5 failed / 21** — the same three plus R2-a's pair (`/tmp/g6fix-red-android.log`) |
+| R1-b | the third case above with iOS's host untouched, so only the JS wrapper was new — the JS half of M1 on its own | **1 failed / 21** (`/tmp/g6fix-red-ios2.log`) |
+| R1-c | mutant `/tmp/g6fix-mut-host.kt` makes `NitroComposeHost.holdSizingReports()` a no-op, then `holds a pick's report until the batch that names the title` | Android **1 failed, 21 skipped** (`/tmp/g6fix-holdtest-RED-mut-android.log`). The same mutant and the same test on iOS **passed** (`/tmp/g6fix-holdtest-RED-mut-ios.log`): the hold is Android-only, so that case is an Android witness and nothing more |
+| R2-a | `asks a menu the unbounded question after a variant change` and `asks a wheel the box question after a variant change` against `0be0d31` | red on **Android** (in `/tmp/g6fix-red-android.log`) and **green on iOS in the same run** — iOS reads the policy live, so only Android can see M2. Both cases are kept on both platforms anyway |
+| R3-a | `CHECKS.picker` step 8 run against the pre-fix APK | **5 of its 6 assertions** red (`/tmp/g6fix-realinput-M3RED.log`); the tree it replaced is kept as `/tmp/g6fix-realinput-m3-before.log` |
+| R4-a | `onDropView`'s `host.drop()` skipped, then the new `MountChurn` Picker case | `keeps the post-GC heap floor flat across 3 churn cycles of 200 Pickers, one with its menu open` — **1 failed** (`/tmp/g6fix-churn-RED-leak.log`); green `/tmp/g6fix-churn-green.log` and `/tmp/g6fix-churn-green2.log` |
+| R4-b | mutant `if (model.state.reconcile())` → `if (false && model.state.reconcile())` | `the refused title went away… — expected Summit, saw Ridge` (`/tmp/g6fix-realinput-RED-snapback.log`), re-confirmed after the restore in `/tmp/g6fix2-RED-snapback.log` |
+| R4-c | both disabled guards at once: `onExpandedChange` drops `&& enabled` *and* `menuAnchor(…, enabled = true)` | `a real tap on the disabled picker opens no menu — expected 0, saw 1` (`/tmp/g6fix-realinput-RED-disabled-both2.log`), re-confirmed after the restore in `/tmp/g6fix2-RED-disabled-anchor.log`, which also cascades to the next assertion because the wrongly opened menu is still on screen. With one half only, the run reds at an earlier assertion instead (`/tmp/g6fix-realinput-RED-disabled.log`), so the paired mutant is the one that names the refusal |
+| R4-d | mutant leaves `didApplyDefault = true` in `prepareForRecycle` | the device case `survives remounts…` stayed **green** (`/tmp/g6fix-recycle-RED.log`): nothing the harness mounts is a recycling container, so `prepareForRecycle` never runs during those mounts. The JVM twin is the real guard — 2 of 6 red (`/tmp/g6fix-jvm-RED-recycle.log`), green `/tmp/g6fix-jvm-green.log` |
+| R4-e | mutant skips `onDropView`'s `host.drop()` and the *real-input* window-table cycles are run (the leak case on the device, not in churn) | the run dies at step 3 (`a real tap on a menu row reaches JS as index 2` — saw null), so the unmount cycles are **never reached** (`/tmp/g6fix-realinput-RED-leak.log`). The window-table cycles stay a measurement; R4-a is the gate |
+| R4-f | the same leak mutant built for iOS and `testRealInputPicker` run against it | **`** TEST EXECUTE SUCCEEDED **` — it passed** (`/tmp/g6fix-realinput-ios-RED-leak.log`, 186.177 s). iOS cannot be shown red for this leak, as M4 explains |
+| R4-g | iOS step 7's new heartbeat guard, before `tickerBeat()` existed (the 6 s option rotation aliased with the 4 s reading) | `the screen's own option ticker should repaint within 4s while nothing is presented (both readings "Yes")` (`/tmp/g6fix-realinput-ios.log`); green after the fix in `/tmp/g6fix-realinput-ios2.log` |
+| C1 | (recorded before this round) the containment pair | `fits an over-wide menu into the box the caller gave it` and `re-fits when the caller narrows the box under an over-wide menu` — **2 failed** (`/tmp/g6fix-c1C-RED.log`: intrinsic 180.19 against `> 200.19`; box 200 against `> 220`). The older C1 placement mutation is on record as **still green** (`/tmp/g6fix-c1-placement-mutation-STILL-GREEN.log`), and that run also fell through to Metro **8295** because 8293 was held by my own Metro — read it as an unplaced measurement, not a pass |
+
+**No red recorded, so not claimed as guarded:** `re-measures when the selection moves to a longer
+title`, `clamps a selection the caller sends out of range`, `reads back what React sent` and
+`keeps a caller width in charge across a title change` all pass, and none of them was ever made to
+fail. They are ordinary coverage, not shown-red guards.
+
+### Gates, fix round 1
+
+| Command | Result |
+| --- | --- |
+| `bun run check` (`fnm exec --using 24 --`) | **pass** — all fourteen steps: jest **188 tests / 12 suites**, `perf:renders` **6/6** (Picker still 6 renders, `mount+0 redundant`), the native C++/Swift suites plus ASan+UBSan, nitrogen **no drift** (160 files, 24 views patched), autolinking, prepare, api-extractor, publint **All good!**, manifest **375 files**, readme 5 blocks (`/tmp/g6fix2-check.log`) |
+| `bun run harness:android` — full, 9 suites | **128 passed** — `nitroui_t01` / `emulator-5570`, adb server 5041, Metro **8293**, `HARNESS_TIMING=unset`, `Time: 116.435 s` (`/tmp/g6fix2-h-android-full.log`) |
+| `bun run harness:ios` — full, 9 suites | **126 passed, 1 skipped** — iPhone 17 `F08675D3-…`, Metro **8293**, `HARNESS_TIMING=unset`, `Time: 106.359 s` (`/tmp/g6fix2-h-ios-full.log`) |
+| `test:real-input:android --control picker` | **pass, 36 assertions** on the rebuilt clean APK — incl. the six `uiautomator` dump assertions, the disabled refusal and the refused-choice snap-back (`/tmp/g6fix2-GREEN-final-android.log`) |
+| `test:real-input:ios --control picker` | **pass** — `testRealInputPicker` in **181.038 s**, `** TEST EXECUTE SUCCEEDED **`, Metro 8293, with the app and the UI-test bundle built from the committed tree (`/tmp/g6fix2-GREEN-final-ios.log`); an earlier run of the same case, 135.660 s, is `/tmp/g6fix-realinput-ios2.log` |
+| `scripts/native-tests-android.sh --tests com.margelo.nitro.nitroui.PickerModelTest` | **BUILD SUCCESSFUL**, 6 tests — the JVM twin that guards the recycle reset (`/tmp/g6fix-jvm-green.log`) |
+| `bunx prettier --check` on every file this round touched (`.swift` excluded — prettier has no parser for it) | **All matched files use Prettier code style** |
+| bench | **not re-run** — see the note under this table |
+
+Every row above is on the restored, mutation-free tree: after the last mutation the Kotlin file
+went back byte-identical to the copy the round's green gates were first taken on (`diff` clean,
+`MUTATION` count 0 across the native source directory), the APK was rebuilt from it before the
+real-input run, and `bun run check` ran last, on the finished tree.
+
+**Bench was not re-run.** The review's Q1 answer makes it a quiet-window run rather than a merge
+blocker, and no idle window opened: `load1` moved between 8 and 206 over 14 cores all evening, with
+G5's builds and harness runs on the same machine, and iPhone 17 is reserved for the quiet-machine
+baseline from 01:00 — the same condition that forced `HARNESS_TIMING=unset` in round 0. It stays
+scheduled for release prep, where it should also mint the iOS baseline.
+
+*A note without evidence:* the first iOS full-suite run of this round died on T11's
+`lays a cold Switch out at the size the control measures` (`expected null not to be null`) at
+`load1` 61; that suite alone was 24/24 and the re-run was green. The log did not survive `/tmp`, so
+this is a note and not a record — but the same case failed the same way in logs that did survive
+from earlier tasks (`/tmp/green-ios.log`, `/tmp/r1-harness-ios.log`).
+
+### Corrections to round 0
+
+The review listed nine claims that were wrong on `0be0d31`. They are recorded here rather than
+edited out of the round-0 sections, so the reader can see what changed.
+
+1. **"Every new test shown red first"**, and the Acceptance row that repeats it: false for the M4
+   list. The honest statement is the table above plus the "no red recorded" paragraph under it.
+2. **Decision 5**: `expanded` *is* `PickerModel` state (`.kt:91`), not per-host — `picker.md:114`
+   had it right. And "three unmount-while-open cycles each leave zero popup windows" is a
+   measurement, not a shown-red gate; R4-a is the gate.
+3. **Decision 6, Known issues and Q3**: the `enabled=true` explanation was wrong. The node that
+   answers `enabled=true` is RN's host container — RN copies the `accessibilityLabel` base prop
+   onto it and knows nothing about `disabled` — not Compose, which reports
+   `enabled = !config.contains(Disabled)`. Corrected in `HybridNitroUiPicker.kt`,
+   `scripts/real-input/android.mjs` step 7, `docs/components/picker.md` and decision 6. The
+   container half is core and is filed as a follow-up, not fixed for other controls here.
+4. **Decision 2, `picker.md:127-128` and both host headers**: "the same two-policy switch Progress
+   makes" was true of the switch only, because Picker lacked Progress's variant key. With M2's
+   `key={variantKey}` the remount is shared too, so the sentence is true from this round.
+5. **Decision 4, `picker.md:128-131` and `:177-182`**: the key named the selected title only until
+   the first pick (M1). `picker.md:181`'s claim that the `update` benchmark cell exercises the
+   pick path is false — the bench drives `selectedIndex` from JS (`nitroUi.tsx`,
+   `pickerSelection`), so no native pick ever happens there. That is also why `perf:renders` did
+   not move when `lastChoice` landed: its scenario is the controlled path.
+6. **`picker.md:120-123`**: the harness test did not test unmount-while-open. Rewritten, and the
+   test renamed to what it actually asserts.
+7. **Summary's "the data model was reused, not forked"**: `escapeOption`, `OPTION_SEPARATOR` and
+   `clampToOptions` are *copies* of `SegmentedControl.tsx`'s (verified: both files declare their
+   own), and the native `clamp` copies are the same story. Reuse is a debt here, not a done item.
+8. **Files changed's "G5 … merges without contention"**: a trial `git merge-tree` of G5 `d773658`
+   with `0be0d31` reports **28 conflicting files**. All are both-sides-append, but they are
+   conflicts, and only the review's merge plan resolves them.
+9. **`HybridNitroUiPicker.kt:51-55`**: it cited `MountChurn.harness.tsx` as guarding the popup when
+   MountChurn had no Picker case. It has one as of this round, so the citation holds now.
+
+### Follow-ups (one line each)
+
+- **Copied helpers** — move `escapeOption` / `OPTION_SEPARATOR` / `clampToOptions` and the native `clamp` copies to `src/core` before a third component copies them again.
+- **iOS cold wheel** — a per-variant declared fallback would remove the 35 pt-against-216 first frame; D17 already permits the one correction, so this is polish.
+- **iOS value announcement** — assert `hostedControl(...).value` in `testRealInputPicker`, and check whether the wrapper's "Choice, Choice" label means the name is read twice.
+- **iOS `needsContainment` mount cost** — every Picker adds a hosting controller on mount (200 `addChild` calls in a list); worth a sizingStats/Instruments look before 0.2.
+- **`lbl:` in the iOS key** — iOS draws no caption, so the segment only fragments the cache; harmless, drop it per-platform only if that is cheap.
+- **Core ticket (SF2)** — RN puts the `accessibilityLabel` base prop on the Android host container for every control: confirm with one Switch dump, then either rename the spec prop or keep the host's own `contentDescription` null.
+- **iOS leak coverage** — iOS cannot witness a leaked containment (R4-f); a harness that can press popup rows should own this.
+- **T11 flake** — `Sizing … lays a cold Switch out…` failed once (`expected null not to be null`) at `load1` 61 in a full suite; the suite alone was 24/24 and the re-run was green, and the log did not survive `/tmp` (see the note under the gates). Worth watching before it gates a release.
+- **Bench** — re-run the `picker` quick plan in an idle window after this round, since M1/M2 change what `update.picker` does; that run should also mint the iOS baseline.
+
+### Questions for orchestrator
+
+1. Ready for main on your go. Please re-run the merge-plan gates after pulling main: `uiautomator.mjs`, `RealInputTests.swift`, the `CHECKS`/`SMOKE_CONTROLS` tables and the nitrogen output all changed for two controls at once, so the merge — not either branch — is what needs the harness on both platforms.
+2. The SF2 core ticket (`accessibilityLabel` on the Android host container) is bigger than G6: do you want to open it, or should I file it against core?
