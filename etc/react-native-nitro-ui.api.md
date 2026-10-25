@@ -46,6 +46,49 @@ export type ButtonSize = 'small' | 'medium' | 'large';
 export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
 
 // @public
+export function DatePicker(input: DatePickerProps): JSX.Element;
+
+// @public
+export type DatePickerMode = 'date' | 'time' | 'datetime';
+
+// @public
+export interface DatePickerProps extends ViewProps {
+    defaultValue?: Date | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly valueMillis: number | null;
+        readonly mostRecentEventCount: number;
+        readonly mode: string;
+        readonly variant: string;
+        readonly minimumMillis: number | null;
+        readonly maximumMillis: number | null;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestSelect(year: number, month: number, day: number, hour: number, minute: number): void;
+        nuiTestPresent(): void;
+        nuiTestStateReport(): string;
+    }) => void) | undefined;
+    maximumDate?: Date | undefined;
+    minimumDate?: Date | undefined;
+    mode?: DatePickerMode | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onChange?: ((date: Date) => void) | undefined;
+    tintColor?: ColorValue | undefined;
+    value?: Date | undefined;
+    variant?: DatePickerVariant | undefined;
+}
+
+// @public
+export type DatePickerVariant = 'compact' | 'inline' | 'wheel';
+
+// @public
 export interface NitroUiCore extends HybridObject<{
     ios: 'c++';
     android: 'c++';

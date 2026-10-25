@@ -44,6 +44,7 @@ final class RealInputTests: XCTestCase {
     static let sliderTab = "tab-slider"
     static let buttonTab = "tab-button"
     static let segmentedTab = "tab-segmented"
+    static let datePickerTab = "tab-datepicker"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -59,6 +60,8 @@ final class RealInputTests: XCTestCase {
     static let segmentedEvents = "real-input-segmented-events"
     static let rejectEvents = "real-input-reject-events"
     static let rejectValue = "real-input-reject-value"
+    static let dateValue = "real-input-date-value"
+    static let dateEvents = "real-input-date-events"
   }
 
   /// How far the Slider's thumb sits from each end of the track at the extremes,
@@ -337,6 +340,442 @@ final class RealInputTests: XCTestCase {
   }
 
   // MARK: - Reading the screen
+
+  /// A real tap on the `compact` field must open SwiftUI's own presentation, and a
+  /// real tap on a day inside it must reach JS as a new instant.
+  ///
+  /// This is the control where a hosted-library bug is most likely, because the
+  /// thing the finger finally lands on is not in the React Native window at all -
+  /// it is SwiftUI's calendar, presented by the presentation system. Two hops have
+  /// to work for the echo to move: the field's own button, then the day cell.
+  ///
+  /// The day is chosen by the helper rather than named: a pick of the date already
+  /// showing reports nothing by design (the suppression rule), which from out here
+  /// is indistinguishable from a touch that never arrived.
+  func testRealInputDatePicker() throws {
+    try goToTab(Tab.datePickerTab, showing: Echo.dateValue)
+    let field = try required("real-input-date", as: "the uncontrolled DatePicker field")
+    let whereItStarted = field.frame
+    // A dash, not a date: the picker is uncontrolled, so nothing has told JS a
+    // value and nothing should have.
+    XCTAssertEqual(
+      try read(Echo.dateValue),
+      "-",
+      "the DatePicker should not have reported a day before a touch"
+    )
+    XCTAssertEqual(try read(Echo.dateEvents), "0", "no change should be reported before a touch")
+
+    field.centre.tap()
+    let opened = try openPresentation(from: field, watching: Echo.dateValue)
+    try pickSomeDay(in: opened, from: field, watching: Echo.dateValue) { $0 != "-" }
+
+    XCTAssertEqual(
+      try read(Echo.dateEvents),
+      "1",
+      "one day picked should report one change"
+    )
+    try assertStillInPlace(
+      "real-input-date",
+      startedAt: whereItStarted,
+      after: "the real pick"
+    )
+
+    // The refusing parent: the pick must reach JS, and the day the parent keeps
+    // sending must not move. Unlike the SegmentedControl check this does not need
+    // a tap-twice oracle - the parent's pinned day is on screen as text, and a
+    // picker that never reverted would show the picked day in the field.
+    let rejecting = try required(
+      "real-input-date-reject",
+      as: "the controlled DatePicker field"
+    )
+    XCTAssertEqual(
+      try read(Echo.rejectValue),
+      "2024-06-15",
+      "the refusing parent pins its DatePicker at 2024-06-15"
+    )
+    XCTAssertEqual(
+      try read(Echo.rejectEvents),
+      "0",
+      "no change should be reported on the controlled control yet"
+    )
+    rejecting.centre.tap()
+    let rejectingPopover = try openPresentation(from: rejecting, watching: Echo.rejectEvents)
+    try pickSomeDay(in: rejectingPopover, from: rejecting, watching: Echo.rejectEvents) { $0 != "0" }
+    XCTAssertEqual(
+      try read(Echo.rejectEvents),
+      "1",
+      "a real pick on the controlled field should reach JS once - native paints optimistically (core.md section 4)"
+    )
+    XCTAssertEqual(
+      try read(Echo.rejectValue),
+      "2024-06-15",
+      "the parent never accepted the change, so the day it sends is still 2024-06-15"
+    )
+
+    // And the same control at the bottom of a form rather than the top, where the
+    // presentation has no room under it and the label has to leave the value alone.
+    try assertLowRowField()
+  }
+
+  /// The last row of the Date screen: a labelled `compact` field with the whole
+  /// screen above it and nothing under it but the home indicator.
+  ///
+  /// Two properties live or die in that position, and neither is visible from the
+  /// fields near the top that every other check uses.
+  ///
+  /// **The popover has to fit.** The bubble this control presents is 336 pt wide and
+  /// 300-420 pt tall. UIKit sizes a popover to the room available *on the side its
+  /// arrow is permitted to point*, so while the presentation permitted only one
+  /// direction, a field in the lower half of the screen got a calendar clipped to the
+  /// few dozen points left under it - the month cut in half, the day cells far under
+  /// the 44 pt target `calendarWidth` exists to guarantee. The fix is to permit both
+  /// directions; this is the check that can tell, because the row is scrolled as far
+  /// down as the page goes.
+  ///
+  /// **The announcement has to be complete.** This row sets `accessibilityLabel`, and
+  /// with a label set VoiceOver reads the label as the node's *name* - so the date has
+  /// to arrive as the node's *value* or the user hears "Departure date, button" and
+  /// never the day. That is what `.accessibilityValue` on the compact button is for,
+  /// and the accessibility tree is the only place it can be observed.
+  private func assertLowRowField() throws {
+    // Whatever the earlier half of this test left open has to go first: a tap
+    // outside a popover is dismissed by the popover, and the scroll below would
+    // otherwise be swallowed by it.
+    try dismissAnyPresentation()
+
+    let field = try required("low-date", as: "the last row's DatePicker field")
+    let screen = app.windows.firstMatch.frame
+
+    // Scroll to the end of the page. It is at the end when a further swipe no longer
+    // moves the field - not when the field becomes hittable, which happens rows
+    // before the bottom and would leave this check testing a field in the middle.
+    var position = field.frame
+    for _ in 0..<12 {
+      app.swipeUp()
+      let after = field.frame
+      if after == position {
+        break
+      }
+      position = after
+    }
+    let frame = field.frame
+    let roomBelow = screen.maxY - frame.maxY
+    print("real-input low row: field=\(frame) screen=\(screen) roomBelow=\(roomBelow)")
+
+    // The check is only worth running in the position it is about, so say so loudly
+    // rather than pass quietly on a screen that did not scroll.
+    XCTAssertGreaterThan(
+      frame.minY,
+      screen.midY,
+      "the last row of the Date screen ended at y \(frame.minY) of a \(screen.height)pt "
+        + "screen - not in the lower half, so this cannot see a popover being squeezed"
+    )
+    XCTAssertLessThan(
+      roomBelow,
+      250,
+      "there are \(roomBelow)pt under the last row, which is room enough for a popover "
+        + "of its own - the case this check exists for is a field with almost none"
+    )
+
+    // The accessibility pair, read the way a screen reader reads it.
+    //
+    // `testID` names React Native's container, and the container is *not* the node
+    // VoiceOver stops on: the control is the hosted element inside it, which is where
+    // `accessibilityLabel` goes (core.md §3 bans naming the box instead). On this
+    // screen the two differ in exactly the way that matters - the container reports
+    // the label with an empty value, and the hosted button below it reports the label
+    // *and* the localised day. So the assertion aims at the innermost element the
+    // subtree offers: reading `field.value` would be reading the wrapper, which says
+    // nothing about what a user hears.
+    //
+    // The subtree is printed either way. This is the only place in the suite where the
+    // tree a screen reader walks gets written down, and the kept log
+    // (`.real-input/ios/xcodebuild-test.log`, "low row a11y") is the evidence behind
+    // the M3 claim in the report.
+    func describe(_ node: XCUIElement, who: String) -> String {
+      let id = node.identifier
+      let label = node.label
+      let value = (node.value as? String) ?? (node.value == nil ? "<nil>" : "\(String(describing: node.value))")
+      return "real-input low row a11y [\(who)]: type=\(node.elementType.rawValue) id=\"\(id)\" "
+        + "label=\"\(label)\" value=\"\(value)\" frame=\(node.frame)"
+    }
+
+    print(describe(field, who: "the testID node"))
+    let walked = field.descendants(matching: .any).allElementsBoundByIndex
+    print("real-input low row a11y: \(walked.count) descendants of the testID node")
+    for node in walked {
+      print(describe(node, who: "descendant"))
+    }
+    // Contrast, one row above: an unlabelled field's control takes its name from its
+    // own text, so a *label* is the only thing that can push the date out of the
+    // announcement - which is why the labelled row is the one under test.
+    let plain = app.descendants(matching: .any)["tinted-inline"].firstMatch
+    if plain.exists {
+      print(describe(plain, who: "the unlabelled row above"))
+    }
+
+    let control = ([field] + walked).last { $0.elementType == .button } ?? field
+    XCTAssertEqual(
+      control.label,
+      "Departure date",
+      "the field's name should be the accessibilityLabel it was given"
+    )
+    XCTAssertTrue(
+      ((control.value as? String) ?? "").contains("2026"),
+      "the labelled compact field announced value=\"\(String(describing: control.value))\", "
+        + "which is not a date: with a label set the label *replaces* the control's own "
+        + "text, so the localised day has to be announced as the value - a field that "
+        + "says nothing here tells the user what the field is and never what it holds"
+    )
+
+    let popovers = app.descendants(matching: .popover)
+    print(
+      "real-input low row: before the press popovers=\(popovers.count) "
+        + "windows=\(app.windows.count) containerHittable=\(field.isHittable) "
+        + "controlHittable=\(control.isHittable)"
+    )
+    // The finger goes on the *control*, which is what the paragraph above just
+    // located. React Native's container reports `isHittable == false` here - hit
+    // testing returns the hosted button, not the wrapper around it - and the kept log
+    // of the run that aimed at the wrapper shows the first press eaten (`press 1 ->
+    // popovers=0`, `press 2 -> popovers=1`) with the bubble then opening at its full
+    // size. Aiming at the control is both the honest gesture and the reliable one;
+    // the retry stays because a press released while the list is still settling can
+    // still be eaten by its own gesture recogniser, and that is not the property
+    // under test - the size and place of the presentation below are.
+    var attempts = 0
+    while popovers.count == 0 && attempts < 3 {
+      attempts += 1
+      control.centre.tap()
+      let settle = Date().addingTimeInterval(2.0)
+      while Date() < settle, popovers.count == 0 {
+        Thread.sleep(forTimeInterval: 0.1)
+      }
+      print("real-input low row: press \(attempts) -> popovers=\(popovers.count) windows=\(app.windows.count)")
+    }
+    guard popovers.count > 0 else {
+      dumpHierarchy("tapping the last row presented nothing")
+      let shot = XCUIScreen.main.screenshot()
+      let url = URL(fileURLWithPath: "/tmp/g5-lowrow-\(attempts).png")
+      try? shot.pngRepresentation.write(to: url)
+      print("real-input low row: screenshot written to \(url.path)")
+      XCTFail("a real tap on the last row's field presented no popover")
+      throw RealInputCheckAborted(identifier: Echo.dateValue)
+    }
+    let popover = popovers.firstMatch
+    let bubble = popover.frame
+    print("real-input low row: popover=\(bubble)")
+
+    XCTAssertGreaterThanOrEqual(
+      bubble.width,
+      300,
+      "the last row presented a popover \(bubble.width)pt wide - a calendar's seven "
+        + "columns of day cells are not tappable at that width"
+    )
+    XCTAssertGreaterThanOrEqual(
+      bubble.height,
+      250,
+      "the last row presented a popover \(bubble.height)pt tall into \(roomBelow)pt of "
+        + "room: UIKit compressed the calendar into the space under the field instead of "
+        + "putting the bubble above it, and the month a finger has to use is cut off"
+    )
+    XCTAssertLessThanOrEqual(
+      bubble.maxY,
+      frame.minY + 8,
+      "the popover was drawn at y \(bubble.minY)-\(bubble.maxY) with the field starting "
+        + "at \(frame.minY): it stayed below a field with only \(roomBelow)pt under it. "
+        + "A bubble that cannot fit below has to be permitted to sit above, pointing "
+        + "down at the field it belongs to"
+    )
+
+    // And the calendar inside it is the usable one, not a shrunken drawing.
+    let days = popover.descendants(matching: .collectionView).firstMatch
+      .descendants(matching: .button)
+    var dayCount = 0
+    let daysDeadline = Date().addingTimeInterval(reactTimeout)
+    while Date() < daysDeadline {
+      dayCount = days.count
+      if dayCount > 10 {
+        break
+      }
+      Thread.sleep(forTimeInterval: 0.25)
+    }
+    XCTAssertGreaterThan(
+      dayCount,
+      10,
+      "the popover a finger has to use holds \(dayCount) day cells"
+    )
+  }
+
+  /// Close whatever presentation is on screen, by tapping outside it.
+  ///
+  /// Popovers dismiss on a tap outside their own bounds, so the corner of the window
+  /// is the neutral place to ask for that - and if something is up that will not
+  /// close, that is worth a failure of its own rather than a mysterious later tap.
+  private func dismissAnyPresentation() throws {
+    let popovers = app.descendants(matching: .popover)
+    guard popovers.count > 0 else {
+      return
+    }
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.95)).tap()
+    let deadline = Date().addingTimeInterval(reactTimeout)
+    while Date() < deadline, popovers.count > 0 {
+      Thread.sleep(forTimeInterval: 0.2)
+    }
+    if popovers.count > 0 {
+      dumpHierarchy("a tap outside the popover left it up")
+      XCTFail("a tap outside the presentation did not close it")
+      throw RealInputCheckAborted(identifier: Echo.dateValue)
+    }
+  }
+
+  /// Press a `compact` field and return the popover it presented.
+  ///
+  /// The press has to produce a *presentation*, not just a flag: this is the one
+  /// control in the library whose content, after the tap, is not in the React
+  /// Native window at all. The wait is on the popover element itself, so a field
+  /// that only moved a piece of state fails here rather than in the day-picking
+  /// helper, where the failure would read as "no cells" and hide what happened.
+  ///
+  /// What is measured here is the thing a flag cannot tell: whether the bubble a
+  /// finger has to use is the right size and in the right place. The first version
+  /// of this control presented a 68x188.7 pt popover whose calendar was laid out at
+  /// 52 pt wide - a month of day cells drawn from `x: -43` to `x: 141`, most of them
+  /// outside the bubble and each one a fraction of the 44 pt minimum touch target -
+  /// below the status bar, 190 pt away from the field that opened it. Every number
+  /// the app reported was true.
+  private func openPresentation(from field: XCUIElement, watching echo: String) throws -> XCUIElement {
+    let fieldFrame = field.frame
+    let popovers = app.descendants(matching: .popover)
+    let deadline = Date().addingTimeInterval(reactTimeout)
+    while Date() < deadline, popovers.count == 0 {
+      Thread.sleep(forTimeInterval: 0.2)
+    }
+    guard popovers.count > 0 else {
+      dumpHierarchy("tapping \(field.identifier) presented nothing")
+      XCTFail(
+        "a real tap on the field presented no popover - the accessibility tree has "
+          + "no presentation, so a finger has nothing to pick"
+      )
+      throw RealInputCheckAborted(identifier: echo)
+    }
+    let popover = popovers.firstMatch
+    // Seven columns of at least 44 pt, plus the popover's margin: narrower than
+    // that and the days are not tappable, however the control describes itself.
+    XCTAssertGreaterThanOrEqual(
+      popover.frame.width,
+      300,
+      "the field presented a popover \(popover.frame.width)pt wide - too narrow for a "
+        + "calendar's day cells to be tappable, whatever the control reported"
+    )
+    // A bubble too short clips the calendar below its own edge: the first version of
+    // this presentation was 188.7 pt around a calendar that needs about 312, so the
+    // bottom rows of the month were drawn outside the popover. There is no matching
+    // upper bound on purpose - pinning the content 700 pt tall could not drive such an
+    // assertion red, because UIKit clamps a popover to the room it has, so a "sheet
+    // wearing a popover's arrow" is not a state an iPhone can show.
+    XCTAssertGreaterThanOrEqual(
+      popover.frame.height,
+      250,
+      "the field presented a popover \(popover.frame.height)pt tall, which is shorter "
+        + "than the calendar inside it - the bottom rows of the month are cut off"
+    )
+    // And it has to be *the field's* popover: a presentation that resolves its anchor
+    // somewhere else on the screen points at nothing. `+ 8` of tolerance for the
+    // arrow's own height, which the accessibility frame may or may not include.
+    XCTAssertGreaterThanOrEqual(
+      popover.frame.minY,
+      fieldFrame.maxY - 8,
+      "the popover opened at y \(popover.frame.minY) while the field ends at "
+        + "\(fieldFrame.maxY) - it is not anchored to the control that presented it"
+    )
+    return popover
+  }
+
+  /// Tap day cells inside an open popover until the echo moves.
+  ///
+  /// The days of a SwiftUI calendar are `Button`s inside the calendar's collection
+  /// view (`.cell` finds none: there is no table here), and the list is scoped to
+  /// the popover on purpose - the screen also has an *inline* picker whose days are
+  /// in the app's own window, and a tap that landed there would move the wrong
+  /// echo and prove nothing.
+  ///
+  /// Candidates start at the middle of the list rather than the top: the first rows
+  /// of a month are the days that follow its first weekday, and on the first of a
+  /// month one of them is today - the date an uncontrolled picker already shows,
+  /// whose pick reports nothing by design.
+  private func pickSomeDay(
+    in popover: XCUIElement,
+    from field: XCUIElement,
+    watching echo: String,
+    until isMoved: (String) -> Bool,
+    attempts: Int = 4
+  ) throws {
+    let days = popover.descendants(matching: .collectionView).firstMatch
+      .descendants(matching: .button)
+    let deadline = Date().addingTimeInterval(reactTimeout)
+    var dayCount = 0
+    while Date() < deadline {
+      dayCount = days.count
+      if dayCount > 10 {
+        break
+      }
+      Thread.sleep(forTimeInterval: 0.25)
+    }
+    guard dayCount > 10 else {
+      dumpHierarchy("the presentation did not open a calendar")
+      XCTFail(
+        "the popover presented no calendar: its collection view has \(dayCount) "
+          + "day buttons, so a finger has nothing to pick"
+      )
+      throw RealInputCheckAborted(identifier: echo)
+    }
+
+    let middle = dayCount / 2
+    for attempt in 0..<attempts {
+      let step = attempt / 2
+      let index = middle + step * (attempt.isMultiple(of: 2) ? 1 : -1)
+      guard index >= 0, index < dayCount else { continue }
+      // A day cell's label is the localised date ("Tuesday, 27 October"), never a
+      // bare number: the month header and the year-picker control are buttons in
+      // the same list, and a pick has to be a date.
+      let day = days.element(boundBy: index)
+      guard day.label.range(of: "[0-9]", options: .regularExpression) != nil else { continue }
+      day.tap()
+      if isMoved(readUntil(echo, timeout: 3, isMoved)) {
+        // The pick worked, and the presentation is still open: it covers the field
+        // the next pair of assertions has to press. The field is a point outside the
+        // bubble that belongs to no reachable control, so a tap there can only be the
+        // platform's own "tap outside" affordance - and waiting for the bubble to go
+        // is what makes those assertions mean something. Closing it is the library's
+        // job too: UIKit dismisses without asking, and the model's `presented` flag
+        // has to follow or it lies to every test that reads it afterwards.
+        field.centre.tap()
+        let deadline = Date().addingTimeInterval(reactTimeout)
+        var open = app.descendants(matching: .popover).count
+        while open > 0, Date() < deadline {
+          Thread.sleep(forTimeInterval: 0.2)
+          open = app.descendants(matching: .popover).count
+        }
+        guard open == 0 else {
+          dumpHierarchy("a tap outside the presentation")
+          XCTFail(
+            "a real tap outside the presentation left it open - the app cannot get "
+              + "rid of the window it opened, so it still covers the app"
+          )
+          throw RealInputCheckAborted(identifier: echo)
+        }
+        return
+      }
+    }
+    let last = (try? read(echo)) ?? "-"
+    dumpHierarchy("no day cell moved \(echo)")
+    XCTFail(
+      "\(attempts) real taps on calendar day cells left \(echo) at \"\(last)\" "
+        + "- the touches reached the presentation, but no pick came back to JS"
+    )
+    throw RealInputCheckAborted(identifier: echo)
+  }
 
   /// The element React Native gave this `testID`, waiting for it to exist.
   ///

@@ -11,6 +11,7 @@ import type { BenchListProps } from '../types';
 import {
   SEGMENTED_SELECTION,
   buttonTitle,
+  dateLabel,
   onPress,
   onValueChange,
   range,
@@ -48,9 +49,29 @@ import {
  *   (`segmentedOptions`) and one selected index (`SEGMENTED_SELECTION`) are shared
  *   with the other arms, so the row says the same words and paints the same
  *   segment chosen.
+ * - `date-picker`: RN core has no date picker either, so the idiomatic core
+ *   equivalent is the label a JS-only picker would show: the same instant every
+ *   other arm displays, formatted by the shared `Intl` formatter (`dateLabel`).
+ *   Also a *floor* - it owns no calendar, no dialog and no native control - and
+ *   the G5 brief asks for exactly this arm.
  */
 export function RnCoreList({ n, value, component }: BenchListProps) {
   const style = rowStyle(component);
+  if (component === 'date-picker') {
+    return (
+      <>
+        {range(n).map((index) => (
+          <Text
+            key={index}
+            testID={`bench-rn-core-date-${String(index)}`}
+            style={style}
+          >
+            {dateLabel(value)}
+          </Text>
+        ))}
+      </>
+    );
+  }
   if (component === 'segmented-control') {
     const options = segmentedOptions(value);
     return (

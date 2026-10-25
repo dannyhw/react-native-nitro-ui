@@ -58,6 +58,16 @@
         "implementationClassName": "HybridNitroUiSwitch"
       }
     },
+    "NitroUiDatePicker": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiDatePicker"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiDatePicker"
+      }
+    },
     "NitroUiSegmentedControl": {
       "ios": {
         "language": "swift",

@@ -24,6 +24,7 @@
  * @property {string} contentDesc
  * @property {string} enabled
  * @property {string} clickable
+ * @property {string} selected
  * @property {{ x1: number, y1: number, x2: number, y2: number, cx: number, cy: number, width: number, height: number }} bounds
  */
 
@@ -45,6 +46,7 @@ export function parseHierarchy(xml) {
       contentDesc: attributes['content-desc'] ?? '',
       enabled: attributes.enabled ?? '',
       clickable: attributes.clickable ?? '',
+      selected: attributes.selected ?? '',
       bounds: parseBounds(attributes.bounds ?? ''),
     };
   });

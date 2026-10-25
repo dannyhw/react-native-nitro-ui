@@ -12,7 +12,12 @@ export type ImplementationName =
  * (`mount.slider`). See `docs/architecture/benchmarks.md`.
  */
 export type ComponentName =
-  'switch' | 'slider' | 'button' | 'progress' | 'segmented-control';
+  | 'switch'
+  | 'slider'
+  | 'button'
+  | 'progress'
+  | 'segmented-control'
+  | 'date-picker';
 
 /** What one launch does to the controls. */
 export type ScenarioAction = 'mount' | 'update' | 'memory' | 'leak';
@@ -27,7 +32,8 @@ export type ScenarioName =
   | `${ScenarioAction}.slider`
   | `${ScenarioAction}.button`
   | `${ScenarioAction}.progress`
-  | `${ScenarioAction}.segmented-control`;
+  | `${ScenarioAction}.segmented-control`
+  | `${ScenarioAction}.date-picker`;
 
 /**
  * A control set the harness can mount, update and unmount.
