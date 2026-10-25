@@ -1119,3 +1119,12 @@ the iOS run), which matters for timing-sensitive rows and not at all for pass/fa
 - **`DatePicker.nitro.ts:189` still documents the report as `<displayed ms>|<presented 0|1>`** while it
   carries six fields; fixing the doc line means touching the Nitro spec and re-running
   `bun run nitrogen`, which is outside this task. Not fixed.
+
+## Orchestrator note (on merge)
+
+Re-review 2 (`docs/tasks/G5-datepicker.rereview2.md`): MERGE. One correction to this report: the iOS
+`|outside` escape does **not** "stop applying right after" a rebuild — `builtBounds` is recorded by an
+`.onAppear` outside `.id(_:)`, so it reflects the bounds at first appearance; after the bounds widen, a
+value crossing the old bound rebuilds once per crossing (not per render; crash protection unaffected).
+The iOS rebuild counter staying green is more likely this placement than UIKit "updating in place".
+Recorded as a follow-up; the Swift comment is corrected (comment only).
