@@ -26,8 +26,8 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | A1b overnight baselines | — | merged | Android minted; iOS refused (end-of-run load) | One more overnight iOS attempt after R4 merges; if refused again, stop — iOS stays on `--compare`. |
 | R4 load guard | — | merged | Done | iOS overnight attempt scheduled 01:00 2026-10-26. |
 | C1 Android over-wide | — | merged | Done | — |
-| G6 Picker | `nitro-ui-worktrees/G6` · `task/G6-picker` | `9bc3b7b` | Ready to merge (rounds exhausted); devices down | After G5 merges: one merge-main pass (Apex), regenerate nitrogen, gates both platforms, then merge. |
-| G5 DatePicker | `nitro-ui-worktrees/G5` · `task/G5-datepicker` | `9a29a3c` + uncommitted re-review | Fix round 2 (last, Apex `nitroui-G5-fix-r2`) on iPhone Air + `nitroui_t02`; hard stop 00:45 | Short Opus re-review of the N1/N2 diff; merge G5; then G6 merge-main pass and merge. |
+| G6 Picker | `nitro-ui-worktrees/G6` · `task/G6-picker` | `9bc3b7b` | Ready; G5 now on main | After 05:00: merge-main pass (Apex, `nitroui-G6-merge`), regenerate nitrogen, full gates both platforms, then merge. |
+| G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done (H3 dropped) | — |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
