@@ -93,7 +93,15 @@ type DatePickerHandle = {
     minute: number
   ): void;
   nuiTestPresent(): void;
-  /** `"<displayed millis>|<presented 0|1>"`. */
+  /**
+   * `"<displayed millis>|<presented 0|1>|<calendar month>|<calendar has selection>|<live presentations>"`.
+   *
+   * The middle two are the composed *calendar's* own facts and Android's only:
+   * Material 3's `DatePickerState` publishes a displayed month and a nullable
+   * selection, SwiftUI's `DatePicker` publishes neither, so iOS reports `-1` for both
+   * (see `readReport()` in `HybridNitroUiDatePicker.swift`). The last field is
+   * process-wide on both platforms.
+   */
   nuiTestStateReport(): string;
 };
 
@@ -163,10 +171,89 @@ function measured(testId: string): Size | null {
 }
 
 /** The report native keeps in step with what it is showing, parsed. */
-function reportOf(testId: string): { millis: number; presented: boolean } {
+type Report = {
+  /** The instant the control is showing, in ms. */
+  millis: number;
+  presented: boolean;
+  /** UTC millis of the first of the month the composed calendar is showing, or -1. */
+  calendarMonthUtc: number;
+  /** 1 = the calendar has a day selected, 0 = it declined one, -1 = no calendar. */
+  calendarHasSelection: number;
+  /** Presentations open in this whole process, from any mount, present or gone. */
+  livePresentations: number;
+};
+
+function reportOf(testId: string): Report {
   const raw = handles.get(testId)?.nuiTestStateReport() ?? '';
-  const [millis, presented] = raw.split('|');
-  return { millis: Number(millis), presented: presented === '1' };
+  const [
+    millis,
+    presented,
+    calendarMonthUtc,
+    calendarHasSelection,
+    livePresentations,
+  ] = raw.split('|');
+  return {
+    millis: Number(millis),
+    presented: presented === '1',
+    calendarMonthUtc: Number(calendarMonthUtc),
+    calendarHasSelection: Number(calendarHasSelection),
+    livePresentations: Number(livePresentations),
+  };
+}
+
+/** `'2026-07'` for the month a report names, in UTC — the calendar's own page. */
+function monthKeyOf(utcMillis: number): string {
+  const date = new Date(utcMillis);
+  return (
+    String(date.getUTCFullYear()) +
+    '-' +
+    String(date.getUTCMonth() + 1).padStart(2, '0')
+  );
+}
+
+/** `'2026-07'` for the year/month a test expects the calendar to be showing. */
+function expectedMonthKey(year: number, month: number): string {
+  return String(year) + '-' + String(month).padStart(2, '0');
+}
+
+/** Poll until the composed calendar is showing the given month. */
+async function waitForMonth(
+  testId: string,
+  year: number,
+  month: number,
+  what: string
+) {
+  const wanted = expectedMonthKey(year, month);
+  return await pollUntil(
+    () =>
+      monthKeyOf(reportOf(testId).calendarMonthUtc) === wanted ? wanted : null,
+    () =>
+      new Error(
+        `"${testId}" (${what}) is not showing ${wanted} - its report is ` +
+          `"${handles.get(testId)?.nuiTestStateReport() ?? '<no handle>'}" ` +
+          `(month ${monthKeyOf(reportOf(testId).calendarMonthUtc)}), while the ` +
+          `model displays ${String(displayedOf(testId))} ` +
+          `(${new Date(displayedOf(testId)).toISOString()}).`
+      )
+  );
+}
+
+/** Poll until the process-wide count of open presentations is `count`. */
+async function waitForLivePresentations(
+  testId: string,
+  count: number,
+  what: string
+) {
+  return await pollUntil(
+    () => (reportOf(testId).livePresentations === count ? count : null),
+    () =>
+      new Error(
+        `"${testId}" (${what}) reports ` +
+          `${String(reportOf(testId).livePresentations)} live presentations, ` +
+          `want ${String(count)} - the report is ` +
+          `"${handles.get(testId)?.nuiTestStateReport() ?? '<no handle>'}".`
+      )
+  );
 }
 
 /** The instant native is showing, or NaN when the handle is gone. */
@@ -623,24 +710,291 @@ describe('DatePicker · G5', () => {
     unmount();
   });
 
+  it('shows the month the value is in, and moves the page with it', async () => {
+    // A Material 3 calendar has a *page* of its own (`displayedMonthMillis`) that the
+    // model does not, and it is easy to hand it the wrong one:
+    // `rememberDatePickerState`'s second positional argument is
+    // `initialDisplayedMonthMillis` - *not* a minimum - so the call that read like a
+    // minimum opened the calendar on today's month (or the minimum's), with the day the
+    // field was showing off-screen. `docs/tasks/G5-datepicker/android-dialog.png` is
+    // the record: `Jul 4, 2026` in the header over an October 2026 grid.
+    //
+    // The second half is that the state reads the month, the year range and the
+    // selectable days once, at construction, so React widening the range has to
+    // *rebuild* it: a calendar whose `yearRange` the value has outgrown stores `null`
+    // for the selection it is handed, and then shows no day at all while the field
+    // reads one. `calendarHasSelection` is the oracle for that, and the one the
+    // rebuild has to satisfy.
+    //
+    // Both months are derived from the device's clock rather than fixed: with the
+    // positional bug the page lands on *today's* month, so a hardcoded July would pass
+    // by luck whenever the device was in July. The value is three months out, the
+    // minimum four months before that, the rerender eleven months further again - no
+    // two of them share a month with each other or with today.
+    //
+    // The calendar pair in the report is Android's (SwiftUI publishes neither fact),
+    // so the month assertions are guarded and iOS runs this as the model-level check
+    // it can be: the value, the page and the presentation still have to agree.
+    const today = new Date();
+    const target = new Date(
+      today.getFullYear(),
+      today.getMonth() + 3,
+      4,
+      12,
+      0
+    );
+    const minimum = new Date(
+      target.getFullYear(),
+      target.getMonth() - 4,
+      1,
+      0,
+      0
+    );
+    const moved = new Date(
+      target.getFullYear() + 1,
+      target.getMonth() + 2,
+      15,
+      9,
+      30
+    );
+    const endOfTargetYear = new Date(target.getFullYear(), 11, 31, 23, 59);
+    const endTwoYearsLater = new Date(target.getFullYear() + 2, 11, 31, 23, 59);
+    // A value for the picker whose bounds never move. Only the model->picker effect can
+    // follow this one: nothing rebuilds an unbounded calendar's state, so if the page
+    // sync is missing, the day moves and the page does not.
+    const laterPlain = new Date(
+      target.getFullYear(),
+      target.getMonth() + 6,
+      9,
+      8,
+      15
+    );
+    const isAndroid = Platform.OS === 'android';
+
+    const tree = (widened: boolean, plainValue = target) => (
+      <View style={columnStyle}>
+        <DatePicker
+          value={plainValue}
+          variant="inline"
+          testID="page-plain"
+          hybridRef={captureHybrid('page-plain')}
+        />
+        <DatePicker
+          value={target}
+          variant="inline"
+          minimumDate={minimum}
+          testID="page-min"
+          hybridRef={captureHybrid('page-min')}
+        />
+        <DatePicker
+          value={widened ? moved : target}
+          variant="inline"
+          maximumDate={widened ? endTwoYearsLater : endOfTargetYear}
+          testID="page-bounded"
+          hybridRef={captureHybrid('page-bounded')}
+        />
+        <DatePicker
+          value={target}
+          testID="page-dialog"
+          hybridRef={captureHybrid('page-dialog')}
+        />
+      </View>
+    );
+
+    const { rerender, unmount } = await render(tree(false), {
+      timeout: 20000,
+    });
+    for (const testId of [
+      'page-plain',
+      'page-min',
+      'page-bounded',
+      'page-dialog',
+    ]) {
+      await waitForTestId(testId);
+    }
+    for (const testId of ['page-plain', 'page-min', 'page-bounded']) {
+      await waitForDisplayed(testId, target.getTime(), `the seed on ${testId}`);
+    }
+    if (isAndroid) {
+      // No bounds: the page is the value's month, not the device's.
+      await waitForMonth(
+        'page-plain',
+        target.getFullYear(),
+        target.getMonth() + 1,
+        'an unbounded calendar'
+      );
+      // A minimum a different month again: still the value's month, not the bound's.
+      await waitForMonth(
+        'page-min',
+        target.getFullYear(),
+        target.getMonth() + 1,
+        'a bounded calendar'
+      );
+      await waitForMonth(
+        'page-bounded',
+        target.getFullYear(),
+        target.getMonth() + 1,
+        'a range-limited calendar'
+      );
+    }
+
+    // The dialog the field opens has to start on the same page (this is the case the
+    // screenshot showed wrong), and it is the presentation the count below is for.
+    handles.get('page-dialog')?.nuiTestPresent();
+    await waitForPresented('page-dialog', true, 'the field press');
+    if (isAndroid) {
+      await waitForMonth(
+        'page-dialog',
+        target.getFullYear(),
+        target.getMonth() + 1,
+        'the dialog calendar'
+      );
+    }
+    await waitForLivePresentations('page-dialog', 1, 'the open dialog');
+    // Left open on purpose: the seam opens a presentation and does not toggle it (a
+    // dialog's own Cancel/OK and the tap outside are the platform's, not the harness's),
+    // and `presents nothing after the mount that opened it is gone` is the test that
+    // unmounts an open one and checks the count comes back to zero.
+
+    // A programmatic value moves the page. Without this the example screen's "Reset to
+    // 2026-01-01" selects a day on a page the user is not looking at.
+    await rerender(tree(true));
+    await waitForDisplayed(
+      'page-bounded',
+      moved.getTime(),
+      'the widened range'
+    );
+    if (isAndroid) {
+      await waitForMonth(
+        'page-bounded',
+        moved.getFullYear(),
+        moved.getMonth() + 1,
+        'the rebuilt range'
+      );
+      await pollUntil(
+        () => (reportOf('page-bounded').calendarHasSelection === 1 ? 1 : null),
+        () =>
+          new Error(
+            'the rebuilt calendar has no day selected: its report is ' +
+              `"${handles.get('page-bounded')?.nuiTestStateReport() ?? '<no handle>'}" ` +
+              `while the model displays ${String(moved.getTime())}. A ` +
+              '`yearRange' +
+              '` the value outgrew stores null, which is a calendar with no day ' +
+              'and a field that says otherwise.'
+          )
+      );
+      // The picker whose props did *not* move keeps its page: rebuilding the state of
+      // the one whose range widened must not disturb its neighbours.
+      await waitForMonth(
+        'page-plain',
+        target.getFullYear(),
+        target.getMonth() + 1,
+        'the picker whose props did not move'
+      );
+    }
+
+    // Then a value-only change on that same unbounded picker. The page has to follow
+    // the value with nothing rebuilding the state underneath - the example screen's
+    // external "Reset" button is exactly this write, and a calendar left on the month
+    // the user was looking at shows no selected day for it.
+    await rerender(tree(true, laterPlain));
+    await waitForDisplayed(
+      'page-plain',
+      laterPlain.getTime(),
+      'the value-only move'
+    );
+    if (isAndroid) {
+      await waitForMonth(
+        'page-plain',
+        laterPlain.getFullYear(),
+        laterPlain.getMonth() + 1,
+        'the value-only move'
+      );
+      // A neighbour that follows the page also keeps its *selection* lit.
+      await pollUntil(
+        () => (reportOf('page-plain').calendarHasSelection === 1 ? 1 : null),
+        () =>
+          new Error(
+            'the unbounded calendar lost its day on a value-only move: ' +
+              `"${handles.get('page-plain')?.nuiTestStateReport() ?? '<no handle>'}"`
+          )
+      );
+    }
+    console.log(
+      `calendar page (${Platform.OS}, ${zoneNote()}): ` +
+        `target=${target.toISOString()} minimum=${minimum.toISOString()} ` +
+        `moved=${moved.toISOString()} ` +
+        `plain=${handles.get('page-plain')?.nuiTestStateReport() ?? '-'} ` +
+        `bounded=${handles.get('page-bounded')?.nuiTestStateReport() ?? '-'}`
+    );
+    unmount();
+  });
+
   it('round-trips an instant across a DST boundary', async () => {
     // The value on the wire is an instant and both platforms' pickers speak in
     // calendar fields - Material 3 stores a *UTC midnight* per day, SwiftUI a
-    // `Date` - so the conversion between the two is where an hour goes missing.
-    // Asserted on the days either side of both 2026 transitions in Europe/Lisbon
-    // (29 March, 25 October) plus a winter and a summer instant, at clock times
-    // that exist in every zone, and by both directions:
-    //  - `dst-set`: React writes an instant, native shows it, and shows it
-    //    unchanged (`nuiTestStateReport` is native's own reading of the instant);
-    //  - `dst-pick`: uncontrolled, so a pick's calendar fields can produce an
-    //    instant and have it survive - which is the direction the picker's own
-    //    day-storage decides. An hour lost across a boundary shows up as an
-    //    instant one hour off JS's own reading of the same fields.
+    // `Date` - so the conversion between the two is where an hour, or a day, goes
+    // missing. Both directions:
+    //  - `dst-set`: React writes an instant, native shows it unchanged
+    //    (`nuiTestStateReport` is native's own reading), and - the half that used to
+    //    be missing - says nothing about it. A conversion that reads the wrong day
+    //    makes the control *emit* the instant it just painted, which a controlled
+    //    parent then refuses, and a polling test cannot see the round trip. The
+    //    recorder makes the spurious event visible.
+    //  - `dst-pick`: uncontrolled, so a pick's calendar fields have to produce JS's
+    //    own instant. On Android the seam runs the day through the picker's own
+    //    `toUtcMidnightOfLocalDay`/`fromUtcMidnightKeepingTimeOfDay` pair, exactly as
+    //    a day cell does.
+    //
+    // The zone is asserted, not assumed - nothing in this suite sets it, so an
+    // environment that moved the device to `UTC` used to make this test pass without
+    // crossing a transition. Two checks, both loud:
+    //  - the zone must observe DST at all (a January and a July offset differ);
+    //  - at least one of *these* instants must have a local day that is not its UTC
+    //    day, because that is what the conversion exists to get right. A noon instant
+    //    has the same day number in every zone on the planet, so an hour-skipping
+    //    conversion error would sail through it - which is how the mutation that
+    //    deleted the conversion altogether stayed green here. Hence the 00:30 and
+    //    23:45 pairs: one of them lands on another UTC day in any zone with a
+    //    non-zero offset, and the check below says so if neither does.
+    const winterOffset = new Date(2026, 0, 1).getTimezoneOffset();
+    const summerOffset = new Date(2026, 6, 1).getTimezoneOffset();
+    const zoneDescription = new Date(2026, 6, 1).toString();
+    console.log(
+      `dst zone: ${zoneDescription} winterOffset=${String(winterOffset)} ` +
+        `summerOffset=${String(summerOffset)}`
+    );
+    expect(winterOffset).not.toBe(summerOffset); // the device is not observing DST, so nothing here crosses a boundary
+
     const WINTER = localMs(2026, 1, 5, 12, 30);
     const SUMMER = localMs(2026, 7, 5, 12, 30);
     const SPRING_DAY = localMs(2026, 3, 29, 12, 30);
     const AUTUMN_EVE = localMs(2026, 10, 24, 23, 45);
     const AUTUMN_DAY = localMs(2026, 10, 25, 23, 45);
+    // The two that make the UTC-midnight conversion observable. 00:30 is the day
+    // before in UTC for a zone ahead of it (Lisbon in summer: 23:30Z), 23:45 is the
+    // day after in UTC for a zone behind it, and both are times that exist on every
+    // date used here.
+    const SUMMER_JUST_AFTER_MIDNIGHT = localMs(2026, 7, 5, 0, 30);
+    const WINTER_JUST_BEFORE_MIDNIGHT = localMs(2026, 1, 5, 23, 45);
+    const discriminating = [
+      WINTER,
+      SUMMER,
+      SPRING_DAY,
+      AUTUMN_EVE,
+      AUTUMN_DAY,
+      SUMMER_JUST_AFTER_MIDNIGHT,
+      WINTER_JUST_BEFORE_MIDNIGHT,
+    ].filter(
+      (millis) => new Date(millis).getUTCDate() !== new Date(millis).getDate()
+    );
+    console.log(
+      `dst cases: ${String(discriminating.length)} of 7 cross a UTC day - ` +
+        `summerNight=${String(SUMMER_JUST_AFTER_MIDNIGHT)} ` +
+        `winterLate=${String(WINTER_JUST_BEFORE_MIDNIGHT)}`
+    );
+    expect(discriminating.length).toBeGreaterThan(0); // no instant here has a local day that differs from its UTC day: in this zone the conversion cannot be observed, and the test would pass vacuously
+
     const { rerender, unmount } = await render(
       <View style={columnStyle}>
         <DatePicker
@@ -648,6 +1002,7 @@ describe('DatePicker · G5', () => {
           mode="datetime"
           variant="inline"
           testID="dst-set"
+          onChange={recordChange('dst-set')}
           hybridRef={captureHybrid('dst-set')}
         />
         <DatePicker
@@ -664,12 +1019,15 @@ describe('DatePicker · G5', () => {
     await waitForTestId('dst-pick');
     await waitForDisplayed('dst-set', WINTER, 'the winter instant');
     expect(handles.get('dst-set')?.valueMillis).toBe(WINTER);
+    expect(eventLog).toEqual([]); // a controlled write is not a pick: saying otherwise is the bug
 
     for (const [label, millis] of [
       ['summer', SUMMER],
       ['spring-forward day', SPRING_DAY],
       ['day before the autumn change', AUTUMN_EVE],
       ['autumn change day', AUTUMN_DAY],
+      ['summer instant just after midnight', SUMMER_JUST_AFTER_MIDNIGHT],
+      ['winter instant just before midnight', WINTER_JUST_BEFORE_MIDNIGHT],
     ] as const) {
       await rerender(
         <View style={columnStyle}>
@@ -678,6 +1036,7 @@ describe('DatePicker · G5', () => {
             mode="datetime"
             variant="inline"
             testID="dst-set"
+            onChange={recordChange('dst-set')}
             hybridRef={captureHybrid('dst-set')}
           />
           <DatePicker
@@ -691,6 +1050,7 @@ describe('DatePicker · G5', () => {
       );
       await waitForDisplayed('dst-set', millis, `the ${label} instant`);
       expect(handles.get('dst-set')?.valueMillis).toBe(millis);
+      expect(eventLog).toEqual([]); // and none of them made the control report a pick
     }
 
     // The other direction, on the uncontrolled instance: the same fields, in the
@@ -705,6 +1065,8 @@ describe('DatePicker · G5', () => {
       [2026, 1, 5, 12, 30, WINTER],
       [2026, 3, 29, 12, 30, SPRING_DAY],
       [2026, 10, 25, 23, 45, AUTUMN_DAY],
+      [2026, 7, 5, 0, 30, SUMMER_JUST_AFTER_MIDNIGHT],
+      [2026, 1, 5, 23, 45, WINTER_JUST_BEFORE_MIDNIGHT],
     ];
     for (const [
       index,
@@ -717,19 +1079,32 @@ describe('DatePicker · G5', () => {
     console.log(
       `dst (${Platform.OS}, ${zoneNote()}): winter=${String(WINTER)} ` +
         `summer=${String(SUMMER)} spring=${String(SPRING_DAY)} ` +
-        `autumnEve=${String(AUTUMN_EVE)} autumn=${String(AUTUMN_DAY)}`
+        `autumnEve=${String(AUTUMN_EVE)} autumn=${String(AUTUMN_DAY)} ` +
+        `summerNight=${String(SUMMER_JUST_AFTER_MIDNIGHT)} ` +
+        `winterLate=${String(WINTER_JUST_BEFORE_MIDNIGHT)}`
     );
     unmount();
   });
 
   it('presents nothing after the mount that opened it is gone', async () => {
-    // The B1 rule for the one control in this library with a window of its own.
-    // A Material 3 `Dialog` is a second window and a SwiftUI `.popover` is a view
-    // the presenting controller hosts, so either one that outlived the mount would
-    // sit on top of the app and swallow the next thing the user touches. The
-    // assertion therefore cannot be a readout of the dropped view (it has no handle
-    // any more); it is a witness the suite presses *after* the drop. A surviving
-    // presentation eats that press, and the press counter never leaves zero.
+    // The B1 rule for the one control in this library with a window of its own: a
+    // Material 3 `Dialog` is a second window and UIKit's popover is a view the
+    // presenting controller hosts, so either one that outlived the mount would sit on
+    // top of an app that can no longer close it.
+    //
+    // The witness press below is the *second* signal, not the first. On its own it was
+    // not enough: the kept mutation that stops `onDropView` from closing the Android
+    // dialog or disposing its composition (`/tmp/g5-mut/android-t6b.py`) left the
+    // window on screen and this press still landed, because a `Dialog` is a separate
+    // window and the harness dispatches its touch into the app's own. So the primary
+    // assertion is structural - the process-wide count of live presentations, which
+    // each platform keeps in the one place that survives a drop.
+    //
+    // It is read through a *fresh* mount, because the dropped view has no handle left:
+    // the count is process-wide, so a picker that never presented anything reports how
+    // many presentations exist. And it is asserted at 1 while the dialog is open,
+    // because a counter stuck at zero would otherwise satisfy every assertion after
+    // this one vacuously.
     const presses: number[] = [];
     const Witness = () => (
       <Pressable
@@ -756,27 +1131,47 @@ describe('DatePicker · G5', () => {
     await waitForTestId('witness');
     await waitForTestId('opener');
 
+    // Nothing else in this process is presenting: the count starts at zero.
+    await waitForLivePresentations('opener', 0, 'the untouched process');
     handles.get('opener')?.nuiTestPresent();
     await waitForPresented('opener', true, 'the field press');
     // Opening is not picking: the instant and the event log are untouched.
     expect(displayedOf('opener')).toBe(localMs(2026, 7, 4));
     expect(eventLog).toEqual([]);
+    await waitForLivePresentations('opener', 1, 'the open presentation');
 
     first.unmount();
     await settle(300);
     handles.clear();
     expect(sizeOf('opener')).toBeNull();
 
-    const second = await render(<Witness />, { timeout: 20000 });
+    const second = await render(
+      <View style={columnStyle}>
+        <DatePicker
+          defaultValue={new Date(2026, 6, 4)}
+          testID="probe"
+          hybridRef={captureHybrid('probe')}
+        />
+        <Witness />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('probe');
+    // The structural half: the mount that opened the window is gone, so nothing may
+    // still be presenting. This is the assertion the Android leak mutation failed.
+    await waitForLivePresentations('probe', 0, 'the mount after the drop');
+    // The second half, and the one the leak mutation did not fail: a window that is
+    // really on top of the app also swallows a press.
     const witness = await waitForTestId('witness');
     await userEvent.press(witness);
     await pollUntil(
       () => (presses.length >= 1 ? true : null),
       () =>
         new Error(
-          'A press on a plain Pressable did not land after the picker was ' +
-            'dropped with its presentation open, which is what a surviving ' +
-            'popover or dialog window looks like from here.'
+          'A press on a plain Pressable did not land after the picker was dropped ' +
+            'with its presentation open, which is what a surviving popover or dialog ' +
+            'window looks like from here. The count above already says whether one ' +
+            'is up; this says whether it is in the way.'
         )
     );
     expect(presses.length).toBeGreaterThanOrEqual(1);

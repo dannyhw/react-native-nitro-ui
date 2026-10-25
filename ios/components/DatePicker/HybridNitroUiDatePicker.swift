@@ -149,7 +149,13 @@ final class DatePickerModel: NitroUiModel {
   func readReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return report
+    // The calendar's own two fields are Android's (-1 = "this platform has no
+    // calendar state to read": Material 3's `DatePickerState` publishes a displayed
+    // month and a nullable selection, SwiftUI's `DatePicker` publishes neither), and
+    // then the process-wide count of live presentations, read live rather than
+    // published: a dropped mount has nothing left to publish, which is exactly the
+    // case the count exists for.
+    return "\(report)|-1|-1|\(NitroUiDatePickerPresentation.livePresentations)"
   }
 
   // MARK: - Interaction
@@ -423,6 +429,17 @@ struct DatePickerContent: NitroUIContent {
     // Without this the hit area is the *glyphs*; with it, the whole padded rect -
     // including the space either side of a short month name.
     .contentShape(Rectangle())
+    // The announced value. ``OptionalDatePickerAccessibility`` applies
+    // `accessibilityLabel(_:)` to the whole content, and for this variant that content
+    // is this button - whose only accessible text is the date, which the label
+    // *replaces*. With a label set, VoiceOver would read "Departure, button" and never
+    // the day: the brief's "the announced value is localised" fails on the one variant
+    // an app puts in a form (`.graphical` and `.wheel` are fine - the platform picker
+    // keeps its own value). The same string the field paints, from the same cached
+    // formatter, so the announcement is what the user sees.
+    .accessibilityValue(
+      Text(NitroUiDatePickerField.label(millis: model.state.displayed, mode: model.mode))
+    )
   }
 
   // MARK: - The press
@@ -463,6 +480,30 @@ private struct PlatformPicker: View {
       displayedComponents: components
     )
     .labelsHidden()
+    // Re-identified whenever the bounds move. Not a style choice: `UIDatePicker`
+    // applies a new `date` *before* a new `maximumDate`, and a date outside the bounds
+    // it still holds is clamped - a clamp UIKit reports as a selection change from
+    // inside its own update, whose reload then asserts in `UICalendarView
+    // _setVisibleMonth:` (SIGABRT; see the `shows the month the value is in…` harness
+    // test, which does exactly this: `maximumDate` to 31 Dec 2028 together with a value
+    // in March 2028). A *fresh* control starts unbounded, so both bounds land before
+    // anything can be clamped. Same shape as Android's `key(minimum, maximum,
+    // yearRange)`; the cost is that a bounds change resets that calendar's own page,
+    // which is documented on the page.
+    .id(boundsIdentity)
+  }
+
+  /// What the platform control's SwiftUI identity is keyed on: the bounds, exactly as
+  /// ``selectableRange`` reads them. Empty for an unbounded picker, so the common case
+  /// never re-identifies.
+  private var boundsIdentity: String {
+    guard let minimum = model.minimum else {
+      return model.maximum.map { "max:\($0)" } ?? ""
+    }
+    guard let maximum = model.maximum else {
+      return "min:\(minimum)"
+    }
+    return "\(minimum):\(maximum)"
   }
 
   /// Which components the mode shows. `'date'` is the default for anything unrecognised,
@@ -628,6 +669,43 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
   /// `calendarWidth` plus both margins - the width the content is measured with.
   static var contentWidth: CGFloat { calendarWidth + 2 * margin }
 
+  // MARK: - Live presentations
+
+  /// How many presentations this process has open right now.
+  ///
+  /// Process-wide rather than per mount, because the property it guards is "no
+  /// presentation outlives the mount that opened it" - and a mount that has been
+  /// dropped has nothing left to report. ``countOpened()`` runs in `present`'s
+  /// completion and ``countClosed()`` on each terminal path (UIKit's own dismissal,
+  /// and our `dismissNow`), so the number returns to zero only when the window is
+  /// really gone. `presents nothing after the mount that opened it is gone` reads it
+  /// through a *fresh* mount's `nuiTestStateReport()`, which is the only witness that
+  /// survives the drop.
+  ///
+  /// Locked rather than a plain `static var`: the writes are all on main, but
+  /// ``DatePickerModel/readReport()`` is documented safe from any thread and reads it
+  /// from JS, and JS must never hop to main for it (`core.md` §1.4).
+  private static let countLock = NSLock()
+  private static var count = 0
+
+  static var livePresentations: Int {
+    countLock.lock()
+    defer { countLock.unlock() }
+    return count
+  }
+
+  private static func countOpened() {
+    countLock.lock()
+    count += 1
+    countLock.unlock()
+  }
+
+  private static func countClosed() {
+    countLock.lock()
+    count -= 1
+    countLock.unlock()
+  }
+
   private let model: DatePickerModel
   /// The control's own view: what the popover's arrow points at.
   private weak var anchor: UIView?
@@ -640,6 +718,12 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
   private var isPresenting = false
   /// A dismissal that arrived during that transition, carried to its completion.
   private var dismissWhenPresented = false
+  /// Whether this instance's presentation is counted in
+  /// ``livePresentations``. One presentation, one decrement: a programmatic
+  /// ``dismissNow()`` whose completion lands next to a `presentationControllerDidDismiss`
+  /// from the same teardown must not take the count below zero, or the harness's
+  /// witness would read "nothing presented" while a window is still up.
+  private var countedOpen = false
 
   init(
     model: DatePickerModel,
@@ -698,16 +782,26 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
     }
     popover.sourceView = anchor
     popover.sourceRect = anchor.bounds
-    // The popover goes *below* the field, so its arrow is on its own top edge - the
-    // UIKit spelling of the `arrowEdge: .bottom` SwiftUI would have used. Only `.up`
-    // is permitted: a bubble that flipped above the field would point at the tab bar.
-    popover.permittedArrowDirections = .up
+    // Either direction, and UIKit picks the one with room. The old comment here
+    // claimed a bubble flipped above the field "would point at the tab bar"; it does
+    // no such thing - an arrow pointing *down* lands on the field - and what
+    // permitting only `.up` actually did was cap the popover at the space *below* the
+    // field. UIKit honours the permitted directions and squeezes the content into the
+    // room on that side, so a field in the lower half of the screen (a form's last
+    // row, anything above a keyboard or a tab bar) got a calendar shorter than the
+    // `preferredContentSize` it asked for: the month clipped, and the day cells under
+    // the 44 pt target this class's `calendarWidth` exists to guarantee.
+    popover.permittedArrowDirections = [.up, .down]
     popover.delegate = self
     isPresenting = true
     dismissWhenPresented = false
     presenter.present(hosted, animated: true) { [weak self] in
       guard let self else { return }
       self.isPresenting = false
+      if !self.countedOpen {
+        self.countedOpen = true
+        Self.countOpened()
+      }
       if self.dismissWhenPresented {
         self.dismissWhenPresented = false
         self.dismissNow()
@@ -768,7 +862,19 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
     guard let controller, controller.presentingViewController != nil else {
       return
     }
-    controller.dismiss(animated: false)
+    // Take the ticket before asking, and hand *that* to the completion: this can be
+    // called for a presentation that was never counted (a `dismiss()` on a control that
+    // never got a presenter), and an unearned decrement would put the harness's witness
+    // at "nothing presented" while a window is still up. The completion deliberately
+    // does not capture `self` - it has to run even when the view that owned the
+    // presentation is already gone, which is the normal case for a drop.
+    let wasCounted = countedOpen
+    countedOpen = false
+    controller.dismiss(animated: false) {
+      if wasCounted {
+        Self.countClosed()
+      }
+    }
   }
 
   // MARK: - UIPopoverPresentationControllerDelegate
@@ -789,6 +895,10 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
   /// has to follow - that write is what makes "closed on unmount" (`test 6`) a real
   /// assertion instead of a claim about a state nothing ever reads.
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+    if countedOpen {
+      countedOpen = false
+      Self.countClosed()
+    }
     model.setPresented(false)
   }
 }
@@ -814,17 +924,30 @@ final class HybridNitroUiDatePicker: HybridNitroUiDatePickerSpec, RecyclableView
   /// and every other configuration is a first instance of *its own* configuration
   /// that gets corrected the turn it measures (`docs/architecture/sizing.md` §9).
   ///
-  /// Provisional, measured on iOS 27 (iPhone Air simulator, regular text size)
-  /// with `variant = "compact"`, `mode = "date"`. TODO(G5): replaced with the
-  /// on-device measurement before the commit, like every other component's.
+  /// Measured on the gate simulator (iOS 27, iPhone Air, regular text size,
+  /// `AppleLocale = en_PT`) with `variant = "compact"`, `mode = "date"`: the field's
+  /// box is **103.00 x 36.33 pt** - the size the harness logs for that configuration
+  /// (`variants (ios, ...): field=103.00x36.33`), not a round number picked to look
+  /// tidy. Declaring what the control actually measures puts the pair inside the
+  /// engine's 0.5 pt `kEpsilon`, so a cold `compact` `date` mount is laid out at its
+  /// own size and pays no correction (D17).
+  ///
+  /// The height is the one number here that does not move with the locale. The width
+  /// is the widest `date` string the *locale's* formatter produces (see
+  /// ``NitroUiDatePickerField``), so it is exact for the configuration it was measured
+  /// in and approximate for the rest: the same configuration measures 107.00 under
+  /// `en_US`, and `mode = "time"` measures 48.00 here against 72.00 there. A locale
+  /// wider than this one costs that configuration's first instance one horizontal
+  /// correction, which is the documented price of a sizing key that excludes the
+  /// value - and it is the safe direction to be wrong in.
   ///
   /// As everywhere else, a fallback *smaller* than the control is the dead-touch
   /// story in `core.md` §7, and a `compact` field that is 44 pt wide for one frame
   /// truncates a long month name for exactly that frame. `inline` is the
   /// configuration where being wrong is most visible (a calendar laid out 32 pt
-  /// tall clips itself), which is why the harness test
-  /// `a cold inline picker reports its own height` exists rather than a bigger
-  /// number here.
+  /// tall clips itself), which is why `lays each variant out at the size the control
+  /// measured` puts a cold `inline` and a cold `wheel` under a 320 dp caller and
+  /// requires each to correct to its own measured height.
   private static let declaresFallback: Bool = {
     NitroUiSizing.setFallback(sizingComponentName, fallbackSize.width, fallbackSize.height, NitroUiSizingPolicy.intrinsic.rawValue)
     return true
@@ -842,7 +965,7 @@ final class HybridNitroUiDatePicker: HybridNitroUiDatePickerSpec, RecyclableView
   }
 
   /// The declared fallback - see ``declaresFallback``.
-  private static let fallbackSize = (width: 118.0, height: 36.0)
+  private static let fallbackSize = (width: 103.0, height: 36.33)
 
   /// The Nitro `view` - created once here and never replaced.
   override init() {

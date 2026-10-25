@@ -334,6 +334,37 @@ export default function DatePickerScreen() {
           tintColor="#FF5733"
           testID="tinted-inline"
         />
+
+        {/*
+          Deliberately the last row of the page, and deliberately labelled.
+
+          Two things are proved from one field, both by
+          `example/ios/NitroUiExampleUITests/RealInputTests.swift`:
+
+          - **the presentation fits.** A `compact` field's popover is 336 pt wide and
+            300-420 pt tall. With only one arrow direction permitted, UIKit caps the
+            bubble at the room on that side of the field, so the *last row of a form* -
+            this row - gets a clipped calendar. Whatever the field's y ends up being
+            after the page is scrolled to the bottom, it is the worst case a real
+            screen can hand a date picker, and that is the case worth a check.
+          - **the announcement is complete.** The label is on the control here, so the
+            value has to arrive next to it rather than be replaced by it - the
+            accessibility half of M2/M3, read from the accessibility tree a screen
+            reader actually walks.
+
+          Android is not ignored by this row, it is just not checkable from here: its
+          `compact` field opens a dialog, which is centred and never squeezed, and the
+          label/value/disabled state is read from a `uiautomator dump` instead (the
+          report records those dumps).
+        */}
+        <Text style={[styles.section, { color: ink.ink }]}>
+          Last row (a popover has to fit above this one)
+        </Text>
+        <DatePicker
+          defaultValue={new Date(2026, 6, 4)}
+          accessibilityLabel="Departure date"
+          testID="low-date"
+        />
       </ScrollView>
     </SafeAreaView>
   );

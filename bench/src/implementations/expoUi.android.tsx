@@ -28,12 +28,6 @@ import {
 } from './shared';
 
 /**
- * `@expo/ui` worst case for the library: one Compose hosting view per control
- * (one `AndroidComposeView` each). Expo UI always needs a `Host`, so both Expo
- * arms are required for a fair comparison
- * (docs/research/setup-decisions.md SS6).
- */
-/**
  * `@expo/ui` has no DatePicker arm on Android, and a launch that asks for one
  * fails here rather than reaching Compose.
  *
@@ -54,6 +48,11 @@ import {
  * (`scripts/bench/lib.mjs` `ARMS_WITHOUT_COMPONENT`); this is the loud failure
  * for a launch that asks anyway, in place of an opaque Compose crash or 50
  * calendars that took three minutes to lay out.
+ *
+ * Plainly, for anyone reading this looking for a number: this arm is **never
+ * rendered**, on any launch, so no table in `docs/benchmarks.md` has an Android
+ * `@expo/ui` DatePicker row to compare against. It is *not* an inline calendar
+ * that lost a comparison - there is no Android date-picker arm at all.
  */
 function unsupportedDatePicker(): never {
   throw new Error(
@@ -68,6 +67,9 @@ function unsupportedDatePicker(): never {
  * (one `AndroidComposeView` each). Expo UI always needs a `Host`, so both Expo
  * arms are required for a fair comparison
  * (docs/research/setup-decisions.md SS6).
+ *
+ * For `date-picker` it defers to [unsupportedDatePicker], which says why there is
+ * no Android arm to write here.
  */
 export function ExpoUiHostPerControlList({
   n,
