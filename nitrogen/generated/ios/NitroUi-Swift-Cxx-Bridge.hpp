@@ -258,6 +258,15 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<NitroUiPickerSize>::withError(error);
   }
   
+  // pragma MARK: Result<void>
+  using Result_void_ = Result<void>;
+  inline Result_void_ create_Result_void_() noexcept {
+    return Result<void>::withValue();
+  }
+  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
+    return Result<void>::withError(error);
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNitroUiProgressSpec>
   /**
    * Specialized version of `std::shared_ptr<HybridNitroUiProgressSpec>`.
@@ -352,15 +361,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
   }
   inline Result_NitroUiSliderSize_ create_Result_NitroUiSliderSize_(const std::exception_ptr& error) noexcept {
     return Result<NitroUiSliderSize>::withError(error);
-  }
-  
-  // pragma MARK: Result<void>
-  using Result_void_ = Result<void>;
-  inline Result_void_ create_Result_void_() noexcept {
-    return Result<void>::withValue();
-  }
-  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
-    return Result<void>::withError(error);
   }
   
   // pragma MARK: std::variant<bool, nitro::NullType>

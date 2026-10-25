@@ -114,6 +114,24 @@ export interface NitroUiPickerMethods extends HybridViewMethods {
    * this is safe to call from the JS thread (core.md §5).
    */
   measureContent(): NitroUiPickerSize;
+
+  /**
+   * TEMPORARY, test-only: choose `index` through the same code path a popup row
+   * press uses - clamped against `options`, refused while `disabled`, no-op when
+   * it changes nothing, optimistic, and emitted with a fresh event count - so a
+   * harness can assert a *real* pick (the handshake, the sizing key that follows
+   * it, and the cache it files) without a touch synthesiser that can reach a row
+   * in a popup.
+   *
+   * Goes through the *selection* path, not the props path: it moves the displayed
+   * index and emits, exactly like a tap, so a change JS refuses still reverts. On
+   * Android it closes the popup first, like the row does. It runs on the UI thread
+   * like a real press (core.md §5), and a call from JS hops there.
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can press a
+   * popup row.
+   */
+  nuiTestSelect(index: number): void;
 }
 
 /**

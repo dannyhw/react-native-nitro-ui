@@ -124,6 +124,10 @@ abstract class HybridNitroUiPickerSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun measureContent(): NitroUiPickerSize
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestSelect(index: Double): Unit
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

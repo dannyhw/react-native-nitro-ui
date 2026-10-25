@@ -39,6 +39,7 @@ import {
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import {
+  findAllByDescription,
   findByDescription,
   findByTestId,
   findAllByText,
@@ -596,12 +597,17 @@ const CHECKS = {
     //    witness - and the ordinary picker beside it, tapped the same way, is what
     //    turns "nothing happened" into "this one refused".
     //
-    //    The accessibility `enabled` flag is deliberately not the witness:
-    //    measured on `nitroui_t01`, Compose renders the anchor as two nodes - M3's
-    //    merged field node, which does report `enabled=false`, and the node that
-    //    carries this control's `contentDescription`, which reports `enabled=true`
-    //    even with `Disabled` in its semantics (`HybridNitroUiPicker.kt`). Reading
-    //    the first would claim more than the second grants; the gap is reported.
+    //    The accessibility `enabled` flag is deliberately not *this* witness, because
+    //    a flag is a claim about the tree and a refusal is a claim about input:
+    //    `menuAnchor(enabled = false)` has to be what stops the pointer, and only a
+    //    real tap measures that. What the tree says is checked separately, in step 8
+    //    below, from the same dump. (Until M3 these two steps had a worse reason to
+    //    be split: the anchor was two nodes, and the one carrying the picker's name
+    //    was the React Native host view - RN copies the `accessibilityLabel` base prop
+    //    onto the container and knows nothing about `disabled`, so it read
+    //    `enabled=true` on a disabled control. That was never Compose deriving
+    //    `isEnabled` from unmerged children: `ui-android-1.11.4` reports
+    //    `enabled = !config.contains(Disabled)`. See `docs/components/picker.md`.)
     const locked = await t.requireControlOnScreen('Real-input disabled picker');
     await t.tapNode(locked);
     t.log.checkEquals(
@@ -620,6 +626,56 @@ const CHECKS = {
     );
     await t.pressBack();
     t.log.checkEquals('and that menu goes away again', t.popupWindowCount(), 0);
+
+    // 8. What a screen reader is offered (M3). The dump is the only witness for
+    //    this: the accessibility tree is what TalkBack reads, and a name sitting on
+    //    a node with no value - or spread over two nodes - misdescribes the control
+    //    however well the taps land. These two pickers are used rather than the
+    //    first one because they are the ones still on screen after step 7 scrolled
+    //    to the bottom, and both pin their title to "Mica", so the value the node
+    //    has to carry is known.
+    const named = t.nodesNamed('Real-input enabled picker');
+    t.log.checkEquals(
+      "one node carries the enabled picker's name, so it is announced once",
+      named.length,
+      1
+    );
+    t.log.checkEquals(
+      'and that same node carries the value it shows',
+      named[0]?.text,
+      'Mica'
+    );
+    t.log.checkEquals(
+      'it is the node a tap is aimed at, too (the name is not parked on a container)',
+      named[0]?.clickable,
+      'true'
+    );
+    // The role: `Role.DropdownList` reaches the dump as the class Compose gives a
+    // drop-down, which is how the tree says "list of choices" rather than "text
+    // field". Measured on `nitroui_t01` with the anchor's own semantics.
+    t.log.checkEquals(
+      'the node announces the role of a list of choices',
+      named[0]?.className,
+      'android.widget.Spinner'
+    );
+    const lockedNodes = t.nodesNamed('Real-input disabled picker');
+    t.log.checkEquals(
+      'the disabled picker is one node as well',
+      lockedNodes.length,
+      1
+    );
+    t.log.checkEquals(
+      'and that node is the one that says it is disabled',
+      lockedNodes[0]?.enabled,
+      'false'
+    );
+    // What the fix does *not* claim: that Compose marks this node focusable. It
+    // does not (measured), and the honest record of that is here rather than in a
+    // comment that quietly stops being true - see `docs/components/picker.md`.
+    t.log.note(
+      `name node reports focusable=${String(named[0]?.focusable)} - ` +
+        'kept as evidence, not asserted'
+    );
   },
 };
 
@@ -1437,6 +1493,13 @@ function makeContext(harness, log) {
       if (control == null) {
         return null;
       }
+      // Since M3 the control's own node answers: one node carries the name *and*
+      // the value, so the value is read where the name is. The bounds search is
+      // kept as the fallback it was - if a Compose or Material change ever splits
+      // the node again, this asks the same question instead of reading nothing.
+      if (control.text !== '') {
+        return control.text;
+      }
       const field = nodes.find(
         (node) =>
           node.text !== '' &&
@@ -1446,6 +1509,19 @@ function makeContext(harness, log) {
           node.bounds.y2 === control.bounds.y2
       );
       return field == null ? null : field.text;
+    },
+
+    /**
+     * Every accessibility node that carries this control's name.
+     *
+     * The count is the point: one node means a screen reader announces the control
+     * once, with whatever that node says. More than one means it announces it
+     * twice, and only one of those nodes has the value. See `CHECKS.picker` step 8.
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     */
+    nodesNamed(description) {
+      return findAllByDescription(harness.hierarchy(), description);
     },
 
     /**

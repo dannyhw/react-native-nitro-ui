@@ -182,6 +182,36 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * yet. Set by [noteSizingKeyChanged], consumed by [onLayout].
    */
   private var sizingKeyChangePending = false
+  /**
+   * Whether this host is holding its size reports back until the next props batch.
+   *
+   * Set by [holdSizingReports]: the component calls it when *native* moved something
+   * that changes the control's size, which is the one moment a new `nuiSizingKey` is
+   * on its way but has not arrived. The engine files a report under the key of the
+   * last shadow measure (G6 review M1), so a size measured in that window belongs to
+   * the content that was just replaced and would be filed against the configuration
+   * it replaced - poisoning the cache entry of the title the control no longer shows.
+   *
+   * Held reports still update [contentSize], so `measureContent()` goes on answering
+   * what the control measures; only the engine is left out, and only until the batch
+   * that carries the new key lands.
+   */
+  private var sizingReportsHeld = false
+
+  /**
+   * The last size measured while [sizingReportsHeld] was on, and null when nothing
+   * has measured behind the hold (or no hold is on).
+   *
+   * This is the answer the hold was for. A choice paints first and is re-keyed by
+   * the next batch, and every measure between those two moments measures the content
+   * the choice painted - which is exactly what the batch that arrives is about to
+   * name. [releaseSizingReports] files it then, instead of asking for a fresh
+   * measure and hoping the composition has caught up by the time it runs.
+   *
+   * The last one wins: several passes over the same content agree, and the one that
+   * matters is the newest.
+   */
+  private var heldContentSize: NitroUiDpSize? = null
 
   /**
    * Bumped when an armed sizing key change lands ([onLayout]) and read by
@@ -353,6 +383,21 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
+   * Push model writes made *outside* Compose's own event handling into the
+   * composition.
+   *
+   * A row press writes model state and returns inside Compose's input handling,
+   * which applies the snapshot its handler touched, so the press repaints on the
+   * next frame. A write from a plain UI-thread post (a `hybridRef` call, say) lands
+   * in the global snapshot with nothing to apply it: the paint would wait for the
+   * next [commit], which is a props batch. Callers that are not a Compose event call
+   * this so their write paints when an equivalent press would.
+   */
+  fun applyModelWrites() {
+    Snapshot.sendApplyNotifications()
+  }
+
+  /**
    * Apply the batch. Called once, from the generated `updateState`.
    *
    * Snapshot writes are already visible; sending the apply notification here is
@@ -384,6 +429,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     isDirty = true
     isMeasurePending = true
     sizingKeyChangePending = false
+    sizingReportsHeld = false
+    heldContentSize = null
     contentSize = null
     overWidePlacement.reset()
     // A recycled mount still paints its first frame for itself, and has to watch
@@ -431,6 +478,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     firstFrameWatchRegistered = false
     unregisterPreDraw(flushWatch)
     flushWatch = null
+    sizingReportsHeld = false
+    heldContentSize = null
     contentSize = null
     overWidePlacement.reset()
     releaseSizingInstance()
@@ -766,6 +815,70 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     sizingKeyChangePending = true
   }
 
+  /**
+   * Stop reporting sizes until the next props batch lands (see
+   * [sizingReportsHeld]), which the component calls the moment it paints a
+   * user's choice.
+   *
+   * The pair is the whole rule a report has to respect: it may only be filed under
+   * a key that names the content it measured. Between the choice and the batch that
+   * re-keys the instance, that key names the content being replaced.
+   */
+  fun holdSizingReports() {
+    sizingReportsHeld = true
+    heldContentSize = null
+  }
+
+  /**
+   * End the hold at the end of the props batch the choice was waiting for - so call
+   * it after the setters have been interpreted - and file what the hold held when
+   * that batch is the batch the held size belongs to. The caller decides that: it has
+   * just interpreted the index React sent, which may be the choice, or a different
+   * one, or the same one it never gave up on.
+   *
+   * The held size is filed here rather than re-measured, because a measure asked for
+   * at this moment answers the wrong content both ways round. Asked for here, it can
+   * run in a pass that precedes the batch's own recomposition - a props batch measures
+   * this host before the recomposition it belongs to, which is the whole reason
+   * [contentRevision] exists - so it reports the title the choice replaced under the
+   * key that replaces it: the damage the hold exists to prevent. And on Android it can
+   * also report nothing at all: content wider than its box is placed *at* the box, and
+   * a bounded pass answers the box's width rather than the content's, so it never
+   * reaches [NitroUiMeasuredRoot]'s `record` gate. Both were measured on
+   * `nitroui_t01`: asking for a measure at the release left the real-input picker laid
+   * out at its old width, ellipsising the title it was painting for the rest of the
+   * mount, because every pass after it answered at the box; and where the pass did run
+   * first, it filed the replaced title's width under the new key - the frame at the
+   * declared fallback that "re-keys the size of an uncontrolled pick" in
+   * `Picker.harness.tsx` refuses.
+   *
+   * Filing the held size needs neither half. It is the size of the content the choice
+   * painted, it is filed under the key the batch brought, and a batch that held nothing
+   * changes nothing here, so no ordinary props turn pays anything. A choice React
+   * refused comes through with `heldSizeBelongsToBatch` false and is dropped unfiled:
+   * the configuration the key names is the one the engine already has, measured before
+   * the choice, and the rollback reports it again in the ordinary course. An accepted
+   * choice whose new title measures what the old one measured held nothing back either,
+   * and that case is a key change like any other - the key setter already armed the
+   * correction this host owes it (see [noteSizingKeyChanged]).
+   */
+  fun releaseSizingReports(heldSizeBelongsToBatch: Boolean) {
+    if (!sizingReportsHeld) {
+      return
+    }
+    sizingReportsHeld = false
+    val held = heldContentSize
+    heldContentSize = null
+    if (held == null || !heldSizeBelongsToBatch) {
+      return
+    }
+    // Clearing the dedupe is not incidental: the size it holds belongs to the
+    // configuration this batch replaced, and a new title that happens to measure the
+    // same width still has to reach an engine that has never seen this key.
+    lastReportedSize = null
+    reportToSizingEngine(held)
+  }
+
   private fun recordMeasuredSize(widthPx: Int, heightPx: Int) {
     if (!wantsContentSize) {
       return
@@ -776,7 +889,11 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
     val size = NitroUiDpSize(widthPx.toDouble() / density, heightPx.toDouble() / density)
     contentSize = size
-    reportToSizingEngine(size)
+    if (sizingReportsHeld) {
+      heldContentSize = size
+    } else {
+      reportToSizingEngine(size)
+    }
   }
 
   /**

@@ -80,6 +80,14 @@ type PickerHandle = {
   readonly tintColor: number | null;
   readonly accessibilityLabel: string | null;
   measureContent(): { width: number; height: number };
+  /**
+   * Test-only (`@internal`, D14): press the row for `index` through the same path a
+   * real row press takes - clamp, no-op guard, optimistic paint, event. The harness
+   * cannot reach a row in a popup (the popup is not in the app's window), so this is
+   * how a *real* pick gets tested here; see `scripts/real-input/` for the same pick
+   * done with a real tap.
+   */
+  nuiTestSelect(index: number): void;
 };
 
 /** Handles by testID, so a test can ask each control what it holds. */
@@ -102,6 +110,28 @@ const recordChange =
   (testId: string) =>
   (event: { index: number }): void => {
     eventLog.push(`${testId}:${String(event.index)}`);
+  };
+
+/**
+ * `recordChange` plus a busy JS thread: the handler spins for `ms` before returning,
+ * so the render a choice causes - and with it the props batch that carries the new
+ * sizing key - lands long after the control has painted and laid out its new title.
+ *
+ * That ordering is the only one a pick-time measure is wrong for, and a harness that
+ * asks for a pick and then waits does not reliably produce it: on a debug JS thread a
+ * props batch can just as easily win the race against the control's next frame, which
+ * would make the guard below look inert when it is only untested. Real apps do block
+ * JS like this (a dispatch, a synchronous read, a heavy render), so this is the real
+ * timing with the window the bug needs, not a fake.
+ */
+const recordChangeThenBlock =
+  (testId: string, ms = 250) =>
+  (event: { index: number }): void => {
+    eventLog.push(`${testId}:${String(event.index)}`);
+    const deadline = nitroUiCore.now() + ms;
+    while (nitroUiCore.now() < deadline) {
+      // Deliberately busy: the point is that JS cannot render.
+    }
   };
 
 const stats = (): NitroUiSizingStats => nitroUiCore.sizingStats();
@@ -305,6 +335,41 @@ async function pressAnchor(testId: string): Promise<void> {
   await userEvent.pressAt(box!.x + box!.width / 2, box!.y + box!.height / 2);
 }
 
+/**
+ * Choose an option the way a row press does, through the native selection path.
+ *
+ * `nuiTestSelect` is the `@internal` hook the component adds for exactly this: the
+ * harness dispatches input into the app's own window, and a Material 3 popup (or a
+ * SwiftUI menu) lives outside it, so no `userEvent` can reach a row. What the hook
+ * runs is the *same* code a row runs - the model's selection path, on the UI thread -
+ * which is what makes the sizing assertions below about a pick rather than about a
+ * prop write. `settle` covers the hop to the UI thread and back.
+ */
+async function pickRow(testId: string, index: number): Promise<void> {
+  const handle = handles.get(testId);
+  expect(handle).not.toBeNull();
+  handle?.nuiTestSelect(index);
+  await settle(150);
+}
+
+/** Every size the engine laid `testId`'s instances out with, oldest first. */
+function laidOutSizes(): { width: number; height: number }[] {
+  return nitroUiCore
+    .drainSizingTrace()
+    .filter((event) => event.stage === 'laidOut')
+    .map((event) => ({ width: event.width, height: event.height }));
+}
+
+/**
+ * The component's *declared* fallback, per platform (`NitroUiDeclaredFallbacks`):
+ * iOS 72 x 35 pt, Android 280 x 56 dp. Used to catch a box that was laid out at
+ * the fallback for a frame - the flash D17 is about.
+ */
+const DECLARED_FALLBACK =
+  Platform.OS === 'ios'
+    ? { width: 72, height: 35 }
+    : { width: 280, height: 56 };
+
 const columnStyle = { gap: 8 } as const;
 
 /**
@@ -337,6 +402,12 @@ afterEach(() => {
   eventLog.length = 0;
   nitroUiCore.setSizingTraceEnabled(false);
 });
+
+/** Arm the trace and empty the ring, so a test reads only its own events. */
+function armTrace(): void {
+  nitroUiCore.setSizingTraceEnabled(true);
+  nitroUiCore.drainSizingTrace();
+}
 
 describe('Picker · G6', () => {
   it('lays each option list out at the size its own title gives it', async () => {
@@ -1136,7 +1207,503 @@ describe('Picker · G6', () => {
     unmount();
   });
 
-  it('does not treat opening as a choice, and survives going away while open', async () => {
+  // MARK: - M1: a pick must re-key the size it reports
+
+  it('files a real pick under the key of the title the pick shows', async () => {
+    // The sizing key names the selected title, so a pick is a change of *size
+    // configuration* - and the rule that keeps the cache honest is that a report
+    // may only be filed under a key that names the title being painted. A native
+    // pick paints a new title a whole round trip before React sends the key that
+    // names it, so the host must not answer in between: measuring there files the
+    // new title's width under the old title's key.
+    //
+    // Both configurations are poisoned, so every layout the engine does is a
+    // visible event in the trace, and the pick is required to cost exactly one
+    // correction - the new key's own cold answer. Two means something was filed
+    // under the *old* key first: the width of the title the pick painted, written
+    // against the key of the title it replaced.
+    const OPTIONS = ['One', 'Two', LONG_TITLE];
+    poisonConfigurations([
+      sizingKey(OPTIONS, 0, null, 'menu'),
+      sizingKey(OPTIONS, 2, null, 'menu'),
+    ]);
+    const { rerender, unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={0}
+        onChange={recordChange('pick-key')}
+        testID="pick-key"
+        hybridRef={captureHybrid('pick-key')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('pick-key');
+    const shortSize = await waitForMeasured('pick-key', 'the short title');
+    await waitForBox('pick-key', shortSize, 'the short title');
+    await settle(200);
+    armTrace();
+    const before = stats();
+
+    // The pick itself, and the app accepting it - what an `onChange` that calls
+    // `setState` does. The order is the real one: native chooses, emits, and the
+    // props batch that names the new title arrives after the echo.
+    await pickRow('pick-key', 2);
+    // The choice is real (a row's path, not a prop write), and it is reported once.
+    expect(eventLog).toEqual(['pick-key:2']);
+    // Let the choice's own paint-and-measure land before the echo, the way it does
+    // in an app: an `onChange` that calls `setState` costs a render and a bridge
+    // round trip, while the control repaints on its next frame. The invariant this
+    // test is about only exists for that ordering - a report filed while the old
+    // key is still the one the engine has.
+    await settle(200);
+    await rerender(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={2}
+        onChange={recordChange('pick-key')}
+        testID="pick-key"
+        hybridRef={captureHybrid('pick-key')}
+      />
+    );
+    // Native painted the new title on its own; the box follows in the batch that
+    // names it, and the test asks for that size rather than assuming a frame.
+    const painted = await waitForRemeasure(
+      'pick-key',
+      shortSize,
+      'the long title, painted by the pick'
+    );
+    expect(painted.width).toBeGreaterThan(shortSize.width + 20);
+    const widest = sizeOf('pick-key');
+    await waitForBox('pick-key', painted, 'the long title');
+    const after = delta(before, stats());
+    const laidOut = laidOutSizes();
+    console.log(
+      `pick re-keys: short=${describeSize(shortSize)} ` +
+        `long=${describeSize(painted)} box=${describeSize(widest)} ` +
+        `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
+        `delta=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
+    );
+    // One choice, one event, and it is the one the wrapper reports.
+    expect(eventLog).toEqual(['pick-key:2']);
+    // Exactly the new configuration's own cold correction - no more.
+    expect(after.corrections).toBe(1);
+    // And no frame of it was laid out at the declared fallback: the engine is
+    // answering the poisoned (i.e. simply *other*) sizes here, and a fallback-sized
+    // box in the middle of a pick is the flash D17 says a warm configuration must
+    // not pay.
+    expect(laidOut.some((size) => sameSize(size, DECLARED_FALLBACK))).toBe(
+      false
+    );
+    expect(sameSize(sizeOf('pick-key'), painted)).toBe(true);
+    unmount();
+  });
+
+  it('leaves the width of each title in the cache after a pick', async () => {
+    // The damage a pick-time measure does is not the one frame the user sees, it is
+    // what it leaves in the process-wide cache: `sel:One` ends up holding the long
+    // title's width and is marked exact, so every later picker showing `One` is laid
+    // out at 360 pt / 385 dp and corrects back (D17: an exact entry lays the first
+    // frame out exact, 0 stale). This reads the cache back by mounting a fresh picker
+    // in the configuration the pick *started* from - warm, so it must cost no
+    // correction and no stale frame at all.
+    const OPTIONS = ['One', 'Two', LONG_TITLE];
+    const first = await render(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={0}
+        testID="poison"
+        hybridRef={captureHybrid('poison')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('poison');
+    const shortSize = await waitForMeasured('poison', 'the short title');
+    await waitForBox('poison', shortSize, 'the short title');
+    await settle(200);
+
+    await pickRow('poison', 2);
+    // The ordering note from the pick test above applies here too: the control has
+    // painted and measured the new title before this batch arrives.
+    await settle(200);
+    await first.rerender(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={2}
+        testID="poison"
+        hybridRef={captureHybrid('poison')}
+      />
+    );
+    const longSize = await waitForRemeasure(
+      'poison',
+      shortSize,
+      'the long title, painted by the pick'
+    );
+    await waitForBox('poison', longSize, 'the long title');
+    first.unmount();
+    handles.delete('poison');
+    await settle(300);
+
+    armTrace();
+    const before = stats();
+    const { unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={0}
+        testID="again"
+        hybridRef={captureHybrid('again')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('again');
+    await settle(400);
+    const box = sizeOf('again');
+    const measuredAgain = measured('again');
+    const after = delta(before, stats());
+    const laidOut = laidOutSizes();
+    console.log(
+      `cache after a pick: startedAt=${describeSize(shortSize)} ` +
+        `picked=${describeSize(longSize)} freshMountBox=${describeSize(box)} ` +
+        `measured=${describeSize(measuredAgain)} ` +
+        `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
+        `delta=${JSON.stringify(after)}`
+    );
+    // The box the fresh mount was laid out with is the size of the title it shows,
+    // on its first read - not the title the previous picker picked.
+    expect(sameSize(box, shortSize)).toBe(true);
+    expect(sameSize(box, measuredAgain)).toBe(true);
+    // Warm means no correction, and the trace says no other box was ever drawn.
+    expect(after.corrections).toBe(0);
+    expect(laidOut.every((size) => sameSize(size, shortSize))).toBe(true);
+    unmount();
+  });
+
+  it('re-keys the size of an uncontrolled pick, with no render to ask for it', async () => {
+    // The uncontrolled twin, which is the case the whole mechanism exists for: no
+    // React render is coming, so nothing else can tell the engine that the title -
+    // and with it the size configuration - moved. The wrapper tracks the index the
+    // native side reported (one render per choice, which is what a discrete control
+    // costs everywhere else) so the key follows the shown title, and the host holds
+    // its reports until that batch arrives.
+    //
+    // This is also the case the real-input suite proves from outside (the box grows
+    // after a tap); here it is the same claim with the counters beside it.
+    const OPTIONS = ['One', 'Two', LONG_TITLE];
+    poisonConfigurations([
+      sizingKey(OPTIONS, 0, null, 'menu'),
+      sizingKey(OPTIONS, 2, null, 'menu'),
+    ]);
+    const { unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        onChange={recordChange('unc')}
+        testID="unc"
+        hybridRef={captureHybrid('unc')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('unc');
+    const shortSize = await waitForMeasured('unc', 'the short title');
+    await waitForBox('unc', shortSize, 'the short title');
+    await settle(200);
+    armTrace();
+    const before = stats();
+
+    // The choice is real and it is reported once - native chose, and JS was told.
+    await pickRow('unc', 2);
+    expect(eventLog).toEqual(['unc:2']);
+    // Still uncontrolled: JS never sends an index. So the only thing that can move
+    // the size configuration is the wrapper noticing what native showed it, and the
+    // key it sends has to name the title now on screen. Before that, every width
+    // this instance reports - and the cache entry it lands in - belongs to a title
+    // that is no longer drawn.
+    expect(handles.get('unc')?.selectedIndex).toBe(null);
+    const sentKey = (handles.get('unc') as unknown as { nuiSizingKey?: string })
+      ?.nuiSizingKey;
+    expect(sentKey).toBe(sizingKey(OPTIONS, 2, null, 'menu'));
+    const longSize = await waitForRemeasure(
+      'unc',
+      shortSize,
+      'the long title, chosen without a render'
+    );
+    await waitForBox('unc', longSize, 'the long title');
+    await settle(300);
+    const after = delta(before, stats());
+    const laidOut = laidOutSizes();
+    console.log(
+      `uncontrolled pick: short=${describeSize(shortSize)} ` +
+        `long=${describeSize(longSize)} ` +
+        `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
+        `delta=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
+    );
+    // One choice, one correction: the new configuration's own cold answer, and no
+    // frame of it laid out at the declared fallback.
+    expect(after.corrections).toBe(1);
+    expect(laidOut.some((size) => sameSize(size, DECLARED_FALLBACK))).toBe(
+      false
+    );
+    unmount();
+    handles.delete('unc');
+    await settle(300);
+
+    // And the damage a pick-time report does is the part nobody sees: the cache
+    // entry of the title the pick *replaced* would hold this title's width and be
+    // marked exact, so the next picker showing `One` is laid out at the long width
+    // and corrects back. A warm configuration must cost a fresh mount nothing.
+    armTrace();
+    const cacheBefore = stats();
+    const second = await render(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={0}
+        testID="unc-again"
+        hybridRef={captureHybrid('unc-again')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('unc-again');
+    await settle(400);
+    const boxAgain = sizeOf('unc-again');
+    const measuredAgain = measured('unc-again');
+    const cacheAfter = delta(cacheBefore, stats());
+    const laidOutAgain = laidOutSizes();
+    console.log(
+      `uncontrolled cache: freshMountBox=${describeSize(boxAgain)} ` +
+        `measured=${describeSize(measuredAgain)} ` +
+        `laidOut=${laidOutAgain.map((s) => describeSize(s)).join(',')} ` +
+        `delta=${JSON.stringify(cacheAfter)}`
+    );
+    expect(sameSize(boxAgain, shortSize)).toBe(true);
+    expect(sameSize(boxAgain, measuredAgain)).toBe(true);
+    expect(cacheAfter.corrections).toBe(0);
+    expect(laidOutAgain.every((size) => sameSize(size, shortSize))).toBe(true);
+    second.unmount();
+  });
+
+  it("holds a pick's report until the batch that names the title", async () => {
+    // The host's hold only matters inside one window: between the pick and the props
+    // batch that re-keys. So the fixture makes that window real - an `onChange` that
+    // keeps JS busy, the way a dispatch or a heavy render does in an app - which lets
+    // the control paint and lay out its new title *first*. A host that measures on its
+    // own then files the new title's width under the key of the title it replaced,
+    // which is the cache damage M1 is about.
+    //
+    // With the hold, the first box drawn after the pick is the new key's own cold
+    // answer (the poisoned size) and the pick costs exactly one correction. Without
+    // it, the first box is the long title's width, filed under `sel:One`, and the pick
+    // costs two.
+    const OPTIONS = ['One', 'Two', LONG_TITLE];
+    poisonConfigurations([
+      sizingKey(OPTIONS, 0, null, 'menu'),
+      sizingKey(OPTIONS, 2, null, 'menu'),
+    ]);
+    const { unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        onChange={recordChangeThenBlock('slow-echo')}
+        testID="slow-echo"
+        hybridRef={captureHybrid('slow-echo')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('slow-echo');
+    const shortSize = await waitForMeasured('slow-echo', 'the short title');
+    await waitForBox('slow-echo', shortSize, 'the short title');
+    await settle(200);
+    armTrace();
+    const before = stats();
+
+    // The choice runs the row's own path; its event handler is the spin above, so the
+    // control repaints and lays out while JS is still inside the choice.
+    await pickRow('slow-echo', 2);
+    expect(eventLog).toEqual(['slow-echo:2']);
+    const longSize = await waitForRemeasure(
+      'slow-echo',
+      shortSize,
+      'the long title, chosen behind a busy JS thread'
+    );
+    await waitForBox('slow-echo', longSize, 'the long title');
+    await settle(300);
+    const after = delta(before, stats());
+    const laidOut = laidOutSizes();
+    console.log(
+      `busy-echo pick: short=${describeSize(shortSize)} ` +
+        `long=${describeSize(longSize)} ` +
+        `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
+        `delta=${JSON.stringify(after)}`
+    );
+    // One correction for one pick, and it belongs to the new key: the first box the
+    // engine drew after the pick is the poisoned size for `sel:<long>`. If the pick
+    // answered for itself, that first box is the long title's width instead and there
+    // is a correction more.
+    expect(after.corrections).toBe(1);
+    expect(sameSize(laidOut[0] ?? null, WRONG_SIZE)).toBe(true);
+    expect(laidOut.some((size) => sameSize(size, DECLARED_FALLBACK))).toBe(
+      false
+    );
+    expect(sameSize(sizeOf('slow-echo'), longSize)).toBe(true);
+    unmount();
+  });
+
+  it('grows an unpoisoned pick whose new configuration starts at the fallback', async () => {
+    // The pick tests above poison every configuration, which is what makes a
+    // missing correction visible - and, as G6's real-input run found, what let one
+    // bug hide: a poisoned key answers with the poisoned size, so the box *moves*,
+    // and a host that is waiting for a box change to ask its next measure gets
+    // asked. With a cold key the engine's first answer is the declared fallback,
+    // which for a title growing inside a box that is already at the fallback width
+    // is the box it has - nothing moves, nothing asks, and the control is left
+    // painting an ellipsised title for the rest of the mount.
+    //
+    // This is real-input step 4 as a gate: no poison, no trace, just the box the
+    // user ends up with after choosing a longer title from an uncontrolled picker.
+    // The fixture is the real-input screen's own options.
+    const OPTIONS = ['Onyx', 'Quartz', 'A considerably longer mineral name'];
+    const { unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        onChange={recordChange('plain-unc')}
+        testID="plain-unc"
+        hybridRef={captureHybrid('plain-unc')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('plain-unc');
+    const shortSize = await waitForMeasured('plain-unc', 'the short title');
+    await waitForBox('plain-unc', shortSize, 'the short title');
+    await settle(200);
+    const before = stats();
+
+    await pickRow('plain-unc', 2);
+    expect(eventLog).toEqual(['plain-unc:2']);
+    const longSize = await waitForRemeasure(
+      'plain-unc',
+      shortSize,
+      'the longer title the pick painted'
+    );
+    expect(longSize.width).toBeGreaterThan(shortSize.width + 20);
+    // The claim real-input makes from outside, made here with the box reading.
+    await waitForBox(
+      'plain-unc',
+      longSize,
+      'the box following the picked title'
+    );
+    const after = delta(before, stats());
+    console.log(
+      `unpoisoned pick: short=${describeSize(shortSize)} ` +
+        `long=${describeSize(longSize)} box=${describeSize(sizeOf('plain-unc'))} ` +
+        `delta=${JSON.stringify(after)}`
+    );
+    expect(sameSize(sizeOf('plain-unc'), longSize)).toBe(true);
+    unmount();
+  });
+
+  // MARK: - M2: a variant change is a different control, not a repaint
+
+  it('asks a wheel the box question after a variant change', async () => {
+    // Both variants of Progress's two-policy switch live here, and Android builds
+    // the question when the composition is built: `NitroUiMeasuredRoot` is handed
+    // `unbounded = sizingPolicy == POLICY_INTRINSIC` once, and reads no state that
+    // changes. So a `menu` that becomes a `wheel` at runtime goes on being asked
+    // the unbounded question - and `fillMaxWidth()` under infinite constraints is a
+    // no-op, which leaves the field reporting its own 280 dp inside a box the caller
+    // made 330 wide. Progress solves this by keying the native view on the variant;
+    // a rerender of the same instance is the only thing that can show it.
+    const OPTIONS = ['One', 'Two', LONG_TITLE];
+    const BOX = { width: 330, height: 60 };
+    const { rerender, unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={0}
+        variant="menu"
+        testID="var-w"
+        style={{ width: BOX.width, height: BOX.height }}
+        hybridRef={captureHybrid('var-w')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('var-w');
+    const asMenu = await waitForMeasured('var-w', 'a menu of the short title');
+    // The caller's width is in charge, so the box is 330 whatever the menu measured.
+    expect(Math.abs(boxOf('var-w')!.width - BOX.width) < 0.6).toBe(true);
+    expect(asMenu.width).not.toBeCloseTo(BOX.width, 0);
+    await settle(200);
+
+    await rerender(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={0}
+        variant="wheel"
+        testID="var-w"
+        style={{ width: BOX.width, height: BOX.height }}
+        hybridRef={captureHybrid('var-w')}
+      />
+    );
+    const asWheel = await waitForRemeasure(
+      'var-w',
+      asMenu,
+      'a wheel, which fills the box'
+    );
+    await settle(300);
+    console.log(
+      `variant menu->wheel: menu=${describeSize(asMenu)} ` +
+        `wheel=${describeSize(asWheel)} box=${describeSize(boxOf('var-w'))}`
+    );
+    // A wheel is as wide as its box, whatever the menu before it measured.
+    expect(Math.abs(asWheel.width - BOX.width) < 1).toBe(true);
+    unmount();
+  });
+
+  it('asks a menu the unbounded question after a variant change', async () => {
+    // The other direction, and the one that poisons the cache: a `wheel` that
+    // becomes a `menu` goes on being asked the *bounded* question, so a 40-character
+    // title offered a 330 box measures 330, agrees with the box, and is confirmed -
+    // the field stays truncated for the life of the mount and `cache[menu|...]`
+    // records the box's width as the title's own.
+    const OPTIONS = ['One', 'Two', LONG_TITLE];
+    const BOX = { width: 330, height: 60 };
+    const { rerender, unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={2}
+        variant="wheel"
+        testID="var-m"
+        style={{ width: BOX.width, height: BOX.height }}
+        hybridRef={captureHybrid('var-m')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('var-m');
+    const asWheel = await waitForMeasured('var-m', 'a wheel of the long title');
+    expect(Math.abs(asWheel.width - BOX.width) < 1).toBe(true);
+    await settle(200);
+
+    await rerender(
+      <Picker
+        options={OPTIONS}
+        selectedIndex={2}
+        variant="menu"
+        testID="var-m"
+        style={{ width: BOX.width, height: BOX.height }}
+        hybridRef={captureHybrid('var-m')}
+      />
+    );
+    const asMenu = await waitForRemeasure(
+      'var-m',
+      asWheel,
+      'a menu, which measures the long title unbounded'
+    );
+    await settle(300);
+    console.log(
+      `variant wheel->menu: wheel=${describeSize(asWheel)} ` +
+        `menu=${describeSize(asMenu)} box=${describeSize(boxOf('var-m'))}`
+    );
+    // The menu reports the title's own width - wider than the box it sits in, which
+    // is the C1 over-wide story - rather than the box's width back as a verdict.
+    expect(asMenu.width).toBeGreaterThan(BOX.width + 1);
+    unmount();
+  });
+
+  it('does not treat opening as a choice, and the next mount sizes normally after going away mid-menu', async () => {
     // A press on the anchor is the only interaction the harness can deliver,
     // because the anchor is in the app's window and the popup it opens is not.
     // That leaves two honest claims, both of which need a real tap:
