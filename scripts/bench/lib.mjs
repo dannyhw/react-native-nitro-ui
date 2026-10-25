@@ -86,6 +86,36 @@ export const IMPLEMENTATIONS = [
   'nitro-ui',
 ];
 
+/**
+ * Arms that cannot mount a component on one platform, keyed
+ * `platform:implementation:component`, so those cells are simply not scheduled
+ * there (G5).
+ *
+ * `@expo/ui`'s two Android arms have no date-picker cell because `@expo/ui`
+ * exposes no mountable date *field* — only the inline Material 3 `DateTimePicker`
+ * and whole dialogs. Measured on `nitroui_t02` (2026-10-25), neither shape is
+ * priceable:
+ *
+ * - the fit-its-content host every self-sizing arm gets (`Host matchContents`)
+ *   measures the inline calendar's horizontally scrollable month pager with
+ *   infinite width, and the app dies: `IllegalStateException: Horizontally
+ *   scrollable component was measured with an infinity maximum width
+ *   constraints`;
+ * - with the width bounded it does mount, at 2.45 s of mount work per iteration
+ *   of 50 inline calendars (~96 s per launch, shared-host arm), which is the
+ *   runner's whole per-launch budget — and it prices a full-screen calendar
+ *   against the compact field every other arm renders.
+ *
+ * An arm that cannot mount the control is not a slow arm, so the Android
+ * date-picker rows are `nitro-ui` over `rn-core` with the gap stated, rather
+ * than four launches per cell that end in `no end sentinel within 180s`.
+ * `bench/src/implementations/expoUi.android.tsx` fails such a launch loudly.
+ */
+export const ARMS_WITHOUT_COMPONENT = [
+  'android:expo-ui-host-per-control:date-picker',
+  'android:expo-ui-shared-host:date-picker',
+];
+
 /** Latency metrics, all nanoseconds, all smaller-is-better. */
 export const LATENCY_METRICS = ['jsCommitNs', 'mountedNs', 'presentedNs'];
 
@@ -133,6 +163,9 @@ export const PLANS = {
     { scenario: 'mount.segmented-control', n: 50 },
     { scenario: 'update.segmented-control', n: 50 },
     { scenario: 'memory.segmented-control', n: 200 },
+    { scenario: 'mount.date-picker', n: 50 },
+    { scenario: 'update.date-picker', n: 50 },
+    { scenario: 'memory.date-picker', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -170,6 +203,13 @@ export const PLANS = {
     { scenario: 'update.segmented-control', n: 50 },
     { scenario: 'memory.segmented-control', n: 200 },
     { scenario: 'leak.segmented-control', n: 200 },
+    { scenario: 'mount.date-picker', n: 1 },
+    { scenario: 'mount.date-picker', n: 50 },
+    { scenario: 'mount.date-picker', n: 200 },
+    { scenario: 'update.date-picker', n: 1 },
+    { scenario: 'update.date-picker', n: 50 },
+    { scenario: 'memory.date-picker', n: 200 },
+    { scenario: 'leak.date-picker', n: 200 },
   ],
 };
 
@@ -238,6 +278,7 @@ export function buildSchedule({
   only = null,
   perfMarks = false,
   component = null,
+  platform = null,
 } = {}) {
   const cells = PLANS[plan];
   if (cells == null) {
@@ -288,6 +329,17 @@ export function buildSchedule({
     const order = launch % 2 === 0 ? wanted : [...wanted].reverse();
     for (const cell of wantedCells) {
       for (const implementation of order) {
+        if (
+          platform != null &&
+          ARMS_WITHOUT_COMPONENT.includes(
+            `${platform}:${implementation}:${componentOf(cell.scenario)}`
+          )
+        ) {
+          // One platform's arm cannot mount this component at all; the other
+          // platforms keep their cell, and a run with no `platform` (a hand
+          // schedule, a test) still asks for every arm it was given.
+          continue;
+        }
         schedule.push({
           scenario: cell.scenario,
           implementation,

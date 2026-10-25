@@ -1,0 +1,1067 @@
+/**
+ * On-device tests for the DatePicker (task G5).
+ *
+ * DatePicker is the first control in this library that *presents*: a popover on
+ * iOS, a dialog window on Android. That adds two things the SegmentedControl
+ * suite does not have — a piece of UI that outlives a tap and must not outlive
+ * the mount, and a value that is a calendar instant rather than a number, so the
+ * device's time zone is part of the result. It keeps everything the other suites
+ * have: the event-count handshake, and a size that comes from what the control
+ * renders.
+ *
+ * Three readings, as in the Button/SegmentedControl suites:
+ *  - `harnessUi.queryByTestId` — the box Fabric gave the view;
+ *  - `hybridRef.measureContent()` — the size the hosted control measured;
+ *  - `hybridRef.nuiTestStateReport()` — `(displayed instant, presented?)`.
+ *
+ * The third one is new, and it is here because of what a date picker is: a
+ * calendar cell, a wheel row and a dialog button are all unreachable to a
+ * synthesised press on at least one platform (see `nuiTestSelect`'s doc comment),
+ * so the suite drives selections through the control's own selection path and
+ * reads the result back through the only two channels that are honest about it —
+ * the event that reached JS, and the report native keeps in step with what it is
+ * showing. The dialog test then needs no readout at all: a leaked dialog window
+ * (Android) or popover (iOS) swallows the press of the witness next to it.
+ *
+ * Two things make these tests able to fail:
+ *  - every cold configuration is **poisoned** first (`seedSizingSize` with a size
+ *    no date picker has, then an environment bump), so a correction that never
+ *    arrives leaves a visible wrong box and costs a correction the test requires;
+ *  - the pair test requires **exactly one** correction for two mounted pickers,
+ *    which is the assertion that fails if a `compact` field's width ever depends
+ *    on the date it is showing.
+ */
+import {
+  Platform,
+  Pressable,
+  Text,
+  TurboModuleRegistry,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import {
+  afterEach,
+  cleanup,
+  describe,
+  expect,
+  it,
+  render,
+} from 'react-native-harness';
+import { screen, userEvent } from '@react-native-harness/ui';
+import {
+  DatePicker,
+  nitroUiCore,
+  type NitroUiSizingStats,
+} from 'react-native-nitro-ui';
+
+/** The Fabric name — what the sizing engine files sizes under. */
+const COMPONENT = 'NitroUiDatePicker';
+
+type ViewInfo = { x: number; y: number; width: number; height: number };
+type HarnessUiModule = {
+  queryByTestId(testId: string): ViewInfo | null;
+};
+const harnessUi = TurboModuleRegistry.getEnforcing(
+  'HarnessUI'
+) as unknown as HarnessUiModule;
+
+/**
+ * What `hybridRef` hands back — declared, not imported (DECISIONS D14 keeps
+ * Hybrid View types off the public surface). Read-only except for the two test
+ * seams, which are the point of having the handle at all here.
+ */
+type DatePickerHandle = {
+  /** The instant React sent, clamped to the bounds; null when uncontrolled. */
+  readonly valueMillis: number | null;
+  readonly mostRecentEventCount: number;
+  readonly mode: string;
+  readonly variant: string;
+  readonly minimumMillis: number | null;
+  readonly maximumMillis: number | null;
+  readonly disabled: boolean;
+  readonly tintColor: number | null;
+  readonly accessibilityLabel: string | null;
+  readonly onValueChange?: unknown;
+  measureContent(): { width: number; height: number };
+  /** `month` is 1-12; fields the `mode` does not show keep the displayed value. */
+  nuiTestSelect(
+    year: number,
+    month: number,
+    day: number,
+    hour: number,
+    minute: number
+  ): void;
+  nuiTestPresent(): void;
+  /** `"<displayed millis>|<presented 0|1>"`. */
+  nuiTestStateReport(): string;
+};
+
+/** Handles by testID, so a test can ask each control what it holds. */
+const handles = new Map<string, DatePickerHandle>();
+const captureHybrid =
+  (testId: string) =>
+  (view: DatePickerHandle): void => {
+    handles.set(testId, view);
+  };
+
+/**
+ * Every `onChange` the app has reported, in order: `testID:millis`.
+ *
+ * The instant is in the line rather than just a count because half of what this
+ * suite asserts is *which* instant a pick produced (clamping, the DST round-trip),
+ * and re-rendering the tree to show one would spend a render on the measurement.
+ */
+const eventLog: string[] = [];
+const recordChange =
+  (testId: string) =>
+  (date: Date): void => {
+    eventLog.push(`${testId}:${String(date.getTime())}`);
+  };
+
+const stats = (): NitroUiSizingStats => nitroUiCore.sizingStats();
+
+/** `after - before` for the counters a test asserts on. */
+function delta(before: NitroUiSizingStats, after: NitroUiSizingStats) {
+  return {
+    corrections:
+      after.correctionsImmediate -
+      before.correctionsImmediate +
+      (after.correctionsBatched - before.correctionsBatched),
+    immediate: after.correctionsImmediate - before.correctionsImmediate,
+    flushes: after.flushes - before.flushes,
+    measurements: after.measurements - before.measurements,
+    epoch: after.environmentEpoch - before.environmentEpoch,
+    cachedSizes: after.cachedSizes - before.cachedSizes,
+  };
+}
+
+type Size = { width: number; height: number };
+
+/** Within what Yoga rounds to. */
+function sameSize(a: Size | null, b: Size | null): boolean {
+  return (
+    a != null &&
+    b != null &&
+    Math.abs(a.width - b.width) < 0.6 &&
+    Math.abs(a.height - b.height) < 0.6
+  );
+}
+
+function describeSize(size: Size | null): string {
+  return size == null
+    ? 'null'
+    : `${size.width.toFixed(2)}x${size.height.toFixed(2)}`;
+}
+
+function sizeOf(testId: string): Size | null {
+  return harnessUi.queryByTestId(testId);
+}
+
+function measured(testId: string): Size | null {
+  return handles.get(testId)?.measureContent() ?? null;
+}
+
+/** The report native keeps in step with what it is showing, parsed. */
+function reportOf(testId: string): { millis: number; presented: boolean } {
+  const raw = handles.get(testId)?.nuiTestStateReport() ?? '';
+  const [millis, presented] = raw.split('|');
+  return { millis: Number(millis), presented: presented === '1' };
+}
+
+/** The instant native is showing, or NaN when the handle is gone. */
+function displayedOf(testId: string): number {
+  return reportOf(testId).millis;
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollUntil<T>(
+  read: () => T | null,
+  failure: () => Error,
+  timeoutMs = 8000
+): Promise<T> {
+  const deadline = nitroUiCore.now() + timeoutMs;
+  for (;;) {
+    const value = read();
+    if (value != null) {
+      return value;
+    }
+    if (nitroUiCore.now() > deadline) {
+      throw failure();
+    }
+    await sleep(25);
+  }
+}
+
+async function waitForTestId(testId: string, timeoutMs = 10000) {
+  await pollUntil(
+    () => (harnessUi.queryByTestId(testId) == null ? null : true),
+    () =>
+      new Error(`No element with testID "${testId}" within ${timeoutMs}ms.`),
+    timeoutMs
+  );
+  return screen.findByTestId(testId);
+}
+
+/** Poll until the box of `testId` is `size`, i.e. until a size has really arrived. */
+async function waitForBox(testId: string, size: Size, what: string) {
+  return await pollUntil(
+    () => (sameSize(sizeOf(testId), size) ? sizeOf(testId) : null),
+    () =>
+      new Error(
+        `testID "${testId}" (${what}) never reached ` +
+          `${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box ` +
+          `${describeSize(sizeOf(testId))}, control measured ` +
+          `${describeSize(measured(testId))}.`
+      )
+  );
+}
+
+/** Poll until the control reports a size (a host measures after its first commit). */
+async function waitForMeasured(testId: string, what: string) {
+  return await pollUntil(
+    () => {
+      const size = measured(testId);
+      return size != null && size.width > 0 && size.height > 0 ? size : null;
+    },
+    () => new Error(`"${testId}" (${what}) never reported a measured size.`)
+  );
+}
+
+/** Poll until the control is showing `millis`, i.e. until a write or a revert landed. */
+async function waitForDisplayed(testId: string, millis: number, what: string) {
+  return await pollUntil(
+    () => (displayedOf(testId) === millis ? millis : null),
+    () =>
+      new Error(
+        `"${testId}" (${what}) is not showing ${String(millis)} - it reports ` +
+          `${String(displayedOf(testId))}, and the last box was ` +
+          `${describeSize(sizeOf(testId))}.`
+      )
+  );
+}
+
+/** Poll until the presentation of `testId` is `presented`. */
+async function waitForPresented(
+  testId: string,
+  presented: boolean,
+  what: string
+) {
+  return await pollUntil(
+    () => (reportOf(testId).presented === presented ? presented : null),
+    () =>
+      new Error(
+        `"${testId}" (${what}) never reported presented=${presented ? '1' : '0'} ` +
+          `- the control's report is "${
+            handles.get(testId)?.nuiTestStateReport() ?? '<no handle>'
+          }".`
+      )
+  );
+}
+
+/**
+ * Poll until the box agrees with the size the control itself reports, at a
+ * caller's `width`.
+ *
+ * Used for the `fillWidth` variants, where a single read of `measureContent()` is
+ * not enough: a Material 3 calendar lays out twice when its year range and
+ * `SelectableDates` land, so the first reported height can be a frame's-old
+ * number, and the correction that follows is the control settling rather than the
+ * engine failing. The claim is that the box ends up where the control ends up.
+ */
+async function waitForBoxToMatchMeasured(
+  testId: string,
+  width: number,
+  what: string
+) {
+  return await pollUntil(
+    () => {
+      const box = sizeOf(testId);
+      const size = measured(testId);
+      return box != null &&
+        size != null &&
+        Math.abs(box.width - width) < 0.6 &&
+        Math.abs(box.height - size.height) < 0.6
+        ? box
+        : null;
+    },
+    () =>
+      new Error(
+        `"${testId}" (${what}) never laid out at ${String(width)} x ` +
+          `its own height - last box ${describeSize(sizeOf(testId))}, control ` +
+          `measures ${describeSize(measured(testId))}.`
+      )
+  );
+}
+
+/** Wait for `eventLog` to hold at least `count` entries. */
+async function waitForEvents(count: number) {
+  return await pollUntil(
+    () => (eventLog.length >= count ? eventLog.slice() : null),
+    () =>
+      new Error(
+        `Only ${String(eventLog.length)} of ${String(count)} change events ` +
+          `arrived: ${JSON.stringify(eventLog)}.`
+      )
+  );
+}
+
+/**
+ * The key `DatePicker.tsx` builds: `"<variant>|<mode>"`.
+ *
+ * Written out here rather than imported — a harness that poisoned the cache
+ * through the library's own helper could not catch the helper being wrong, and a
+ * missing input in that key is exactly the R3 bug class. Note what is *not* in
+ * it: the date. That omission is the claim of the pair test, not an oversight.
+ */
+function sizingKey(variant: string, mode: string): string {
+  return `${variant}|${mode}`;
+}
+
+/**
+ * A size that is *not* any date picker's size, planted as the engine's answer for
+ * a configuration before it is first mounted (see the SegmentedControl suite).
+ */
+const WRONG_SIZE = { width: 13.25, height: 66.5 };
+
+/** Plant a wrong answer for several configurations, then drop the cache once. */
+function poisonConfigurations(keys: readonly string[]): void {
+  for (const key of keys) {
+    nitroUiCore.seedSizingSize(
+      COMPONENT,
+      key,
+      WRONG_SIZE.width,
+      WRONG_SIZE.height
+    );
+  }
+  nitroUiCore.invalidateSizingEnvironment();
+}
+
+/** Let queued work land before reading counters that only move on a later turn. */
+async function settle(ms = 250): Promise<void> {
+  await sleep(ms);
+}
+
+/**
+ * A local instant, from calendar fields — the same arithmetic native performs.
+ *
+ * Both sides resolve these fields in the *device's* time zone (a JS `Date`
+ * constructor and a native `Calendar`/`DateComponents`), which is what makes this
+ * usable as an expectation for `nuiTestSelect`: the claim under test is that the
+ * two agree, including across a DST boundary. `month` is 1-12, like the seam's.
+ */
+function localMs(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0
+): number {
+  return new Date(year, month - 1, day, hour, minute).getTime();
+}
+
+/** What the device thinks its UTC offset is, for the log lines (D21 evidence). */
+function zoneNote(): string {
+  const offsetMinutes = new Date().getTimezoneOffset();
+  return `tzOffset=${String(offsetMinutes)}`;
+}
+
+/**
+ * The widest string `mode` can format, from the same formatter the field's probe
+ * uses. Only for failure output: a mode change that does not move the box is
+ * undiagnosable without knowing what the two fields were sized from.
+ */
+function probeTextOf(mode: string): string {
+  const probe = new Date(2288, 10, 28, 23, 59);
+  return mode === 'time'
+    ? probe.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : probe.toLocaleDateString([], {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+}
+
+const columnStyle: StyleProp<ViewStyle> = { gap: 6 };
+
+afterEach(() => {
+  cleanup();
+  handles.clear();
+  eventLog.length = 0;
+  nitroUiCore.setSizingTraceEnabled(false);
+});
+
+describe('DatePicker · G5', () => {
+  it('lays each variant out at the size the control measured', async () => {
+    // The base R3 claim plus the policy claim for this component: `compact` is
+    // intrinsic (the field's own width), `inline` and `wheel` are `fillWidth`
+    // (the caller's width, the control's height). A `wheel` on Android is the
+    // inline picker, so it must behave like `inline` here rather than like a
+    // field — which is also the assertion that catches a variant flipping the
+    // wrong policy.
+    poisonConfigurations([
+      sizingKey('compact', 'date'),
+      sizingKey('inline', 'date'),
+      sizingKey('wheel', 'datetime'),
+    ]);
+    const before = stats();
+    const { unmount } = await render(
+      <View style={columnStyle}>
+        <DatePicker
+          defaultValue={new Date(2026, 6, 4, 13, 45)}
+          testID="field"
+          hybridRef={captureHybrid('field')}
+        />
+        <View style={{ width: 320 }}>
+          <DatePicker
+            defaultValue={new Date(2026, 6, 4)}
+            variant="inline"
+            testID="inline"
+            hybridRef={captureHybrid('inline')}
+          />
+        </View>
+        <View style={{ width: 320 }}>
+          <DatePicker
+            defaultValue={new Date(2026, 6, 4, 13, 45)}
+            variant="wheel"
+            mode="datetime"
+            testID="wheel"
+            hybridRef={captureHybrid('wheel')}
+          />
+        </View>
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('field');
+    await waitForTestId('inline');
+    await waitForTestId('wheel');
+
+    const fieldSize = await waitForMeasured('field', 'the compact field');
+    await waitForBox('field', fieldSize, 'the compact field');
+    // Intrinsic: the field is narrower than the caller's 320 dp box around the
+    // other two, and it is the control's width rather than the window's.
+    expect(fieldSize.width).toBeLessThan(320);
+
+    for (const testId of ['inline', 'wheel']) {
+      const size = await waitForMeasured(testId, `the ${testId} picker`);
+      // Height comes from the control, width from the caller. The height is what a
+      // `fillWidth` host has to get right (a calendar is not 34 dp tall); the width
+      // is what the policy is for, and 320 rather than the control's own width is
+      // the difference between `fillWidth` and `intrinsic`.
+      await waitForBoxToMatchMeasured(testId, 320, `the ${testId} picker`);
+      expect(size.height).toBeGreaterThan(100);
+    }
+
+    const after = delta(before, stats());
+    console.log(
+      `variants (${Platform.OS}, ${zoneNote()}): field=${describeSize(fieldSize)} ` +
+        `inline=${describeSize(sizeOf('inline'))} wheel=${describeSize(sizeOf('wheel'))} ` +
+        `delta=${JSON.stringify(after)}`
+    );
+    // Three configurations, each poisoned, so each owes a correction. Without a
+    // measure or a report any one of them sits at 13.25x66.5 and this fails.
+    expect(after.corrections).toBeGreaterThanOrEqual(3);
+    expect(sameSize(sizeOf('field'), WRONG_SIZE)).toBe(false);
+    unmount();
+  });
+
+  it('reports a pick once, and nothing for the same day', async () => {
+    // The event contract, in the order a user produces it: one pick, one event
+    // with the instant; the same day again, no event. The second half is the
+    // no-op suppression that also underwrites the rejection test below — a picker
+    // that echoed "still 2027-01-15" would make a snap-back invisible.
+    const FIRST = localMs(2027, 1, 15);
+    const { unmount } = await render(
+      <DatePicker
+        defaultValue={new Date(2026, 5, 4)}
+        onChange={recordChange('pick')}
+        testID="pick"
+        hybridRef={captureHybrid('pick')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('pick');
+    // The seed: an uncontrolled picker shows the `defaultValue` it was given.
+    await waitForDisplayed('pick', localMs(2026, 6, 4), 'the default');
+    // Uncontrolled means React sent no instant, so there is nothing to read back.
+    expect(handles.get('pick')?.valueMillis).toBeNull();
+
+    handles.get('pick')?.nuiTestSelect(2027, 1, 15, 0, 0);
+    const first = await waitForEvents(1);
+    // `mode="date"` shows no clock, so the seam's hour/minute are ignored and the
+    // displayed 00:00 survives — the instant a day cell tap produces.
+    expect(first).toEqual([`pick:${String(FIRST)}`]);
+    await waitForDisplayed('pick', FIRST, 'the pick');
+
+    handles.get('pick')?.nuiTestSelect(2027, 1, 15, 0, 0);
+    await settle(300);
+    expect(eventLog).toEqual([`pick:${String(FIRST)}`]);
+
+    handles.get('pick')?.nuiTestSelect(2027, 1, 16, 0, 0);
+    const second = await waitForEvents(2);
+    expect(second[1]).toBe(`pick:${String(localMs(2027, 1, 16))}`);
+    console.log(
+      `events (${Platform.OS}): ${JSON.stringify(eventLog)} default=` +
+        `${String(localMs(2026, 6, 4))}`
+    );
+    unmount();
+  });
+
+  it('reverts a pick the parent refuses', async () => {
+    // The controlled half of the handshake (core.md §4), with the tap-twice oracle
+    // the SegmentedControl suite uses: a picker that has reverted is showing the
+    // parent's date again, so *the same pick is a change again*. A picker that
+    // never reverted is still showing 2027-01-15, the second pick is a no-op, and
+    // the log has one line instead of two.
+    const PARENT = localMs(2026, 6, 4);
+    const PICKED = localMs(2027, 1, 15);
+    const { unmount } = await render(
+      <DatePicker
+        value={new Date(PARENT)}
+        onChange={recordChange('rejected')}
+        testID="rejected"
+        hybridRef={captureHybrid('rejected')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('rejected');
+    await waitForDisplayed('rejected', PARENT, 'the parent value');
+
+    handles.get('rejected')?.nuiTestSelect(2027, 1, 15, 0, 0);
+    const first = await waitForEvents(1);
+    expect(first).toEqual([`rejected:${String(PICKED)}`]);
+    // Native owns the *displayed* instant, so the pick is painted first and the
+    // parent's refusal is what puts it back. Reading "still painted" here is not
+    // observable: waiting for the event already yielded the JS loop, so the echo
+    // of the event count and its commit have landed by now on a fast device. The
+    // revert itself, and the pick-twice oracle below, are what the handshake is
+    // actually asserted on.
+    await waitForDisplayed('rejected', PARENT, 'the revert');
+    expect(handles.get('rejected')?.valueMillis).toBe(PARENT);
+
+    handles.get('rejected')?.nuiTestSelect(2027, 1, 15, 0, 0);
+    const second = await waitForEvents(2);
+    expect(second).toEqual([
+      `rejected:${String(PICKED)}`,
+      `rejected:${String(PICKED)}`,
+    ]);
+    console.log(
+      `rejection (${Platform.OS}): log=${JSON.stringify(eventLog)} ` +
+        `displayed=${String(displayedOf('rejected'))}`
+    );
+    unmount();
+  });
+
+  it('clamps a value and a pick to minimumDate/maximumDate', async () => {
+    // Two controls, because the two clamps are two different paths and a
+    // controlled one cannot show the second: a pick that native clamped onto a
+    // bound is refused by a parent that keeps sending its own value, so the
+    // controlled instance ends up back on the value rather than on the bound.
+    //  - `bounded-value`: React sends an instant past `maximumDate`, and both the
+    //    wrapper and native clamp it. The handle reports the *clamped* instant,
+    //    which is what makes an out-of-range value readable instead of live;
+    //  - `bounded-pick`: uncontrolled, so a pick outside the range can stay where
+    //    the clamp put it and be read back.
+    const MIN = localMs(2026, 1, 1);
+    const MAX = localMs(2027, 1, 1);
+    const { unmount } = await render(
+      <View style={columnStyle}>
+        <DatePicker
+          value={new Date(localMs(2030, 1, 1))}
+          minimumDate={new Date(MIN)}
+          maximumDate={new Date(MAX)}
+          onChange={recordChange('bounded-value')}
+          testID="bounded-value"
+          hybridRef={captureHybrid('bounded-value')}
+        />
+        <DatePicker
+          defaultValue={new Date(2026, 5, 4)}
+          minimumDate={new Date(MIN)}
+          maximumDate={new Date(MAX)}
+          onChange={recordChange('bounded-pick')}
+          testID="bounded-pick"
+          hybridRef={captureHybrid('bounded-pick')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('bounded-value');
+    await waitForTestId('bounded-pick');
+
+    await waitForDisplayed('bounded-value', MAX, 'a value past maximumDate');
+    expect(handles.get('bounded-value')?.valueMillis).toBe(MAX);
+    expect(handles.get('bounded-value')?.maximumMillis).toBe(MAX);
+    expect(handles.get('bounded-value')?.minimumMillis).toBe(MIN);
+    // A clamp is not a pick: nothing reached JS.
+    expect(eventLog).toEqual([]);
+
+    await waitForDisplayed('bounded-pick', localMs(2026, 6, 4), 'the seed');
+    // A pick above the range lands on the upper bound and reports it.
+    handles.get('bounded-pick')?.nuiTestSelect(2031, 6, 1, 0, 0);
+    const clampedHigh = await waitForEvents(1);
+    expect(clampedHigh).toEqual([`bounded-pick:${String(MAX)}`]);
+    await waitForDisplayed('bounded-pick', MAX, 'the upper clamp');
+
+    // ...and the 31st of a month the target year does not have stays inside the
+    // month rather than rolling over, which is the other clamp a calendar seam
+    // needs (2026-02-31 has to mean 2026-02-28).
+    handles.get('bounded-pick')?.nuiTestSelect(2026, 2, 31, 0, 0);
+    const clampedDay = await waitForEvents(2);
+    expect(clampedDay[1]).toBe(`bounded-pick:${String(localMs(2026, 2, 28))}`);
+
+    handles.get('bounded-pick')?.nuiTestSelect(2020, 1, 1, 0, 0);
+    const clampedLow = await waitForEvents(3);
+    expect(clampedLow[2]).toBe(`bounded-pick:${String(MIN)}`);
+    await waitForDisplayed('bounded-pick', MIN, 'the lower clamp');
+    console.log(
+      `clamping (${Platform.OS}, ${zoneNote()}): min=${String(MIN)} ` +
+        `max=${String(MAX)} log=${JSON.stringify(eventLog)}`
+    );
+    unmount();
+  });
+
+  it('round-trips an instant across a DST boundary', async () => {
+    // The value on the wire is an instant and both platforms' pickers speak in
+    // calendar fields - Material 3 stores a *UTC midnight* per day, SwiftUI a
+    // `Date` - so the conversion between the two is where an hour goes missing.
+    // Asserted on the days either side of both 2026 transitions in Europe/Lisbon
+    // (29 March, 25 October) plus a winter and a summer instant, at clock times
+    // that exist in every zone, and by both directions:
+    //  - `dst-set`: React writes an instant, native shows it, and shows it
+    //    unchanged (`nuiTestStateReport` is native's own reading of the instant);
+    //  - `dst-pick`: uncontrolled, so a pick's calendar fields can produce an
+    //    instant and have it survive - which is the direction the picker's own
+    //    day-storage decides. An hour lost across a boundary shows up as an
+    //    instant one hour off JS's own reading of the same fields.
+    const WINTER = localMs(2026, 1, 5, 12, 30);
+    const SUMMER = localMs(2026, 7, 5, 12, 30);
+    const SPRING_DAY = localMs(2026, 3, 29, 12, 30);
+    const AUTUMN_EVE = localMs(2026, 10, 24, 23, 45);
+    const AUTUMN_DAY = localMs(2026, 10, 25, 23, 45);
+    const { rerender, unmount } = await render(
+      <View style={columnStyle}>
+        <DatePicker
+          value={new Date(WINTER)}
+          mode="datetime"
+          variant="inline"
+          testID="dst-set"
+          hybridRef={captureHybrid('dst-set')}
+        />
+        <DatePicker
+          defaultValue={new Date(AUTUMN_EVE)}
+          mode="datetime"
+          onChange={recordChange('dst-pick')}
+          testID="dst-pick"
+          hybridRef={captureHybrid('dst-pick')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('dst-set');
+    await waitForTestId('dst-pick');
+    await waitForDisplayed('dst-set', WINTER, 'the winter instant');
+    expect(handles.get('dst-set')?.valueMillis).toBe(WINTER);
+
+    for (const [label, millis] of [
+      ['summer', SUMMER],
+      ['spring-forward day', SPRING_DAY],
+      ['day before the autumn change', AUTUMN_EVE],
+      ['autumn change day', AUTUMN_DAY],
+    ] as const) {
+      await rerender(
+        <View style={columnStyle}>
+          <DatePicker
+            value={new Date(millis)}
+            mode="datetime"
+            variant="inline"
+            testID="dst-set"
+            hybridRef={captureHybrid('dst-set')}
+          />
+          <DatePicker
+            defaultValue={new Date(AUTUMN_EVE)}
+            mode="datetime"
+            onChange={recordChange('dst-pick')}
+            testID="dst-pick"
+            hybridRef={captureHybrid('dst-pick')}
+          />
+        </View>
+      );
+      await waitForDisplayed('dst-set', millis, `the ${label} instant`);
+      expect(handles.get('dst-set')?.valueMillis).toBe(millis);
+    }
+
+    // The other direction, on the uncontrolled instance: the same fields, in the
+    // order a user produces them, must produce JS's own instants.
+    // Each pick is a different instant from the one before it, including the
+    // `defaultValue` this instance was seeded with (`AUTUMN_EVE`): the suppression
+    // rule means a pick of the instant already showing reports nothing, and a
+    // missing line here would read as a DST failure.
+    const picks: ReadonlyArray<
+      readonly [number, number, number, number, number, number]
+    > = [
+      [2026, 1, 5, 12, 30, WINTER],
+      [2026, 3, 29, 12, 30, SPRING_DAY],
+      [2026, 10, 25, 23, 45, AUTUMN_DAY],
+    ];
+    for (const [
+      index,
+      [year, month, day, hour, minute, millis],
+    ] of picks.entries()) {
+      handles.get('dst-pick')?.nuiTestSelect(year, month, day, hour, minute);
+      const logged = await waitForEvents(index + 1);
+      expect(logged[index]).toBe(`dst-pick:${String(millis)}`);
+    }
+    console.log(
+      `dst (${Platform.OS}, ${zoneNote()}): winter=${String(WINTER)} ` +
+        `summer=${String(SUMMER)} spring=${String(SPRING_DAY)} ` +
+        `autumnEve=${String(AUTUMN_EVE)} autumn=${String(AUTUMN_DAY)}`
+    );
+    unmount();
+  });
+
+  it('presents nothing after the mount that opened it is gone', async () => {
+    // The B1 rule for the one control in this library with a window of its own.
+    // A Material 3 `Dialog` is a second window and a SwiftUI `.popover` is a view
+    // the presenting controller hosts, so either one that outlived the mount would
+    // sit on top of the app and swallow the next thing the user touches. The
+    // assertion therefore cannot be a readout of the dropped view (it has no handle
+    // any more); it is a witness the suite presses *after* the drop. A surviving
+    // presentation eats that press, and the press counter never leaves zero.
+    const presses: number[] = [];
+    const Witness = () => (
+      <Pressable
+        onPress={() => {
+          presses.push(1);
+        }}
+        testID="witness"
+      >
+        <Text>Witness</Text>
+      </Pressable>
+    );
+
+    const first = await render(
+      <View style={columnStyle}>
+        <DatePicker
+          defaultValue={new Date(2026, 6, 4)}
+          testID="opener"
+          hybridRef={captureHybrid('opener')}
+        />
+        <Witness />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('witness');
+    await waitForTestId('opener');
+
+    handles.get('opener')?.nuiTestPresent();
+    await waitForPresented('opener', true, 'the field press');
+    // Opening is not picking: the instant and the event log are untouched.
+    expect(displayedOf('opener')).toBe(localMs(2026, 7, 4));
+    expect(eventLog).toEqual([]);
+
+    first.unmount();
+    await settle(300);
+    handles.clear();
+    expect(sizeOf('opener')).toBeNull();
+
+    const second = await render(<Witness />, { timeout: 20000 });
+    const witness = await waitForTestId('witness');
+    await userEvent.press(witness);
+    await pollUntil(
+      () => (presses.length >= 1 ? true : null),
+      () =>
+        new Error(
+          'A press on a plain Pressable did not land after the picker was ' +
+            'dropped with its presentation open, which is what a surviving ' +
+            'popover or dialog window looks like from here.'
+        )
+    );
+    expect(presses.length).toBeGreaterThanOrEqual(1);
+    second.unmount();
+  });
+
+  it('is inert while disabled', async () => {
+    // `disabled` has no native equivalent for a calendar or a clock: Material 3's
+    // `DatePicker` has no `enabled`, and SwiftUI's `.disabled` cannot reach the
+    // `nuiTestSelect` path. What the prop has to mean is "nothing the user does
+    // can change the app's date", which is assertable on the seam: no presentation,
+    // no selection, no event.
+    const PINNED = localMs(2026, 6, 4);
+    const { unmount } = await render(
+      <DatePicker
+        value={new Date(PINNED)}
+        disabled
+        onChange={recordChange('locked')}
+        testID="locked"
+        hybridRef={captureHybrid('locked')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('locked');
+    await waitForDisplayed('locked', PINNED, 'the pinned value');
+
+    handles.get('locked')?.nuiTestPresent();
+    handles.get('locked')?.nuiTestSelect(2027, 1, 15, 9, 30);
+    await settle(400);
+    expect(reportOf('locked').presented).toBe(false);
+    expect(displayedOf('locked')).toBe(PINNED);
+    expect(eventLog).toEqual([]);
+    console.log(
+      `disabled (${Platform.OS}): report="${
+        handles.get('locked')?.nuiTestStateReport() ?? '<none>'
+      }" log=${JSON.stringify(eventLog)}`
+    );
+    unmount();
+  });
+
+  it('gives two compact pickers one box, whatever dates they show', async () => {
+    // The sizing decision this component had to make (brief: "the field width
+    // depends on locale formatting - decide and justify, with a test"). The key is
+    // `variant|mode` and the *value is deliberately not in it*, because two
+    // instances that share a key share the engine's one size for it: if a field's
+    // width depended on the date it shows, every pair of pickers on one screen
+    // would spend the process correcting each other's box. Asserted twice:
+    //  - two instances, two very different dates, one box, and both boxes are the
+    //    size the control measures rather than the poisoned guess;
+    //  - one instance, the same key, its date moved from the narrowest day to the
+    //    widest the mode can produce: the box must not move, and no correction is
+    //    allowed - the entry is already exact (D17), which is only true while the
+    //    width is value-independent.
+    const NARROW = new Date(2026, 8, 1, 0, 0); //  Sep  1, 2026
+    const WIDE = new Date(2288, 10, 28, 0, 0); //  Nov 28, 2288
+    poisonConfigurations([sizingKey('compact', 'date')]);
+    const { rerender, unmount } = await render(
+      <View style={columnStyle}>
+        <DatePicker
+          defaultValue={NARROW}
+          testID="narrow"
+          hybridRef={captureHybrid('narrow')}
+        />
+        <DatePicker
+          defaultValue={WIDE}
+          testID="wide"
+          hybridRef={captureHybrid('wide')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('narrow');
+    await waitForTestId('wide');
+    const narrowSize = await waitForMeasured('narrow', 'the 2026 field');
+    await waitForBox('narrow', narrowSize, 'the 2026 field');
+    const wideSize = await waitForMeasured('wide', 'the 2288 field');
+    // One key, so one answer - and it is the answer the control gives, not the
+    // fallback the engine guessed. A width that followed the date would put these
+    // two fields at different widths and leave one box wrong.
+    expect(sameSize(wideSize, narrowSize)).toBe(true);
+    // Polled: two instances of one cold configuration are corrected on separate
+    // turns, and Android in particular settles the second box after the control
+    // has already reported its size.
+    await waitForBox('wide', narrowSize, 'the 2288 field');
+    expect(sameSize(sizeOf('narrow'), WRONG_SIZE)).toBe(false);
+    // Not degenerate: the field really is a field, wider than the 44 pt floor the
+    // implementation clamps its probe to.
+    expect(narrowSize.width).toBeGreaterThan(44);
+
+    // Second half: the same instance, a different date, and the box holds.
+    await settle(400);
+    const before = stats();
+    await rerender(
+      <View style={columnStyle}>
+        <DatePicker
+          defaultValue={WIDE}
+          testID="narrow"
+          hybridRef={captureHybrid('narrow')}
+        />
+        <DatePicker
+          defaultValue={WIDE}
+          testID="wide"
+          hybridRef={captureHybrid('wide')}
+        />
+      </View>
+    );
+    await settle(400);
+    const after = delta(before, stats());
+    console.log(
+      `pair (${Platform.OS}, ${zoneNote()}): narrow=${describeSize(narrowSize)} ` +
+        `wide=${describeSize(wideSize)} box=${describeSize(sizeOf('narrow'))} ` +
+        `delta=${JSON.stringify(after)}`
+    );
+    expect(sameSize(sizeOf('narrow'), narrowSize)).toBe(true);
+    expect(sameSize(measured('narrow'), narrowSize)).toBe(true);
+    // A configuration whose cached size is exact costs no correction. With the
+    // value in the key - or a field that sized itself to its own string - the
+    // 2288 date wants a different box and this counter moves.
+    expect(after.corrections).toBe(0);
+    unmount();
+  });
+
+  it('keeps a date field and a time field at their own boxes', async () => {
+    // The other half of the sizing-key decision. `mode` IS in the key, so a date
+    // field and a time field are two configurations with two cached answers;
+    // `gives two compact pickers one box` covers the input that is deliberately
+    // *not* in it. Take the mode out and the pair shares one cached width, which
+    // cannot be right for both - the claim here is that each box ends up at its
+    // own control's size rather than at the one answer the key can hold.
+    poisonConfigurations([
+      sizingKey('compact', 'date'),
+      sizingKey('compact', 'time'),
+    ]);
+    const { unmount } = await render(
+      <View style={columnStyle}>
+        <DatePicker
+          defaultValue={new Date(2026, 6, 4, 13, 45)}
+          testID="key-date"
+          hybridRef={captureHybrid('key-date')}
+        />
+        <DatePicker
+          defaultValue={new Date(2026, 6, 4, 13, 45)}
+          mode="time"
+          testID="key-time"
+          hybridRef={captureHybrid('key-time')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('key-date');
+    await waitForTestId('key-time');
+    const dateSize = await waitForMeasured('key-date', 'the date field');
+    await waitForBox('key-date', dateSize, 'the date field');
+    const timeSize = await waitForMeasured('key-time', 'the time field');
+    await waitForBox('key-time', timeSize, 'the time field');
+    console.log(
+      `mode-keys (${Platform.OS}, ${zoneNote()}): date=${describeSize(dateSize)} ` +
+        `time=${describeSize(timeSize)} boxes=${describeSize(
+          sizeOf('key-date')
+        )}/${describeSize(sizeOf('key-time'))} ` +
+        `probeDate="${probeTextOf('date')}" probeTime="${probeTextOf('time')}"`
+    );
+    // Two configurations: the widest date a `date` field can show is wider than
+    // the widest time, in every locale these two devices run.
+    expect(dateSize.width).toBeGreaterThan(timeSize.width + 1);
+    // And each is laid out at its own size. One shared key would leave the
+    // narrower of the two at the wider one's box, or set both chasing a cache
+    // entry that is right for neither.
+    expect(sameSize(sizeOf('key-date'), dateSize)).toBe(true);
+    expect(sameSize(sizeOf('key-time'), timeSize)).toBe(true);
+    unmount();
+  });
+
+  it('re-measures the field when the mode changes', async () => {
+    // `mode` is in the key, so `compact|date` and `compact|time` are two
+    // configurations. Drop the mode off the key and a time field keeps the date
+    // field's box: the planted size below is the *date* field's own box, so the
+    // only thing that can move the control is a new configuration's answer.
+    const DATE = 'mode-date';
+    const { rerender, unmount } = await render(
+      <DatePicker
+        defaultValue={new Date(2026, 6, 4, 13, 45)}
+        testID={DATE}
+        hybridRef={captureHybrid(DATE)}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId(DATE);
+    const dateSize = await waitForMeasured(DATE, 'the date field');
+    await waitForBox(DATE, dateSize, 'the date field');
+
+    nitroUiCore.seedSizingSize(
+      COMPONENT,
+      sizingKey('compact', 'time'),
+      dateSize.width,
+      dateSize.height
+    );
+    nitroUiCore.invalidateSizingEnvironment();
+    await settle(200);
+    const before = stats();
+
+    await rerender(
+      <DatePicker
+        defaultValue={new Date(2026, 6, 4, 13, 45)}
+        mode="time"
+        testID={DATE}
+        hybridRef={captureHybrid(DATE)}
+      />
+    );
+    await settle(600);
+    const now = measured(DATE);
+    const after = delta(before, stats());
+    // Logged before the assertions: this test's whole value is the difference
+    // between a date field and a time field, and a locale where they are the same
+    // width has to be visible in the output rather than as a bare `false`.
+    console.log(
+      `mode-change (${Platform.OS}, ${zoneNote()}): date=${describeSize(dateSize)} ` +
+        `time=${describeSize(now)} box=${describeSize(sizeOf(DATE))} ` +
+        `probeDate="${probeTextOf('date')}" probeTime="${probeTextOf('time')}" ` +
+        `delta=${JSON.stringify(after)}`
+    );
+    // A time field is narrower than a date field in every locale this is measured
+    // in, so the planted answer is provably wrong for the new configuration...
+    expect(now !== null && now.width < dateSize.width - 1).toBe(true);
+    // ...the box followed the control rather than the guess, and the engine
+    // recorded a correction for the key that includes the mode.
+    expect(sameSize(sizeOf(DATE), now)).toBe(true);
+    expect(after.corrections).toBeGreaterThanOrEqual(1);
+    unmount();
+  });
+
+  it("starts a remount from its own default, not the previous mount's", async () => {
+    // The `RecyclableView` reset, from the outside. A recycled instance whose
+    // model kept the old instant, or whose `didApplyDefault` flag survived, paints
+    // a date its React element never mentioned — invisible to the box and to the
+    // handle's `valueMillis` (which reports what *React* sent). The report is what
+    // can see it, and a presentation left open by the dropped mount is read the
+    // same way.
+    const DEFAULT_DAY = localMs(2026, 6, 4);
+    const PICKED = localMs(2027, 1, 15);
+    const tree = () => (
+      <View style={columnStyle}>
+        <DatePicker
+          defaultValue={new Date(DEFAULT_DAY)}
+          onChange={recordChange('recycled')}
+          testID="recycled"
+          hybridRef={captureHybrid('recycled')}
+        />
+      </View>
+    );
+
+    const first = await render(tree(), { timeout: 20000 });
+    await waitForTestId('recycled');
+    await waitForDisplayed('recycled', DEFAULT_DAY, 'the first default');
+    handles.get('recycled')?.nuiTestSelect(2027, 1, 15, 0, 0);
+    await waitForEvents(1);
+    await waitForDisplayed('recycled', PICKED, 'the first pick');
+    // Open the presentation *and* pick, so the dropped mount leaves both kinds of
+    // state behind if either survives.
+    handles.get('recycled')?.nuiTestPresent();
+    await waitForPresented('recycled', true, 'the first presentation');
+    first.unmount();
+    await settle(200);
+    handles.clear();
+
+    const second = await render(tree(), { timeout: 20000 });
+    await waitForTestId('recycled');
+    await waitForMeasured('recycled', 'the remounted field');
+    // No correction is required here, but the report is only meaningful once the
+    // control has committed, so wait for that and then read it.
+    await settle(200);
+    const state = reportOf('recycled');
+    console.log(
+      `remount (${Platform.OS}): report="${
+        handles.get('recycled')?.nuiTestStateReport() ?? '<none>'
+      }" expected=${String(DEFAULT_DAY)}|0`
+    );
+    expect(state.millis).toBe(DEFAULT_DAY);
+    expect(state.presented).toBe(false);
+    // The new mount has emitted nothing of its own.
+    expect(eventLog).toHaveLength(1);
+    // And it is the *default* rather than a value it could have inherited: the
+    // pick above proves the seam works, so a remount showing 2027-01-15 could only
+    // come from state that survived.
+    expect(state.millis).not.toBe(PICKED);
+    second.unmount();
+  });
+});

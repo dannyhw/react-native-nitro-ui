@@ -7,6 +7,7 @@ import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
 import com.margelo.nitro.nitroui.core.NitroUiDeclaredFallbacks
 import com.margelo.nitro.nitroui.views.HybridNitroUiButtonManager
+import com.margelo.nitro.nitroui.views.HybridNitroUiDatePickerManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiProgressManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSliderManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSegmentedControlManager
@@ -47,6 +48,7 @@ class NitroUiPackage : BaseReactPackage() {
     HybridNitroUiButtonManager(),
     HybridNitroUiProgressManager(),
     HybridNitroUiSegmentedControlManager(),
+    HybridNitroUiDatePickerManager(),
   )
 
   companion object {

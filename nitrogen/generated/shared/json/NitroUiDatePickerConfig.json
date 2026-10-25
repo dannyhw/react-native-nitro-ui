@@ -1,0 +1,24 @@
+{
+  "uiViewClassName": "NitroUiDatePicker",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "valueMillis": true,
+    "defaultValueMillis": true,
+    "mostRecentEventCount": true,
+    "mode": true,
+    "variant": true,
+    "minimumMillis": true,
+    "maximumMillis": true,
+    "disabled": true,
+    "tintColor": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onValueChange": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}

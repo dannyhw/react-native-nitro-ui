@@ -13,7 +13,7 @@ import type { ComponentName } from '../types';
  * host).
  */
 const ROW_HEIGHTS: Record<
-  Exclude<ComponentName, 'button' | 'segmented-control'>,
+  Exclude<ComponentName, 'button' | 'segmented-control' | 'date-picker'>,
   number
 > = {
   // RN's Switch, SwiftUI's Toggle and M3's Switch all fit; 34 is T02/T10's row.
@@ -27,7 +27,7 @@ const ROW_HEIGHTS: Record<
   progress: 44,
 };
 
-/* Button and SegmentedControl have no row height on purpose - see `fitRowStyle`. */
+/* Button, SegmentedControl and DatePicker have no row height on purpose - see `fitRowStyle`. */
 
 /**
  * Whether a component's own measurement decides its box, so no arm may be given a
@@ -40,8 +40,12 @@ const ROW_HEIGHTS: Record<
  */
 function isSizedByContent(
   component: ComponentName
-): component is 'button' | 'segmented-control' {
-  return component === 'button' || component === 'segmented-control';
+): component is 'button' | 'segmented-control' | 'date-picker' {
+  return (
+    component === 'button' ||
+    component === 'segmented-control' ||
+    component === 'date-picker'
+  );
 }
 
 /**
@@ -222,6 +226,55 @@ export function progressValue(value: boolean): number {
  * change-event signature without the bench importing any of those types.
  */
 export function onSegmentChange(): void {
+  // Intentionally empty: state is driven by the runner.
+}
+
+/**
+ * The two instants every DatePicker arm shows, built once.
+ *
+ * Same month, same year, same clock time, and one is a two-digit day: the
+ * `update.date-picker` cell must change what the control *displays* (that is the
+ * transaction it prices), and it must not change anything else - a different
+ * month would move the calendar's page, and a different year its year header,
+ * which are the picker's work rather than the value's.
+ *
+ * Module-level for the same reason as `segmentedOptions`: an arm that handed its
+ * control a fresh `Date` on every flip would pay an object-identity change no
+ * other arm pays.
+ */
+const DATES = [
+  new Date(2026, 10, 4, 9, 0),
+  new Date(2026, 10, 14, 9, 0),
+] as const;
+
+/** The instant every DatePicker arm selects, flipped by `update.date-picker`. */
+export function dateValue(value: boolean): Date {
+  return DATES[value ? 1 : 0];
+}
+
+/**
+ * The same instant spelled as text, for the `rn-core` floor.
+ *
+ * RN core has no date picker, so the idiomatic core equivalent is the label a
+ * JS-only control would show - which is also what the brief asks this arm to be.
+ * One module-level `Intl` formatter keeps the flip to a format call: building a
+ * formatter per render would price ICU setup rather than the control.
+ */
+const DATE_LABEL_FORMAT = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+});
+
+export function dateLabel(value: boolean): string {
+  return DATE_LABEL_FORMAT.format(dateValue(value));
+}
+
+/**
+ * Stable no-op date handler for the reference arms, for the same reason as
+ * {@link onSegmentChange}: the runner owns the state, so no arm may pay a new
+ * callback identity per render. Written without parameters so it satisfies each
+ * runtime's own change-event signature without the bench importing those types.
+ */
+export function onDateChange(): void {
   // Intentionally empty: state is driven by the runner.
 }
 
