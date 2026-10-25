@@ -1,15 +1,23 @@
 # Committed benchmark baselines
 
-**Status (T02 round 4): no latency baselines are committed.** There is no
-`ios27-sim-*.json` and no `android35-emu-pixel9.json`, so `--check` on either
-platform exits with `no baseline at bench/baselines/<deviceKey>.json` and gates
-nothing. The one Android baseline that was committed (`bb41d00`) was recorded
+**Status (A1b): Android is committed, iOS is not.** `android35-emu-pixel9.json`
+comes from one clean `--plan full --launches 8` run on the canonical API 35
+Pixel 9 emulator at `3533d64` — 1120/1120 launches, no problems, ART
+`speed-profile`, load average 2.39 over 14 cores (`quiet: true`) — so
+`--check` on Android gates: 90 nitro-ui rows within tolerance, 44 suppressed by
+their own within-run spread, 0 failures. There is still no iPhone 17 baseline
+(`ios27-sim-iphone17.json`): two iOS `--plan full` runs have completed
+problem-free since (A1 at load 10.50, A1b at 7.60, ceiling 7.0) and both were
+refused by the idle-machine guard, so `--check` on iOS still exits with
+`no baseline at bench/baselines/<deviceKey>.json` and gates nothing.
+
+The one Android baseline committed before this one (`bb41d00`) was recorded
 while nitro-ui self-skipped: all seven of its nitro-ui cells carry a
 `skipReason` and zero metrics, so every `--check` against it degraded to
 `new-arm` and could never fail. It measured Android `presented` through the
-probe bug fixed in round 4 too. Deleting it is honest; a replacement must come
-from one clean `--plan full --launches 8` run on an idle canonical device per
-the rules below — never from a quick run.
+probe bug fixed in round 4 too. Deleting it was honest; the replacement above
+comes from one clean `--plan full --launches 8` run on an idle canonical device
+per the rules below — never from a quick run.
 
 One JSON per canonical device, produced by a run the `--check` flag can read:
 
@@ -35,6 +43,12 @@ Rules (docs/DECISIONS.md D9, enforced by `baselineBlockers()` in
   a new file. Anything that is not the canonical device uses same-run ratio
   tables and `--compare <ref>`, never `--check`.
 - **One dedicated commit** per refresh, so the diff is only this directory.
+- **Prettier-clean.** The runner writes 2-space JSON with one `launchRatios`
+  entry per line, and `bun run check` runs `prettier --check .`, which rejects
+  that shape. Run `prettier --write` on a freshly minted file before
+  committing. The pass changes bytes only: the parsed file is identical and
+  `--check` still reads it back (seen on `android35-emu-pixel9.json`,
+  244017 -> 216717 bytes).
 
 `--update-baseline` prints every reason it refused.
 
