@@ -3,8 +3,10 @@
 package com.margelo.nitro.nitroui
 
 import android.app.Activity
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.text.TextPaint
 import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.DatePicker
@@ -425,11 +427,22 @@ internal class DatePickerModel : NitroUiModel() {
  * locale- and font-scale-correct without this file measuring text at all (Compose's
  * own measure pass then reports the size, which is why Android needs no width cache).
  *
+ * Which candidate is widest is a question about *pixels*, so it is answered by
+ * measuring ([WIDEST_MEASURE]) rather than by comparing the strings: `maxOf` over
+ * the formatted strings themselves compares them lexicographically, and in a
+ * `.MEDIUM` date format a one-digit day sorts *after* a two-digit one, so the
+ * alphabetical winner (`Sep 8, 2288`) is a character narrower than the dates people
+ * have - `Oct 25, 2026` did not fit the width its own probe selected.
+ *
  * Keyed by `(mode, locale)` and process-wide, because a hosted control is its own
  * composition and `remember` cannot share anything between controls
  * (`core.md` "Shared objects"). Dynamic Type is *not* in the key on purpose: it
  * changes what the probe needs to be *in pixels*, not which characters are the
- * widest, and the pixels are Compose's problem.
+ * widest, and the pixels are Compose's problem. That still holds now that the
+ * ranking measures: this object takes the *identity* of the widest string from the
+ * measurement and never a size. A text width is a sum of glyph advances times the
+ * text size and [TextPaint]'s tracking is in em, so the order is the same at every
+ * font scale - only the pixels move, and Compose still produces those.
  */
 private object DatePickerFieldText {
   private val cache = HashMap<String, Pair<DateFormat, String>>()
@@ -457,14 +470,14 @@ private object DatePickerFieldText {
     cache[key]?.let { return it }
     val formatter = formatter(mode, locale)
     val widest =
-      PROBES.maxOf { probe ->
+      PROBES.map { probe ->
         val calendar =
           Calendar.getInstance(locale).apply {
             clear()
             set(probe[0], probe[1], probe[2], probe[3], probe[4])
           }
         formatter.format(calendar.time)
-      }
+      }.maxBy { text -> WIDEST_MEASURE.measureText(text) }
     // The cache is bounded by the handful of modes and locales one app renders; the
     // cap is what stops a control that renders under many `LocaleList`s from growing
     // it for the life of the process.
@@ -487,6 +500,25 @@ private object DatePickerFieldText {
     }
 
   private const val MAX_ENTRIES = 32
+
+  /**
+   * The instrument that picks the widest candidate: the field's own text style
+   * (`labelLarge` is 14 sp Medium with 0.05 em tracking) at an arbitrary size,
+   * because only the *order* of the candidates is read from it.
+   *
+   * No width measured here reaches the layout - the composable lays the winning
+   * string out and Compose's measure pass turns it into pixels at the user's font
+   * scale, which is why this cache holds a string and not a size.
+   */
+  private val WIDEST_MEASURE =
+    TextPaint().apply {
+      textSize = 40f
+      letterSpacing = 0.05f
+      // The face `labelLarge`'s Medium weight resolves to under the default font
+      // family. The weight only matters insofar as it can change which candidate is
+      // widest; nothing here decides how wide anything is drawn.
+      typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+    }
 
   /**
    * The dates whose formatting is widest: every digit at its widest form, every month
@@ -733,9 +765,10 @@ private class DatePickerHost(
       //
       // `clearAndSetSemantics {}` empties the node: without it TalkBack reads the probe
       // as well, and the field announces a date nobody picked.
-      // `Box` rather than the button's own `Row`: `matchParentSize` is a `BoxScope`
-      // extension, and overlaying the two texts is what makes the field exactly as wide
-      // as the probe instead of as wide as probe + value.
+      // `Box` rather than the button's own `Row`: a `Row` would place the two texts
+      // side by side and make the field as wide as probe *plus* value. Stacked, the
+      // field is as wide as the wider of the two - which is the probe for every date
+      // this mode can show.
       Box {
         Text(
           text = DatePickerFieldText.probe(mode),
@@ -749,11 +782,17 @@ private class DatePickerHost(
           text = DatePickerFieldText.format(mode, model.displayed),
           style = MaterialTheme.typography.labelLarge,
           maxLines = 1,
+          // Asks the `Box` for its own width as well, so the field is
+          // `max(probe, value)` instead of exactly the probe. While the probe really
+          // is the widest string the mode can produce the two agree and the value
+          // cannot move the box; when a probe under-estimates - a locale this file has
+          // not met, an era designator, a five-digit year - the cost is a field a few
+          // dp too wide for one measure rather than a date the user cannot read.
+          // `DatePicker.harness.tsx`'s "gives two compact pickers one box" test keeps
+          // that honest: a narrow date and a wide date share one sizing key and must
+          // get one box, so a value that moves the box because the probe is short
+          // fails there.
           overflow = TextOverflow.Ellipsis,
-          // Matches the probe's box instead of asking for its own, so the Box's width is
-          // the probe's and an unexpectedly long value ellipsises rather than widening the
-          // field mid-mount.
-          modifier = Modifier.matchParentSize(),
         )
       }
     }
