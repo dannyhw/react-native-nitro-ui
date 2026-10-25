@@ -1,7 +1,7 @@
 # G5 — DatePicker (0.2) — implementation report
 
 **Branch:** `task/G5-datepicker` (from `main` @ `fd55c1a`)
-**Round:** implementation round 1 of 1, fix round 1 of 2
+**Round:** implementation round 1 of 1, fix round 2 of 2 (the last, D19)
 **Devices:** iPhone Air `331EF109…`, AVD `nitroui_t02` / `emulator-5572` (adb 5042), Metro 8294
 
 ## Summary
@@ -489,15 +489,26 @@ passed 11/11. The assertion is now structural, in the one place that survives a 
 | --- | --- |
 | `fr2-m5-android` = `android-t6b` — `onDropView` neither closes the dialog nor disposes the composition (the real B1 shape) | ✕ 1 failed — the live-presentations assertion |
 | `fr2-m5-iosf` — iOS `countOpened()` stops counting | ✕ 2 failed |
-| `fr2-m5-ios`/`iosb`/`iosc`/`iosd`/`iose` — the iOS closing sites removed, in five shapes | ✓ stayed green |
+| `fr2-m5-ios`/`iosb`/`iosc`/`iosd`/`iose` — intended as the iOS closing sites removed, in five shapes; **each actually left a closing site in place** (see the correction in *Fix round 2*) | ✓ stayed green |
+| `fr4-n3-ios-bothcloses` — the iOS twin of `android-t6b` as the five above intended it: `onDropView` neither closes nor drops, and the recycle stops closing too | ✕ 4 failed — `presents nothing after the mount that opened it is gone` reports `1 live presentations, want 0` |
 
-Those last five are the honest half of M5: **the iOS twin of `android-t6b` cannot be shown red
-here, because on iOS that mutation does not leak.** UIKit tears the popover down with the host
-view, `presentationControllerDidDismiss` runs, and the counter really does fall back to 0. The
-iOS counter is still worth having — it is what turns "we assume SwiftUI owns this" into a number
-the test reads — but the Android half is the one the review's named failure mode is guarded on,
-and this report does not claim an iOS red that did not happen.
-`/tmp/g5-fr2-red-and-fr2-m5and.log`, `/tmp/g5-fr2-red-ios-fr2-m5-iosf.log`.
+The last five were reported, wrongly, as the honest half of M5 — that the iOS twin of
+`android-t6b` "cannot be shown red here, because on iOS that mutation does not leak". Fix round
+2 ran the twin the five intended to be, and it **is** red: with `onDropView` neither closing the
+presentation (`model.setPresented(false)`) nor releasing the host (`host.drop()`), and
+`prepareForRecycle()` no longer closing it either, `presents nothing after the mount that opened
+it is gone` fails with `"opener" (the untouched process) reports 1 live presentations, want 0`.
+Nothing has torn the popover down, because nothing *asked* it to: the counter falls in
+`presentationControllerDidDismiss` or `dismissNow`'s completion, and with both component closes
+gone neither ever runs. The five green runs were an artefact of the mutation scripts, all five of
+which anchored on the first two lines of `onDropView` — so they deleted `model.onChange = nil`
+(and, in `iosc`/`iosd`/`iose`, the recycle's close) and left `model.setPresented(false)` plus
+`host.drop()` standing. Two corollaries: the iOS leak guard is real coverage, not a courtesy, and
+the earlier explanation ("UIKit tears the popover down with the host view") is retracted — it also
+never explained `iose`, which silenced `presentationControllerDidDismiss` and still counted back
+down to 0.
+`/tmp/g5-fr2-red-and-fr2-m5and.log`, `/tmp/g5-fr2-red-ios-fr2-m5-iosf.log`,
+`/tmp/g5-fr4-n3-ios-bothcloses.log`.
 
 ### M6 — the DST test exercises the conversion, and the zone is asserted
 
@@ -919,3 +930,192 @@ frames are from the fix-round build.
 
 Nothing here blocks reviewing the component: the gates that cover it are green on the final
 build and the four items are all "who owns the next run".
+
+## Fix round 2 — the re-review's N1, N2, N3 and M7 (this round)
+
+The brief is `docs/tasks/G5-datepicker.rereview.md` (verdict MERGE-AFTER-SMALL-FIXES), committed with
+this round. Two behaviour regressions in the code fix round 1 touched, one false claim in this report,
+one doc-comment wording fix, and the re-review's non-blocking list recorded one line each at the
+bottom. Under D19 this is the last round, so both fixes are made at the root rather than papered over.
+
+Files this round: `HybridNitroUiDatePicker.kt` (1769 lines), `HybridNitroUiDatePicker.swift`
+(1440), `DatePicker.harness.tsx` (1662, 13 tests), `scripts/real-input/android.mjs` (1545, one new
+check), `docs/components/date-picker.md`, this report.
+
+### N1 — the own-write guard now records every value it observes, not only the ones it wrote
+
+`syncDatePicker` and `syncTimePicker` end their second effect by writing the model's day (or
+hour/minute) back into the Material 3 state when the model did not take a pick, and fix round 1
+recorded `pushed` *inside* the `if` that does it. A pick the model **accepted** needs no write, so
+`pushed` was left holding the day before the tap; the next tap, back onto that day, was then
+indistinguishable from the model's own write — nothing was emitted, and the calendar snapped forward
+again under the finger. `pushed.value = wanted` is now the statement *before* the `if` in both effects
+(`.kt:1287`, `.kt:1327`), so every value the effect observes is recorded. The race the guard exists for
+stays closed: `pushed` is still written before anything this control writes into the state, so a
+model-driven page change is still not priced as a pick.
+
+**Red first — and deliberately not in the harness.** The harness cannot reach this guard: its
+selection seam, `nuiTestSelect`, writes *through the model*, which is exactly what the guard exists to
+ignore, and a Material 3 day cell is not a React view, so `userEvent.press` has no element to press.
+A seam that wrote `DatePickerState.selectedDateMillis` directly would need a new method on the Nitro
+spec, which is not this task's to change. The case is therefore a real-input check:
+`tapBackToTheDisplayedDay` in `scripts/real-input/android.mjs` drives the inline calendar with
+`adb shell input` — the day the control was built with (a documented no-op, and the check's own proof
+that it is aiming at the day the model holds), then a different day, then that first day again, then a
+third day. Against fix round 1's build (`/tmp/g5-prefix.apk`, md5 `d9e514917369c96d915b26da9acc78da`):
+
+> `✗ timed out waiting for the tap back onto the previous day - the snap-back leaves this at 1 (change-count="2")`
+> `date-picker: FAIL` — `/tmp/g5-fr4-red-and-n1.log`
+
+Against the fixed build the same check passes, and the exact change counts before and after it still
+say one event per pick: the guard is narrowed, not removed.
+
+The clock case (10 → 11 → 10 on the dial) is the same two lines and is **not** driven, for a
+mechanical reason: Android's inline `mode="time"` is Material 3's `HorizontalTimePicker`, a canvas dial
+with no per-hour accessibility node to read and nothing for `adb shell input` to aim at, and
+`nuiTestSelect` — the only other seam — bypasses the guard by construction. The fix is applied there
+identically, and the comment at `.kt:1325` records that a dial returned by hand to the hour it started
+on is a pick.
+
+### N2 — a re-render that moves only a bound's millisecond no longer rebuilds the control
+
+`minimumDate={new Date()}` is the first example in `docs/components/date-picker.md`, and it hands the
+control a new instant on every render. Fix round 1 keyed the rebuild on the raw bound instants, so
+every parent render — and every pick, which re-renders through the same props — tore the platform
+control down, taking the page the user turned to, a wheel's scroll position and an open dialog's
+provisional selection with it.
+
+- **Android** (`.kt:1056`, `.kt:1116`): `key(selectable, yearRange)` — the two keys the
+  `DatePickerState` actually consumes. Both are already day-granular: `rememberSelectableDates()` is
+  `remember`ed on the bounds' UTC-midnight days, and `yearRange` is a pair of years. A bound that moves
+  less than a day is not a new state; a bound that moves a day still rebuilds, which is what Material 3
+  needs because its state reads both once, at construction.
+- **iOS** (`.swift:225`): `controlIdentity` is the two bounds bucketed at the control's own granularity
+  — the local day for `mode = "date"`, the minute for the modes that show a time — plus one escape,
+  `|outside`, appended when the displayed value has left the range the control *on screen* was built
+  with. That range is recorded by the control itself when it appears (`.swift:186`), so the escape
+  compares against the live control rather than what React last sent — and it is the real precondition
+  of the `UICalendarView _setVisibleMonth:` SIGABRT, which a bound can satisfy while moving too little
+  to change a day. The key stays applied to the `DatePicker` itself (`.swift:599`): the same key
+  applied one level out, to `PlatformPicker` from its call sites, was measured to assert again, because
+  the fresh control is asked for a month its own bounds exclude as it goes on screen.
+- **A counter, because a rebuild is otherwise invisible to a test**: `controlBuilds`, the sixth field of
+  `nuiTestStateReport`, counts the platform controls this mount built — each `rememberDatePickerState`
+  Android's `key` produces (`.kt:1066`, `.kt:1125`), each `onAppear` iOS gets (`.swift:600`).
+
+**New test** `keeps the live control when a re-render sends a new bound instant`
+(`DatePicker.harness.tsx:943`). Baselines are read only once the counter has *settled*
+(`settledBuilds`: fifteen consecutive equal 100 ms polls), because a mount legitimately rebuilds while
+its props land and an early baseline would be a race, not an assertion. It then requires the counts
+flat across three millisecond-only bound moves; opens the `compact` field's dialog, moves the value to
+another month under it and asserts both the count and — on Android — the July page it opened on; then
+moves `maximumDate` to the day before the dialog's value and asserts the presentation survives and the
+value clamps onto the new bound, with Android additionally required to *raise* its count, because that
+is how a real bound arrives there.
+
+**Red first (Android).** With the key put back to the raw instants (`/tmp/g5-mut/fr4-n2-kotlin-revert.py`)
+the settled baseline is 1 and three millisecond-only renders make it 4: `expected 4 to be 1` —
+`/tmp/g5-fr4-red-and-n2final.log`. Fixed: 13/13, `/tmp/g5-fr4-green-and-dp3.log`.
+
+**iOS: this assertion cannot be made red, and the test says so instead of pretending.** The iOS
+counter counts *appearances*, and a changed `.id(_:)` on a control that is already on screen was
+measured not to produce another one, in either direction. With the raw-instant key restored in place
+(`/tmp/g5-mut/fr4-n2-ios-revert2.py`) the whole DatePicker suite passes 13/13 on iPhone Air
+(`/tmp/g5-fr4-red-ios-n2final.log`) — that green run *is* the disclosure. Two probes back it up: one
+that stamped `KMUT` into the report string to prove the mutated binary was the one running, whose
+inline counter settled at 4 (`/tmp/g5-fr4-ios-kmark.log`), and the fixed tree's own probe, which
+settles at 3 with the day-granular identity in the same field (`min:2026-1-2 max:none`,
+`/tmp/g5-fr4-ios-diag6.log`). Neither number rises *per re-render*, so no iOS assertion on it can tell
+the two binaries apart; the difference between 4 and 3 is mount churn, which the settling rule absorbs
+on purpose. What iOS asserts instead is the contract the rebuild exists for — the open presentation
+survives, and the new bound is in force a moment later — and the one case where iOS genuinely needs a
+fresh control (a value the live control would clamp against a bound it still holds) stays the escape
+clause of `controlIdentity`, driven by `shows the month the value is in, and moves the page with it`.
+
+`docs/components/date-picker.md:130` now says all of this to the reader: the rebuild is keyed at the
+control's granularity (a day, or a minute when a time is shown), why `minimumDate={new Date()}` must
+not cost it, and that iOS also rebuilds when the value has left the range the live control was built
+with.
+
+### N3 — the M5 "iOS does not leak" claim was false; the real twin is red
+
+Corrected where it was made, in the M5 paragraph and its mutation table above. All five
+`fr2-m5-ios`/`iosb`/`iosc`/`iosd`/`iose` scripts anchored on the first two lines of `onDropView` and so
+deleted `model.onChange = nil`, leaving `model.setPresented(false)` and `host.drop()` standing: not one
+of them removed a closing site. The twin the section claimed to have run — `onDropView` neither closing
+nor releasing the host, **and** `prepareForRecycle()` no longer closing — was run this round
+(`/tmp/g5-mut/fr4-n3-ios-bothcloses.py`):
+
+> `✕ 4 failed` — `presents nothing after the mount that opened it is gone` reports
+> `"opener" (the untouched process) reports 1 live presentations, want 0` —
+> `/tmp/g5-fr4-n3-ios-bothcloses.log`
+
+So the iOS half of the leak guard is real coverage, and the earlier explanation ("UIKit tears the
+popover down with the host view") is retracted — it never explained `iose` either, which silenced
+`presentationControllerDidDismiss` and still counted back to 0.
+
+### M7 — the fallback comment no longer calls a narrow fallback "the safe direction"
+
+`docs/architecture/core.md` §7 says neither direction is safe; the comment said the opposite while
+declaring the `en_PT` measurement. It now keeps the measurement the harness gate actually runs under
+(103.00 x 36.33 pt: iPhone Air, iOS 27, regular text, `AppleLocale = en_PT`, `compact` `date` — the
+configuration whose cold mount D17 requires to land inside `kEpsilon`) and states the error it carries
+for the rest instead of calling it free: 107.00 pt under `en_US` (so 4 pt narrow there), and
+`mode = "time"` at 48.00 here against 72.00 under `en_US`. Declaring 107 was the review's other option;
+it would trade a correct number for the configuration the gate measures for a correct number for one it
+does not.
+
+### Gates (fix round 2, all on this tree)
+
+| Gate | Result | Log |
+| --- | --- | --- |
+| `bun run check` | exit 0 — typecheck, bench typecheck, lint, format, jest 176/176, `test:native`, `perf:renders` 262 checks with the DatePicker row at `mount+0 redundant`, nitrogen no drift, autolinking, prepare, api-extractor, publint `--strict`, package-files 375, README examples | `/tmp/g5-fr4-check2.log` |
+| Android harness `DatePicker` | 13/13 | `/tmp/g5-fr4-green-and-dp3.log` |
+| iOS harness `DatePicker` | 13/13 | `/tmp/g5-fr4-green-ios-dp9.log` |
+| Android whole harness suite | 9 suites, 117/117 | `/tmp/g5-fr4-green-and-full.log` |
+| iOS whole harness suite | 8 suites passed, 1 skipped; 116 passed, 1 skipped test | `/tmp/g5-fr4-green-ios-full.log` |
+| Android real-input `date-picker` | PASS, incl. the new tap-back check | `/tmp/g5-fr5-green-and-realinput.log` |
+| iOS real-input `date-picker` | PASS — `testRealInputDatePicker`, 56.1 s | `/tmp/g5-fr4-green-ios-realinput.log` |
+
+All four harness rows were re-taken once the tree was committed, with the same result: Android
+`DatePicker` 13/13 (`/tmp/g5-fr6-green-and-dp.log`), iOS `DatePicker` 13/13
+(`/tmp/g5-fr6-green-ios-dp.log`), Android whole suite 117/117 and iOS whole suite 116 passed + 1
+skipped (`/tmp/g5-fr6-green-and-full.log`, `/tmp/g5-fr6-green-ios-full.log`). That pass exists because
+the last source edits landed a minute either side of the earlier runs, and a gate row should be
+citable against the tree it names.
+
+Devices and artifacts: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3`; AVD `nitroui_t02` as
+`emulator-5554` on adb server port 5042; Metro 8294 (8295 for the iOS real-input run, as ever). APK
+md5 `5522f994b75b579bd76d7501a798d4e5`; the iOS app binary measured `31b38a2f11b92ce91e34701b70fcaf2e`
+after the last build from this tree (the iOS real-input run builds into the same
+`example/ios/build` derivedData, and no source changed between that build and the iOS suite above).
+
+Two disclosures about the order of these runs. The first `bun run check` failed (exit 1,
+`/tmp/g5-fr4-check.log`) on three prettier line-wrap errors in the new `android.mjs` check and nowhere
+else; `eslint --fix` fixed them, and the table cites the green run after. The Android real-input row
+is therefore a **repeat** taken after that formatting change — the first pass
+(`/tmp/g5-fr4-green-and-realinput.log`) was taken on the pre-format script, which differs only in line
+wrapping. Both whole-suite runs were taken at a `load1` the runner flags as over its ceiling (13.32 on
+the iOS run), which matters for timing-sensitive rows and not at all for pass/fail here.
+
+### The re-review's non-blocking list, one line each
+
+- **`.kt:846` `mergeDescendants = true`** on the picker variants: it merges the title, headline and
+  weekday names into the label stop. Drop it. Not fixed.
+- **The value is announced twice when there is no label** — iOS `.accessibilityValue` (`.swift:552`)
+  and Android `stateDescription` (`.kt:848`, `.kt:864`): apply them only when a label is set. Not fixed.
+- **`publishCalendarFacts` (`.kt:1230`)**: after a bounds-only rebuild whose month and selection did
+  not change, `DisposableEffect(state)` clears the report to `-1` and the `LaunchedEffect` does not
+  relaunch, so the hook says "no calendar" while one is composed. Key the `LaunchedEffect` on `state`
+  too. Test-hook only. Not fixed.
+- **The M7 "safe direction" wording**: fixed this round, above.
+- **`presents nothing after the mount that opened it is gone`**: its comment names the wrong assertion
+  as the one `fr2-m5-android` failed — it failed at "the untouched process". Not fixed (comment).
+- **Per-recomposition allocations grew**: Android builds `toUtcMonthStartOfLocalDay(shown)`,
+  `toUtcMidnightOfLocalDay(shown)` and `format(mode, shown)` per `InlinePicker` pass; iOS interpolates
+  one identity string per `body`. Cheap, and belongs with the allocation follow-up above. Not fixed.
+- **The `dst-pick` half of M6 was never shown red in isolation**, because the test stops at
+  `dst-set`'s first failure. Noted here, as the review allowed.
+- **`DatePicker.nitro.ts:189` still documents the report as `<displayed ms>|<presented 0|1>`** while it
+  carries six fields; fixing the doc line means touching the Nitro spec and re-running
+  `bun run nitrogen`, which is outside this task. Not fixed.
