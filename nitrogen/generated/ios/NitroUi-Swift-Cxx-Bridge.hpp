@@ -10,6 +10,8 @@
 // Forward declarations of C++ defined types
 // Forward declaration of `HybridNitroUiButtonSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
+// Forward declaration of `HybridNitroUiPickerSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiPickerSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec` to properly resolve imports.
@@ -20,6 +22,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSliderSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 // Forward declaration of `NitroUiButtonSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
+// Forward declaration of `NitroUiPickerSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiPickerSize; }
 // Forward declaration of `NitroUiSegmentedControlSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSegmentedControlSize; }
 // Forward declaration of `NitroUiSize` to properly resolve imports.
@@ -30,6 +34,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridNitroUiButtonSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
+// Forward declaration of `HybridNitroUiPickerSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiPickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec_cxx` to properly resolve imports.
@@ -41,11 +47,13 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 
 // Include C++ defined types
 #include "HybridNitroUiButtonSpec.hpp"
+#include "HybridNitroUiPickerSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "NitroUiButtonSize.hpp"
+#include "NitroUiPickerSize.hpp"
 #include "NitroUiSegmentedControlSize.hpp"
 #include "NitroUiSize.hpp"
 #include "NitroUiSliderSize.hpp"
@@ -181,45 +189,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<NitroUiButtonSize>::withError(error);
   }
   
-  // pragma MARK: std::shared_ptr<HybridNitroUiProgressSpec>
-  /**
-   * Specialized version of `std::shared_ptr<HybridNitroUiProgressSpec>`.
-   */
-  using std__shared_ptr_HybridNitroUiProgressSpec_ = std::shared_ptr<HybridNitroUiProgressSpec>;
-  std::shared_ptr<HybridNitroUiProgressSpec> create_std__shared_ptr_HybridNitroUiProgressSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
-  void* NON_NULL get_std__shared_ptr_HybridNitroUiProgressSpec_(std__shared_ptr_HybridNitroUiProgressSpec_ cppType);
-  
-  // pragma MARK: std::weak_ptr<HybridNitroUiProgressSpec>
-  using std__weak_ptr_HybridNitroUiProgressSpec_ = std::weak_ptr<HybridNitroUiProgressSpec>;
-  inline std__weak_ptr_HybridNitroUiProgressSpec_ weakify_std__shared_ptr_HybridNitroUiProgressSpec_(const std::shared_ptr<HybridNitroUiProgressSpec>& strong) noexcept { return strong; }
-  
-  // pragma MARK: Result<NitroUiSize>
-  using Result_NitroUiSize_ = Result<NitroUiSize>;
-  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const NitroUiSize& value) noexcept {
-    return Result<NitroUiSize>::withValue(value);
-  }
-  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const std::exception_ptr& error) noexcept {
-    return Result<NitroUiSize>::withError(error);
-  }
-  
-  // pragma MARK: Result<std::string>
-  using Result_std__string_ = Result<std::string>;
-  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
-    return Result<std::string>::withValue(value);
-  }
-  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
-    return Result<std::string>::withError(error);
-  }
-  
-  // pragma MARK: Result<bool>
-  using Result_bool_ = Result<bool>;
-  inline Result_bool_ create_Result_bool_(bool value) noexcept {
-    return Result<bool>::withValue(std::move(value));
-  }
-  inline Result_bool_ create_Result_bool_(const std::exception_ptr& error) noexcept {
-    return Result<bool>::withError(error);
-  }
-  
   // pragma MARK: std::vector<std::string>
   /**
    * Specialized version of `std::vector<std::string>`.
@@ -266,6 +235,66 @@ namespace margelo::nitro::nitroui::bridge::swift {
   }
   inline std::function<void(double /* index */, double /* eventCount */)> get_std__optional_std__function_void_double____index_____double____eventCount______(const std::optional<std::function<void(double /* index */, double /* eventCount */)>>& optional) noexcept {
     return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiPickerSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiPickerSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiPickerSpec_ = std::shared_ptr<HybridNitroUiPickerSpec>;
+  std::shared_ptr<HybridNitroUiPickerSpec> create_std__shared_ptr_HybridNitroUiPickerSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiPickerSpec_(std__shared_ptr_HybridNitroUiPickerSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiPickerSpec>
+  using std__weak_ptr_HybridNitroUiPickerSpec_ = std::weak_ptr<HybridNitroUiPickerSpec>;
+  inline std__weak_ptr_HybridNitroUiPickerSpec_ weakify_std__shared_ptr_HybridNitroUiPickerSpec_(const std::shared_ptr<HybridNitroUiPickerSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiPickerSize>
+  using Result_NitroUiPickerSize_ = Result<NitroUiPickerSize>;
+  inline Result_NitroUiPickerSize_ create_Result_NitroUiPickerSize_(const NitroUiPickerSize& value) noexcept {
+    return Result<NitroUiPickerSize>::withValue(value);
+  }
+  inline Result_NitroUiPickerSize_ create_Result_NitroUiPickerSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiPickerSize>::withError(error);
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiProgressSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiProgressSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiProgressSpec_ = std::shared_ptr<HybridNitroUiProgressSpec>;
+  std::shared_ptr<HybridNitroUiProgressSpec> create_std__shared_ptr_HybridNitroUiProgressSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiProgressSpec_(std__shared_ptr_HybridNitroUiProgressSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiProgressSpec>
+  using std__weak_ptr_HybridNitroUiProgressSpec_ = std::weak_ptr<HybridNitroUiProgressSpec>;
+  inline std__weak_ptr_HybridNitroUiProgressSpec_ weakify_std__shared_ptr_HybridNitroUiProgressSpec_(const std::shared_ptr<HybridNitroUiProgressSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiSize>
+  using Result_NitroUiSize_ = Result<NitroUiSize>;
+  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const NitroUiSize& value) noexcept {
+    return Result<NitroUiSize>::withValue(value);
+  }
+  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiSize>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::string>
+  using Result_std__string_ = Result<std::string>;
+  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
+    return Result<std::string>::withValue(value);
+  }
+  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
+    return Result<std::string>::withError(error);
+  }
+  
+  // pragma MARK: Result<bool>
+  using Result_bool_ = Result<bool>;
+  inline Result_bool_ create_Result_bool_(bool value) noexcept {
+    return Result<bool>::withValue(std::move(value));
+  }
+  inline Result_bool_ create_Result_bool_(const std::exception_ptr& error) noexcept {
+    return Result<bool>::withError(error);
   }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiSegmentedControlSpec>

@@ -18,10 +18,12 @@
 #include "JHybridNitroUiButtonSpec.hpp"
 #include "JFunc_void.hpp"
 #include "views/JHybridNitroUiButtonStateUpdater.hpp"
+#include "JHybridNitroUiPickerSpec.hpp"
+#include "JFunc_void_double_double.hpp"
+#include "views/JHybridNitroUiPickerStateUpdater.hpp"
 #include "JHybridNitroUiProgressSpec.hpp"
 #include "views/JHybridNitroUiProgressStateUpdater.hpp"
 #include "JHybridNitroUiSegmentedControlSpec.hpp"
-#include "JFunc_void_double_double.hpp"
 #include "views/JHybridNitroUiSegmentedControlStateUpdater.hpp"
 #include "JHybridNitroUiSliderSpec.hpp"
 #include "views/JHybridNitroUiSliderStateUpdater.hpp"
@@ -79,6 +81,14 @@ struct JHybridNitroUiSegmentedControlSpecImpl: public jni::JavaClass<JHybridNitr
     return javaPart->getJHybridNitroUiSegmentedControlSpec();
   }
 };
+struct JHybridNitroUiPickerSpecImpl: public jni::JavaClass<JHybridNitroUiPickerSpecImpl, JHybridNitroUiPickerSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiPicker;";
+  static std::shared_ptr<JHybridNitroUiPickerSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiPickerSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiPickerSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiPickerSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -88,10 +98,12 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiButtonSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiButtonStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiPickerSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiPickerStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiProgressSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiProgressStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSegmentedControlSpec::CxxPart::registerNatives();
-  margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSegmentedControlStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSliderSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSliderStateUpdater::registerNatives();
@@ -137,6 +149,12 @@ void registerAllNatives() {
     "NitroUiSegmentedControl",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiSegmentedControlSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiPicker",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiPickerSpecImpl::create();
     }
   );
 }

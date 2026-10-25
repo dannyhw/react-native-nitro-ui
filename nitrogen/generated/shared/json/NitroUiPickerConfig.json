@@ -1,0 +1,23 @@
+{
+  "uiViewClassName": "NitroUiPicker",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "options": true,
+    "selectedIndex": true,
+    "defaultSelectedIndex": true,
+    "mostRecentEventCount": true,
+    "variant": true,
+    "label": true,
+    "disabled": true,
+    "tintColor": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onValueChange": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}
