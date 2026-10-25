@@ -1504,10 +1504,9 @@ describe('the DatePicker cells (--component date-picker)', () => {
       1.1,
       4
     );
-    expect(table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
-      1.1,
-      4
-    );
+    expect(
+      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
     expect(
       table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
     ).toBeCloseTo(1.1, 4);

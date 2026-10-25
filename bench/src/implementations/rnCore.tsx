@@ -61,7 +61,11 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
     return (
       <>
         {range(n).map((index) => (
-          <Text key={index} testID={`bench-rn-core-date-${String(index)}`} style={style}>
+          <Text
+            key={index}
+            testID={`bench-rn-core-date-${String(index)}`}
+            style={style}
+          >
             {dateLabel(value)}
           </Text>
         ))}
