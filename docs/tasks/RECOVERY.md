@@ -27,7 +27,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | R4 load guard | — | merged | Done | iOS overnight attempt scheduled 01:00 2026-10-26. |
 | C1 Android over-wide | — | merged | Done | — |
 | G6 Picker | `nitro-ui-worktrees/G6` · `task/G6-picker` | from main | Implementation round running (Apex, `nitroui-G6-impl-r1`) on iPhone 17 + `nitroui_t01`; no device work 00:45–05:00 | If lost: re-delegate from brief. Opus review after. |
-| G5 DatePicker | `nitro-ui-worktrees/G5` · `task/G5-datepicker` | `d113c79` | Implementation done; Opus review → `/tmp/G5-datepicker.review.md` | Fix round answers G5's questions: bench re-run in fix round outside quiet window (both platforms); add smoke App.tsx line + layout check, running smoke deferred to R3; keep Android expo-ui date arm with caveat; bench pod-install stamp → FOLLOWUPS. |
+| G5 DatePicker | `nitro-ui-worktrees/G5` · `task/G5-datepicker` | `d113c79` + uncommitted review | Fix round 1 running (Apex, `nitroui-G5-fix-r1`) on iPhone Air + `nitroui_t02` | If lost: re-delegate fix round 1 from the review (M1–M7 + report). Then Opus re-review. Merge G5 before G6 (G6 then merges main; regenerate nitrogen, don't hand-merge). |
 | P1 iOS profiling | — | report merged | Done (H3 dropped) | — |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
