@@ -1255,10 +1255,17 @@ describe('the Button cells (--component button)', () => {
     // up here as a shorter schedule, not a silent skip.
     const all = buildSchedule({ plan: 'quick' });
     expect(new Set(all.map((entry) => componentOf(entry.scenario)))).toEqual(
-      new Set(['switch', 'slider', 'button', 'progress', 'segmented-control'])
+      new Set([
+        'switch',
+        'slider',
+        'button',
+        'progress',
+        'segmented-control',
+        'date-picker',
+      ])
     );
-    // Five components in the quick plan, each with the same three cells.
-    expect(all.length).toBe(button.length * 5);
+    // Six components in the quick plan, each with the same three cells.
+    expect(all.length).toBe(button.length * 6);
   });
 });
 
@@ -1403,6 +1410,195 @@ describe('the SegmentedControl cells (--component segmented-control)', () => {
       'memory.segmented-control',
     ]);
     expect(new Set(segmented.map((entry) => entry.implementation))).toEqual(
+      new Set(IMPLEMENTATIONS)
+    );
+  });
+});
+
+/**
+ * The DatePicker cells (`bun bench --component date-picker`, task G5).
+ *
+ * The same four claims as the SegmentedControl block, now with a *fourth*
+ * component in the fixture: `componentOf` is what pairs an arm with the
+ * `rn-core` control of its own cell, and a plan that grows is exactly when a
+ * pairing bug would start dividing a date arm by a segmented control's number.
+ * Scales are 1/2/3/4 microseconds apart per component, so a crossed pairing is
+ * arithmetically unreachable: 1.1x only comes from the right control.
+ */
+describe('the DatePicker cells (--component date-picker)', () => {
+  /**
+   * A run holding Switch, Button, SegmentedControl and DatePicker cells at once.
+   *
+   * Every arm is exactly 1.1x over the control of *its own* cell, and each
+   * component's control is a different size, so a ratio can only be 1.1 when the
+   * pairing is right.
+   */
+  function makeMixedRun(overrides = {}) {
+    const arms = {
+      'rn-core': {},
+      'expo-ui-host-per-control': { mounted: 210_000 },
+      'expo-ui-shared-host': { mounted: 80_000 },
+      'nitro-ui': { mounted: 110_000 },
+      ...overrides,
+    };
+    const scenarios = [
+      ['mount', 1],
+      ['mount.button', 2],
+      ['mount.segmented-control', 3],
+      ['mount.date-picker', 4],
+    ];
+    const records = [];
+    for (const [implementation, values] of Object.entries(arms)) {
+      for (const [scenario, scale] of scenarios) {
+        records.push(
+          ...cellRecords({
+            scenario,
+            implementation,
+            mounted: (values.mounted ?? 100_000) * scale,
+            presented: (values.presented ?? 130_000) * scale,
+          })
+        );
+        const action = scenarioActionOf(scenario);
+        const suffix = scenario === action ? '' : `.${componentOf(scenario)}`;
+        records.push(
+          ...memoryRecords({
+            scenario: `memory${suffix}`,
+            implementation,
+            ...values,
+          })
+        );
+      }
+    }
+    return {
+      platform: 'ios',
+      cells: aggregateRecords(records, { keepRaw: true }),
+    };
+  }
+
+  /** `makeMixedRun` restricted to the DatePicker component, as `--component date-picker` runs it. */
+  function makeDateRun(overrides = {}) {
+    const run = makeMixedRun(overrides);
+    return {
+      platform: 'ios',
+      cells: Object.fromEntries(
+        Object.entries(run.cells).filter(
+          ([key, cell]) => componentOf(cell.scenario ?? key) === 'date-picker'
+        )
+      ),
+    };
+  }
+
+  it('divides a DatePicker arm by the DatePicker control', () => {
+    const table = ratioTable(makeMixedRun());
+    // 440 us over a 400 us control - and not 440 over the Switch (4.4x), Button
+    // (2.2x) or SegmentedControl (1.47x) controls.
+    expect(
+      table['mount.date-picker:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
+    expect(
+      table['mount.date-picker:rn-core:50'].metrics.mountedNs.control
+    ).toBe(true);
+    // The three earlier components keep their own pairings, so this is a fifth
+    // row joining the table rather than a row that moved the others.
+    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
+      1.1,
+      4
+    );
+    expect(
+      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
+    expect(
+      table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
+  });
+
+  it('is silent when nothing changed', () => {
+    const result = gate({ head: makeDateRun(), base: makeDateRun() });
+    expect(result.failures).toEqual([]);
+  });
+
+  it('fails conclusively when the DatePicker arm doubles', () => {
+    const result = gate({
+      head: makeDateRun({
+        'nitro-ui': { mounted: 440_000, presented: 520_000 },
+      }),
+      base: makeDateRun(),
+    });
+    const mounted = result.failures.find(
+      (failure) => failure.metric === 'mountedNs'
+    );
+    expect(mounted).toBeDefined();
+    expect(mounted.implementation).toBe('nitro-ui');
+    expect(mounted.key).toBe('mount.date-picker:nitro-ui:50');
+  });
+
+  it('never gates a DatePicker reference arm', () => {
+    const result = gate({
+      head: makeDateRun({
+        'expo-ui-shared-host': { mounted: 640_000, presented: 780_000 },
+      }),
+      base: makeDateRun(),
+    });
+    expect(
+      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
+    ).toEqual([]);
+  });
+
+  it('schedules every date-picker cell and every arm', () => {
+    const datePicker = buildSchedule({
+      plan: 'quick',
+      component: 'date-picker',
+    });
+    expect([...new Set(datePicker.map((entry) => entry.scenario))]).toEqual([
+      'mount.date-picker',
+      'update.date-picker',
+      'memory.date-picker',
+    ]);
+    expect(new Set(datePicker.map((entry) => entry.implementation))).toEqual(
+      new Set(IMPLEMENTATIONS)
+    );
+  });
+
+  /**
+   * `@expo/ui` has no mountable date *field* on Android: its only picker form is
+   * the inline M3 calendar, whose month pager is horizontally scrollable, so the
+   * `matchContents` host every self-sizing arm gets measures it with infinite
+   * width and the app dies with `IllegalStateException`. Bounding the width makes
+   * it mountable but prices a full-screen calendar against a compact field at
+   * ~2.45 s per mount iteration, past the runner's per-launch budget. So those
+   * cells do not exist on Android, and the schedule says so instead of burning
+   * 180 s timeouts per launch.
+   */
+  it('omits the Android arms that cannot mount a DatePicker', () => {
+    const android = buildSchedule({
+      plan: 'quick',
+      component: 'date-picker',
+      platform: 'android',
+    });
+    expect(
+      [...new Set(android.map((entry) => entry.implementation))].sort()
+    ).toEqual(['nitro-ui', 'rn-core']);
+    expect(android.length).toBe(3 * 2 * 4);
+  });
+
+  /** The exclusion is a property of the platform, not of the arm or the cell. */
+  it('keeps the DatePicker reference arms everywhere they do mount', () => {
+    const ios = buildSchedule({
+      plan: 'quick',
+      component: 'date-picker',
+      platform: 'ios',
+    });
+    expect(new Set(ios.map((entry) => entry.implementation))).toEqual(
+      new Set(IMPLEMENTATIONS)
+    );
+    // Switch is a control `@expo/ui` mounts on both platforms, so the same
+    // `platform` argument must not narrow any other component's arms.
+    const androidSwitch = buildSchedule({
+      plan: 'quick',
+      component: 'switch',
+      platform: 'android',
+    });
+    expect(new Set(androidSwitch.map((entry) => entry.implementation))).toEqual(
       new Set(IMPLEMENTATIONS)
     );
   });

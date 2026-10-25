@@ -25,8 +25,13 @@
  * @property {string} id Lower-case identifier, also the name of the check on
  *   both platforms (`switch` -> `testRealInputSwitch` / `CHECKS.switch`).
  * @property {string} title What the check proves, for the report line.
- * @property {'switch' | 'slider' | 'button' | 'segmented'} screen The example
- *   app's tab to be
+ * @property {
+ *   | 'switch'
+ *   | 'slider'
+ *   | 'button'
+ *   | 'segmented'
+ *   | 'datepicker'
+ * } screen The example app's tab to be
  *   on. Must be a tab `example/src/App.tsx` actually renders, and the screen
  *   behind it has to render the on-screen `Text` the checks read.
  */
@@ -53,6 +58,12 @@ export const REAL_INPUT_CONTROLS = Object.freeze([
     title:
       'real tap selects the segment under the finger, and a refused selection snaps back',
     screen: 'segmented',
+  },
+  {
+    id: 'date-picker',
+    title:
+      'real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back',
+    screen: 'datepicker',
   },
 ]);
 

@@ -18,10 +18,12 @@
 #include "JHybridNitroUiButtonSpec.hpp"
 #include "JFunc_void.hpp"
 #include "views/JHybridNitroUiButtonStateUpdater.hpp"
+#include "JHybridNitroUiDatePickerSpec.hpp"
+#include "JFunc_void_double_double.hpp"
+#include "views/JHybridNitroUiDatePickerStateUpdater.hpp"
 #include "JHybridNitroUiProgressSpec.hpp"
 #include "views/JHybridNitroUiProgressStateUpdater.hpp"
 #include "JHybridNitroUiSegmentedControlSpec.hpp"
-#include "JFunc_void_double_double.hpp"
 #include "views/JHybridNitroUiSegmentedControlStateUpdater.hpp"
 #include "JHybridNitroUiSliderSpec.hpp"
 #include "views/JHybridNitroUiSliderStateUpdater.hpp"
@@ -71,6 +73,14 @@ struct JHybridNitroUiSwitchSpecImpl: public jni::JavaClass<JHybridNitroUiSwitchS
     return javaPart->getJHybridNitroUiSwitchSpec();
   }
 };
+struct JHybridNitroUiDatePickerSpecImpl: public jni::JavaClass<JHybridNitroUiDatePickerSpecImpl, JHybridNitroUiDatePickerSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiDatePicker;";
+  static std::shared_ptr<JHybridNitroUiDatePickerSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiDatePickerSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiDatePickerSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiDatePickerSpec();
+  }
+};
 struct JHybridNitroUiSegmentedControlSpecImpl: public jni::JavaClass<JHybridNitroUiSegmentedControlSpecImpl, JHybridNitroUiSegmentedControlSpec::JavaPart> {
   static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiSegmentedControl;";
   static std::shared_ptr<JHybridNitroUiSegmentedControlSpec> create() {
@@ -88,10 +98,12 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiButtonSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiButtonStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiDatePickerSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiDatePickerStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiProgressSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiProgressStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSegmentedControlSpec::CxxPart::registerNatives();
-  margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSegmentedControlStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSliderSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSliderStateUpdater::registerNatives();
@@ -131,6 +143,12 @@ void registerAllNatives() {
     "NitroUiSwitch",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiSwitchSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiDatePicker",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiDatePickerSpecImpl::create();
     }
   );
   HybridObjectRegistry::registerHybridObjectConstructor(

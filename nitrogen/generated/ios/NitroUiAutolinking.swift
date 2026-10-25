@@ -60,6 +60,18 @@ public final class NitroUiAutolinking {
     return HybridNitroUiSwitch.self is any RecyclableView.Type
   }
   
+  public static func createNitroUiDatePicker() -> bridge.std__shared_ptr_HybridNitroUiDatePickerSpec_ {
+    let hybridObject = HybridNitroUiDatePicker()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiDatePickerSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiDatePickerRecyclable() -> Bool {
+    return HybridNitroUiDatePicker.self is any RecyclableView.Type
+  }
+  
   public static func createNitroUiSegmentedControl() -> bridge.std__shared_ptr_HybridNitroUiSegmentedControlSpec_ {
     let hybridObject = HybridNitroUiSegmentedControl()
     return { () -> bridge.std__shared_ptr_HybridNitroUiSegmentedControlSpec_ in
