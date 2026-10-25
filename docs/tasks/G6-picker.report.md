@@ -406,8 +406,10 @@ Three changes, as recommended:
 
 - **JS: the key follows the shown title in both modes** (`src/components/Picker/Picker.tsx`).
   An uncontrolled control keeps the index native last reported in wrapper state (`lastChoice`,
-  stored together with the variant it was made under), and `shownIndex` reads it. That costs
-  one React render per uncontrolled choice — what a discrete control costs everywhere else —
+  stored together with the variant it was made under — round 2 matches it on the sizing id
+  of the mount that made it instead, see Corrections (fix round 2) #1), and `shownIndex`
+  reads it. That costs one React render per uncontrolled choice — what a discrete control
+  costs everywhere else —
   and is now said in `docs/components/picker.md`. `perf:renders` is unchanged (6/6, Picker
   still 6 renders, `mount+0 redundant`): its scenario drives `selectedIndex` from JS, so it
   never takes the path that re-renders.
@@ -458,7 +460,9 @@ Progress uses it for: `key={variantKey}`, the `variant` prop, and `useSizingId(v
 Android needs it because its measured root decides `intrinsic` vs `fillWidth` when the
 composition is built and never re-asks; iOS reads the policy live, so the key costs it nothing.
 Stated consequence: an uncontrolled picker re-seeds from `defaultSelectedIndex` across a
-variant change (which is why `lastChoice` carries the variant it was made under). New tests
+variant change, which is why `lastChoice` is stored with the mount that made it — round 1
+keyed that on the variant, which a menu → wheel → menu round-trip defeats (Corrections
+(fix round 2) #1). New tests
 rerender one instance inside a 330 box in both directions, on both platforms.
 
 ### M3 — the Android anchor is one accessibility node
@@ -474,9 +478,12 @@ asserting it, because that is what the tree says and the fix does not claim othe
 
 The wrong `enabled=true` explanation is gone from all four places the review named:
 `HybridNitroUiPicker.kt`, `scripts/real-input/android.mjs` step 7, `docs/components/picker.md`,
-and decision 6 below. The remaining half — RN copying the `accessibilityLabel` base prop onto
-the host container, which is why a *second* node carries the name at all — is core, affects
-every control with that prop, and is **not** touched here.
+and decision 6 below. What the second node actually was: a Compose semantics node of the
+anchor. The pre-fix dumps (`/tmp/g6-d3.xml`, `/tmp/g6-pickerscreen.xml`) nest it *inside* the
+`EditText`, and a container cannot nest inside what it contains, so it was not the RN host
+container — round 1 wrote that, and it is wrong (Corrections (fix round 2) #2). *Why* that node
+answered `enabled=true` was never established; nothing here depends on the answer, and step 8
+counts the named nodes so a second one cannot come back unnoticed.
 
 ### M4 — reds that were missing, a leak case that can see a leak, and claims that match
 
@@ -580,12 +587,13 @@ edited out of the round-0 sections, so the reader can see what changed.
 2. **Decision 5**: `expanded` *is* `PickerModel` state (`.kt:91`), not per-host — `picker.md:114`
    had it right. And "three unmount-while-open cycles each leave zero popup windows" is a
    measurement, not a shown-red gate; R4-a is the gate.
-3. **Decision 6, Known issues and Q3**: the `enabled=true` explanation was wrong. The node that
-   answers `enabled=true` is RN's host container — RN copies the `accessibilityLabel` base prop
-   onto it and knows nothing about `disabled` — not Compose, which reports
+3. **Decision 6, Known issues and Q3**: the `enabled=true` explanation was wrong — and so was
+   the explanation round 1 wrote in its place. See Corrections (fix round 2) #2: the node is a
+   Compose semantics node of the anchor, not RN's host container, and why it answered
+   `enabled=true` was never established. What *is* established is what it was not: not Compose
+   deriving `isEnabled` from unmerged children, because `ui-android-1.11.4` reports
    `enabled = !config.contains(Disabled)`. Corrected in `HybridNitroUiPicker.kt`,
-   `scripts/real-input/android.mjs` step 7, `docs/components/picker.md` and decision 6. The
-   container half is core and is filed as a follow-up, not fixed for other controls here.
+   `scripts/real-input/android.mjs` step 7, `docs/components/picker.md` and decision 6.
 4. **Decision 2, `picker.md:127-128` and both host headers**: "the same two-policy switch Progress
    makes" was true of the switch only, because Picker lacked Progress's variant key. With M2's
    `key={variantKey}` the remount is shared too, so the sentence is true from this round.
@@ -612,12 +620,135 @@ edited out of the round-0 sections, so the reader can see what changed.
 - **iOS value announcement** — assert `hostedControl(...).value` in `testRealInputPicker`, and check whether the wrapper's "Choice, Choice" label means the name is read twice.
 - **iOS `needsContainment` mount cost** — every Picker adds a hosting controller on mount (200 `addChild` calls in a list); worth a sizingStats/Instruments look before 0.2.
 - **`lbl:` in the iOS key** — iOS draws no caption, so the segment only fragments the cache; harmless, drop it per-platform only if that is cheap.
-- **Core ticket (SF2)** — RN puts the `accessibilityLabel` base prop on the Android host container for every control: confirm with one Switch dump, then either rename the spec prop or keep the host's own `contentDescription` null.
+- **Core question (SF2, re-scoped)** — a pre-fix Picker anchor had a second named semantics node reporting `enabled=true` while disabled; round 1 blamed RN copying `accessibilityLabel` onto the host container and that is not supported by the dumps (Corrections (fix round 2) #2), so nothing is filed against core: one Switch dump on a *pre-M3* build would be needed first, and nothing in Picker depends on the answer now.
 - **iOS leak coverage** — iOS cannot witness a leaked containment (R4-f); a harness that can press popup rows should own this.
 - **T11 flake** — `Sizing … lays a cold Switch out…` failed once (`expected null not to be null`) at `load1` 61 in a full suite; the suite alone was 24/24 and the re-run was green, and the log did not survive `/tmp` (see the note under the gates). Worth watching before it gates a release.
 - **Bench** — re-run the `picker` quick plan in an idle window after this round, since M1/M2 change what `update.picker` does; that run should also mint the iOS baseline.
+- **Stale-batch race (round 2, both platforms)** — two picks in one JS round trip whose batches do not merge leave a batch keyed A while native shows B, and both platforms then file B's width under A's key (`pickIsStillShown` compares with `displayed`, `layoutSubviews` likewise); the fix is to stamp the event count and release only once the batch has caught up.
+- **iOS exact-equality corner (round 2)** — a native pick onto a cold key whose declared fallback equals the old box exactly gets no `layoutSubviews` re-measure and nothing else measures, so the mount keeps the fallback frame; Android files the held size instead.
+- **`defaultSelectedIndex` after mount (round 2, pre-existing)** — changing it on an uncontrolled picker moves the wrapper's key while native keeps its seed, the same poison class as M1; not introduced by either round.
+- **Android unlabelled picker (round 2)** — `contentDescription = title` next to a `stateDescription` that is also the title likely makes TalkBack read the title twice; omit `contentDescription` when there is no `accessibilityLabel`.
+- **MountChurn Picker press (round 2)** — the case never checks that the press opened the menu, so a missed press silently degrades into a plain churn; its red still proves the `drop()` omission, which is the realistic popup-leak path.
+- **`nuiTestSelect` after drop (round 2, test-only)** — Android's `View.post` on a detached host runs at the next attach, possibly of a recycled mount, and iOS's `main.async` has the same shape.
+- **Jest key coverage (round 2, partly closed)** — the uncontrolled key now has a jest case (N1), but there is still no `variantKey`/`useSizingId` case for Picker as `useSizingId.test.tsx` has for Progress.
+- **Orphaned comment (round 2)** — the "A list that shrank under an *open* popup…" comment in `afterUpdate` lost its code and now sits above the release block; it belongs to the rows' recomposition, which happens in the composition.
 
 ### Questions for orchestrator
 
 1. Ready for main on your go. Please re-run the merge-plan gates after pulling main: `uiautomator.mjs`, `RealInputTests.swift`, the `CHECKS`/`SMOKE_CONTROLS` tables and the nitrogen output all changed for two controls at once, so the merge — not either branch — is what needs the harness on both platforms.
-2. The SF2 core ticket (`accessibilityLabel` on the Android host container) is bigger than G6: do you want to open it, or should I file it against core?
+2. The SF2 item is no longer a core ticket: the mechanism round 1 named (`accessibilityLabel` copied onto the Android host container) is contradicted by our own dumps, and the merged-node fix stands regardless. Nothing to file unless you want the unexplained `enabled=true` chased on a pre-M3 build — say so and it is a separate task, not G6.
+
+## Fix round 2 — N1, N2, N3 (final round under D19)
+
+Re-review verdict `MERGE-AFTER-SMALL-FIXES` (`docs/tasks/G6-picker.rereview.md`, committed as
+`dc7d864`). Three must-fixes: one JS, one Kotlin (Picker file only), one text-only. Harness files
+changed, so both platforms were re-run (AGENTS.md).
+
+### N1 — a remembered choice belongs to the mount that made it
+
+`src/components/Picker/Picker.tsx` stores the uncontrolled choice as `{ sizingId, index }` and
+matches it on `sizingId`. Mount identity is the sizing id, not the variant: a menu → wheel → menu
+round-trip re-creates a native view whose variant *matches* while its content is the seed again,
+so a choice kept under the variant names a title native is not painting and the fresh host's first
+width is filed under the title it replaced — M1's cache poison, arriving through the other door.
+`useSizingId` mints on every `variantKey` change and never reuses, so matching on it can only ever
+match the mount that made the choice. `variantKey`/`sizingId` moved above the state because the
+choice is stamped with the id.
+
+New jest case `names the picked title, and only the picked title of the current mount`
+(`src/__tests__/picker.test.tsx`, new `Picker · uncontrolled key` describe): pick → `sel:Three`,
+→ wheel → `sel:One`, → menu again → the key must name the default again *and* the sizing id must
+have moved. The file's fake core now mints a fresh id per mount (`nextMockId`) instead of always
+returning 1 — an id that never moves cannot witness this, and no assertion reads an absolute id.
+
+### N2 — a size report is held only for a choice that emitted
+
+`PickerModel.applyUserSelection` answers `Boolean` (`false` for a disabled control and for a press
+on the row already shown), and `PickerHost.choose` calls `holdSizingReports()` only on a `true`.
+A refused press paints nothing and starts no props batch, so a hold taken for it is released only
+by the next unrelated batch — which *drops* the held size rather than filing it, losing every size
+meant in between for the life of the mount. Re-tapping the shown row is the common refusal:
+real-input step 2 does exactly that.
+
+`PickerHost` itself is **not** unit-testable — nothing on the JVM can construct the Compose host —
+so, as the review asked us to say: the JVM case covers the model's answer (the only question the
+host can ask) and the harness case covers the host's use of it.
+
+New harness case `goes on reporting its size after a re-tap of the row already shown`: uncontrolled
+picker, both configurations poisoned, press the row already shown (no event, no follow-up batch,
+box unchanged), *then* change `options` to a longer title and require the correction to land.
+
+### N3 — the second accessibility node was never the RN host
+
+Corrected in `scripts/real-input/android.mjs` step 7, `docs/components/picker.md` and here
+(Corrections below). The evidence the round had in hand: the pre-fix dumps nest the named
+`android.view.View` *inside* the `EditText`, and a container cannot nest inside what it contains —
+the RN host `FrameLayout` would be an ancestor. Step 8 asserts exactly **one** node carries
+`content-desc="Real-input enabled picker"` while `PickerScreen.tsx` passes that name as
+`accessibilityLabel`, so RN did not copy it onto the host either. What the second node was: a
+Compose semantics node of the anchor. *Why* it answered `enabled=true` was never established, the
+merged-node fix does not depend on the answer, and the SF2 core ticket that invented the mechanism
+is withdrawn rather than re-filed.
+
+### Files this round
+
+- **JS**: `src/components/Picker/Picker.tsx` (N1), `src/__tests__/picker.test.tsx` (+1 case, fake core mints ids).
+- **Android**: `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPicker.kt` (N2, `applyUserSelection` → `Boolean`, `choose` holds conditionally), `android/src/test/java/com/margelo/nitro/nitroui/PickerModelTest.kt` (+1 case).
+- **Tests**: `example/__tests__/Picker.harness.tsx` (+1 case, both platforms run).
+- **Text**: `scripts/real-input/android.mjs` (step 7 comment), `docs/components/picker.md` (accessibility bullet), this report.
+- Commits: N1 `08a9e4f`, N2 `bbc5e0d`, N3 `829e86e`, re-review `dc7d864`, this section last.
+
+### Reds in fix round 2
+
+| # | What was broken | What went red |
+| - | - | - |
+| N1-jest | `Picker.tsx` reverted to `1719a7b`, new case in place | `Expected: "menu|3|One|Two|Three|sel:One|lbl:"`, `Received: "…sel:Three|lbl:"` (`/tmp/g6fix2-N1-RED-jest.log`) — the round-trip mount files `Three`'s title on a view painting `One` |
+| N2-jvm | new case against the unfixed model | `compileDebugUnitTestKotlin FAILED — Argument type mismatch: actual type is 'Unit', but 'Boolean' was expected` (`/tmp/g6fix2-N2-RED-jvm.log`). The case cannot be red as an assertion before the API exists; the compile failure *is* the statement that the host cannot ask the question yet |
+| N2-harness | mutant: `choose()` holds for every press **and** `afterUpdate()` no longer calls `releaseSizingReports` (`/tmp/g6fix2-N2-MUTANT-build.log`) | 6 failed / 18 passed (`/tmp/g6fix2-N2-RED-retap-android.log`), the new case among them: `testID "re-tap" (the box following the new title) never reached 384.76x56.00 - last box 13.33x66.67, control measured 384.76x56.00` — the engine is still filing the short title's box |
+
+**The N2 harness case is green on the unfixed code, and that is stated rather than hidden.** In
+that run (`/tmp/g6fix2-BEFORE-android.log`) the only failure was a different, since-deleted case,
+so the re-tap case passed: `afterUpdate()`'s `releaseSizingReports()` runs before the batch's own
+measure, so a *props batch* cannot lose a size even with a stray hold. Losing one needs a size
+change that arrives with no batch at all (an in-process configuration change in an app that owns
+its `fontScale`), which the harness cannot drive; a fixture that deferred the pick's acceptance to
+a later tick was written and **deleted** because the controlled echo re-keys one frame after the
+pick, so the window it needed was never open long enough to assert anything non-vacuous about it.
+The mutant above is therefore the proof that the case bites: with both nets removed the re-tap
+case goes red with the five hold cases, and with the guard in place the suite is green again.
+
+### Gates, fix round 2
+
+| Gate | Result |
+| - | - |
+| `fnm exec --using 24 -- bun run check` | **pass, exit 0** — jest **189/189** (12 suites), `perf:renders` 6/6 (Picker 6, `mount+0 redundant`), nitrogen no drift (160 files, 24 views), api-extractor/publint/manifest/readme clean (`/tmp/g6fix2-check-final.log`) |
+| `bash scripts/native-tests-android.sh` | **pass** — `BUILD SUCCESSFUL in 1m 1s`, `PickerModelTest` 7 tests incl. the new one (`/tmp/g6fix2-N2-GREEN-jvm.log`). Still **not** part of `check` (see Follow-ups) |
+| `react-native-harness --harnessRunner android Picker.harness.tsx` | **pass, 24/24** in 30.8 s on `nitroui_t01` / Metro 8293, app rebuilt from this tree (`/tmp/g6fix2-AFTER-android-full.log`) |
+| `react-native-harness --harnessRunner ios Picker.harness.tsx` | **pass, 24/24** in 55.3 s on iPhone 17 / Metro 8293 (`/tmp/g6fix2-AFTER-ios-full.log`). No iOS native code changed this round, so the existing Debug `.app` was reused |
+| `bun run test:real-input:android --control picker` | **pass, 1/1 controls** — every assertion incl. the six `uiautomator` dump ones, the disabled refusal, the refused snap-back and the three unmount-while-open cycles (`/tmp/g6fix2-AFTER-realinput-android.log`) |
+| `bun run test:real-input:ios --control picker` | **pass** — `testRealInputPicker` in **151.667 s**, `** TEST EXECUTE SUCCEEDED **` (`/tmp/g6fix2-AFTER-realinput-ios2.log`). The **first** run failed at step 7 under `load1` ≈ 105 (`/tmp/g6fix2-AFTER-realinput-ios.log`: `real-input-drop-gone` never appeared) — see the Follow-up about that step's 10 s read against the screen's 12 s delay; steps 1–6, which hold this round's and round 1's iOS claims, passed in both runs |
+
+### Corrections (fix round 2)
+
+1. **"the variant it was made under"** (round-1 M1 and M2 above): the variant is not the mount. A
+   menu → wheel → menu round-trip matches a stale choice again, which is N1; the code now stamps
+   the sizing id, and the jest case is the regression guard.
+2. **"that second node is the React Native host view"** (round-1 M3, Corrections #3, decision 6 and
+   the SF2 follow-up as first written): contradicted by our own dumps, which nest the node inside
+   the `EditText`, and by step 8 counting one named node. It is a Compose semantics node; why it
+   said `enabled=true` is unknown. The behaviour claims (one node, `Spinner`, `enabled=false` when
+   disabled, refusal measured by a real tap) are unaffected — they are measured, and were re-run
+   this round.
+
+### Follow-ups added this round
+
+The re-review's non-blocking items are one line each in the Follow-ups list above (marked
+*round 2*). Two more from this round:
+
+- **iOS leak step's margin** — step 7 reads `real-input-drop-gone` with a 10 s timeout while the screen's own `DROP_DELAY_MS` is 12 s on iOS, and the read starts before the delay has run out, so the margin is whatever the heartbeat read happens to take; at `load1` ≈ 105 it went negative and the case failed once, green on re-run. Reading the arm timestamp (or raising the timeout above the delay) would make it load-proof.
+- **Deferred-pick harness fixture** — a fixture that accepts a pick on a later tick cannot witness the N2 hold window while the `onChange` echo still re-keys one frame later; if a future case needs that window, it needs a picker whose echo is genuinely withheld, and it should say so.
+
+### Questions for orchestrator (fix round 2)
+
+1. Still ready for main on your go; the merge-plan gate note from round 1 stands (the merge, not either branch, is what needs the harness on both platforms).
+2. `PickerModelTest` runs only under `test:native:android`, which `check` does not call, so this round's red was a Kotlin *compile* failure in a script the gate never runs. If that is worth closing, it is a one-line `check` addition — but it also puts a Gradle JVM task inside every `check`, which is a repo-wide call, not a G6 one.
