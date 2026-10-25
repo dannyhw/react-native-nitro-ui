@@ -198,6 +198,41 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    */
   private val remeasureToken = mutableIntStateOf(0)
 
+  /**
+   * How many times this host's rendered content has been marked changed, for
+   * [NitroUiMeasuredRoot]'s placement guard.
+   *
+   * [remeasureToken] moves when the *box* says something; this moves when the
+   * *content* does. It has to be a composition read, and here is the ordering that
+   * forces that: a prop batch measures the host before its recomposition has run
+   * (measured on `nitroui_t01`: setters, `commit()`, then Fabric's measure, all in
+   * one message, with the recomposition dispatched after it), so a measure taken in
+   * the prop turn still sees the old content - and a control placed at its box's
+   * width answers the box's width whatever that content is, so Compose has no child
+   * size change to propagate and never re-measures on its own. Restarting the group
+   * that owns the `Layout` block is the one thing that asks again *after* the new
+   * content is in the composition, which is the only moment a report can be right.
+   *
+   * Written by [markDirty], which every setter that renders calls - so the extra
+   * recomposition and measure land on a batch that changed something drawn, and a
+   * `fillWidth` control (which never asks the unbounded question) does not read this
+   * at all.
+   */
+  private val contentRevision = mutableIntStateOf(0)
+
+  /**
+   * The host's own note of whether this control's content overruns its box, and
+   * whether to place it at the box's width (see [NitroUiOverWidePlacement]).
+   *
+   * Without it, an `intrinsic` control that wants more width than Yoga gave it is
+   * drawn at its own width, centred, and cut off at both ends by the host's bounds
+   * (G4 review F2): the visible part of an outer segment belongs to its neighbour,
+   * so the ends of a long `SegmentedControl` row are both invisible and untappable.
+   * iOS has no equivalent - SwiftUI lays a control *into* the box it is offered and
+   * truncates - so this is the Android half of matching it.
+   */
+  private val overWidePlacement = NitroUiOverWidePlacement()
+
   /** Whether a pre-draw flush is already queued for this host. */
   private var flushScheduled = false
 
@@ -255,6 +290,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
         record = wantsContentSize,
         unbounded = wantsContentSize && sizingPolicy == NitroUiSizing.POLICY_INTRINSIC,
         remeasureToken = remeasureToken,
+        contentRevision = contentRevision,
+        overWide = overWidePlacement,
         onMeasured = ::recordMeasuredSize,
       ) {
         Component(model)
@@ -286,6 +323,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
   /** Called by prop setters: record that something rendered changed. */
   fun markDirty() {
+    // Every setter that changes what is drawn arrives here, and only when its value
+    // actually changed (they compare first), so this is the host's one generic
+    // "the content may be different now" signal. See [contentRevision].
+    contentRevision.intValue += 1
     isDirty = true
   }
 
@@ -322,6 +363,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     isMeasurePending = true
     sizingKeyChangePending = false
     contentSize = null
+    overWidePlacement.reset()
     // A recycled mount still paints its first frame for itself, and has to watch
     // for it again: the listener it registered for the previous mount is gone.
     hasMarkedFirstFrame = false
@@ -368,6 +410,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     unregisterPreDraw(flushWatch)
     flushWatch = null
     contentSize = null
+    overWidePlacement.reset()
     releaseSizingInstance()
   }
 
@@ -519,6 +562,49 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
     isMeasurePending = false
     super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    askForBoundedPlacement()
+  }
+
+  /**
+   * Turn an overrun into the measure that can not overrun.
+   *
+   * The measure that just ran asked the unbounded question, because that is the
+   * only question that can report a control's own size ([NitroUiMeasuredRoot] has
+   * the reasons). When its answer does not fit the box, the *drawing* has to be redone
+   * with the box's width - Material 3 truncates an `Ellipsis`-able label and shares a
+   * row out between its segments once it is measured at a finite width, which is
+   * exactly what the control does on iOS in the same box. The host's answer cannot
+   * change (it is Yoga's box either way) and its report must not, so only the
+   * question changes.
+   *
+   * It is a second measure, and it is deliberately not a second *report*: the size
+   * the bounded question returns is the box, and that number in the cache under this
+   * configuration is the pre-T11 bug (`docs/architecture/sizing.md` §3) - a row that
+   * wants 330 dp would be laid out at 140 forever, for every later instance too.
+   * [NitroUiMeasuredRoot] knows which question it asked and keeps the bounded answer
+   * to itself, so `contentSize` stays the control's intrinsic size.
+   *
+   * One traversal's worth of the old drawing can reach the screen: the measure block
+   * cannot ask its child twice in the same pass (`MeasurePassDelegate` throws for a
+   * second `measure()`), so this can only mark the node dirty and let the next
+   * traversal ask. Only a control that overruns pays it, and it stops paying as soon
+   * as [NitroUiOverWidePlacement.placeAtBoxWidth] is sticky.
+   */
+  private fun askForBoundedPlacement() {
+    if (!overWidePlacement.contentWantsMoreThanBox) {
+      return
+    }
+    overWidePlacement.contentWantsMoreThanBox = false
+    if (overWidePlacement.placeAtBoxWidth) {
+      // This measure *was* the bounded one, so it could not have overrun: the flag
+      // it would have set is the one this function already consumed. Belt and braces.
+      return
+    }
+    overWidePlacement.placeAtBoxWidth = true
+    // The same lever an armed sizing key change uses: the measure block reads this
+    // state, so writing it marks that node measure-dirty, and the next traversal runs
+    // the block with [NitroUiOverWidePlacement.placeAtBoxWidth] true.
+    remeasureToken.intValue += 1
   }
 
   /**
@@ -546,6 +632,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       // nothing to correct.
       sizingKeyChangePending = false
       lastReportedSize = null
+      overWidePlacement.reset()
       remeasureToken.intValue += 1
     }
   }
@@ -761,6 +848,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   override fun onConfigurationChanged(newConfig: android.content.res.Configuration?) {
     super.onConfigurationChanged(newConfig)
     lastReportedSize = null
+    // A new font scale or locale changes what the content wants, which is the one
+    // thing the sticky placement flag must not hide: the next measure has to ask the
+    // unbounded question again to find out.
+    overWidePlacement.reset()
     // Only the parts of a configuration that can move a control's size belong in
     // the signature. A rotation is a configuration change that moves no size, and
     // this fires once per mounted view, so bumping unconditionally would clear a
@@ -943,6 +1034,15 @@ internal object NitroUiColorSchemes {
  *   The `else` arm covers a `fillWidth` control in a genuinely unbounded parent:
  *   with no width to fill there is nothing to ask but the unbounded question.
  *
+ * When the honest question comes back wider than the box - a long `SegmentedControl`
+ * row under a caller's `width` - [NitroUiOverWidePlacement.placeAtBoxWidth] turns the
+ * *next* pass into a second question, this one with the box's width (its height still
+ * free), and the control then lays itself out the way it would in a Compose layout of
+ * that width: labels ellipsize, a row's segments share the space. That pass is for
+ * placement only and reports nothing, so the size the engine is given stays the
+ * control's own; a `height` too small for the control still clips it centred, as it
+ * did before and as the caller's `height` always meant.
+ *
  * Material's `minimumInteractiveComponentSize` (a 48 dp touch target) is part of
  * the size by design, and only [NitroComposeHost.wantsContentSize] pays for
  * recording at all.
@@ -952,12 +1052,31 @@ internal fun NitroUiMeasuredRoot(
   record: Boolean,
   unbounded: Boolean,
   remeasureToken: IntState,
+  contentRevision: IntState,
+  overWide: NitroUiOverWidePlacement,
   onMeasured: (Int, Int) -> Unit,
   content: @Composable () -> Unit,
 ) {
+  // Read in the composition, not in the measure block, and deliberately so: this is
+  // the read that makes a prop batch restart this group, and handing `Layout` a new
+  // measure block is what makes Compose measure the node again - after the content
+  // it is about to measure is actually in the composition. See
+  // [NitroComposeHost.contentRevision]. `fillWidth` never places at the box, so it
+  // never subscribes.
+  val revision = if (unbounded) contentRevision.value else -1
   Layout(content) { measurables, constraints ->
+    // Which of the two questions to ask the content. The placement flag is read
+    // here, not captured above: the host flips it *between* passes, so a value read
+    // at composition time would be the previous pass's. The revision is the
+    // exception - the composition's number is the content this node renders.
+    val placeAtBoxWidth =
+      unbounded &&
+      overWide.placeAtBoxWidth &&
+      constraints.hasBoundedWidth &&
+      constraints.maxWidth == overWide.armedWidthPx &&
+      revision == overWide.armedRevision
     val childConstraints =
-      if (unbounded) {
+      if (unbounded && !placeAtBoxWidth) {
         // The unbounded question. See the kdoc: this is what makes the recorded
         // size the control's, not the box's.
         Constraints()
@@ -980,8 +1099,28 @@ internal fun NitroUiMeasuredRoot(
     // measure again (see [NitroComposeHost.remeasureToken]), and a fresh measure is
     // the only thing that can produce the report a new sizing key is waiting for.
     val remeasureRequested = remeasureToken.value >= 0
-    if (record && remeasureRequested && placeable != null) {
+    if (record && remeasureRequested && placeable != null && !placeAtBoxWidth) {
       onMeasured(measuredWidth, measuredHeight)
+    }
+    if (unbounded && !placeAtBoxWidth) {
+      // Only the unbounded question can answer this, and it answers it every time:
+      // a row that fits says so, which is what releases the flag when a box grows
+      // back to the control's size. The host reads it after the measure returns
+      // ([NitroComposeHost.askForBoundedPlacement]) - never inside a composition.
+      // [NitroUiOverWidePlacement.armedWidthPx] is written here too, and by the pass
+      // that saw the overrun rather than by the host afterwards: the host's own
+      // measured width is not necessarily the same number as the constraint this
+      // content was asked under, and the guard has to compare like with like.
+      // Both stamps are this pass's own facts: the width it was asked under, and the
+      // composition revision whose content it measured. The host knows neither - the
+      // revision it holds may already be newer than what is in the composition.
+      val overruns =
+        constraints.hasBoundedWidth && measuredWidth > constraints.maxWidth
+      overWide.contentWantsMoreThanBox = overruns
+      if (overruns) {
+        overWide.armedWidthPx = constraints.maxWidth
+        overWide.armedRevision = revision
+      }
     }
     // What this returns is Yoga's box, not the control's size - the control gets
     // centred inside it. `resolveSize` keeps an explicit `EXACTLY` from Fabric
@@ -996,6 +1135,75 @@ internal fun NitroUiMeasuredRoot(
         (height - measuredHeight) / 2
       )
     }
+  }
+}
+
+/**
+ * What the host knows about content that is wider than the box RN gave it.
+ *
+ * Plain fields, not snapshot state, and that is load-bearing rather than tidy: the
+ * measure block writes [contentWantsMoreThanBox] and reads [placeAtBoxWidth] on
+ * every pass, and a measure block that observes what it writes dirties the node it
+ * runs in - which here would be a permanent dirty → measure → honest → arm → dirty
+ * loop. The host owns these fields and every reset of them, all on the UI thread, in
+ * the one moment they can be trusted: after a measure.
+ */
+internal class NitroUiOverWidePlacement {
+  /**
+   * Whether to measure the content with the box's width for *placement*.
+   *
+   * Sticky rather than per-pass, and it has to be: asking the unbounded question,
+   * seeing that it does not fit, and then flipping the flag is already two
+   * measures. Resetting it after each pass would make that the steady state - every
+   * pass would start with the question that cannot fit and answer it again - and a
+   * flag written at the end of a pass and read at the start of the next is how a
+   * layout that never settles gets written.
+   *
+   * It is a property of one content at one box, so it expires when either moves:
+   * [armedWidthPx] for the box and [armedRevision] for the content, both read by
+   * [NitroUiMeasuredRoot]'s measure block - and an expired arming asks the unbounded
+   * question again, which is also the only thing that can report the new size. It is
+   * reset outright when the environment it was measured in changes
+   * ([NitroComposeHost.onConfigurationChanged]), when a new sizing key arrives
+   * ([NitroComposeHost.noteSizingKeyChanged]) and with the mount.
+   */
+  var placeAtBoxWidth = false
+
+  /**
+   * The box width [placeAtBoxWidth] was armed against, in the px the measure block
+   * saw it, or -1 (a box width is never negative).
+   *
+   * The flag is only honoured while the box still has that width, which is what
+   * stops two wrong drawings from surviving: content that overran the engine's
+   * *first* guess at a box (Yoga's provisional fallback, before the control's own
+   * report corrects it) would otherwise be placed at that too-small width forever,
+   * and content that has since been given room would stay squeezed into a width it
+   * no longer needs. A pass under any other width is the unbounded one, and it
+   * answers again whether an overrun is still true.
+   */
+  var armedWidthPx = -1
+
+  /**
+   * The [NitroComposeHost.contentRevision] of the composition whose content overran.
+   *
+   * The other half of "the box the control overran is still the box it has": props
+   * can change what the content wants without changing the frame at all, and a
+   * control measured at the box's width reports the box's width for *any* content,
+   * so an arming that outlives its content quietly loses every later correction.
+   */
+  var armedRevision = -1
+
+  /**
+   * Set by the measure block when the *unbounded* question came back wider than the
+   * box. The host consumes it after the measure and asks the bounded question.
+   */
+  var contentWantsMoreThanBox = false
+
+  fun reset() {
+    placeAtBoxWidth = false
+    contentWantsMoreThanBox = false
+    armedWidthPx = -1
+    armedRevision = -1
   }
 }
 
