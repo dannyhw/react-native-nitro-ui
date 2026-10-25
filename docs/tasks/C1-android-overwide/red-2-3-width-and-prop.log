@@ -1,0 +1,40 @@
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.32/3.20 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Using existing Android emulator nitroui_t01...
+2026-10-25T08:06:33.059Z [harness] Hardware acceleration (KVM/HVF) appears unavailable for the Android emulator. It will fall back to very slow software emulation.
+HARNESS Runner android ready
+
+FAIL __tests__/SegmentedControl.harness.tsx
+  ● SegmentedControl · G4 › re-fits when the caller narrows the box under an over-wide row
+
+    expected [ 'narrowing:3', 'narrowing:0', …(2) ] to deeply equal [ 'narrowing:3', 'narrowing:0', …(2) ]
+
+      [0m [90m 321 |[39m   [36mawait[39m userEvent[33m.[39mpressAt(box[33m![39m[33m.[39mx [33m+[39m box[33m![39m[33m.[39mwidth [33m-[39m [35m2[39m[33m,[39m box[33m![39m[33m.[39my [33m+[39m box[33m![39m[33m.[39mheight [33m/[39m [35m2[39m)[33m;[39m
+       [90m 322 |[39m   [36mawait[39m userEvent[33m.[39mpressAt(box[33m![39m[33m.[39mx [33m+[39m [35m2[39m[33m,[39m box[33m![39m[33m.[39my [33m+[39m box[33m![39m[33m.[39mheight [33m/[39m [35m2[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 323 |[39m   expect([36mawait[39m waitForEvents(expected[33m.[39mlength))[33m.[39mtoEqual([[33m...[39mexpected])[33m;[39m
+       [90m     |[39m                                                       [31m[1m^[22m[39m
+       [90m 324 |[39m }
+       [90m 325 |[39m
+       [90m 326 |[39m [36mconst[39m rowStyle[33m:[39m [33mStyleProp[39m[33m<[39m[33mViewStyle[39m[33m>[39m [33m=[39m { gap[33m:[39m [35m6[39m }[33m;[39m[0m
+
+  ● SegmentedControl · G4 › keeps an over-wide row fitted through a prop change
+
+    expected [ 'tinted:3', 'tinted:0', …(2) ] to deeply equal [ 'tinted:3', 'tinted:0', …(2) ]
+
+      [0m [90m 321 |[39m   [36mawait[39m userEvent[33m.[39mpressAt(box[33m![39m[33m.[39mx [33m+[39m box[33m![39m[33m.[39mwidth [33m-[39m [35m2[39m[33m,[39m box[33m![39m[33m.[39my [33m+[39m box[33m![39m[33m.[39mheight [33m/[39m [35m2[39m)[33m;[39m
+       [90m 322 |[39m   [36mawait[39m userEvent[33m.[39mpressAt(box[33m![39m[33m.[39mx [33m+[39m [35m2[39m[33m,[39m box[33m![39m[33m.[39my [33m+[39m box[33m![39m[33m.[39mheight [33m/[39m [35m2[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 323 |[39m   expect([36mawait[39m waitForEvents(expected[33m.[39mlength))[33m.[39mtoEqual([[33m...[39mexpected])[33m;[39m
+       [90m     |[39m                                                       [31m[1m^[22m[39m
+       [90m 324 |[39m }
+       [90m 325 |[39m
+       [90m 326 |[39m [36mconst[39m rowStyle[33m:[39m [33mStyleProp[39m[33m<[39m[33mViewStyle[39m[33m>[39m [33m=[39m { gap[33m:[39m [35m6[39m }[33m;[39m[0m
+
+HARNESS Shutting down Android emulator nitroui_t01...
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 16 passed, 18 total
+Snapshots:   0 total
+Time:        39.612 s
+Ran all test suites matching SegmentedControl.

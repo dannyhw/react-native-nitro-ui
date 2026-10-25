@@ -145,6 +145,16 @@ function sizeOf(testId: string): Size | null {
   return harnessUi.queryByTestId(testId);
 }
 
+/**
+ * The same box with its position, for a test that taps at an edge of it.
+ *
+ * `sizeOf` answers with a `Size` because that is all a sizing assertion reads; the
+ * coordinates are screen dp, the unit `userEvent.pressAt` takes.
+ */
+function boxOf(testId: string): ViewInfo | null {
+  return harnessUi.queryByTestId(testId);
+}
+
 function measured(testId: string): Size | null {
   return handles.get(testId)?.measureContent() ?? null;
 }
@@ -289,6 +299,32 @@ function poisonConfigurations(keys: readonly string[]): void {
 /** Let queued work land before reading counters that only move on a later turn. */
 async function settle(ms = 250): Promise<void> {
   await sleep(ms);
+}
+
+/**
+ * Tap both ends of a control's box and require `expected` to be the log after.
+ *
+ * The tap is the only honest oracle for where a hosted row's segments actually
+ * are: the harness dispatches real MotionEvents from the window root, so Compose
+ * hit-tests this the way a finger is hit-tested, while its segments are virtual
+ * nodes that no geometry query can see. Both ends matter - content drawn wider
+ * than its box is centred, so each end of the box shows a *different* neighbour's
+ * segment - and the expected log is spelled out by the caller so a test that taps
+ * twice reads as one sequence.
+ */
+async function pressBothEnds(
+  testId: string,
+  expected: readonly string[]
+): Promise<void> {
+  const box = boxOf(testId);
+  expect(box).not.toBeNull();
+  await userEvent.pressAt(box!.x + box!.width - 2, box!.y + box!.height / 2);
+  await userEvent.pressAt(box!.x + 2, box!.y + box!.height / 2);
+  // Joined, so a red run says which segment got the tap: the harness prints an
+  // array diff abbreviated (`…(2)`), which hides exactly the fact under test.
+  expect((await waitForEvents(expected.length)).join(',')).toEqual(
+    [...expected].join(',')
+  );
 }
 
 const rowStyle: StyleProp<ViewStyle> = { gap: 6 };
@@ -740,13 +776,12 @@ describe('SegmentedControl · G4', () => {
     // A measured size is not an override: a `width` from the caller fixes the box,
     // and this asserts the box - 140, not the ~330 the labels want.
     //
-    // It deliberately does not claim what each platform then *draws*. iOS hands the
-    // box to SwiftUI, whose segmented `Picker` compresses the segments and truncates
-    // the labels. Android measures the row unbounded and centres it in the box, so a
-    // too-narrow box clips the row at both ends and the hidden part of the outer
-    // segments cannot be tapped (`docs/components/segmented-control.md`, Limits).
-    // Neither is observable through the handle, and the shared host's fix is a 0.2
-    // follow-up, so the honest name here is the box.
+    // Both platforms then *draw* the box: iOS hands it to SwiftUI, whose segmented
+    // `Picker` compresses the segments and truncates the labels, and Android
+    // re-measures the row with it before placing it (`NitroUiMeasuredRoot`), which
+    // is what the test below is about. What stays unobservable through the handle is
+    // the *truncation itself* - Compose's segments are virtual nodes, so the honest
+    // claim here is still the box, and the row inside it is the next test's job.
     const { unmount } = await render(
       <SegmentedControl
         options={['January', 'February', 'March', 'April']}
@@ -759,6 +794,237 @@ describe('SegmentedControl · G4', () => {
     const box = sizeOf('capped');
     expect(box).not.toBeNull();
     expect(Math.abs(box!.width - 140) < 0.6).toBe(true);
+    unmount();
+  });
+
+  it('fits an over-wide row into the box the caller gave it', async () => {
+    // The other half of a caller's width. The labels want ~330 dp and the box is
+    // 140, and what the user gets has to be a 140 dp row: four segments inside the
+    // box, each one reachable. Before the host asked for a *placement* measure with
+    // the box's constraints, Android drew the row at its intrinsic width centred in
+    // the box and clipped both ends - the outer segments were cut off, and the part
+    // of them that was visible was a neighbour's.
+    //
+    // The tap is the oracle because it cannot lie about which segment is where: the
+    // two outer segments are the only things at the two edges of the box, and the
+    // harness dispatches real MotionEvents from the window root, so Compose
+    // hit-tests this the way a finger is hit-tested. The reported size is asserted
+    // in the same breath - placement must not become the report, or 140 goes into
+    // the cache under this option list and every later row with these labels is
+    // laid out at 140 (the exact pre-T11 bug `docs/architecture/sizing.md` §3).
+    const { unmount } = await render(
+      <SegmentedControl
+        options={['January', 'February', 'March', 'April']}
+        onChange={recordChange('overwide')}
+        testID="overwide"
+        style={{ width: 140 }}
+        hybridRef={captureHybrid('overwide')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('overwide');
+    const box = boxOf('overwide');
+    expect(box).not.toBeNull();
+    expect(Math.abs(box!.width - 140) < 0.6).toBe(true);
+    const intrinsic = await waitForMeasured('overwide', 'four long options');
+    expect(intrinsic.width).toBeGreaterThan(box!.width + 20);
+
+    // Uncontrolled, so native owns the result: the right edge is the last segment
+    // and the left edge is the first, if the row was laid out at 140 dp.
+    await userEvent.pressAt(box!.x + box!.width - 2, box!.y + box!.height / 2);
+    expect(await waitForEvents(1)).toEqual(['overwide:3']);
+
+    await userEvent.pressAt(box!.x + 2, box!.y + box!.height / 2);
+    expect(await waitForEvents(2)).toEqual(['overwide:3', 'overwide:0']);
+    unmount();
+  });
+
+  it('fits a row whose box comes from a narrow parent, not from a width', async () => {
+    // The G4 F2 shape of the bug: *no* `width` on the control. The option list is one
+    // this process has never seen, so the row's own report is what sizes it, and the
+    // report (~600 dp of month names) is wider than the 300 dp parent - the engine
+    // clamps it, so the box is the parent's and the row overruns it by a factor of
+    // two. That is the brief's "narrow parent" fixture, and it is the one the caller
+    // `width` test above cannot stand in for: here the box is whatever the parent has
+    // left over, which is also what a rotation does to a flex row.
+    //
+    // The parent then narrows twice, and that second half is the point. At mount the
+    // box moves once by itself (fallback, then the clamped report) but *when* that
+    // move lands is not deterministic - a correction applied before the view is first
+    // laid out leaves no trace at all - so the test moves the box itself and requires
+    // the row to still fit it. An arming is a fact about one content at one box, so
+    // each move retires it, and the measure at the new box has to discover the overrun
+    // and ask for its own placement measure: a host that reads an expired arming as
+    // "already placed at the box" answers 260 with the row drawn at its own width,
+    // centred, cut off at both ends, with each end of the box showing a neighbour.
+    //
+    // Two moves, not one, is what makes this fail without the fix rather than
+    // usually: at the first narrowing the row either ends up clipped (red there) or
+    // it is genuinely placed at 260, which means an arming exists for 260 - and the
+    // next narrowing retires exactly that. One move alone can land on a host that has
+    // never armed yet, where the old one-shot arming still works.
+    //
+    // `alignItems: flex-start` is load-bearing: a stretched child is pinned to the
+    // parent's width by Yoga from its first frame, and then the box is never the
+    // row's reported width clamped to anything, which is the case under test.
+    const COLD_SIX = ['January', 'February', 'March', 'April', 'May', 'June'];
+    const row = (width: number) => (
+      <View style={{ width, alignItems: 'flex-start' }}>
+        <SegmentedControl
+          options={COLD_SIX}
+          onChange={recordChange('clamped')}
+          testID="clamped"
+          hybridRef={captureHybrid('clamped')}
+        />
+      </View>
+    );
+    const { rerender, unmount } = await render(row(300), { timeout: 20000 });
+    await waitForTestId('clamped');
+    const box = boxOf('clamped');
+    expect(box).not.toBeNull();
+    const intrinsic = await waitForMeasured('clamped', 'six month labels');
+    // The clamp really happened, and the report stayed the row's own width: 300 is
+    // the parent, ~600 is the row. Reporting 300 instead is the pre-T11 bug, which
+    // is why this asserts both numbers as well as the taps.
+    expect(Math.abs(box!.width - 300) < 0.6).toBe(true);
+    expect(intrinsic.width).toBeGreaterThan(box!.width + 20);
+    await pressBothEnds('clamped', ['clamped:5', 'clamped:0']);
+
+    await rerender(row(260));
+    await waitForBox(
+      'clamped',
+      { width: 260, height: box!.height },
+      'the narrower parent'
+    );
+    await pressBothEnds('clamped', [
+      'clamped:5',
+      'clamped:0',
+      'clamped:5',
+      'clamped:0',
+    ]);
+
+    await rerender(row(224));
+    await waitForBox(
+      'clamped',
+      { width: 224, height: box!.height },
+      'the narrowest parent'
+    );
+    await pressBothEnds('clamped', [
+      'clamped:5',
+      'clamped:0',
+      'clamped:5',
+      'clamped:0',
+      'clamped:5',
+      'clamped:0',
+    ]);
+    unmount();
+  });
+
+  it('re-fits when the caller narrows the box under an over-wide row', async () => {
+    // Fitted at 140, then the caller asks for 120 - a flex parent narrowing on
+    // rotation is the same path. Both boxes are too narrow, so the row overruns
+    // before and after; what has to change is that the arming is *made again*
+    // against the new width. Fabric does measure this host for a new box, so the
+    // danger is not that the pass never runs - it is that a host which has armed
+    // once reasons that the pass it just ran must have been the bounded one, and
+    // never asks again. From there the 120 box shows the middle of a row drawn at
+    // its own width, and a tap at either end belongs to the neighbour again.
+    const FOUR = ['January', 'February', 'March', 'April'];
+    const { rerender, unmount } = await render(
+      <SegmentedControl
+        options={FOUR}
+        onChange={recordChange('narrowing')}
+        testID="narrowing"
+        style={{ width: 140 }}
+        hybridRef={captureHybrid('narrowing')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('narrowing');
+    const wide = boxOf('narrowing');
+    expect(wide).not.toBeNull();
+    await waitForMeasured('narrowing', 'four long options at 140');
+    await pressBothEnds('narrowing', ['narrowing:3', 'narrowing:0']);
+
+    await rerender(
+      <SegmentedControl
+        options={FOUR}
+        onChange={recordChange('narrowing')}
+        testID="narrowing"
+        style={{ width: 120 }}
+        hybridRef={captureHybrid('narrowing')}
+      />
+    );
+    await waitForBox(
+      'narrowing',
+      { width: 120, height: wide!.height },
+      'the narrower box'
+    );
+    await pressBothEnds('narrowing', [
+      'narrowing:3',
+      'narrowing:0',
+      'narrowing:3',
+      'narrowing:0',
+    ]);
+    unmount();
+  });
+
+  it('keeps an over-wide row fitted through a prop change', async () => {
+    // Arm at 140, then change one prop that repaints without resizing: the tint. It
+    // is not in the sizing key, so the box does not move, no sizing correction
+    // follows, and nothing else will measure this host again - Fabric measures a
+    // view when its spec changes, and this one did not. Content placed at its box's
+    // width answers the box's width whatever it is, so the pass after the props land
+    // has to ask the unbounded question again, and the pass that learns the row
+    // still overruns has to be the one that asks for the placement measure.
+    // Otherwise one `tintColor` sends the row back to the clipped drawing for the
+    // rest of the mount, and the ends mis-tap again.
+    const FOUR = ['January', 'February', 'March', 'April'];
+    const tint = processColor('#7C4DFF') as number;
+    const { rerender, unmount } = await render(
+      <SegmentedControl
+        options={FOUR}
+        onChange={recordChange('tinted')}
+        testID="tinted"
+        style={{ width: 140 }}
+        tintColor={null}
+        hybridRef={captureHybrid('tinted')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('tinted');
+    await waitForMeasured('tinted', 'four long options at 140');
+    await pressBothEnds('tinted', ['tinted:3', 'tinted:0']);
+
+    await rerender(
+      <SegmentedControl
+        options={FOUR}
+        onChange={recordChange('tinted')}
+        testID="tinted"
+        style={{ width: 140 }}
+        tintColor="#7C4DFF"
+        hybridRef={captureHybrid('tinted')}
+      />
+    );
+    // The tint is the only observable half of "this prop was applied"; the passes it
+    // causes are not observable from JS at all, so the settle covers the UI thread's
+    // work rather than racing it.
+    await pollUntil(
+      () => (handles.get('tinted')?.tintColor === tint ? true : null),
+      () =>
+        new Error(
+          `testID "tinted" never reported the new tint - the handle says ` +
+            `${String(handles.get('tinted')?.tintColor)}, expected ${String(tint)}.`
+        ),
+      5000
+    );
+    await settle(400);
+    await pressBothEnds('tinted', [
+      'tinted:3',
+      'tinted:0',
+      'tinted:3',
+      'tinted:0',
+    ]);
     unmount();
   });
 

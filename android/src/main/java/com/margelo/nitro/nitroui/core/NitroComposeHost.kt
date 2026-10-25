@@ -15,6 +15,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.IntState
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
@@ -198,6 +199,61 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    */
   private val remeasureToken = mutableIntStateOf(0)
 
+  /**
+   * How many times this host's rendered content has been marked changed, for
+   * [NitroUiMeasuredRoot]'s placement guard.
+   *
+   * [remeasureToken] moves when the *box* says something; this moves when the
+   * *content* does. Content placed at its box's width answers that width whatever it
+   * is, so an arming that outlived the content it was made for would keep the drawing
+   * and lose every later correction - and a measure block cannot notice that by
+   * reading this live, because a prop batch measures the host before its recomposition
+   * has run (measured on `nitroui_t01`: setters, `commit()`, then Fabric's measure,
+   * all in one message, with the recomposition dispatched after it). A measure taken
+   * in the prop turn is still measuring the *old* content while this counter already
+   * says new, so the number has to come from the composition that rendered it:
+   * [NitroUiMeasuredRoot] reads it and gives the measure block the revision that
+   * content was composed at.
+   *
+   * That is also what makes a stale pass harmless rather than fatal, which is why this
+   * is a revision and not a flag the pass clears: a measure that arrives before the
+   * recomposition measures content that is about to be replaced, so its verdict gets no
+   * revision to stamp, and the guard refuses to place an unattributed arming bounded.
+   * The first pass over the *new* content therefore still asks the unbounded question -
+   * and reporting is the one thing a pass may never skip, since a bounded answer is the
+   * box, and the box in the cache is the pre-T11 bug.
+   *
+   * Who reads it is the cost story: only a group that is placed at its box's width
+   * reads it, so for content that fits its box - the whole bench corpus, and every
+   * Switch on a plain screen - a bump here has no reader. It restarts no group, hands
+   * `Layout` no new measure block and asks for no measure. What it costs every host is
+   * the write: one snapshot record, the same kind the model's own prop writes make.
+   */
+  private val contentRevision = mutableIntStateOf(0)
+
+  /**
+   * The host's own note of whether this control's content overruns its box, and
+   * whether to place it at the box's width (see [NitroUiOverWidePlacement]).
+   *
+   * Without it, an `intrinsic` control that wants more width than Yoga gave it is
+   * drawn at its own width, centred, and cut off at both ends by the host's bounds
+   * (G4 review F2): the visible part of an outer segment belongs to its neighbour,
+   * so the ends of a long `SegmentedControl` row are both invisible and untappable.
+   * iOS has no equivalent - SwiftUI lays a control *into* the box it is offered and
+   * truncates - so this is the Android half of matching it.
+   */
+  private val overWidePlacement = NitroUiOverWidePlacement()
+
+  /**
+   * [noteOverWideContent] as one stable object.
+   *
+   * Held rather than written as `::noteOverWideContent` at the call site so that
+   * passing it cannot itself be a reason for [NitroUiMeasuredRoot] to recompose: a
+   * fresh lambda per recomposition is a changed argument per recomposition, which is
+   * the cost this pass is careful not to add to controls that never overran.
+   */
+  private val noteOverWide: (Boolean) -> Unit = ::noteOverWideContent
+
   /** Whether a pre-draw flush is already queued for this host. */
   private var flushScheduled = false
 
@@ -255,7 +311,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
         record = wantsContentSize,
         unbounded = wantsContentSize && sizingPolicy == NitroUiSizing.POLICY_INTRINSIC,
         remeasureToken = remeasureToken,
+        contentRevision = contentRevision,
+        overWide = overWidePlacement,
         onMeasured = ::recordMeasuredSize,
+        onOverWide = noteOverWide,
       ) {
         Component(model)
       }
@@ -286,6 +345,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
   /** Called by prop setters: record that something rendered changed. */
   fun markDirty() {
+    // Every setter that changes what is drawn arrives here, and only when its value
+    // actually changed (they compare first), so this is the host's one generic
+    // "the content may be different now" signal. See [contentRevision].
+    contentRevision.intValue += 1
     isDirty = true
   }
 
@@ -322,6 +385,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     isMeasurePending = true
     sizingKeyChangePending = false
     contentSize = null
+    overWidePlacement.reset()
     // A recycled mount still paints its first frame for itself, and has to watch
     // for it again: the listener it registered for the previous mount is gone.
     hasMarkedFirstFrame = false
@@ -368,6 +432,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     unregisterPreDraw(flushWatch)
     flushWatch = null
     contentSize = null
+    overWidePlacement.reset()
     releaseSizingInstance()
   }
 
@@ -522,6 +587,44 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
+   * Record that this content overruns the box it was just measured under, or that it
+   * no longer does, and ask for the measure that can place it at the box's width.
+   *
+   * Called by [NitroUiMeasuredRoot]'s measure block, in the pass that found out, and
+   * nowhere else. That is the whole point of it being a callback rather than a flag
+   * this host reads after `super.onMeasure`, which is how the first version of the
+   * placement pass worked: a host's `onMeasure` runs only when Fabric measures it with
+   * a spec it has not seen (`View.measure` skips `onMeasure` for one it has), and the
+   * passes that matter most never come through there at all - the one after a prop
+   * batch, the one an armed sizing key change asks for, the one Compose runs from
+   * `dispatchDraw` because a child changed size. An overrun noticed by one of those
+   * and left for a later `onMeasure` is an overrun nobody hears about, because nothing
+   * else is going to measure a view whose box did not move.
+   *
+   * The token is the same lever an armed sizing key change uses (see
+   * [remeasureToken]), and this is a write to the state the calling measure block
+   * reads, from inside that block: Compose routes that as a request to measure the
+   * node again, deferred to the end of the traversal, which is exactly the ask. It is
+   * only made when there is something to place, and the bounded pass that answers it
+   * writes nothing, so the asking stops with that pair.
+   *
+   * One traversal's worth of the unbounded drawing does reach the screen first, and it
+   * cannot be avoided here: a `Measurable` may be measured exactly once per pass
+   * (`MeasurePassDelegate` throws for a second `measure()`, checked against the
+   * bytecode of Compose UI 1.12.1), so the pass that learns of an overrun has nothing
+   * else to place. It is why a prop change to a fitted control costs a clipped frame,
+   * and only ever for a control whose content does not fit.
+   *
+   * Only the arming is written here. The two stamps beside it belong to the measure
+   * block, the only place that knows both the box the content was asked under and the
+   * content the composition actually rendered.
+   */
+  private fun noteOverWideContent(overruns: Boolean) {
+    overWidePlacement.armed.value = overruns
+    if (overruns) remeasureToken.intValue += 1
+  }
+
+  /**
    * Same rule as [onMeasure], other way round: a frame can also arrive before the
    * window does, which is what RN does to a `Modal`'s tree. Lay out whatever has
    * been measured, and if the window is here now, measure first so that there is
@@ -546,6 +649,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       // nothing to correct.
       sizingKeyChangePending = false
       lastReportedSize = null
+      overWidePlacement.reset()
       remeasureToken.intValue += 1
     }
   }
@@ -761,6 +865,15 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   override fun onConfigurationChanged(newConfig: android.content.res.Configuration?) {
     super.onConfigurationChanged(newConfig)
     lastReportedSize = null
+    // A new font scale or locale changes what the content wants, which is the one
+    // thing the sticky placement flag must not hide: the next measure has to ask the
+    // unbounded question again to find out.
+    overWidePlacement.reset()
+    // ...and something has to *be* that next measure. Compose re-measures for its own
+    // reasons after a configuration change, but it is not obliged to re-measure a node
+    // whose measured size it has no reason to doubt, and the arming lost above is only
+    // re-made by a pass that asks the unbounded question. Ask for that pass.
+    remeasureToken.intValue += 1
     // Only the parts of a configuration that can move a control's size belong in
     // the signature. A rotation is a configuration change that moves no size, and
     // this fires once per mounted view, so bumping unconditionally would clear a
@@ -943,6 +1056,15 @@ internal object NitroUiColorSchemes {
  *   The `else` arm covers a `fillWidth` control in a genuinely unbounded parent:
  *   with no width to fill there is nothing to ask but the unbounded question.
  *
+ * When the honest question comes back wider than the box - a long `SegmentedControl`
+ * row under a caller's `width`, or one the engine clamped to its parent - the pass
+ * that learned it asks for a second question, this one with the box's width (its
+ * height still free), and the control then lays itself out the way it would in a
+ * Compose layout of that width: labels ellipsize, a row's segments share the space.
+ * That pass is for placement only and reports nothing, so the size the engine is
+ * given stays the control's own; a `height` too small for the control still clips it
+ * centred, as it did before and as the caller's `height` always meant.
+ *
  * Material's `minimumInteractiveComponentSize` (a 48 dp touch target) is part of
  * the size by design, and only [NitroComposeHost.wantsContentSize] pays for
  * recording at all.
@@ -952,12 +1074,61 @@ internal fun NitroUiMeasuredRoot(
   record: Boolean,
   unbounded: Boolean,
   remeasureToken: IntState,
+  contentRevision: IntState,
+  overWide: NitroUiOverWidePlacement,
   onMeasured: (Int, Int) -> Unit,
+  onOverWide: (Boolean) -> Unit,
   content: @Composable () -> Unit,
 ) {
+  // Both reads are gated on the arming, and that gate is the whole cost story of the
+  // placement work: content that never overran its box never arms, so it observes
+  // neither of these and a prop batch through [NitroComposeHost.markDirty] neither
+  // restarts this group nor hands `Layout` a different measure block for it. Only
+  // content that is placed at its box's width pays, which is the content that needs it.
+  //
+  // [contentRevision] has to be read *here* rather than in the measure block, and that
+  // is not a style choice: a block reading the live value reads the revision of content
+  // it has not rendered yet (the reason is on the field), and content placed at a box's
+  // width answers that width whatever it is, so Compose has no child-size change to
+  // propagate and never asks again. The composition is the only thing that knows what it
+  // rendered, so the revision has to travel with it - and reading
+  // [NitroUiOverWidePlacement.armed] is what makes the gating possible, because writing
+  // it at an overrun restarts this group, which is the moment this group starts
+  // observing the revision.
+  val armedAtComposition = if (unbounded) overWide.armed.value else false
+  val revision =
+    if (armedAtComposition) {
+      contentRevision.value
+    } else {
+      NitroUiOverWidePlacement.NO_REVISION
+    }
   Layout(content) { measurables, constraints ->
+    // Which of the two questions to ask the content.
+    //
+    // The arming and its width are read live rather than captured above because this
+    // block is what makes and unmakes them, and a decision taken from a
+    // composition-time copy would always be a pass late. They are plain fields, and
+    // that matters: a measure block that observes what it writes dirties the node it
+    // runs in, which here would be a measure → arm → measure loop that never settles.
+    // The one write that has to reach Compose is the ask for the next measure, and that
+    // goes through [remeasureToken], which this block already reads.
+    //
+    // The revision is the exception, and it is what keeps a stale pass from doing
+    // damage. Honour an arming only for the content that made it: `NO_REVISION` on
+    // either side says the same thing - the pass that armed could not say what it had
+    // measured, which is what a measure inside the prop batch that is about to be
+    // recomposed means - and an arming that cannot name its content is never placed.
+    // Such an arming exists to buy one more unbounded pass, and that is exactly the
+    // pass the content it could not see needs in order to be reported at all.
+    val placeAtBoxWidth =
+      unbounded &&
+      overWide.armed.value &&
+      constraints.hasBoundedWidth &&
+      constraints.maxWidth == overWide.armedWidthPx &&
+      revision != NitroUiOverWidePlacement.NO_REVISION &&
+      revision == overWide.armedRevision
     val childConstraints =
-      if (unbounded) {
+      if (unbounded && !placeAtBoxWidth) {
         // The unbounded question. See the kdoc: this is what makes the recorded
         // size the control's, not the box's.
         Constraints()
@@ -980,8 +1151,31 @@ internal fun NitroUiMeasuredRoot(
     // measure again (see [NitroComposeHost.remeasureToken]), and a fresh measure is
     // the only thing that can produce the report a new sizing key is waiting for.
     val remeasureRequested = remeasureToken.value >= 0
-    if (record && remeasureRequested && placeable != null) {
+    if (record && remeasureRequested && placeable != null && !placeAtBoxWidth) {
       onMeasured(measuredWidth, measuredHeight)
+    }
+    if (unbounded && !placeAtBoxWidth && constraints.hasBoundedWidth) {
+      // Only the unbounded question can answer this, and it answers it every time: a
+      // row that fits says so, which is what releases the arming when a box grows back
+      // to the control's size. The stamps are written by the pass that has the facts -
+      // the box this content was asked under, and the revision this composition
+      // rendered, which may be no revision at all - and the host is told from here
+      // rather than looked at afterwards, because the pass that discovers an overrun is
+      // the only one that will: Fabric has no reason to measure this view again for a
+      // box that did not move, and Compose has no child size change to propagate once
+      // the content answers the box's width. Being told from inside the pass is what
+      // makes the second measure happen.
+      //
+      // An unbounded box skips the verdict entirely: there is nothing to overrun, and
+      // an arming made against a narrower box is still true of the content. And a
+      // verdict that changes nothing - the content fits, and nothing was armed - says
+      // nothing to the host, which is every control that fits its box.
+      val overruns = measuredWidth > constraints.maxWidth
+      overWide.armedWidthPx = if (overruns) constraints.maxWidth else -1
+      overWide.armedRevision = revision
+      if (overruns || overWide.armed.value) {
+        onOverWide(overruns)
+      }
     }
     // What this returns is Yoga's box, not the control's size - the control gets
     // centred inside it. `resolveSize` keeps an explicit `EXACTLY` from Fabric
@@ -996,6 +1190,92 @@ internal fun NitroUiMeasuredRoot(
         (height - measuredHeight) / 2
       )
     }
+  }
+}
+
+/**
+ * What the host knows about content that is wider than the box RN gave it.
+ *
+ * One snapshot value and two plain fields, and the split is load-bearing rather than
+ * tidy. [armed] is observed by [NitroUiMeasuredRoot]'s composition, which is what both
+ * starts the placement and lets content that never overran observe nothing at all: the
+ * write that flips it restarts that group, and the restarted group is the one that can
+ * say which content it rendered. The two stamps are written by the measure block, which
+ * runs under `Snapshot.observeMeasure`: a block that observes what it writes dirties
+ * the node it runs in, which here would be a permanent dirty → measure → honest → arm →
+ * dirty loop. Everyone is on the UI thread.
+ */
+internal class NitroUiOverWidePlacement {
+  /**
+   * Whether this content is currently placed at its box's width.
+   *
+   * Sticky rather than per-pass, and it has to be: asking the unbounded question,
+   * seeing that it does not fit, and then placing at the box is already two measures.
+   * Clearing it after each pass would make that pair the steady state: every pass would
+   * start with the question that cannot fit and answer it again.
+   *
+   * It is a property of one content at one box, so it is *made* by the first unbounded
+   * pass that overruns - [armedWidthPx] records the box it overran and [armedRevision]
+   * the content it measured, which may be [NO_REVISION] - and *unmade* by the first
+   * unbounded pass that fits. A pass under any other box, or over any other content,
+   * asks the unbounded question instead, which is the only question that can both find
+   * the overrun again and report a size; and the pass that finds it is the one that asks
+   * for the placement measure, because nothing else is going to measure a view whose box
+   * did not move. It is reset outright when the environment it was measured in changes
+   * ([NitroComposeHost.onConfigurationChanged]), when a new sizing key arrives
+   * ([NitroComposeHost.onLayout]) and with the mount.
+   */
+  val armed = mutableStateOf(false)
+
+  /**
+   * The box width [armed] was made against, in the px the measure block saw it, or -1
+   * (a box width is never negative).
+   *
+   * The arming is only honoured while the box still has that width, which is what stops
+   * two wrong drawings from surviving: content that overran the engine's *first* guess
+   * at a box (Yoga's provisional fallback, before the control's own report corrects it)
+   * would otherwise be placed at that too-small width forever, and content that has
+   * since been given room would stay squeezed into a width it no longer needs. A pass
+   * under any other width asks the unbounded question, and that pass either releases
+   * the arming or makes a new one for the width it was asked under.
+   */
+  var armedWidthPx = -1
+
+  /**
+   * The [NitroComposeHost.contentRevision] of the content this arming was made against,
+   * or [NO_REVISION] when the pass that made it could not tell.
+   *
+   * The other half of "the box the control overran is still the box it has": props
+   * change what the content wants without moving the frame at all, and content measured
+   * at a box's width answers that width for *any* content, so an arming that outlived
+   * its content would keep the drawing and swallow every later correction. A group
+   * placed at the box is subscribed to the revision ([NitroUiMeasuredRoot]), so the pass
+   * after a prop change is the one that finds the mismatch and asks again. An arming
+   * stamped [NO_REVISION] is never honoured, and re-making it costs one more unbounded
+   * pass - the pass that has to happen anyway for new content to be reported.
+   */
+  var armedRevision = NO_REVISION
+
+  fun reset() {
+    armed.value = false
+    armedWidthPx = -1
+    armedRevision = NO_REVISION
+  }
+
+  internal companion object {
+    /**
+     * "this pass cannot say which content it measured".
+     *
+     * [NitroComposeHost.contentRevision] starts at 0 and only grows, so -1 is never a
+     * revision. A composition only subscribes to the revision once it is placing at its
+     * box's width, so a pass before that - and above all the one that runs inside the
+     * prop batch, before the recomposition it belongs to - reads this instead. Stamped
+     * onto an arming it means the arming is not attributable to any content, so
+     * [NitroUiMeasuredRoot]'s guard will not place it, and the next pass asks the
+     * unbounded question. There is no adopting a stamp later: an arming is good for the
+     * content that measured it, and for nothing else.
+     */
+    const val NO_REVISION = -1
   }
 }
 

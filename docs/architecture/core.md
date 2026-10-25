@@ -367,12 +367,14 @@ Measurement cadence — this is where sizing costs performance:
   (`ios/core/NitroSwiftUIHost.swift:242`, `:190-193`, `:118-125`, `:140-148`). Content that can change size with neither
   (`Picker`'s longer selected title, a re-wrapped label) must call `invalidateContentSize()`
   (`ios/core/NitroSwiftUIHost.swift:225-234`) or the cache keeps the old size.
-- **Android**: one `measure()` call per pass, and the *constraints* it asks with depend on the component's sizing
+- **Android**: one `measure()` call per pass, or two when the content overruns its box (below), and the *constraints*
+  it asks with depend on the component's sizing
   policy (`android/.../nitroui/core/NitroComposeHost.kt`, `NitroUiMeasuredRoot`). Either way the incoming constraints
   cannot be passed through as they arrive: the host lays the composition out `MATCH_PARENT`, Fabric measures the host
   `EXACTLY`, `AndroidComposeView` turns `EXACTLY` into `minWidth == maxWidth`, and a `Placeable`'s size is always coerced
   into its constraints — so that version reports the box back and the centring offset is always 0. Asking the question
-  twice is also not available: a `Measurable` may be measured exactly once per pass (`MeasurePassDelegate` throws
+  twice *within one pass* is also not available: a `Measurable` may be measured exactly once per pass
+  (`MeasurePassDelegate` throws
   "measure() may not be called multiple times").
   - Policy `intrinsic` (Switch, and the whole library today) asks **unbounded**: `Constraints()`, no minimum and no
     maximum — the same question iOS asks with `sizeThatFits(in: .infinity)`. A control that wants more than its box
@@ -380,6 +382,36 @@ Measurement cadence — this is where sizing costs performance:
     before T11, and it is wrong: a box *smaller* than the control records the box, and that number then sits in the
     cache under that configuration. What the pass still *returns* is Yoga's box, so the control is centred in it and a
     caller's `width`/`height`/`flex` keeps winning.
+  - **Content that overruns its box is asked again, and drawn from the second answer.** When the unbounded answer is
+    wider than the box the host was measured under, the measure block itself asks for one more measure, and `NitroUiMeasuredRoot`
+    measures that pass with the box's width and an unbounded height and places *it*: Material 3 then truncates an over-long
+    label instead of the host clipping both ends of it (C1, matching iOS). The reported size is still the unbounded answer -
+    the `onMeasured` callback is skipped on the placement pass - so nothing about the cache or the correction path changes.
+    The asking is done by the pass that *found* the overrun, not by the host's `onMeasure`: Fabric only calls `onMeasure`
+    when a view's spec changes, and the passes that matter most (after a prop batch, after a sizing-key reset, after a
+    child changes size inside `dispatchDraw`) never come through it, so an overrun noticed by one of those and left for a
+    later `onMeasure` would be an overrun nobody hears about.
+    - **The arming is a fact about one content at one box, so it is remade, not kept.** An unbounded pass under a different
+      `maxWidth`, or against different content, releases it and makes a new one for what it just measured; an unbounded pass
+      whose content now fits releases it and leaves it released. A box that grows back to the control's size therefore stops
+      paying, and a box that merely gets *another* too-small width gets a fresh placement measure instead of a stale verdict.
+    - **An arming that cannot name its content is never placed.** A prop batch measures the host *before* its own
+      recomposition (setters, `commit()`, Fabric's measure, then the recomposition — measured on one message), so that pass
+      measures content which is about to be replaced and has no `contentRevision` to stamp. Placing it bounded would answer
+      the box's width for content that no longer exists *and report nothing*, which freezes the box wherever the engine last
+      put it — a fallback forever. So the guard requires the revision the composition rendered to match the stamp, and an
+      unattributed arming only buys one more unbounded pass: the pass the new content needs in order to be reported at all.
+    - **Only content that is placed at its box pays.** The measured root observes `armed`, and reads `contentRevision` only
+      while armed, so for a control that fits its box a bump has no reader: no recomposition of the measured root, no new
+      measure policy on the `Layout` node, no extra measure, no `requestLayout` bubble. What every `intrinsic` host pays is
+      the single snapshot *write* in `markDirty()`. That gating is the difference between "an overrun pays" and "every
+      `intrinsic` control pays on every prop batch", and it is what the `update.*` bench arms (Switch, Button,
+      SegmentedControl, circular Progress all call `markDirty()`) would otherwise cost.
+    - **One clipped frame after `markDirty()` on a fitted control is inherent.** A prop change can only be answered by the
+      unbounded question, and since a `Measurable` is measured once per pass that pass is also what gets drawn, so a fitted
+      row shows its unbounded (clipped) drawing for one traversal before the placement measure redraws it. Same shape as the
+      one-frame fallback correction D17 already accepts; it is invisible unless the control is over-wide *and* the frame is
+      caught.
   - Policy `fillWidth` (a Slider, whose width *is* the box) keeps the maximum and drops only the minimum —
     `constraints.copy(minWidth = 0, minHeight = 0)` — which asks for the height the control wants at the width it got.
   - Consequence of the unbounded question: **`intrinsic` content must tolerate infinite constraints**. A scrollable
