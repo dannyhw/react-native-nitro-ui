@@ -59,3 +59,12 @@ values for "no min/max" per core.md rules and document. Locale/timezone come fro
 
 `bun run check` green; harness green on both platforms; bench tables; screenshots (iOS + Android,
 light + dark, each variant, dialog open) in `docs/tasks/G5-datepicker/`.
+
+## 0.2 additions (orchestrator, 2026-10-25)
+
+- **Round cap (D19):** 1 + 2 fix rounds. Read `docs/tasks/G6-picker.md` "Lessons (G1–G4, B1, C1)" —
+  they apply here too, especially: popups/dialogs must not register anything per mount that
+  survives drop (B1), and over-wide `compact` content fits its box on Android (C1).
+- Add **Storybook stories** (Playground with every prop + showcase) per S1's layout, a real-input
+  case (open the picker, pick a date) on both platforms, and the smoke per-control layout check (A2).
+- Run the harness under Node 24 with an absolute `HARNESS_APP_PATH`.

@@ -9,7 +9,7 @@ first, then the rest), iOS mount profiling to decide an iOS Host. Per task: 1 im
 | 1 | **C1** Android over-wide intrinsic content fits its box | Android | A1 |
 | 1 | **P1** iOS mount-cost profiling (one round, decides iOS `<Host>`) | iOS | A1 |
 | 2 | **G6** Picker (`menu` / `wheel`) | both | C1 |
-| 2 | **G5** DatePicker (brief exists, refresh before start) | both | C1 |
+| 2 | **G5** DatePicker (brief refreshed 2026-10-25) | both | C1 |
 | 3 | **H1** Android `<Host>` productionised for Switch, D17 rule for hosted controls | Android | C1 |
 | 3 | **H2** Host support for Slider, Progress, Button, SegmentedControl, Picker, DatePicker | Android | H1, G5, G6 |
 | 3 | ~~**H3** iOS `<Host>`~~ — dropped: P1 no-go (iOS cost is the synchronous first measure, not hosting) | iOS | — |
