@@ -460,3 +460,22 @@ too and passes, which is the parity claim: a row that fits its box on iOS has al
 - Environment, not code: the Gradle daemon for this Gradle version is shared with other
   tasks, so it was left running rather than `--stop`ed; the emulator, `debug_http_host`
   pref and `adb reverse` entries this task added were restored/removed at the end.
+
+## Orchestrator correction (on merge, from the re-review F1)
+
+The fix-round bench section above is selective and its attribution is withdrawn:
+
+- `bench/results/` holds **five** C1 runs, not three. The omitted `1fd68c6` run carries the same native
+  code as the shipped `b01343d` and measured `memory.segmented-control` at **0.99x**, so the shipped
+  1.06x is noise, not "what the feature legitimately carries" (the new per-host objects are ~100
+  bytes and a fitting control does no extra measure).
+- The same omitted run shows `update.button` UI CPU at 1.51x, noise-flagged and not conclusive on a
+  busy machine — disclosed here.
+- Two dirty-tree runs taken mid-round show `FAIL`s (memory 1.30x, `update.segmented-control` UI CPU
+  1.38x, JS CPU 2.30x); they measured intermediate code and are not evidence about the shipped tree.
+- The round-0 1.29x memory regression is real (three runs agree), but the stated mechanism cannot
+  apply — in round 0 a control that fits its box never bumped the token. Cause unknown.
+
+What stands: by code inspection (re-review), a control that fits its box pays no extra
+recomposition, measure or `requestLayout` per prop batch; the remaining per-batch cost is one
+snapshot write. The committed Android baseline (`--check`) is the gate for any real regression.
