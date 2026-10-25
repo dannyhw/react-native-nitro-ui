@@ -559,14 +559,14 @@ which is why deleting the conversion (`android-t5`) stayed green with 11 passing
 
 | Gate | Result |
 | --- | --- |
-| `bun run check` | **pass** — exit 0 on this round's tree at `load1` 4.9: typecheck, bench typecheck (both tsconfigs), eslint, prettier, jest (176 tests / 11 suites, 184 s), `test:native`, `perf:renders`, nitrogen drift, autolinking, `prepare`, api-extractor, publint, package-files (375 files), readme examples (`/tmp/g5-fr3-check.log`) |
+| `bun run check` | **pass** — exit 0 on this round's tree at `load1` 4.9: typecheck, bench typecheck (both tsconfigs), eslint, prettier, jest (176 tests / 11 suites, 184 s), `test:native`, `perf:renders`, nitrogen drift, autolinking, `prepare`, api-extractor, publint, package-files (375 files), readme examples (`/tmp/g5-fr3-check.log`). Re-run green on this round's final tree, after its bench section landed: exit 0 again, 176 tests, 262 `perf:renders` checks, no nitrogen drift over 160 generated files / 24 patched views, `publint --strict`, the 375-file manifest and 5 README blocks (`/tmp/g5-fr3-check-final.log`) |
 | Harness `DatePicker`, iOS (iPhone Air, Node 24, absolute `HARNESS_APP_PATH`) | **pass** — 12/12 (`/tmp/g5-fr2-ios-base.log`) |
 | Harness `DatePicker`, Android (`emulator-5572`, adb 5042) | **pass** — 12/12 (`/tmp/g5-fr2-and-base2.log`) |
 | Harness, whole suite, iOS | **pass** — 115 passed, 1 suite skipped (`MountChurn.harness.tsx`'s "is Android-only" placeholder, skipped by every earlier iOS run here too), 99.9 s, on the `.app` built from this tree at 18:17 (Node 24, absolute `HARNESS_APP_PATH`, `HARNESS_TEST_TIMEOUT=90000`; `/tmp/g5-fr3-ios-full.log`) |
 | Harness, whole suite, Android | **pass** — 116/116, 9 suites, this round's APK (`/tmp/g5-fr3-and-full2.log`). The first run of this gate, at 18:39 with `load1` 10.35 / `load5` 44.42, was 115/116: `Progress > honours an explicit size instead of its own box` hit its 1000 ms render timeout. `Progress.harness.tsx` is not a file this round touched, the same suite was 116/116 at `load1` 3.10 earlier on the same code (`/tmp/g5-fr5-and-full.log`) and green again minutes later on this tree, so the failure was the host. A render timeout under 14x that load is an environment failure, and it is recorded here rather than hidden behind the green re-run. |
 | Real-input `--control date-picker`, iOS | **pass** — `testRealInputDatePicker` passed in 117.4 s, `** TEST EXECUTE SUCCEEDED **`, `real-input (ios): 1/1 controls passed`, on the unmutated tree at 19:26 (`/tmp/g5-fr3-ios-ri-1921.log`; the detailed xcodebuild log is copied to `/tmp/g5-fr3-ios-ri-1921-test.log`, which holds the a11y subtree and the popover frame quoted above — `.real-input/ios/` is overwritten by every later run). An earlier build of the same round also passed in 54.0 s |
 | Real-input `--control date-picker`, Android | **pass** — `real-input (android): 1/1 controls passed` on this round's unmutated build, including a real `input tap` on a dialog day reaching JS (`Friday, October 16, 2026` → `2026-10-16`) and the refusing-parent case (`/tmp/g5-fr2-red-android-fr2-baseline.log`, 18:41) |
-| `bun bench --component date-picker --plan quick`, both platforms | [[GATE-BENCH]] |
+| `bun run bench --platform <p> --plan quick --component date-picker`, both platforms | **ran on both** — 48 iOS launches in 681 s and 24 Android launches in 203 s, both exit 0 with `problems: none`, from a clean tree at `8b60818`; both at a load the runner marks busy, so they are directional — the next subsection |
 
 Two notes on how these were run, because both bit here. The real-input scripts refuse Node 26
 (`scripts/node-version.mjs` pins 24.22.1), so every one of them goes through
@@ -574,6 +574,98 @@ Two notes on how these were run, because both bit here. The real-input scripts r
 branch: one Android run died on it at `load1` ≈ 189, which is an environment failure and not a
 test failure — the re-run in a lull is the one quoted. `HARNESS_TEST_TIMEOUT` *is* env-tunable in
 the committed config, and that is what a loaded host needs raised.
+
+### Bench re-run on this round's tree (answer 1)
+
+Run from `git status` clean at `8b60818`, starting 19:54 local — iOS first with Android queued
+behind it, so the two never shared the CPU, and outside the 00:45–05:00 quiet window as asked:
+
+```
+IOS_SIM_UDID=331EF109-21DD-422B-AEF8-DFFFC6998DC3 \
+  bun run bench --platform ios --plan quick --component date-picker
+ANDROID_SERIAL=emulator-5572 ANDROID_AVD=nitroui_t02 ANDROID_ADB_SERVER_PORT=5042 \
+  bun run bench --platform android --plan quick --component date-picker
+```
+
+**Neither run got a quiet machine, and each says so in its own header.** iOS: 48 launches in 681 s,
+`load1` sampled 70× at median **25.17**, p90 184.48, max 231.38 — 100 % of samples over the
+runner's 7.0 ceiling for 14 cores. Android: 24 launches in 203 s, sampled 31× at median **21.51**,
+p90 55.01, max 78.41, again 100 % over. The load is the host's own apps (a game client pinned near
+42 % CPU for the whole window, two Electron apps, WindowServer) plus G6 building; `load1` did not
+come under the ceiling at any point between 19:00 and 20:30. Both runs end `problems: none`, so
+every cell completed its four launches: what the load costs is precision, not the setup.
+
+- `bench/results/8b60818-ios-20261025T195630Z.md` (gitignored, like every run)
+- `bench/results/8b60818-android-20261025T201353Z.md`
+
+#### iOS — iPhone Air, `8b60818`
+
+| Cell | Implementation | presented | mounted | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mount N=50 | rn-core | 16.08 ms | 4.31 ms | 2.16 ms | 2.57 ms | 2.27 ms | n/a |
+| mount N=50 | expo-ui-host-per-control | 1197.15 ms | 60.84 ms | 3.92 ms | 8.34 ms | 883.97 ms | n/a |
+| mount N=50 | expo-ui-shared-host | 968.07 ms | 32.66 ms | 1.80 ms | 2.38 ms | 657.16 ms | n/a |
+| mount N=50 | nitro-ui | 32.54 ms | 33.05 ms | 2.35 ms | 2.67 ms | 36.13 ms | n/a |
+| update N=50 | rn-core | 16.08 ms | 5.00 ms | 1.30 ms | 1.55 ms | 5.19 ms | n/a |
+| update N=50 | expo-ui-host-per-control | 225.74 ms | 36.28 ms | 3.60 ms | 12.38 ms | 215.73 ms | n/a |
+| update N=50 | expo-ui-shared-host | 165.98 ms | 31.36 ms | 1.68 ms | 2.18 ms | 165.81 ms | n/a |
+| update N=50 | nitro-ui | 16.08 ms | 3.40 ms | 2.07 ms | 2.26 ms | 13.52 ms | n/a |
+| memory N=200 | rn-core | n/a | n/a | n/a | n/a | n/a | 31.8 KiB |
+| memory N=200 | expo-ui-host-per-control | n/a | n/a | n/a | n/a | n/a | 139.2 KiB |
+| memory N=200 | expo-ui-shared-host | n/a | n/a | n/a | n/a | n/a | 168.3 KiB |
+| memory N=200 | nitro-ui | n/a | n/a | n/a | n/a | n/a | 199.1 KiB |
+
+Launch-paired ratio to `rn-core`: mount **2.02x** presented, 9.21x mounted, 1.20x JS commit,
+1.12x JS CPU/op, 17.85x UI CPU/op; update **1.00x** presented, 0.68x mounted, 1.62x JS commit,
+1.50x JS CPU/op, 2.68x UI CPU/op; memory 6.26x.
+
+#### Android — `nitroui_t02`, `8b60818`
+
+No `expo-ui` rows, for the reason in Known issues: the arm never renders.
+
+| Cell | Implementation | presented | mounted | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mount N=50 | rn-core | 104.10 ms | 59.62 ms | 6.04 ms | 9.35 ms | 31.06 ms | n/a |
+| mount N=50 | nitro-ui | 155.96 ms | 138.93 ms | 8.01 ms | 10.73 ms | 109.14 ms | n/a |
+| update N=50 | rn-core | 94.79 ms | 47.98 ms | 4.72 ms | 5.44 ms | 18.69 ms | n/a |
+| update N=50 | nitro-ui | 153.43 ms | 39.79 ms | 6.03 ms | 8.21 ms | 34.86 ms | n/a |
+| memory N=200 | rn-core | n/a | n/a | n/a | n/a | n/a | 27.9 KiB |
+| memory N=200 | nitro-ui | n/a | n/a | n/a | n/a | n/a | 193.9 KiB |
+
+Ratio: mount 1.39x presented, 2.18x mounted, 1.37x JS commit, 1.17x JS CPU/op, 3.65x UI CPU/op;
+update 1.69x presented, 0.85x mounted, 1.32x JS commit, 1.46x JS CPU/op, 1.90x UI CPU/op; memory
+6.90x.
+
+**What the runner accepted.** Seven of the twelve iOS cells carry a `Within-run spread above 10 %`
+note on named columns: mount `nitro-ui` (JS commit, JS CPU/op, UI CPU/unmount), both `expo-ui`
+mount arms (presented 22–25 %), all three `expo-ui`/`nitro-ui` update arms, and memory
+`expo-ui-host-per-control`. Both Android `nitro-ui` cells carry one (mount: JS commit 29.4 %,
+JS CPU/op 24.3 %, UI CPU/op, UI CPU/unmount 57.1 %; update: mounted, presented, JS CPU/op). The
+remaining columns have a spread the runner accepted, which is the most a run at this load offers.
+
+Three readings that survive that, and one that does not:
+
+- **iOS `update` presented is 1.00x `rn-core`** — 16.08 ms in both arms, the same column the
+  pre-review run measured at 1.00x. It is the D15 column a form actually spends, and this round
+  did not move it.
+- **The `expo-ui` arms keep their direction**: iOS mount 74.45x (per control) and 60.23x (shared
+  host) presented against `rn-core`, UI CPU/op 437x and 324x. The magnitude is worse than the
+  pre-review 3.1–7.9x, which is what a busy machine does to an arm that builds a SwiftUI tree per
+  row; direction unchanged, magnitude not usable.
+- **Android's numbers sit below their pre-review values** — mount 1.93x → 1.39x presented,
+  3.27x → 2.18x mounted, 4.31x → 3.65x UI CPU/op — but the two runs were taken at different loads
+  and `presented` is frame-quantised, so this is not a measured improvement.
+- **iOS `mount` presented at 2.02x is the one to discard.** 32.54 ms against `rn-core`'s 16.08 ms,
+  where the pre-review run read 16.11 ms (1.02x). `presented` is a frame stamp: the busy machine
+  put a 50-host mount one frame later, and `rn-core` happened to stay inside its frame. The D15
+  mount position is not restated from this run; the Android table's 1.39x, taken on the same busy
+  host, is closer to what the pre-review quiet-ish run said.
+
+One number this round cannot attribute, recorded rather than explained: **Android's per-instance
+memory moved up**, 27.9 KiB `rn-core` / 193.9 KiB `nitro-ui` against 28.4 / 135.5 KiB pre-review
+(6.90x against 4.59x). A heap delta is the metric load affects least, and the candidates are C1's
+shared-host fix, this round's wider probe, and the per-recomposition allocations the review lists
+as non-blocking. See Follow-ups.
 
 ## Bench
 
@@ -649,8 +741,8 @@ most of the afternoon, and the human's own sessions keep load1 in the tens. See 
   field's box from 120.76 dp to 131.05 dp. Both touch what the Android cells measure, so the
   Android table in particular is a direction that has since moved. See Questions.
 
-Fix round 1 re-ran both platforms from a clean tree; those cells are in its section, and the
-two tables above stay as the history of what the pre-review build measured.
+Fix round 1 re-ran both platforms from a clean tree at `8b60818`; those cells are in its section, and
+the two tables above stay as the history of what the pre-review build measured.
 
 ## Screenshots
 
@@ -686,9 +778,11 @@ frames are from the fix-round build.
 
 ## Known issues and follow-ups
 
-- **The Android bench rows need a re-run** (see the Bench bullet): they predate C1's shared-host
-  fix and fix round 1's width change, and neither run was verdictable at the load it was taken
-  at. The iOS rows need one too, for the load reason alone.
+- **The DatePicker rows are re-measured; the quiet run is still owed.** Fix round 1 ran both
+  platforms from a clean tree (see "Bench re-run"), so the rows are no longer two changes old — but
+  the host was over the runner's load ceiling for 100 % of both runs, so nothing in them is a
+  verdict. What release prep still owes is the same command once on an idle machine, which is also
+  when the other five components' rows should be refreshed.
 - **The whole Android suite has not been green since fix round 1** - not because of this
   component. Two full runs after the fix hit a machine at `load1` 11-44 (the human's own apps
   plus another task building): one lost `Slider` on its 1 000 ms render timeout, the second
@@ -696,6 +790,10 @@ frames are from the fix-round build.
   this test file / the app process exited, but no crash log lines were found" with the emulator
   at 51 % CPU. The `DatePicker` suite alone is green on that same build in 42.7 s, and the
   whole suite was green on this branch's code at `1536201`. Both logs are kept.
+- **Android's per-instance memory for this component moved up and is unattributed**: 193.9 KiB in
+  fix round 1's run against 135.5 KiB pre-review (6.90x `rn-core`, was 4.59x). A heap delta is the
+  least load-sensitive column the runner has, so it deserves one look during the quiet bench run;
+  the candidates are C1's shared-host fix, the wider probe, and the per-recomposition allocations.
 - **`assembleDebug` without `-PreactNativeArchitectures=arm64-v8a`** packages every ABI (the
   all-ABI build left here was 235 MB against this one's 78 MB). Every Android command in this
   report passes the flag; it is worth a line in the device docs.
@@ -785,6 +883,9 @@ frames are from the fix-round build.
    one component while the others stay old is honest as long as the table says so.
    **Answer:** (a), in this round - both platforms, `--plan quick`, from a clean tree, outside
    the quiet window, labelled with the load it was taken at. Only the DatePicker cells matter.
+   **Done:** both ran at `8b60818` (see "Bench re-run"). The host stayed over the runner's load
+   ceiling for every sample of both runs, so the rows are labelled and directional; the quiet run
+   is recorded as still owed.
 2. **Who runs `bun run smoke:rn-cli` and `smoke:expo`?** G4 and I both stopped at the same
    place: the per-control ready line is updated and unit-tested, but the pack + Expo + RN-CLI
    cycle is a release-readiness gate, and it is not cheap. **Recommend** one scheduled task
