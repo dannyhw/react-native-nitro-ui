@@ -9,7 +9,9 @@ their own within-run spread, 0 failures. There is still no iPhone 17 baseline
 (`ios27-sim-iphone17.json`): two iOS `--plan full` runs have completed
 problem-free since (A1 at load 10.50, A1b at 7.60, ceiling 7.0) and both were
 refused by the idle-machine guard, so `--check` on iOS still exits with
-`no baseline at bench/baselines/<deviceKey>.json` and gates nothing.
+`no baseline at bench/baselines/<deviceKey>.json` and gates nothing. Both
+refusals came from one sample taken in the run's last minute; R4 changed the
+guard to judge the whole run, so the next iOS attempt is measured, not guessed.
 
 The one Android baseline committed before this one (`bb41d00`) was recorded
 while nitro-ui self-skipped: all seven of its nitro-ui cells carry a
@@ -33,9 +35,21 @@ Rules (docs/DECISIONS.md D9, enforced by `baselineBlockers()` in
   ever fail.
 - **Clean tree only.** A run from a dirty worktree is named `<sha>-dirty-...json`
   and cannot become a `--compare` base or a baseline.
-- **Idle machine.** `os.loadavg()[0]` must be at or under 0.5 x the core count,
-  and is recorded in the file. Load is the largest single source of ratio noise
-  on this host.
+- **Idle machine, judged over the whole run (R4).** The runner samples
+  `os.loadavg()[0]` every 30 s and at every launch boundary, and records the
+  summary as `machine.loadSamples`: `{ count, ceiling, median, p90, max, over,
+overFraction }`. A run is refused when its **median** sample is over the
+  ceiling of 0.5 x the core count, or when **more than 10 %** of its samples
+  are. (Any run with a median over the ceiling necessarily has at least half its
+  samples over it, so the 10 % share is the clause that binds; the median is
+  stated as the intent.) A sample exactly _on_ the ceiling does not count as
+  over it. The `--update-baseline` command also refuses **before starting** when
+  `loadavg1` is already over the ceiling - a baseline run costs hours and cannot
+  recover from a machine that is busy when it begins. `loadavg1`/`loadavg5` stay
+  in the file as the end-of-run instant, and a results file with no
+  `loadSamples` (anything recorded before R4) is still judged by that single
+  sample, because that is all it has. Load is the largest single source of ratio
+  noise on this host.
 - **`--plan full` with 8 launches**, no `problems`, on the canonical device.
   `--plan quick` numbers are local feedback, not baseline material.
 - **Device key = platform + OS runtime + class** (`ios27-sim-iphoneair`,
