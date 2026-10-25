@@ -133,6 +133,37 @@ class PickerModelTest {
   }
 
   @Test
+  fun aPickReportsWhetherItEmitted() {
+    // The host holds its size reports for the batch a *choice* is waiting for, so it
+    // may only hold them when a choice actually happened (G6 round-2 review N2). A
+    // re-tap of the row already shown is common - the real-input case does it - and it
+    // brings no batch with it, so a hold taken for it is never released by anything
+    // but the next unrelated batch, which drops the held size: every size measured in
+    // between is lost to the engine for the life of the mount. This function is the
+    // only thing the host can ask, so it has to answer it.
+    val model = PickerModel().apply {
+      options = arrayOf("One", "Two", "Three")
+      displayed = 1
+      state.displayed = 1.0
+      onChange = { _, _ -> }
+    }
+    assertFalse(
+      "re-tapping the shown row emits nothing, so nothing may be held for it",
+      model.applyUserSelection(1)
+    )
+    model.enabled = false
+    assertFalse(
+      "a disabled control is inert, so nothing may be held for it either",
+      model.applyUserSelection(0)
+    )
+    assertNull("a refusal leaves no stamp", model.pickStamp)
+    model.enabled = true
+    model.expanded = true
+    assertTrue("a choice that moves the selection emits", model.applyUserSelection(2))
+    assertNotNull("and it leaves a stamp for the batch that follows", model.pickStamp)
+  }
+
+  @Test
   fun aStampOnlyNamesTheConfigurationItWasMadeUnder() {
     val model = PickerModel().apply {
       options = arrayOf("One", "Two", "Three")

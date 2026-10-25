@@ -219,15 +219,26 @@ internal class PickerModel : NitroUiModel() {
    * the next tap on that row a fresh choice. A disabled control is inert, and the
    * index is clamped before anything is compared - a list that shrank under an open
    * popup has rows that no longer address anything.
+   *
+   * The answer says whether a choice actually happened. The host holds its size
+   * reports for the batch a choice is waiting for (see [PickerHost.choose]), and a
+   * refused press brings no batch at all, so a hold taken for one is only released by
+   * the next unrelated batch - which drops the held size instead of filing it, and
+   * every size measured in between is lost to the engine for the life of the mount
+   * (G6 round-2 review N2). Re-tapping the row already shown is the common refusal:
+   * `scripts/real-input/android.mjs` step 2 does it.
+   *
+   * Returns true when the selection moved and [onChange] fired, false when the press
+   * was refused.
    */
-  fun applyUserSelection(index: Int) {
+  fun applyUserSelection(index: Int): Boolean {
     expanded = false
     if (!enabled) {
-      return
+      return false
     }
     val chosen = clamp(index.toDouble())
     if (chosen == displayed) {
-      return
+      return false
     }
     // Native is optimistic: paint the new title now, before React has seen the
     // event, so there is no visual latency (core.md section 4).
@@ -235,6 +246,7 @@ internal class PickerModel : NitroUiModel() {
     displayed = chosen
     pickStamp = PickerPickStamp(chosen, options, variant, label)
     onChange?.invoke(chosen.toDouble(), eventCount.toDouble())
+    return true
   }
 
   /**
@@ -380,8 +392,8 @@ private class PickerHost(
   model: PickerModel,
 ) : NitroComposeHost<PickerModel>(context, activity, model) {
   /**
-   * The user chose [index] - hold the size report the paint is about to cause, then
-   * apply the choice.
+   * The user chose [index] - apply the choice, and hold the size report its paint is
+   * about to cause.
    *
    * The one entry point for "a row was pressed", so the popup's row and the
    * `nuiTestSelect` harness hook cannot diverge. The hold is what makes a choice
@@ -389,10 +401,19 @@ private class PickerHost(
    * `nuiSizingKey` that names that title only arrives with the next props batch, so
    * a size measured in between would be filed against the title the choice replaced
    * (`NitroComposeHost.holdSizingReports`, G6 review M1).
+   *
+   * Only a choice that emitted is worth a hold (G6 round-2 review N2): a refused
+   * press - the row already shown, or a disabled control - paints nothing and starts
+   * no batch, so holding for it parks the host with its reports going nowhere until
+   * some unrelated batch releases them, and that release then drops what was held.
+   * Taking the hold after the emit costs nothing: nothing can measure between the
+   * emit and the end of the click handler, and `nuiTestSelect` applies its writes
+   * only once `choose` has returned.
    */
   fun choose(index: Int) {
-    holdSizingReports()
-    model.applyUserSelection(index)
+    if (model.applyUserSelection(index)) {
+      holdSizingReports()
+    }
   }
 
   @OptIn(ExperimentalMaterial3Api::class)
