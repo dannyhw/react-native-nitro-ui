@@ -101,11 +101,14 @@ export function ccacheRequested(env = {}) {
  *   so writing that leaves `hash_dir` on and every second-worktree compile a
  *   silent miss. `ccacheEffectiveForWorktrees()` is how the build notices.
  *
- * Both are environment variables rather than a config file on purpose: React
- * Native's `ccache-clang.sh` points `CCACHE_CONFIGPATH` at *its* config file, so
- * a `~/.config/ccache/ccache.conf` is not read for iOS builds, and a repo cannot
- * write either file without carrying a machine path. Environment wins over both
- * config files.
+ * Both are environment variables rather than a config file on purpose. On macOS
+ * ccache reads `~/Library/Preferences/ccache/ccache.conf`, and only falls back to
+ * `$XDG_CONFIG_HOME/ccache/ccache.conf` when that variable is set - so a file at
+ * `~/.config/ccache/ccache.conf` is read for *no* build here, iOS or Android.
+ * React Native's `ccache-clang.sh` then points `CCACHE_CONFIGPATH` at *its* own
+ * file for the iOS compiles, which replaces the user config entirely. Neither
+ * file is something a repo could write anyway without carrying a machine path,
+ * and an exported variable outranks whatever is in them.
  *
  * `CCACHE_BINARY` is here for a subtler reason. iOS compiles go through React
  * Native's `ccache-clang.sh`, whose last line is `exec $CCACHE_BINARY clang`,
@@ -167,6 +170,33 @@ export function gradleCcacheArgs({ enabled, initScript }) {
 }
 
 /**
+ * Do two ABI lists mean the same build?
+ *
+ * Compared as sets: `arm64-v8a,x86_64` and `x86_64,arm64-v8a` are one build, so
+ * the order gradle was handed them in changes nothing about the APK. A missing
+ * or empty list never matches: `null` is a stamp written before ABIs were
+ * recorded, which says nothing about what is in the artifact, and "nothing
+ * known" is not an agreement with what the caller just asked for.
+ *
+ * @param {string | null | undefined} stampedAbis what the stamp recorded
+ * @param {string | null | undefined} requestedAbis what this run asks for
+ * @returns {boolean}
+ */
+export function abisMatch(stampedAbis, requestedAbis) {
+  const set = (value) => {
+    if (value == null) return null;
+    const entries = String(value)
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== '');
+    return entries.length === 0 ? null : [...new Set(entries)].sort().join(',');
+  };
+  const stamped = set(stampedAbis);
+  const requested = set(requestedAbis);
+  return stamped != null && requested != null && stamped === requested;
+}
+
+/**
  * Should `build-app.mjs` skip a build?
  *
  * Only when the caller asked for nothing specific: no `--force`, no `--clean`,
@@ -174,12 +204,24 @@ export function gradleCcacheArgs({ enabled, initScript }) {
  * was built from this exact code tree. Anything else builds. A build is the safe
  * answer; a skip is the earned one.
  *
+ * For Android, "the same code tree" is not the whole question. The artifact path
+ * is fixed per worktree, so an `arm64-v8a` APK and an `x86_64` one are the same
+ * file, and the code tree is the same whether gradle was asked for one ABI or
+ * four. A stamp that did not record the ABIs cannot tell them apart, and
+ * guessing serves an `arm64-v8a` APK to a run that asked for `x86_64`: the
+ * install then fails with `INSTALL_FAILED_NO_MATCHING_ABIS`, or a multi-ABI
+ * request quietly gets a one-ABI artifact. So an Android skip needs the ABIs to
+ * match exactly, and a stamp without them means build.
+ *
  * @param {object} options
  * @param {boolean} options.force
  * @param {boolean} options.clean
  * @param {boolean} options.noStamp
  * @param {boolean} options.fresh the stamp matches the tree and the artifact
  * @param {string | null} [options.freshReason] why it is not fresh, for the log
+ * @param {'ios'|'android'} [options.platform] what is being built
+ * @param {string | null} [options.abis] the ABIs this run asks for (Android)
+ * @param {string | null} [options.stampedAbis] what the stamp recorded
  * @returns {{skip: boolean, reason: string}}
  */
 export function decideSkipBuild({
@@ -188,6 +230,9 @@ export function decideSkipBuild({
   noStamp,
   fresh,
   freshReason = null,
+  platform = 'android',
+  abis = null,
+  stampedAbis = null,
 }) {
   if (force) {
     return { skip: false, reason: '--force' };
@@ -204,6 +249,19 @@ export function decideSkipBuild({
     return {
       skip: false,
       reason: freshReason == null ? 'no matching app.stamp' : freshReason,
+    };
+  }
+  if (platform === 'android' && !abisMatch(stampedAbis, abis)) {
+    // Two different sentences: "the stamp says something else" is worth reading,
+    // "the stamp says nothing" is worth *fixing*, and they look the same in the
+    // log if the empty one is printed as a blank ABI list.
+    const saidNothing =
+      stampedAbis == null || String(stampedAbis).trim() === '';
+    return {
+      skip: false,
+      reason: saidNothing
+        ? `the stamp does not say which ABIs it built, this run asks for ${String(abis)}`
+        : `the app was built for ${String(stampedAbis)}, this run asks for ${String(abis)}`,
     };
   }
   return { skip: true, reason: 'app.stamp matches this tree' };

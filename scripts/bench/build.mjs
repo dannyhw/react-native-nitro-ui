@@ -137,11 +137,39 @@ function findCcache() {
 
 const ccache = findCcache();
 
-if (ccache.enabled) {
-  // `react_native_post_install` reads USE_CCACHE *while pod install writes the
-  // Pods project* (it is the generated bench Podfile's only ccache switch, since
-  // expo owns that file), so it has to be in the environment CocoaPods sees.
-  process.env.USE_CCACHE = '1';
+// `react_native_post_install` reads USE_CCACHE *while pod install writes the
+// Pods project* (it is the generated bench Podfile's only ccache switch, since
+// expo owns that file), so it has to be in the environment CocoaPods sees.
+// Scoped to that one call rather than set here at import time: this module is
+// imported by `bench/run.mjs` and anything else that asks for a bench build, and
+// a module-level write to `process.env` is inherited by every child of every
+// unrelated command they run. `buildEnv()` still carries it for the compiles.
+const USE_CCACHE = ccache.enabled ? { USE_CCACHE: '1' } : {};
+
+/**
+ * Run `fn` with `vars` in `process.env`, then put the environment back. Only
+ * needed for a call that reads `process.env` itself and takes no env argument -
+ * `installPods` spawns with the inherited environment.
+ *
+ * @param {Record<string, string>} vars
+ * @param {() => T} fn
+ * @template T
+ * @returns {T}
+ */
+function withEnv(vars, fn) {
+  const before = Object.entries(vars).map(
+    ([key]) =>
+      /** @type {[string, string | undefined]} */ ([key, process.env[key]])
+  );
+  Object.assign(process.env, vars);
+  try {
+    return fn();
+  } finally {
+    for (const [key, value] of before) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 }
 
 /** Environment for a build: ccache's cache location rules, plus any extras. */
@@ -269,7 +297,7 @@ export function buildIos({ rebuild = false, prebuildFirst = false } = {}) {
     // `Podfile.lock` already records, so a machine on another CocoaPods cannot
     // leave a stamp-only diff in a tracked lock (R1, C1, G5, G6 each lost time
     // to restoring that line by hand).
-    const pods = installPods({ dir: iosDir });
+    const pods = withEnv(USE_CCACHE, () => installPods({ dir: iosDir }));
     if (pods.status !== 0) {
       // S8: a red pod install used to fall through into xcodebuild, which then
       // compiled against the previous Pods project and reported numbers for an
