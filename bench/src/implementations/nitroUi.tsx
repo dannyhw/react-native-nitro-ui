@@ -105,21 +105,27 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
 }
 
 /**
- * `n` nitro-ui Switches inside **one** `<Host>` (T16 spike,
- * `docs/tasks/T16-host-spike.md`): one Compose composition and one
- * `AndroidComposeView` for the batch instead of one per control.
+ * `n` nitro-ui controls inside **one** `<Host>` (H1, widened to Slider, Progress and
+ * Button by H2a): one Compose composition and one `AndroidComposeView` for the batch
+ * instead of one per control.
  *
- * The box is the `expo-ui-shared-host` arm's box (`stackStyle`), and the child's
- * props are the `nitro-ui` arm's props - same `rowStyle`, same stable no-op
- * handler - so the difference this cell prices is only *where the control composes*.
- * That is deliberate: the Expo arm's children carry no box at all (a Compose child
- * has no Yoga node to size), and giving this arm's children no box either would fold
- * "no intrinsic sizing round trip" into a number that is supposed to be about
- * compositions. The sizing consequence of that is real and belongs in the report, not
- * in the ratio.
+ * The box is the `expo-ui-shared-host` arm's box (`stackStyle`), and the child's props
+ * are the `nitro-ui` arm's props - same `rowStyle`, same stable no-op handler - so the
+ * difference this cell prices is only *where the control composes*. That is deliberate:
+ * the Expo arm's children carry no box at all (a Compose child has no Yoga node to size),
+ * and giving this arm's children no box either would fold "no intrinsic sizing round
+ * trip" into a number that is supposed to be about compositions. The sizing consequence
+ * of that is real and belongs in the report, not in the ratio.
  *
- * `Host` stacks its children itself (a Compose `Column`), which is the same
- * arrangement the Expo arm builds with an explicit `<Column>`.
+ * `Host` stacks its children itself (a Compose `Column`), which is the same arrangement
+ * the Expo arm builds with an explicit `<Column>`.
+ *
+ * D24 makes the four cells mean slightly different things, and the rows say so: the
+ * `fillWidth` controls (Slider, linear Progress) take the Host's inner width in the Column
+ * rather than their own `style.width`, and `Switch` and `Button` keep their intrinsic width
+ * at the column's leading edge. The *box RN lays out* is the same one the other arms get
+ * (`rowStyle`), because that is the box the ratio is about; what the control draws inside
+ * it is the library's documented Host sizing, not a per-arm styling choice.
  */
 export function NitroUiHostList({
   n,
@@ -130,25 +136,64 @@ export function NitroUiHostList({
   if (n === 0) {
     return null;
   }
-  if (component !== 'switch') {
-    // The plan should never ask (`BenchImplementation.components`); rendering an
-    // empty tree here would be a number nobody asked for.
-    throw new Error(`nitro-ui-host implements Switch only, got ${component}`);
-  }
-  return (
-    <Host style={stackStyle(n, component)}>
-      {range(n).map((index) => (
+  const style = rowStyle(component);
+  /** One child, the same props the `nitro-ui` arm passes for this component. */
+  const child = (index: number) => {
+    const testId = `bench-nitro-ui-host-${component}-${String(index)}`;
+    const nuiPerfId = perfMarks ? index : null;
+    if (component === 'slider') {
+      return (
+        <Slider
+          key={index}
+          testID={testId}
+          value={sliderValue(value)}
+          onValueChange={onSliderChange}
+          nuiPerfId={nuiPerfId}
+          style={style}
+        />
+      );
+    }
+    if (component === 'progress') {
+      return (
+        <Progress
+          key={index}
+          testID={testId}
+          value={progressValue(value)}
+          nuiPerfId={nuiPerfId}
+          style={style}
+        />
+      );
+    }
+    if (component === 'button') {
+      return (
+        <Button
+          key={index}
+          testID={testId}
+          title={buttonTitle(value)}
+          onPress={onPress}
+          nuiPerfId={nuiPerfId}
+          style={style}
+        />
+      );
+    }
+    if (component === 'switch') {
+      return (
         <Switch
           key={index}
-          testID={`bench-nitro-ui-host-${String(index)}`}
+          testID={testId}
           value={value}
           onValueChange={onValueChange}
-          nuiPerfId={perfMarks ? index : null}
-          style={rowStyle(component)}
+          nuiPerfId={nuiPerfId}
+          style={style}
         />
-      ))}
-    </Host>
-  );
+      );
+    }
+    // SegmentedControl, Picker and DatePicker are not hostable (H2b): a Host refuses
+    // them, so the plan should never ask (`BenchImplementation.components`) and
+    // rendering an empty tree here would be a number nobody asked for.
+    throw new Error(`nitro-ui-host cannot compose ${component}`);
+  };
+  return <Host style={stackStyle(n, component)}>{range(n).map(child)}</Host>;
 }
 
 /**

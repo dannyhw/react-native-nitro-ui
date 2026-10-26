@@ -512,13 +512,46 @@ Limits, stated plainly:
 
 ## 10. A control inside a `<Host>` (D24)
 
-`<Host>` (Android, opt-in, `Switch` only — `docs/components/host.md`) composes its direct
+`<Host>` (Android, opt-in — `docs/components/host.md`) composes its direct
 nitro-ui children into **one** Compose composition, which is where the mount memory and
 UI-thread win comes from (H1's run: 2.75x → **0.86x** `expo-ui-shared-host` on mount memory,
 1.39x → **0.87x** on mount UI CPU; T16's spike measured 2.75x → 0.87x and 1.50x → 0.80x the
 same way, and the shipped container reproduced it). The cost is the JS thread — 0.73x unhosted
 against **1.18x** hosted — and that the hosted control stops being a Yoga leaf whose box
-anybody draws:
+anybody draws.
+
+H1 shipped that for `Switch`. H2a adds `Slider`, `Progress` and `Button` to the same
+mechanism — unreleased, so 0.1.0 ships `Switch` only — and re-measured the batch with all four
+in it. One figure per control: mount memory (the `memory` cell, N=200) / mount UI-thread CPU /
+mount JS-thread CPU / unmount UI-thread CPU (the `mount` cell, N=50), each one the runner's own
+launch-paired ratio to `expo-ui-shared-host` from one run (`quick` plan, ART `speed-profile`,
+4 launches, `bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`, read with
+`bench/tools/arm-ratios.mjs`). That run was made on a **busy machine (37 % of load samples over
+the ceiling), so it is indicative and a quiet re-run is pending**: every cell whose spread
+across launches is over 10 % is marked **ᴺ** and carries no verdict.
+
+| Control (N=200)         | `nitro-ui` unhosted                                       | `expo-ui-shared-host` | `nitro-ui` + `<Host>`                                   |
+| ----------------------- | --------------------------------------------------------- | --------------------- | ------------------------------------------------------- |
+| `Switch` (H1's run)     | 2.75x(1%) / 1.39x(4%) / **0.73x**(6%) / 1.31x              | 1.00x                 | **0.86x**(1%) / **0.87x**(2%) / 1.18x(4%) / 0.78x(16%)ᴺ  |
+| `Switch` (H2a's run)    | 2.81x(1%) / 1.55x(12%)ᴺ / **0.80x**(6%) / 1.20x(13%)ᴺ      | 1.00x                 | **0.88x**(3%) / **0.84x**(2%) / 1.23x(5%) / 0.68x(40%)ᴺ  |
+| `Slider`                | 2.49x(4%) / 1.62x(8%) / **0.94x**(6%) / 1.42x(22%)ᴺ        | 1.00x                 | 1.00x(2%) / **0.86x**(7%) / 1.07x(16%)ᴺ / 0.62x(21%)ᴺ    |
+| `Progress` (linear bar) | 1.44x(1%) / **0.85x**(4%) / **0.59x**(3%) / 1.42x(7%)      | 1.00x                 | **0.37x**(1%) / **0.50x**(9%) / **0.92x**(8%) / 0.82x(26%)ᴺ |
+| `Button`                | 2.45x(2%) / 1.80x(18%)ᴺ / 0.64x(18%)ᴺ / 3.04x(21%)ᴺ        | 1.00x                 | **0.80x**(2%) / **0.87x**(4%) / 0.71x(10%)ᴺ / 0.67x(37%)ᴺ |
+
+(Bold = ≤ 1.0× with a launch spread of 10 % or less; **ᴺ** = spread over 10 %, reported
+without a verdict — the same convention as the task reports. A figure with no parenthesis is
+one whose spread the source report did not print: `1.31x` is H1's `Switch` unmount ratio, from
+`docs/components/host.md`.)
+
+(There is no *mixed* bench cell — a cell is one component at one N, so a Host holding
+four kinds of control at once is a correctness case in the harness and the real-input
+suite, not a measured one.)
+
+The shape is the same as H1 measured and the same in both directions: the memory and
+UI-thread columns move in the Host's favour, and the JS column moves against it — a hosted
+control is still a React Native node *and* a child of somebody else's composition. Beyond
+that, what the rule "the hosted control stops being a Yoga leaf whose box anybody draws"
+now has to cover is four controls with two different sizing policies:
 
 - **It never measures its content, and never reports.** `NitroComposeHost.onMeasure` declines
   while its parent is a `NitroUiHostView` (`isHostedByParent`), `onLayout` returns early, and
@@ -527,7 +560,8 @@ anybody draws:
   report, so the cache gains no entry, no correction is queued, and **D17's first-frame
   budget has nothing to govern** — a hosted control cannot be a frame late because nothing
   arrived. Measured over eight hosted Switches on an invalidated cache: reports 0, cache
-  entries 0, corrections 0 (`example/__tests__/Host.harness.tsx`).
+  entries 0, corrections 0 (`example/__tests__/Host.harness.tsx`); the same reading over a
+  mixed Host of Switches, Sliders, Progress bars and Buttons (`example/__tests__/HostControls.harness.tsx`).
 - **The measure call itself does not go away.** Fabric still asks each hosted child's Yoga
   node for its frame, and `measure()` is still entered once per child — 8 hosted, 8
   unhosted, the same number. The answer comes from §2's cache or the declared fallback, so
@@ -542,17 +576,34 @@ anybody draws:
   cache/fallback as an unhosted control — it has no idea who draws the pixels and must not
   start asking (§1) — so `<Host><Switch /></Host>` still gives the Switch a 48 dp row box and
   RN still computes a frame from it. Nothing places pixels with that frame; on Android the
-  platform view behind it declines to measure, so Android lays it out at `0 × 0` and that is
-  what anything reading real view bounds sees. It is *not* `GONE`, and an earlier draft of this
-  file said it was: `SurfaceMountingManager.updateLayout` re-asserts `VISIBLE` (or `INVISIBLE`
-  for `display: none`) on the child's view on every layout pass, so a visibility flag written
-  once at attach would be undone before the next frame was drawn. The measure gate is the
-  mechanism, and `0 × 0` is what makes the child neither a hit target nor visible-to-user for
-  accessibility.
+  platform view behind it declines to measure, so Android lays it out at `0 × 0` at mount.
+  That is not the whole answer, and a first draft of this file treated it as one: **the next
+  layout pass over that child writes its Yoga frame into its `View`** (F8). Measured — a
+  hosted child re-framed from 120 × 44 to 160 × 60 afterwards reads `[160, 60, 0, 48]`, a
+  child added later reads `[52, 48, 0, 96]`, and the drawing answers at the same offsets
+  before and after (`example/__tests__/Host.harness.tsx`). A `testID` box for a hosted
+  child is therefore the engine's frame or nothing, never the drawn rect, and only the
+  first is aim-at-able. It is *not* `GONE`, and an earlier draft of this file said it was:
+  `SurfaceMountingManager.updateLayout` re-asserts `VISIBLE` (or `INVISIBLE` for
+  `display: none`) on the child's view on every layout pass, which is exactly how the frame
+  above arrives — a visibility flag written once at attach would have been undone before
+  the next frame was drawn, and so would a zero size.
 
   A hosted child's `alignSelf: 'stretch'`, `width: '100%'` or `height` therefore moves the
   frame and not the drawing (D16's cross-axis opt-in means nothing inside a Host), and does
   not space the rows.
+- **What each child draws is its own policy applied to the Host's width.** The Host offers one
+  constraint — its inner width — and `nitro-ui`'s existing `intrinsic` / `fillWidth` policy
+  (§5) decides what to do with it, which is why no new rule was needed for a `Slider`, a
+  `Progress` or a `Button`: the same control measures itself the same way for Yoga. A `fillWidth`
+  control — `Slider`, a linear `Progress` — takes the Host's inner width, so a hosted `Slider`
+  with `width: 60` still drags across the whole Host (measured: the same child answers a
+  different value at the same offset in a 260 dp Host than in a 100 dp one, and a tap 240 dp
+  along answers near the maximum). An `intrinsic` control — `Switch`, `Button`, a circular
+  `Progress` — takes its own size and sits at the column's leading edge, at whatever width its
+  content needs: a hosted `Button` titled `Roll back the release` is reachably wider than one
+  titled `Go` in the same Host, and neither is reachably 250 dp across a 260 dp box. So "the
+  frame is decorative" per control means *which* drawing replaces it, not whether one does.
 - **The Host places the children.** One `Column`, mount order, the Host's width, from the box's
   **top-leading edge**, clipped to the box. The same measured root that centres a control
   inside the box the engine gave it (`placeRelative((w-mw)/2, (h-mh)/2)`) is what `centersContent`
@@ -571,10 +622,18 @@ anybody draws:
   composition as well as its layout — otherwise the hidden row goes on drawing while a
   content-sized Host shrinks by a row and clips what it still shows. `padding` reaches the view
   only through `ViewManager.setPadding`, which the base class leaves a no-op, so the Host's view
-  manager forwards it and the `Column` starts inside the padding. The props that cannot cross at
-  all are `gap`, `flexDirection`, `alignItems`, `justifyContent`, `borderWidth` and
-  `pointerEvents`: Compose arranges one column and Compose takes the touches, while Yoga still
-  spends box height on each of them. Dev builds say so, once per instance.
+  manager forwards it and the `Column` starts inside the padding. `borderWidth` does the same
+  thing by a route nobody chose: Fabric reports border and padding as one
+  `layoutMetrics.contentInsets`, so a border insets the drawing exactly like padding and paints
+  nothing — worth knowing before an app asks a Host for a 2 dp outline and gets 2 dp of missing
+  width. What cannot cross at all is `gap` / `rowGap` / `columnGap`, `flexDirection`,
+  `alignItems`, `alignContent`, `justifyContent` and `pointerEvents`: Compose arranges one
+  column and Compose takes the touches, while Yoga still spends box height on each of them. Dev
+  builds say so, once per instance. `alignSelf` is on neither list, and H2a removed it from
+  the warning for the reason the warning itself gives: it reads the **Host's own** `style`,
+  and a Host's `alignSelf` positions the Host inside its parent, so it moves the box the
+  drawing sits in — it works. A *child's* `alignSelf` is the bullet above's business (it
+  moves that child's decorative frame), not an arrangement style's.
 - **Unhosted controls are untouched.** The hosted path is a branch on the direct parent, taken
   or reverted on attach and detach, and every case in §3–§7 runs unchanged for a control with
   any other parent — which is the regression `Switch.harness` and `Sizing.harness` keep true.

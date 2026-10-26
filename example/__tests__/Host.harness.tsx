@@ -90,6 +90,8 @@ type Log = {
   setDisabled?: (next: boolean) => void;
   /** Change which of a list fixture's children are `display: none`. */
   setHidden?: (next: boolean) => void;
+  /** Change a hosted child's own `style`, to force a later layout pass for *it*. */
+  setSized?: (next: boolean) => void;
 };
 
 const newLog = (): Log => ({
@@ -267,6 +269,7 @@ function HostedList({
   hostStyle,
   childStyle,
   hideLast,
+  refuseLast,
 }: {
   log: Log;
   ids: string[];
@@ -274,6 +277,14 @@ function HostedList({
   childStyle?: ViewStyle;
   /** Start with the last child `display: none`; `setHidden(false)` shows it. */
   hideLast?: boolean;
+  /**
+   * Make the last child refuse every press it receives.
+   *
+   * A refused press still reaches `onValueChange`, so the child keeps answering probes,
+   * but its value cannot drift: press it ten times and it is still whatever JS last
+   * wrote. That is what lets a case ask "what is the drawing showing?" with a press.
+   */
+  refuseLast?: boolean;
 }) {
   const [current, setCurrent] = useState(ids);
   const [hidden, setHidden] = useState(hideLast ?? false);
@@ -286,6 +297,7 @@ function HostedList({
           key={id}
           id={id}
           log={log}
+          accept={!(refuseLast && index === current.length - 1)}
           style={
             hidden && index === current.length - 1
               ? { ...childStyle, display: 'none' }
@@ -295,6 +307,35 @@ function HostedList({
       ))}
     </Host>
   );
+}
+
+/**
+ * A hosted Switch whose own `style` a test can change after mount.
+ *
+ * Only the child's own metrics make Fabric emit a layout update for that child: growing a
+ * sibling re-lays the screen without touching it, so `updateLayout` never runs again for
+ * it and a test built on that never exercises the second pass it claims to (review M2).
+ */
+function Resizer({ id, log }: { id: string; log: Log }) {
+  const [big, setBig] = useState(false);
+  log.setSized = setBig;
+  return (
+    <Toggle
+      id={id}
+      log={log}
+      style={big ? { width: 160, height: 60 } : { width: 120, height: 44 }}
+    />
+  );
+}
+
+/** `[width, height, x, y]`, rounded — the shape every box assertion in this file uses. */
+function frame(b: ViewInfo): number[] {
+  return [
+    Math.round(b.width),
+    Math.round(b.height),
+    Math.round(b.x),
+    Math.round(b.y),
+  ];
 }
 
 afterEach(() => {
@@ -447,7 +488,15 @@ describe('Host · hosted controls are still controls', () => {
     // have at mount, in the order the app asked for.
     log.setIds?.(['list-c', 'list-a', 'list-d']);
     await settle(500);
-    expect(await boxOf('list-d')).not.toBeNull();
+    const addedBox = frame(await boxOf('list-d'));
+    // A child Fabric laid out *after* the Host mounted is F8 from the other side, and it
+    // behaves as one re-framed later does: on Android the frame Yoga computed reaches its
+    // `View` (measured `[52, 48, 0, 96]` — the engine box, third row), while a child the
+    // Host drew from the start keeps the `[0, 0, 0, 0]` it mounted with. Which of the two
+    // it is does not matter to the reader: the box is the engine's frame, never the drawn
+    // rect, which is the `testID` caveat in docs/components/host.md.
+    expect(addedBox[0]).toBeGreaterThan(0);
+    expect(addedBox[1]).toBeGreaterThan(0);
     const listBox = await boxOf('list-host');
     const order: string[] = [];
     for (let offset = 4; offset <= 200; offset += 8) {
@@ -511,6 +560,11 @@ describe('Host · hosted controls are still controls', () => {
         <Host style={{ width: 300, height: 200 }}>
           <Toggle id="find-0" log={log} />
           <Toggle id="find-1" log={log} />
+          <Toggle
+            id="find-sized"
+            log={log}
+            style={{ width: 120, height: 44 }}
+          />
         </Host>
       </View>
     );
@@ -538,6 +592,102 @@ describe('Host · hosted controls are still controls', () => {
       expect(zero.height).toBeGreaterThan(0);
       expect(one.width).toBeGreaterThan(0);
       expect(one.height).toBeGreaterThan(0);
+    }
+    // Whether a *later* layout pass changes that answer is the F8 case below; on Android
+    // it does, and into the child's engine frame rather than the drawing's rect.
+    unmount();
+  });
+
+  /**
+   * F8: a hosted child's box after a later Fabric layout pass *over that child*.
+   *
+   * The first version of this case grew a sibling's height and read the child again. That
+   * never exercised anything: Fabric emits a layout update for a node whose own metrics
+   * changed, so a sibling's height runs no `updateLayout` for the hosted child and the
+   * `[0, 0, 0, 0]` passed whatever the answer turned out to be (review M2). Here the
+   * child's own `style` changes instead, 120 x 44 to 160 x 60 — a real second pass over
+   * the same `View`.
+   *
+   * Measured on Android inside a 300 x 200 Host at the window origin:
+   *
+   *  - at mount the child reads `[0, 0, 0, 0]`, which is what the docs said;
+   *  - after the re-frame it reads `[160, 60, 0, 48]` — **its own Yoga frame**. F8 is
+   *    real: the next layout update lays the child out at the frame Yoga computed, so a
+   *    hosted child's `testID` box is not permanently zero. (A child *added* later is the
+   *    same story: `list-d` in the case above reads `[52, 48, 0, 96]`.)
+   *  - what did not move is the drawing: the same x offsets down the column answered
+   *    before the re-frame and after it, and the drawing still stops at the control —
+   *    60 dp inside a box 160 wide.
+   *    That reading is Android's, because the probe reads the composition's row band:
+   *    on iOS the passthrough draws every child into its own view, so a child's box is
+   *    its drawing and the probe would compare a rectangle with itself. The iOS branch
+   *    reads the other half of the same case — the child is laid out at its Yoga frame
+   *    before the re-frame and at the new one after it.
+   *
+   * So the caveat is not "a hosted child's box is nothing", it is "a hosted child's box
+   * is the engine's frame, not the drawn one" — sometimes zero, sometimes a plausible
+   * rectangle that is 108 dp of box around a 52 x 32 control. Both readings send a test
+   * tool to `accessibilityLabel` instead (`docs/components/host.md`).
+   */
+  it('lays a re-framed hosted child at its Yoga frame, not its drawing (F8)', async () => {
+    const { unmount } = await mount(
+      <View testID="f8-host" style={HUG}>
+        <Host testID="f8-box" style={{ width: 300, height: 200 }}>
+          <Toggle id="f8-0" log={log} />
+          <Resizer id="f8-sized" log={log} />
+        </Host>
+      </View>
+    );
+    /**
+     * Which x offsets, down the second row's band, answer the hosted Switch.
+     *
+     * A pair, not a number: Compose's row pitch and the drawn control's width are
+     * Compose's business, so this asks where the drawing answers and compares two moments.
+     */
+    const drawnColumns = async () => {
+      const host = await boxOf('f8-box');
+      const hit: number[] = [];
+      for (let x = 4; x <= 220; x += 8) {
+        if (
+          (await probeIn(host, x, 70, ['f8-0', 'f8-sized'], log)) === 'f8-sized'
+        ) {
+          hit.push(x);
+        }
+      }
+      return hit;
+    };
+    const sizedBefore = frame(await boxOf('f8-sized'));
+    // The column probe reads the composition's row band inside the Host box, which is
+    // only where the Host draws; on iOS the box and the drawing are the same rectangle.
+    const drawnBefore = Platform.OS === 'android' ? await drawnColumns() : [];
+    if (Platform.OS === 'android') {
+      expect(drawnBefore.length).toBeGreaterThan(0);
+    }
+
+    log.setSized?.(true);
+    await settle(600);
+
+    const sizedAfter = frame(await boxOf('f8-sized'));
+
+    if (Platform.OS === 'android') {
+      // The re-frame moved the frame and not the drawing.
+      expect(await drawnColumns()).toEqual(drawnBefore);
+      expect(sizedBefore).toEqual([0, 0, 0, 0]);
+      // F8: the child's own engine box, in the row Yoga put it in.
+      expect(sizedAfter).toEqual([160, 60, 0, 48]);
+      // A child nobody re-framed keeps the mount answer, so this is per-child and not a
+      // Host-wide revival of the children's frames.
+      expect(frame(await boxOf('f8-0'))).toEqual([0, 0, 0, 0]);
+      // And the new box is still not the drawn rect: the drawing stops at the control,
+      // 60 dp short of a box 160 wide.
+      const widest = drawnBefore.at(-1) ?? 0;
+      expect(widest).toBeLessThan((sizedAfter[0] ?? 0) - 60);
+    } else {
+      // The passthrough gives the child a real view, so its box is its Yoga frame before
+      // the re-frame and after it — and on iOS that frame is where the control is drawn.
+      expect(sizedBefore.slice(0, 2)).toEqual([120, 44]);
+      expect(sizedAfter.slice(0, 2)).toEqual([160, 60]);
+      expect(Math.round((await boxOf('f8-0')).width)).toBeGreaterThan(0);
     }
     unmount();
   });
@@ -954,6 +1104,76 @@ if (Platform.OS === 'android') {
       hiddenLog.setHidden?.(false);
       await settle(500);
       expect(await sweep()).toEqual(['hidden-a', 'hidden-b']);
+      unmount();
+    });
+
+    /**
+     * S2's other half: a value a hosted child is given *while it is hidden* has to be
+     * what the child draws when it comes back.
+     *
+     * Hiding takes a hosted child out of the composition, so the write lands on a
+     * control with no Compose state behind it. An implementation that composed the child
+     * from the value it happened to have when it was hidden — or that skipped the write
+     * because nothing was listening — shows the old thumb position the moment `display`
+     * flips back, which is a silently wrong control on the screen the app returns to.
+     *
+     * The oracle is a press on the last child with `refuseLast`: JS never accepts it, so
+     * the value can only be the one the test wrote. A drawing that caught the write is ON
+     * and therefore reports `false`; a drawing that did not is OFF and reports `true`.
+     */
+    it('applies a value written while the hosted child was hidden', async () => {
+      const s2Log = newLog();
+      const { unmount } = await mount(
+        <View testID="s2-host" style={HUG}>
+          <HostedList
+            log={s2Log}
+            ids={['s2-a', 's2-b']}
+            hostStyle={{ width: 300, height: 200 }}
+            hideLast
+            refuseLast
+          />
+        </View>
+      );
+      const box = await boxOf('s2-host');
+      await boxOf('s2-a');
+      await boxOf('s2-b');
+
+      // The write, while `display: none` still hides the child.
+      s2Log.write['s2-b']?.(true);
+      await settle(500);
+      // JavaScript has the value and sent the prop; that half is easy and only the
+      // premise. (Read off the handle rather than `accepted`: this is a JS write, which
+      // never passes through `onValueChange`.)
+      expect(s2Log.handles['s2-b']?.value).toBe(true);
+
+      // Hidden is still hidden: a value change must not put the child back in the
+      // drawing, so the only answer a sweep can get is from the shown child.
+      const offsetsFor = async () => {
+        const found: { offset: number; hit: string }[] = [];
+        for (let offset = 4; offset <= 180; offset += 8) {
+          const hit = await probeIn(box, 8, offset, ['s2-a', 's2-b'], s2Log);
+          if (hit != null && found[found.length - 1]?.hit !== hit) {
+            found.push({ offset, hit });
+          }
+        }
+        return found;
+      };
+      expect((await offsetsFor()).map((entry) => entry.hit)).toEqual(['s2-a']);
+
+      // Show it. The child that comes back has to be the one JS wrote.
+      s2Log.setHidden?.(false);
+      await settle(600);
+      const shown = await offsetsFor();
+      expect(shown.map((entry) => entry.hit)).toEqual(['s2-a', 's2-b']);
+      const firstB = shown.find((entry) => entry.hit === 's2-b');
+      expect(firstB).toBeDefined();
+
+      const before = s2Log.requests.length;
+      expect(
+        await probeIn(box, 8, firstB!.offset, ['s2-a', 's2-b'], s2Log)
+      ).toBe('s2-b');
+      // The drawn thumb was ON, so the press the drawing reports is the turn-off.
+      expect(s2Log.requests.slice(before)).toEqual(['s2-b:false']);
       unmount();
     });
   });

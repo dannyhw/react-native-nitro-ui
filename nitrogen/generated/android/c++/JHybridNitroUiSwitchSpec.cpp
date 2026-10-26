@@ -177,5 +177,10 @@ namespace margelo::nitro::nitroui {
     auto __result = method(_javaPart);
     return __result->toCpp();
   }
+  std::string JHybridNitroUiSwitchSpec::nuiTestArmedGuards() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("nuiTestArmedGuards");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
 
 } // namespace margelo::nitro::nitroui

@@ -84,8 +84,9 @@ export const IMPLEMENTATIONS = [
   'expo-ui-host-per-control',
   'expo-ui-shared-host',
   'nitro-ui',
-  // T16 spike: nitro-ui's controls inside one shared `<Host>`. A reference arm like
-  // the two `expo-ui-*` ones - measured and reported, never gated.
+  // nitro-ui's controls inside one shared `<Host>` (H1, widened to more controls by
+  // H2a). A reference arm like the two `expo-ui-*` ones - measured and reported, never
+  // gated (`GATED_IMPLEMENTATIONS`).
   'nitro-ui-host',
 ];
 
@@ -120,28 +121,40 @@ export const ARMS_WITHOUT_COMPONENT = [
 ];
 
 /**
- * Arms that are scoped to one component, or to one platform *and* one component,
- * keyed by implementation name.
+ * Arms that are scoped to a set of components, or to one platform *and* a set of
+ * components, keyed by implementation name.
  *
  * `ARMS_WITHOUT_COMPONENT` is per platform because it describes something the
- * *platform's* runtime cannot mount. This is the other case: an arm that renders
- * one control (and, for the Host, exists on one platform). `nitro-ui-host`
- * (T16, productionised by H1) composes Switches and throws for anything else, so
- * any other cell is a launch that would render nothing and still report a
- * plausible mount time for zero controls; and on iOS `<Host>` is the documented
+ * *platform's* runtime cannot mount. This is the other case: an arm that renders some
+ * controls (and, for the Host, exists on one platform). `nitro-ui-host` (H1, widened to
+ * Slider, Progress and Button by H2a) composes what a `<Host>` can draw - Switch,
+ * Slider, linear Progress, Button - and `NitroUiHostList` throws for the rest, so any
+ * other cell is a launch that would render nothing and still report a plausible mount
+ * time for zero controls. SegmentedControl, Picker and DatePicker stay out because a
+ * `<Host>` refuses them, which is H2b's scope. And on iOS `<Host>` is the documented
  * passthrough - permanently, since T17 measured an iOS Host and D23's outcome was not
  * to ship one - so a cell there would price "nitro-ui plus one extra `View`" under a
  * name that promises a shared composition.
  *
- * The component scope is a property of the arm, so it applies whether or not the
- * caller named a platform; the platform scope only applies when one is named.
- * `bench/src/implementations/index.ts` repeats the component scope as a runtime
- * refusal, which is the belt to this brace: an arm that renders nothing must say
- * so in the table rather than be measured.
+ * The component scope is a property of the arm, so it applies whether or not the caller
+ * named a platform; the platform scope only applies when one is named.
+ * `bench/src/implementations/index.ts` repeats the same list as `components` and
+ * `NitroUiHostList` refuses what is not on it: an arm that renders nothing must say so
+ * in the table rather than be measured. `scripts/__tests__/bench-gate.test.js` keeps
+ * those lists from drifting apart.
  */
 export const ARM_SCOPES = {
-  'nitro-ui-host': { component: 'switch', platform: 'android' },
+  'nitro-ui-host': {
+    components: ['switch', 'slider', 'progress', 'button'],
+    platform: 'android',
+  },
 };
+
+/** Whether a scoped arm renders `component` at all, platform aside. */
+export function armScopeCovers(implementation, component) {
+  const scope = ARM_SCOPES[implementation];
+  return scope == null || scope.components.includes(component);
+}
 
 /** Latency metrics, all nanoseconds, all smaller-is-better. */
 export const LATENCY_METRICS = ['jsCommitNs', 'mountedNs', 'presentedNs'];
@@ -380,7 +393,8 @@ export function buildSchedule({
       `--only matched no implementation for platform ${String(platform)} ` +
         `(scoped arms: ${Object.entries(ARM_SCOPES)
           .map(
-            ([name, scope]) => `${name} = ${scope.platform} ${scope.component}`
+            ([name, scope]) =>
+              `${name} = ${scope.platform} ${scope.components.join('/')}`
           )
           .join(', ')})`
     );
@@ -391,8 +405,7 @@ export function buildSchedule({
     const order = launch % 2 === 0 ? wanted : [...wanted].reverse();
     for (const cell of wantedCells) {
       for (const implementation of order) {
-        const scope = ARM_SCOPES[implementation];
-        if (scope != null && scope.component !== componentOf(cell.scenario)) {
+        if (!armScopeCovers(implementation, componentOf(cell.scenario))) {
           // The arm renders a different control than this cell asks for. Skipping
           // the cell is also what keeps a scoped arm out of another component's
           // ratio table, where its absence is honest and an empty tree is not.

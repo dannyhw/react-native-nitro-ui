@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.util.Log
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
 import android.view.View
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.bridge.WritableNativeMap
@@ -30,7 +32,7 @@ internal class NitroUiHostModel : NitroUiModel() {
 
 /**
  * The Android `<Host>`: one Compose composition shared by every nitro-ui control
- * placed directly inside it (T16 spike - `docs/tasks/T16-host-spike.md`).
+ * placed directly inside it (H1 - `docs/components/host.md`).
  *
  * **Mechanism (Expo's shape, read from `@expo/ui`'s `HostView` +
  * `ExpoComposeView.Children`).** RN still mounts one Fabric node and one `View`
@@ -51,15 +53,25 @@ internal class NitroUiHostModel : NitroUiModel() {
  * **Which of the Host's own styles reach the drawing.** `width` / `height` / `flex`
  * size the box, and `padding` insets it: [NitroUiHostViewManager] forwards
  * `setPadding`, so the `Column` starts inside the padding as in any other
- * container. `gap`, `flexDirection`, `alignItems`, `justifyContent`, `borderWidth`
- * and `pointerEvents` do not - Compose does the arranging (one `Column`, no gaps),
- * the Host draws no border, and hits go to Compose rather than RN's hit testing.
- * Yoga still honours each of them in the *box*, which is the trap: a `gap` buys
- * height and no space, and `flexDirection: row` buys a one-row-tall box around a
- * stack of rows. Say how tall the Host is, and stack it in a column (review S3).
+ * container. `borderWidth` insets it the same way and paints nothing: Fabric sends
+ * border and padding as one `layoutMetrics.contentInsets`, and the view manager
+ * forwards `setPadding`, so `borderWidth: 2` moves the column in by 2 dp without
+ * drawing a border. What does not cross at all is `gap` / `rowGap` / `columnGap`,
+ * `flexDirection`, `alignItems`, `alignContent`, `justifyContent` and
+ * `pointerEvents` - Compose does the arranging (one `Column`, no gaps) and hits go
+ * to Compose rather than RN hit testing. Yoga still honours each of them in the
+ * *box*, which is the trap: a `gap` buys height and no space, and
+ * `flexDirection: row` buys a one-row-tall box around a stack of rows. Say how tall
+ * the Host is, and stack it in a column (review S3). `alignSelf` belongs to neither
+ * list, and not because of anything about the children: the JS warning reads the
+ * **Host's own** style, and a Host's `alignSelf` positions the Host inside *its*
+ * parent - it moves the box, and the drawing is inside the box. Warning about it was
+ * a false claim, and H2a dropped it (review F5/F6). A child's own `alignSelf` moves
+ * that child's decorative frame, which is the per-child rule, not an arrangement one.
  *
  * **The allowlist is native, not only JS.** [NitroComposeHost.isHostable] decides who
- * may be composed here, and only `SwitchHost` says yes. JS refuses what it can name
+ * may be composed here: Switch, Slider, Progress and Button say yes (H1, then H2a),
+ * and every other control says no. JS refuses what it can name
  * (`src/components/Host/HostChildren.ts`), but React flattens components out of the
  * native tree: a `Picker` behind a `memo` arrives as a direct child that JS saw as a
  * `<Row>`, and a nested `<Host>` is a child like any other. Both are refused here and
@@ -186,6 +198,38 @@ internal class NitroUiHostView(
   private fun hostedChildrenChanged() {
     hostedVersion.intValue = hostedVersion.intValue + 1
     Snapshot.sendApplyNotifications()
+  }
+
+  /**
+   * The platform's own answer to "can a reader receive events right now?".
+   *
+   * Declared here because the guard below needs it, and this view is the one that
+   * announces for every hosted control.
+   */
+  private val systemAccessibility =
+    context.getSystemService(AccessibilityManager::class.java)
+
+  /**
+   * Hand an accessibility event to the platform only when it can accept one.
+   *
+   * This is the Slider's guard (`HybridNitroUiSlider.kt`), and a Host needs it for the
+   * same reason *on behalf of* everything it composes: an announcement leaves the
+   * Host's own `AndroidComposeView`, so the platform asks **this** view, not the
+   * control. A hosted Slider or Progress publishes `ProgressBarRangeInfo`, and Compose
+   * announces a semantics change up the parent chain - which with no reader connected
+   * answers `IllegalStateException: Accessibility off. Did you forget to check that?`
+   * and takes the app down (measured with a hosted Slider's screen-reader step in the
+   * harness). Refusing is the outcome the platform was reaching anyway, and it is
+   * inert while a reader is connected, because then the check passes and [super] runs.
+   */
+  override fun requestSendAccessibilityEvent(
+    child: View,
+    event: AccessibilityEvent,
+  ): Boolean {
+    if (systemAccessibility?.isEnabled != true) {
+      return false
+    }
+    return super.requestSendAccessibilityEvent(child, event)
   }
 
   /**

@@ -170,6 +170,20 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private var strategyArmed = false
 
   /**
+   * Whether this mount has *ever* armed each of the two own-composition guards,
+   * outliving the live flags above going false again.
+   *
+   * [armedGuardsReport] reads these instead of the live pair. Arming is what costs,
+   * and a first-frame listener that has already marked is still a listener that was
+   * armed and then had to be taken out; a probe that reads only what is live right
+   * now cannot tell "never armed" from "armed and released", which makes it a race
+   * with the first frame rather than a gate. Both are reset with the live flags in
+   * [prepareForRecycle], so the answer is about the mount, as the report is.
+   */
+  private var everArmedStrategy = false
+  private var everArmedPreDraw = false
+
+  /**
    * The size the sizing engine already has from this host, in dp. Compared with an
    * epsilon so a measure that wobbles by a fraction of a dp does not become a
    * Fabric commit (risk R12). This only skips the JNI call - the engine drops a
@@ -368,9 +382,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   /**
    * Whether a [NitroUiHostView] may compose this control.
    *
-   * The native half of the "Switch only" rule (review M2). JS names the hostable
-   * controls in `src/components/Host/HostChildren.ts`, but React flattens
-   * components out of the native tree, so a `Picker` behind a `memo` arrives as a
+   * The native half of the allowlist rule (review M2) - one control in H1, four since
+   * H2a. JS names the hostable controls in `src/components/Host/HostChildren.ts`, but
+   * React flattens components out of the native tree, so a `Picker` behind a `memo`
+   * arrives as a
    * direct child of a Host that JS never saw a `Picker` in. Only this side can
    * decide then, and the decision is this property: `false` on the base class, so a
    * control opts in by overriding it and everything else - including another
@@ -425,8 +440,11 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * (`SurfaceMountingManager.updateLayout` ends by coercing the view to
    * `VISIBLE`/`INVISIBLE` and laying it out at its RN frame), so a write here would
    * be undone before the next frame was drawn. The measure gate is the mechanism:
-   * [onMeasure] declines to `0 × 0`, so the child is laid out at `0 × 0`, draws
-   * nothing, is not a hit target, and is not visible-to-user for accessibility.
+   * [onMeasure] declines to `0 × 0`, so the child builds no composition of its own,
+   * draws nothing and is not a hit target. It is laid out at `0 × 0` by the pass that
+   * mounts it and at its RN frame by any later pass over it - measured, F8 - which is
+   * why the frame must not be read as a place: the pixels are the Host's and the view
+   * has no content of its own.
    */
   private fun applyHostedDrawFlag() {
     if (isHostedByParent) {
@@ -487,6 +505,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
         // and the control is composed in exactly one place. Idempotent, and a no-op
         // when nothing was ever composed.
         disposeComposition()
+        // Same for the two registrations an unhosted mount armed (H1 N4): a control
+        // that moves *into* a Host mid-mount holds an activity lifecycle observer and
+        // possibly a pre-draw listener for a composition that has just been disposed.
+        // The steady state is handled by [armCompositionStrategy] and
+        // [watchForFirstFrame] declining; this is the transition that finds them
+        // already armed. Both are idempotent for the same reason as the dispose.
+        releaseOwnCompositionGuards()
       }
       // The first moment this view has a window, which is the first moment
       // Compose can resolve a composition against one. If Yoga already gave the
@@ -580,6 +605,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     // for it again: the listener it registered for the previous mount is gone.
     hasMarkedFirstFrame = false
     firstFrameWatchRegistered = false
+    everArmedStrategy = false
+    everArmedPreDraw = false
     releaseSizingInstance()
   }
 
@@ -647,6 +674,18 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       // transition, `removeClippedSubviews`) must not pay for a second observer.
       return
     }
+    if (isHostedByParent) {
+      // A hosted child builds no composition of its own ([ComposeContent.
+      // shouldCreateCompositionOnAttachedToWindow] and [onMeasure] both decline it),
+      // so there is nothing for this guard to guard: the observer it installs is
+      // keyed to *this* view's composition, and the composition that can leak here
+      // is the Host's - which arms one for itself, as the attach of a view it owns.
+      // Arming one per hosted child was H1's follow-up N4: 200 hosted Switches meant
+      // 200 `LifecycleRegistry` registrations and 200 removals per mount, to protect
+      // nothing. `parent` is already the Host here - `ViewGroup.addViewInner` assigns
+      // it before it dispatches the attach - so this is decided, not guessed.
+      return
+    }
     val owner = owner ?: return
     // `installFor` throws rather than skip when the owner is already DESTROYED, and
     // a view can be attached while an activity is being torn down (a surface that is
@@ -657,6 +696,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
     composeContent.setViewCompositionStrategy(DisposeOnLifecycleDestroyed(owner))
     strategyArmed = true
+    everArmedStrategy = true
   }
 
   /**
@@ -673,6 +713,60 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private fun unarmCompositionStrategy() {
     composeContent.setViewCompositionStrategy(DisposeWithTheHost)
     strategyArmed = false
+  }
+
+  /**
+   * Give up the two registrations that only this view's *own* composition needs.
+   *
+   * The pair [drop] releases, minus the sizing bookkeeping: this is for a control that
+   * is still mounted and still has state, but is no longer the one drawing itself.
+   */
+  private fun releaseOwnCompositionGuards() {
+    unarmCompositionStrategy()
+    unregisterPreDraw(firstFrameWatch)
+    firstFrameWatch = null
+    firstFrameWatchRegistered = false
+  }
+
+  /**
+   * What a harness asks about (H1 N4): the guards this mount armed for a composition of
+   * its own, as one line - `strategy` for an installed [ViewCompositionStrategy] (the
+   * activity `LifecycleRegistry` observer), `preDraw` for the first-frame listener once
+   * it is on its observer.
+   *
+   * The line has two halves, `ever|live:<live>`:
+   *
+   * - the **ever** half is what this mount has armed at any point, surviving the live
+   *   flags going false again. Arming is what costs, and a first-frame listener that has
+   *   already marked is still a listener that was armed and had to be taken out; a probe
+   *   that read only the live pair could not tell "never armed" from "armed and
+   *   released", which made it a race with the first frame - round 1's mutation of the
+   *   hosted early-return stayed green under a live-only probe for exactly that reason.
+   * - the **live** half is what is installed *now*, which is the only way to see the
+   *   other direction: a control that moves into a Host mid-mount has armed both and must
+   *   give both back ([releaseOwnCompositionGuards]). Without this half that release path
+   *   could be deleted and nothing would notice.
+   *
+   * So a hosted control answers `|live:` - nothing armed, nothing installed - and the same
+   * control outside a Host answers `strategy,preDraw|live:strategy` once its first frame
+   * has been marked. Read-only; both halves answer from fields the arming writes.
+   */
+  internal fun armedGuardsReport(): String {
+    val ever = mutableListOf<String>()
+    if (everArmedStrategy) {
+      ever.add("strategy")
+    }
+    if (everArmedPreDraw) {
+      ever.add("preDraw")
+    }
+    val live = mutableListOf<String>()
+    if (strategyArmed) {
+      live.add("strategy")
+    }
+    if (firstFrameWatchRegistered) {
+      live.add("preDraw")
+    }
+    return ever.joinToString(",") + "|live:" + live.joinToString(",")
   }
 
   /**
@@ -919,11 +1013,19 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     if (hasMarkedFirstFrame || firstFrameWatchRegistered) {
       return
     }
+    if (isHostedByParent) {
+      // Same rule as [armCompositionStrategy], different registrar (H1 N4). What this
+      // listener marks is the first frame *this view* drew, and records the box it
+      // drew into (D24: for a hosted child that box is `0 x 0`, and the pixels are the
+      // Host's). The Host arms one for itself, which is the frame anyone can read.
+      return
+    }
     val observer = viewTreeObserver
     if (!observer.isAlive) {
       return
     }
     firstFrameWatchRegistered = true
+    everArmedPreDraw = true
     val listener =
       object : ViewTreeObserver.OnPreDrawListener {
         override fun onPreDraw(): Boolean {

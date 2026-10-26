@@ -38,11 +38,18 @@ import { Switch } from '../Switch/Switch';
  * the error comes from the same table as the permission - hosting one more
  * control means adding one row here, and nothing else decides.
  *
- * One row today: H1 ships the Host for Switch, which is T16's condition 1 ("one
- * arm per component before it is claimed"). The rest are refused rather than
- * rendered into a composition that was never measured for them.
+ * Four rows: `Switch` from H1, and `Slider`, `Progress`, `Button` from H2a, each
+ * with a bench arm and a device suite behind it (T16's condition 1 - "one arm per
+ * component before it is claimed"). A row here is one half of the rule; the other
+ * is the `isHostable` override on the control's own Android host, and the two are
+ * the same decision seen from the two sides that have to agree.
  */
-const HOSTABLE_CONTROLS = new Map<unknown, string>([[Switch, 'Switch']]);
+const HOSTABLE_CONTROLS = new Map<unknown, string>([
+  [Button, 'Button'],
+  [Progress, 'Progress'],
+  [Slider, 'Slider'],
+  [Switch, 'Switch'],
+]);
 
 /**
  * This library's other controls, by the same identity rule.
@@ -52,14 +59,16 @@ const HOSTABLE_CONTROLS = new Map<unknown, string>([[Switch, 'Switch']]);
  * `src/__tests__/host.test.tsx` walks `src/components` and fails if a control is
  * added without a row in one of the two tables, so this list cannot quietly fall
  * behind the library.
+ *
+ * The three left here are H2b's: a `SegmentedControl`, `Picker` or `DatePicker` is
+ * refused, not because a shared composition cannot draw one but because nobody has
+ * measured or tested one inside a Host - and the popup/dialog controls reach outside
+ * the Host's box for a window, which is a different question.
  */
 const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
-  [Button, 'Button'],
   [DatePicker, 'DatePicker'],
   [Picker, 'Picker'],
-  [Progress, 'Progress'],
   [SegmentedControl, 'SegmentedControl'],
-  [Slider, 'Slider'],
 ]);
 
 /**

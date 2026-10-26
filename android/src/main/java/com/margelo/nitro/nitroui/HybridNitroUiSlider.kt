@@ -489,6 +489,16 @@ private class SliderHost(
     return super.requestSendAccessibilityEvent(child, event)
   }
 
+  /**
+   * A `<Host>` composes this control (H2a).
+   *
+   * The same allowlist line the Switch has (`HybridNitroUiSwitch.kt`), with the
+   * matching JS row in `src/components/Host/HostChildren.ts`. What the gesture costs
+   * inside a shared composition is measured, not assumed: `docs/components/host.md`.
+   */
+  override val isHostable: Boolean
+    get() = true
+
   @Composable
   override fun Component(model: SliderModel) {
     // Everything that decides what the control *is* is read in [SliderTrack],
@@ -978,7 +988,12 @@ class HybridNitroUiSlider(
   override fun nuiTestFramePumpArmed(): Boolean = model.isFramePumpArmed
 
   private fun runTestAccessibilityStep(up: Boolean) {
-    val root = findComposeRoot(host)
+    // A hosted control's semantics live in the *Host's* Compose view (that is what a
+    // Host is), so the search starts at the view that owns the composition rather than
+    // at this one. Without this the probe answers "no Compose root" for a control that
+    // is composed perfectly well - and the answer would be a lie about the control.
+    val compositionOwner = if (host.isHostedByParent) host.parent as? View else null
+    val root = findComposeRoot(compositionOwner ?: host)
     if (root == null) {
       reportAccessibilityStep("no Compose root (RootForTest) under the host")
       return
@@ -1015,7 +1030,9 @@ class HybridNitroUiSlider(
     if (candidates.size > 1) {
       // Two nodes offering one action is the ambiguity `clearAndSetSemantics`
       // exists to remove; saying so here is what stops a passing test from hiding
-      // a control whose *other* action is the wrong rule.
+      // a control whose *other* action is the wrong rule. Inside a Host this can also
+      // mean what it says literally: two hosted Sliders share one semantics tree, and
+      // the probe cannot tell them apart from the tree, so it refuses to guess.
       reportAccessibilityStep("ambiguous: ${candidates.size} nodes publish SetProgress")
       return
     }

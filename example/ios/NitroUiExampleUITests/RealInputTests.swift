@@ -72,6 +72,9 @@ final class RealInputTests: XCTestCase {
     static let dropArmed = "real-input-drop-armed"
     static let hostValue = "host-controlled-value"
     static let hostEvents = "host-events-count"
+    static let hostSliderValue = "host-slider-value"
+    static let hostButtonPresses = "host-button-presses"
+    static let hostMixedState = "host-mixed-state"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -193,6 +196,197 @@ final class RealInputTests: XCTestCase {
       try read(Echo.hostEvents),
       "2",
       "the Host should have reported both changes its child was asked for"
+    )
+  }
+
+  /// A real tap must press the `Button` inside a Host, and a disabled one beside it
+  /// must stay unpressed.
+  ///
+  /// On iOS a Host is the documented passthrough (D23), so what this presses is the
+  /// same SwiftUI Button the unhosted `button` check presses, inside a plain React
+  /// Native container. That is a contract and not a skip: the app is promised one tree
+  /// to reason about, and this is the case that keeps that promise honest on the
+  /// platform that composes nothing. Android checks the other mechanism there — a
+  /// Button with no view of its own at all (`CHECKS['hosted-button']`).
+  ///
+  /// The counter is shared with the disabled Button and both are given `onPress`, so
+  /// the refusal means something: a library that let a disabled control answer would
+  /// move the number, and a screen that had stopped rendering is caught by the tap
+  /// that follows.
+  func testRealInputHostedButton() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    try scrollIntoView("host-button", as: "the Button inside the Host")
+    let control = try required("host-button", as: "the Button inside the Host")
+    let disabled = try required("host-button-disabled", as: "the disabled Button inside the Host")
+    XCTAssertEqual(
+      try read(Echo.hostButtonPresses),
+      "0",
+      "the hosted Buttons should start with no presses recorded"
+    )
+
+    control.centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostButtonPresses) { $0 == "1" },
+      "1",
+      "one real tap on a Button inside a Host should reach onPress, and React should render 1 (the dump above shows what was on screen instead)"
+    )
+
+    disabled.centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostButtonPresses, timeout: 1.5) { $0 != "1" },
+      "1",
+      "a real tap on the disabled Button inside the Host should be refused: onPress was passed to it too, so a count that moves proves the touch was not refused"
+    )
+
+    control.centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostButtonPresses) { $0 == "2" },
+      "2",
+      "a second real tap should press the hosted Button again - which is also what proves the line above measured a refusal and not a screen that stopped rendering"
+    )
+    XCTAssert(control.isHittable, "the hosted Button should still be touchable")
+    XCTAssert(disabled.isHittable, "the disabled hosted Button should still be on screen")
+  }
+
+  /// A real drag must move the `Slider` inside a Host, and the track it moves along
+  /// must be the Host's width rather than the Slider's own box.
+  ///
+  /// Same reasoning as the Button: on iOS this is the passthrough, so the check is
+  /// that the JSX a Host asks for renders and answers there, while Android reads the
+  /// same claim out of a shared Compose composition. The width half is the D24
+  /// `fillWidth` rule read through the frames React Native ends up with: on both
+  /// platforms a hosted child's frame is decorative, and here it happens to agree with
+  /// the drawing because a Slider fills whatever it is given.
+  func testRealInputHostedSlider() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    try scrollIntoView("host-slider", as: "the Slider inside the Host")
+    let control = try required("host-slider", as: "the Slider inside the Host")
+    let startEcho = try read(Echo.hostSliderValue)
+    let before = number(in: startEcho)
+    XCTAssertEqual(
+      before,
+      0.4,
+      "the hosted Slider should start where the screen says it does (echo: \(startEcho))"
+    )
+
+    // A `fillWidth` control inside a Host has the Host's width, so it should read as a
+    // track: much wider than tall, and wider than the switch above it in the same box.
+    let frame = control.frame
+    XCTAssertGreaterThan(
+      frame.width,
+      frame.height * 3,
+      "a Slider is a track, not a square (hosted frame: \(frame))"
+    )
+
+    control.dragFromThumb(atValue: before ?? 0.4, toFraction: 0.9)
+    let up = readNumberUntil(Echo.hostSliderValue) { value in
+      value != nil && before != nil && value! > before! + 0.2
+    }
+    XCTAssertTrue(
+      up != nil && up! > (before ?? 0) + 0.2,
+      "a real drag on a Slider inside a Host should reach React (echo went from \(String(describing: before)) to \(String(describing: up)))"
+    )
+
+    control.dragFromThumb(atValue: up ?? 0.9, toFraction: 0.1)
+    let back = readNumberUntil(Echo.hostSliderValue) { value in
+      value != nil && up != nil && value! < up! - 0.2
+    }
+    XCTAssertTrue(
+      back != nil && back! < (up ?? 0) - 0.2,
+      "dragging back should move the hosted Slider the other way (echo went from \(String(describing: up)) to \(String(describing: back)))"
+    )
+  }
+
+  /// Four kinds of control in one Host, each of which has to stay itself.
+  ///
+  /// A Host is a container, so the interesting question is not whether one control
+  /// answers - the checks above cover that - but whether a batch of different kinds
+  /// still behaves as five controls rather than one blob. Three things are read here,
+  /// all of them things a person or a screen reader would notice:
+  ///
+  /// 1. Every child is on screen, reachable, and in the order it was given.
+  /// 2. Each keeps its own sizing rule (D24): the linear controls are as wide as each
+  ///    other, the indicator is a small square, and none of them was stretched to match
+  ///    its neighbour.
+  /// 3. Pressing one child moves only what it owns: the Button in this Host moves the
+  ///    press count in the echo, and the switch and slider values beside it do not
+  ///    move. That is recomposition staying per-child rather than a whole-batch
+  ///    redraw, which is what a Host is supposed to preserve.
+  ///
+  /// Android reads the same three claims out of `uiautomator dump`, where the nodes
+  /// are Compose's own (`CHECKS['hosted-mixed']`); here they are the views React Native
+  /// lays out, because a Host is a passthrough on iOS.
+  func testRealInputHostedMixed() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    let ids = [
+      "host-mixed-switch",
+      "host-mixed-slider",
+      "host-mixed-progress-linear",
+      "host-mixed-progress-circular",
+      "host-mixed-button",
+    ]
+    try scrollIntoView("host-mixed-button", as: "the last control of the mixed Host")
+    XCTAssertEqual(
+      try read(Echo.hostMixedState),
+      "off 0.50 0",
+      "the mixed Host should start with nothing answered"
+    )
+
+    var frames: [String: CGRect] = [:]
+    for id in ids {
+      let element = try required(id, as: "a control of the mixed Host")
+      XCTAssert(element.exists, "\(id) should be on screen inside the mixed Host")
+      XCTAssert(element.isHittable, "\(id) should be reachable inside the mixed Host")
+      frames[id] = element.frame
+    }
+    let tops = ids.map { frames[$0]!.minY }
+    XCTAssertEqual(
+      tops,
+      tops.sorted(),
+      "a Host draws its children in mount order (frames: \(frames))"
+    )
+
+    let sliderWidth = frames["host-mixed-slider"]!.width
+    let barWidth = frames["host-mixed-progress-linear"]!.width
+    let indicator = frames["host-mixed-progress-circular"]!
+    let switchWidth = frames["host-mixed-switch"]!.width
+    XCTAssertEqual(
+      barWidth,
+      sliderWidth,
+      accuracy: max(2, barWidth * 0.05),
+      "both linear controls fill the Host, so they should agree (bar \(barWidth), slider \(sliderWidth))"
+    )
+    XCTAssertLessThan(
+      indicator.width * 3,
+      barWidth,
+      "a circular indicator keeps its own width instead of stretching to the Host (\(indicator.width) against \(barWidth))"
+    )
+    XCTAssertEqual(
+      indicator.width,
+      indicator.height,
+      accuracy: 2,
+      "a circular indicator is drawn as a square (\(indicator))"
+    )
+    XCTAssertLessThan(
+      switchWidth * 3,
+      barWidth,
+      "a Switch keeps its own width inside a Host too (\(switchWidth) against \(barWidth))"
+    )
+
+    let button = try required("host-mixed-button", as: "the Button of the mixed Host")
+    button.centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostMixedState) { $0 == "off 0.50 1" },
+      "off 0.50 1",
+      "the Button in a mixed Host should press, and nothing else in the echo should move (the dump above shows what was on screen instead)"
+    )
+
+    let flip = try required("host-mixed-switch", as: "the Switch of the mixed Host")
+    flip.centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostMixedState) { $0 == "on 0.50 1" },
+      "on 0.50 1",
+      "the Switch in the same Host should answer too, with the press count left where the Button put it"
     )
   }
 
