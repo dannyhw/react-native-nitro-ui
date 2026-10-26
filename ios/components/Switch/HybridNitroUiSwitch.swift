@@ -348,10 +348,11 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
   /// first-frame pre-draw listener - and a control inside a `<Host>` must not register
   /// either, which is what the probe lets a test see (H1 follow-up N4). iOS has neither
   /// mechanism: a `UIHostingController` is torn down with its host and there is no
-  /// pre-draw registrar to leak through. The test that reads this is gated to Android,
-  /// so the empty string states a fact rather than a measurement.
+  /// pre-draw registrar to leak through. The answer keeps Android's shape - nothing ever
+  /// armed, nothing installed - rather than inventing a third one. The test that reads
+  /// this is gated to Android, so it states a fact rather than a measurement.
   func nuiTestArmedGuards() throws -> String {
-    return ""
+    return "|live:"
   }
 
   private var model: SwitchModel {

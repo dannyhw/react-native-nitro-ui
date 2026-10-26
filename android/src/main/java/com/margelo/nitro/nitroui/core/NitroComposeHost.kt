@@ -730,29 +730,43 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
   /**
    * What a harness asks about (H1 N4): the guards this mount armed for a composition of
-   * its own, as one line.
+   * its own, as one line - `strategy` for an installed [ViewCompositionStrategy] (the
+   * activity `LifecycleRegistry` observer), `preDraw` for the first-frame listener once
+   * it is on its observer.
    *
-   * `strategy` once a [ViewCompositionStrategy] has been installed for the mount (the
-   * activity `LifecycleRegistry` observer), `preDraw` once the first-frame listener has
-   * gone onto its observer. Both are *ever* answers, deliberately: the live fields go
-   * false again on their own schedule - the first-frame listener takes itself off as
-   * soon as it marks - so reading those would make a hosted child and an unhosted one
-   * answer the same thing a frame after mount. The cost this reports is the arming, so
-   * that is what the report counts.
+   * The line has two halves, `ever|live:<live>`:
    *
-   * A hosted control answers the empty string - it composes inside somebody else's view
-   * - and a control outside a Host answers both, which is the pair the test needs.
-   * Read-only, and answers from the same fields the arming writes.
+   * - the **ever** half is what this mount has armed at any point, surviving the live
+   *   flags going false again. Arming is what costs, and a first-frame listener that has
+   *   already marked is still a listener that was armed and had to be taken out; a probe
+   *   that read only the live pair could not tell "never armed" from "armed and
+   *   released", which made it a race with the first frame - round 1's mutation of the
+   *   hosted early-return stayed green under a live-only probe for exactly that reason.
+   * - the **live** half is what is installed *now*, which is the only way to see the
+   *   other direction: a control that moves into a Host mid-mount has armed both and must
+   *   give both back ([releaseOwnCompositionGuards]). Without this half that release path
+   *   could be deleted and nothing would notice.
+   *
+   * So a hosted control answers `|live:` - nothing armed, nothing installed - and the same
+   * control outside a Host answers `strategy,preDraw|live:strategy` once its first frame
+   * has been marked. Read-only; both halves answer from fields the arming writes.
    */
   internal fun armedGuardsReport(): String {
-    val parts = mutableListOf<String>()
+    val ever = mutableListOf<String>()
     if (everArmedStrategy) {
-      parts.add("strategy")
+      ever.add("strategy")
     }
     if (everArmedPreDraw) {
-      parts.add("preDraw")
+      ever.add("preDraw")
     }
-    return parts.joinToString(",")
+    val live = mutableListOf<String>()
+    if (strategyArmed) {
+      live.add("strategy")
+    }
+    if (firstFrameWatchRegistered) {
+      live.add("preDraw")
+    }
+    return ever.joinToString(",") + "|live:" + live.joinToString(",")
   }
 
   /**

@@ -81,17 +81,23 @@ export interface NitroUiSwitchMethods extends HybridViewMethods {
   measureContent(): NitroUiSize;
 
   /**
-   * TEMPORARY, test-only (task H2a, follow-up N4 from H1's re-review): the guards
-   * this view currently holds **for a composition of its own**, as one line —
-   * `strategy` while the Compose composition strategy is installed (the activity
-   * `LifecycleRegistry` observer), `preDraw` while its first-frame pre-draw listener
-   * is registered.
+   * TEMPORARY, test-only (task H2a, follow-up N4 from H1's re-review): the guards this
+   * view has armed **for a composition of its own**, as one line — `strategy` for the
+   * Compose composition strategy (the activity `LifecycleRegistry` observer), `preDraw`
+   * for its first-frame pre-draw listener.
    *
-   * A control a `<Host>` composes answers the empty string: it builds no composition,
-   * so both registrations would guard nothing, and the Host arms its own. A control
-   * outside a Host answers both. Android-only meaning: iOS has no composition strategy
-   * and no pre-draw listener, so it answers the empty string for every Switch and the
-   * test that reads this is gated to Android.
+   * The line is `ever|live:<live>`. The first half is what this mount has armed **at any
+   * point** — it does not describe the current instant, and both flags reset when the view
+   * is recycled. The `live` half is what is installed right now, which is how a test sees a
+   * control that armed the guards while unhosted and then handed them back on moving into a
+   * `<Host>`.
+   *
+   * A control a `<Host>` composes answers `|live:` — nothing armed and nothing installed,
+   * because it builds no composition and the Host arms its own. The same control outside a
+   * Host answers `strategy,preDraw|live:strategy` once its first frame has been marked
+   * (the pre-draw listener takes itself off when it marks). Android-only meaning: iOS has
+   * no composition strategy and no pre-draw listener, so it answers `|live:` for every
+   * Switch and the test that reads this is gated to Android.
    */
   nuiTestArmedGuards(): string;
 }
