@@ -159,8 +159,8 @@ build reaches (`c8f5819` again).
 
 Each row: mutate, rebuild (with `:react-native-nitro-ui:compileDebugKotlin` shown to *execute*
 rather than report `UP-TO-DATE`), run the named gate on the device, read the failure, revert, and
-confirm `git status` clean. The last four rows were already recorded in earlier rounds of this task
-and are repeated here for one list.
+confirm `git status` clean. The last two rows are the ones recorded in the earlier rounds of this
+task; the rest are from the final tree, after the probe fix that made the first two possible.
 
 | Mutation | Gate | The failure it produced |
 | -------- | ---- | ----------------------- |
