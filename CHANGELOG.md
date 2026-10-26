@@ -8,6 +8,12 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.1.1
+
+### Patch Changes
+
+- 306b07f: Ship `CHANGELOG.md` inside the published package, so the release notes travel with the code into `node_modules`.
+
 ## 0.1.0 — 2026-10-26
 
 First release. Seven controls, each one the real platform view — SwiftUI inside
