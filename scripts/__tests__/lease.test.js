@@ -807,6 +807,19 @@ describe('the CLI, in a real state directory', () => {
 
   const stateFile = () => statePaths(home).leases;
   const readState = () => JSON.parse(readFileSync(stateFile(), 'utf8'));
+  /** Poll until `predicate` holds (fixed sleeps flake on a loaded CI runner). */
+  const waitFor = async (predicate, timeoutMs = 20000) => {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      try {
+        if (predicate()) return;
+      } catch {
+        // state file mid-write or not there yet
+      }
+      if (Date.now() > deadline) throw new Error('waitFor: timed out');
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  };
 
   it('prints an env file and remembers the lease', () => {
     const result = cli(['acquire', '--task', 'G6', '--config', config]);
@@ -909,9 +922,9 @@ describe('the CLI, in a real state directory', () => {
       '--config',
       config,
     ]);
-    // Long enough for the child to see G6 and enter the poll loop (50 ms there),
-    // then hand the machine over: the point is that it waits and then wins.
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    // Until the child has seen G6 and parked its exclusive request, then hand the
+    // machine over: the point is that it waits and then wins.
+    await waitFor(() => (readState().pendingExclusive ?? []).length > 0);
     expect(cli(['release', 'G6']).status).toBe(0);
 
     const finished = await waiter;
@@ -1091,8 +1104,8 @@ describe('the CLI, in a real state directory', () => {
       '--config',
       config,
     ]);
-    // Give it a few polls to write its marker and start waiting.
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    // Until it has written its marker and started waiting.
+    await waitFor(() => (readState().pendingExclusive ?? []).length > 0);
 
     const third = cli([
       'acquire',

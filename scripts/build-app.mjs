@@ -145,6 +145,8 @@ function writeMarker(file, value) {
 function iosInputFingerprint() {
   const roots = [
     path.join(REPO_ROOT, 'example', 'ios'),
+    // The library's own Swift/ObjC sources: a new component file must re-run pods.
+    path.join(REPO_ROOT, 'ios'),
     path.join(REPO_ROOT, 'cpp'),
     path.join(REPO_ROOT, 'nitrogen', 'generated'),
   ];
