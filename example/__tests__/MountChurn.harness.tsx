@@ -23,12 +23,16 @@
  *   an iteration. A transient allocation storm returns to the floor; a leak moves
  *   it.
  *
- * The file gates two controls, because the second one adds a failure mode the first
- * cannot show: a `Picker`'s menu is a Compose `Popup` - a real `PopupWindow` in the
- * window list - and it is a child of the composition, so the composition that a leak
- * retains also retains the popup of a control that is already gone. The Picker cycle
+ * The file gates two controls and three shapes, because each adds a failure mode the
+ * others cannot show: a `Picker`'s menu is a Compose `Popup` - a real `PopupWindow` in
+ * the window list - and it is a child of the composition, so the composition that a
+ * leak retains also retains the popup of a control that is already gone (the cycle
  * therefore opens one menu and unmounts the tree while it is open, which is the
- * `onDropView` → `host.drop()` path (G6, review M4).
+ * `onDropView` → `host.drop()` path - G6, review M4). A `<Host>` changes what one
+ * teardown is: N children share one composition, so a reference held anywhere in it
+ * holds a whole screen (H1). And a Host holding four *kinds* of control has four
+ * different object graphs that could hold it, which is the mixed cycle H2a adds -
+ * "the Switch case is green" is not evidence about a Slider's gesture state.
  *
  * Android only: the leak is in the Compose hosting lifecycle, and iOS hosts SwiftUI
  * views with a different lifetime, so there is nothing to assert there. The iOS
@@ -45,7 +49,15 @@ import {
   it,
   render,
 } from 'react-native-harness';
-import { Host, Picker, Switch, nitroUiCore } from 'react-native-nitro-ui';
+import {
+  Button,
+  Host,
+  Picker,
+  Progress,
+  Slider,
+  Switch,
+  nitroUiCore,
+} from 'react-native-nitro-ui';
 import { userEvent } from '@react-native-harness/ui';
 
 /** Controls per cycle: the N the bench died at. */
@@ -243,6 +255,83 @@ async function churnHostedCycle(prefix: string): Promise<ViewInfo | null> {
 }
 
 /**
+ * Controls per mixed cycle — a quarter of `COUNT` of each kind.
+ *
+ * Not `COUNT` itself for one reason and one only: the harness's 30 s per-test floor
+ * (`AGENTS.md`, wall-clock is not gated but the runner enforces one). A cycle of 200
+ * mixed controls plus four forced collects does not fit it; 100 does, and a leak that
+ * measured 42 KiB per control is still four times the 2 MiB bound at 100.
+ */
+const MIXED_COUNT = 100;
+
+/** One of each kind per four rows, in this order. */
+const MIXED_KINDS = ['switch', 'slider', 'progress', 'button'] as const;
+
+/** The box that batch needs: `48` dp is the engine's row for the tallest of the four. */
+const MIXED_HOST_STYLE = {
+  width: '100%' as const,
+  height: MIXED_COUNT * 48,
+};
+
+/**
+ * Mount `MIXED_COUNT` controls of four kinds inside **one** `<Host>`, let them draw,
+ * unmount.
+ *
+ * Mixed because a Host's teardown has to let go of four different kinds of Compose
+ * content, and the one H1 churned is the simplest of them: a `Slider` carries gesture
+ * state, a `Progress` may be mid-animation, a `Button` carries press state, and
+ * anything in the composition that still holds any of them holds the composition,
+ * which holds the Host.
+ *
+ * Returns the box of one child of **each** kind, which is the witness that all four
+ * were really composed by the Host: a hosted control declines to measure, so its own
+ * Android view is laid out at `0 × 0` (D24 — not `GONE`, and not an absent view either).
+ * A control the allowlist had quietly stopped composing would still be in the churn,
+ * still be mounted and unmounted every cycle, and would report a real frame instead.
+ */
+async function churnMixedCycle(
+  prefix: string
+): Promise<Record<(typeof MIXED_KINDS)[number], ViewInfo | null>> {
+  const { unmount } = await render(
+    <Host testID={`${prefix}-host`} style={MIXED_HOST_STYLE}>
+      {Array.from({ length: MIXED_COUNT }, (_, index) => index).map((row) => {
+        const kind = MIXED_KINDS[row % MIXED_KINDS.length];
+        const testId = `${prefix}-${String(row)}`;
+        if (kind === 'slider') {
+          return <Slider key={row} defaultValue={0.5} testID={testId} />;
+        }
+        if (kind === 'progress') {
+          return <Progress key={row} value={0.5} testID={testId} />;
+        }
+        if (kind === 'button') {
+          return (
+            <Button key={row} title={`Row ${String(row)}`} testID={testId} />
+          );
+        }
+        return (
+          <Switch key={row} defaultValue={row % 2 === 0} testID={testId} />
+        );
+      })}
+    </Host>,
+    // Four kinds of composable, and the first cycle pays for all of them.
+    { timeout: 60000 }
+  );
+  // Layout first: the point of the boxes below is where Fabric ended up putting the
+  // child's own view, which is only an answer once the batch has been laid out.
+  await settle(600);
+  // One of each kind, taken from the first four rows, so the witness below names the
+  // kind it is talking about rather than a row number.
+  const boxes = {} as Record<(typeof MIXED_KINDS)[number], ViewInfo | null>;
+  MIXED_KINDS.forEach((kind, index) => {
+    boxes[kind] = harnessUi.queryByTestId(`${prefix}-${String(index)}`);
+  });
+  await settle(600);
+  unmount();
+  await settle(400);
+  return boxes;
+}
+
+/**
  * Hosts per cycle for the leak a shared Host cannot see (review M1).
  *
  * `churnHostedCycle` churns **one** Host, and the floor bound below is 2 MiB per
@@ -408,6 +497,74 @@ if (Platform.OS === 'android') {
       // D24 again, this time as a churn assertion: a hosted control reports nothing,
       // so a warm hosted loop cannot be growing the heap because the engine learned a
       // size. Zero here is also the number that makes the heap slope mean retention.
+      expect(corrections).toBe(0);
+      expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
+      expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
+    });
+
+    /**
+     * The churn a single kind of hosted child cannot show (H2a, brief item 5).
+     *
+     * H1's two churn gates see one composition per Host and one kind of composable
+     * inside it. With three more controls on the allowlist, the teardown has four
+     * kinds of Compose content to release, and a reference held by a Slider's gesture
+     * state or a Progress's animation is the same leak by the same route - but it is
+     * not the same object graph, and "the Switch case is green" does not cover it.
+     */
+    const mixedTitle =
+      `keeps the post-GC heap floor flat across ${String(CYCLES)} churn cycles ` +
+      `of ${String(MIXED_COUNT)} mixed controls inside one <Host>`;
+    it(mixedTitle, async () => {
+      nitroUiCore.prewarmSizing([
+        COMPONENT,
+        'NitroUiSlider',
+        'NitroUiProgress',
+        'NitroUiButton',
+      ]);
+      const warmUp = await churnMixedCycle('mixed-warmup');
+      // Every kind has to have been composed *by the Host*, not merely mounted next to
+      // it: 0x0 is what a hosted control's own Android view is laid out at, because a
+      // hosted control declines to measure (D24). A control the allowlist had quietly
+      // stopped composing would still churn, still be mounted and freed every cycle,
+      // and report a real frame instead - which would make every number below a
+      // measurement of the wrong thing.
+      for (const kind of MIXED_KINDS) {
+        const box = warmUp[kind];
+        expect(box).not.toBeNull();
+        expect([Math.round(box!.width), Math.round(box!.height)]).toEqual([
+          0, 0,
+        ]);
+      }
+
+      const statsBefore = nitroUiCore.sizingStats();
+      const floors: HeapStats[] = [];
+      for (let cycle = 0; cycle < CYCLES; cycle += 1) {
+        await churnMixedCycle(`mixed-${String(cycle)}`);
+        floors.push(await heapStats());
+      }
+      const first = floors[0];
+      const last = floors[floors.length - 1];
+      if (first == null || last == null) {
+        throw new Error(
+          `Expected ${String(CYCLES)} heap floors, read ${String(floors.length)}.`
+        );
+      }
+      const after = nitroUiCore.sizingStats();
+      const corrections =
+        after.correctionsImmediate -
+        statsBefore.correctionsImmediate +
+        (after.correctionsBatched - statsBefore.correctionsBatched);
+      const growthMib = toMib(
+        (last.usedBytes - first.usedBytes) / (floors.length - 1)
+      );
+      console.log(
+        `mixed churn: N=${String(MIXED_COUNT)} cycles=${String(floors.length)} ` +
+          `floorsMiB=[${floors.map((f) => toMib(f.usedBytes)).join(', ')}] ` +
+          `growthMiBPerCycle=${String(growthMib)} ` +
+          `maxHeapMiB=${String(toMib(last.maxBytes))} ` +
+          `corrections=${String(corrections)}`
+      );
+
       expect(corrections).toBe(0);
       expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
       expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
