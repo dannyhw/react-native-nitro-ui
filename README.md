@@ -265,19 +265,30 @@ iOS and 0.43–1.02× on Android (`Slider`'s 1.02× is the one miss), iOS UI CPU
 four of five (0.73–0.87×, `Button` 1.48×), and Android update UI CPU is still above the
 shared host on all four controls whose update cell is comparable (1.01–1.87×).
 
-`<Host>` — opt-in, Android, `Switch` today — is the one place that bill is paid the
-other way, and it is the arm this library now measures. Measured the same way on the
-same emulator (one run, `quick`, `speed-profile`, five arms, machine load median 2.96
-over 14 cores, `problems: none`): 200 Switches inside one Host cost **0.86×** the
-shared host's mount memory — 44.5 KiB per instance against its 51.9 KiB — and **0.87×**
-its mount UI CPU per op, where the same Switches unhosted cost 2.75× and 1.39×;
-`mounted` is 0.97× and `presented` 0.99×, and unmounting costs 0.78× what it costs the
-shared host. The axis it loses on is the JS thread:
-1.18× the shared host on mount JS CPU per op, against 0.73× for the unhosted control,
-because a hosted control is still a React Native node _and_ a child of somebody
-else's composition. That is why the container is something an app opts into for a dense
-list rather than what every `<View>` does (`docs/components/host.md`, and
-`docs/tasks/H1-android-host.report.md` for the absolutes, spreads and `update` cells).
+`<Host>` — opt-in, Android, four controls today (`Switch`, `Slider`, `Progress`,
+`Button`) — is the one place that bill is paid the other way, and it is the arm this
+library now measures. Measured the same way on the same emulator (one run, `quick`,
+`speed-profile`, five arms, `problems: none`; load samples median 5.51 over 14 cores with
+37 % over the ceiling, so these are same-run paired readings and mint no baseline):
+200 of a control inside one Host cost **0.88×** the shared host's mount memory for
+`Switch` — 45.4 KiB per instance against its 51.1 KiB — **0.80×** for `Button`, **0.37×**
+for a linear `Progress`, and **1.00×** for `Slider`, where the same controls unhosted cost
+2.81×, 2.45×, 1.44× and 2.49×. Mount UI CPU per op runs **0.84×** (`Switch`), **0.87×**
+(`Button`), **0.50×** (`Progress`) and **0.86×** (`Slider`) in that same order; unmounting
+costs 0.68×/0.67×/0.82×/0.62×, all of them below the shared host. The `Slider` memory
+figure is the one to read with the denominator in hand: hosting it halves our own number
+(155.0 KiB → 62.2 KiB) and lands level with an arm that is itself heavy for a `Slider`
+(62.3 KiB against a bare RN `Slider`'s 14.8 KiB). The axis the Host loses on is the JS
+thread, and it loses it on `Switch` most: 1.23× the shared host on mount JS CPU per op
+against 0.80× for the unhosted control, because a hosted control is still a React Native
+node _and_ a child of somebody else's composition. `Slider` and `Progress` land near
+parity there (1.07× and 0.92×) and `Button` stays under it (0.71×). Four readings of
+near-identical `Switch` code have put that column at 1.10×, 1.26×, 1.18× and now 1.23×, so
+read it as roughly 1.2× rather than as a figure. That is why the container is something an
+app opts into for a dense list rather than what every `<View>` does
+(`docs/components/host.md`, plus `docs/tasks/H1-android-host.report.md` and
+`docs/tasks/H2a-host-more-controls.report.md` for the absolutes, spreads and `update`
+cells).
 
 Against `expo-ui-host-per-control` — the same one-host-per-control shape, reached
 through `@expo/ui` — we are below it on every cell that carries a verdict:

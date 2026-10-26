@@ -51,6 +51,53 @@ measured 1.10x and H1's first run 1.26x; read this column as roughly 1.2x and re
 it rather than trusting one run.) That cost is why `Host` is a component an app chooses
 for a dense list, and not what every container does by default.
 
+### The other three controls (H2a)
+
+H2a re-ran the same plan with `Slider`, `Progress` and `Button` in the host arm, so the
+four are priced by one run (`quick`, ART `speed-profile`, 4 launches, one results file;
+`bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`). Ratios to
+`expo-ui-shared-host`, launch-paired; memory from the N=200 cell, the rest from the N=50
+`mount` cell; **ᴺ** = spread over 10 % and no verdict:
+
+| Control              | Mount memory (no Host → +`<Host>`) | Mount UI CPU (no Host → +`<Host>`) | Mount JS CPU (no Host → +`<Host>`) |
+| -------------------- | ---------------------------------- | ---------------------------------- | ---------------------------------- |
+| `Switch`             | 2.81x → **0.88x**                  | 1.55xᴺ → **0.84x**                 | 0.80x → 1.23x                      |
+| `Slider`             | 2.49x → 1.00x                      | 1.62x → **0.86x**                  | 0.94x → 1.07xᴺ                     |
+| `Progress` (linear)  | 1.44x → **0.37x**                  | 0.85x → **0.50x**                  | 0.59x → 0.92x                      |
+| `Button`             | 2.45x → **0.80x**                  | 1.80xᴺ → **0.87x**                 | 0.64xᴺ → 0.71xᴺ                    |
+
+Read as absolutes from the same run (KiB per instance from the N=200 cell; ms per op for
+mount UI-thread CPU from the N=50 `mount` cell):
+
+| Control      | `nitro-ui` no Host   | + `<Host>`               | `expo-ui-shared-host` |
+| ------------ | -------------------- | ------------------------ | --------------------- |
+| `Switch`     | 144.1 KiB / 9.97 ms  | **45.4 KiB / 5.43 ms**   | 51.1 KiB / 6.54 ms    |
+| `Slider`     | 155.0 KiB / 11.93 ms | 62.2 KiB / **6.33 ms**   | 62.3 KiB / 7.16 ms    |
+| `Progress`   | 130.6 KiB / 8.55 ms  | **33.3 KiB / 5.00 ms**   | 91.2 KiB / 9.61 ms    |
+| `Button`     | 188.7 KiB / 13.85 ms | **61.3 KiB / 7.21 ms**   | 77.1 KiB / 8.37 ms    |
+
+Four things that table says, stated at the size they were measured:
+
+- **The Host wins on memory on all four,** and by a lot on the cheap-to-draw ones: a hosted
+  `Progress` bar is 33.3 KiB against the shared host's 91.2 KiB. `Slider` is the exception
+  worth naming: hosting it takes it from 2.49x to **1.00x**, i.e. level with the shared
+  host rather than under it, because `@expo/ui`'s shared-host Slider is itself heavy in
+  this run (62.3 KiB against a bare RN `Slider`'s 14.8 KiB). Same arm shape as the
+  others, worse denominator.
+- **The UI-thread win is on all four** (0.50x–0.87x), and unhosted `Progress` is already
+  below the shared host there (0.85x), so a `Progress` inside a Host is the one case where
+  both halves of the comparison are wins rather than one of each.
+- **The JS column is roughly flat, not uniformly worse.** `Switch` pays the H1 tax
+  (0.80x → 1.23x). `Slider` and `Progress` land near parity (1.07xᴺ, 0.92x). `Button`
+  stays *below* the shared host (0.71x) even hosted — with a 10.5 % spread, so read that as
+  "no worse", not as a win.
+- **Nothing here was measured on a quiet machine.** That run's load samples: 459 of them,
+  median 5.51, 170 over the ceiling of 7 (37 %, against a 10 % bar for `quiet`), so this
+  run is same-run paired readings and nothing else — it mints no baseline, and the
+  `update` cells are all ᴺ. The `mount` cells still agree with H1's quiet run on the
+  `Switch` row (0.88x/0.84x against 0.86x/0.87x), which is the check that says the run is
+  readable rather than sound.
+
 ## API
 
 `HostProps extends ViewProps` — it is a container, so it takes layout props like any
@@ -69,17 +116,19 @@ would make it a second list component.
 Each of these follows from who owns the pixels, and each is a refusal in development
 rather than a screen that draws half of itself:
 
-- **Anything that is not a hosted control.** Only `Switch` is hosted today. One of our
-  other controls, an RN view (`View`, `Text`, `ScrollView`, `Image`, …), a third-party
-  native view, plain text as a direct child, or another `<Host>` throws in dev — on
-  **both** platforms, so the rule is not learned later on the platform that was not
-  tested.
+- **Anything that is not a hosted control.** Four controls are hosted: `Switch` (H1),
+  and `Slider`, `Progress` and `Button` (H2a). `SegmentedControl`, `Picker` and
+  `DatePicker` are not — a popup owns a window, and a Host owns a rectangle; that pair
+  is H2b's problem, not this container's. One of our other controls, an RN view
+  (`View`, `Text`, `ScrollView`, `Image`, …), a third-party native view, plain text as
+  a direct child, or another `<Host>` throws in dev — on **both** platforms, so the
+  rule is not learned later on the platform that was not tested.
 - **The rule is enforced twice, because the two sides see different trees.** JavaScript
   refuses what it can *name*. It cannot see through a component, so a `<Row>` that
   renders a `Picker` arrives at the native Host looking like a direct child, and there
-  the allowlist decides: `NitroComposeHost.isHostable` is `false` for every control and
-  `true` only for `Switch`, so a `Picker`, a `Slider`, or a `<Host>` behind a wrapper is
-  **not** composed. In a debuggable build that refusal is not only a log line — the Host
+  the allowlist decides: `NitroComposeHost.isHostable` is `false` on the base class and
+  `true` on those four hosts only, so a `Picker`, a `SegmentedControl`, or a `<Host>`
+  behind a wrapper is **not** composed. In a debuggable build that refusal is not only a log line — the Host
   reports it to JavaScript, where it becomes a `console.error` in Metro and LogBox that
   names the child's class. In a release build it draws nothing and says nothing, so a
   control outside the allowlist must stay outside the `<Host>`.
@@ -95,17 +144,26 @@ rather than a screen that draws half of itself:
   changes.
 - **No `Modal`**, or anything else that owns a window.
 - **No per-child size.** A `width`, `height` or `alignSelf` on a hosted child moves the
-  frame React Native computes, not the drawing (Sizing below).
+  frame React Native computes, not the drawing (Sizing below). What the drawing is
+  comes from the control's own sizing rule and the Host's box: `Slider` and a linear
+  `Progress` take the Host's inner width, `Button`, `Switch` and a circular `Progress`
+  take their own size at the column's leading edge.
 - **Only some of a Host's own styles reach the drawing.** `width`, `height` and `flex`
-  size the box, and `padding` insets it — the `Column` starts inside the padding, as in
-  any other container. `gap`, `flexDirection`, `alignItems`, `justifyContent`,
-  `borderWidth` and `pointerEvents` do **not**: Compose arranges the rows (one column,
-  no gaps), a Host draws no border, and touches go to Compose rather than to React
-  Native's hit testing. Yoga still honours each of them in the *box*, which is the trap
-  a host can fall into: `gap: 8` over ten children buys 72 dp of height and no space
-  between rows, and `flexDirection: 'row'` buys a one-row-tall box around a stack of
-  rows. Dev builds warn about each of them once per instance. Say how tall the Host is,
-  and stack it in a column.
+  size the box; `padding` and `borderWidth` inset it. The `Column` starts inside either
+  one, as in any other container — `borderWidth` because Fabric reports border and
+  padding as one `layoutMetrics.contentInsets` and the Host view manager forwards
+  `setPadding`, so `borderWidth: 2` moves the drawing in by 2 dp. What it does *not* do
+  is draw a border: a Host paints nothing of its own, and that is the trap — the box
+  shrinks as if it had. What does not cross at all is `gap` / `rowGap` / `columnGap`,
+  `flexDirection`, `alignItems`, `alignContent`, `justifyContent` and `pointerEvents`:
+  Compose arranges the rows (one column, no gaps) and Compose takes the touches, while
+  React Native's Yoga still honours each of them in the *box*. That is the other trap:
+  `gap: 8` over ten children buys 72 dp of height and no space between rows, and
+  `flexDirection: 'row'` buys a one-row-tall box around a stack of rows. Dev builds warn
+  about each of them once per instance. Say how tall the Host is, and stack it in a
+  column. A child's own `alignSelf` is neither case: like every self style it moves that
+  child's decorative frame, which a Host ignores whether or not the Host itself has one,
+  so it is not warned about (H2a).
 
 Components are transparent in both directions. React flattens them out of the native
 tree, so a wrapper that renders a `Switch` **is** a direct child of the Host and is
@@ -139,6 +197,36 @@ it, from `example/__tests__/Host.harness.tsx`:
 | A Host with `padding: 32` vs the same Host with none              | the drawing starts **32 dp later**; the box is the same                |
 | A hosted child with `display: 'none'` vs shown                    | the hidden row draws and answers **nothing**; the shown one answers both |
 
+### What each control draws inside the box (H2a)
+
+The Host gives every child the same *constraint* — the Host's inner width — and the
+control's own sizing policy (D24) decides what to do with it. That is the whole rule, and
+it is the same rule the control follows when it measures itself for Yoga:
+
+| Control                            | Policy     | Drawn inside a Host                                                        | Aimed at (Android)                    |
+| ---------------------------------- | ---------- | -------------------------------------------------------------------------- | ------------------------------------- |
+| `Slider`                           | fillWidth  | the Host's inner width × its own height                                     | the drawn track, by label             |
+| `Progress` linear                  | fillWidth  | the Host's inner width × the bar's thickness                                | nothing to press — read the tree      |
+| `Progress` circular                | intrinsic  | its own square, at the column's leading edge                                | nothing to press — read the tree      |
+| `Switch`                           | intrinsic  | its own box (52 × 32 dp of drawing), at the leading edge                    | the drawn switch, by label            |
+| `Button`                           | intrinsic  | the width its title needs × its scale's height, at the leading edge         | the drawn button, by label            |
+
+Three measurements make that table rather than a claim (`example/__tests__/HostControls.harness.tsx`,
+and `hosted-mixed` in `scripts/real-input/` for the tree the two `Progress` variants are read from):
+
+- **A hosted `Slider` is stretched by the Host, not by its own style.** The same child with
+  `width: 60` answers `0…100` differently in a 260 dp Host and a 100 dp one, because the
+  value a tap produces is a fraction of the width Compose laid the track out at — and in
+  a 260 dp Host a tap 240 dp along answers 90+. A child with no style at all answers the
+  same value at the same offset: its frame was never in the calculation.
+- **A hosted `Button` is not.** Two Buttons in one 260 dp Host, one titled `Go` and one
+  `Roll back the release`: both start answering at the leading edge, the long title
+  answers everything the short one does and more, and neither answers 250 dp across.
+  `width: 220, height: 120` on the child changes none of it.
+- **The `Progress` pair coexists** — a bar that fills and an indicator that does not, in
+  one composition, both drawing what JS writes; the accessibility tree reports the bar as
+  wide as a `Slider` in the same Host and the indicator as a small square.
+
 Two consequences worth stating plainly:
 
 - **A Host that ends up 0 tall draws nothing.** It cannot grow: nothing inside it
@@ -156,11 +244,13 @@ What a Host changes about accessibility is *who publishes the node*, and that is
 invisible from the outside. Dumped on `nitroui_t01` (Android 15, 420 dpi) while the
 Host screen showed three hosted Switches and a batch of 24:
 
-- **One labelled node per hosted control, from Compose.** Each hosted `Switch`
-  publishes a `android.view.View` whose `content-desc` is its `accessibilityLabel` —
-  the same `Modifier.semantics { contentDescription }` as unhosted. Attribute for
-  attribute (`class`, `content-desc`, `enabled`, `focusable`, `clickable`,
-  `checkable`, `checked`) a hosted node and an unhosted Switch node are identical.
+- **One labelled node per hosted control, from Compose.** Each hosted child — Switch,
+  Slider, either Progress variant, Button — publishes a `android.view.View` whose
+  `content-desc` is its `accessibilityLabel`, the same `Modifier.semantics {
+  contentDescription }` as unhosted. Attribute for attribute (`class`, `content-desc`,
+  `enabled`, `focusable`, `clickable`, `checkable`, `checked`) a hosted node and the
+  same control unhosted are identical, and a mixed Host of five children publishes five
+  nodes, in mount order (`hosted-mixed`).
 - **No node from the React Native side.** A hosted child's own Android view is laid out
   at `0 × 0` (Sizing above), which is not visible-to-user, so it contributes no
   accessibility node and nothing reads out a control twice: three hosted children, three
