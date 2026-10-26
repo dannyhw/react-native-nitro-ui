@@ -34,7 +34,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | X1 dev tooling (CI checks, build-app, lease) | — | merged | Done; CI enabled (checks / native-tests / build-android) | Next: X2 gate ledger + short reports, X3 registry codegen (after H2a), X4 conformance, X5 bench queue / second Mac. |
 | R6 Changesets release | — | merged | **Validated end to end:** 0.1.1 staged by CI via OIDC with provenance, approved by the owner, `v0.1.1` tagged at `152e059` by Release tag | — |
 | R5b post-publish smoke | — | merged | Done: all 6 rows green from the npm tarball | — |
-| H2a Host: Slider/Progress/Button | `nitro-ui-worktrees/H2a` · `task/H2a-host-more-controls` | `f69db4f` (round 1) | Review: MERGE WITH FIXES (noisy-cell verdicts in README; F8 not really tested; report overstates). Fix round 1 running (`nitroui-H2a-fix1`) incl. merge main, on iPhone Air + `nitroui_t01` | Merge (docs/tests only → no re-review unless native changes). |
+| H2a Host: Slider/Progress/Button | — | merged | Done; ships in the next minor via `.changeset/host-composes-more-controls.md` | Quiet bench re-run pending (bench machine). Then H2b. |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
 | T17 iOS Host spike | branch only (`871c579`, pushed) | report merged | Done: iOS Host not better (D23); H3 dropped | — |
@@ -43,7 +43,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 ## Devices (D13)
 
 - Free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
-- H2a fix: iPhone Air + `nitroui_t01`. X1 fix: `nitroui_t03`. Free: iPhone 17. Device config for `scripts/lease.mjs` (X1) is machine-local in `~/.nitro-ui/devices.json`.
+- All device pairs free. Device config for `scripts/lease.mjs` is machine-local in `~/.nitro-ui/devices.json`.
 - Never touch `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
