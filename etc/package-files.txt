@@ -74,6 +74,8 @@ lib/module/components/Host/Host.js
 lib/module/components/Host/Host.js.map
 lib/module/components/Host/Host.nitro.js
 lib/module/components/Host/Host.nitro.js.map
+lib/module/components/Host/HostChildren.js
+lib/module/components/Host/HostChildren.js.map
 lib/module/components/Host/NativeNitroUiHost.js
 lib/module/components/Host/NativeNitroUiHost.js.map
 lib/module/components/Host/NitroUiHostConfig.js
@@ -158,6 +160,8 @@ lib/typescript/src/components/Host/Host.d.ts
 lib/typescript/src/components/Host/Host.d.ts.map
 lib/typescript/src/components/Host/Host.nitro.d.ts
 lib/typescript/src/components/Host/Host.nitro.d.ts.map
+lib/typescript/src/components/Host/HostChildren.d.ts
+lib/typescript/src/components/Host/HostChildren.d.ts.map
 lib/typescript/src/components/Host/NativeNitroUiHost.d.ts
 lib/typescript/src/components/Host/NativeNitroUiHost.d.ts.map
 lib/typescript/src/components/Host/NitroUiHostConfig.d.ts
