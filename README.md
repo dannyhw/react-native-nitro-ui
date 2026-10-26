@@ -270,7 +270,7 @@ other way, and it is the arm this library now measures. Measured the same way on
 same emulator (one run, `quick`, `speed-profile`, five arms, machine load median 2.96
 over 14 cores, `problems: none`): 200 Switches inside one Host cost **0.86×** the
 shared host's mount memory — 44.5 KiB per instance against its 51.9 KiB — and **0.87×**
-its mount UI CPU per op, where the same Switches unhosted cost 2.63× and 1.39×;
+its mount UI CPU per op, where the same Switches unhosted cost 2.75× and 1.39×;
 `mounted` is 0.97× and `presented` 0.99×, and unmounting costs 0.78× what it costs the
 shared host. The axis it loses on is the JS thread:
 1.18× the shared host on mount JS CPU per op, against 0.73× for the unhosted control,

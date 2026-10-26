@@ -6,12 +6,10 @@ import {
   Button as RNButton,
   FlatList,
   Image,
-  ImageBackground,
   KeyboardAvoidingView,
   Modal,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   SectionList,
   Switch as RNSwitch,
@@ -75,19 +73,20 @@ const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
  * would miss RN's own `Switch` being passed for ours. Not exhaustive by nature
  * (`Animated.*`, and any third-party native view); what JS cannot see, the native
  * Host says out loud in dev when it is handed a child it cannot compose.
+ * `ImageBackground` and `SafeAreaView` are left to the native check on purpose:
+ * reading either export makes React Native log a deprecation warning, and this
+ * table is built when the module loads, i.e. in every app that imports `Host`.
  */
 const UNHOSTABLE_RN_VIEWS = new Map<unknown, string>([
   [ActivityIndicator, 'ActivityIndicator'],
   [FlatList, 'FlatList'],
   [Image, 'Image'],
-  [ImageBackground, 'ImageBackground'],
   [KeyboardAvoidingView, 'KeyboardAvoidingView'],
   [Modal, 'Modal'],
   [Pressable, 'Pressable'],
   [RefreshControl, 'RefreshControl'],
   [RNButton, 'Button'],
   [RNSwitch, 'Switch'],
-  [SafeAreaView, 'SafeAreaView'],
   [ScrollView, 'ScrollView'],
   [SectionList, 'SectionList'],
   [Text, 'Text'],

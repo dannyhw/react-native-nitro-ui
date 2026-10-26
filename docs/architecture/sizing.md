@@ -511,7 +511,7 @@ Limits, stated plainly:
 
 `<Host>` (Android, opt-in, `Switch` in 0.2 — `docs/components/host.md`) composes its direct
 nitro-ui children into **one** Compose composition, which is where the mount memory and
-UI-thread win comes from (H1's run: 2.63x → **0.86x** `expo-ui-shared-host` on mount memory,
+UI-thread win comes from (H1's run: 2.75x → **0.86x** `expo-ui-shared-host` on mount memory,
 1.39x → **0.87x** on mount UI CPU; T16's spike measured 2.75x → 0.87x and 1.50x → 0.80x the
 same way, and the shipped container reproduced it). The cost is the JS thread — 0.73x unhosted
 against **1.18x** hosted — and that the hosted control stops being a Yoga leaf whose box

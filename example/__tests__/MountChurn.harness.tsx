@@ -424,7 +424,7 @@ if (Platform.OS === 'android') {
      * churns 200 of them and gates the same floor.
      *
      * It was shown red: with the `onDropView` override deleted from
-     * `HybridNitroUiHost`, the floors climb by ~2 MiB per cycle here (the report has
+     * `HybridNitroUiHost`, the floors climb by ~11 MiB per cycle here (the report has
      * the numbers); with it, they are flat.
      */
     const manyHostsTitle =
