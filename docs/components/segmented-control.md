@@ -268,6 +268,6 @@ drops the now-wrong cached sizes.
   `View.tag`, which is what the harness reads.
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated.
 - A menu or wheel picker is **not** this component: that is `Picker`
-  (`docs/components/picker.md`, on `main` and unreleased), because a `.menu` Picker
+  (`docs/components/picker.md`, shipping in 0.1.0), because a `.menu` Picker
   needs view-controller containment and an open-popup lifecycle that this control
   does not have.

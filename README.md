@@ -12,24 +12,18 @@ TalkBack get the control's own accessibility instead of an approximation of it.
 Layout still belongs to Yoga — the control measures itself, reports its size to
 the layout engine, and React never sees a native node.
 
-> **Status: not published yet.** Nothing is on npm, and there is no git tag or
-> GitHub release. `package.json` says `0.1.0`, which is the scope of the first
-> release (Switch, Slider, Progress, Button, SegmentedControl); `main` already
-> has more than that (Picker, DatePicker and an opt-in `<Host>`), all unreleased.
-> To try it today, [build it from source](#installation).
-
 ## Components
 
-| Component          | iOS                                                        | Android                                                      | Status            | Docs                                                         |
-| ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
-| `Switch`           | `Toggle(…).toggleStyle(.switch)`                           | `androidx.compose.material3.Switch`                          | 0.1.0             | [switch.md](docs/components/switch.md)                       |
-| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                  | `androidx.compose.material3.Slider`                          | 0.1.0             | [slider.md](docs/components/slider.md)                       |
-| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0             | [progress.md](docs/components/progress.md)                   |
-| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`            | the five Material 3 button composables                       | 0.1.0             | [button.md](docs/components/button.md)                       |
-| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | 0.1.0             | [segmented-control.md](docs/components/segmented-control.md) |
-| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                    | `ExposedDropdownMenuBox` (M3)                                | unreleased (main) | [picker.md](docs/components/picker.md)                       |
-| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)      | M3 `DatePicker` / `TimePicker` and their dialogs             | unreleased (main) | [date-picker.md](docs/components/date-picker.md)             |
-| `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its `Switch` children     | unreleased (main) | [host.md](docs/components/host.md)                           |
+| Component          | iOS                                                        | Android                                                      | Status | Docs                                                         |
+| ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| `Switch`           | `Toggle(…).toggleStyle(.switch)`                           | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
+| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                  | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
+| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
+| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`            | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
+| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
+| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                    | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
+| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)      | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
+| `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its `Switch` children     | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of Switches
 one Compose composition on Android instead of one each. `Switch` is the only
@@ -71,15 +65,39 @@ native code.
 
 ## Installation
 
+```sh
+npm install react-native-nitro-ui react-native-nitro-modules
+```
+
 React Native autolinks the native code: no config plugin, no Podfile or Gradle
-edits, no manual linking.
+edits, no manual linking. `react-native-nitro-modules` is a peer dependency —
+every control here is a Nitro Hybrid View, so your app needs it too.
 
-### Today: build a tarball from source
+What is left is compiling the new native code in, which needs more than a Metro
+reload. Both routes below are what the consumer smoke tests run.
 
-The package is not on npm yet, and it needs a build step (`bob build`, which
-also regenerates the Nitro code) before an app can use it, so build it from a
-clone and install the tarball. You need [bun](https://bun.sh) 1.4 and Node 24
-(see [CONTRIBUTING](CONTRIBUTING.md#prerequisites)):
+Expo (Continuous Native Generation):
+
+```sh
+npx expo prebuild   # or: npx expo run:ios / npx expo run:android / eas build
+```
+
+Bare React Native CLI — the template ships a Gemfile, so use it:
+
+```sh
+cd ios && bundle install && bundle exec pod install
+```
+
+Then `npx expo run:ios` / `run:android`, or `npx react-native run-ios` /
+`run-android`.
+
+### Without npm
+
+From a clone (a fork, or a fix you need before the next release): the package
+needs a build step (`bob build`, which also regenerates the Nitro code) before
+an app can use it, so build the tarball and install that. You need
+[bun](https://bun.sh) 1.4 and Node 24 (see
+[CONTRIBUTING](CONTRIBUTING.md#prerequisites)).
 
 ```sh
 git clone https://github.com/dannyhw/react-native-nitro-ui.git
@@ -95,47 +113,22 @@ Then, in your app:
 npm install /path/to/react-native-nitro-ui-0.1.0.tgz react-native-nitro-modules
 ```
 
-and rebuild it the way you normally would (`npx expo prebuild` /
-`npx expo run:ios` for Expo, `bundle exec pod install` then
-`npx react-native run-ios` / `run-android` for the React Native CLI). This is the
-same path the consumer smoke tests take (`bun run smoke:pack`, then `npm install`
-of the tarball into a freshly generated app); see
-[Consumer smoke tests](CONTRIBUTING.md#consumer-smoke-tests).
+and rebuild as above. This is the path the consumer smoke tests take
+(`bun run smoke:pack`, then `npm install` of the tarball into a freshly
+generated app); see [Consumer smoke tests](CONTRIBUTING.md#consumer-smoke-tests).
 
 Installing straight from GitHub (`npm install github:dannyhw/react-native-nitro-ui`)
 is untested: npm would have to install this repo's development dependencies,
 including its example and benchmark workspaces, and run the build during your
 install. Use the tarball.
 
-### After the first release
-
-These are the commands for once the package is on npm. **They do not work yet.**
-
-Expo (Continuous Native Generation):
-
-```sh
-npm install react-native-nitro-ui react-native-nitro-modules
-npx expo prebuild   # or: npx expo run:ios / npx expo run:android / eas build
-```
-
-Bare React Native CLI:
-
-```sh
-npm install react-native-nitro-ui react-native-nitro-modules
-cd ios && bundle install && bundle exec pod install
-```
-
-Rebuild the app (`npx react-native run-ios` / `run-android`) so the new native
-code is compiled in.
-
 ### What has been tried
 
 The consumer smoke tests (`scripts/smoke/`) install the packed tarball with
 `npm` into a fresh app, build **Release**, launch it and check that every
-control mounts with a non-zero size. They are run by hand — the GitHub
-workflows are disabled for now — and these rows are from the 0.1.0 scope (the
-five controls); they have not been re-run since Picker and DatePicker were
-added to `main`:
+control mounts with a non-zero size - the seven controls, plus a `<Host>`
+holding two Switches. They are run by hand — the GitHub workflows are disabled
+for now. Every ticked cell below was green for the 0.1.0 tarball on 2026-10-26:
 
 | Consumer              | iOS | Android |
 | --------------------- | --- | ------- |
@@ -143,9 +136,12 @@ added to `main`:
 | RN CLI 0.88.0         | ✅  | ✅      |
 | RN CLI 0.86.3         | n/a | ✅      |
 
-RN 0.86.3 is the supported floor. Its iOS install has not been verified: on an
-iOS 27 simulator runtime a fresh 0.86.3 app hangs at launch even without this
-library, and no run on an older runtime has been done.
+RN 0.86.3 is the supported floor, and its iOS cell cannot be ticked on this
+machine: UIKit terminates a freshly generated 0.86.3 app at launch on the iOS 27
+simulator runtime for not adopting the scene lifecycle, before any JavaScript
+runs, and the crash names UIKit's scene check with no library frames in it. The
+same launch failure was measured earlier with this library absent. The row needs
+a run on an older iOS runtime.
 
 ## Usage
 

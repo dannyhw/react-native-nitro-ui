@@ -82,7 +82,14 @@
   "keywords": [
     "react-native",
     "ios",
-    "android"
+    "android",
+    "swiftui",
+    "jetpack-compose",
+    "compose",
+    "nitro-modules",
+    "nitro",
+    "native-components",
+    "ui-components"
   ],
   "repository": {
     "type": "git",
