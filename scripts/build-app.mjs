@@ -131,7 +131,7 @@ function ccacheSetup() {
     return { enabled: false, binary: null, env: {}, gradleArgs: [] };
   }
   const env = {
-    ...ccacheEnv({ enabled: true, repoRoot: REPO_ROOT }),
+    ...ccacheEnv({ enabled: true, repoRoot: REPO_ROOT, binary }),
     // Read by scripts/gradle-ccache.init.gradle: the file is passed with -I
     // only when ccache exists, and it needs the path, not a guess.
     CCACHE_GRADLE_LAUNCHER: binary,
