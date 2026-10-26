@@ -225,6 +225,20 @@ private class SwitchHost(
   activity: Activity?,
   model: SwitchModel,
 ) : NitroComposeHost<SwitchModel>(context, activity, model) {
+  /**
+   * The one control a `<Host>` composes today.
+   *
+   * This line is the whole native allowlist (review M2). The JS table in
+   * `src/components/Host/HostChildren.ts` and this override are the same decision seen
+   * from the two sides that have to agree, because React flattens components away: JS
+   * cannot see a `Picker` behind a `memo`, and this side cannot see that the app
+   * thought it was a `<Row>`. Hosting `Switch` is H1's condition (one component per
+   * arm, measured for it), so every other control answers the base class's `false`
+   * until someone measures it inside a Host and gives it a bench arm.
+   */
+  override val isHostable: Boolean
+    get() = true
+
   @Composable
   override fun Component(model: SwitchModel) {
     val tint = model.checkedTrackColor

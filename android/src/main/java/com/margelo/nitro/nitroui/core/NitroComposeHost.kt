@@ -330,6 +330,123 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   @Composable
   protected abstract fun Component(model: M)
 
+  // MARK: - Hosted mode (T16)
+
+  /**
+   * Whether a [NitroUiHostView] composes this control instead of [composeContent].
+   *
+   * A direct-parent rule, deliberately the same one `@expo/ui` enforces with
+   * `validateHostingAncestor()`: the view above either renders us or does not. A
+   * grandchild of a Host is a plain view of its own, which keeps the surprising
+   * case (an RN `View` wrapping a control inside a Host) behaving like the
+   * unhosted control it looks like, rather than rendering in a composition two
+   * levels away that no one asked for.
+   *
+   * Read from the view tree rather than cached: RN owns when a child moves, and a
+   * flag we maintained could only be wrong after a re-parent we did not see.
+   */
+  internal val isHostedByParent: Boolean
+    get() = parent is NitroUiHostView
+
+  /**
+   * Render this control into the Host's composition. Called only by
+   * [NitroUiHostView], once per child, inside that Host's `Column`.
+   *
+   * Just [Component] - no [NitroUiMeasuredRoot] and no [NitroUiTheme] of our own:
+   * the Host's composition already sits inside one theme, and a hosted control
+   * has no box to report, because Yoga is not laying it out. Recomposition stays
+   * per child: the group that observes this model is this child's own `key` scope
+   * in the Host, so flipping one Switch recomposes that Switch, not the batch.
+   * [commit] stays ours to call and still sends one apply notification - the
+   * snapshot system routes it to whichever composition is observing.
+   */
+  @Composable
+  internal fun HostedContent() {
+    Component(model)
+  }
+
+  /**
+   * Whether a [NitroUiHostView] may compose this control.
+   *
+   * The native half of the "Switch only" rule (review M2). JS names the hostable
+   * controls in `src/components/Host/HostChildren.ts`, but React flattens
+   * components out of the native tree, so a `Picker` behind a `memo` arrives as a
+   * direct child of a Host that JS never saw a `Picker` in. Only this side can
+   * decide then, and the decision is this property: `false` on the base class, so a
+   * control opts in by overriding it and everything else - including another
+   * `<Host>`, which is a `NitroComposeHost` too - is composed by nobody and
+   * reported by [NitroUiHostView.reportUncomposableChild].
+   *
+   * `false` is the default because it is the honest answer for a control nobody has
+   * measured inside a Host: it is the state the round-1 report called "renders
+   * silently wrong", and an allowlist is what makes it a refusal instead.
+   */
+  internal open val isHostable: Boolean
+    get() = false
+
+  /** What RN last asked this view to show. `display: 'none'` arrives as `INVISIBLE`. */
+  private var visibilityRequestedByRn: Int = VISIBLE
+
+  /**
+   * Whether RN hid this child, so a Host must not draw it either (review S2).
+   *
+   * A Host draws its children, so RN's `display: none` cannot be honoured by hiding
+   * the child's own view - there are no pixels there to hide. It has to take the
+   * child out of the composition, or a hidden row goes on drawing while the
+   * content-sized Host shrinks by a row and clips what it still shows.
+   */
+  internal val isHiddenByReact: Boolean
+    get() = visibilityRequestedByRn == INVISIBLE
+
+  /**
+   * Record what RN asked for, and tell a Host that its drawn content moved.
+   *
+   * RN never asks a view to hide: `display: none` reaches Android as `INVISIBLE`
+   * (RN 0.88's `SurfaceMountingManager.updateLayout`), and for a hosted child that
+   * has to mean "do not compose this one". Recorded before the delegate, so no hook
+   * can observe a stale answer.
+   */
+  override fun setVisibility(visibility: Int) {
+    val changedByRn = visibilityRequestedByRn != visibility
+    visibilityRequestedByRn = visibility
+    super.setVisibility(visibility)
+    if (changedByRn && isHostedByParent) {
+      (parent as? NitroUiHostView)?.hostedChildVisibilityChanged()
+    }
+  }
+
+  /**
+   * Tell Android this control's own view has no drawing of its own to do, while a
+   * Host composes it.
+   *
+   * This is *not* what keeps a hosted child out of the way, and round 1 said it was
+   * (review S1). The child is never set to `GONE`: Fabric re-asserts the visibility
+   * it believes in on the child in every layout pass
+   * (`SurfaceMountingManager.updateLayout` ends by coercing the view to
+   * `VISIBLE`/`INVISIBLE` and laying it out at its RN frame), so a write here would
+   * be undone before the next frame was drawn. The measure gate is the mechanism:
+   * [onMeasure] declines to `0 × 0`, so the child is laid out at `0 × 0`, draws
+   * nothing, is not a hit target, and is not visible-to-user for accessibility.
+   */
+  private fun applyHostedDrawFlag() {
+    if (isHostedByParent) {
+      setWillNotDraw(true)
+    }
+  }
+
+  /**
+   * Whether this host's content is centred inside the box RN gave it.
+   *
+   * True for every control: the box is the size the sizing engine gave the control,
+   * the composable may answer something smaller (an M3 Switch is 51x31 inside a 48dp
+   * interactive box), and centring is what sits the drawing inside the frame RN
+   * believes it has. A `<Host>` overrides this (see `NitroUiHostView`): it is a
+   * container, and a container that centres its children shows the middle of a list
+   * when it is shorter than the list.
+   */
+  protected open val centersContent: Boolean
+    get() = true
+
   /**
    * The composition's root: built once, for the lifetime of the instance. There
    * is no `setContent` per props update, which is the perf contract's main rule.
@@ -338,6 +455,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private fun Content() {
     NitroUiTheme {
       NitroUiMeasuredRoot(
+        centered = centersContent,
         record = wantsContentSize,
         unbounded = wantsContentSize && sizingPolicy == NitroUiSizing.POLICY_INTRINSIC,
         remeasureToken = remeasureToken,
@@ -362,6 +480,14 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
     override fun onAttachedToWindow() {
       super.onAttachedToWindow()
+      if (isHostedByParent) {
+        // A control moved *into* a Host mid-mount already built a composition while
+        // it was unhosted, and the flag below only stops a new one. Drop the stale
+        // one so "hosted => no composition of its own" holds for every transition
+        // and the control is composed in exactly one place. Idempotent, and a no-op
+        // when nothing was ever composed.
+        disposeComposition()
+      }
       // The first moment this view has a window, which is the first moment
       // Compose can resolve a composition against one. If Yoga already gave the
       // control a frame - the usual case, since Fabric measures and lays out
@@ -369,6 +495,23 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       // was declined needed, so run it now rather than a frame later.
       runPendingMeasure()
     }
+
+    /**
+     * A hosted control never builds a composition of its own.
+     *
+     * `AbstractComposeView` composes eagerly on attach by default, and attach is
+     * not something a Host can avoid - `addView` attaches its children whatever
+     * their visibility, and Fabric lays each child out from the frame C++ computed
+     * (review S1). So the flag is the seam the class offers for exactly this case -
+     * "subclasses may choose to override this property to prevent this eager initial
+     * composition". The only other trigger is the first measure, and a hosted control
+     * never gets one either: [NitroComposeHost.onMeasure] declines it before Compose
+     * sees a size spec. Both gates are load-bearing, and they are what makes it one
+     * `Composition` per Host instead of one per control - the entire point of a Host,
+     * and the difference this library measures.
+     */
+    override val shouldCreateCompositionOnAttachedToWindow: Boolean
+      get() = !isHostedByParent
   }
 
   // MARK: - Updating
@@ -611,7 +754,19 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       setViewTreeSavedStateRegistryOwner(savedStateOwner)
     }
     super.onAttachedToWindow()
+    // After `super`: a hosted child is attached by its Host's `addView`, so by now
+    // `parent` is the Host and this is the first moment the answer is known.
+    applyHostedDrawFlag()
     watchForFirstFrame()
+  }
+
+  override fun onDetachedFromWindow() {
+    // A control that leaves the window also stops being composited, whether or not
+    // it is still a child of the Host (a list scrolling off detaches both). Re-read
+    // here, so a control that moved out of a Host is not left flagged by the attach
+    // that went in.
+    applyHostedDrawFlag()
+    super.onDetachedFromWindow()
   }
 
   // MARK: - Measuring
@@ -626,6 +781,16 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * view out from the frame C++ computed, it does not read the measured dimension.
    */
   override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    if (isHostedByParent) {
+      // A Host draws us; measuring would build a second composition for content
+      // that is already in the Host's. Fabric measures every node it lays out,
+      // whatever the view's visibility, so this is the gate that matters: declining
+      // here is what keeps one `Composition` per Host instead of one per control, and
+      // the 0 x 0 it measures is what lays the child out of the way (review S1).
+      isMeasurePending = true
+      setMeasuredDimension(0, 0)
+      return
+    }
     if (!isAttachedToWindow) {
       isMeasurePending = true
       setMeasuredDimension(0, 0)
@@ -686,6 +851,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     right: Int,
     bottom: Int,
   ) {
+    if (isHostedByParent) {
+      // Nothing to lay out: the only child is the never-measured `composeContent`,
+      // and the box RN computed is decorative - Compose places the control inside
+      // the Host. Also skips the sizing-key block, which is right for the same
+      // reason: a hosted control measures nothing, so it has no report to make.
+      return
+    }
     if (isMeasurePending && isAttachedToWindow) {
       measureNow(right - left, bottom - top)
     }
@@ -712,6 +884,9 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * completes clears the flag, and a declined one (no window) sets it again.
    */
   private fun runPendingMeasure() {
+    if (isHostedByParent) {
+      return
+    }
     if (!isMeasurePending || !isAttachedToWindow) {
       return
     }
@@ -1188,6 +1363,7 @@ internal object NitroUiColorSchemes {
  */
 @Composable
 internal fun NitroUiMeasuredRoot(
+  centered: Boolean,
   record: Boolean,
   unbounded: Boolean,
   remeasureToken: IntState,
@@ -1302,10 +1478,14 @@ internal fun NitroUiMeasuredRoot(
     val height =
       if (constraints.hasBoundedHeight) constraints.maxHeight else measuredHeight
     layout(width, height) {
-      placeable?.placeRelative(
-        (width - measuredWidth) / 2,
-        (height - measuredHeight) / 2
-      )
+      if (centered) {
+        placeable?.placeRelative(
+          (width - measuredWidth) / 2,
+          (height - measuredHeight) / 2
+        )
+      } else {
+        placeable?.placeRelative(0, 0)
+      }
     }
   }
 }

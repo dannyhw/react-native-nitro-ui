@@ -265,6 +265,20 @@ iOS and 0.43–1.02× on Android (`Slider`'s 1.02× is the one miss), iOS UI CPU
 four of five (0.73–0.87×, `Button` 1.48×), and Android update UI CPU is still above the
 shared host on all four controls whose update cell is comparable (1.01–1.87×).
 
+`<Host>` — opt-in, Android, `Switch` today — is the one place that bill is paid the
+other way, and it is the arm this library now measures. Measured the same way on the
+same emulator (one run, `quick`, `speed-profile`, five arms, machine load median 2.96
+over 14 cores, `problems: none`): 200 Switches inside one Host cost **0.86×** the
+shared host's mount memory — 44.5 KiB per instance against its 51.9 KiB — and **0.87×**
+its mount UI CPU per op, where the same Switches unhosted cost 2.75× and 1.39×;
+`mounted` is 0.97× and `presented` 0.99×, and unmounting costs 0.78× what it costs the
+shared host. The axis it loses on is the JS thread:
+1.18× the shared host on mount JS CPU per op, against 0.73× for the unhosted control,
+because a hosted control is still a React Native node _and_ a child of somebody
+else's composition. That is why the container is something an app opts into for a dense
+list rather than what every `<View>` does (`docs/components/host.md`, and
+`docs/tasks/H1-android-host.report.md` for the absolutes, spreads and `update` cells).
+
 Against `expo-ui-host-per-control` — the same one-host-per-control shape, reached
 through `@expo/ui` — we are below it on every cell that carries a verdict:
 Android presented 0.66–0.94×, UI CPU 0.40–0.60×, memory 0.56–0.82×; iOS UI CPU
@@ -283,8 +297,8 @@ model and sizing entry — that is the +44…+80 KiB per instance on iOS and the
 +26…+112 KiB on Android, and most of the extra UI CPU per mount. T13 measured what
 is left after the framework's own sharing (Compose owner services are already
 per-window) and the only remaining lever is an opt-in Expo-style shared `<Host>`
-container, which is a public-API decision for 0.2 (DECISIONS D19: documented with
-a follow-up, not chased). Absolute numbers, per-launch spreads and the noise flags
+container — which is what `Host` is today, and the paragraph above is what it pays
+(DECISIONS D19 asked for the decision, D24 records the sizing rule it lives by). Absolute numbers, per-launch spreads and the noise flags
 for these runs are in `docs/tasks/R2-release-0.1.report.md`, the per-component
 history in `docs/tasks/`. Committed ratio baselines live in `bench/baselines/`,
 one per canonical device, and both now exist: Android at `3533d64` (which

@@ -84,6 +84,9 @@ export const IMPLEMENTATIONS = [
   'expo-ui-host-per-control',
   'expo-ui-shared-host',
   'nitro-ui',
+  // T16 spike: nitro-ui's controls inside one shared `<Host>`. A reference arm like
+  // the two `expo-ui-*` ones - measured and reported, never gated.
+  'nitro-ui-host',
 ];
 
 /**
@@ -115,6 +118,30 @@ export const ARMS_WITHOUT_COMPONENT = [
   'android:expo-ui-host-per-control:date-picker',
   'android:expo-ui-shared-host:date-picker',
 ];
+
+/**
+ * Arms that are scoped to one component, or to one platform *and* one component,
+ * keyed by implementation name.
+ *
+ * `ARMS_WITHOUT_COMPONENT` is per platform because it describes something the
+ * *platform's* runtime cannot mount. This is the other case: an arm that renders
+ * one control (and, for the Host, exists on one platform). `nitro-ui-host`
+ * (T16, productionised by H1) composes Switches and throws for anything else, so
+ * any other cell is a launch that would render nothing and still report a
+ * plausible mount time for zero controls; and on iOS `<Host>` is the documented
+ * passthrough - permanently, since T17 measured an iOS Host and D23's outcome was not
+ * to ship one - so a cell there would price "nitro-ui plus one extra `View`" under a
+ * name that promises a shared composition.
+ *
+ * The component scope is a property of the arm, so it applies whether or not the
+ * caller named a platform; the platform scope only applies when one is named.
+ * `bench/src/implementations/index.ts` repeats the component scope as a runtime
+ * refusal, which is the belt to this brace: an arm that renders nothing must say
+ * so in the table rather than be measured.
+ */
+export const ARM_SCOPES = {
+  'nitro-ui-host': { component: 'switch', platform: 'android' },
+};
 
 /** Latency metrics, all nanoseconds, all smaller-is-better. */
 export const LATENCY_METRICS = ['jsCommitNs', 'mountedNs', 'presentedNs'];
@@ -333,12 +360,44 @@ export function buildSchedule({
     }
     wanted = marked;
   }
+  // A scoped arm (see `ARM_SCOPES`) is not scheduled outside its scope. The
+  // platform half is dropped here, before the cell loop, because the caller asked
+  // for arms by name: an arm that is not scheduled at all must not read as a
+  // measured arm with a missing cell.
+  wanted = wanted.filter((name) => {
+    const scope = ARM_SCOPES[name];
+    return (
+      scope == null ||
+      scope.platform == null ||
+      platform == null ||
+      scope.platform === platform
+    );
+  });
+  if (wanted.length === 0) {
+    // An explicit `--only` of a scoped arm on another platform would otherwise
+    // launch nothing at all and exit green.
+    throw new Error(
+      `--only matched no implementation for platform ${String(platform)} ` +
+        `(scoped arms: ${Object.entries(ARM_SCOPES)
+          .map(
+            ([name, scope]) => `${name} = ${scope.platform} ${scope.component}`
+          )
+          .join(', ')})`
+    );
+  }
 
   const schedule = [];
   for (let launch = 0; launch < launches; launch++) {
     const order = launch % 2 === 0 ? wanted : [...wanted].reverse();
     for (const cell of wantedCells) {
       for (const implementation of order) {
+        const scope = ARM_SCOPES[implementation];
+        if (scope != null && scope.component !== componentOf(cell.scenario)) {
+          // The arm renders a different control than this cell asks for. Skipping
+          // the cell is also what keeps a scoped arm out of another component's
+          // ratio table, where its absence is honest and an empty tree is not.
+          continue;
+        }
         if (
           platform != null &&
           ARMS_WITHOUT_COMPONENT.includes(

@@ -30,6 +30,7 @@ import {
   buildSchedule,
   buildBaseline,
   cellKey,
+  ARM_SCOPES,
   comparableMetrics,
   componentOf,
   createLoadSampler,
@@ -59,6 +60,30 @@ import {
 
 const LAUNCHES = 4;
 const ITERATIONS = 20;
+
+/**
+ * The arms a component's cells must carry.
+ *
+ * `IMPLEMENTATIONS` is every arm the runner knows about; `ARM_SCOPES` narrows the
+ * ones that render a single control (`nitro-ui-host`, Switch on Android). Naming
+ * the arms a cell must have, rather than "all of them", is what keeps these
+ * assertions true when an arm exists that cannot serve the component - a missing
+ * arm is only acceptable when it is a scoped one.
+ */
+function armsFor(component, platform = null) {
+  return new Set(
+    IMPLEMENTATIONS.filter((name) => {
+      const scope = ARM_SCOPES[name];
+      if (scope == null) {
+        return true;
+      }
+      if (scope.component !== component) {
+        return false;
+      }
+      return platform == null || scope.platform === platform;
+    })
+  );
+}
 
 /**
  * Per-launch multipliers. The quiet one is what an idle machine produces; the
@@ -1243,7 +1268,7 @@ describe('the Button cells (--component button)', () => {
       'memory.button',
     ]);
     expect(new Set(button.map((entry) => entry.implementation))).toEqual(
-      new Set(IMPLEMENTATIONS)
+      armsFor('button')
     );
     const sw = buildSchedule({ plan: 'quick', component: 'switch' });
     expect(sw.every((entry) => componentOf(entry.scenario) === 'switch')).toBe(
@@ -1265,8 +1290,20 @@ describe('the Button cells (--component button)', () => {
         'picker',
       ])
     );
-    // Seven components in the quick plan, each with the same three cells.
-    expect(all.length).toBe(button.length * 7);
+    /**
+     * Seven components in the quick plan, each with the same three cells, and one
+     * arm (the Switch-only Host) that exists on one of them. The extra launches are
+     * spelled out instead of folded into a product, so a component gaining a cell
+     * changes one number here and an arm escaping its scope changes the other.
+     */
+    expect(all.length).toBe(
+      button.length * 7 +
+        buildSchedule({
+          plan: 'quick',
+          component: 'switch',
+          platform: 'android',
+        }).filter((entry) => entry.implementation === 'nitro-ui-host').length
+    );
   });
 });
 
@@ -1411,7 +1448,7 @@ describe('the SegmentedControl cells (--component segmented-control)', () => {
       'memory.segmented-control',
     ]);
     expect(new Set(segmented.map((entry) => entry.implementation))).toEqual(
-      new Set(IMPLEMENTATIONS)
+      armsFor('segmented-control')
     );
   });
 });
@@ -1556,7 +1593,7 @@ describe('the DatePicker cells (--component date-picker)', () => {
       'memory.date-picker',
     ]);
     expect(new Set(datePicker.map((entry) => entry.implementation))).toEqual(
-      new Set(IMPLEMENTATIONS)
+      armsFor('date-picker')
     );
   });
 
@@ -1590,7 +1627,7 @@ describe('the DatePicker cells (--component date-picker)', () => {
       platform: 'ios',
     });
     expect(new Set(ios.map((entry) => entry.implementation))).toEqual(
-      new Set(IMPLEMENTATIONS)
+      armsFor('date-picker', 'ios')
     );
     // Switch is a control `@expo/ui` mounts on both platforms, so the same
     // `platform` argument must not narrow any other component's arms.
@@ -1751,7 +1788,90 @@ describe('the Picker cells (--component picker)', () => {
       'memory.picker',
     ]);
     expect(new Set(picker.map((entry) => entry.implementation))).toEqual(
-      new Set(IMPLEMENTATIONS)
+      armsFor('picker')
     );
+  });
+});
+
+/**
+ * The shared-`<Host>` arm's scope (H1, productionising T16's `nitro-ui-host`).
+ *
+ * The arm composes Switches and refuses every other control, and on iOS `<Host>`
+ * is a passthrough rather than a shared composition. Either way a cell outside
+ * that scope is a launch that measures nothing under a name that promises
+ * something, so the claim these tests hold is that such cells are never scheduled
+ * — and that the arm is still measured where it *does* apply, or the D15 ratio
+ * against `expo-ui-shared-host` would silently lose its head row.
+ */
+describe('the shared-Host arm is scheduled only where it renders something', () => {
+  const HOST = 'nitro-ui-host';
+
+  it('schedules the Switch cells it renders on Android', () => {
+    const schedule = buildSchedule({
+      plan: 'quick',
+      component: 'switch',
+      platform: 'android',
+    });
+    const host = schedule.filter((entry) => entry.implementation === HOST);
+    expect([...new Set(host.map((entry) => entry.scenario))].sort()).toEqual([
+      'memory',
+      'mount',
+      'update',
+    ]);
+    // One launch per cell, like every other arm — a ratio needs the same pairing.
+    expect(host.length).toBe(3 * 4);
+  });
+
+  it('schedules no cell of another component', () => {
+    for (const component of [
+      'slider',
+      'button',
+      'progress',
+      'segmented-control',
+      'date-picker',
+      'picker',
+    ]) {
+      for (const platform of ['android', 'ios']) {
+        const schedule = buildSchedule({
+          plan: 'quick',
+          component,
+          platform,
+        });
+        expect(
+          schedule.filter((entry) => entry.implementation === HOST)
+        ).toEqual([]);
+      }
+    }
+  });
+
+  it('schedules no cell on iOS, where a Host is a passthrough', () => {
+    const schedule = buildSchedule({
+      plan: 'quick',
+      component: 'switch',
+      platform: 'ios',
+    });
+    expect(schedule.filter((entry) => entry.implementation === HOST)).toEqual(
+      []
+    );
+    // The other arms keep their Switch cells: the scope is one arm's property.
+    expect(new Set(schedule.map((entry) => entry.implementation))).toEqual(
+      armsFor('switch', 'ios')
+    );
+  });
+
+  /**
+   * Asking for nothing but the scoped arm on a platform it does not exist on has
+   * to be an error, not an empty schedule: an empty schedule exits green, and a
+   * green run that measured nothing is the failure mode this file exists for.
+   */
+  it('refuses an --only that the platform leaves nothing to measure', () => {
+    expect(() =>
+      buildSchedule({
+        plan: 'quick',
+        component: 'switch',
+        platform: 'ios',
+        only: 'nitro-ui-host',
+      })
+    ).toThrow(/matched no implementation for platform ios/);
   });
 });

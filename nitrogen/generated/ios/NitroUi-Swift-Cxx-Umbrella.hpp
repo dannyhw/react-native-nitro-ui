@@ -12,6 +12,8 @@
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
 // Forward declaration of `HybridNitroUiDatePickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiDatePickerSpec; }
+// Forward declaration of `HybridNitroUiHostSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiHostSpec; }
 // Forward declaration of `HybridNitroUiPickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiPickerSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
@@ -38,6 +40,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 // Include C++ defined types
 #include "HybridNitroUiButtonSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
+#include "HybridNitroUiHostSpec.hpp"
 #include "HybridNitroUiPickerSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
@@ -73,6 +76,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
 // Forward declaration of `HybridNitroUiDatePickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiDatePickerSpec_cxx; }
+// Forward declaration of `HybridNitroUiHostSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiHostSpec_cxx; }
 // Forward declaration of `HybridNitroUiPickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiPickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.

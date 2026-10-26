@@ -506,3 +506,72 @@ Limits, stated plainly:
   saying so.
 - It does not shrink a control into a smaller box on request. Yoga still owns layout: a caller's
   `width`, `height` or `flex` wins, unchanged (`example/__tests__/Sizing.harness.tsx`).
+
+## 10. A control inside a `<Host>` (D24)
+
+`<Host>` (Android, opt-in, `Switch` in 0.2 — `docs/components/host.md`) composes its direct
+nitro-ui children into **one** Compose composition, which is where the mount memory and
+UI-thread win comes from (H1's run: 2.75x → **0.86x** `expo-ui-shared-host` on mount memory,
+1.39x → **0.87x** on mount UI CPU; T16's spike measured 2.75x → 0.87x and 1.50x → 0.80x the
+same way, and the shipped container reproduced it). The cost is the JS thread — 0.73x unhosted
+against **1.18x** hosted — and that the hosted control stops being a Yoga leaf whose box
+anybody draws:
+
+- **It never measures its content, and never reports.** `NitroComposeHost.onMeasure` declines
+  while its parent is a `NitroUiHostView` (`isHostedByParent`), `onLayout` returns early, and
+  `shouldCreateCompositionOnAttachedToWindow` is false: measuring would build a second
+  composition for content that is already in the Host's. No content measurement means no
+  report, so the cache gains no entry, no correction is queued, and **D17's first-frame
+  budget has nothing to govern** — a hosted control cannot be a frame late because nothing
+  arrived. Measured over eight hosted Switches on an invalidated cache: reports 0, cache
+  entries 0, corrections 0 (`example/__tests__/Host.harness.tsx`).
+- **The measure call itself does not go away.** Fabric still asks each hosted child's Yoga
+  node for its frame, and `measure()` is still entered once per child — 8 hosted, 8
+  unhosted, the same number. The answer comes from §2's cache or the declared fallback, so
+  it costs a lookup, not a measurement, and it is never reported back.
+- **`measureContent()` stops answering for a hosted control.** It is public API on every
+  control, and it returns what the control's own composition last measured — which a hosted
+  control never builds. So on a hosted Switch it answers `0 × 0`, or the stale size the control
+  measured before it moved into a Host. It is not the box RN has (that is the decorative frame
+  below) and not what Compose drew (that is the Host's business). Ask a Host for its box; do
+  not ask a hosted control for one.
+- **The frame it gets is decorative.** The shadow node answers layout from the same
+  cache/fallback as an unhosted control — it has no idea who draws the pixels and must not
+  start asking (§1) — so `<Host><Switch /></Host>` still gives the Switch a 48 dp row box and
+  RN still computes a frame from it. Nothing places pixels with that frame; on Android the
+  platform view behind it declines to measure, so Android lays it out at `0 × 0` and that is
+  what anything reading real view bounds sees. It is *not* `GONE`, and an earlier draft of this
+  file said it was: `SurfaceMountingManager.updateLayout` re-asserts `VISIBLE` (or `INVISIBLE`
+  for `display: none`) on the child's view on every layout pass, so a visibility flag written
+  once at attach would be undone before the next frame was drawn. The measure gate is the
+  mechanism, and `0 × 0` is what makes the child neither a hit target nor visible-to-user for
+  accessibility.
+
+  A hosted child's `alignSelf: 'stretch'`, `width: '100%'` or `height` therefore moves the
+  frame and not the drawing (D16's cross-axis opt-in means nothing inside a Host), and does
+  not space the rows.
+- **The Host places the children.** One `Column`, mount order, the Host's width, from the box's
+  **top-leading edge**, clipped to the box. The same measured root that centres a control
+  inside the box the engine gave it (`placeRelative((w-mw)/2, (h-mh)/2)`) is what `centersContent`
+  now turns off for the Host: centred, a Host 60 tall holding 144 of content drew its second
+  row at the top of its box.
+- **The Host measures nothing either.** Its view config has no measure function, so its box is
+  pure Yoga: `style` first, and with no `height`/`flex` the sum of its children's decorative
+  boxes (three children of `height: 24` → 72 tall, while Compose drew 144). Growing to measured
+  Compose height was rejected: it needs a Compose measurement on the layout path (§1's forbidden
+  question) or a hard-coded row height (a declared fallback with nothing to correct it). So a
+  dense list says how tall it is, and the declared fallbacks stay honest because that sum is
+  what a content-sized Host gets.
+- **A hosted child obeys `display: none`, and a Host's `padding` insets its drawing.** Both are
+  things RN expresses in the view it no longer draws with. `display: none` reaches Android as
+  `INVISIBLE`, so `setVisibility` records what RN asked and the Host takes that child out of its
+  composition as well as its layout — otherwise the hidden row goes on drawing while a
+  content-sized Host shrinks by a row and clips what it still shows. `padding` reaches the view
+  only through `ViewManager.setPadding`, which the base class leaves a no-op, so the Host's view
+  manager forwards it and the `Column` starts inside the padding. The props that cannot cross at
+  all are `gap`, `flexDirection`, `alignItems`, `justifyContent`, `borderWidth` and
+  `pointerEvents`: Compose arranges one column and Compose takes the touches, while Yoga still
+  spends box height on each of them. Dev builds say so, once per instance.
+- **Unhosted controls are untouched.** The hosted path is a branch on the direct parent, taken
+  or reverted on attach and detach, and every case in §3–§7 runs unchanged for a control with
+  any other parent — which is the regression `Switch.harness` and `Sizing.harness` keep true.
