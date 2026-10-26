@@ -331,13 +331,15 @@ xcrun simctl spawn "$IOS_SIM_UDID" log stream --level info --style compact \
 That line is asserted, not just grepped - it carries the box each control got:
 
 ```
-NITRO_UI_SMOKE_READY switch=30x20 slider=310x20 button=88x36 progress=310x4 segmented-control=214x32
+NITRO_UI_SMOKE_READY switch=61x28 slider=354x31 button=61x34.333343505859375 progress=354x4 segmented-control=165x31 date-picker=138x34 picker=72x35 host=354x96
 ```
 
-`scripts/smoke/lib.mjs` owns the contract (five `name=WxH` boxes, each greater
-than `0x0`; a number may be fractional, because `onLayout` reports computed
-layout metrics - `52.19047546386719x48` on a density-scaled Android display,
-`61x34.333343505859375` for a Button sized by its font on iOS) and
+`scripts/smoke/lib.mjs` owns the contract (one `name=WxH` box per control -
+the seven controls plus `host`, the `<Host>` container, each greater than `0x0`;
+a number may be fractional, because `onLayout` reports computed layout metrics -
+`52.19047546386719x48` on a density-scaled Android display,
+`61x34.333343505859375` for a Button sized by its font on iOS, and the line
+above is iOS-shaped output from a run) and
 `scripts/smoke/ready-line.mjs` is the command both platform
 paths call, so iOS and Android cannot drift apart and a control that mounts at
 `0x0` - a sizing regression, a hosting change, a `measureContent()` that answers
@@ -403,6 +405,12 @@ single source of truth for what a consumer must be able to render. Its rules:
   need state get their own small probe component above the list (one `useState`
   and the render call). `smoke-ready-line.test.js` fails `check` if the two
   lists ever disagree.
+- **a `<Host>` counts as one control (`host`), not two.** The box worth
+  asserting is the container's: a hosted child is drawn by the Host's own
+  composition and its RN view is deliberately laid out at nothing
+  (`docs/components/host.md`, Sizing), so putting a hosted Switch in
+  `SMOKE_CONTROLS` would fail the contract by design. Render the Host with its
+  children inside it, as the app does today.
 - it is typechecked by `bun run check` (`tsconfig.json` includes
   `scripts/smoke`), so a public-API rename fails the static gate instead of
   surfacing ten minutes into a smoke run.
