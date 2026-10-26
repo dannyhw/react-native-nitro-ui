@@ -346,9 +346,9 @@ the box their parent gives them and only their height is their own.
   first screen mounts, so nothing shows the fallback frame. It is cheap, safe to
   call with a name a future version does not know, and the sizing engine still
   treats it as provisional: a real measurement replaces it if it disagrees. It
-  seeds a component's default configuration only, so it helps controls with one
-  configuration (`Switch`, `Slider`); there is no way yet to pre-warm a
-  particular Button title or option list.
+  seeds a component's default configuration only, which covers `Switch`,
+  `Slider` and a `linear` `Progress`; there is no way yet to pre-warm a
+  particular Button title, option list or DatePicker.
 - **A control inside `<Host>` is not measured at all** on Android: the Host
   draws its children in one column at its own width, so the box to get right is
   the Host's. See [host.md](docs/components/host.md#sizing-d24).
@@ -433,17 +433,18 @@ presented 0.64–0.97×, UI CPU 0.50–0.70×, memory 0.58–0.82×.
 
 `<Host>` is the one place the Android memory bill is paid the other way.
 Measured on the same emulator (one `--plan quick` run, all five arms including a
-hosted `nitro-ui-host` arm, ART `speed-profile`, no problems reported), 200
-Switches inside one Host against `expo-ui-shared-host`:
+hosted `nitro-ui-host` arm, ART `speed-profile`, no problems reported),
+Switches inside one Host against `expo-ui-shared-host` — memory at N=200, the
+rest at N=50:
 
-|                       | `Switch` without a Host | `Switch` in a `<Host>`  |
-| --------------------- | ----------------------- | ----------------------- |
-| Mount memory (N=200)  | 2.75×                   | **0.86×**               |
-| Mount UI CPU per op   | 1.39×                   | **0.87×**               |
-| Mount `mounted`       | 1.13×                   | **0.97×**               |
-| Mount `presented`     | 1.01×                   | **0.99×**               |
-| Mount JS CPU per op   | 0.73×                   | 1.18×                   |
-| Unmount UI CPU per op | 1.31×                   | **0.78×** (16 % spread) |
+|                       | `Switch` without a Host | `Switch` in a `<Host>` |
+| --------------------- | ----------------------- | ---------------------- |
+| Mount memory (N=200)  | 2.75×                   | **0.86×**              |
+| Mount UI CPU per op   | 1.39×                   | **0.87×**              |
+| Mount `mounted`       | 1.13×                   | **0.97×**              |
+| Mount `presented`     | 1.01×                   | **0.99×**              |
+| Mount JS CPU per op   | 0.73×                   | 1.18×                  |
+| Unmount UI CPU per op | 1.31×                   | 0.78× `n/v`            |
 
 That is 44.5 KiB per hosted Switch against the shared host's 51.9 KiB. The axis
 it loses on is the JS thread — roughly 1.2× the shared host, where the unhosted
