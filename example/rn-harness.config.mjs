@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -11,6 +12,17 @@ import {
   appleSimulator,
 } from '@react-native-harness/platform-apple';
 import { assertSupportedNode } from '../scripts/node-version.mjs';
+import {
+  StaleAppError,
+  artifactPath,
+  assertFreshApp,
+  colorize,
+} from '../scripts/app-stamp.mjs';
+import {
+  platformForArtifact,
+  runnerFromArgv,
+} from '../scripts/app-stamp-core.mjs';
+import { checkEmulatorEnv, emulatorSerial } from '../scripts/lease-core.mjs';
 // CommonJS, because `example/metro.config.js` requires the same module to serve
 // the state this publishes.
 import harnessTimingGate from '../scripts/harness-timing-gate.js';
@@ -22,6 +34,79 @@ const { publishTimingGate } = harnessTimingGate;
 // test file. Say so here, before any device work, rather than after a build.
 assertSupportedNode({ command: 'bun run harness:ios|android' });
 
+// Second gate at the same point, for the other way a device run goes wrong:
+// `HARNESS_APP_PATH` pointing at an app that is not this checkout's (a stale
+// build, or an APK whose dex lost a generated hybrid). Refusing here happens
+// before a simulator or emulator is touched, so a refusal cannot hold a device
+// another task needs. `scripts/build-app.mjs` writes the stamp this reads.
+const runner = runnerFromArgv(process.argv) ?? 'ios';
+const explicitApp = process.env.HARNESS_APP_PATH ?? '';
+// No explicit path means the fixed one this worktree's build writes, when it is
+// there: publishing it back to the environment is what lets
+// `bun run harness:ios` run with no environment at all.
+const artifact =
+  explicitApp === ''
+    ? fs.existsSync(artifactPath({ platform: runner }))
+      ? artifactPath({ platform: runner })
+      : null
+    : path.resolve(explicitApp);
+
+if (artifact != null) {
+  process.env.HARNESS_APP_PATH = artifact;
+  const platform = platformForArtifact(artifact) ?? runner;
+  try {
+    const stamp = assertFreshApp({
+      platform,
+      artifact,
+      command: `bun run harness:${platform}`,
+    });
+    console.log(
+      colorize(
+        `app is fresh: ${artifact} (tree ${stamp.tree.slice(0, 12)}, ` +
+          `${Object.keys(stamp.counts).length} components registered)`,
+        'green'
+      )
+    );
+  } catch (error) {
+    // Red because the alternative - a green run against someone else's binary -
+    // reads like evidence. Printed before rethrowing so the fix is the last
+    // thing on the screen of whoever ran it.
+    console.error(
+      colorize(
+        error instanceof StaleAppError
+          ? String(error.message)
+          : `app.stamp: ${String(error?.message ?? error)}`,
+        'red'
+      )
+    );
+    throw error;
+  }
+} else if (process.env.NITRO_UI_ALLOW_UNSTAMPED === '1') {
+  // The escape hatch, for the runs that legitimately have nothing here: an app
+  // built by Xcode or Android Studio at a path this file does not know, and a CI
+  // action that builds the app itself. Loud, because the day a suite runs with
+  // this set is the day its green means something else.
+  console.log(
+    colorize(
+      'app.stamp: NITRO_UI_ALLOW_UNSTAMPED=1 - no artifact was checked, so this ' +
+        'run proves nothing about any app in this checkout.',
+      'red'
+    )
+  );
+} else {
+  // Review S10. The harness never builds, so with no artifact there is no binary
+  // at all - and on Android the run then goes on against whatever the emulator
+  // already has installed, which is a previous task's app or none. Printing a
+  // note and continuing is how a suite ends up reporting results for a binary
+  // nobody has, which is the exact failure this file exists to stop.
+  throw new Error(
+    `bun run harness:${runner}: no app to test.\n` +
+      `       build it: node scripts/build-app.mjs --platform ${runner}\n` +
+      '       (it writes app.stamp, which is what this check reads)\n' +
+      '       or point HARNESS_APP_PATH at an app built another way;\n' +
+      '       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite without this check.'
+  );
+}
 // react-native-harness does not build the app: build a Debug iOS .app or an
 // Android APK first and point HARNESS_APP_PATH at it (see CONTRIBUTING.md).
 //
@@ -96,6 +181,32 @@ function avd() {
 }
 
 /**
+ * Which console port the emulator may boot on, checked before the first device
+ * is touched (review S5).
+ *
+ * A lease names a serial, and that promise only holds while the emulator really
+ * boots on the port behind it. `react-native-harness` starts the emulator
+ * itself and used to pass no `-port`, so the console port was whatever happened
+ * to be free: a leased AVD could come up as the one serial this repo never
+ * touches, and the `ANDROID_SERIAL` the lease exported would name a device that
+ * does not exist. The port now travels through `EMULATOR_PORT`, which the
+ * harness reads through the patch in `patches/` (it adds `-port`, and the
+ * emulator refuses to start rather than quietly picking another port).
+ *
+ * What is checked here is what the patch is about to act on: a port that the
+ * emulator cannot take, a reserved serial in either variable, and a serial that
+ * disagrees with its own port. Refusing at config time means no device work has
+ * happened yet, so a mistake cannot leave a booted emulator behind.
+ */
+const emulatorBoot = checkEmulatorEnv(process.env);
+if (emulatorBoot.port != null) {
+  console.log(
+    `lease: ${avd()} boots on console port ${String(emulatorBoot.port)} ` +
+      `(serial ${emulatorSerial(emulatorBoot.port)})`
+  );
+}
+
+/**
  * The machine state the wall-clock gates need (D21), published for the app to
  * read. `example/` is Metro's project root, and Metro serves a file under it
  * from disk per request, so an assertion reads a current load average instead
@@ -137,7 +248,7 @@ export default {
       }),
     }),
   ],
-  defaultRunner: 'ios',
+  defaultRunner: runner,
   resetEnvironmentBetweenTestFiles: 'runtime',
   // react-native-harness 1.6 has no per-test timeout: this is the budget for
   // the slowest test in the suite, not the average one. The sizing suite mounts

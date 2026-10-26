@@ -24,6 +24,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { installPods } from '../pod-install.mjs';
+
 export const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -168,11 +170,22 @@ export function buildIos({ rebuild = false, prebuildFirst = false } = {}) {
     prebuild('ios');
   }
   if (!fs.existsSync(path.join(iosDir, 'Pods', 'Manifest.lock'))) {
-    run('pod', ['install'], {
-      cwd: iosDir,
-      env: { ...process.env, CI: '1' },
-      stdio: 'inherit',
-    });
+    // The repo's one CocoaPods entry point: it prefers the version a
+    // `Podfile.lock` already records, so a machine on another CocoaPods cannot
+    // leave a stamp-only diff in a tracked lock (R1, C1, G5, G6 each lost time
+    // to restoring that line by hand).
+    const pods = installPods({ dir: iosDir });
+    if (pods.status !== 0) {
+      // S8: a red pod install used to fall through into xcodebuild, which then
+      // compiled against the previous Pods project and reported numbers for an
+      // app that is not this commit's app. A bench number from the wrong binary
+      // is worse than no number, because it looks like a result.
+      throw new Error(
+        `bench: pod install failed with exit code ${String(pods.status)} in ` +
+          iosDir +
+          ' - stopping before xcodebuild rather than measuring a stale app.'
+      );
+    }
   }
 
   const derivedData = path.join(iosDir, 'build', 'DerivedData');

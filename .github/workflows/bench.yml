@@ -19,18 +19,12 @@ name: Bench
 # D9 names: `ios27-sim-iphone17` and `android35-emu-pixel9`. A machine on someone's
 # desk is a different device key, so it compares (`--compare`) rather than checks.
 
+# Manual only, like the other device jobs (docs/DECISIONS.md D22, D25): the
+# scheduled and label/comment triggers are off, so nothing runs here until a
+# maintainer starts it. The `trigger` job below still understands those events,
+# so re-enabling them is a change to this block alone. A dispatch run has base ==
+# head, which is a noise sample and not a comparison.
 on:
-  pull_request:
-    types:
-      - labeled
-  issue_comment:
-    types:
-      - created
-  schedule:
-    # Nightly noise sample on the default branch, report-only. There is no base
-    # revision to compare against (merge-base of main with itself is main), so a
-    # nightly run measures how much this runner's noise is, nothing more.
-    - cron: '30 3 * * *'
   workflow_dispatch:
 
 # `pull-requests: write` is needed by exactly two things: posting the comment and
@@ -178,6 +172,7 @@ jobs:
 
       - name: Report
         run: |
+          # shellcheck disable=SC2010  # fixed artifact names, nothing exotic
           HEAD_FILE=$(ls -1 bench/results/ 2>/dev/null \
             | grep -E "^${HEAD_SHA}(-dirty)?-ios-" | tail -1 || true)
           if [ -z "$HEAD_FILE" ]; then
@@ -197,6 +192,7 @@ jobs:
         env:
           PR_NUMBER: ${{ needs.trigger.outputs.pr }}
         run: |
+          # shellcheck disable=SC2016  # literal markdown, backticks included
           {
             echo "## iOS benchmarks ($HEAD_SHA)"
             if [ -z "$PR_NUMBER" ]; then
@@ -214,6 +210,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.trigger.outputs.pr }}
         run: |
+          # shellcheck disable=SC2016  # literal markdown, backticks included
           {
             echo "### iOS benchmarks ($HEAD_SHA vs base $BASE_SHA)"
             echo
@@ -332,6 +329,7 @@ jobs:
 
       - name: Report
         run: |
+          # shellcheck disable=SC2010  # fixed artifact names, nothing exotic
           HEAD_FILE=$(ls -1 bench/results/ 2>/dev/null \
             | grep -E "^${HEAD_SHA}(-dirty)?-android-" | tail -1 || true)
           if [ -z "$HEAD_FILE" ]; then
@@ -368,6 +366,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.trigger.outputs.pr }}
         run: |
+          # shellcheck disable=SC2016  # literal markdown, backticks included
           {
             echo "### Android benchmarks ($HEAD_SHA vs base $BASE_SHA)"
             echo

@@ -12,11 +12,11 @@
     "storybook:generate": "STORYBOOK_DISABLE_TELEMETRY=true sb-rn-get-stories",
     "build:android": "react-native build-android --extra-params \"--no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a\"",
     "build:ios": "react-native build-ios --mode Debug",
-    "harness": "react-native-harness",
-    "harness:ios": "react-native-harness --harnessRunner ios",
-    "harness:android": "react-native-harness --harnessRunner android",
-    "harness:cold:ios": "react-native-harness --harnessRunner ios ColdSizing",
-    "harness:cold:android": "react-native-harness --harnessRunner android ColdSizing"
+    "harness": "node ../scripts/harness.mjs",
+    "harness:ios": "node ../scripts/harness.mjs --harnessRunner ios",
+    "harness:android": "node ../scripts/harness.mjs --harnessRunner android",
+    "harness:cold:ios": "node ../scripts/harness.mjs --harnessRunner ios ColdSizing",
+    "harness:cold:android": "node ../scripts/harness.mjs --harnessRunner android ColdSizing"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",

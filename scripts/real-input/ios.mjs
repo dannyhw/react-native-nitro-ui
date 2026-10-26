@@ -37,11 +37,17 @@ import {
   Suite,
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS, iosCheckName } from './controls.mjs';
-import { assertSupportedNode } from '../node-version.mjs';
+import { assertSupportedNodeOrReexec } from '../node-version.mjs';
+import { currentCodeTree, recordBuild } from '../app-stamp.mjs';
 
 // One Node across every device gate: the harness cannot run on Node 25/26 at
-// all, so a real-input run on that runtime is not comparable evidence.
-assertSupportedNode({ command: 'bun run test:real-input:ios' });
+// all, so a real-input run on that runtime is not comparable evidence. When this
+// shell is on the wrong Node, restart under the `.nvmrc` one rather than refusing
+// a device run - `bun run test:real-input:*` is a device gate, not a shell test.
+assertSupportedNodeOrReexec({
+  command: 'bun run test:real-input:ios',
+  entryUrl: import.meta.url,
+});
 
 const BUNDLE_ID = 'nitroui.example';
 const WORKSPACE = 'NitroUiExample.xcworkspace';
@@ -334,6 +340,11 @@ async function main() {
   });
   let status = 1;
   try {
+    // M3: this suite writes its own stamp, so it has to prove the tree stood
+    // still while xcodebuild read it. Taken here, after Metro is up and before
+    // the compile, so nothing that happens between the two hashes is a tool
+    // tidying up after itself.
+    const treeBefore = currentCodeTree();
     const destination = `platform=iOS Simulator,id=${device.udid}`;
     // Same arguments for both phases: a different build setting between them
     // would make xcodebuild throw the whole build away.
@@ -358,6 +369,26 @@ async function main() {
     if (built !== 0) {
       throw new Error(
         `real-input: building for testing failed (${built}). See ${buildLog}.`
+      );
+    }
+
+    // This suite builds its own app (it needs the UI-test bundle), so it cannot
+    // inherit a stamp from `build-app.mjs` - but it uses the same fixed derived
+    // data path, and installing an app that lost a generated hybrid would be the
+    // same false evidence. Inspect what was just built, and let the harness use
+    // it: the stamp is refreshed to say this binary came from this tree.
+    try {
+      recordBuild({
+        platform: 'ios',
+        artifact: app,
+        treeBefore,
+        log: (message) => console.log(`  ${message}`),
+      });
+    } catch (error) {
+      throw new Error(
+        `real-input: ${String(error?.message ?? error)}\n` +
+          '       an incremental xcodebuild that never recompiled the generated ' +
+          'hybrids is the usual cause: `rm -rf example/ios/build` and run again.'
       );
     }
 

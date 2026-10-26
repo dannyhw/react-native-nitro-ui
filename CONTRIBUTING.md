@@ -85,6 +85,8 @@ Run from the repo root.
 | `bun run perf:renders`      | Reassure render-count gate for the JS wrappers                              |
 | `bun run changeset`         | Record a release entry for your change (see "Releasing")                    |
 | `bun run release:version`   | Apply pending changesets, as the Version Packages PR does (see "Releasing") |
+| `bun run build:app`         | Build + stamp the example app for one platform (see below)                  |
+| `bun run lease <command>`   | Device/port leases for this machine: `acquire`, `release`, `list`           |
 | `bun run example <script>`  | Run an `example/` script, e.g. `bun run example ios`                        |
 | `bun run hooks:install`     | Install optional git hooks (see "Commit messages and git hooks")            |
 | `bun run hooks:uninstall`   | Remove them again                                                           |
@@ -145,40 +147,139 @@ bun run example android
 bun run example start        # plain Metro (port 8081)
 ```
 
+## Leasing a device or port
+
+Several tasks work on one machine at once, so which simulator, AVD, emulator
+port, adb port and Metro port a run may use is a **resource**, not a detail to
+invent per task: two tasks on one simulator, or two Metros on one port, both
+produce a run nobody can trust. `scripts/lease.mjs` is the gate.
+
+```sh
+node scripts/lease.mjs acquire --task G6 --out /tmp/g6.env   # or: bun run lease acquire …
+source /tmp/g6.env                                            # exports the variables below
+node scripts/lease.mjs list
+node scripts/lease.mjs release G6
+```
+
+`acquire` prints the env file on stdout (or writes it with `--out`) and exits 1
+with a reason when it refuses. It hands out `IOS_SIM_UDID`, `IOS_SIM`,
+`IOS_VERSION`, `ANDROID_AVD`, `ANDROID_API_LEVEL`, `AVD_PROFILE`,
+`EMULATOR_PORT`, `ANDROID_SERIAL`, `ANDROID_ADB_SERVER_PORT` and `METRO_PORT`,
+which are the variables `example/rn-harness.config.mjs` and the real-input scripts
+already read, so a task stops naming devices and starts by leasing them.
+
+Four rules are enforced rather than written down:
+
+- at most **2 device leases** at a time (a third is refused: two device tasks is
+  what one machine does without load turning duration gates red, D21);
+- `--exclusive` - for a bench run or a baseline mint, which needs a quiet
+  machine - **waits until every other lease has ended**, then holds every pair;
+- the emulator serial **`emulator-5560` can never be leased**, because an `adb`
+  command without `-s` reaches it. A pool that contains it is refused when it is
+  read, so the mistake is a config error rather than a borrowed device.
+- the emulator **boots on the port behind the serial** it was handed: the
+  harness passes `-port $EMULATOR_PORT`, so a leased AVD cannot come up as some
+  other console. A run whose `ANDROID_SERIAL` disagrees with its `EMULATOR_PORT`,
+  or which names the reserved serial, is refused by the harness config and by
+  real-input before anything is installed on a device.
+
+The pool is one file per machine, because UDIDs, AVD names and ports do not
+travel between machines. Copy `scripts/devices.example.json` and edit it:
+
+```sh
+mkdir -p ~/.nitro-ui
+cp scripts/devices.example.json ~/.nitro-ui/devices.json   # then put your real devices in it
+```
+
+```json
+{
+  "maxDeviceLeases": 2,
+  "reservedEmulatorPorts": [5560],
+  "reservedIdentifiers": [],
+  "pairs": [
+    {
+      "id": "pair-a",
+      "ios": {
+        "name": "iPhone 17",
+        "udid": "<simulator udid>",
+        "system": "27.0"
+      },
+      "android": {
+        "avd": "<avd name>",
+        "emulatorPort": 5574,
+        "adbPort": 5043,
+        "apiLevel": 35,
+        "profile": "pixel_9"
+      },
+      "metroPort": 8295
+    }
+  ]
+}
+```
+
+A pair is the unit: one iOS simulator and one Android emulator that belong
+together, plus the ports that go with them. `reservedIdentifiers` is for anything
+else that must never be handed out (a person's own device, another project's
+simulator). State lives in `~/.nitro-ui/leases.json` behind a lock file
+(`~/.nitro-ui/leases.lock`); leases expire after a TTL so a killed task cannot
+wedge the machine, and `NITRO_UI_HOME` moves the whole directory - which is how
+`scripts/__tests__/lease.test.js` tests the lock and the limits without touching a
+real one.
+
+`ANDROID_ADB_SERVER_PORT` is part of a lease on purpose: a private adb server per
+task means one task's `adb` never queues behind another's, and it is what makes
+`adb kill-server` on the default port somebody else's problem - so don't.
+
 ## Running the on-device (Harness) tests
 
 `react-native-harness` runs `.harness.tsx` files **inside the app**; it does not
-build the app and it runs debug builds only. So: build first, then point the
-harness at the artifact.
-
-### iOS
+build the app and it runs debug builds only. So: build first, then run.
 
 ```sh
-cd example/ios
-pod install
+node scripts/build-app.mjs --platform ios        # or: --platform android
+bun run harness:ios                              # or: harness:android
+```
+
+`build-app.mjs` is the one build step: it runs `pod install` when the Pods are out
+of date, builds into a **fixed path inside your worktree** (`example/ios/build`
+via `-derivedDataPath`, `example/android/app/build`), and then writes `app.stamp`
+next to the artifact. The harness config reads that stamp, so `HARNESS_APP_PATH`
+does not have to be set at all; export it only to point a run at some other
+artifact.
+
+The stamp is what stops a device run testing code it does not contain
+(`G2-button.report.md` records that failure). It records a hash of the code tree
+(everything git can see except `docs/`, `bench/`, `.github/` and Markdown) and how
+many times each registered component's hybrid class appears in the binary - the
+component list comes from nitrogen's generated autolinker, so a new component
+joins the gate on its own commit. A harness or real-input run **refuses** (in red,
+before it touches a device) when:
+
+- the tree hash differs from the one the app was built from: your edit is not in
+  the binary, so its green would be somebody else's green;
+- a registered component is missing from the binary - on Android this is gradle
+  calling `packageDebug` up-to-date over a dex that never got the generated
+  hybrid, which `build-app.mjs` repairs itself by re-running `packageDebug --rerun`.
+
+The equivalent manual commands, if you ever need them:
+
+```sh
+cd example/ios && node ../../scripts/pod-install.mjs
 xcodebuild -workspace NitroUiExample.xcworkspace -scheme NitroUiExample \
   -configuration Debug -sdk iphonesimulator \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+# -> example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app
 
-cd ..
-HARNESS_APP_PATH="$(pwd)/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app" \
-  bunx react-native-harness --harnessRunner ios
+cd example/android && ./gradlew :app:assembleDebug -PreactNativeArchitectures=arm64-v8a
+# x86_64 on Intel   -> example/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### Android
-
-```sh
-cd example/android
-./gradlew :app:assembleDebug -PreactNativeArchitectures=arm64-v8a   # x86_64 on Intel
-
-cd ..
-HARNESS_APP_PATH="$(pwd)/android/app/build/outputs/apk/debug/app-debug.apk" \
-  bunx react-native-harness --harnessRunner android
-```
-
-`harness:ios` / `harness:android` are shortcuts for the last command in each
-pair; you still need the build (and `pod install`) before them.
+A hand-built artifact has no stamp, so a gate asked to use one says so and names
+`build-app.mjs`. `scripts/pod-install.mjs` is the repo's only CocoaPods entry
+point: it runs the version a `Podfile.lock` already records, so a machine on
+another CocoaPods does not leave a `COCOAPODS:`-trailer-only diff in a tracked
+lock file (four tasks each lost time restoring that line by hand).
 
 ### Devices and ports
 
@@ -225,6 +326,9 @@ launches the app, so nothing is baked into the build; a stock `react-native
 start` is still on 8081. Every concurrent run must set its own `METRO_PORT` —
 the harness fails fast with `MetroPortUnavailableError` rather than attaching to
 someone else's Metro.
+
+Those variables are what a lease prints, so prefer `node scripts/lease.mjs
+acquire --task <id>` over setting them by hand (see "Leasing a device or port").
 
 Only start devices you need, never touch a device you did not start, and shut
 down the ones you started when you finish.
@@ -284,8 +388,11 @@ ANDROID_AVD=<avd> ANDROID_ADB_SERVER_PORT=<port> METRO_PORT=8292 \
 bun run test:real-input:android --control slider
 ```
 
-Both build first (iOS: `pod install` + the workspace's `NitroUiExampleUITests`
-scheme; Android: the debug APK), install, point the debug build at your
+iOS builds first (`pod install` + the workspace's `NitroUiExampleUITests` scheme)
+and refreshes `app.stamp` with what it built; Android installs the debug APK that
+`node scripts/build-app.mjs --platform android` left, and **refuses** when that
+stamp does not match the tree - the same `app.stamp` the harness reads, so an
+unbuilt change cannot pass here either. Both install, point the debug build at your
 `METRO_PORT`, and read the screen afterwards - `accessibilityIdentifier` on iOS,
 `uiautomator dump` on Android - which is what a person and a screen reader have.
 Neither script boots or shuts down a device, and neither accepts a device it was
@@ -296,9 +403,10 @@ They are **not** part of `bun run check`: they need a booted device, a simulator
 build and several minutes. Run them when you change how a control receives
 touch, and expect the maintainer to run them before a release.
 
-Both run on the Node `.nvmrc` pins and refuse to start on anything else, so that
-one runtime produced every device gate — a real-input pass on a Node the harness
-cannot run on is not comparable evidence.
+Both run on the Node `.nvmrc` pin: started on a different one, they restart
+themselves under it with `fnm exec` rather than refusing a device run, so that one
+runtime produced every device gate - a real-input pass on a Node the harness cannot
+run on is not comparable evidence.
 
 Each run keeps its evidence in `.real-input/<platform>/` (gitignored): the full
 `xcodebuild` and `adb` logs, the accessibility hierarchy printed by a failing
@@ -707,4 +815,20 @@ None of this is a contributor's step, and none of it lives in this repo to chang
 - If you touched specs or native code, run the example builds and the harness
   tests on both platforms.
 - Say in the pull request which of the device suites (harness, real-input,
-  smoke, bench) you ran and on what. There is no CI to run them for you.
+  smoke, bench) you ran and on what.
+
+`.github/workflows/ci.yml` runs on every push to `main` and on every pull
+request, on free GitHub-hosted runners: `bun run check` (ubuntu, Node from
+`.nvmrc`), the host native ASan tests (**macOS**: they need a Swift toolchain and
+`xcrun`, so `scripts/native-tests.sh` prints its skip reason on Linux and CI runs
+them in a `macos-latest` job instead), and an Android `assembleDebug` of the
+example. Anything that needs one of this project's devices or a Mac's simulators -
+the harness suites, the consumer smoke tests, the benchmarks, the Android release
+build - stays **manual**: those jobs are `workflow_dispatch` only, because a
+hosted runner has no device and a bench number from a shared runner measures
+nothing (D21).
+
+Validate workflow edits locally with
+[`actionlint`](https://github.com/rhysd/actionlint)
+(`actionlint .github/workflows/*.yml`). `.github/actionlint.yaml` declares the one
+self-hosted label a job may use.

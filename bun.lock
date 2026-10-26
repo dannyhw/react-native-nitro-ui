@@ -119,6 +119,7 @@
     "@parcel/watcher",
   ],
   "patchedDependencies": {
+    "@react-native-harness/platform-android@1.6.0": "patches/@react-native-harness%2Fplatform-android@1.6.0.patch",
     "@react-native-harness/platform-apple@1.6.0": "patches/@react-native-harness%2Fplatform-apple@1.6.0.patch",
   },
   "packages": {
