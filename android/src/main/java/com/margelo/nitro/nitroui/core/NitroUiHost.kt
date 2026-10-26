@@ -62,10 +62,12 @@ internal class NitroUiHostModel : NitroUiModel() {
  * to Compose rather than RN hit testing. Yoga still honours each of them in the
  * *box*, which is the trap: a `gap` buys height and no space, and
  * `flexDirection: row` buys a one-row-tall box around a stack of rows. Say how tall
- * the Host is, and stack it in a column (review S3). A child's own `alignSelf`
- * belongs to neither list: like every self style it moves that child's decorative
- * frame, which a Host ignores either way, so warning about it as if it were an
- * arrangement style was a false claim (H2a).
+ * the Host is, and stack it in a column (review S3). `alignSelf` belongs to neither
+ * list, and not because of anything about the children: the JS warning reads the
+ * **Host's own** style, and a Host's `alignSelf` positions the Host inside *its*
+ * parent - it moves the box, and the drawing is inside the box. Warning about it was
+ * a false claim, and H2a dropped it (review F5/F6). A child's own `alignSelf` moves
+ * that child's decorative frame, which is the per-child rule, not an arrangement one.
  *
  * **The allowlist is native, not only JS.** [NitroComposeHost.isHostable] decides who
  * may be composed here: Switch, Slider, Progress and Button say yes (H1, then H2a),

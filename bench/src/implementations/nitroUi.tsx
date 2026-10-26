@@ -120,9 +120,9 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
  * `Host` stacks its children itself (a Compose `Column`), which is the same arrangement
  * the Expo arm builds with an explicit `<Column>`.
  *
- * D24 makes the four cells mean slightly different things, and the rows say so:
- * `fillWidth` controls (Switch, Slider, linear Progress) take the Host's inner width in
- * the Column rather than their own `style.width`, and a Button keeps its intrinsic width
+ * D24 makes the four cells mean slightly different things, and the rows say so: the
+ * `fillWidth` controls (Slider, linear Progress) take the Host's inner width in the Column
+ * rather than their own `style.width`, and `Switch` and `Button` keep their intrinsic width
  * at the column's leading edge. The *box RN lays out* is the same one the other arms get
  * (`rowStyle`), because that is the box the ratio is about; what the control draws inside
  * it is the library's documented Host sizing, not a per-arm styling choice.
