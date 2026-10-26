@@ -15,8 +15,11 @@ import { ScrollView, Switch as RNCoreSwitch, Text, View } from 'react-native';
 import * as lib from '../index';
 
 import { Host } from '../components/Host/Host';
-import { assertHostChildren } from '../components/Host/HostChildren';
-import { Slider } from '../components/Slider/Slider';
+import {
+  assertHostChildren,
+  HOSTABLE_NAMES,
+} from '../components/Host/HostChildren';
+import { Picker } from '../components/Picker/Picker';
 import { Switch } from '../components/Switch/Switch';
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
 
@@ -182,13 +185,34 @@ describe('Host children', () => {
   });
 
   it('names a control the Host does not render yet', () => {
-    const error = errorFor(<Slider value={0.5} />);
+    // H2a hosted Slider/Progress/Button, so the refused case has to be asked of a
+    // control that is still refused - and the same sentence is the one that has to
+    // keep working when the next control joins the table.
+    const error = errorFor(
+      <Picker options={['a', 'b']} selectedIndex={0} onChange={() => {}} />
+    );
     expect(error).not.toBeNull();
-    expect(error?.message).toMatch(/<Slider>/);
+    expect(error?.message).toMatch(/<Picker>/);
     // "nitro-ui's", so the sentence says whose control it is before saying what
-    // is wrong with it - `Switch` and `Slider` exist in more than one library.
-    expect(error?.message).toMatch(/react-native-nitro-ui's <Slider>/);
+    // is wrong with it - `Switch` and `Picker` exist in more than one library.
+    expect(error?.message).toMatch(/react-native-nitro-ui's <Picker>/);
   });
+
+  /**
+   * The controls H2a put on the allowlist must be accepted by *identity*, not by a
+   * name match: this is the row that would go red if a table keyed on `displayName`,
+   * because RN's own Slider/Button/Progress carry the same names.
+   */
+  it.each(['Slider', 'Progress', 'Button', 'Switch'] as const)(
+    'accepts its own <%s>',
+    (name) => {
+      const Control = (lib as Record<string, unknown>)[name];
+      expect(typeof Control).toBe('function');
+      // No props: the check never mounts the child, so it only has to survive
+      // element creation. A crash here would be the control's, not the Host's.
+      expect(errorFor(createElement(Control as never))).toBeNull();
+    }
+  );
 
   /**
    * Matching on `displayName` would host RN's own Switch - same name, different
@@ -494,7 +518,9 @@ describe('Host children · tables cover the library', () => {
       const exported = (lib as Record<string, unknown>)[name];
       expect(exported).toBeDefined();
       const refused = errorFor(createElement(exported as never));
-      if (name === 'Switch') {
+      // Read the answer off the table rather than a second hand-written list, so
+      // this cannot drift when H2b moves another control across.
+      if (HOSTABLE_NAMES.includes(name)) {
         expect(refused).toBeNull();
       } else {
         expect(refused).not.toBeNull();

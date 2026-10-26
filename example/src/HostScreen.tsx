@@ -10,7 +10,7 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import { Host, Switch } from 'react-native-nitro-ui';
+import { Button, Host, Progress, Slider, Switch } from 'react-native-nitro-ui';
 
 /**
  * The `<Host>` screen.
@@ -21,10 +21,14 @@ import { Host, Switch } from 'react-native-nitro-ui';
  * rather than a number in a report. `Host` is opt-in and Android-only - iOS is the
  * documented passthrough, permanently (D23's outcome) - so nothing here is hidden.
  *
- * It is also the screen the real-input suite taps: `host-switch-*` carries an
- * accessibility label and the two `host-*` texts are the echoes it reads, so those
- * testIDs are part of a gate (`scripts/real-input/`) and not decoration. The harness
- * cases for the same behaviour are in `example/__tests__/Host.harness.tsx`.
+ * It is also the screen the real-input suite taps. Every `host-*` testID and every
+ * accessibility label on it is part of a gate (`scripts/real-input/`), not decoration:
+ * `host-switch-*` / `host-slider` / `host-button*` / `host-mixed-*` are how a check
+ * aims a real touch (Android reads the labels, iOS the identifiers), and
+ * `host-controlled-value`, `host-events-count`, `host-slider-value`,
+ * `host-button-presses` and `host-mixed-state` are the echoes it reads back. Renaming
+ * one fails a suite on two platforms. The harness cases for the same behaviour are in
+ * `example/__tests__/Host.harness.tsx`.
  */
 
 /** Switches in the batch. Enough to see a composition's cost, few enough to scroll. */
@@ -85,6 +89,25 @@ export default function HostScreen() {
     setBatchEvents((count) => count + 1);
   }, []);
 
+  // The Slider + Button Host (H2a). The two Buttons share one counter and both are
+  // given `onPress`, which is what makes the disabled half of the real-input check
+  // mean something: a library that let a disabled control press would move the number.
+  const [hostSlider, setHostSlider] = useState(0.4);
+  const [buttonPresses, setButtonPresses] = useState(0);
+  const countHostPress = useCallback(() => {
+    setButtonPresses((count) => count + 1);
+  }, []);
+
+  // The mixed Host: four kinds of control in one composition (brief item 5). The one
+  // echo below it is what both real-input suites read, so it shows all three kinds of
+  // answer at once - a switch state, a controlled value, a press count.
+  const [mixedOn, setMixedOn] = useState(false);
+  const [mixedValue, setMixedValue] = useState(0.5);
+  const [mixedPresses, setMixedPresses] = useState(0);
+  const countMixedPress = useCallback(() => {
+    setMixedPresses((count) => count + 1);
+  }, []);
+
   // Both halves of the comparison mount the same number of controls, at the same
   // pitch, in the same box - the only difference is who composes them.
   const batch = useMemo(
@@ -114,9 +137,10 @@ export default function HostScreen() {
           react-native-nitro-ui · Host
         </Text>
         <Text style={[styles.note, { color: ink.muted }]}>
-          Everything inside a Host is one Compose composition: N Switches, one
-          AndroidComposeView, one LayoutNode tree. Outside a Host every Switch
-          brings its own. On iOS a Host is a plain view today.
+          Everything inside a Host is one Compose composition: N controls, one
+          AndroidComposeView, one LayoutNode tree. Outside a Host each one
+          brings its own. Switch, Slider, Progress and Button can be hosted; on
+          iOS a Host is a plain view today.
         </Text>
 
         <Text style={[styles.section, { color: ink.ink }]}>
@@ -168,6 +192,109 @@ export default function HostScreen() {
             flip the first from JS
           </Text>
         </Pressable>
+
+        <Text style={[styles.section, { color: ink.ink }]}>
+          A Slider and a Button, one composition
+        </Text>
+        {/* The readouts sit above the box rather than below it because the
+            real-input suite has to be able to read them after it has scrolled to the
+            last control in the box: below, that scroll can push them off the screen
+            and the check cannot see what its own tap did. */}
+        <Row label="hosted Slider, as JS sees it">
+          <Text
+            testID="host-slider-value"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {hostSlider.toFixed(2)}
+          </Text>
+        </Row>
+        <Row label="presses the hosted Buttons share">
+          <Text
+            testID="host-button-presses"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {buttonPresses}
+          </Text>
+        </Row>
+        <View style={[styles.hostBox, { backgroundColor: ink.box }]}>
+          <Host style={styles.sliderButtonRows}>
+            <Slider
+              value={hostSlider}
+              onValueChange={setHostSlider}
+              testID="host-slider"
+              accessibilityLabel="Hosted slider"
+            />
+            <Button
+              title="Hosted action"
+              onPress={countHostPress}
+              accessibilityLabel="Hosted button"
+              testID="host-button"
+            />
+            <Button
+              title="Hosted action, disabled"
+              disabled
+              onPress={countHostPress}
+              accessibilityLabel="Hosted disabled button"
+              testID="host-button-disabled"
+            />
+          </Host>
+        </View>
+        <Text style={[styles.note, { color: ink.muted }]}>
+          The Slider fills the Host&apos;s width - its own style would only move
+          the frame React Native computes. The Buttons do not: an intrinsic
+          control sits at the column&apos;s leading edge at the width its title
+          needs (D24).
+        </Text>
+
+        <Text style={[styles.section, { color: ink.ink }]}>
+          Four kinds of control, one composition
+        </Text>
+        <Row label="mixed Host, as JS sees it">
+          <Text
+            testID="host-mixed-state"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {mixedOn ? 'on' : 'off'} {mixedValue.toFixed(2)} {mixedPresses}
+          </Text>
+        </Row>
+        <View style={[styles.hostBox, { backgroundColor: ink.box }]}>
+          <Host style={styles.mixedRows}>
+            <Switch
+              value={mixedOn}
+              onValueChange={setMixedOn}
+              testID="host-mixed-switch"
+              accessibilityLabel="Mixed switch"
+            />
+            <Slider
+              value={mixedValue}
+              onValueChange={setMixedValue}
+              testID="host-mixed-slider"
+              accessibilityLabel="Mixed slider"
+            />
+            <Progress
+              value={0.35}
+              testID="host-mixed-progress-linear"
+              accessibilityLabel="Mixed linear progress"
+            />
+            <Progress
+              variant="circular"
+              value={0.65}
+              testID="host-mixed-progress-circular"
+              accessibilityLabel="Mixed circular progress"
+            />
+            <Button
+              title="Mixed action"
+              onPress={countMixedPress}
+              accessibilityLabel="Mixed button"
+              testID="host-mixed-button"
+            />
+          </Host>
+        </View>
+        <Text style={[styles.note, { color: ink.muted }]}>
+          One Compose composition holds a switch, a slider, a bar, an indicator
+          and a button, and each of them still answers on its own: recomposition
+          stays per-child, so flipping the switch does not redraw the slider.
+        </Text>
 
         <Text style={[styles.section, { color: ink.ink }]}>
           {BATCH} Switches, {batchHosted ? 'in one Host' : 'each on its own'}
@@ -269,6 +396,13 @@ const styles = StyleSheet.create({
   // are the one number RN gets right about a hosted control (D24) - module-level so a
   // re-render never hands the Host a style object with a new identity.
   threeRows: { width: '100%', height: 3 * ROW },
+  // Generous rather than exact: a Host places from its top-leading edge and clips to
+  // its box, so extra height is only ever empty space at the bottom, while a Host that
+  // is too short loses a row. The Switch pitch (ROW) is the one the sizing engine
+  // agrees with; a Slider, Button or Progress draws its own height inside the box it
+  // is given, and RN does not know it (D24).
+  sliderButtonRows: { width: '100%', height: 170 },
+  mixedRows: { width: '100%', height: 280 },
   batchRows: { width: '100%', height: BATCH * ROW },
   hostBox: { borderRadius: 10, paddingVertical: 4 },
   actions: {

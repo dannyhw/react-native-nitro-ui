@@ -38,6 +38,11 @@ export interface NitroUiSwitchHandle {
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
   measureContent(): NitroUiSize;
+  /**
+   * Which composition guards this control's own view has armed - see
+   * `NitroUiSwitchMethods.nuiTestArmedGuards`.
+   */
+  nuiTestArmedGuards(): string;
 }
 
 /**

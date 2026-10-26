@@ -333,6 +333,7 @@ export interface SwitchProps extends ViewProps {
             width: number;
             height: number;
         };
+        nuiTestArmedGuards(): string;
     }) => void) | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;
