@@ -1,0 +1,375 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -workspace NitroUiExample.xcworkspace -scheme NitroUiExampleUITests -configuration Debug -destination id=F08675D3-A32B-4F88-BC81-02D7E0CB797E -derivedDataPath build -collect-test-diagnostics never "-only-testing:NitroUiExampleUITests/RealInputTests/testHostedSwitchAnswersARealTap" "-only-testing:NitroUiExampleUITests/RealInputTests/testHostedSliderAnswersARealDrag" "-only-testing:NitroUiExampleUITests/RealInputTests/testRealInputSwitch" "-only-testing:NitroUiExampleUITests/RealInputTests/testRealInputSlider"
+
+2026-10-26 05:32:18.643583+0000 NitroUiExampleUITests-Runner[31203:19034700] [Default] Running tests...
+2026-10-26 05:32:18.656252+0000 NitroUiExampleUITests-Runner[31203:19034700] [loading] Error loading /System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController (157):  dlopen(/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController, 0x0106): tried: '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/AppleSyntheticGameController' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/AppleSyntheticGameController' (no such file), '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/AppleSyntheticGameController' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/AppleSyntheticGameController' (no such file), '/Library/Developer/CoreSimulator/Volumes/iOS_24A434/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController' (no such file), '/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController' (fat file, but missing compatible architecture (have 'x86_64,arm64e,arm64e.x1', need 'arm64, arm64'))
+2026-10-26 05:32:18.656516+0000 NitroUiExampleUITests-Runner[31203:19034700] [plugin] Cannot find function pointer AppleSyntheticKeyboardFactory for factory <CFUUID 0x10568cdc0> FE4690BC-AD06-4704-BBFC-BF0894242B7D in CFBundle/CFPlugIn 0x1055c8700 </System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin> (bundle, not loaded)
+2026-10-26 05:32:18.656596+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] failed to create instance for plugin for <CFUUID 0x10568c140> 7DDEECA8-A7B4-11DA-8A0E-0014519758EF
+2026-10-26 05:32:18.658528+0000 NitroUiExampleUITests-Runner[31203:19034700] [loading] Error loading /System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController (157):  dlopen(/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController, 0x0106): tried: '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/AppleSyntheticGameController' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/AppleSyntheticGameController' (no such file), '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/AppleSyntheticGameController' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/AppleSyntheticGameController' (no such file), '/Library/Developer/CoreSimulator/Volumes/iOS_24A434/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController' (no such file), '/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController' (fat file, but missing compatible architecture (have 'x86_64,arm64e,arm64e.x1', need 'arm64, arm64'))
+2026-10-26 05:32:18.658651+0000 NitroUiExampleUITests-Runner[31203:19034700] [plugin] Cannot find function pointer AppleSyntheticXbox360ControllerFactory for factory <CFUUID 0x10568dc60> 2D34FEE1-E996-4D8C-8505-87BDD38F1F2C in CFBundle/CFPlugIn 0x1055c8700 </System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin> (bundle, not loaded)
+2026-10-26 05:32:18.658686+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] failed to create instance for plugin for <CFUUID 0x10568c140> 7DDEECA8-A7B4-11DA-8A0E-0014519758EF
+2026-10-26 05:32:18.658870+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] IOCreatePlugInInterfaceForService:0xe00002be for serviceID:0x10009ac50
+2026-10-26 05:32:18.661042+0000 NitroUiExampleUITests-Runner[31203:19034700] [loading] Error loading /System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin/Contents/MacOS/GCHIDLib (119):  dlopen(/System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin/Contents/MacOS/GCHIDLib, 0x0106): tried: '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/GCHIDLib' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/GCHIDLib' (no such file), '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/GCHIDLib' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/GCHIDLib' (no such file), '/Library/Developer/CoreSimulator/Volumes/iOS_24A434/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin/Contents/MacOS/GCHIDLib' (no such file), '/System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin/Contents/MacOS/GCHIDLib' (fat file, but missing compatible architecture (have 'x86_64,arm64e,arm64e.x1', need 'arm64, arm64'))
+2026-10-26 05:32:18.661212+0000 NitroUiExampleUITests-Runner[31203:19034700] [plugin] Cannot find function pointer GCHIDLibFactory for factory <CFUUID 0x10568e1e0> E071DA1B-55D5-4D29-B6BE-D47438269B7B in CFBundle/CFPlugIn 0x1055c87e0 </System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin> (bundle, not loaded)
+2026-10-26 05:32:18.661248+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] failed to create instance for plugin for <CFUUID 0x10568c140> 7DDEECA8-A7B4-11DA-8A0E-0014519758EF
+2026-10-26 05:32:18.661279+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] IOCreatePlugInInterfaceForService:0xe00002be for serviceID:0x10009ac32
+2026-10-26 05:32:18.681586+0000 NitroUiExampleUITests-Runner[31203:19034700] [loading] Error loading /System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController (157):  dlopen(/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController, 0x0106): tried: '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/AppleSyntheticGameController' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/AppleSyntheticGameController' (no such file), '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/AppleSyntheticGameController' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/AppleSyntheticGameController' (no such file), '/Library/Developer/CoreSimulator/Volumes/iOS_24A434/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController' (no such file), '/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController' (fat file, but missing compatible architecture (have 'x86_64,arm64e,arm64e.x1', need 'arm64, arm64'))
+2026-10-26 05:32:18.681791+0000 NitroUiExampleUITests-Runner[31203:19034700] [plugin] Cannot find function pointer AppleSyntheticKeyboardFactory for factory <CFUUID 0x10568cdc0> FE4690BC-AD06-4704-BBFC-BF0894242B7D in CFBundle/CFPlugIn 0x1055c8700 </System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin> (bundle, not loaded)
+2026-10-26 05:32:18.681834+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] failed to create instance for plugin for <CFUUID 0x10568c140> 7DDEECA8-A7B4-11DA-8A0E-0014519758EF
+2026-10-26 05:32:18.683734+0000 NitroUiExampleUITests-Runner[31203:19034700] [loading] Error loading /System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController (157):  dlopen(/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController, 0x0106): tried: '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/AppleSyntheticGameController' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/AppleSyntheticGameController' (no such file), '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/AppleSyntheticGameController' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/AppleSyntheticGameController' (no such file), '/Library/Developer/CoreSimulator/Volumes/iOS_24A434/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController' (no such file), '/System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin/Contents/MacOS/AppleSyntheticGameController' (fat file, but missing compatible architecture (have 'x86_64,arm64e,arm64e.x1', need 'arm64, arm64'))
+2026-10-26 05:32:18.683864+0000 NitroUiExampleUITests-Runner[31203:19034700] [plugin] Cannot find function pointer AppleSyntheticXbox360ControllerFactory for factory <CFUUID 0x10568dc60> 2D34FEE1-E996-4D8C-8505-87BDD38F1F2C in CFBundle/CFPlugIn 0x1055c8700 </System/Library/Extensions/AppleSyntheticGameController.kext/Contents/PlugIns/AppleSyntheticGameController.plugin> (bundle, not loaded)
+2026-10-26 05:32:18.683907+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] failed to create instance for plugin for <CFUUID 0x10568c140> 7DDEECA8-A7B4-11DA-8A0E-0014519758EF
+2026-10-26 05:32:18.683952+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] IOCreatePlugInInterfaceForService:0xe00002be for serviceID:0x10009ac50
+2026-10-26 05:32:18.685864+0000 NitroUiExampleUITests-Runner[31203:19034700] [loading] Error loading /System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin/Contents/MacOS/GCHIDLib (119):  dlopen(/System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin/Contents/MacOS/GCHIDLib, 0x0106): tried: '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/GCHIDLib' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/GCHIDLib' (no such file), '/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Build/Products/Debug-iphonesimulator/GCHIDLib' (no such file), '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/GCHIDLib' (no such file), '/Library/Developer/CoreSimulator/Volumes/iOS_24A434/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin/Contents/MacOS/GCHIDLib' (no such file), '/System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin/Contents/MacOS/GCHIDLib' (fat file, but missing compatible architecture (have 'x86_64,arm64e,arm64e.x1', need 'arm64, arm64'))
+2026-10-26 05:32:18.685994+0000 NitroUiExampleUITests-Runner[31203:19034700] [plugin] Cannot find function pointer GCHIDLibFactory for factory <CFUUID 0x10568e1e0> E071DA1B-55D5-4D29-B6BE-D47438269B7B in CFBundle/CFPlugIn 0x1055c87e0 </System/Library/Extensions/AppleGameControllerPersonality.kext/Contents/PlugIns/GCHIDLib.plugin> (bundle, not loaded)
+2026-10-26 05:32:18.686026+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] failed to create instance for plugin for <CFUUID 0x10568c140> 7DDEECA8-A7B4-11DA-8A0E-0014519758EF
+2026-10-26 05:32:18.686059+0000 NitroUiExampleUITests-Runner[31203:19034700] [default] IOCreatePlugInInterfaceForService:0xe00002be for serviceID:0x10009ac32
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-26 05:32:20.986.
+Test Suite 'NitroUiExampleUITests.xctest' started at 2026-10-26 05:32:20.986.
+Test Suite 'RealInputTests' started at 2026-10-26 05:32:20.986.
+Test Case '-[NitroUiExampleUITests.RealInputTests testHostedSliderAnswersARealDrag]' started.
+    t =     0.00s Start Test at 2026-10-26 05:32:20.988
+    t =     0.02s Set Up
+    t =     0.02s     Open nitroui.example
+    t =     0.02s         Launch nitroui.example
+2026-10-26 05:32:21.060 xcodebuild[31200:19034492] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-26 05:32:21.060 xcodebuild[31200:19034492] [MT] IDELaunchParametersSnapshot: no debugger version
+objc[31203]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_24A434/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x108370398) and /Library/Developer/CoreSimulator/Volumes/iOS_24A434/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x108878310). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     0.48s             Setting up automation session
+    t =     2.59s             Wait for nitroui.example to idle
+    t =     3.91s     Waiting 120.0s for "tab-switch" Any to exist
+<unknown>:0: warning: -[NitroUiExampleUITests.RealInputTests testHostedSliderAnswersARealDrag] : [Internal] Thread running at User-initiated quality-of-service class waiting on a thread without a QoS class specified (base priority 33). Investigate ways to avoid priority inversions
+    t =     4.96s         Checking `Expect predicate `existsNoRetry == 1` for object "tab-switch" Any`
+    t =     4.96s             Checking existence of `"tab-switch" Any`
+    t =     5.00s Checking existence of `"host-events-count" Any`
+    t =     5.04s Waiting 8.0s for Any (First Match) to exist
+    t =     6.12s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =     6.12s         Checking existence of `Any (First Match)`
+    t =     6.15s Find the Any (First Match)
+real-input (ios): hosted "Hosted slider" is drawn at (16.0, 435.00000762939453, 370.0, 44.0)
+    t =     6.18s Checking existence of `"host-slider-value" Any`
+    t =     6.22s Find the "host-slider-value" Any
+    t =     6.27s Find the "host-slider-value" StaticText
+    t =     6.31s Press "host-slider" Other[0.27, 0.50] for 0.3 seconds, then drag to "host-slider" Other[0.70, 0.50] with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =     6.31s     Wait for nitroui.example to idle
+    t =     6.32s     Find the "host-slider" Other
+    t =     6.35s     Check for interrupting elements affecting "host-slider" Other
+    t =     6.39s     Synthesize event
+    t =     6.39s         Find the "host-slider" Other
+    t =     6.43s         Find the "host-slider" Other
+    t =     6.46s         Find the "host-slider" Other
+    t =     6.50s         Find the "host-slider" Other
+    t =     6.53s         Find the "host-slider" Other
+    t =     7.41s     Wait for nitroui.example to idle
+    t =     8.51s Checking existence of `"host-slider-value" Any`
+    t =     8.56s Find the "host-slider-value" Any
+    t =     8.61s Find the "host-slider-value" StaticText
+    t =     8.66s Checking existence of `"host-events-count" Any`
+    t =     8.71s Find the "host-events-count" Any
+    t =     8.75s Find the "host-events-count" StaticText
+    t =     8.80s Tear Down
+Test Case '-[NitroUiExampleUITests.RealInputTests testHostedSliderAnswersARealDrag]' passed (9.044 seconds).
+Test Case '-[NitroUiExampleUITests.RealInputTests testHostedSwitchAnswersARealTap]' started.
+    t =     0.00s Start Test at 2026-10-26 05:32:30.034
+    t =     0.03s Set Up
+    t =     0.03s     Open nitroui.example
+    t =     0.03s         Launch nitroui.example
+    t =     0.03s             Terminate nitroui.example:31215
+2026-10-26 05:32:31.135 xcodebuild[31200:19034492] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-26 05:32:31.135 xcodebuild[31200:19034492] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.32s             Setting up automation session
+    t =     3.26s             Wait for nitroui.example to idle
+<unknown>:0: warning: -[NitroUiExampleUITests.RealInputTests testHostedSwitchAnswersARealTap] : [Internal] Thread running at User-initiated quality-of-service class waiting on a thread without a QoS class specified (base priority 33). Investigate ways to avoid priority inversions
+    t =     4.41s     Waiting 120.0s for "tab-switch" Any to exist
+    t =     5.48s         Checking `Expect predicate `existsNoRetry == 1` for object "tab-switch" Any`
+    t =     5.48s             Checking existence of `"tab-switch" Any`
+    t =     5.51s Checking existence of `"host-events-count" Any`
+    t =     5.57s Waiting 8.0s for Any (First Match) to exist
+    t =     6.63s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =     6.63s         Checking existence of `Any (First Match)`
+    t =     6.65s Find the Any (First Match)
+real-input (ios): hosted "Hosted switch 0" is drawn at (16.0, 303.00000762939453, 370.0, 44.0)
+    t =     6.68s Find the "host-switch-0" Other
+    t =     6.71s Waiting 8.0s for "host-switch-value" Any to exist
+    t =     7.76s     Checking `Expect predicate `existsNoRetry == 1` for object "host-switch-value" Any`
+    t =     7.76s         Checking existence of `"host-switch-value" Any`
+    t =     7.82s Find the "host-switch-value" Any
+    t =     7.86s Find the "host-switch-value" StaticText
+    t =     7.90s Checking existence of `"host-events-count" Any`
+    t =     7.94s Find the "host-events-count" Any
+    t =     7.98s Find the "host-events-count" StaticText
+    t =     8.03s Tap "host-switch-0" Other[0.50, 0.50]
+    t =     8.03s     Wait for nitroui.example to idle
+    t =     8.03s     Find the "host-switch-0" Other
+    t =     8.06s     Check for interrupting elements affecting "host-switch-0" Other
+    t =     8.09s     Synthesize event
+    t =     8.09s         Find the "host-switch-0" Other
+    t =     8.13s         Find the "host-switch-0" Other
+    t =     8.16s         Find the "host-switch-0" Other
+    t =     8.47s     Wait for nitroui.example to idle
+    t =     9.73s Checking existence of `"host-switch-value" Any`
+    t =     9.77s Find the "host-switch-value" Any
+    t =     9.82s Find the "host-switch-value" StaticText
+    t =     9.86s Checking existence of `"host-events-count" Any`
+    t =     9.90s Find the "host-events-count" Any
+    t =     9.94s Find the "host-events-count" StaticText
+    t =     9.99s Checking existence of `Any (First Match)`
+    t =    10.01s Find the Any (First Match)
+    t =    10.07s Find the "host-switch-0" Other
+    t =    10.09s Waiting 8.0s for Any (First Match) to exist
+    t =    11.14s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    11.14s         Checking existence of `Any (First Match)`
+    t =    11.18s Find the Any (First Match)
+real-input (ios): hosted "Hosted switch 0" is drawn at (16.0, 303.00000762939453, 370.0, 44.0)
+    t =    11.22s Tap "host-switch-0" Other[0.50, 0.50]
+    t =    11.22s     Wait for nitroui.example to idle
+    t =    11.22s     Find the "host-switch-0" Other
+    t =    11.25s     Check for interrupting elements affecting "host-switch-0" Other
+    t =    11.27s     Synthesize event
+    t =    11.28s         Find the "host-switch-0" Other
+    t =    11.31s         Find the "host-switch-0" Other
+    t =    11.34s         Find the "host-switch-0" Other
+    t =    11.65s     Wait for nitroui.example to idle
+    t =    12.89s Checking existence of `"host-switch-value" Any`
+    t =    12.94s Find the "host-switch-value" Any
+    t =    12.99s Find the "host-switch-value" StaticText
+    t =    13.04s Waiting 10.0s for "host-js-toggle" Any to exist
+    t =    14.10s     Checking `Expect predicate `existsNoRetry == 1` for object "host-js-toggle" Any`
+    t =    14.10s         Checking existence of `"host-js-toggle" Any`
+    t =    14.14s Tap "host-js-toggle" Any[0.50, 0.50]
+    t =    14.14s     Wait for nitroui.example to idle
+    t =    14.14s     Find the "host-js-toggle" Any
+    t =    14.19s     Check for interrupting elements affecting "host-js-toggle" Other
+    t =    14.21s     Synthesize event
+    t =    14.21s         Find the "host-js-toggle" Other
+    t =    14.26s         Find the "host-js-toggle" Other
+    t =    14.31s         Find the "host-js-toggle" Other
+    t =    14.66s     Wait for nitroui.example to idle
+    t =    14.82s Checking existence of `"host-switch-value" Any`
+    t =    14.86s Find the "host-switch-value" Any
+    t =    14.90s Find the "host-switch-value" StaticText
+    t =    14.94s Tear Down
+Test Case '-[NitroUiExampleUITests.RealInputTests testHostedSwitchAnswersARealTap]' passed (15.190 seconds).
+Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSlider]' started.
+    t =     0.00s Start Test at 2026-10-26 05:32:45.224
+    t =     0.02s Set Up
+    t =     0.02s     Open nitroui.example
+    t =     0.02s         Launch nitroui.example
+    t =     0.02s             Terminate nitroui.example:31280
+2026-10-26 05:32:46.326 xcodebuild[31200:19034492] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-26 05:32:46.326 xcodebuild[31200:19034492] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.31s             Setting up automation session
+    t =     3.21s             Wait for nitroui.example to idle
+<unknown>:0: warning: -[NitroUiExampleUITests.RealInputTests testRealInputSlider] : [Internal] Thread running at User-initiated quality-of-service class waiting on a thread without a QoS class specified (base priority 33). Investigate ways to avoid priority inversions
+    t =     4.40s     Waiting 120.0s for "tab-switch" Any to exist
+    t =     5.47s         Checking `Expect predicate `existsNoRetry == 1` for object "tab-switch" Any`
+    t =     5.47s             Checking existence of `"tab-switch" Any`
+    t =     5.52s Checking existence of `"slider-start-count" Any`
+    t =     5.62s Waiting 10.0s for "tab-slider" Any to exist
+    t =     6.66s     Checking `Expect predicate `existsNoRetry == 1` for object "tab-slider" Any`
+    t =     6.66s         Checking existence of `"tab-slider" Any`
+    t =     6.68s Tap "tab-slider" Any[0.50, 0.50]
+    t =     6.68s     Wait for nitroui.example to idle
+    t =     6.68s     Find the "tab-slider" Any
+    t =     6.70s     Check for interrupting elements affecting "tab-slider" Other
+    t =     6.73s     Synthesize event
+    t =     6.73s         Find the "tab-slider" Other
+    t =     6.75s         Find the "tab-slider" Other
+    t =     6.76s         Find the "tab-slider" Other
+    t =     7.06s     Wait for nitroui.example to idle
+    t =     7.41s Waiting 8.0s for "slider-start-count" Any to exist
+    t =     8.46s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-start-count" Any`
+    t =     8.46s         Checking existence of `"slider-start-count" Any`
+    t =     8.56s Waiting 10.0s for "slider-phases" Any to exist
+    t =     9.61s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-phases" Any`
+    t =     9.61s         Checking existence of `"slider-phases" Any`
+    t =     9.70s Waiting 8.0s for "slider-start-count" Any to exist
+    t =    10.75s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-start-count" Any`
+    t =    10.75s         Checking existence of `"slider-start-count" Any`
+    t =    10.84s Find the "slider-start-count" Any
+    t =    10.93s Find the "slider-start-count" StaticText
+    t =    11.02s Waiting 8.0s for "slider-change-count" Any to exist
+    t =    12.08s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-change-count" Any`
+    t =    12.08s         Checking existence of `"slider-change-count" Any`
+    t =    12.18s Find the "slider-change-count" Any
+    t =    12.28s Find the "slider-change-count" StaticText
+    t =    12.38s Waiting 8.0s for "slider-complete-count" Any to exist
+    t =    13.41s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-complete-count" Any`
+    t =    13.41s         Checking existence of `"slider-complete-count" Any`
+    t =    13.52s Find the "slider-complete-count" Any
+    t =    13.62s Find the "slider-complete-count" StaticText
+    t =    13.71s Press "slider-phases" Any[0.50, 0.50] for 0.3 seconds, then drag to "slider-phases" Any[0.90, 0.50] with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =    13.71s     Wait for nitroui.example to idle
+    t =    13.72s     Find the "slider-phases" Any
+    t =    13.81s     Check for interrupting elements affecting "slider-phases" Other
+    t =    13.97s     Synthesize event
+    t =    13.97s         Find the "slider-phases" Other
+    t =    14.06s         Find the "slider-phases" Other
+    t =    14.16s         Find the "slider-phases" Other
+    t =    14.25s         Find the "slider-phases" Other
+    t =    14.34s         Find the "slider-phases" Other
+    t =    15.25s     Wait for nitroui.example to idle
+    t =    16.34s Checking existence of `"slider-complete-count" Any`
+    t =    16.45s Find the "slider-complete-count" Any
+    t =    16.54s Find the "slider-complete-count" StaticText
+    t =    16.63s Waiting 8.0s for "slider-start-count" Any to exist
+    t =    17.67s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-start-count" Any`
+    t =    17.67s         Checking existence of `"slider-start-count" Any`
+    t =    17.78s Find the "slider-start-count" Any
+    t =    17.87s Find the "slider-start-count" StaticText
+    t =    17.95s Waiting 8.0s for "slider-complete-count" Any to exist
+    t =    18.99s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-complete-count" Any`
+    t =    18.99s         Checking existence of `"slider-complete-count" Any`
+    t =    19.09s Find the "slider-complete-count" Any
+    t =    19.19s Find the "slider-complete-count" StaticText
+    t =    19.29s Waiting 8.0s for "slider-change-count" Any to exist
+    t =    20.36s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-change-count" Any`
+    t =    20.36s         Checking existence of `"slider-change-count" Any`
+    t =    20.45s Find the "slider-change-count" Any
+    t =    20.55s Find the "slider-change-count" StaticText
+    t =    20.64s Waiting 8.0s for "slider-phase-value" Any to exist
+    t =    21.69s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-phase-value" Any`
+    t =    21.69s         Checking existence of `"slider-phase-value" Any`
+    t =    21.80s Find the "slider-phase-value" Any
+    t =    21.90s Find the "slider-phase-value" StaticText
+    t =    22.00s Press "slider-phases" Other[0.92, 0.50] for 0.3 seconds, then drag to "slider-phases" Other[0.10, 0.50] with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =    22.00s     Wait for nitroui.example to idle
+    t =    22.01s     Find the "slider-phases" Other
+    t =    22.10s     Check for interrupting elements affecting "slider-phases" Other
+    t =    22.25s     Synthesize event
+    t =    22.25s         Find the "slider-phases" Other
+    t =    22.35s         Find the "slider-phases" Other
+    t =    22.44s         Find the "slider-phases" Other
+    t =    22.54s         Find the "slider-phases" Other
+    t =    22.63s         Find the "slider-phases" Other
+    t =    23.86s     Wait for nitroui.example to idle
+    t =    24.94s Checking existence of `"slider-complete-count" Any`
+    t =    25.05s Find the "slider-complete-count" Any
+    t =    25.14s Find the "slider-complete-count" StaticText
+    t =    25.24s Waiting 8.0s for "slider-start-count" Any to exist
+    t =    26.31s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-start-count" Any`
+    t =    26.31s         Checking existence of `"slider-start-count" Any`
+    t =    26.42s Find the "slider-start-count" Any
+    t =    26.52s Find the "slider-start-count" StaticText
+    t =    26.62s Waiting 8.0s for "slider-complete-count" Any to exist
+    t =    27.67s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-complete-count" Any`
+    t =    27.67s         Checking existence of `"slider-complete-count" Any`
+    t =    27.79s Find the "slider-complete-count" Any
+    t =    27.88s Find the "slider-complete-count" StaticText
+    t =    27.97s Waiting 8.0s for "slider-phase-value" Any to exist
+    t =    29.01s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-phase-value" Any`
+    t =    29.01s         Checking existence of `"slider-phase-value" Any`
+    t =    29.12s Find the "slider-phase-value" Any
+    t =    29.22s Find the "slider-phase-value" StaticText
+    t =    29.32s Waiting 10.0s for "slider-controlled" Any to exist
+    t =    30.36s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-controlled" Any`
+    t =    30.36s         Checking existence of `"slider-controlled" Any`
+    t =    30.44s Waiting 8.0s for "slider-controlled-value" Any to exist
+    t =    31.49s     Checking `Expect predicate `existsNoRetry == 1` for object "slider-controlled-value" Any`
+    t =    31.49s         Checking existence of `"slider-controlled-value" Any`
+    t =    31.57s Find the "slider-controlled-value" Any
+    t =    31.66s Find the "slider-controlled-value" StaticText
+    t =    31.74s Press "slider-controlled" Any[0.27, 0.50] for 0.3 seconds, then drag to "slider-controlled" Any[0.80, 0.50] with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =    31.74s     Wait for nitroui.example to idle
+    t =    31.74s     Find the "slider-controlled" Any
+    t =    31.83s     Check for interrupting elements affecting "slider-controlled" Other
+    t =    31.97s     Synthesize event
+    t =    31.97s         Find the "slider-controlled" Other
+    t =    32.05s         Find the "slider-controlled" Other
+    t =    32.15s         Find the "slider-controlled" Other
+    t =    32.24s         Find the "slider-controlled" Other
+    t =    32.33s         Find the "slider-controlled" Other
+    t =    33.34s     Wait for nitroui.example to idle
+    t =    34.44s Checking existence of `"slider-controlled-value" Any`
+    t =    34.54s Find the "slider-controlled-value" Any
+    t =    34.63s Find the "slider-controlled-value" StaticText
+    t =    34.71s Tear Down
+Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSlider]' passed (34.961 seconds).
+Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' started.
+    t =     0.00s Start Test at 2026-10-26 05:33:20.186
+    t =     0.03s Set Up
+    t =     0.03s     Open nitroui.example
+    t =     0.03s         Launch nitroui.example
+    t =     0.03s             Terminate nitroui.example:31327
+2026-10-26 05:33:21.264 xcodebuild[31200:19034492] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-26 05:33:21.264 xcodebuild[31200:19034492] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.28s             Setting up automation session
+    t =     3.22s             Wait for nitroui.example to idle
+<unknown>:0: warning: -[NitroUiExampleUITests.RealInputTests testRealInputSwitch] : [Internal] Thread running at User-initiated quality-of-service class waiting on a thread without a QoS class specified (base priority 33). Investigate ways to avoid priority inversions
+    t =     4.40s     Waiting 120.0s for "tab-switch" Any to exist
+    t =     5.46s         Checking `Expect predicate `existsNoRetry == 1` for object "tab-switch" Any`
+    t =     5.46s             Checking existence of `"tab-switch" Any`
+    t =     5.49s Checking existence of `"switch-controlled-value" Any`
+    t =     5.58s Waiting 10.0s for "tab-switch" Any to exist
+    t =     6.63s     Checking `Expect predicate `existsNoRetry == 1` for object "tab-switch" Any`
+    t =     6.63s         Checking existence of `"tab-switch" Any`
+    t =     6.64s Tap "tab-switch" Any[0.50, 0.50]
+    t =     6.64s     Wait for nitroui.example to idle
+    t =     6.64s     Find the "tab-switch" Any
+    t =     6.66s     Check for interrupting elements affecting "tab-switch" Other
+    t =     6.68s     Synthesize event
+    t =     6.68s         Find the "tab-switch" Other
+    t =     6.70s         Find the "tab-switch" Other
+    t =     6.72s         Find the "tab-switch" Other
+    t =     7.02s     Wait for nitroui.example to idle
+    t =     7.34s Waiting 8.0s for "switch-controlled-value" Any to exist
+    t =     8.38s     Checking `Expect predicate `existsNoRetry == 1` for object "switch-controlled-value" Any`
+    t =     8.38s         Checking existence of `"switch-controlled-value" Any`
+    t =     8.49s Waiting 10.0s for "switch-controlled" Any to exist
+    t =     9.50s     Checking `Expect predicate `existsNoRetry == 1` for object "switch-controlled" Any`
+    t =     9.50s         Checking existence of `"switch-controlled" Any`
+    t =     9.63s Find the "switch-controlled" Any
+    t =     9.74s Waiting 8.0s for "switch-controlled-value" Any to exist
+    t =    10.78s     Checking `Expect predicate `existsNoRetry == 1` for object "switch-controlled-value" Any`
+    t =    10.78s         Checking existence of `"switch-controlled-value" Any`
+    t =    10.90s Find the "switch-controlled-value" Any
+    t =    11.00s Find the "switch-controlled-value" StaticText
+    t =    11.11s Tap "switch-controlled" Other[0.50, 0.50]
+    t =    11.11s     Wait for nitroui.example to idle
+    t =    11.12s     Find the "switch-controlled" Other
+    t =    11.22s     Check for interrupting elements affecting "switch-controlled" Other
+    t =    11.48s     Synthesize event
+    t =    11.48s         Find the "switch-controlled" Other
+    t =    11.59s         Find the "switch-controlled" Other
+    t =    11.69s         Find the "switch-controlled" Other
+    t =    12.09s     Wait for nitroui.example to idle
+    t =    13.37s Checking existence of `"switch-controlled-value" Any`
+    t =    13.49s Find the "switch-controlled-value" Any
+    t =    13.60s Find the "switch-controlled-value" StaticText
+    t =    13.70s Checking existence of `"switch-controlled" Any`
+    t =    13.81s Find the "switch-controlled" Any
+    t =    13.94s Find the "switch-controlled" Other
+    t =    14.04s Waiting 10.0s for "switch-controlled" Any to exist
+    t =    15.08s     Checking `Expect predicate `existsNoRetry == 1` for object "switch-controlled" Any`
+    t =    15.08s         Checking existence of `"switch-controlled" Any`
+    t =    15.18s Tap "switch-controlled" Any[0.50, 0.50]
+    t =    15.18s     Wait for nitroui.example to idle
+    t =    15.18s     Find the "switch-controlled" Any
+    t =    15.28s     Check for interrupting elements affecting "switch-controlled" Other
+    t =    15.49s     Synthesize event
+    t =    15.49s         Find the "switch-controlled" Other
+    t =    15.61s         Find the "switch-controlled" Other
+    t =    15.72s         Find the "switch-controlled" Other
+    t =    16.13s     Wait for nitroui.example to idle
+    t =    17.41s Checking existence of `"switch-controlled-value" Any`
+    t =    17.52s Find the "switch-controlled-value" Any
+    t =    17.62s Find the "switch-controlled-value" StaticText
+    t =    17.73s Tear Down
+Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' passed (17.943 seconds).
+Test Suite 'RealInputTests' passed at 2026-10-26 05:33:38.129.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 77.139 (77.143) seconds
+Test Suite 'NitroUiExampleUITests.xctest' passed at 2026-10-26 05:33:38.130.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 77.139 (77.144) seconds
+Test Suite 'Selected tests' passed at 2026-10-26 05:33:38.130.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 77.139 (77.144) seconds
+2026-10-26 05:33:38.424 xcodebuild[31200:19034492] [MT] IDETestOperationsObserverDebug: 80.763 elapsed -- Testing started completed.
+2026-10-26 05:33:38.424 xcodebuild[31200:19034492] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-26 05:33:38.424 xcodebuild[31200:19034492] [MT] IDETestOperationsObserverDebug: 80.763 sec, +80.763 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/daniel.williams/Developer/oss/nitro-ui-worktrees/T17/example/ios/build/Logs/Test/Test-NitroUiExampleUITests-2026.10.26_05-32-17-+0000.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

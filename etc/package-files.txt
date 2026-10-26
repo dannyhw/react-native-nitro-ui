@@ -10,6 +10,7 @@ android/src/main/cpp/NitroUiSizingJni.hpp
 android/src/main/cpp/cpp-adapter.cpp
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiProgress.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt
@@ -32,6 +33,7 @@ cpp/core/NitroUiPerf.hpp
 cpp/core/NitroUiSizing.hpp
 ios/components/Button/HybridNitroUiButton.swift
 ios/components/DatePicker/HybridNitroUiDatePicker.swift
+ios/components/Host/HybridNitroUiHost.swift
 ios/components/Progress/HybridNitroUiProgress.swift
 ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift
 ios/components/Slider/HybridNitroUiSlider.swift
@@ -41,6 +43,7 @@ ios/core/NitroSwiftUIHost.swift
 ios/core/NitroUIContent.swift
 ios/core/NitroUiDeclaredFallbacks.swift
 ios/core/NitroUiDeclaredFallbacksLoader.m
+ios/core/NitroUiHost.swift
 ios/core/NitroUiMainThread.swift
 ios/core/NitroUiModel.swift
 ios/core/UIColor+NitroUiColor.swift
@@ -64,6 +67,14 @@ lib/module/components/DatePicker/NativeNitroUiDatePicker.js
 lib/module/components/DatePicker/NativeNitroUiDatePicker.js.map
 lib/module/components/DatePicker/NitroUiDatePickerConfig.js
 lib/module/components/DatePicker/NitroUiDatePickerConfig.js.map
+lib/module/components/Host/Host.js
+lib/module/components/Host/Host.js.map
+lib/module/components/Host/Host.nitro.js
+lib/module/components/Host/Host.nitro.js.map
+lib/module/components/Host/NativeNitroUiHost.js
+lib/module/components/Host/NativeNitroUiHost.js.map
+lib/module/components/Host/NitroUiHostConfig.js
+lib/module/components/Host/NitroUiHostConfig.js.map
 lib/module/components/Progress/NativeNitroUiProgress.js
 lib/module/components/Progress/NativeNitroUiProgress.js.map
 lib/module/components/Progress/NitroUiProgressConfig.js
@@ -132,6 +143,14 @@ lib/typescript/src/components/DatePicker/NativeNitroUiDatePicker.d.ts
 lib/typescript/src/components/DatePicker/NativeNitroUiDatePicker.d.ts.map
 lib/typescript/src/components/DatePicker/NitroUiDatePickerConfig.d.ts
 lib/typescript/src/components/DatePicker/NitroUiDatePickerConfig.d.ts.map
+lib/typescript/src/components/Host/Host.d.ts
+lib/typescript/src/components/Host/Host.d.ts.map
+lib/typescript/src/components/Host/Host.nitro.d.ts
+lib/typescript/src/components/Host/Host.nitro.d.ts.map
+lib/typescript/src/components/Host/NativeNitroUiHost.d.ts
+lib/typescript/src/components/Host/NativeNitroUiHost.d.ts.map
+lib/typescript/src/components/Host/NitroUiHostConfig.d.ts
+lib/typescript/src/components/Host/NitroUiHostConfig.d.ts.map
 lib/typescript/src/components/Progress/NativeNitroUiProgress.d.ts
 lib/typescript/src/components/Progress/NativeNitroUiProgress.d.ts.map
 lib/typescript/src/components/Progress/NitroUiProgressConfig.d.ts
@@ -187,6 +206,8 @@ nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiHostSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiHostSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSegmentedControlSpec.cpp
@@ -210,6 +231,8 @@ nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.cpp
@@ -223,6 +246,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_bool_doubl
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_double_double.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiButtonSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiDatePickerSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiHostSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiProgressSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControlSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSliderSpec.kt
@@ -240,6 +264,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiB
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiDatePickerManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiDatePickerStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiHostManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiHostStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiProgressManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiProgressStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSegmentedControlManager.kt
@@ -262,6 +288,8 @@ nitrogen/generated/ios/c++/HybridNitroUiButtonSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiButtonSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiDatePickerSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiDatePickerSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiHostSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiHostSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiProgressSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiProgressSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiSegmentedControlSpecSwift.cpp
@@ -272,6 +300,7 @@ nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.hpp
 nitrogen/generated/ios/c++/views/HybridNitroUiButtonComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiDatePickerComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiHostComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiProgressComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSegmentedControlComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSliderComponent.mm
@@ -283,6 +312,8 @@ nitrogen/generated/ios/swift/HybridNitroUiButtonSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiButtonSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiDatePickerSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiDatePickerSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiHostSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiHostSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiProgressSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiProgressSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiSegmentedControlSpec.swift
@@ -305,6 +336,8 @@ nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiDatePickerSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiDatePickerSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiHostSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiHostSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiSegmentedControlSpec.cpp
@@ -325,6 +358,8 @@ nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.cpp
@@ -335,6 +370,7 @@ nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.hpp
 nitrogen/generated/shared/json/NitroUiButtonConfig.json
 nitrogen/generated/shared/json/NitroUiDatePickerConfig.json
+nitrogen/generated/shared/json/NitroUiHostConfig.json
 nitrogen/generated/shared/json/NitroUiProgressConfig.json
 nitrogen/generated/shared/json/NitroUiSegmentedControlConfig.json
 nitrogen/generated/shared/json/NitroUiSliderConfig.json
@@ -350,6 +386,10 @@ src/components/DatePicker/DatePicker.nitro.ts
 src/components/DatePicker/DatePicker.tsx
 src/components/DatePicker/NativeNitroUiDatePicker.ts
 src/components/DatePicker/NitroUiDatePickerConfig.ts
+src/components/Host/Host.nitro.ts
+src/components/Host/Host.tsx
+src/components/Host/NativeNitroUiHost.ts
+src/components/Host/NitroUiHostConfig.ts
 src/components/Progress/NativeNitroUiProgress.ts
 src/components/Progress/NitroUiProgressConfig.ts
 src/components/Progress/Progress.nitro.ts

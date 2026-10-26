@@ -7,6 +7,7 @@
 import { ColorValue } from 'react-native';
 import type { HybridObject } from 'react-native-nitro-modules';
 import { JSX } from 'react';
+import { ReactNode } from 'react';
 import { ViewProps } from 'react-native';
 
 // @public
@@ -87,6 +88,15 @@ export interface DatePickerProps extends ViewProps {
 
 // @public
 export type DatePickerVariant = 'compact' | 'inline' | 'wheel';
+
+// @public
+export function Host(input: HostProps): JSX.Element;
+
+// @public
+export interface HostProps extends ViewProps {
+    // (undocumented)
+    children?: ReactNode;
+}
 
 // @public
 export interface NitroUiCore extends HybridObject<{

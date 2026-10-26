@@ -1575,10 +1575,14 @@ describe('the DatePicker cells (--component date-picker)', () => {
       component: 'date-picker',
       platform: 'android',
     });
+    // `nitro-ui-host` (T17) is scheduled here and *refuses* the cell at runtime:
+    // an arm that implements some components and not others declares its scope
+    // (`BenchImplementation.components`) and records a `skip`, which keeps this
+    // list a list of platform gaps rather than a list of arm scopes.
     expect(
       [...new Set(android.map((entry) => entry.implementation))].sort()
-    ).toEqual(['nitro-ui', 'rn-core']);
-    expect(android.length).toBe(3 * 2 * 4);
+    ).toEqual(['nitro-ui', 'nitro-ui-host', 'rn-core']);
+    expect(android.length).toBe(3 * 3 * 4);
   });
 
   /** The exclusion is a property of the platform, not of the arm or the cell. */

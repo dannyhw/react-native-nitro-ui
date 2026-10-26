@@ -10,6 +10,7 @@
 // Include C++ implementation defined types
 #include "HybridNitroUiButtonSpecSwift.hpp"
 #include "HybridNitroUiDatePickerSpecSwift.hpp"
+#include "HybridNitroUiHostSpecSwift.hpp"
 #include "HybridNitroUiProgressSpecSwift.hpp"
 #include "HybridNitroUiSegmentedControlSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
@@ -64,6 +65,22 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiDatePickerSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiHostSpec>
+  std::shared_ptr<HybridNitroUiHostSpec> create_std__shared_ptr_HybridNitroUiHostSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiHostSpec_cxx swiftPart = NitroUi::HybridNitroUiHostSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiHostSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiHostSpec_(std__shared_ptr_HybridNitroUiHostSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiHostSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiHostSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiHostSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiHostSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
   

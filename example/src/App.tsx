@@ -11,13 +11,20 @@ import {
 } from 'react-native';
 import ButtonScreen from './ButtonScreen';
 import DatePickerScreen from './DatePickerScreen';
+import HostSpikeScreen from './HostSpikeScreen';
 import ProgressScreen from './ProgressScreen';
 import SliderScreen from './SliderScreen';
 import SegmentedControlScreen from './SegmentedControlScreen';
 import SwitchScreen from './SwitchScreen';
 
 type Screen =
-  'switch' | 'slider' | 'button' | 'progress' | 'segmented' | 'datepicker';
+  | 'switch'
+  | 'slider'
+  | 'button'
+  | 'progress'
+  | 'segmented'
+  | 'datepicker'
+  | 'host';
 
 /**
  * Which screen a cold launch shows.
@@ -58,6 +65,7 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'progress', label: 'Progress' },
   { id: 'segmented', label: 'Segments' },
   { id: 'datepicker', label: 'Dates' },
+  { id: 'host', label: 'Host' },
 ];
 
 /**
@@ -103,6 +111,7 @@ export default function App() {
         {screen === 'progress' ? <ProgressScreen /> : null}
         {screen === 'segmented' ? <SegmentedControlScreen /> : null}
         {screen === 'datepicker' ? <DatePickerScreen /> : null}
+        {screen === 'host' ? <HostSpikeScreen /> : null}
       </View>
     </View>
   );
@@ -117,7 +126,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   tabs: {
+    // Wraps rather than overflows: seven tabs do not fit on a 402 pt window, and
+    // a tab drawn past the edge cannot be tapped (T17 found this by adding an
+    // eighth screen and watching XCUITest tap nothing).
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 4,
     paddingHorizontal: 4,
     paddingBottom: 4,

@@ -1,6 +1,7 @@
 import {
   Button,
   DatePicker,
+  Host,
   Progress,
   SegmentedControl,
   Slider,
@@ -23,6 +24,7 @@ import {
   rowStyle,
   segmentedOptions,
   sliderValue,
+  stackStyle,
 } from './shared';
 
 /**
@@ -96,6 +98,65 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
     });
   }
   return marks;
+}
+
+/**
+ * `n` nitro-ui controls composed as children of ONE shared `<Host>`.
+ *
+ * T17's subject. Same props as {@link NitroUiList} - same `testID` shape apart
+ * from the arm prefix, same `rowStyle`, same stable no-op handler - so the only
+ * difference the runner measures is where the platform view tree lives: one
+ * hosting controller for the batch instead of one per control.
+ *
+ * Switch and Slider only, which is what the spike implements; anything else is a
+ * plan bug and throws rather than publishing a number nobody asked for.
+ */
+export function NitroUiHostList({
+  n,
+  value,
+  perfMarks,
+  component,
+}: BenchListProps) {
+  if (n === 0) {
+    return null;
+  }
+  const style = rowStyle(component);
+  const stack = stackStyle(n, component);
+  if (component === 'switch') {
+    return (
+      <Host style={stack}>
+        {range(n).map((index) => (
+          <Switch
+            key={index}
+            testID={`bench-nitro-ui-host-${String(index)}`}
+            value={value}
+            onValueChange={onValueChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </Host>
+    );
+  }
+  if (component === 'slider') {
+    return (
+      <Host style={stack}>
+        {range(n).map((index) => (
+          <Slider
+            key={index}
+            testID={`bench-nitro-ui-host-slider-${String(index)}`}
+            value={sliderValue(value)}
+            onValueChange={onSliderChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </Host>
+    );
+  }
+  throw new Error(
+    `nitro-ui-host implements Switch and Slider only, got ${component}`
+  );
 }
 
 /**
