@@ -401,11 +401,20 @@ function buildAndroid({ abis, abisFrom, clean, log }) {
         'output, re-running packageDebug'
     );
     // `--rerun` skips the up-to-date checks for every task in this graph, which
-    // is the documented fix for a generated hybrid that never got dexed.
-    run(gradlew, [':app:packageDebug', '--rerun', ...architectures], {
-      cwd: androidDir,
-      env: buildEnv(),
-    });
+    // is the documented fix for a generated hybrid that never got dexed. The
+    // gradle arguments have to match the build above exactly, init script
+    // included: without it the rerun is a different configuration-cache key and
+    // a CMake reconfigure with no launcher, so the slowest possible path becomes
+    // the one the safety net takes - and it forces the same reconfigure again on
+    // the next normal build.
+    run(
+      gradlew,
+      [':app:packageDebug', '--rerun', ...architectures, ...ccache.gradleArgs],
+      {
+        cwd: androidDir,
+        env: buildEnv(),
+      }
+    );
     const second = inspectArtifact({
       platform: 'android',
       artifact: apk,
@@ -442,6 +451,15 @@ function main(argv) {
   const force = argv.includes('--force');
   const noStamp = argv.includes('--no-stamp');
 
+  // Resolved before the skip decision, not after it: the ABIs are part of what
+  // the caller asked for, and an artifact that does not contain them is not the
+  // build that was requested even when the code tree matches (review M1).
+  const { abis, source: abisFrom } = resolveAndroidAbis({
+    flag: parseArg(argv, '--arch'),
+    env: process.env,
+    hostArch: os.arch(),
+  });
+
   // Nothing changed since the last build, and the artifact still proves it? Then
   // there is nothing to build. The check is the same one the device gates run,
   // so "fresh" cannot mean one thing here and another thing there; anything it
@@ -454,6 +472,9 @@ function main(argv) {
       noStamp,
       fresh: decision.ok,
       freshReason: decision.ok ? null : decision.problems[0],
+      platform,
+      abis,
+      stampedAbis: decision.stamp?.abis ?? null,
     });
     if (skip.skip) {
       process.stdout.write(
@@ -469,12 +490,6 @@ function main(argv) {
     log(`building: ${skip.reason}`);
   }
 
-  const { abis, source: abisFrom } = resolveAndroidAbis({
-    flag: parseArg(argv, '--arch'),
-    env: process.env,
-    hostArch: os.arch(),
-  });
-
   const startedAt = Date.now();
   const { artifact, treeBefore } =
     platform === 'ios'
@@ -483,7 +498,13 @@ function main(argv) {
 
   const stamp = noStamp
     ? null
-    : recordBuild({ platform, artifact, treeBefore, log });
+    : recordBuild({
+        platform,
+        artifact,
+        treeBefore,
+        abis: platform === 'android' ? abis : null,
+        log,
+      });
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(0);
   const tree = currentCodeTree();
   process.stdout.write(

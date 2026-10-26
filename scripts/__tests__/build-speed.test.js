@@ -22,6 +22,7 @@ import {
   ccacheEffectiveForWorktrees,
   ccacheRequested,
   decideSkipBuild,
+  abisMatch,
   gradleArchArgs,
   gradleCcacheArgs,
   hostAbi,
@@ -144,13 +145,33 @@ describe('ccache', () => {
 });
 
 describe('decideSkipBuild', () => {
-  const fresh = { force: false, clean: false, noStamp: false, fresh: true };
+  // A stamp that answers every question the skip asks, including which ABIs are
+  // in the artifact. The shape is deliberate: the Android case has to state the
+  // ABIs, because that is the one place a tree match alone can lie (review M1).
+  const fresh = {
+    force: false,
+    clean: false,
+    noStamp: false,
+    fresh: true,
+    platform: 'android',
+    abis: 'arm64-v8a',
+    stampedAbis: 'arm64-v8a',
+  };
 
   it('skips only the build that is genuinely already done', () => {
     expect(decideSkipBuild(fresh)).toEqual({
       skip: true,
       reason: 'app.stamp matches this tree',
     });
+    // iOS has no ABIs to agree on; the tree and the binary are the whole claim.
+    expect(
+      decideSkipBuild({
+        ...fresh,
+        platform: 'ios',
+        abis: null,
+        stampedAbis: null,
+      }).skip
+    ).toBe(true);
   });
 
   it('never overrides the caller asking for a build', () => {
@@ -181,6 +202,55 @@ describe('decideSkipBuild', () => {
         fresh: false,
       }).reason
     ).toBe('no matching app.stamp');
+  });
+
+  // The artifact path is fixed per worktree, so an arm64-v8a APK and an x86_64
+  // one are the same file, and the code tree does not move when only `--arch`
+  // does. Without this check the run that asks for an x86_64 emulator build is
+  // told "fresh, not rebuilt" over an arm64-only APK, and the AVD answers with
+  // INSTALL_FAILED_NO_MATCHING_ABIS (or a two-ABI request gets a one-ABI app).
+  it('will not serve an artifact built for different ABIs', () => {
+    const asksFor = (abis, stampedAbis) =>
+      decideSkipBuild({ ...fresh, abis, stampedAbis });
+
+    const wrong = asksFor('x86_64', 'arm64-v8a');
+    expect(wrong.skip).toBe(false);
+    expect(wrong.reason).toContain('built for arm64-v8a');
+    expect(wrong.reason).toContain('asks for x86_64');
+
+    // Asking for more than the stamp has is the same mistake, in the other
+    // direction: a partial artifact is not a full one.
+    expect(asksFor('arm64-v8a,x86_64', 'arm64-v8a').skip).toBe(false);
+  });
+
+  it('builds rather than guess at a stamp that does not record its ABIs', () => {
+    // Stamps written before the ABI was recorded still match the tree and the
+    // binary. Saying "fresh" about one would be exactly the M1 bug, so an
+    // unknown is a build, and the reason names the unknown.
+    for (const stampedAbis of [null, undefined, '']) {
+      const decision = decideSkipBuild({
+        ...fresh,
+        abis: 'arm64-v8a',
+        stampedAbis,
+      });
+      expect(decision.skip).toBe(false);
+      expect(decision.reason).toContain('does not say which ABIs');
+    }
+  });
+});
+
+describe('abisMatch', () => {
+  it('compares the set, not the string', () => {
+    expect(abisMatch('arm64-v8a,x86_64', 'x86_64,arm64-v8a')).toBe(true);
+    expect(abisMatch(' arm64-v8a ', 'arm64-v8a')).toBe(true);
+    expect(abisMatch('arm64-v8a,arm64-v8a', 'arm64-v8a')).toBe(true);
+  });
+
+  it('never matches an unknown against anything', () => {
+    expect(abisMatch(null, 'arm64-v8a')).toBe(false);
+    expect(abisMatch('arm64-v8a', null)).toBe(false);
+    expect(abisMatch(null, null)).toBe(false);
+    expect(abisMatch('', '')).toBe(false);
   });
 });
 

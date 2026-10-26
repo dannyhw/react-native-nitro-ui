@@ -334,6 +334,23 @@ Four things make a local or agent build faster:
   `<platform> example app is fresh, not rebuilt` and exits. `--force`, `--clean`
   and `--no-stamp` all build.
 
+Two things it buys that are worth knowing before you go looking for a bug:
+
+- **Debug info names the worktree that first compiled the object.**
+  `CCACHE_NOHASHDIR` is what makes a second worktree a hit, and it also means a
+  cached object keeps the `DW_AT_comp_dir` of the directory that built it. So in
+  worktree B, lldb/Xcode/Android Studio resolve a C++ frame back to worktree A -
+  or to nothing, once A is deleted. Gates are unaffected (they read the binary,
+  not the paths in its debug info). For a native-debugging session, build that
+  worktree's objects itself: `NITRO_UI_CCACHE=0`, or `--force` with the cache
+  cleared.
+- **iOS inherits React Native's ccache `sloppiness`.** Its config file sets
+  `modules`, `pch_defines`, `file_stat_matches` and `system_headers`, which is
+  upstream's choice, not this repo's. It trades a little correctness for hits:
+  the risk is a change reached through `@import` rather than `#include`. Nothing
+  under `ios/` uses `@import` today; if that changes and a rebuild looks ignored,
+  `NITRO_UI_CCACHE=0` is the answer to both bullets.
+
 ```sh
 node scripts/build-app.mjs --platform ios          # fresh? skipped, in half a second
 node scripts/build-app.mjs --platform android --force

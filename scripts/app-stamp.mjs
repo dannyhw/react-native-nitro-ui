@@ -331,6 +331,9 @@ export function readStamp(file) {
  *   code tree as it was when the build started. A stamp is a claim that this
  *   binary came from these sources, so it can only be made when the sources did
  *   not move while the compiler was reading them.
+ * @param {string} [options.abis] the Android ABIs the artifact was built for,
+ *   as they were passed to gradle (`arm64-v8a`, or a comma-separated list).
+ *   Omitted for iOS and for a stamp that does not know.
  * @param {((message: string) => void)} [options.log]
  * @returns {object} the stamp
  */
@@ -339,6 +342,7 @@ export function recordBuild({
   platform,
   artifact,
   treeBefore = null,
+  abis = null,
   log = (message) => process.stderr.write(`${message}\n`),
 }) {
   // M3: the tree the build started from has to be the tree the stamp describes.
@@ -390,6 +394,14 @@ export function recordBuild({
     counts,
     scanned,
   };
+  // Which ABIs went into an Android artifact (review M1). The stamp path and the
+  // APK path are both fixed per worktree, so nothing else in here says whether
+  // the file on disk is arm64-v8a, x86_64, or all four - and `build-app.mjs`
+  // needs that to decide whether this artifact is the build that was asked for.
+  // Left out rather than set to null for iOS, where there is no such thing, and
+  // no version bump: a stamp without the field is simply one written before it
+  // existed, which the skip reads as "unknown" and builds.
+  if (abis != null && abis !== '') stamp.abis = abis;
   const file = stampPath({ repoRoot, platform });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}`;
@@ -439,7 +451,8 @@ export class StaleAppError extends Error {}
  * @param {'ios'|'android'} options.platform
  * @param {string} [options.artifact] the `.app` or `.apk` to look at
  * @param {((message: string) => void)} [options.warn]
- * @returns {{ok: boolean, artifact: string, stamp?: object, problems?: string[], fix?: string}}
+ * @returns {{ok: boolean, artifact: string, stamp?: object, missing?: boolean,
+ *   problems?: string[], fix?: string}}
  */
 export function checkFreshApp({
   repoRoot = repoRootOf(),
@@ -450,6 +463,7 @@ export function checkFreshApp({
   if (!fs.existsSync(artifact)) {
     return {
       ok: false,
+      missing: true,
       artifact,
       problems: [`${artifact} does not exist`],
       fix: `build it: node scripts/build-app.mjs --platform ${platform}`,
@@ -498,7 +512,11 @@ export function assertFreshApp({
 }) {
   const decision = checkFreshApp({ repoRoot, platform, artifact, warn });
   if (decision.ok) return decision.stamp;
-  if (decision.problems[0].endsWith('does not exist')) {
+  // The difference matters for the message: a missing artifact is "go build
+  // one", anything else is "what you have does not match this tree". Flag, not
+  // string match - rewording a problem sentence must not silently change which
+  // of the two the gate says.
+  if (decision.missing === true) {
     throw new StaleAppError(
       `${command}: ${decision.problems[0]}.\n` +
         `       build it: node scripts/build-app.mjs --platform ${platform}`

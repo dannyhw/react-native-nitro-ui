@@ -20,6 +20,9 @@
 import { describe, expect, it } from '@jest/globals';
 import { Buffer } from 'node:buffer';
 import { existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { deflateRawSync } from 'node:zlib';
 
 import {
@@ -37,6 +40,8 @@ import {
   zipEntries,
 } from '../app-stamp-core.mjs';
 import {
+  assertFreshApp,
+  checkFreshApp,
   currentCodeTree,
   recordBuild,
   registeredComponents,
@@ -429,5 +434,91 @@ describe('a build that ran while the tree moved (review M3)', () => {
     }
     expect(message).not.toMatch(/changed during the build/);
     expect(message).not.toBe('');
+  });
+});
+
+describe('the freshness question (review N7)', () => {
+  // `build-app.mjs` asks it to decide whether to skip a build, and the device
+  // gates ask it to decide whether to run at all. Both go through
+  // `checkFreshApp`, and `assertFreshApp` picks its message from the `missing`
+  // flag rather than from the wording of a problem - so the flag is the part
+  // worth pinning: a reworded sentence must not turn "go build one" into
+  // "refusing to run against a stale app", or the other way round.
+  const missingArtifact = join(
+    tmpdir(),
+    'nitro-ui-no-such-app',
+    'app-debug.apk'
+  );
+  const unstampedArtifact = join(
+    mkdtempSync(join(tmpdir(), 'nitro-ui-stamp-')),
+    'app-debug.apk'
+  );
+  writeFileSync(
+    unstampedArtifact,
+    buildZip([{ name: 'AndroidManifest.xml', data: Buffer.from('<x/>') }])
+  );
+  const quiet = { warn: () => {} };
+
+  it('reports an artifact that is not there as missing', () => {
+    const decision = checkFreshApp({
+      platform: 'android',
+      artifact: missingArtifact,
+      ...quiet,
+    });
+    expect(decision.ok).toBe(false);
+    expect(decision.missing).toBe(true);
+    expect(decision.problems).toEqual([`${missingArtifact} does not exist`]);
+    expect(decision.fix).toMatch(/scripts\/build-app\.mjs --platform android/);
+  });
+
+  it('reports an artifact that is there but unproven as not missing', () => {
+    const decision = checkFreshApp({
+      platform: 'android',
+      artifact: unstampedArtifact,
+      ...quiet,
+    });
+    expect(decision.ok).toBe(false);
+    // The point: there is a file here. It is the wrong file, which is a
+    // different sentence and a different fix.
+    expect(decision.missing).toBeUndefined();
+    // Which doubt it is does not matter here (this checkout may or may not have
+    // a stamp, and the tree may or may not match). What matters is that the
+    // answer is "there is a file, and it is not proven", never "go build one".
+    expect(decision.problems.length).toBeGreaterThan(0);
+    expect(decision.problems.join('\n')).not.toMatch(/does not exist$/);
+  });
+
+  it('routes the two cases to different messages', () => {
+    const ask = (fn) => {
+      try {
+        fn();
+        return 'no throw';
+      } catch (error) {
+        return String(error?.message ?? error);
+      }
+    };
+    const gone = ask(() =>
+      assertFreshApp({
+        platform: 'android',
+        artifact: missingArtifact,
+        command: 'harness:android',
+        ...quiet,
+      })
+    );
+    expect(gone).toMatch(/harness:android/);
+    expect(gone).toMatch(
+      /build it: node scripts\/build-app\.mjs --platform android/
+    );
+    expect(gone).not.toMatch(/refusing to run against a stale app/);
+
+    const stale = ask(() =>
+      assertFreshApp({
+        platform: 'android',
+        artifact: unstampedArtifact,
+        command: 'harness:android',
+        ...quiet,
+      })
+    );
+    expect(stale).toMatch(/refusing to run against a stale app/);
   });
 });
