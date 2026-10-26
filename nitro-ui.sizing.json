@@ -4,5 +4,6 @@
   "HybridNitroUiSlider": "fillWidth",
   "HybridNitroUiButton": "intrinsic",
   "HybridNitroUiSegmentedControl": "intrinsic",
-  "HybridNitroUiDatePicker": "intrinsic"
+  "HybridNitroUiDatePicker": "intrinsic",
+  "HybridNitroUiPicker": "intrinsic"
 }

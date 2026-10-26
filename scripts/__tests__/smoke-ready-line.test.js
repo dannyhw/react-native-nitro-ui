@@ -7,13 +7,14 @@
  * `measureContent()` that answers 0 - passed. These fixtures are the regression
  * test for that, with no device involved (same shape as
  * `scripts/__tests__/bench-gate.test.js`): the committed contract is one
- * `name=WxH` box per control, each greater than zero, and every weaker line the app could
- * have produced has to fail.
+ * `name=WxH` box per control, each greater than zero, and every weaker line the
+ * app could have produced has to fail.
  *
  * The `passes` case is deliberately the *only* green one, and it is not a
  * coincidental match with what the app emits: `scripts/smoke/App.tsx` builds the
  * line from `SMOKE_BOXES`, and the test below compares that fixture's control
- * list against the one App.tsx renders.
+ * list against the one App.tsx renders, so a control added to the app without a
+ * box in these fixtures fails here rather than passing on a shorter line.
  */
 
 import { readFileSync } from 'node:fs';
@@ -32,7 +33,8 @@ import {
 const READY_LINE =
   'I/ReactNative( 1234): ' +
   `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 ` +
-  'progress=310x4 segmented-control=214x32 date-picker=138x34';
+  'progress=310x4 segmented-control=214x32 ' +
+  'date-picker=138x34 picker=72x35';
 
 /**
  * What the two platforms actually printed the first time this gate ran on
@@ -45,7 +47,8 @@ const READY_LINE_FRACTIONAL =
   'I/ReactNativeJS(13147): ' +
   `${READY_PREFIX} switch=52.19047546386719x48 slider=363.4285583496094x48 ` +
   'button=91.04762268066406x48 progress=363.4285583496094x4.19049072265625 ' +
-  'segmented-control=256x48 date-picker=120.76190185546875x48';
+  'segmented-control=256x48 date-picker=120.76190185546875x48 ' +
+  'picker=280x56.09523010253906';
 
 describe('smoke ready line', () => {
   it('passes on one non-zero box per control', () => {
@@ -57,6 +60,7 @@ describe('smoke ready line', () => {
       width: 214,
       height: 32,
     });
+    expect(verdict.sizes.picker).toEqual({ width: 72, height: 35 });
   });
 
   it('fails the bare line the app used to print', () => {
@@ -81,6 +85,10 @@ describe('smoke ready line', () => {
     expect(verdict.sizes.progress).toEqual({
       width: 363.4285583496094,
       height: 4.19049072265625,
+    });
+    expect(verdict.sizes.picker).toEqual({
+      width: 280,
+      height: 56.09523010253906,
     });
   });
 
@@ -130,6 +138,7 @@ describe('smoke ready line', () => {
     // must not satisfy the contract for the missing one.
     const verdict = checkReadyLine(
       `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 progress=310x4 ` +
+        'date-picker=138x34 picker=72x35 ' +
         'message mentions segmented-control here'
     );
     expect(verdict.ok).toBe(false);
@@ -140,7 +149,8 @@ describe('smoke ready line', () => {
     // One token cannot cover two controls, and a box cannot move between them.
     const verdict = checkReadyLine(
       `${READY_PREFIX} switch=30x20x1 slider=310x20 button=88x36 ` +
-        'progress=310x4 segmented-control=214x32 date-picker=138x34'
+        'progress=310x4 segmented-control=214x32 ' +
+        'date-picker=138x34 picker=72x35'
     );
     expect(verdict.ok).toBe(false);
     expect(verdict.problems.join('\n')).toContain('switch');

@@ -1,6 +1,7 @@
 import {
   Button,
   DatePicker,
+  Picker,
   Progress,
   SegmentedControl,
   Slider,
@@ -15,9 +16,12 @@ import {
   dateValue,
   onDateChange,
   onPress,
+  onPickerChange,
   onSegmentChange,
   onSliderChange,
   onValueChange,
+  pickerOptions,
+  pickerSelection,
   progressValue,
   range,
   rowStyle,
@@ -132,6 +136,30 @@ export function NitroUiList({
             testID={`bench-nitro-ui-date-${String(index)}`}
             value={dateValue(value)}
             onChange={onDateChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'picker') {
+    // `pickerSelection(value)` is the same index the other arms paint and the
+    // options list is the list they mount, so the `update` cell is a real selection
+    // change here: the painted title changes, the sizing key moves, the control
+    // re-measures, and the cost of that round trip is in the numbers. `variant`,
+    // `label`, `disabled` and `tintColor` stay at their defaults - the arms compare
+    // each control's platform default, including the size that default measures
+    // (Material 3's 280 dp field floor included).
+    return (
+      <>
+        {range(n).map((index) => (
+          <Picker
+            key={index}
+            testID={`bench-nitro-ui-picker-${String(index)}`}
+            options={pickerOptions()}
+            selectedIndex={pickerSelection(value)}
+            onChange={onPickerChange}
             nuiPerfId={perfMarks ? index : null}
             style={style}
           />
