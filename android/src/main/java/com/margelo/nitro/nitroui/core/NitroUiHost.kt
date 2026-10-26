@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.util.Log
 import android.view.View
+import com.facebook.react.bridge.ReactContext
+import com.facebook.react.bridge.WritableNativeMap
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableIntState
@@ -46,6 +48,23 @@ internal class NitroUiHostModel : NitroUiModel() {
  * builds - so their RN frames are decorative: nothing reads them, and a control
  * placed next to an RN view inside a Host is positioned by Compose, not by Yoga.
  *
+ * **Which of the Host's own styles reach the drawing.** `width` / `height` / `flex`
+ * size the box, and `padding` insets it: [NitroUiHostViewManager] forwards
+ * `setPadding`, so the `Column` starts inside the padding as in any other
+ * container. `gap`, `flexDirection`, `alignItems`, `justifyContent`, `borderWidth`
+ * and `pointerEvents` do not - Compose does the arranging (one `Column`, no gaps),
+ * the Host draws no border, and hits go to Compose rather than RN's hit testing.
+ * Yoga still honours each of them in the *box*, which is the trap: a `gap` buys
+ * height and no space, and `flexDirection: row` buys a one-row-tall box around a
+ * stack of rows. Say how tall the Host is, and stack it in a column (review S3).
+ *
+ * **The allowlist is native, not only JS.** [NitroComposeHost.isHostable] decides who
+ * may be composed here, and only `SwitchHost` says yes. JS refuses what it can name
+ * (`src/components/Host/HostChildren.ts`), but React flattens components out of the
+ * native tree: a `Picker` behind a `memo` arrives as a direct child that JS saw as a
+ * `<Row>`, and a nested `<Host>` is a child like any other. Both are refused here and
+ * said out loud in a debuggable build (review M2).
+ *
  * **Recomposition stays per child.** Each child renders under `key(child)`, so the
  * group that reads that child's model is its own scope: one Switch's prop write
  * recomposes that Switch, not the Host's whole content.
@@ -83,7 +102,9 @@ internal class NitroUiHostView(
     setOnHierarchyChangeListener(
       object : OnHierarchyChangeListener {
         override fun onChildViewAdded(parent: View, child: View) {
-          reportUncomposableChild(child)
+          if (!isHostableChild(child)) {
+            reportUncomposableChild(child)
+          }
           hostedChildrenChanged()
         }
 
@@ -97,30 +118,55 @@ internal class NitroUiHostView(
   /**
    * Say out loud, in a debuggable build, that this child will not be drawn.
    *
-   * [HostedChildren] composes the children that are nitro-ui controls and skips the
-   * rest, so a child that is not one is invisible on Android. The JS check
-   * (`src/components/Host/HostChildren.ts`) catches the shapes it can name, but
-   * React flattens components out of the native tree: what an app's own child
-   * component returns is a direct child of this view whatever JS thought of it, and
-   * this is the only place that can see the answer. Expo's `HostView` reports the
-   * same case for the same reason.
+   * [HostedChildren] composes the children a Host is allowed to compose (see
+   * [NitroComposeHost.isHostable]) and skips the rest, so a skipped child is
+   * invisible on Android. The JS check (`src/components/Host/HostChildren.ts`)
+   * catches the shapes it can name, but React flattens components out of the native
+   * tree: what an app's own child component returns is a direct child of this view
+   * whatever JS thought of it, and this is the only place that can see the answer -
+   * including a `Picker` behind a `memo`, which JS saw as a component and this side
+   * sees as a control that is not on the allowlist (review M2). Expo's `HostView`
+   * reports the same case for the same reason.
    *
-   * A log rather than a throw: by here the tree is already being mounted on the UI
+   * A report rather than a throw: by here the tree is already being mounted on the UI
    * thread, and a library that crashes an app from inside `addView` to report a
    * mistake it could equally have printed has chosen the worse of two dev-time
-   * outcomes.
+   * outcomes. It is also not only logcat (review S5): a JS developer watches Metro
+   * and LogBox, so the same sentence goes to JS as a device event, which
+   * `src/components/Host/HostChildren.ts` turns into a `console.error`.
    */
-  private fun reportUncomposableChild(child: View) {
-    if (child is NitroComposeHost<*> || !isDebuggableBuild) {
+  internal fun reportUncomposableChild(child: View) {
+    if (!isDebuggableBuild) {
       return
     }
-    Log.w(
-      HOST_LOG_TAG,
-      "A <Host> cannot compose a ${child.javaClass.simpleName}; it will not be drawn. " +
-        "A Host holds nitro-ui controls directly - RN views are skipped, and a child " +
-        "component is only hosted if what it renders is a control " +
-        "(docs/components/host.md).",
-    )
+    val what =
+      if (child is NitroComposeHost<*>) {
+        if (child is NitroUiHostView) {
+          "another <Host>"
+        } else {
+          "a ${child.javaClass.simpleName.removeSuffix("Host")} (a nitro-ui control this " +
+            "Host is not built to compose)"
+        }
+      } else {
+        "a ${child.javaClass.simpleName} (not a nitro-ui control)"
+      }
+    val message =
+      "A <Host> cannot compose $what: it will not be drawn on Android. A Host holds " +
+        "the controls it is built for directly, and a child component is only hosted " +
+        "if what it renders is one of those (docs/components/host.md)."
+    Log.w(HOST_LOG_TAG, message)
+    (context as? ReactContext)?.let { reactContext ->
+      // Dev-only, async, and one string: `emitDeviceEvent` enqueues onto the JS
+      // queue rather than waiting for it, so this cannot stall the mount that
+      // reported it.
+      reactContext.emitDeviceEvent(
+        HOST_UNHOSTABLE_CHILD_EVENT,
+        WritableNativeMap().apply {
+          putString("message", message)
+          putString("childClass", child.javaClass.simpleName)
+        },
+      )
+    }
   }
 
   /** Whether the app this view lives in is debuggable, i.e. worth warning into. */
@@ -165,10 +211,13 @@ internal class NitroUiHostView(
    * One composable group per hosted control, in the order RN mounted them.
    *
    * Children are read from the view tree rather than a list we maintain: the view
-   * tree is what RN actually mutates, and a second copy of it could only drift.
-   * Non-nitro-ui children (an RN `View` in the middle of a Host) are skipped - they
-   * are not Compose content, and they are the reason a Host may not hold arbitrary
-   * RN views; [reportUncomposableChild] is how that case announces itself.
+   * tree is what RN actually mutates, and a second copy of it could only drift. Two
+   * kinds of child are skipped. One is a child this Host is not built to compose - an
+   * RN view, a control that is not on the allowlist, or another `<Host>` - which
+   * [reportUncomposableChild] says out loud in a debuggable build. The other is a
+   * child RN itself hid (`display: none`), which has to leave the drawing as well as
+   * the layout: otherwise a hidden row keeps drawing while a content-sized Host
+   * shrinks by a row and clips what it still shows (review S2).
    */
   @Composable
   private fun HostedChildren() {
@@ -176,13 +225,42 @@ internal class NitroUiHostView(
     hostedVersion.intValue
     for (index in 0 until childCount) {
       val child = getChildAt(index)
-      if (child is NitroComposeHost<*>) {
+      if (child is NitroComposeHost<*> && child.isHostable && !child.isHiddenByReact) {
         key(child) { child.HostedContent() }
       }
     }
   }
 
+  /**
+   * Whether this child is a control this Host composes, ignoring RN's hiding.
+   *
+   * The question the hierarchy listener asks: a child that is not on the allowlist
+   * is a mistake whether or not it is hidden, and hiding is not a reason to stay
+   * quiet about one.
+   */
+  private fun isHostableChild(child: View): Boolean =
+    child is NitroComposeHost<*> && child.isHostable
+
+  /**
+   * A hosted child's `display` changed: recompose the hosted block.
+   *
+   * Called by [NitroComposeHost.setVisibility] for a child of this view. RN's answer
+   * to `display: none` is the one prop a hosted child can change without going
+   * through its own model, so it is the one thing that has to reach the Host directly
+   * rather than through the control's recomposition.
+   */
+  internal fun hostedChildVisibilityChanged() {
+    hostedChildrenChanged()
+  }
+
   private companion object {
     private const val HOST_LOG_TAG = "NitroUiHost"
+
+    /**
+     * The device event a debuggable build emits for a child it will not compose, so
+     * the report reaches Metro and LogBox and not only logcat (review S5). JS turns
+     * it into a `console.error` in `src/components/Host/HostChildren.ts`.
+     */
+    internal const val HOST_UNHOSTABLE_CHILD_EVENT = "NitroUiHostUnhostableChild"
   }
 }

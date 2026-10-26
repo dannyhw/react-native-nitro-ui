@@ -72,10 +72,15 @@ class Boundary extends Component<
   }
 }
 
-/** The error for a child a Host cannot compose, or `null` when it accepted them. */
+/**
+ * The error for a child a Host cannot compose, or `null` when it accepted them.
+ *
+ * It passes `Host` as the second argument the way the component does, so a nested
+ * `<Host>` is checked here under the same identity rule it has in an app.
+ */
 function errorFor(children: ReactNode): Error | null {
   try {
-    assertHostChildren(children);
+    assertHostChildren(children, Host);
     return null;
   } catch (error) {
     return error as Error;
@@ -105,6 +110,60 @@ describe('Host children', () => {
   });
 
   /**
+   * `{label && <Switch/>}` with an empty `label` gives React the string `''`, which
+   * it renders as nothing. Refusing it would throw about a child that draws no
+   * pixels - and a Host that throws for a shape `View` accepts is a Host nobody can
+   * use in a list.
+   */
+  it('ignores an empty string, which React draws as nothing too', () => {
+    expect(errorFor('')).toBeNull();
+    expect(errorFor(['', <Switch value />])).toBeNull();
+  });
+
+  /**
+   * Nesting was the one shape that passed JS and reached the native tree as a
+   * control: a `<Host>` is a child of a Host, where it measures nothing, draws a
+   * nested composition, and answers to no box of its own (review M2).
+   */
+  it('refuses a Host inside a Host, by name', () => {
+    const error = errorFor(
+      <>
+        <Switch value />
+        <Host>
+          <Switch value />
+        </Host>
+      </>
+    );
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/Child 1/);
+    expect(error?.message).toMatch(/another <Host>/);
+    expect(error?.message).toMatch(/side by side/);
+  });
+
+  /** The refusal has to be reachable from the component, not only the helper. */
+  it('refuses a nested Host through the component apps render', async () => {
+    const caught: Error[] = [];
+    const errors = captureErrors();
+    await render(
+      <Boundary onCatch={(error) => caught.push(error)}>
+        <Host testID="outer">
+          <Host testID="inner">
+            <Switch value />
+          </Host>
+        </Host>
+      </Boundary>
+    );
+    expect(caught).toHaveLength(1);
+    expect(caught[0]?.message).toMatch(/another <Host>/);
+    // React also logs what the boundary caught, so the same refusal is what the
+    // developer would see in Metro. Nothing else may be in there: a second error
+    // would mean the outer Host or the Switch failed for its own reason too.
+    const logged = errors();
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatch(/another <Host>/);
+  });
+
+  /**
    * The case the spike reported as silently wrong: an RN view inside a Host draws
    * nothing on Android, because the only thing that could draw it is the
    * composition it was never invited into.
@@ -126,6 +185,9 @@ describe('Host children', () => {
     const error = errorFor(<Slider value={0.5} />);
     expect(error).not.toBeNull();
     expect(error?.message).toMatch(/<Slider>/);
+    // "nitro-ui's", so the sentence says whose control it is before saying what
+    // is wrong with it - `Switch` and `Slider` exist in more than one library.
+    expect(error?.message).toMatch(/react-native-nitro-ui's <Slider>/);
   });
 
   /**
@@ -135,7 +197,13 @@ describe('Host children', () => {
   it('names a plain RN Switch, which is not ours', () => {
     const error = errorFor(<RNCoreSwitch value />);
     expect(error).not.toBeNull();
-    expect(error?.message).toMatch(/Switch/);
+    // Saying `<Switch>` here reads as "your Switch is wrong" to a person who
+    // imported the right-looking one from the wrong package; the message has to
+    // name the package that owns the child (review N3).
+    expect(error?.message).toMatch(/react-native's <Switch>/);
+    // Never the bare `<Switch>`, which is how ours is named when it is refused for
+    // some other reason and would read as "your Switch is not hostable".
+    expect(error?.message).not.toMatch(/ is <Switch>/u);
   });
 
   /** Text is a child too, and the one a person is most likely to type by habit. */
@@ -273,7 +341,83 @@ describe('Host children', () => {
     fireLayout(view.getByTestId('empty'), { width: 360, height: 0 });
     expect(warnings()).toEqual([]);
   });
+
+  /**
+   * `{show && <Switch/>}` with `show = false` is `false`, which is not `null`, and a
+   * `map` over an empty array is `[]`. Both draw nothing, and warning about them
+   * would train a person to ignore the warning about the Host that really has no
+   * height.
+   */
+  it('stays quiet when the children are a conditional that is off', async () => {
+    const warnings = captureWarnings();
+    const show = false;
+    const view = await render(
+      <Host testID="conditional">
+        {show && <Switch value />}
+        {[].map((id: never) => (
+          <Switch key={id} value />
+        ))}
+      </Host>
+    );
+    fireLayout(view.getByTestId('conditional'), { width: 360, height: 0 });
+    expect(warnings()).toEqual([]);
+  });
+
+  /**
+   * `gap`/`flexDirection`/`pointerEvents` and friends size a Host's box in Yoga and
+   * do nothing in Compose, which is the shape of a bug nobody finds. Dev-only, once
+   * per instance (review S3).
+   */
+  it('says which of its styles a Host will not draw', async () => {
+    const warnings = captureWarnings();
+    const view = await render(
+      <Host testID="spaced" style={{ gap: 8, alignItems: 'center' }}>
+        <Switch value />
+      </Host>
+    );
+    expect(warnings()).toHaveLength(1);
+    expect(warnings()[0]).toMatch(/`gap`/);
+    expect(warnings()[0]).toMatch(/`alignItems`/);
+    // The row is still laid out by Yoga, so the Host keeps its box either way.
+    fireLayout(view.getByTestId('spaced'), { width: 360, height: 96 });
+    expect(warnings()).toHaveLength(1);
+  });
+
+  /** `flexDirection: 'row'` is the inert one that also changes the box height. */
+  it('says a Host lays its rows in a column only', async () => {
+    const warnings = captureWarnings();
+    await render(
+      <Host testID="rowed" style={{ flexDirection: 'row', height: 48 }}>
+        <Switch value />
+      </Host>
+    );
+    expect(warnings()).toHaveLength(1);
+    expect(warnings()[0]).toMatch(/only a column is drawn/);
+  });
+
+  /** `padding` is honoured (the view manager forwards it), so it must stay quiet. */
+  it('says nothing about the styles a Host does draw', async () => {
+    const warnings = captureWarnings();
+    await render(
+      <Host
+        testID="padded"
+        style={{ padding: 16, height: 96, flexDirection: 'column' }}
+      >
+        <Switch value />
+      </Host>
+    );
+    expect(warnings()).toEqual([]);
+  });
 });
+
+/** Tap `console.error` for this test. `afterEach` restores it. */
+function captureErrors(): () => string[] {
+  const seen: string[] = [];
+  jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    seen.push(args.map(String).join(' '));
+  });
+  return () => seen;
+}
 
 /**
  * Tap `console.warn` for this test. `afterEach` restores it.

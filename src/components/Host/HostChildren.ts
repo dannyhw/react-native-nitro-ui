@@ -1,6 +1,8 @@
 import { Fragment, type ReactNode, isValidElement } from 'react';
 import {
   ActivityIndicator,
+  DeviceEventEmitter,
+  Platform,
   Button as RNButton,
   FlatList,
   Image,
@@ -102,7 +104,53 @@ export const HOSTABLE_NAMES: readonly string[] = [
 ];
 
 /**
+ * The event a debuggable Android build emits for a child it will not compose.
+ *
+ * The other half of it is `HOST_UNHOSTABLE_CHILD_EVENT` in
+ * `android/.../core/NitroUiHost.kt`; the name is the wire format between the two, so
+ * it is written twice on purpose, in the two places a person editing either can see
+ * the other.
+ */
+const UNHOSTABLE_CHILD_EVENT = 'NitroUiHostUnhostableChild';
+
+let listeningForUnhostableChildren = false;
+
+/**
+ * Turn the native Host's report into a JS error, in development.
+ *
+ * The native side *sees* what React flattened JS could not (a `Picker` behind a
+ * `memo`, an RN view behind a `<Row>`, another `<Host>`) and used to say so in logcat
+ * only - which no app author reads (review S5). A device event reaches Metro and
+ * LogBox, where a dev-time problem actually lives. It cannot throw: the tree is
+ * already mounting on the UI thread, and a library that crashes an app from inside
+ * `addView` has chosen the worse of two dev-time outcomes.
+ */
+function listenForUnhostableChildren(): void {
+  if (listeningForUnhostableChildren || Platform.OS !== 'android') {
+    return;
+  }
+  listeningForUnhostableChildren = true;
+  DeviceEventEmitter.addListener(
+    UNHOSTABLE_CHILD_EVENT,
+    (report: { message?: string } | undefined) => {
+      console.error(
+        report?.message ??
+          'react-native-nitro-ui: a <Host> was handed a child it cannot compose, and ' +
+            'it will not be drawn on Android (docs/components/host.md).'
+      );
+    }
+  );
+}
+
+/**
  * Fail loudly, in dev, when a Host holds something it cannot compose.
+ *
+ * @param hostComponent the `Host` component itself, passed by the component so a
+ *   nested `<Host>` can be recognised without `HostChildren.ts` importing `Host.tsx`
+ *   (which would be a cycle, and a `Map` built against a component that has not been
+ *   defined yet). Nesting is refused rather than composed: the inner Host would become
+ *   a child of the outer one's `Column`, where it measures nothing, draws a nested
+ *   composition, and answers to no box (review M2).
  *
  * **Why a check at all.** A Host composes its direct nitro-ui children and skips
  * everything else, so an RN view inside one draws nothing on Android: the only
@@ -128,11 +176,15 @@ export const HOSTABLE_NAMES: readonly string[] = [
  * host component, one of RN's own views, or one of our controls that is not hosted
  * yet.
  */
-export function assertHostChildren(children: ReactNode): void {
+export function assertHostChildren(
+  children: ReactNode,
+  hostComponent?: unknown
+): void {
   if (!__DEV__) {
     return;
   }
-  visit(children, '');
+  listenForUnhostableChildren();
+  visit(children, '', hostComponent);
 }
 
 /**
@@ -140,13 +192,25 @@ export function assertHostChildren(children: ReactNode): void {
  *   fragment. Positions count per list, which is what a person can find in the
  *   JSX; a flattened index would name nothing.
  */
-function visit(children: ReactNode, position: string): void {
-  if (children == null || typeof children === 'boolean') {
+function visit(
+  children: ReactNode,
+  position: string,
+  hostComponent: unknown
+): void {
+  if (
+    children == null ||
+    children === '' ||
+    typeof children === 'boolean' ||
+    // An empty string is how `{label && <Switch/>}` arrives when `label` is `''`,
+    // and React draws nothing for it - `View` does not complain about that shape
+    // either, so neither may a Host.
+    (typeof children === 'string' && children.length === 0)
+  ) {
     return;
   }
   if (Array.isArray(children)) {
     children.forEach((child, index) => {
-      visit(child, join(position, index));
+      visit(child, join(position, index), hostComponent);
     });
     return;
   }
@@ -156,19 +220,30 @@ function visit(children: ReactNode, position: string): void {
   if (HOSTABLE_CONTROLS.has(children.type)) {
     return;
   }
+  if (hostComponent != null && children.type === hostComponent) {
+    throw new Error(nestedHostError(position));
+  }
   if (children.type === Fragment) {
-    visit((children.props as { children?: ReactNode }).children, position);
+    visit(
+      (children.props as { children?: ReactNode }).children,
+      position,
+      hostComponent
+    );
     return;
   }
   const unhostable =
-    UNHOSTABLE_CONTROLS.get(children.type) ??
-    UNHOSTABLE_RN_VIEWS.get(children.type) ??
-    // A string tag is a host component whatever it is called, and none of them is
-    // a nitro-ui control. RN's own are in the table above by identity; this catches
-    // a raw tag and a third-party native component.
-    (typeof children.type === 'string' ? String(children.type) : null);
+    (UNHOSTABLE_CONTROLS.get(children.type) ?? null) !== null
+      ? `react-native-nitro-ui's <${UNHOSTABLE_CONTROLS.get(children.type)}>`
+      : (UNHOSTABLE_RN_VIEWS.get(children.type) ?? null) !== null
+        ? // "react-native's `<Switch>`" rather than a bare `<Switch>`: the message
+          // must survive an app that imports both Switches and wrote the wrong one.
+          `react-native's <${UNHOSTABLE_RN_VIEWS.get(children.type)}>`
+        : // A string tag is a host component whatever it is called, and none of them
+          // is a nitro-ui control. RN's own are in the table above by identity; this
+          // catches a raw tag and a third-party native component.
+          (typeof children.type === 'string' ? `<${String(children.type)}>` : null);
   if (unhostable != null) {
-    throw new Error(childError(`<${unhostable}>`, position));
+    throw new Error(childError(unhostable, position));
   }
 }
 
@@ -181,12 +256,22 @@ function describeText(child: ReactNode): string {
   return `the text "${text.length > 20 ? `${text.slice(0, 20)}…` : text}"`;
 }
 
+function nestedHostError(position: string): string {
+  return (
+    'react-native-nitro-ui: a <Host> cannot hold another <Host>. Child ' +
+    `${position || '0'} of this <Host> is a <Host>, which the outer one would ` +
+    'compose as a child of its own column - it would measure nothing, draw a nested ' +
+    'composition, and answer to no box of its own. Put the two Hosts side by side ' +
+    'instead, each with its own height (docs/components/host.md).'
+  );
+}
+
 function childError(child: string, position: string): string {
   return (
     'react-native-nitro-ui: a <Host> composes its direct children into one native ' +
     `composition, and renders only ${HOSTABLE_NAMES.join(', ')}. Child ${position || '0'} ` +
     `of this <Host> is ${child}, which it would skip on Android and lay out as a ` +
-    'plain view on iOS. Move it outside the <Host>, or replace it with a control ' +
-    `it renders (${HOSTABLE_NAMES.join(', ')}).`
+    'plain view on iOS. Move it outside the <Host>, or replace it with a control it ' +
+    `renders (${HOSTABLE_NAMES.join(', ')}).`
   );
 }

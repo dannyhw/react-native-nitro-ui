@@ -77,6 +77,31 @@ internal class NitroUiHostViewManager : ViewGroupManager<NitroUiHostView>() {
    */
   override fun needsCustomLayoutForChildren(): Boolean = false
 
+  /**
+   * Put the Host's `padding` where the drawing is.
+   *
+   * `ViewManager.setPadding` is a no-op by default (RN 0.88's `ViewManager.java`) and
+   * Fabric calls *it* rather than the view's own setter - so without this override a
+   * `<Host style={{ padding: 16 }}>` grows its box by 32 dp in Yoga and draws its rows
+   * flush into the top-left corner, leaving a box of dead space (review S3). The
+   * `ComposeContent` child is `MATCH_PARENT`, so the `FrameLayout`'s padding insets the
+   * whole `Column` and nothing else has to know about it.
+   *
+   * `gap` and the flex / align / justify props are deliberately *not* honoured here:
+   * the arranging is Compose's, and pretending otherwise would make them behave
+   * differently from the box Yoga already laid them out in. `docs/components/host.md`
+   * lists what a Host's style reaches and what it does not.
+   */
+  override fun setPadding(
+    view: NitroUiHostView,
+    left: Int,
+    top: Int,
+    right: Int,
+    bottom: Int,
+  ) {
+    view.setPadding(left, top, right, bottom)
+  }
+
   private fun getHybridViewHolder(view: NitroUiHostView): HybridViewHolder? =
     view.getTag(associated_hybrid_view_tag) as? HybridViewHolder
 }
