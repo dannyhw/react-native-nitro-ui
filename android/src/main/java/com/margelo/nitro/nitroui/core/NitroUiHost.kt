@@ -2,6 +2,8 @@ package com.margelo.nitro.nitroui.core
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.util.Log
 import android.view.View
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
@@ -81,6 +83,7 @@ internal class NitroUiHostView(
     setOnHierarchyChangeListener(
       object : OnHierarchyChangeListener {
         override fun onChildViewAdded(parent: View, child: View) {
+          reportUncomposableChild(child)
           hostedChildrenChanged()
         }
 
@@ -90,6 +93,39 @@ internal class NitroUiHostView(
       },
     )
   }
+
+  /**
+   * Say out loud, in a debuggable build, that this child will not be drawn.
+   *
+   * [HostedChildren] composes the children that are nitro-ui controls and skips the
+   * rest, so a child that is not one is invisible on Android. The JS check
+   * (`src/components/Host/HostChildren.ts`) catches the shapes it can name, but
+   * React flattens components out of the native tree: what an app's own child
+   * component returns is a direct child of this view whatever JS thought of it, and
+   * this is the only place that can see the answer. Expo's `HostView` reports the
+   * same case for the same reason.
+   *
+   * A log rather than a throw: by here the tree is already being mounted on the UI
+   * thread, and a library that crashes an app from inside `addView` to report a
+   * mistake it could equally have printed has chosen the worse of two dev-time
+   * outcomes.
+   */
+  private fun reportUncomposableChild(child: View) {
+    if (child is NitroComposeHost<*> || !isDebuggableBuild) {
+      return
+    }
+    Log.w(
+      HOST_LOG_TAG,
+      "A <Host> cannot compose a ${child.javaClass.simpleName}; it will not be drawn. " +
+        "A Host holds nitro-ui controls directly - RN views are skipped, and a child " +
+        "component is only hosted if what it renders is a control " +
+        "(docs/components/host.md).",
+    )
+  }
+
+  /** Whether the app this view lives in is debuggable, i.e. worth warning into. */
+  private val isDebuggableBuild: Boolean =
+    context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
   /**
    * The child set moved. Recompose the hosted block.
@@ -106,6 +142,20 @@ internal class NitroUiHostView(
     Snapshot.sendApplyNotifications()
   }
 
+  /**
+   * Children start at the Host's top-leading edge rather than centred in its box.
+   *
+   * [NitroComposeHost.centersContent] centres a control inside the box the sizing
+   * engine gave *it*, which is right for one control and wrong for a container: a Host
+   * is usually wider than the `Column` it draws, and measured on a device a Host 60
+   * tall holding three switches (144 of content) placed that column at -42, so the
+   * *second* row was the one under a finger at the top of the box. Top-leading is what
+   * RN means by a container, what Expo's Host does, and what makes an over-tall list
+   * clip at the bottom - the far half of its content - rather than at the top.
+   */
+  override val centersContent: Boolean
+    get() = false
+
   @Composable
   override fun Component(model: NitroUiHostModel) {
     Column { HostedChildren() }
@@ -118,7 +168,7 @@ internal class NitroUiHostView(
    * tree is what RN actually mutates, and a second copy of it could only drift.
    * Non-nitro-ui children (an RN `View` in the middle of a Host) are skipped - they
    * are not Compose content, and they are the reason a Host may not hold arbitrary
-   * RN views (see the report).
+   * RN views; [reportUncomposableChild] is how that case announces itself.
    */
   @Composable
   private fun HostedChildren() {
@@ -130,5 +180,9 @@ internal class NitroUiHostView(
         key(child) { child.HostedContent() }
       }
     }
+  }
+
+  private companion object {
+    private const val HOST_LOG_TAG = "NitroUiHost"
   }
 }

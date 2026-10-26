@@ -397,6 +397,19 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
+   * Whether this host's content is centred inside the box RN gave it.
+   *
+   * True for every control: the box is the size the sizing engine gave the control,
+   * the composable may answer something smaller (an M3 Switch is 51x31 inside a 48dp
+   * interactive box), and centring is what sits the drawing inside the frame RN
+   * believes it has. A `<Host>` overrides this (see `NitroUiHostView`): it is a
+   * container, and a container that centres its children shows the middle of a list
+   * when it is shorter than the list.
+   */
+  protected open val centersContent: Boolean
+    get() = true
+
+  /**
    * The composition's root: built once, for the lifetime of the instance. There
    * is no `setContent` per props update, which is the perf contract's main rule.
    */
@@ -404,6 +417,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private fun Content() {
     NitroUiTheme {
       NitroUiMeasuredRoot(
+        centered = centersContent,
         record = wantsContentSize,
         unbounded = wantsContentSize && sizingPolicy == NitroUiSizing.POLICY_INTRINSIC,
         remeasureToken = remeasureToken,
@@ -1309,6 +1323,7 @@ internal object NitroUiColorSchemes {
  */
 @Composable
 internal fun NitroUiMeasuredRoot(
+  centered: Boolean,
   record: Boolean,
   unbounded: Boolean,
   remeasureToken: IntState,
@@ -1423,10 +1438,14 @@ internal fun NitroUiMeasuredRoot(
     val height =
       if (constraints.hasBoundedHeight) constraints.maxHeight else measuredHeight
     layout(width, height) {
-      placeable?.placeRelative(
-        (width - measuredWidth) / 2,
-        (height - measuredHeight) / 2
-      )
+      if (centered) {
+        placeable?.placeRelative(
+          (width - measuredWidth) / 2,
+          (height - measuredHeight) / 2
+        )
+      } else {
+        placeable?.placeRelative(0, 0)
+      }
     }
   }
 }

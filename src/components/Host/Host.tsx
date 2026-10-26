@@ -50,9 +50,7 @@ export interface HostProps extends ViewProps {
  *   iOS.
  * - **No interleaving.** RN cannot lay a hosted control next to an RN view, or put
  *   an RN view between two hosted ones: RN hands the Host one rectangle and
- *   everything inside it is Compose's. A control that is *not* a direct child (one
- *   inside an RN `View` inside the Host) is not hosted either - it renders as the
- *   standalone control it looks like.
+ *   everything inside it is Compose's.
  * - **No RN scrolling, clipping or transforming of the children.** A
  *   `ScrollView` around a Host moves the Host's whole rectangle; RN cannot scroll
  *   the content inside it, clip part of it (`removeClippedSubviews`) or transform
@@ -61,20 +59,34 @@ export interface HostProps extends ViewProps {
  * - **No `Modal`**, or anything else that owns a window.
  * - **No per-child size** - see the sizing rule below.
  *
+ * Components are transparent here, in both directions. React flattens them out of
+ * the native tree, so a wrapper that renders a `Switch` *is* a direct child of the
+ * Host and is hosted - wrapping a control in your own component does not opt it
+ * out. The flip side is the rule rather than a gap: a `Switch` inside an RN `View`
+ * inside a Host is not hosted, because that `View` is the direct child, and a
+ * `View` is what the check above refuses.
+ *
  * ## Sizing (D24)
  *
- * A hosted control has no RN box. It never measures - its own measure is declined
- * while a Host composes it - so it reports nothing to the sizing engine, gets no
- * cache entry, and is never corrected. `style` on a hosted control does not place
- * it: the Host stacks its children in a Compose `Column`, in mount order, and
- * their Yoga frames are decorative.
+ * A hosted control **never measures**. While a Host composes it, its own measure
+ * is declined, so it reports nothing to the sizing engine: no cache entry, no
+ * correction, and D17's first-frame rule does not apply - there is no measurement
+ * that could arrive late.
  *
- * The **Host's** box is RN's, and it comes from its `style` alone - a `height`, or
- * `flex: 1`, or being stretched by its parent. It does not measure its content,
- * because its children contribute nothing to Yoga: a Host with no height gets none,
- * and its content is not visible. Inside a Host, cross-axis sizing like
- * `alignSelf: 'stretch'` or `width: '100%'` on a child does not resize what Compose
- * draws - it is a Yoga decision about a box Yoga is not placing.
+ * Its RN box still exists, and it is still the engine's answer for that
+ * configuration (a measured size, or the declared fallback): the shadow node does
+ * not know who draws the control. It is decorative - nothing reads it to place
+ * pixels. The Host places its children itself, in a Compose `Column`, in mount
+ * order, at the Host's own width. So `alignSelf: 'stretch'`, `width: '100%'` or a
+ * `height` on a hosted control moves the frame RN computes, not what Compose draws.
+ *
+ * The Host measures nothing either. Its box is Yoga's: its own `style`, plus its
+ * children's decorative boxes. Give it a `height` or `flex: 1` and that is the box;
+ * give it neither and its height is the sum of its children's sizing-engine sizes -
+ * a row of Compose controls only for as long as those declared sizes match what
+ * Compose draws. Dense lists should therefore say how tall they are: when the two
+ * disagree, Compose clips to the smaller box. A Host that ends up 0 tall (a
+ * `height: 0`, or a parent that gave it none) says so once in development.
  *
  * @see docs/components/host.md for the same rule with the harness cases that hold
  * it, and docs/architecture/sizing.md §10 (D24) for where it sits in the sizing
@@ -94,11 +106,10 @@ export function Host({ children, ...props }: HostProps) {
   /**
    * Dev-only: a Host that was given no height has nothing to draw into.
    *
-   * It is a consequence of D24 rather than a bug - the Host measures no content,
-   * because a hosted control reports no size - but it is a consequence that looks
-   * like a bug: an empty rectangle where the controls should be, on one platform,
-   * with the same JSX working on the other. RN lays a plain `View` out at its
-   * children's height; this says out loud that a Host does not.
+   * It is D24 rather than a bug - a Host measures nothing, and a hosted control
+   * reports no size - but it is a consequence that looks like one: an empty
+   * rectangle where the controls should be, on Android, with the same JSX drawing
+   * fine through the iOS passthrough. This says out loud what the box came from.
    *
    * `onLayout` is the only place the box is knowable: `style` says what was asked
    * for, not what Yoga decided (`flex: 1`, or a parent with no height of its own,
@@ -115,10 +126,10 @@ export function Host({ children, ...props }: HostProps) {
       warnedAboutHeight.current = true;
       console.warn(
         'react-native-nitro-ui: a <Host> measured 0 tall, so nothing inside it is ' +
-          'visible. A Host takes its box from its own style (a `height`, or ' +
-          '`flex: 1`, or a parent that stretches it) and never from its content: a ' +
-          'hosted control reports no size (D24, docs/architecture/sizing.md §10), so ' +
-          'unlike a plain <View> it will not grow to fit.'
+          'visible. A Host measures nothing: its box is its own `style` plus the ' +
+          'boxes RN computes for its children, and nothing inside it can grow it ' +
+          'back. Give it a `height` or `flex: 1`, or take the height away from ' +
+          'whatever parent is refusing it (D24, docs/architecture/sizing.md). '
       );
     }
   };

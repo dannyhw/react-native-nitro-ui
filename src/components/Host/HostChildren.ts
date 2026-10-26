@@ -1,5 +1,32 @@
 import { Fragment, type ReactNode, isValidElement } from 'react';
+import {
+  ActivityIndicator,
+  Button as RNButton,
+  FlatList,
+  Image,
+  ImageBackground,
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  SectionList,
+  Switch as RNSwitch,
+  Text,
+  TextInput,
+  TouchableHighlight,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 
+import { Button } from '../Button/Button';
+import { DatePicker } from '../DatePicker/DatePicker';
+import { Picker } from '../Picker/Picker';
+import { Progress } from '../Progress/Progress';
+import { SegmentedControl } from '../SegmentedControl/SegmentedControl';
+import { Slider } from '../Slider/Slider';
 import { Switch } from '../Switch/Switch';
 
 /**
@@ -16,6 +43,58 @@ import { Switch } from '../Switch/Switch';
  * rendered into a composition that was never measured for them.
  */
 const HOSTABLE_CONTROLS = new Map<unknown, string>([[Switch, 'Switch']]);
+
+/**
+ * This library's other controls, by the same identity rule.
+ *
+ * They are named rather than left to fall through because of what an unhostable
+ * nitro-ui child does on Android: the Host skips it and it draws nothing.
+ * `src/__tests__/host.test.tsx` walks `src/components` and fails if a control is
+ * added without a row in one of the two tables, so this list cannot quietly fall
+ * behind the library.
+ */
+const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
+  [Button, 'Button'],
+  [DatePicker, 'DatePicker'],
+  [Picker, 'Picker'],
+  [Progress, 'Progress'],
+  [SegmentedControl, 'SegmentedControl'],
+  [Slider, 'Slider'],
+]);
+
+/**
+ * The RN views an app reaches for, so that "no RN views in a Host" is checked
+ * rather than hoped.
+ *
+ * A direct RN child is what the spike found to be silently wrong: the Host skips
+ * it, and no composition is asked to draw it. RN hands JS a `forwardRef` object
+ * for these, not the native name, so the only honest check is identity against the
+ * components themselves - `displayName` would also reject an app's own `View`, and
+ * would miss RN's own `Switch` being passed for ours. Not exhaustive by nature
+ * (`Animated.*`, and any third-party native view); what JS cannot see, the native
+ * Host says out loud in dev when it is handed a child it cannot compose.
+ */
+const UNHOSTABLE_RN_VIEWS = new Map<unknown, string>([
+  [ActivityIndicator, 'ActivityIndicator'],
+  [FlatList, 'FlatList'],
+  [Image, 'Image'],
+  [ImageBackground, 'ImageBackground'],
+  [KeyboardAvoidingView, 'KeyboardAvoidingView'],
+  [Modal, 'Modal'],
+  [Pressable, 'Pressable'],
+  [RefreshControl, 'RefreshControl'],
+  [RNButton, 'Button'],
+  [RNSwitch, 'Switch'],
+  [SafeAreaView, 'SafeAreaView'],
+  [ScrollView, 'ScrollView'],
+  [SectionList, 'SectionList'],
+  [Text, 'Text'],
+  [TextInput, 'TextInput'],
+  [TouchableHighlight, 'TouchableHighlight'],
+  [TouchableOpacity, 'TouchableOpacity'],
+  [TouchableWithoutFeedback, 'TouchableWithoutFeedback'],
+  [View, 'View'],
+]);
 
 /** The names in {@link HOSTABLE_CONTROLS}, for the error and the docs. */
 export const HOSTABLE_NAMES: readonly string[] = [
@@ -37,9 +116,17 @@ export const HOSTABLE_NAMES: readonly string[] = [
  * must not learn that on the platform it did not test.
  *
  * **What it walks:** arrays and fragments, because neither exists in the native
- * tree - a child under a fragment *is* a direct child of the Host. It does not
- * walk into another component: what one renders is not visible from here, which
- * is the same limit the native direct-parent rule has.
+ * tree - a child under one *is* a direct child of the Host.
+ *
+ * **What it cannot see, and does not pretend to:** another component. React
+ * flattens components out of the native tree, so whatever a child component
+ * renders *becomes* a direct child of the Host - a `<Row>` that returns a
+ * `<Switch>` is hosted, and nothing here could have told the two shapes apart.
+ * That is the same limit the native direct-parent rule has, so an unknown
+ * component passes and the view it returns decides; the native Host reports a child
+ * it cannot compose in dev. What is refused is what JS can *prove*: a text node, a
+ * host component, one of RN's own views, or one of our controls that is not hosted
+ * yet.
  */
 export function assertHostChildren(children: ReactNode): void {
   if (!__DEV__) {
@@ -73,43 +160,20 @@ function visit(children: ReactNode, position: string): void {
     visit((children.props as { children?: ReactNode }).children, position);
     return;
   }
-  throw new Error(childError(describeElement(children.type), position));
+  const unhostable =
+    UNHOSTABLE_CONTROLS.get(children.type) ??
+    UNHOSTABLE_RN_VIEWS.get(children.type) ??
+    // A string tag is a host component whatever it is called, and none of them is
+    // a nitro-ui control. RN's own are in the table above by identity; this catches
+    // a raw tag and a third-party native component.
+    (typeof children.type === 'string' ? String(children.type) : null);
+  if (unhostable != null) {
+    throw new Error(childError(`<${unhostable}>`, position));
+  }
 }
 
 function join(position: string, index: number): string {
   return position === '' ? String(index) : `${position}/${index}`;
-}
-
-/**
- * What a child looks like to someone reading an error about it.
- *
- * Not `type.name` alone: an RN built-in is a `forwardRef` object (`View`, `Text`,
- * `ScrollView`), a native component is a string, and a minified component can
- * have an empty `name` - and "child 2 is an element" is as silent as the bug.
- */
-function describeElement(type: unknown): string {
-  if (typeof type === 'string') {
-    return `<${type}>`;
-  }
-  if (typeof type === 'function') {
-    return `<${nameOf(type) ?? 'anonymous component'}>`;
-  }
-  if (typeof type === 'object' && type !== null) {
-    const named = type as {
-      displayName?: string;
-      render?: { displayName?: string; name?: string };
-    };
-    return `<${nameOf(named) ?? nameOf(named.render) ?? 'component'}>`;
-  }
-  return 'an element';
-}
-
-function nameOf(value: unknown): string | null {
-  if (typeof value !== 'object' && typeof value !== 'function') {
-    return null;
-  }
-  const named = value as { displayName?: string; name?: string };
-  return named.displayName ?? (named.name === '' ? null : (named.name ?? null));
 }
 
 function describeText(child: ReactNode): string {
