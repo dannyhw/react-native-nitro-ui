@@ -426,6 +426,59 @@ export function realpath(artifact) {
 export class StaleAppError extends Error {}
 
 /**
+ * Decide, without refusing anything: does the artifact at this path really come
+ * from this code tree?
+ *
+ * `assertFreshApp` is the same question with a throw attached, and
+ * `scripts/build-app.mjs` needs the answer the other way round - it skips the
+ * build when the answer is yes, so a "no" here is a normal sentence in a log,
+ * not an error. Both callers go through this one so they can never disagree.
+ *
+ * @param {object} options
+ * @param {string} [options.repoRoot]
+ * @param {'ios'|'android'} options.platform
+ * @param {string} [options.artifact] the `.app` or `.apk` to look at
+ * @param {((message: string) => void)} [options.warn]
+ * @returns {{ok: boolean, artifact: string, stamp?: object, problems?: string[], fix?: string}}
+ */
+export function checkFreshApp({
+  repoRoot = repoRootOf(),
+  platform,
+  artifact = artifactPath({ repoRoot, platform }),
+  warn = (message) => process.stderr.write(`app.stamp: ${message}\n`),
+}) {
+  if (!fs.existsSync(artifact)) {
+    return {
+      ok: false,
+      artifact,
+      problems: [`${artifact} does not exist`],
+      fix: `build it: node scripts/build-app.mjs --platform ${platform}`,
+    };
+  }
+  const stamp = readStamp(stampPath({ repoRoot, platform }));
+  const components = registeredComponents({ repoRoot, platform });
+  const { counts, fingerprint } = inspectArtifact({
+    platform,
+    artifact,
+    components,
+    warn,
+  });
+  const decision = decideFreshness({
+    stamp,
+    current: currentCodeTree({ repoRoot }),
+    platform,
+    artifact,
+    artifactPath: realpath(artifact),
+    fingerprint,
+    components,
+    counts,
+  });
+  return decision.ok
+    ? { ok: true, artifact, stamp }
+    : { ...decision, artifact, stamp };
+}
+
+/**
  * The gate. Throws `StaleAppError` with the reason and the fix.
  *
  * @param {object} options
@@ -443,32 +496,14 @@ export function assertFreshApp({
   command = 'this run',
   warn = (message) => process.stderr.write(`app.stamp: ${message}\n`),
 }) {
-  const file = stampPath({ repoRoot, platform });
-  const stamp = readStamp(file);
-  const components = registeredComponents({ repoRoot, platform });
-  if (!fs.existsSync(artifact)) {
+  const decision = checkFreshApp({ repoRoot, platform, artifact, warn });
+  if (decision.ok) return decision.stamp;
+  if (decision.problems[0].endsWith('does not exist')) {
     throw new StaleAppError(
-      `${command}: ${artifact} does not exist.\n` +
+      `${command}: ${decision.problems[0]}.\n` +
         `       build it: node scripts/build-app.mjs --platform ${platform}`
     );
   }
-  const { counts, fingerprint } = inspectArtifact({
-    platform,
-    artifact,
-    components,
-    warn,
-  });
-  const decision = decideFreshness({
-    stamp,
-    current: currentCodeTree({ repoRoot }),
-    platform,
-    artifact,
-    artifactPath: realpath(artifact),
-    fingerprint,
-    components,
-    counts,
-  });
-  if (decision.ok) return stamp;
   throw new StaleAppError(
     `${command}: refusing to run against a stale app.\n` +
       decision.problems.map((problem) => `       - ${problem}`).join('\n') +
