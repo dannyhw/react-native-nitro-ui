@@ -60,10 +60,35 @@ tasks depend on.
 
 ## Report
 
-Write `docs/tasks/<ID>.report.md` on your branch with: summary, files changed, decisions made
-(and why), gate results (exact commands + pass/fail), benchmark numbers if applicable, known
-issues / follow-ups, questions for orchestrator. Your final message should be a concise version
-of the report plus the branch name and final commit SHA.
+Copy `docs/tasks/REPORT-TEMPLATE.md` to `docs/tasks/<ID>.report.md` and fill it in: a summary of
+**400 words or less**, the generated gate table, red proofs as one line each (`test -> mutation
+-> the line that went red`), follow-ups as one line each, and questions. A fix round appends a
+`## Fix round N` section of **200 words or less** rather than rewriting the report. Anything that
+does not fit is an optional appendix. Your final message is a concise version of that report plus
+the branch name and final commit SHA.
+
+Run gates through `node scripts/gate.mjs <gate>` (see its header for the names) rather than the
+`bun run` form. Every run lands in `.gates/<branch>.jsonl` keyed to the code tree, and:
+
+- `gate.mjs status` says what is green, red or missing for the code in front of you;
+- `gate.mjs need --for review` / `--for merge` exits non-zero with what the stage still needs, so
+  a round checks its own bar instead of claiming one. A docs-only commit invalidates nothing; a
+  fix round re-runs only the platforms its diff touches, because each device run is also keyed to
+  that platform's half of the tree (`trees.ios` / `trees.android`) while `check` and merge are
+  matched on the whole tree; the full harness plus real-input runs once, at merge. Benches are
+  never required by `need` (they belong to the bench host), and neither is anything under the
+  check-only tooling list in `scripts/gate-core.mjs` (`scripts/gate*.mjs`, `scripts/__tests__`,
+  `eslint-rules/`, `etc/`, `.changeset/`): those touch no platform half, so `check` proves them;
+- a filtered run records under its own name (`gate.mjs harness:android -- ColdSizing` is
+  `harness:android:ColdSizing`), and satisfies nothing else; `check` takes no arguments at all;
+- `gate.mjs table` renders the report's gate table, and `gate.mjs export --task <ID>` commits the
+  ledger to `docs/tasks/<ID>/gates.jsonl` beside it.
+
+Do not write a gate result into a report that the table does not print, and do not write a device
+hygiene section. Leases and the scripts enforce that now (X1): a device gate runs under
+`scripts/lease.mjs`, refuses an app whose `app.stamp` does not match the tree, and cannot be
+handed the reserved emulator serial. Report a hygiene *incident* if one happened; otherwise the
+lease id in the header is the whole section.
 
 ## Scope discipline (D19)
 
