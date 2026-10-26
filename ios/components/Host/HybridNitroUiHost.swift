@@ -2,8 +2,9 @@
 //  HybridNitroUiHost.swift
 //  react-native-nitro-ui
 //
-//  A documented no-op (T16 spike). `<Host>` renders a shared native composition on
-//  Android; on iOS `Host.tsx` renders a plain `View` and never instantiates this
+//  A documented no-op (`docs/tasks/T16-host-spike.md`). `<Host>` renders a shared
+//  native composition on Android; on iOS `Host.tsx` renders a plain `View` and never
+//  instantiates this
 //  type. It exists because nitrogen refuses to generate a Hybrid View with no
 //  native implementation on a platform, `@platforms` included - so the iOS half of
 //  the spec has to be satisfiable, and this is the smallest thing that satisfies it.

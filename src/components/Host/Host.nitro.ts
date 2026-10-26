@@ -9,7 +9,7 @@ import type {
  *
  * The Host has **no native props**: it owns no state of its own, it renders
  * nothing of its own, and everything a control inside it needs already travels
- * on that control (T16 spike, `docs/tasks/T16-host-spike.md`). Base `View` props
+ * on that control (`docs/components/host.md`). Base `View` props
  * (`style`, layout, testID, a11y) are RN's, applied by the view manager.
  */
 export interface NitroUiHostProps extends HybridViewProps {}
