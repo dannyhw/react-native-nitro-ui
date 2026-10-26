@@ -267,12 +267,13 @@ shared host on all four controls whose update cell is comparable (1.01–1.87×)
 
 `<Host>` — opt-in, Android, `Switch` today — is the one place that bill is paid the
 other way, and it is the arm this library now measures. Measured the same way on the
-same emulator (one run, `quick`, `speed-profile`, five arms, machine load median 2.99
-over 14 cores, `problems: none`): 200 Switches inside one Host cost **0.85×** the
-shared host's mount memory — 45.3 KiB per instance against its 53.3 KiB — and **0.81×**
-its mount UI CPU per op, where the same Switches unhosted cost 2.68× and 1.38×;
-`mounted` is 0.98× and `presented` 1.00×. The axis it loses on is the JS thread:
-1.26× the shared host on mount JS CPU per op, against 0.78× for the unhosted control,
+same emulator (one run, `quick`, `speed-profile`, five arms, machine load median 2.96
+over 14 cores, `problems: none`): 200 Switches inside one Host cost **0.86×** the
+shared host's mount memory — 44.5 KiB per instance against its 51.9 KiB — and **0.87×**
+its mount UI CPU per op, where the same Switches unhosted cost 2.63× and 1.39×;
+`mounted` is 0.97× and `presented` 0.99×, and unmounting costs 0.78× what it costs the
+shared host. The axis it loses on is the JS thread:
+1.18× the shared host on mount JS CPU per op, against 0.73× for the unhosted control,
 because a hosted control is still a React Native node _and_ a child of somebody
 else's composition. That is why the container is something an app opts into for a dense
 list rather than what every `<View>` does (`docs/components/host.md`, and

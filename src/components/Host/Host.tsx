@@ -29,12 +29,12 @@ export interface HostProps extends ViewProps {
  * `Composition`, one owner view and one native view tree per control, which is
  * exactly what Android mount memory and mount UI-thread time pay for. A Host gives
  * all of its direct children **one** composition instead, so 50 Switches cost one
- * composition rather than fifty. Measured (T16, `quick`, `speed-profile`, N=200):
- * **0.87x** `expo-ui-shared-host` on mount memory and **0.80x** on mount UI CPU
- * per op, against 2.75x and 1.50x without a Host. What it pays with is the JS
- * thread - a hosted control is still an RN node *plus* a child of somebody else's
- * composition: **1.10x** the shared host on mount JS CPU per op. Opt-in for that
- * reason, not a default.
+ * composition rather than fifty. Measured on the shipping container (H1, `quick`,
+ * `speed-profile`): **0.86x** `expo-ui-shared-host` on mount memory (44.5 KiB per
+ * Switch against its 51.9 KiB) and **0.87x** on mount UI CPU per op, against 2.63x and
+ * 1.39x without a Host. What it pays with is the JS thread - a hosted control is still
+ * an RN node *plus* a child of somebody else's composition: **1.18x** the shared host
+ * on mount JS CPU per op. Opt-in for that reason, not a default.
  *
  * Only `Switch` is hosted today, and the rule is held on both sides of the bridge.
  * A direct child that JS can prove is not one (a text node, an RN view, one of our
