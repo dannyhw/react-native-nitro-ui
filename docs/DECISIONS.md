@@ -225,3 +225,10 @@ must say so (no "install from npm" without that caveat, no "verified in CI"). In
 (`docs/tasks/`, `PLAN.md`, this file, `AGENTS.md`) stay in the repo as a development log on the
 condition that they carry no personal information — no personal emails, absolute home paths, names
 of the human's own devices or apps; tasks and reports must keep it that way.
+
+## D26 — First npm release is 0.1.0 from main (2026-10-26)
+
+The owner's call: publish `react-native-nitro-ui@0.1.0` from current `main` (seven controls plus
+`<Host>` on Android for Switch), after the public-docs pass and a fresh tarball smoke on both
+platforms (R5). The owner runs `npm publish` by hand (first publish is manual; no npm login on the
+build machine). Host support for more controls (H2a/H2b) is 0.2.
