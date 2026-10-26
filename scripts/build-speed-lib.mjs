@@ -107,16 +107,26 @@ export function ccacheRequested(env = {}) {
  * write either file without carrying a machine path. Environment wins over both
  * config files.
  *
+ * `CCACHE_BINARY` is here for a subtler reason. iOS compiles go through React
+ * Native's `ccache-clang.sh`, whose last line is `exec $CCACHE_BINARY clang`,
+ * and React Native supplies that path as an Xcode *build setting* - which Xcode
+ * does not put in the environment of the compiler it launches. An empty
+ * variable there means the wrapper runs plain clang: no error, no cache, no
+ * hint. A build that says it uses ccache should have set the variable it is
+ * read from, so it is exported here too.
+ *
  * @param {object} options
  * @param {boolean} options.enabled ccache was found on this machine
  * @param {string} options.repoRoot this checkout
+ * @param {string} [options.binary] the ccache binary the wrapper should exec
  * @returns {Record<string, string>} empty when ccache is not installed
  */
-export function ccacheEnv({ enabled, repoRoot }) {
+export function ccacheEnv({ enabled, repoRoot, binary }) {
   if (!enabled) return {};
   return {
     CCACHE_BASEDIR: repoRoot,
     CCACHE_NOHASHDIR: '1',
+    ...(binary ? { CCACHE_BINARY: binary } : {}),
   };
 }
 

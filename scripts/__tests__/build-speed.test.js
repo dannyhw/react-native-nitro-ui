@@ -97,6 +97,20 @@ describe('ccache', () => {
       // mistake is invisible in the timings it causes.
       CCACHE_NOHASHDIR: '1',
     });
+    // iOS: React Native's wrapper execs `$CCACHE_BINARY clang`, and Xcode does
+    // not put that build setting in the compiler's environment - unset, it
+    // silently compiles with plain clang.
+    expect(
+      ccacheEnv({
+        enabled: true,
+        repoRoot: '/w/X6',
+        binary: '/opt/homebrew/bin/ccache',
+      })
+    ).toEqual({
+      CCACHE_BASEDIR: '/w/X6',
+      CCACHE_NOHASHDIR: '1',
+      CCACHE_BINARY: '/opt/homebrew/bin/ccache',
+    });
     expect(
       gradleCcacheArgs({ enabled: true, initScript: '/i.gradle' })
     ).toEqual(['--init-script=/i.gradle']);
