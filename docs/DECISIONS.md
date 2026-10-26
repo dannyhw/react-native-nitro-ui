@@ -234,3 +234,15 @@ The owner's call: publish `react-native-nitro-ui@0.1.0` from current `main` (sev
 `<Host>` on Android for Switch), after the public-docs pass and a fresh tarball smoke on both
 platforms (R5). The owner runs `npm publish` by hand (first publish is manual; no npm login on the
 build machine). Host support for more controls (H2a/H2b) is 0.2.
+
+## D27 — Releases via Changesets and npm trusted publishing (2026-10-26)
+
+The owner's call: from 0.1.1 on, versions are cut by Changesets (a "Version Packages" PR) and
+published from GitHub Actions with npm trusted publishing (OIDC) — no npm token in GitHub. release-it
+is removed. The `0.0.0-stage` version on npm is npm's own staged-publishing placeholder (it scans a
+package before release) — not ours, not a concern.
+- **D27 amendment (2026-10-26):** the owner keeps npm's trusted publisher at **staged publishing
+  only** (`npm publish` not allowed). CI stages each version (`npm stage publish`, OIDC); the owner
+  approves it on npmjs.com with 2FA; a catch-up workflow then tags `vX.Y.Z` and creates the GitHub
+  release once the version is live. Checks/pack and staging run in separate jobs; only staging gets
+  `id-token: write`.
