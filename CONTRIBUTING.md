@@ -526,12 +526,15 @@ D26); everything after it is this path (D27).
    note that reads well in `CHANGELOG.md` — that text _is_ the release note.
    Commit the file it writes in `.changeset/` with your pull request. A change
    that must not release anything (docs, tooling, tests) still gets an entry:
-   `bunx changeset --empty`. `Changeset status` warns on a pull request that
-   changes `src/`, `ios/`, `android/`, `cpp/` or `nitrogen/` without one; the
-   warning never blocks a merge, because a maintainer can add the entry.
+   `bun run changeset add --empty`. `Changeset status` warns on a pull request
+   that changes `src/`, `ios/`, `android/`, `cpp/` or `nitrogen/` without one;
+   the warning never blocks a merge, because a maintainer can add the entry.
    Only `react-native-nitro-ui` is ever versioned: the `example`, `bench` and
    `bench/modules/bench-probe` workspaces are `private` and listed in `ignore`
-   in `.changeset/config.json`.
+   in `.changeset/config.json`. Changesets only versions packages listed in
+   `workspaces`, so the `"."` entry in `package.json` — the library itself — is
+   load-bearing: drop it and `changeset version` fails with "not in the
+   workspace", because it cannot see this package at all.
 2. **Merge pull requests to `main`.** The `Release` workflow runs
    `bun run check`, then `changeset version`, and opens or updates a pull
    request called **Version Packages**: it bumps `package.json`, prepends the
@@ -543,6 +546,13 @@ D26); everything after it is this path (D27).
    committed on `main`, tags `vX.Y.Z` and opens the GitHub release from the
    changelog entry. `npm publish` runs this package's `prepare` (builder-bob →
    nitrogen) while packing, and provenance comes from the job's OIDC token.
+
+Changelog entries link the commit that carried them: the generator is
+`@changesets/changelog-git`, which ships with the CLI and needs nothing.
+`@changesets/changelog-github` would link pull requests and their authors
+instead, but it throws unless a `GITHUB_TOKEN` personal access token is in the
+environment — a secret on a path that is meant to need none, and one that makes
+`bun run release:version` un-runnable on a laptop.
 
 Two things that look wrong and are not:
 
