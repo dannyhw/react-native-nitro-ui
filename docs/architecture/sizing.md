@@ -512,7 +512,7 @@ Limits, stated plainly:
 
 ## 10. A control inside a `<Host>` (D24)
 
-`<Host>` (Android, opt-in, `Switch` only; on `main`, unreleased — `docs/components/host.md`) composes its direct
+`<Host>` (Android, opt-in, `Switch` only — `docs/components/host.md`) composes its direct
 nitro-ui children into **one** Compose composition, which is where the mount memory and
 UI-thread win comes from (H1's run: 2.75x → **0.86x** `expo-ui-shared-host` on mount memory,
 1.39x → **0.87x** on mount UI CPU; T16's spike measured 2.75x → 0.87x and 1.50x → 0.80x the

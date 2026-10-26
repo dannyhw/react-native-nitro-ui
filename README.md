@@ -12,24 +12,23 @@ TalkBack get the control's own accessibility instead of an approximation of it.
 Layout still belongs to Yoga — the control measures itself, reports its size to
 the layout engine, and React never sees a native node.
 
-> **Status: not published yet.** Nothing is on npm, and there is no git tag or
-> GitHub release. `package.json` says `0.1.0`, which is the scope of the first
-> release (Switch, Slider, Progress, Button, SegmentedControl); `main` already
-> has more than that (Picker, DatePicker and an opt-in `<Host>`), all unreleased.
-> To try it today, [build it from source](#installation).
+> **Status: 0.1.0, not published yet.** The first release covers everything in
+> the table below — seven controls plus an opt-in `<Host>` — and `package.json`
+> says `0.1.0`. Nothing is on npm, and there is no git tag or GitHub release. To
+> try it today, [build it from source](#installation).
 
 ## Components
 
-| Component          | iOS                                                        | Android                                                      | Status            | Docs                                                         |
-| ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
-| `Switch`           | `Toggle(…).toggleStyle(.switch)`                           | `androidx.compose.material3.Switch`                          | 0.1.0             | [switch.md](docs/components/switch.md)                       |
-| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                  | `androidx.compose.material3.Slider`                          | 0.1.0             | [slider.md](docs/components/slider.md)                       |
-| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0             | [progress.md](docs/components/progress.md)                   |
-| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`            | the five Material 3 button composables                       | 0.1.0             | [button.md](docs/components/button.md)                       |
-| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | 0.1.0             | [segmented-control.md](docs/components/segmented-control.md) |
-| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                    | `ExposedDropdownMenuBox` (M3)                                | unreleased (main) | [picker.md](docs/components/picker.md)                       |
-| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)      | M3 `DatePicker` / `TimePicker` and their dialogs             | unreleased (main) | [date-picker.md](docs/components/date-picker.md)             |
-| `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its `Switch` children     | unreleased (main) | [host.md](docs/components/host.md)                           |
+| Component          | iOS                                                        | Android                                                      | Status | Docs                                                         |
+| ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| `Switch`           | `Toggle(…).toggleStyle(.switch)`                           | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
+| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                  | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
+| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
+| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`            | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
+| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
+| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                    | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
+| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)      | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
+| `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its `Switch` children     | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of Switches
 one Compose composition on Android instead of one each. `Switch` is the only
