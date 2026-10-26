@@ -216,3 +216,12 @@ tall versus 20, a short Host versus a tall one, `width: '100%'` versus nothing �
 sizing counters, whose "no cache entry" claim is made against a cache the test invalidated
 and whose positive control is the same eight controls unhosted) and by
 `src/__tests__/host.test.tsx` + `src/__tests__/hostLayoutWarning.test.tsx` for the JS half.
+
+## D25 — The repo is public (2026-10-26)
+
+The human made `dannyhw/react-native-nitro-ui` public. Supersedes D22's "private" part only:
+nothing is on npm yet, there is no tag or release, and the GitHub workflows stay disabled. User docs
+must say so (no "install from npm" without that caveat, no "verified in CI"). Internal process docs
+(`docs/tasks/`, `PLAN.md`, this file, `AGENTS.md`) stay in the repo as a development log on the
+condition that they carry no personal information — no personal emails, absolute home paths, names
+of the human's own devices or apps; tasks and reports must keep it that way.
