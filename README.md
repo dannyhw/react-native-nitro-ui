@@ -10,28 +10,42 @@ the toggle animates like Apple's, the slider takes drags the way `UISlider`
 does, the iOS segmented row truncates labels the way the OS does, and VoiceOver and
 TalkBack get the control's own accessibility instead of an approximation of it.
 Layout still belongs to Yoga — the control measures itself, reports its size to
-the layout engine, and React never sees a native node. v0.1 ships five controls
-(Switch, Slider, Progress, Button, SegmentedControl), the shared native core
-they are built on, and a benchmark rig that prices them against the same
-controls reached through `@expo/ui`.
+the layout engine, and React never sees a native node.
+
+> **Status: not published yet.** Nothing is on npm, and there is no git tag or
+> GitHub release. `package.json` says `0.1.0`, which is the scope of the first
+> release (Switch, Slider, Progress, Button, SegmentedControl); `main` already
+> has more than that (Picker, DatePicker and an opt-in `<Host>`), all unreleased.
+> To try it today, [build it from source](#installation).
 
 ## Components
 
-| Component          | iOS                                                        | Android                                                      | Docs                                                         |
-| ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| `Switch`           | `Toggle(…).toggleStyle(.switch)`                           | `androidx.compose.material3.Switch`                          | [switch.md](docs/components/switch.md)                       |
-| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                  | `androidx.compose.material3.Slider`                          | [slider.md](docs/components/slider.md)                       |
-| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | [progress.md](docs/components/progress.md)                   |
-| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`            | the five Material 3 button composables                       | [button.md](docs/components/button.md)                       |
-| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | [segmented-control.md](docs/components/segmented-control.md) |
+| Component          | iOS                                                        | Android                                                      | Status            | Docs                                                         |
+| ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
+| `Switch`           | `Toggle(…).toggleStyle(.switch)`                           | `androidx.compose.material3.Switch`                          | 0.1.0             | [switch.md](docs/components/switch.md)                       |
+| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                  | `androidx.compose.material3.Slider`                          | 0.1.0             | [slider.md](docs/components/slider.md)                       |
+| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0             | [progress.md](docs/components/progress.md)                   |
+| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`            | the five Material 3 button composables                       | 0.1.0             | [button.md](docs/components/button.md)                       |
+| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | 0.1.0             | [segmented-control.md](docs/components/segmented-control.md) |
+| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                    | `ExposedDropdownMenuBox` (M3)                                | unreleased (main) | [picker.md](docs/components/picker.md)                       |
+| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)      | M3 `DatePicker` / `TimePicker` and their dialogs             | unreleased (main) | [date-picker.md](docs/components/date-picker.md)             |
+| `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its `Switch` children     | unreleased (main) | [host.md](docs/components/host.md)                           |
+
+`Host` is a container, not a control: an opt-in way to give a batch of Switches
+one Compose composition on Android instead of one each. `Switch` is the only
+control it can hold today. See [Performance](#performance) for what it buys and
+what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
-monotonic clock, `CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`) and `prewarm` (see
-[Sizing](#sizing)):
+monotonic clock, `CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, plus sizing
+diagnostics) and `prewarm` (see [Sizing](#sizing)):
 
 ```ts
 import {
   Button,
+  DatePicker,
+  Host,
+  Picker,
   Progress,
   SegmentedControl,
   Slider,
@@ -52,35 +66,59 @@ Jetpack Compose (compiler plugin + Material 3 BOM) is configured inside this
 package's `android/build.gradle`, so your app does not have to opt in to Compose
 to use one slider, and no Podfile or Gradle edits are needed either way.
 
+A dev build is required: Expo Go is not supported, because Nitro Modules needs
+native code.
+
 ## Installation
 
 React Native autolinks the native code: no config plugin, no Podfile or Gradle
-edits, no manual linking. The steps below are the ones our consumer smoke tests
-run (`scripts/smoke/`, with `npm` and a Release build) against a fresh Expo SDK
-58 app and fresh React Native CLI apps, and every row below was re-run for 0.1:
+edits, no manual linking.
 
-| Consumer              | iOS | Android |
-| --------------------- | --- | ------- |
-| Expo SDK 58 (RN 0.88) | ✅  | ✅      |
-| RN CLI 0.88.0         | ✅  | ✅      |
-| RN CLI 0.86.3         | n/a | ✅      |
+### Today: build a tarball from source
 
-RN 0.86.3 is supported (it is our floor); its Android install was re-run for
-0.1. Its iOS install is not verifiable on an iOS 27 simulator runtime — a fresh
-0.86.3 app without this library hangs at launch there too — so it has a row on
-an older runtime in the CI smoke workflow (`.github/workflows/smoke.yml`), which
-has not run yet.
+The package is not on npm yet, and it needs a build step (`bob build`, which
+also regenerates the Nitro code) before an app can use it, so build it from a
+clone and install the tarball. You need [bun](https://bun.sh) 1.4 and Node 24
+(see [CONTRIBUTING](CONTRIBUTING.md#prerequisites)):
 
-### Expo (Continuous Native Generation)
+```sh
+git clone https://github.com/dannyhw/react-native-nitro-ui.git
+cd react-native-nitro-ui
+bun install
+bun run prepare                          # builds lib/ with builder-bob
+npm pack                                 # writes react-native-nitro-ui-0.1.0.tgz
+```
+
+Then, in your app:
+
+```sh
+npm install /path/to/react-native-nitro-ui-0.1.0.tgz react-native-nitro-modules
+```
+
+and rebuild it the way you normally would (`npx expo prebuild` /
+`npx expo run:ios` for Expo, `bundle exec pod install` then
+`npx react-native run-ios` / `run-android` for the React Native CLI). This is the
+same path the consumer smoke tests take (`bun run smoke:pack`, then `npm install`
+of the tarball into a freshly generated app); see
+[Consumer smoke tests](CONTRIBUTING.md#consumer-smoke-tests).
+
+Installing straight from GitHub (`npm install github:dannyhw/react-native-nitro-ui`)
+is untested: npm would have to install this repo's development dependencies,
+including its example and benchmark workspaces, and run the build during your
+install. Use the tarball.
+
+### After the first release
+
+These are the commands for once the package is on npm. **They do not work yet.**
+
+Expo (Continuous Native Generation):
 
 ```sh
 npm install react-native-nitro-ui react-native-nitro-modules
 npx expo prebuild   # or: npx expo run:ios / npx expo run:android / eas build
 ```
 
-Requires a dev build - Expo Go is not supported.
-
-### Bare React Native CLI
+Bare React Native CLI:
 
 ```sh
 npm install react-native-nitro-ui react-native-nitro-modules
@@ -89,6 +127,25 @@ cd ios && bundle install && bundle exec pod install
 
 Rebuild the app (`npx react-native run-ios` / `run-android`) so the new native
 code is compiled in.
+
+### What has been tried
+
+The consumer smoke tests (`scripts/smoke/`) install the packed tarball with
+`npm` into a fresh app, build **Release**, launch it and check that every
+control mounts with a non-zero size. They are run by hand — the GitHub
+workflows are disabled for now — and these rows are from the 0.1.0 scope (the
+five controls); they have not been re-run since Picker and DatePicker were
+added to `main`:
+
+| Consumer              | iOS | Android |
+| --------------------- | --- | ------- |
+| Expo SDK 58 (RN 0.88) | ✅  | ✅      |
+| RN CLI 0.88.0         | ✅  | ✅      |
+| RN CLI 0.86.3         | n/a | ✅      |
+
+RN 0.86.3 is the supported floor. Its iOS install has not been verified: on an
+iOS 27 simulator runtime a fresh 0.86.3 app hangs at launch even without this
+library, and no run on an older runtime has been done.
 
 ## Usage
 
@@ -192,14 +249,82 @@ export function ViewToggle() {
 }
 ```
 
+### Picker
+
+The value is an index into `options`, as with `SegmentedControl`; `label` is
+drawn as the Material 3 field's label on Android and used for accessibility on
+iOS.
+
+```tsx name=picker
+export function SizePicker() {
+  const [index, setIndex] = useState(0);
+
+  return (
+    <Picker
+      label="Size"
+      options={['Small', 'Medium', 'Large']}
+      selectedIndex={index}
+      onChange={(event) => setIndex(event.index)}
+    />
+  );
+}
+```
+
+### DatePicker
+
+Dates are `Date` objects. `variant` picks `compact` (a field that opens the
+platform picker, the default), `inline` or `wheel`; `mode` picks `date`, `time`
+or `datetime`.
+
+```tsx name=date-picker
+export function DueDate() {
+  const [date, setDate] = useState(() => new Date());
+
+  return (
+    <DatePicker accessibilityLabel="Due date" value={date} onChange={setDate} />
+  );
+}
+```
+
+### Host
+
+Opt-in. On Android its direct `Switch` children share one Compose composition;
+on iOS it is a plain `View`. Its only children may be Switches (anything else
+throws in development), and it should be given a height.
+
+```tsx name=host
+export function NotificationSettings() {
+  const [push, setPush] = useState(true);
+  const [email, setEmail] = useState(false);
+
+  // Android: both Switches render in one Compose composition.
+  // iOS: Host is a plain View, so this renders exactly as without it.
+  return (
+    <Host style={styles.settings}>
+      <Switch accessibilityLabel="Push" value={push} onValueChange={setPush} />
+      <Switch
+        accessibilityLabel="Email"
+        value={email}
+        onValueChange={setEmail}
+      />
+    </Host>
+  );
+}
+
+const styles = StyleSheet.create({
+  // Say how tall a Host is: it draws its children into this box.
+  settings: { height: 96 },
+});
+```
+
 ## Sizing
 
 A control's box is **its own measurement**, taken at runtime on the device your
 app is running on, and reported to the layout engine — not a constant written
 into the library. A Switch is 61 × 28 pt on iOS 26+ and 51 × 31 pt on iOS 15–25
-because the running OS says so; `Slider` and `variant="linear"` `Progress` are
-the two `fillWidth` controls, so their width is the box their parent gives them
-and only their height is their own.
+because the running OS says so. `Slider`, a `linear` `Progress`, a `wheel`
+`Picker` and an `inline` or `wheel` `DatePicker` are `fillWidth`: their width is
+the box their parent gives them and only their height is their own.
 
 - **Your styles win.** `width`, `height` or `flex` fix the box and the control
   centres inside it, exactly as with a stock RN component.
@@ -220,10 +345,16 @@ and only their height is their own.
   a component's declared size as this environment's provisional answer before the
   first screen mounts, so nothing shows the fallback frame. It is cheap, safe to
   call with a name a future version does not know, and the sizing engine still
-  treats it as provisional: a real measurement replaces it if it disagrees.
+  treats it as provisional: a real measurement replaces it if it disagrees. It
+  seeds a component's default configuration only, so it helps controls with one
+  configuration (`Switch`, `Slider`); there is no way yet to pre-warm a
+  particular Button title or option list.
+- **A control inside `<Host>` is not measured at all** on Android: the Host
+  draws its children in one column at its own width, so the box to get right is
+  the Host's. See [host.md](docs/components/host.md#sizing-d24).
 
-`docs/architecture/sizing.md` has the rule, the counters and the traps;
-`docs/architecture/core.md` has the hosting model underneath it.
+[sizing.md](docs/architecture/sizing.md) has the rule, the counters and the
+traps; [core.md](docs/architecture/core.md) has the hosting model underneath it.
 
 ## Performance
 
@@ -238,87 +369,112 @@ three arms in the same run, on the same device, in Release builds:
   for all of them. This is the arm worth being measured against, and the target
   is ≤ 1.0× on mount latency, UI CPU and memory.
 
-The release-readiness runs for 0.1 — `bun bench --plan quick`, one run per
-component, on one commit, on an iPhone 17 simulator and an API 35 emulator whose
-ART state was primed to `speed-profile` — measured against `expo-ui-shared-host`
-(`✓` meets the ≤ 1.0× target, `✗` misses it, `n/v` means the harness's own rules
-deny that cell a verdict: the frame probe's sanity counters were non-zero, or the
-per-launch spread was over 10 %, so the number is a measurement and not a pass):
+The numbers below are from the runs that produced the committed baselines in
+`bench/baselines/`: one `--plan full --launches 8` run per platform, on a clean
+tree and an idle machine — an iPhone 17 simulator (iOS 27) at `c9548f6` and an
+API 35 Pixel 9 emulator with ART primed to `speed-profile` at `3533d64`. Each
+cell is the launch-paired median ratio of nitro-ui to `expo-ui-shared-host`;
+mount is at N=50, memory at N=200. `✓` meets the ≤ 1.0× target, `✗` misses it,
+`n/v` means that cell's spread across launches was over 10 %, so the harness
+gives it no verdict, and no mark means the run is at parity within rounding.
 
-| Component          | iOS presented | iOS UI CPU  | iOS memory | Android presented | Android UI CPU | Android memory |
-| ------------------ | ------------- | ----------- | ---------- | ----------------- | -------------- | -------------- |
-| `Switch`           | 0.31× `n/v`   | 0.74× ✓     | 0.99× ✓    | 1.00× ✓           | 1.64× ✗        | 2.74× ✗        |
-| `Slider`           | 0.34× `n/v`   | 0.81× ✓     | 1.44× ✗    | 1.01× ✗           | 1.56× ✗        | 2.57× ✗        |
-| `Progress`         | 0.45× `n/v`   | 1.11× ✗     | 1.36× ✗    | 0.95× ✓           | 0.93× ✓        | 1.61× `n/v`    |
-| `Button`           | 0.49× `n/v`   | 1.23× `n/v` | 1.35× ✗    | 1.01× ✗           | 1.52× ✗        | 2.50× ✗        |
-| `SegmentedControl` | 1.00× `n/v`   | 0.68× ✓     | 0.83× ✓    | 1.31× ✗           | 1.28× ✗        | 1.09× ✗        |
+| Component          | iOS presented | iOS UI CPU  | iOS memory | Android presented | Android UI CPU  | Android memory  |
+| ------------------ | ------------- | ----------- | ---------- | ----------------- | --------------- | --------------- |
+| `Switch`           | 1.00×         | 0.88× ✓     | 1.00×      | 1.01×             | 1.51× `n/v`     | 2.72× ✗         |
+| `Slider`           | 1.00×         | 1.07× `n/v` | 1.48× ✗    | 1.02× ✗           | 1.52× ✗         | 2.42× ✗         |
+| `Progress`         | 0.47× ✓       | 1.20× `n/v` | 1.38× ✗    | 1.00×             | 1.02×           | 1.44× ✗         |
+| `Button`           | 1.00×         | 1.13× `n/v` | 1.34× ✗    | 1.01× ✗           | 1.59× `n/v`     | 2.46× ✗         |
+| `SegmentedControl` | 0.24× `n/v`   | 0.66× ✓     | 0.83× ✓    | 0.89× ✓           | 1.39× `n/v`     | 1.10× ✗         |
+| `DatePicker`       | 1.00×         | 0.08× ✓     | 0.70× ✓    | not in this run   | not in this run | not in this run |
 
-Reading it honestly: on **Android** the memory bill is the consistent miss — 2.5×
-for three of the five controls (Switch costs 141 KiB per instance where the shared
-host costs 52 KiB) — and mount UI CPU runs 1.28–1.64×, with `Progress` the only
-control that meets both. On **iOS** mount `presented` never carries a verdict (the
-frame lands early on every arm, so a 0.31× direction is not a pass), mount UI CPU
-meets on three controls and misses on `Progress`, and memory is a per-control
-affair: `Switch` at parity, `SegmentedControl` 17 % below the shared host, and
-+44 to +80 KiB per instance on the other three. On the update path, presented is 1.00× parity on
-iOS and 0.43–1.02× on Android (`Slider`'s 1.02× is the one miss), iOS UI CPU meets on
-four of five (0.73–0.87×, `Button` 1.48×), and Android update UI CPU is still above the
-shared host on all four controls whose update cell is comparable (1.01–1.87×).
+`Picker` and the Android `DatePicker` were not part of either baseline run, so
+there are no committed numbers for them yet.
 
-`<Host>` — opt-in, Android, `Switch` today — is the one place that bill is paid the
-other way, and it is the arm this library now measures. Measured the same way on the
-same emulator (one run, `quick`, `speed-profile`, five arms, machine load median 2.96
-over 14 cores, `problems: none`): 200 Switches inside one Host cost **0.86×** the
-shared host's mount memory — 44.5 KiB per instance against its 51.9 KiB — and **0.87×**
-its mount UI CPU per op, where the same Switches unhosted cost 2.75× and 1.39×;
-`mounted` is 0.97× and `presented` 0.99×, and unmounting costs 0.78× what it costs the
-shared host. The axis it loses on is the JS thread:
-1.18× the shared host on mount JS CPU per op, against 0.73× for the unhosted control,
-because a hosted control is still a React Native node _and_ a child of somebody
-else's composition. That is why the container is something an app opts into for a dense
-list rather than what every `<View>` does (`docs/components/host.md`, and
-`docs/tasks/H1-android-host.report.md` for the absolutes, spreads and `update` cells).
+Reading it honestly:
 
-Against `expo-ui-host-per-control` — the same one-host-per-control shape, reached
-through `@expo/ui` — we are below it on every cell that carries a verdict:
-Android presented 0.66–0.94×, UI CPU 0.40–0.60×, memory 0.56–0.82×; iOS UI CPU
-0.38–0.53× and memory 0.66–0.87× (its presented cells reach 1.00× on
-`Button` rather than beating the arm, and the probe denies all five a verdict). One axis runs the other way, and it is iOS-only:
-the time spent _inside_ the mount callback is 2.0–5.3× the shared host and
-1.12–1.41× the per-control arm on every cell that carries a verdict (the fifth,
-`Button`, is noise-flagged at 3.06× / 0.91×), because creating a
-`UIHostingController` per instance is work the other arms amortise or never do. That one is profiled as a
-follow-up, not papered over.
+- **Android memory is the consistent miss.** Every control costs more than the
+  shared host per instance — `Switch` 142.7 KiB against 52.1, `Button` 188.5
+  against 77.0 — because each control owns its own Compose composition. Mount
+  UI CPU is 1.39–1.59× on four controls; `Progress` is at 1.02×, just over the
+  line. `SegmentedControl` is the one control that beats the shared host on
+  mount latency (0.89×). On the update path Android `presented` is 0.32–0.61×,
+  while update UI CPU is above the shared host on `Switch` (1.24×) and `Button`
+  (1.94×) and below it on `SegmentedControl` (0.74×).
+- **iOS `presented` at N=50 mostly measures the frame.** On `Switch`, `Slider`,
+  `Button` and `DatePicker` every arm lands in the same 16 ms frame, so 1.00× is
+  the frame floor, not a result. `Progress` and `SegmentedControl` are the two
+  cells where the shared host spans more frames and the ratio means something.
+- **iOS UI CPU** is below the shared host on `Switch`, `SegmentedControl` and
+  `DatePicker`, and above it on `Slider`, `Progress` and `Button` (1.07–1.20×,
+  all three too noisy for a verdict). On the update path iOS UI CPU is below the
+  shared host on every control except `Button` (1.52×).
+- **iOS memory is at parity on `Switch` and below on `SegmentedControl` and
+  `DatePicker`, and it misses on `Slider`, `Progress` and `Button`** — 1.34–1.48×,
+  or +47 to +85 KiB per instance (`Slider` 263.1 KiB against 178.0). That gap is
+  one hosting controller and its SwiftUI graph per control, where `@expo/ui`
+  shares one across all of them. **There is no known fix for it.** A shared iOS
+  host was built and measured: it narrowed the memory gap (Slider still missed)
+  but made mount and unmount UI CPU worse, so it did not ship (DECISIONS D23); and the
+  lighter public hosting-view type that might have cut the per-instance bytes
+  does not exist in the iOS 27 SDK.
+- **iOS `mounted`** (time spent inside the mount transaction, not in the table)
+  is several times the shared host's. That is the library measuring each control
+  synchronously while it mounts, so the first frame is laid out at the right
+  size, where `@expo/ui` does the equivalent SwiftUI work after the transaction;
+  total main-thread work per mount — the UI CPU column — is the fairer
+  comparison.
 
-The memory and UI-CPU misses are one architectural bill, not five separate ones:
-`expo-ui` pays **one** hosting subtree for all N controls, while every control in
-this library owns its `UIHostingController` / Compose `AbstractComposeView`, view
-model and sizing entry — that is the +44…+80 KiB per instance on iOS and the
-+26…+112 KiB on Android, and most of the extra UI CPU per mount. T13 measured what
-is left after the framework's own sharing (Compose owner services are already
-per-window) and the only remaining lever is an opt-in Expo-style shared `<Host>`
-container — which is what `Host` is today, and the paragraph above is what it pays
-(DECISIONS D19 asked for the decision, D24 records the sizing rule it lives by). Absolute numbers, per-launch spreads and the noise flags
-for these runs are in `docs/tasks/R2-release-0.1.report.md`, the per-component
-history in `docs/tasks/`. Committed ratio baselines live in `bench/baselines/`,
-one per canonical device, and both now exist: Android at `3533d64` (which
-reproduces this table — memory 1.10–2.72×, mount UI CPU 1.02–1.59×, presented
-0.89–1.02×) and iOS at `c9548f6`, whose idle `--plan full --launches 8` run
-reproduces the iOS side of it too (memory 0.83–1.48× the shared host, mount UI
-CPU 0.66–1.20×, presented 0.24–1.00×). So `bun bench --check` gates on both
-platforms.
+Against `expo-ui-host-per-control` — the same one-host-per-control shape,
+reached through `@expo/ui` — nitro-ui is below it on every cell that carries a
+verdict: iOS presented 0.10–1.00×, UI CPU 0.07–0.52×, memory 0.64–0.87×; Android
+presented 0.64–0.97×, UI CPU 0.50–0.70×, memory 0.58–0.82×.
+
+### `<Host>` on Android
+
+`<Host>` is the one place the Android memory bill is paid the other way.
+Measured on the same emulator (one `--plan quick` run, all five arms including a
+hosted `nitro-ui-host` arm, ART `speed-profile`, no problems reported), 200
+Switches inside one Host against `expo-ui-shared-host`:
+
+|                       | `Switch` without a Host | `Switch` in a `<Host>`  |
+| --------------------- | ----------------------- | ----------------------- |
+| Mount memory (N=200)  | 2.75×                   | **0.86×**               |
+| Mount UI CPU per op   | 1.39×                   | **0.87×**               |
+| Mount `mounted`       | 1.13×                   | **0.97×**               |
+| Mount `presented`     | 1.01×                   | **0.99×**               |
+| Mount JS CPU per op   | 0.73×                   | 1.18×                   |
+| Unmount UI CPU per op | 1.31×                   | **0.78×** (16 % spread) |
+
+That is 44.5 KiB per hosted Switch against the shared host's 51.9 KiB. The axis
+it loses on is the JS thread — roughly 1.2× the shared host, where the unhosted
+control is below it — because a hosted control is still a React Native node
+_and_ a child of somebody else's composition. That is why `Host` is something an
+app opts into for a dense list rather than what every container does. Only
+`Switch` can be hosted today; on iOS `Host` is a passthrough `View`.
+
+### Baselines and gating
+
+Both canonical devices have a committed ratio baseline
+(`bench/baselines/ios27-sim-iphone17.json`, `bench/baselines/android35-emu-pixel9.json`),
+so `bun bench --check` gates on both platforms. Each one stores ratios to
+`rn-core`, not absolute times; see `bench/baselines/README.md` for the rules a
+baseline run has to meet. Measurement details — absolutes, per-launch spreads,
+noise flags and the update cells — are in the reports for the
+[iOS baseline](docs/tasks/A1c-baselines.report.md),
+[Android baseline](docs/tasks/A1b-baselines.report.md) and
+[`<Host>`](docs/tasks/H1-android-host.report.md) runs.
 
 ## Known limitations
 
 The full list per control is in its doc; these are the ones that bite.
 
-- **An over-wide row still reads badly on Android.** `SegmentedControl` and
-  `Button` now fit what they are given: content wider than its box is laid out at
-  the box's width, where it used to be drawn at its measured width, centred, with
-  both ends cut off and the hidden part of the outer segments untappable. Fitting
-  is not the same as legible, though - Material 3 shares a row's width equally
-  between its segments, so four labels in 140 dp each collapse to an ellipsis.
-  Keep option lists and titles within the available width.
+- **An over-wide row still reads badly on Android.** `SegmentedControl`,
+  `Button` and `Picker` fit what they are given: content wider than its box is
+  laid out at the box's width (it used to be drawn at its measured width,
+  centred, with both ends cut off and untappable). Fitting is not the same as
+  legible, though — Material 3 shares a row's width equally between its
+  segments, so four labels in 140 dp each collapse to an ellipsis. Keep option
+  lists and titles within the available width.
 - **iOS `SegmentedControl` ignores `tintColor`.** A SwiftUI segmented `Picker`
   ignores `.tint()`, so a tinted row looks like the default one on iOS. It works
   on Android.
@@ -330,12 +486,22 @@ The full list per control is in its doc; these are the ones that bite.
 - **`trackColor` is Android-only** (nothing in SwiftUI addresses the track) and
   **`systemImage` is iOS-only** (Android ignores it). Both are accepted on both
   platforms so the JS API means one thing.
+- **No wheel on Android.** `Picker` and `DatePicker` accept `variant="wheel"`,
+  but Material 3 has no wheel, so Android renders the menu (`Picker`) or the
+  inline calendar (`DatePicker`). Android also has no combined date-and-time
+  control: `mode="datetime"` opens a date dialog and then a time dialog.
+- **`<Host>` holds Switches only, and only helps on Android.** Any other child
+  — an RN view, text, another nitro-ui control, another `<Host>` — throws in
+  development. Give a Host a height; per-child sizes, `gap`, `flexDirection` and
+  `alignItems` do not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules
   needs native code.
-- **RN 0.86 on iOS is not yet verified** — it hangs on the iOS 27 simulator
-  even without this library; the CI row for an older runtime has not run yet.
+- **RN 0.86 on iOS is not verified** — a fresh 0.86 app hangs on the iOS 27
+  simulator even without this library, and no older runtime has been tried.
 - **`testID` lands on the host** on Android (`View.tag`): Compose has no test id,
-  which is what `findNodeByName` and the harness read.
+  which is what `findNodeByName` and the harness read. Inside a `<Host>` the view
+  that carries a Switch's `testID` is not where the Switch is drawn (it reads
+  back `0 × 0`), so find hosted controls by `accessibilityLabel`.
 - **Accessibility props belong on the control, not the box.** The label lives on
   the hosted control, so adding `accessible` or an `accessibilityRole` to a
   control's container can hide that control from VoiceOver / TalkBack. Style the
@@ -344,8 +510,6 @@ The full list per control is in its doc; these are the ones that bite.
   thumb (that is `UISlider`); Android infers `onSlidingStart` from the first
   value change; a rejected controlled change reverts without animation; segment
   widths are equal shares on Android and SwiftUI's own distribution on iOS.
-- **Coming in 0.2:** `Picker` and `DatePicker`, and the shared-host container
-  above.
 
 ## How it works
 
@@ -362,8 +526,11 @@ The full list per control is in its doc; these are the ones that bite.
   each control, caches per configuration, and corrects a wrong guess in one
   frame.
 
-See `docs/research/` in the repository for the architecture and constraint
-notes that shaped these choices, and `docs/DECISIONS.md` for the calls.
+`docs/architecture/` has the long form — [core.md](docs/architecture/core.md)
+(how a control is hosted), [sizing.md](docs/architecture/sizing.md) and
+[benchmarks.md](docs/architecture/benchmarks.md). `docs/research/` holds the
+notes that shaped these choices and [docs/DECISIONS.md](docs/DECISIONS.md) the
+calls.
 
 ## Contributing
 
