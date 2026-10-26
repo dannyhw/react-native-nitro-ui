@@ -1,8 +1,10 @@
 # H2a — Android `<Host>` for Slider, Progress, Button (+ N4) — report
 
-**Branch:** `task/H2a-host-more-controls` (from `main` at `9c60166`). **Round:** 1 of 3 (D19).
+**Branch:** `task/H2a-host-more-controls` (from `main` at `9c60166`). **Rounds:** implementation
+round 1 of 3 (D19), then fix round 1 of 2 — the review's findings and their fixes are in
+"Fix round 1" at the end.
 **Devices:** Android `emulator-5570` (AVD assigned to this task), Metro 8293, private adb server on
-port 5041; iOS simulator UDID `331EF109-21DD-422B-AEF8-DFFFC6998DC3`. **Not pushed.**
+port 5041; iOS `iPhone Air` simulator. **Not pushed.**
 
 ## Summary
 
@@ -29,17 +31,34 @@ what to do with it, which is why a hosted `Slider` drags across the whole Host a
 ### Slider
 
 `isHostable = true` (`HybridNitroUiSlider.kt`), a `HOSTABLE_CONTROLS` row, removed from the refused
-list. Drag gestures, the three phase callbacks, the controlled handshake (a JS write with no touch,
-a refused change snapping back), `disabled`, and the screen-reader step all run inside the Host's
-composition. Two pieces of plumbing were needed and neither is Slider-specific:
+list. What round 1 proved about a hosted Slider splits in two, and the split matters (review M3/S1):
 
-- **Accessibility through the Host.** `runTestAccessibilityStep` and the progress-report probe look
-  for the control's Compose root; a hosted control has none of its own, so they now search the
-  Host's when `isHostedByParent` is set. Without that the step silently answered for nothing.
+- **Driven through the model, not the drawing.** The drag cases, the three phase callbacks, the
+  controlled handshake (a JS write with no touch, a refused change snapping back) and `disabled`
+  go through `nuiTestDrag` → `runTestDrag`, which refuses on `SliderModel.enabled` and starts from
+  `SliderModel.displayed` — a model field written in `afterUpdate`/`dragTo`, not a reading of the
+  drawing. They prove that the model a hosted control answers to is the one JS talks to; they cannot
+  prove what the Host's shared composition drew.
+- **Read out of the Host's composition.** The sizing taps (one offset, two Host widths, two values),
+  the screen-reader step and real-input `hosted-slider`. Fix round 1 added the two composition-level
+  cases round 1 lacked: a real tap on a **disabled** hosted Slider's track answers nobody until one
+  prop changes, and a **refused** value is redrawn — the next tap opening its gesture at the old
+  value is the drawing's own answer.
+
+Two pieces of plumbing were needed and neither is Slider-specific:
+
+- **Accessibility through the Host.** `runTestAccessibilityStep` looks for the control's Compose
+  root; a hosted control has none of its own, so it now searches the Host's when
+  `isHostedByParent` is set. Without that the step silently answered for nothing. (The
+  progress-report probe reads the model and needed no change.)
 - **The reader gate.** `NitroUiHostView.requestSendAccessibilityEvent` refuses when no accessibility
   service is enabled. A hosted `Slider`/`Progress` publishing a state change into a composition
-  whose view is not the child's own otherwise dies with `IllegalStateException: Accessibility off`
-  on the first drag — a crash that only a *hosted* control can reach.
+  whose view is not the child's own otherwise dies with `IllegalStateException: Accessibility off` —
+  reachable once Compose's own accessibility is on while the platform has no service, which is what
+  the harness's step seam does (`forceAccessibilityForTesting`, `HybridNitroUiSlider.kt:1006`). With
+  a reader connected the platform check passes and `super` runs; with nothing connected Compose
+  announces nothing at all. So the guard is `SliderHost`'s existing refusal, applied at the view the
+  event now leaves through — not a suppression of an event anyone would have received.
 
 ### Progress
 
@@ -62,14 +81,22 @@ live on both is that a hosted Button's `title`/`disabled` props keep reaching th
 
 `armCompositionStrategy()` and `watchForFirstFrame()` decline while `isHostedByParent` is set, and
 `releaseOwnCompositionGuards()` drops guards armed by a control that moved *into* a Host mid-mount.
-`armedGuardsReport()` answers `strategy` / `preDraw` / empty, surfaced to tests as
-`nuiTestArmedGuards()` on the Switch handle (empty string on iOS, where there is nothing to arm).
-The answer is about the **mount** — whether a guard was ever armed — rather than about the
-instant: the first-frame listener unregisters itself as soon as it marks a frame, so a probe that
-reads only what is live cannot tell "never armed" from "armed and released". That difference is not
-a refinement. Round 1 deleted the `watchForFirstFrame` guard and the test stayed green, which is
-what forced the probe to change (`0a4501f`); with it, both guards are now provably load-bearing.
-The churn gate and the unhosted suites are unchanged for every other parent.
+`armedGuardsReport()` answers `strategy` / `preDraw`, surfaced to tests as `nuiTestArmedGuards()` on
+the Switch handle. The line has two halves, `ever|live:<live>`, because the two directions need
+different witnesses:
+
+- the **ever** half says what this mount armed at any point (both flags reset on recycle), which is
+  the only way to gate a first-frame listener that takes itself off as soon as it marks a frame —
+  round 1 deleted the `watchForFirstFrame` guard and a live-only probe stayed green, which is what
+  forced the probe to change (`0a4501f`);
+- the **live** half says what is installed *now*, which is the only witness the move-in release has:
+  a control that armed both while unhosted and then moved into a Host has to answer both armed and
+  nothing installed (fix round 1, review S2).
+
+A hosted control answers `|live:`; the same control mounted alone answers
+`strategy,preDraw|live:strategy`. iOS answers `|live:` as well, because there is no composition
+strategy and no pre-draw listener there — it keeps Android's shape rather than inventing a third
+answer. The churn gate and the unhosted suites are unchanged for every other parent.
 
 ### Sizing rule per control (D24)
 
@@ -82,18 +109,22 @@ The churn gate and the unhosted suites are unchanged for every other parent.
 | `Button`          | intrinsic  | the width its title needs × its scale's height, leading edge       | `Go` and `Roll back the release` answer different x sweeps; `width: 220` changes nothing |
 
 Every one of those frames is still decorative in the D24 sense — the child's RN frame is the sizing
-engine's answer, computed as if it drew itself, and on Android the child's own view is laid out at
-`0 × 0`. What the per-control rule adds is *which* drawing replaces it.
+engine's answer, computed as if it drew itself, and the drawing answers at the same offsets whether
+that frame is `0 × 0` (the pass that mounts it) or the child's own Yoga frame (any later pass over
+it — fix round 1 re-tested F8 by re-framing the hosted child itself, and Android then reports
+`[160, 60, 0, 48]`, with a child added later at `[52, 48, 0, 96]`). Neither is where the control is
+drawn. What the per-control rule adds is *which* drawing replaces it.
 
 ## Files changed
 
 **Native (Android).**
 `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt`,
 `HybridNitroUiProgress.kt`, `HybridNitroUiButton.kt` — `isHostable = true` on all three, plus two
-control-specific paths: the Slider's screen-reader step and progress-report probes now find the
-Host's composition (a hosted control has none of its own), and `Progress` needed no change at all —
-its animation gate is written by attach/detach of its own view, which a Host keeps doing, so an
-indeterminate bar animates inside the shared composition and stops when the Host leaves the window.
+control-specific paths: the Slider's screen-reader step now finds the Host's composition (a hosted
+control has none of its own), and `Progress` needed no change at all — its animation gate is written
+by attach/detach of its own view, which a Host keeps doing, so an indeterminate bar animates inside
+the shared composition. That it *stops* when the Host leaves the window is reasoned from that same
+attach/detach pair and is **not gated** for the hosted case (review N5): no case detaches a Host.
 The two are worth naming for what they say: the seams H1 chose were the right ones, and the only
 new native hazard was one none of the four controls can reach alone.
 `core/NitroComposeHost.kt` — N4 (`armCompositionStrategy()`, `watchForFirstFrame()` decline for a
@@ -102,9 +133,9 @@ hosted child; `releaseOwnCompositionGuards()` for one that moved in mid-mount), 
 `core/NitroUiHost.kt` — `requestSendAccessibilityEvent` refuses when no reader is enabled; the
 style-crossing docs corrected (`borderWidth` insets, `alignSelf` was never an arrangement style).
 
-**Bridge / JS.** `NitroUiSwitch.nitro.ts` + regenerated `generated/` +
-`src/specs/NativeNitroUiSwitch.ts` + `src/components/Switch/Switch.tsx` — the
-`nuiTestArmedGuards()` probe (iOS answers `""`). `src/components/Host/HostChildren.ts` — the
+**Bridge / JS.** `src/components/Switch/Switch.nitro.ts` + regenerated `nitrogen/generated/` +
+`src/components/Switch/NativeNitroUiSwitch.ts` + `src/components/Switch/Switch.tsx` — the
+`nuiTestArmedGuards()` probe (iOS answers `|live:`). `src/components/Host/HostChildren.ts` — the
 HOSTABLE/UNHOSTABLE tables. `src/components/Host/Host.tsx` — `HostProps` docs.
 
 **Tests.** `example/__tests__/HostControls.harness.tsx` (new: per-control hosted behaviour,
@@ -121,8 +152,10 @@ the arm may not claim), `bench/src/implementations/index.ts` (the arm's entry),
 `hosted-slider`, `hosted-mixed`), `example/ios/NitroUiExampleUITests/RealInputTests.swift` (the
 same three names).
 
-**iOS.** `ios/components/Switch/HybridNitroUiSwitch.swift` answers `""` for the guards probe, where
-there is no composition strategy and no pre-draw listener to arm.
+**iOS.** `ios/components/Switch/HybridNitroUiSwitch.swift` answers `|live:` for the guards probe —
+nothing ever armed, nothing installed — where there is no composition strategy and no pre-draw
+listener to arm. `ios/components/Host/HybridNitroUiHost.swift` is the documented no-op, unchanged in
+behaviour.
 
 **Example / docs.** `example/src/HostScreen.tsx`, `example/src/stories/Host.stories.tsx`,
 `docs/components/host.md`, `docs/architecture/sizing.md`, `README.md`,
@@ -130,45 +163,57 @@ there is no composition strategy and no pre-draw listener to arm.
 
 ## Gates
 
-Commands are the ones actually run, with the task's AVD name as `<avd>` and the harness app path
-absolute. The Android app is built with `:app:assembleDebug -PreactNativeArchitectures=arm64-v8a`
-against a private adb server (port 5041), so nothing here touches the default adb server.
+Commands are the ones actually run, with the task's AVD name as `<avd>`, the simulator as `<udid>`
+and the harness app path absolute. The Android app is built with
+`:app:assembleDebug -PreactNativeArchitectures=arm64-v8a` against a private adb server (port 5041),
+so nothing here touches the default adb server.
+
+These are fix round 1's runs, on the tree this branch ends at; round 1's rows are superseded, and
+their counts differ because the suites have grown since. Both apps are builds of this tree rather
+than leftovers: the branch's merge of `main` predates `scripts/build-app.mjs`, so freshness is shown
+by content — no file under `src/`, `ios/` or `android/` is newer than the APK, whose build had
+`:react-native-nitro-ui:compileDebugKotlin` *execute* rather than report `UP-TO-DATE`, and the iOS
+binary still carries the fix round's `|live:` probe string, which `main`'s build does not have.
 
 | Gate | Command | Result |
 | ---- | ------- | ------ |
-| Repo checks | `bun run check` | exit 0 — 16 jest suites / 237 tests, native checks 7/7, nitrogen no-drift (198 files), api-extractor, publint, manifest (464 entries, unchanged), `readme:check` |
-| Android harness — Host | `HARNESS_APP_PATH=…/app-debug.apk ANDROID_SERIAL=emulator-5570 ANDROID_AVD=<avd> ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 bunx react-native-harness --harnessRunner android "Host"` | **2 suites / 38 passed** |
-| Android harness — churn | same, `"MountChurn"` | **5 passed** (Switches, hosted Switches, mixed Host, 200 single-child Hosts, Picker) |
-| Android harness — full | same, no pattern | **12 suites / 183 passed** |
-| iOS harness — Host | `HARNESS_APP_PATH=…/NitroUiExample.app IOS_SIM_UDID=331EF109… METRO_PORT=8293 bunx react-native-harness --harnessRunner ios "Host"` | **2 suites / 17 passed** |
-| iOS harness — full | same, no pattern | **11 suites / 157 passed, 1 skipped** (the skipped test is `MountChurn`'s documented Android-only case) |
+| Repo checks | `bun run check` | exit 0 — 18 jest suites / 271 tests, `test:native` PASS, `perf:renders` 7/7, nitrogen no-drift (198 files), autolinking, api-extractor, publint, manifest (465 files), `readme:check` (8 blocks) |
+| Android harness — Host and churn | `HARNESS_APP_PATH=…/app-debug.apk ANDROID_SERIAL=emulator-5570 ANDROID_AVD=<avd> ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 bunx react-native-harness --harnessRunner android "Host\|MountChurn"` | **3 suites / 47 passed** — the re-framed F8 case, the two Slider composition gates, the flattening gate, and churn over Switches, hosted Switches, a mixed Host, 200 single-child Hosts and a Picker |
+| Android harness — full | same, no pattern | **12 suites / 187 passed** |
+| iOS harness — full | `HARNESS_APP_PATH=…/NitroUiExample.app IOS_SIM_UDID=<udid> METRO_PORT=8293 bunx react-native-harness --harnessRunner ios` | **11 suites / 158 passed, 1 skipped** (the skipped test is `MountChurn`'s documented Android-only case), the same `Host.harness.tsx` the Android row ran |
 | Real input — Android | `ANDROID_SERIAL=emulator-5570 ANDROID_AVD=<avd> ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 HARNESS_APP_PATH=… bun run test:real-input:android` | **10 / 10**, including the new `hosted-button`, `hosted-slider`, `hosted-mixed` |
-| Real input — iOS | `IOS_UDID=331EF109… METRO_PORT=8293 bun run test:real-input:ios` | **10 / 10**, same three (`hosted-mixed` in 26.7 s of XCUITest) |
-| JS style-warning table | `bun run test hostInertStyles` | passes, and shown red below |
+| Real input — iOS | `IOS_UDID=<udid> METRO_PORT=8293 bun run test:real-input:ios` | **10 / 10**, same three, after a fresh `xcodebuild` build-and-test of this tree; two waits retried once each without changing the result |
+| JS style-warning table | part of the `bun run check` row (`hostInertStyles`) | passes, and shown red below |
 
-Every row is a run of the tree as committed at the end of this round — the harness rows against
-the same debug APK the real-input row uses, rebuilt after the last source change.
+Every row above is a device or CI run of the tree as committed. What came after them is this
+section and the `## Fix round 1` below it, which change no code: the last commit a device gate ran is
+`2cbf051`, and that is the commit every harness and real-input row above ran.
 
-Two real bugs came out of the real-input runs rather than out of the harness: a hosted `Button`
-needing a second tap before its press reaches JS on a real touchscreen (`089ec1e`), and the hosted
-`Slider` echo being read before it had landed (`c8f5819`). Both are fixed on the branch, and the
-iOS half of the second was a Swift throwing-autoclosure compile error that only the UI-test bundle
-build reaches (`c8f5819` again).
+Two fixes came out of the real-input runs, and both were in the **check scripts**, not in the
+library (review M3). `089ec1e`: the hosted-Button check waited for an echo of `2` after asking for
+one tap — it was missing a second `tapNode`, so the script's expectation, not the control, was
+wrong. `c8f5819`: the hosted-Slider check read its echo before it had landed, and the same file had
+a Swift throwing-autoclosure compile error that only the UI-test bundle build reaches. The library
+answered correctly in both cases once the scripts asked the right question.
 
 ## Red proofs
 
 Each row: mutate, rebuild (with `:react-native-nitro-ui:compileDebugKotlin` shown to *execute*
 rather than report `UP-TO-DATE`), run the named gate on the device, read the failure, revert, and
-confirm `git status` clean. The last two rows are the ones recorded in the earlier rounds of this
-task; the rest are from the final tree, after the probe fix that made the first two possible.
+confirm `git status` clean. The first six rows are fix round 1's runs against the tree as it
+stands; the last six are round 1's, recorded against a tree that differs only in the probe's
+answer format and the doc comments.
 
 | Mutation | Gate | The failure it produced |
 | -------- | ---- | ----------------------- |
-| delete the `isHostedByParent` return in `watchForFirstFrame()` | N4 guards | `expected ['preDraw', 'preDraw', 'preDraw'] to deeply equal ['', '', '']` |
-| delete the same return in `armCompositionStrategy()` | N4 guards | `expected ['strategy', 'strategy', 'strategy'] to deeply equal ['', '', '']` |
+| delete both `isHostedByParent` declines (`armCompositionStrategy()` and `watchForFirstFrame()`) in one build | N4 guards, the `ever` half | `expected [ 'strategy,preDraw', …(2) ] to deeply equal [ '', '', '' ]` — round 1 proved the two registrars one at a time under a probe with no `live` half; this is both, against the probe as it now reads |
+| delete the `releaseOwnCompositionGuards()` call | a live control moved into a Host by flattening | `expected 'strategy' to be ''` — the activity `LifecycleRegistry` observer from its unhosted life is still installed inside the Host (review S2's unguarded path, now gated) |
+| `disabled` stops reaching a hosted control (its setter returns early while `isHostedByParent`) | the composition answers, not the model | `expected null to be 'tap-slide-0'` — the press after `setSliderDisabled(false)` finds nobody home. The refusal while disabled is *not* what this gate is for: it holds even under the mutation, which is why round 1's model-level case could not see this |
+| a hosted Slider stops applying JS writes (`afterUpdate` skips the handshake write while hosted) | a refused value is redrawn | `expected 90.5083618164063 to be less than 10` — the next tap opens its gesture at the value the app refused. The two model-level write cases went red in the same run: the same bug, seen from the model |
+| put the F8 re-frame on the *sibling* instead of the asserted child | F8 | `expected [ 52, 48, +0, 60 ] to deeply equal [ 160, 60, +0, 48 ]` — an untouched child keeps its own answer, so the assertion is per-child. A measured extra: moving a row *above* a child hands that child its frame too, which is the same rule (Fabric re-lays what changed) |
+| empty `onDropView()` (no `host.drop()`) | 200 single-child Hosts churn | `expected 10.45 to be less than 2` (MiB retained per cycle) — fix round 1's own number. Round 1's row said 10.98, which is H1's figure, not this task's (review S6) |
 | give every hosted child a fixed `Modifier.width(80.dp)` | D24 sizing, 2 gates | `expected 63.19 to be less than 35` (a Slider track that stopped stretching); `expected 2 to be greater than 2` (a long title no longer reaches further than a short one) |
 | `HybridNitroUiSlider.isHostable = false` | the two gates that only a shared composition can satisfy | 2 of 19 fail: the screen-reader step loses its adjustable node, and the sizing gate loses its track |
-| empty `onDropView()` (no `host.drop()`) | 200 single-child Hosts churn | `expected 10.98 to be less than 2` (MiB retained per cycle) |
 | `model.inWindow = !isHostedByParent` | hosted animation gate | `expected false to be true` on `nuiTestIsAnimating()` for a spinning hosted bar |
 | remove the hosted branch of `onMeasure` | mixed-Host churn witness | `expected [411, 4800] to deeply equal [0, 0]` |
 | re-add `'alignSelf'` to `INERT_HOST_STYLES` | `hostInertStyles` (JS) | fails: the warning says something about a style that does reach the drawing |
@@ -215,7 +260,10 @@ learned here are worth keeping:
   there is no reader to deliver it to.
 - **N4 was fixed at the registrar, not with a teardown sweep.** Not arming is the root cause; a
   `release` path is still needed for the transition where a control moves *into* a Host after
-  arming, and both are covered (`releaseOwnCompositionGuards()` is idempotent).
+  arming, and both need a witness: the *steady state* is gated by the `ever` half of
+  `armedGuardsReport()`, and the *transition* is the job of the `live` half, which fix round 1 added
+  because round 1's claim that both were covered was false — deleting
+  `releaseOwnCompositionGuards()` turned nothing red (review S2).
 - **`armedGuardsReport()` is a probe on the Switch handle only.** Three more handles with one
   method each, all returning the same string, would be a wider API surface for no extra
   coverage: the guards live in `NitroComposeHost`, so one control that can read them proves the
@@ -223,7 +271,9 @@ learned here are worth keeping:
 - **`alignSelf` came off the dev warning list; `borderWidth` came off the "does not cross" list.**
   Both were claims the code does not support: border and padding arrive as one
   `layoutMetrics.contentInsets` that the view manager forwards as padding (so `borderWidth` *does*
-  cross, as an inset), and a self style never reached the drawing on either side of the bridge.
+  cross, as an inset), and the warning reads the **Host's own** `style`, where `alignSelf` positions
+  the Host inside *its* parent — it moves the box, and the drawing is inside the box, so it works.
+  (`Host.tsx` gives this reason; four places had invented one about *children* instead.)
 - **One echo for the mixed Host** (`off 0.50 0`) instead of four. A check reading one string for
   three different kinds of answer is also the cheapest proof that pressing one child left the
   others alone.
@@ -258,8 +308,11 @@ Mount memory (KiB per instance, N=200), and mount UI / JS CPU per op (ms, N=50):
 | `Button`   | 188.7 KiB / 13.85 / 2.13 | **61.3 KiB / 7.21 / 2.54** | 77.1 KiB / 8.37 / 3.34 | **0.80x**(2%) |
 
 Host ÷ *unhosted*, same run (`--arm=nitro-ui-host`, `vs nitro-ui` column) — the host's own
-before/after: memory **0.31x / 0.41x / 0.26x / 0.32x** and mount UI CPU **0.54x / 0.50x / 0.56x /
-0.48x** for Switch / Slider / Progress / Button. The Host does what H1 said it does, on all four.
+before/after. Memory per instance: **0.31x**(2%) / **0.41x**(3%) / **0.26x**(0%) / **0.32x**(1%) for
+Switch / Slider / Progress / Button, every cell inside spread. Mount UI CPU: 0.54x (13%, `n/v`) /
+**0.50x**(3%) / **0.56x**(9%) / 0.48x (13%, `n/v`). The memory half says the Host does what H1 said
+it does on all four; the UI-CPU half only says it on Slider and Progress — the Switch and Button
+cells are noise-flagged and carry no verdict (review S5).
 
 ### What this run cannot say
 
@@ -272,11 +325,17 @@ before/after: memory **0.31x / 0.41x / 0.26x / 0.32x** and mount UI CPU **0.54x 
   (155.0 → 62.2 KiB) and lands exactly on the shared host, because `@expo/ui`'s shared-host Slider
   is 62.3 KiB here while a bare RN `Slider` is 14.8 KiB. Compare H1's quiet run for the shape and
   this run for the ratio; do not sell it as a 1.00x win.
-- **`update` cells are noisy on this machine.** Every `update.*` cell for the host arm carries a
-  spread over 10 % except `mounted` (1–2 %), so none of them carry a verdict. In particular
-  `update.progress` lost its `rn-core` and `expo-ui-*` pairings entirely (`n/a` — the signal did
-  not arrive in enough launches to clear `MAX_MISSING_SAMPLE_RATIO`), which is reported rather than
-  interpolated.
+- **The `update` cells are mixed, and none of them carries a claim.** The aggregate (`Switch`)
+  update cells against the shared host are *inside* spread — `mountedNs` 0.99x(1%), `presentedNs`
+  1.01x(0%), `mainNsPerOp` 0.84x(5%), `jsCommitNs` 0.96x(6%) — while `jsNsPerOp` 1.10x(14%) is not;
+  per-control update spreads run 0–21 %. Round 1's sentence that every host-arm `update.*` cell was
+  over 10 % is simply wrong (review S5). Nothing was claimed from any of them.
+- **`update.progress` has `n/a` cells.** `mountedNs`/`presentedNs` do not pair with `rn-core` or
+  either `expo-ui-*` arm (they pair with `nitro-ui`: 0.96x / 1.00x); `mainNsPerOp` does not pair with
+  `rn-core` but does pair with both `expo-ui-*` arms (0.04x(2%) and 0.05x(11%));
+  `unmountMainNsPerOp` pairs with nothing. `jsCommitNs` and `jsNsPerOp` pair with all four. The gaps
+  are the missing-sample rule (`MAX_MISSING_SAMPLE_RATIO`), reported rather than interpolated —
+  round 1's "lost its `rn-core` and `expo-ui-*` pairings entirely" overstates it.
 - The 5-arm × 21-cell plan means 4 launches × 105 cells; the host arm self-limits to its four
   controls through `armScopeCovers()`, so 3 of the 7 components never scheduled it (the
   `picker`/`date-picker`/`segmented-control` rows have no `nitro-ui-host` line at all).
@@ -295,9 +354,19 @@ before/after: memory **0.31x / 0.41x / 0.26x / 0.32x** and mount UI CPU **0.54x 
   retention, the mixed fixture wants the many-Hosts shape (many Hosts, one of each kind inside
   each), which this round deliberately did not do: it would have made two gates measure the same
   thing.
-* **`update.progress` lost its cross-arm pairings** in this run (`n/a`, missing-sample rule) and every
-  host-arm `update.*` cell carries a spread over 10 %. Re-measured on a quiet machine before any of
-  those numbers are quoted.
+* **Two device runs dropped a connection, and both are recorded rather than quietly rerun.** The
+  Android `Host|MountChurn` gate lost its app bridge mid-suite in one attempt where the harness
+  could not take Metro 8293 — a Metro left running by an earlier step of this task held the port, so
+  the harness ran the suite on 8294. With 8293 free the same gate passed twice (3 suites / 47), and
+  the run in Gates is one of those. Nothing refuses a port fallback while the wall-clock gates are
+  off, so a fallback run simply does not count as a gate result here. Separately, one iOS full run
+  failed `reports a hosted drag through all three callbacks` on its first `log.sliders` lookup, in a
+  test body no fix-round commit touched; the fix round's full iOS run passed it, and no cause is
+  known, so it stands as an unreproduced single failure rather than a fixed one.
+* **The whole H2a run wants a quiet re-run.** 37 % of its load samples were over the ceiling, some
+  `update` cells are spread-flagged, and the `update.progress` gaps above are the missing-sample
+  rule. Fix round 1 added **no** new bench run: the re-run waits for a quiet bench machine, and
+  until then every H2a number in `README.md`, `host.md` and this report is labelled indicative.
 * **H1's load-ceiling follow-up is still open**: the load-sensitive probes (heap floors, animation
   reports) have no gate that refuses a busy machine, and this bench run recorded 37 % of samples
   over the ceiling.
@@ -317,3 +386,27 @@ before/after: memory **0.31x / 0.41x / 0.26x / 0.32x** and mount UI CPU **0.54x 
 3. **Bench honesty policy.** This run is same-run paired but not quiet, and the ratios agree with
    H1's quiet run to ~2 %. Should a non-quiet run be allowed to publish per-control ratios at all, or
    only the host ÷ unhosted half (which is same-arm and so less exposed to machine drift)?
+## Fix round 1
+
+Verdict: MERGE WITH FIXES — the native change held, several claims did not. No new bench
+run: the ratios wait for a quiet machine.
+
+**Merge.** `ae9cc95`, `f7a9f51` brought the public-docs rewrite, 0.1.0 and its tooling; the Host text
+now sits inside main's structure. `README.md` calls hosting `Slider`/`Progress`/`Button` **the next
+release** and passes `readme:check`. `CHANGELOG.md` untouched: the line is
+`.changeset/host-composes-more-controls.md` (`minor`).
+
+| Finding | Commit | Evidence |
+| ------- | ------ | -------- |
+| M1 — verdicts read noise-flagged cells | `fe02042` | every H2a cell in `README.md`, `host.md`, `sizing.md` carries a spread or `n/v`; run labelled busy (37 % of samples over ceiling), indicative, re-run pending |
+| M2 — F8 never exercised | `a696d05`, `2cbf051` | a self re-frame reads `[160, 60, 0, 48]`; the later-added `list-d` reads `[52, 48, 0, 96]`; the caveat now reads "the engine's frame, not the drawn one". Red proof: re-framing the sibling answers `[52, 48, +0, 60]`. The probe is Android's; on iOS the box *is* the drawing |
+| M3.2, S1 — Slider claims outgrew their gates | `e2efc46` | model-level cases name `SliderModel`; two gates press the composition — a disabled hosted track answers nobody until one prop changes; a refused value is redrawn |
+| M3.3, S2 — the move-in was not covered | `e2efc46` | the probe answers `ever|live:`; flattening moves a mounted control in and out; deleting `releaseOwnCompositionGuards()` → `expected 'strategy' to be ''` |
+| S3 — probe doc read as live state | `e2efc46` | spec and KDoc say armed **at any point in this mount**, reset on recycle |
+| S4 — one `alignSelf`, four reasons | `a696d05`, `bc76549` | `Host.tsx`'s reason told everywhere; `alignSelf` reaches the drawing |
+| M3.1, S5, S6 — report accuracy | this commit | the "real bugs" are the script fixes they are; noise sentences per the results file; churn proof is this task's `10.45` (H1's was `10.98`); header names `iPhone Air` |
+| N1–N6 | `bc76549`, report | bench list, citation, spec paths, crash claim, "ever armed" |
+| `check` red since `a696d05` | `8c0a98b` | a TSDoc span across a newline is fatal to api-extractor, ending the chain before `readme:check` |
+
+Two runs dropped a device connection, both re-run green (Known issues): churn on a Metro 8294
+fallback, and one iOS run a hosted-drag assertion that has not repeated.
