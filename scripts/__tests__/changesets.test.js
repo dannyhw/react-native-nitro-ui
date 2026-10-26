@@ -26,29 +26,45 @@ describe('changesets configuration', () => {
   it('versions from main and publishes publicly', () => {
     expect(config.baseBranch).toBe('main');
     expect(config.access).toBe('public');
-    // The changelog it writes is checked by `bun run format`, so it must be
-    // written with this repo's prettier.
+    // Changesets writes package.json and CHANGELOG.md, and `bun run format`
+    // checks them afterwards: `prettier` makes it run this repo's prettier with
+    // this repo's config instead of its own defaults.
     expect(config.format).toBe('prettier');
   });
 
+  it('writes the changelog without needing a GitHub token', () => {
+    // @changesets/changelog-github refuses to run at all when GITHUB_TOKEN is
+    // missing, which would make `bun run release:version` un-runnable locally
+    // and put a GitHub API call on the release path. Entries link commits.
+    expect(config.changelog).toBe('@changesets/changelog-git');
+    expect(pkg.devDependencies['@changesets/changelog-github']).toBeUndefined();
+  });
+
+  it('lists the library itself as a workspace, which is what makes it versionable', () => {
+    // Changesets only versions packages inside the workspace globs; the root
+    // package.json is only reported by @manypkg/get-packages when `.` is one of
+    // them. Drop the entry and `changeset version` fails with "not in the
+    // workspace" — see the R6 report.
+    expect(pkg.workspaces[0]).toBe('.');
+    expect(pkg.devDependencies['@changesets/cli']).toMatch(/^\^3/);
+  });
+
   it('ignores every workspace that is not the published package', () => {
-    const workspaces = pkg.workspaces;
-    expect(workspaces.length).toBeGreaterThan(0);
+    // `.` is the library itself (see the workspace test above); everything else
+    // in `workspaces` must be excluded from versioning by name. Being `private`
+    // only stops the publish — Changesets would still bump and tag it.
+    const workspaceDirs = pkg.workspaces.filter((dir) => dir !== '.');
+    expect(workspaceDirs.length).toBeGreaterThan(0);
+    expect(pkg.workspaces).toContain('.');
 
-    const names = workspaces.map((dir) => readJson(join(dir, 'package.json')));
-    const publishable = names.filter((entry) => !entry.private);
-    expect(publishable).toEqual([]);
-
-    // `ignore` is by package name, and it must cover every workspace: a
-    // workspace that is only `private` would still be versioned and tagged.
-    for (const entry of names) {
-      expect(config.ignore).toContain(entry.name);
-      expect(entry.private).toBe(true);
-    }
-    // Nothing else in the repo may be left out by accident.
-    expect(config.ignore.sort()).toEqual(
-      names.map((entry) => entry.name).sort()
+    const ignored = workspaceDirs.map(
+      (dir) => readJson(join(dir, 'package.json')).name
     );
+    for (const name of ignored) {
+      expect(config.ignore).toContain(name);
+      expect(name).not.toBe(pkg.name);
+    }
+    expect([...config.ignore].sort()).toEqual(ignored.sort());
 
     // Belt and braces: private packages are neither versioned nor tagged.
     expect(config.privatePackages).toEqual({ version: false, tag: false });
@@ -114,6 +130,22 @@ describe('release workflow', () => {
     const publishAt = releaseWorkflow.indexOf('changesets/action@');
     expect(checksAt).toBeGreaterThan(-1);
     expect(publishAt).toBeGreaterThan(checksAt);
+  });
+
+  it('uses the action line that matches Changesets v3', () => {
+    expect(releaseWorkflow).toMatch(/changesets\/action@[0-9a-f]{40} # v2\./);
+    // The v2 action takes `*-script` inputs and kebab-case outputs; the v1
+    // names are silently ignored, which would silently skip the version step.
+    expect(releaseWorkflow).toMatch(
+      /\n {10}version-script: bun run release:version/
+    );
+    expect(releaseWorkflow).toMatch(
+      /\n {10}publish-script: bun run release:publish/
+    );
+    expect(releaseWorkflow).toMatch(
+      /steps\.release\.outputs\.published-packages/
+    );
+    expect(releaseWorkflow).toMatch(/steps\.release\.outputs\.pr-number/);
   });
 
   it('pins every action by commit sha', () => {

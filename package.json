@@ -109,7 +109,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^3.0.3",
     "@commitlint/config-conventional": "^21.2.4",
     "@eslint/compat": "^2.1.1",
@@ -151,6 +150,7 @@
     "react-native-nitro-modules": "^0.37.1"
   },
   "workspaces": [
+    ".",
     "example",
     "bench",
     "bench/modules/bench-probe"
