@@ -28,7 +28,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | C1 Android over-wide | — | merged | Done | — |
 | A1c iOS baseline | — | merged | Done: minted (median load 2.93, 3.4 % over) | — |
 | G6 Picker | — | merged | Done | — |
-| H1 Android Host | `nitro-ui-worktrees/H1` · `task/H1-android-host` | `0689f41` (round 1) | Review: FIX ROUND (M1 Host never dropped → leak; M2 native allowlist). Fix round 1 running (`nitroui-H1-fix1`) | Opus re-review (native changed), then merge. |
+| H1 Android Host | `nitro-ui-worktrees/H1` · `task/H1-android-host` | `db1c738` (fix round 1) | Opus re-review running | Merge, or fix round 2 (last, D19). Then H2 (Host for the other components; include N4: hosted children still arm an observer + pre-draw listener). |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
 | T17 iOS Host spike | branch only (`871c579`, pushed) | report merged | Done: iOS Host not better (D23); H3 dropped | — |
