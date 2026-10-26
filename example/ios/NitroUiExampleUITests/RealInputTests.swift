@@ -75,6 +75,8 @@ final class RealInputTests: XCTestCase {
     static let hostSliderValue = "host-slider-value"
     static let hostButtonPresses = "host-button-presses"
     static let hostMixedState = "host-mixed-state"
+    static let hostSegmentedIndex = "host-segmented-index"
+    static let hostPickerIndex = "host-picker-index"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -397,6 +399,111 @@ final class RealInputTests: XCTestCase {
   /// worked. The controlled Slider is dragged too: there the echo is React's own
   /// state, so it proves the whole loop - touch → SwiftUI → Nitro → JS →
   /// re-render → value back down to native - with nothing but a finger in it.
+  /// A real tap must select a segment of the `SegmentedControl` inside a Host.
+  ///
+  /// H2b's three popup-era controls are the first a Host has ever held that are not
+  /// `fillWidth`. On iOS a Host is the documented passthrough (D23), so this is the
+  /// same claim the `segmented` check makes one tab away - which is the point: the JSX
+  /// a Host asks for has to render and answer there too, or the passthrough is a story.
+  /// Android reads the identical claim out of a shared Compose composition.
+  ///
+  /// The echo is React's own render (`HostScreen`'s `popSegmented`), so it moves only if
+  /// the touch reached the control and JS accepted the new index. A second, different
+  /// segment is owed: a control that echoed once and froze would satisfy the first line.
+  func testRealInputHostedSegmented() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    try scrollIntoView("host-segmented", as: "the SegmentedControl inside the Host")
+    let control = try required("host-segmented", as: "the SegmentedControl inside the Host")
+    let whereItStarted = control.frame
+    XCTAssertEqual(
+      try read(Echo.hostSegmentedIndex),
+      "0",
+      "the hosted SegmentedControl should show the index JS gave it"
+    )
+
+    control.atFraction(0.5).tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostSegmentedIndex) { $0 == "1" },
+      "1",
+      "a real tap on the middle segment of a SegmentedControl inside a Host should reach JS as index 1"
+    )
+
+    try assertStillInPlace("host-segmented", startedAt: whereItStarted, after: "the first real tap")
+
+    try required("host-segmented", as: "the SegmentedControl inside the Host")
+      .atFraction(0.9)
+      .tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostSegmentedIndex) { $0 == "2" },
+      "2",
+      "a real tap on the last segment of the hosted SegmentedControl should reach JS as index 2"
+    )
+  }
+
+  /// A real tap must open the `Picker` inside a Host, and a real tap on one of its rows
+  /// must reach JS.
+  ///
+  /// On Android this is the claim H2b exists to make (a Compose popup is a window of the
+  /// Host's own composition, opening under the row the Host drew). On iOS a Host is a
+  /// passthrough, so the menu is the one `testRealInputPicker` drives on its own tab -
+  /// and it has to be that here too: a `Picker` that loses its menu when the same JSX is
+  /// wrapped in a `<Host>` would be a passthrough that does not pass through.
+  ///
+  /// The three choices are `HostScreen`'s popup set. None of them appears anywhere else
+  /// on the screen, which is what lets a label match name a menu row.
+  func testRealInputHostedPicker() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    try scrollIntoView("host-picker", as: "the Picker inside the Host")
+    let control = try required("host-picker", as: "the Picker inside the Host")
+    XCTAssertEqual(
+      try read(Echo.hostPickerIndex),
+      "1",
+      "the hosted Picker should show the index JS gave it"
+    )
+
+    // 1. Opening. The rows exist only while the menu is open, which is also the witness
+    //    that the hosted anchor answered a real touch.
+    control.centre.tap()
+    _ = try waitForOption("Gamma", "the hosted Picker's menu to open")
+    XCTAssertEqual(
+      try read(Echo.hostPickerIndex),
+      "1",
+      "opening a menu is not a choice - nothing may be reported until a row is tapped"
+    )
+
+    // 2. The menu says which row it is showing: the mark is SwiftUI's own, so this is
+    //    what VoiceOver reads.
+    XCTAssertTrue(
+      optionRow("Beta").images.count > 0,
+      "the current choice (\"Beta\") should carry the hosted menu's selection mark"
+    )
+
+    // 3. Choosing something else.
+    try waitForOption("Gamma", "the hosted menu to be tappable").tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostPickerIndex) { $0 == "2" },
+      "2",
+      "a real tap on a hosted menu row should reach JS as index 2"
+    )
+    XCTAssertEqual(
+      optionLabels(containing: "Gamma"),
+      0,
+      "choosing a row should close the hosted menu"
+    )
+
+    // 4. The way out that changes nothing: the row already chosen. The menu closes and
+    //    no change is reported - the binding's own rule (G6), read here through a Host.
+    try required("host-picker", as: "the Picker inside the Host").centre.tap()
+    try waitForOption("Beta", "the hosted menu to reopen").tap()
+    _ = waitUntilOptionGone("Gamma", "the hosted menu to close")
+    XCTAssertEqual(
+      try read(Echo.hostPickerIndex),
+      "2",
+      "choosing the row that was already chosen should report nothing, and the hosted anchor "
+        + "should still show what it started with"
+    )
+  }
+
   func testRealInputSlider() throws {
     try goToTab(Tab.sliderTab, showing: Echo.sliderStart)
     let phases = try required("slider-phases", as: "the phases Slider")
