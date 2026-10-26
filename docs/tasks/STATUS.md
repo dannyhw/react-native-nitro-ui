@@ -37,5 +37,6 @@
 | X1 | Dev tooling: CI checks, fresh-build stamp, device leases | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE WITH FOLLOW-UPS) |
 | H2a | Android `<Host>` for Slider, Progress, Button (+ N4) | Apex | Opus | merged (1 impl + 1 fix round; review MERGE WITH FIXES; bench indicative, busy machine) |
 | H2b | Android `<Host>` for SegmentedControl, Picker, DatePicker (popups/dialogs) | Apex | Opus | in progress |
+| X2 | Gate ledger (`scripts/gate.mjs`, per-platform code trees) + short report template | Apex | Opus | merged (1 impl + 1 fix round; review FIX ROUND, M1-M4 fixed; check 415 tests, Android harness 187/187) |
 | X7 | Machine doctor (`scripts/doctor.mjs`, `--setup`) + orchestrator playbook (`ORCHESTRATOR.md`) | orchestrator | — | merged (14 unit tests; setup proven against a scratch state dir) |
 | T17 | iOS `<Host>` spike | Apex | — | report merged; not better (D23) — iOS `<Host>` is a passthrough |
