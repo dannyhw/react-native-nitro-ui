@@ -46,7 +46,7 @@ import {
   render,
 } from 'react-native-harness';
 import { userEvent } from '@react-native-harness/ui';
-import { Host, Picker, Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { Host, Switch, nitroUiCore } from 'react-native-nitro-ui';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
@@ -1182,10 +1182,17 @@ if (Platform.OS === 'android') {
    * What a Host will not compose, and how loudly it says so (review M2, S5).
    *
    * JS refuses the children it can name. It cannot see through a component, so
-   * `memo(() => <Picker />)` arrives as an unknown child and the native allowlist is
-   * the only rule left — and in round 1 there was none, so it composed the Picker.
+   * `memo(() => <View />)` arrives as an unknown child and the native allowlist is
+   * the only rule left — and in round 1 there was none, so it composed whatever arrived.
    * The report was a `Log.w`, which is a line no app author reads, so these cases
    * assert that JavaScript hears about it too.
+   *
+   * The example these cases used to make was a `Picker` behind a `memo`. H2b made
+   * `Picker` hostable, so the same wrapper now proves the opposite thing, and both
+   * halves are gated: the allowlist is the rule either way, and which way it decides is
+   * the control's own `isHostable` (`...WrappedViewIsRefused` below,
+   * `...WrappedSwitchIsComposed`). Leaving the first case asserting a refusal that no
+   * longer happens would have been a gate that rewards a regression.
    */
   describe('Host · what it refuses', () => {
     let log: Log;
@@ -1205,15 +1212,9 @@ if (Platform.OS === 'android') {
       );
     }
 
-    /** A control behind a component, which is what JS cannot see through. */
-    const WrappedPicker = memo(function PickerBehindMemo() {
-      return (
-        <Picker
-          options={['Cinder', 'Mica', 'Shale']}
-          defaultSelectedIndex={0}
-          testID="wrapped-picker"
-        />
-      );
+    /** A child JS cannot name, which is what makes the native rule the only one. */
+    const WrappedView = memo(function ViewBehindMemo() {
+      return <View testID="wrapped-view" />;
     });
 
     /**
@@ -1224,78 +1225,124 @@ if (Platform.OS === 'android') {
      * library's controls accept one, and what matters here is the element type the
      * Host is handed.
      */
-    const PickerThroughForwardRef = forwardRef<View>(
-      function PickerBehindForwardRef(_props, _ref) {
-        return (
-          <Picker
-            options={['Cinder', 'Mica', 'Shale']}
-            defaultSelectedIndex={0}
-            testID="wrapped-picker-forwarded"
-          />
-        );
+    const ViewThroughForwardRef = forwardRef<View>(
+      function ViewBehindForwardRef(_props, _ref) {
+        return <View testID="wrapped-view-forwarded" />;
       }
     );
 
-    function PickerFromUserComponent() {
-      return (
-        <Picker
-          options={['Cinder', 'Mica', 'Shale']}
-          defaultSelectedIndex={0}
-          testID="wrapped-picker-user"
-        />
-      );
+    function ViewFromUserComponent() {
+      return <View testID="wrapped-view-user" />;
     }
 
-    it('will not compose a control behind a component, and tells JS', async () => {
+    it('will not compose a view behind a component, and tells JS', async () => {
       const refused: Report[] = [];
       const subscription = listen(refused);
       try {
         const { unmount } = await mount(
           <View testID="refuse-host" style={HUG}>
             <Host style={{ width: 300, height: 140 }}>
-              <WrappedPicker />
-              <PickerThroughForwardRef />
-              <PickerFromUserComponent />
+              <WrappedView />
+              <ViewThroughForwardRef />
+              <ViewFromUserComponent />
             </Host>
           </View>
         );
-        // The Picker's view exists — it is a Fabric node like any other — but nobody
-        // composed it, and it declined to measure, so it is nothing. That holds for
-        // every shape the control hides behind, not only the one JS would unwrap.
-        const boxes: string[] = [];
-        for (const testId of [
-          'wrapped-picker',
-          'wrapped-picker-forwarded',
-          'wrapped-picker-user',
-        ]) {
-          const picker = await boxOf(testId);
-          boxes.push(
-            `${testId}=${String(Math.round(picker.width))}x${String(
-              Math.round(picker.height)
-            )}`
-          );
-        }
-        expect(boxes).toEqual([
-          'wrapped-picker=0x0',
-          'wrapped-picker-forwarded=0x0',
-          'wrapped-picker-user=0x0',
-        ]);
         // Nothing in the Host's box answers: there is no composition there to press.
+        // That holds for every shape the child hides behind, not only the one JS would
+        // unwrap.
         const host = await boxOf('refuse-host');
         for (const offset of [24, 60, 100]) {
           expect(await probeIn(host, 8, offset, [], log)).toBeNull();
         }
-        // And the refusal reached JavaScript, naming the control (S5: not logcat). One
-        // report per refused child is the proof that all three shapes reached the
+        // And the refusal reached JavaScript, naming the child's class (S5: not logcat).
+        // One report per refused child is the proof that all three shapes reached the
         // native rule rather than being dropped without a word.
-        expect(
-          refused.filter((report) => /Picker/.test(report.message ?? '')).length
-        ).toBe(3);
+        expect(refused.length).toBe(3);
+        for (const report of refused) {
+          expect(report.childClass).toBe('ReactViewGroup');
+          expect(report.message ?? '').toMatch(/not a nitro-ui control/);
+        }
         expect(
           refused.some((report) =>
             /docs\/components\/host\.md/.test(report.message ?? '')
           )
         ).toBe(true);
+        unmount();
+      } finally {
+        subscription.remove();
+      }
+    });
+
+    /**
+     * The same three shapes with a control a Host *is* built to compose.
+     *
+     * H2b moved three controls across the allowlist line, and the JS side cannot see
+     * through a component to notice: what decides is `isHostable`, seen by the native
+     * side. So the case above is only half of that — a Host that refused everything
+     * behind a component would still pass it, and would silently stop drawing half the
+     * children of every app that wraps a control in its own component (which is the
+     * normal way to write React, and the reason `host.md` says components are
+     * transparent in both directions).
+     *
+     * `Switch` rather than `Picker`: this case is about who was composed, not about a
+     * window, and a Switch answers a press by name.
+     */
+    const WrappedSwitch = memo(function SwitchBehindMemo() {
+      return <Toggle id="through-memo" log={log} />;
+    });
+
+    const SwitchThroughForwardRef = forwardRef<View>(
+      function SwitchBehindForwardRef(_props, _ref) {
+        return <Toggle id="through-forwarded" log={log} />;
+      }
+    );
+
+    function SwitchFromUserComponent() {
+      return <Toggle id="through-user" log={log} />;
+    }
+
+    it('composes a control behind a component, and says nothing', async () => {
+      const refused: Report[] = [];
+      const subscription = listen(refused);
+      try {
+        const { unmount } = await mount(
+          <View testID="through-host" style={HUG}>
+            <Host style={{ width: 300, height: 200 }}>
+              <WrappedSwitch />
+              <SwitchThroughForwardRef />
+              <SwitchFromUserComponent />
+            </Host>
+          </View>
+        );
+        // Nothing was refused, so nothing was reported: an allowlist that says yes has
+        // no business writing into the console.
+        expect(refused).toEqual([]);
+        // Every one of the three is drawn and answers on its own name. A sweep, because
+        // the row pitch is Compose's business and 8 dp cannot step over a touch target.
+        const host = await boxOf('through-host');
+        const seen: string[] = [];
+        for (let offset = 4; offset <= 190; offset += 8) {
+          const hit = await probeIn(
+            host,
+            8,
+            offset,
+            ['through-memo', 'through-forwarded', 'through-user'],
+            log
+          );
+          if (hit != null) {
+            seen.push(hit);
+          }
+        }
+        expect(new Set(seen)).toEqual(
+          new Set(['through-memo', 'through-forwarded', 'through-user'])
+        );
+        // And in mount order, which is the same Column rule as an unwrapped child: a
+        // control that reached the composition out of order would answer here first.
+        const order = seen.map((hit) =>
+          hit === 'through-memo' ? 0 : hit === 'through-forwarded' ? 1 : 2
+        );
+        expect(order).toEqual([...order].sort((left, right) => left - right));
         unmount();
       } finally {
         subscription.remove();
