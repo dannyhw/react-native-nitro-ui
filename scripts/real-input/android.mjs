@@ -75,6 +75,9 @@ const ECHO = {
   pickerGone: 'real-input-drop-gone',
   hostValue: 'host-controlled-value',
   hostEvents: 'host-events-count',
+  hostSliderValue: 'host-slider-value',
+  hostButtonPresses: 'host-button-presses',
+  hostMixedState: 'host-mixed-state',
 };
 
 /** The system Back key, which is how a person dismisses an open popup. */
@@ -263,6 +266,281 @@ const CHECKS = {
       'the RN note below the Host is read after every hosted Switch',
       hosted.map((at) => at < followingNote),
       [true, true, true]
+    );
+  },
+
+  /**
+   * A real tap must reach a Button that React Native drew no view for.
+   *
+   * On Android this is a different question from the unhosted `button` check: inside
+   * a `<Host>` the Button has no view of its own to receive anything, so the touch
+   * has to land in a composition that belongs to somebody else and be dispatched by
+   * Compose. The echo is React's own render, so it moves only if the tap travelled
+   * touch to Compose to Nitro to JS to re-render.
+   *
+   * The two Buttons share one counter and both are given `onPress`, which is what
+   * makes the disabled half mean something: a library that let a disabled control
+   * answer would move the number, and a screen that had simply stopped rendering is
+   * caught by the enabled tap that follows.
+   *
+   * Both lookups scroll, because this section sits below the fold on a small screen
+   * and `uiautomator dump` lists nothing that is off screen - there, "not in the
+   * tree" means "not scrolled to", not "not drawn".
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-button': async (t) => {
+    const control = await t.requireControlOnScreen('Hosted button');
+    const disabled = await t.requireControlOnScreen('Hosted disabled button');
+    t.log.checkEquals(
+      'the hosted Buttons start with no presses recorded',
+      t.requireEcho(ECHO.hostButtonPresses),
+      '0'
+    );
+
+    await t.tapNode(control);
+    const first = t.waitForEcho(
+      ECHO.hostButtonPresses,
+      '1',
+      'a real tap on a hosted Button to reach onPress'
+    );
+    t.log.checkEquals(
+      'one real tap on a hosted Button reaches onPress',
+      first,
+      '1'
+    );
+
+    // The disabled one gets the same tap at the same kind of offset. Nothing should
+    // happen, and the way to say that is to keep watching the number the enabled one
+    // moves.
+    await t.tapNode(disabled);
+    const afterDisabled = t.requireEchoToStay(
+      ECHO.hostButtonPresses,
+      '1',
+      'a tap on the disabled hosted Button to be refused'
+    );
+    t.log.checkEquals(
+      'a real tap on the disabled hosted Button does not press it',
+      afterDisabled,
+      '1'
+    );
+
+    // And the counter is still live: without this, the line above could have passed
+    // because the screen stopped rendering rather than because the Button refused.
+    const second = t.waitForEcho(
+      ECHO.hostButtonPresses,
+      '2',
+      'a second real tap to reach onPress'
+    );
+    t.log.checkEquals(
+      'a second real tap presses the hosted Button again',
+      second,
+      '2'
+    );
+  },
+
+  /**
+   * A real drag must move a Slider that has no view of its own.
+   *
+   * The drag is aimed at the box the accessibility tree reports for the hosted
+   * Slider, which is the box Compose drew - the child's own React Native view is
+   * laid out at `0 x 0` by the measure gate, so it is not what the tree is reporting.
+   * Dragging along that box and reading the echo React owns is therefore the whole
+   * loop: touch, Compose, Nitro, JS, re-render, and the new value back down to native.
+   *
+   * The width claim is here too, because it is what makes the drag mean what it says:
+   * a `fillWidth` control inside a Host fills the Host, not its own style, so the
+   * track has to be most of the screen wide. A Slider that had honoured its own
+   * decorative frame instead would answer with a fraction of it - and the tree would
+   * report that fraction as the node bounds, which is exactly what this reads.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-slider': async (t) => {
+    const control = await t.requireControlOnScreen('Hosted slider');
+    const before = t.value(ECHO.hostSliderValue);
+    t.log.checkEquals('the hosted Slider starts at 0.40', before, 0.4);
+
+    // The widest node in the tree is a full-width container, so this is the screen:
+    // the Host is `width: 100%` of the page minus its padding, and a hosted Slider
+    // that had drawn at anything like its own box would be a fraction of it.
+    const widest = Math.max(...t.dump().map((node) => node.bounds.width));
+    t.log.check(
+      `the hosted Slider fills the Host (${String(control.bounds.width)} of ${String(
+        widest
+      )} px wide)`,
+      control.bounds.width > widest * 0.6
+    );
+    t.log.check(
+      'the hosted Slider is a track rather than a square',
+      control.bounds.width > control.bounds.height * 3
+    );
+
+    await t.dragControl(control, 0.4, 0.9, 800);
+    const up = t.waitForValueToRise(
+      ECHO.hostSliderValue,
+      before,
+      'a real drag on a hosted Slider to reach React'
+    );
+    t.log.check(
+      `a real drag moves a hosted Slider and React renders it (${String(
+        before
+      )} -> ${String(up)})`,
+      up != null && up > before + 0.3
+    );
+
+    // Back the other way, from wherever the first drag left the thumb - the echo says
+    // where that is, because the echo is what a person sees. A control that only ever
+    // reported one direction would fail here rather than look fine.
+    await t.dragControl(control, 0.9, 0.1, 800);
+    const down = t.waitForEchoToChange(
+      ECHO.hostSliderValue,
+      up,
+      'a second drag to move the hosted Slider back'
+    );
+    const landed = t.value(ECHO.hostSliderValue);
+    t.log.check(
+      `dragging back moves a hosted Slider the other way (${up} -> ${down}; ${String(
+        landed
+      )})`,
+      landed != null && landed < up - 0.3
+    );
+  },
+
+  /**
+   * Four kinds of control in one `<Host>`, read from the tree a screen reader sees.
+   *
+   * `hosted-switch` established the contract for one kind (H1). This is the case that
+   * a Host is a *container*: a Switch, a Slider, both Progress variants and a Button
+   * in one composition, where three things have to hold at once.
+   *
+   * 1. Each child is its own labelled node, in mount order - not one anonymous blob
+   *    that happens to respond to taps somewhere.
+   * 2. Each keeps its own geometry rule inside the Host's single `Column` (D24): the
+   *    linear controls stretch to the Host, the intrinsic ones do not, so the bar is
+   *    as wide as the Slider and the indicator is a small square. A Host that measured
+   *    or stretched everything, or one that gave every child the same box, is caught
+   *    here rather than in a comment.
+   * 3. Pressing one child changes only what it owns: the Button in this Host moves the
+   *    press count, and the switch and slider values in the same echo do not move with
+   *    it - which is recomposition staying per-child inside a shared composition, the
+   *    property a Host exists to preserve.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-mixed': async (t) => {
+    const NAMES = [
+      'Mixed switch',
+      'Mixed slider',
+      'Mixed linear progress',
+      'Mixed circular progress',
+      'Mixed button',
+    ];
+    // All five have to be in one breath, so the check scrolls to the last of them
+    // first: `uiautomator dump` lists nothing off screen. The readout sits above the
+    // box precisely so that it is still on screen at that point, which is what lets
+    // the same check read what its own taps did.
+    const button = await t.requireControlOnScreen('Mixed button');
+    const before = t.requireEcho(ECHO.hostMixedState);
+    t.log.checkEquals(
+      'the mixed Host starts with nothing answered',
+      before,
+      'off 0.50 0'
+    );
+    const tree = t.dump();
+    const order = NAMES.map((name) =>
+      tree.findIndex((node) => node.contentDesc === name)
+    );
+    const seen = tree
+      .map((node, index) =>
+        node.text || node.contentDesc
+          ? `${String(index)}:${(node.text || node.contentDesc).slice(0, 22)}`
+          : null
+      )
+      .filter(Boolean)
+      .join(' | ');
+    t.log.note(`named nodes in the tree: ${seen}`);
+    t.log.checkEquals(
+      'the mixed Host publishes a node for each of its five children',
+      order.map((at) => at >= 0),
+      [true, true, true, true, true]
+    );
+    t.log.checkEquals(
+      'each kind of control is its own node, in mount order',
+      order,
+      [...order].sort((left, right) => left - right)
+    );
+
+    const nodeNamed = (name) =>
+      tree.find((entry) => entry.contentDesc === name);
+    const widthOf = (name) => {
+      const node = nodeNamed(name);
+      return node == null ? 0 : node.bounds.width;
+    };
+    const linear = widthOf('Mixed linear progress');
+    const circular = widthOf('Mixed circular progress');
+    const slider = widthOf('Mixed slider');
+    const switcher = widthOf('Mixed switch');
+    t.log.note(
+      `widths in px - slider=${String(slider)}, bar=${String(
+        linear
+      )}, indicator=${String(circular)}, switch=${String(switcher)}`
+    );
+    // Both linear controls fill the Host, so they agree with each other; both
+    // intrinsic ones keep their own width, so they are much narrower than the Host.
+    t.log.check(
+      `the linear bar is as wide as the Slider (${String(linear)} vs ${String(
+        slider
+      )})`,
+      Math.abs(linear - slider) <= Math.max(8, linear * 0.05)
+    );
+    t.log.check(
+      `the circular indicator keeps its own width (${String(
+        circular
+      )} vs ${String(linear)})`,
+      circular > 0 && circular * 3 < linear
+    );
+    t.log.check(
+      `the Switch keeps its own width too (${String(
+        switcher
+      )} vs ${String(linear)})`,
+      switcher > 0 && switcher * 3 < linear
+    );
+    const indicator = nodeNamed('Mixed circular progress');
+    t.log.check(
+      `the indicator is drawn as a square, not stretched across the Host (${
+        indicator == null
+          ? 'no node'
+          : `${String(indicator.bounds.width)} x ${String(
+              indicator.bounds.height
+            )}`
+      })`,
+      indicator != null &&
+        Math.abs(indicator.bounds.width - indicator.bounds.height) <= 8
+    );
+
+    // Pressing one child answers for that child only.
+    await t.tapNode(button);
+    const pressed = t.waitForEcho(
+      ECHO.hostMixedState,
+      'off 0.50 1',
+      'a real tap on the mixed Host Button to reach onPress'
+    );
+    t.log.checkEquals(
+      'the Button in a mixed Host presses, and nothing else in it moved',
+      pressed,
+      'off 0.50 1'
+    );
+
+    await t.tapNode(await t.requireControlOnScreen('Mixed switch'));
+    t.log.checkEquals(
+      'the Switch in the same Host answers too, and the press count stays',
+      t.waitForEcho(
+        ECHO.hostMixedState,
+        'on 0.50 1',
+        'a real tap on the mixed Host Switch to register'
+      ),
+      'on 0.50 1'
     );
   },
 

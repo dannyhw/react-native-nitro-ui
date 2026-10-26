@@ -368,9 +368,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   /**
    * Whether a [NitroUiHostView] may compose this control.
    *
-   * The native half of the "Switch only" rule (review M2). JS names the hostable
-   * controls in `src/components/Host/HostChildren.ts`, but React flattens
-   * components out of the native tree, so a `Picker` behind a `memo` arrives as a
+   * The native half of the allowlist rule (review M2) - one control in H1, four since
+   * H2a. JS names the hostable controls in `src/components/Host/HostChildren.ts`, but
+   * React flattens components out of the native tree, so a `Picker` behind a `memo`
+   * arrives as a
    * direct child of a Host that JS never saw a `Picker` in. Only this side can
    * decide then, and the decision is this property: `false` on the base class, so a
    * control opts in by overriding it and everything else - including another
