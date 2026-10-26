@@ -1,3 +1,4 @@
+/* global Atomics, SharedArrayBuffer */
 /**
  * Device leases have to be right in the ways a prose rule is not.
  *
