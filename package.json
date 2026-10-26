@@ -1,6 +1,6 @@
 {
   "name": "react-native-nitro-ui",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Native SwiftUI and Jetpack Compose components for React Native, built on Nitro Modules",
   "type": "commonjs",
   "main": "./lib/module/index.js",
