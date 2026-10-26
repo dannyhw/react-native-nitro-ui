@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Launch-paired ratios of `nitro-ui` against *every* other arm in a results file.
+ * Launch-paired ratios of one arm against *every* other arm in a results file.
  *
  *   node bench/tools/arm-ratios.mjs bench/results/<run>.json [more.json ...]
+ *   node bench/tools/arm-ratios.mjs --arm=nitro-ui-host bench/results/<run>.json
  *
  * `bun bench` gates on launch-paired ratios to `rn-core` only (D9). The D15
  * target is a ratio to `expo-ui-shared-host`, and a ratio to `rn-core` cannot be
@@ -25,7 +26,18 @@ import {
   pairedLaunchRatios,
 } from '../../scripts/bench/lib.mjs';
 
-const ARM = 'nitro-ui';
+/**
+ * The control arm to express ratios *from* (default `nitro-ui`).
+ *
+ * `--arm` exists for T16: the D15 question is a ratio to `expo-ui-shared-host`, and
+ * asking it of the spike's `nitro-ui-host` arm needs the same launch-paired pairing
+ * this tool already does - not two medians divided in prose.
+ */
+const ARM =
+  process.argv
+    .find((arg) => arg.startsWith('--arm='))
+    ?.slice('--arm='.length) ?? 'nitro-ui';
+const FILES = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
 /** `mainNsPerOp` is the UI-thread column D15 names; the rest complete the picture. */
 const METRICS = [
   ...LATENCY_METRICS,
@@ -49,7 +61,7 @@ function formatRatio(ratio, spread) {
   return `${ratio.toFixed(2)}x${noise}`;
 }
 
-for (const file of process.argv.slice(2)) {
+for (const file of FILES) {
   const run = JSON.parse(readFileSync(file, 'utf8'));
   const cells = cellsFrom(run);
   const load = run.machine?.loadavg1;
