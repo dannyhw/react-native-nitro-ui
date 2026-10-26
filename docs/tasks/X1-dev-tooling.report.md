@@ -66,6 +66,7 @@ and refuse honestly when fnm cannot provide it. `scripts/pod-install.mjs` is the
 | `actionlint .github/workflows/*.yml` | **PASS** | clean; all action refs still SHA-pinned |
 | `lease acquire` → `source` → `release` | **PASS** | `X1-kwv6c` for the device gate; `list` empty afterwards |
 | `build-app.mjs --platform android` | **PASS** | 30 s, tree `591f955534d3` (499 files), 8 components |
+| `build-app.mjs --platform android --arch x86_64` (the CI command) | **PASS** | 72 s from the same tree; the stamped build is what `build-android` now runs |
 | **harness:android — leased device gate** | **PASS 162 tests / 11 suites** | 175.3 s, through `build-app.mjs` + a lease; log shows "app is fresh" and "nitroui_t03 boots on console port 5574 (serial emulator-5574)" |
 | red: no `app.stamp` | **refused** | "nothing proves this binary was built from this checkout", exit 1, no device work |
 | red: stale tree | **refused** | "built from a different code tree (stamp 3832dc40 …, now 7588a938 …)" |

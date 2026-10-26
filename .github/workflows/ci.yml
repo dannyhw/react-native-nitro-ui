@@ -111,11 +111,15 @@ jobs:
           cache-provider: basic
           cache-read-only: false
 
-      - name: Assemble debug APK
-        working-directory: example/android
+      # Through the same entry point a local device gate uses, so the job that
+      # every pull request runs also proves the stamped build works on a clean
+      # checkout - gradle, then the scan that says every registered component is
+      # really in the dex. A raw `assembleDebug` proves the toolchain and nothing
+      # about the binary (review S1).
+      - name: Build stamped debug app
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
-        run: ./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64 --no-daemon --console=plain
+        run: node scripts/build-app.mjs --platform android --arch x86_64
 
   # A release build of the example app: this is what catches codegen/dex/R8
   # problems that a debug build tolerates. Slower than the debug build and not
