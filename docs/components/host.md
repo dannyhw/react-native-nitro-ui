@@ -124,22 +124,23 @@ would make it a second list component.
 Each of these follows from who owns the pixels, and each is a refusal in development
 rather than a screen that draws half of itself:
 
-- **Anything that is not a hosted control.** Four controls are hosted: `Switch` (H1),
-  and `Slider`, `Progress` and `Button` (H2a). `SegmentedControl`, `Picker` and
-  `DatePicker` are not — a popup owns a window, and a Host owns a rectangle; that pair
-  is H2b's problem, not this container's. One of our other controls, an RN view
-  (`View`, `Text`, `ScrollView`, `Image`, …), a third-party native view, plain text as
-  a direct child, or another `<Host>` throws in dev — on **both** platforms, so the
-  rule is not learned later on the platform that was not tested.
+- **Anything that is not a hosted control.** Seven controls are hosted: `Switch` (H1);
+  `Slider`, `Progress` and `Button` (H2a); and `SegmentedControl`, `Picker` and
+  `DatePicker` (H2b), which is every control this library ships. What is left to refuse
+  is therefore not a control at all: one of our other components if a future one is not
+  hosted, an RN view (`View`, `Text`, `ScrollView`, `Image`, `Modal`, …), a third-party
+  native view, plain text as a direct child, or another `<Host>`. Each of those throws in
+  dev — on **both** platforms, so the rule is not learned later on the platform that was
+  not tested.
 - **The rule is enforced twice, because the two sides see different trees.** JavaScript
   refuses what it can *name*. It cannot see through a component, so a `<Row>` that
-  renders a `Picker` arrives at the native Host looking like a direct child, and there
+  renders a `View` arrives at the native Host looking like a direct child, and there
   the allowlist decides: `NitroComposeHost.isHostable` is `false` on the base class and
-  `true` on those four hosts only, so a `Picker`, a `SegmentedControl`, or a `<Host>`
-  behind a wrapper is **not** composed. In a debuggable build that refusal is not only a log line — the Host
+  `true` on those seven hosts only, so an RN view, one of our other controls, or a
+  `<Host>` behind a wrapper is **not** composed. In a debuggable build that refusal is not only a log line — the Host
   reports it to JavaScript, where it becomes a `console.error` in Metro and LogBox that
   names the child's class. In a release build it draws nothing and says nothing, so a
-  control outside the allowlist must stay outside the `<Host>`.
+  child outside the allowlist must stay outside the `<Host>`.
 - **No nesting.** A `<Host>` cannot hold another `<Host>`. The inner one would become a
   row of the outer one's column: measuring nothing, drawing a composition of its own,
   and answering to no box. Put Hosts side by side, each with its own height.
@@ -150,12 +151,18 @@ rather than a screen that draws half of itself:
   part of it (`removeClippedSubviews`) or transform one child. A list that virtualises
   has to add and remove whole children; the Host recomposes its block when the set
   changes.
-- **No `Modal`**, or anything else that owns a window.
+- **No React Native `Modal`**, and no other RN view that owns a window of its own. A
+  hosted control that presents a popup or a dialog is a different thing and is supported:
+  what a Host owns is the rectangle, and the window a child opens belongs to the
+  composition inside it — see "Popups and dialogs" below. What is refused is a *sibling*
+  window, owned by RN rather than by the composition, whose pixels this container would
+  never see.
 - **No per-child size.** A `width`, `height` or `alignSelf` on a hosted child moves the
   frame React Native computes, not the drawing (Sizing below). What the drawing is
   comes from the control's own sizing rule and the Host's box: `Slider` and a linear
-  `Progress` take the Host's inner width, `Button`, `Switch` and a circular `Progress`
-  take their own size at the column's leading edge.
+  `Progress` take the Host's inner width, and `Button`, `Switch`, a circular `Progress`,
+  `SegmentedControl`, `Picker` and `DatePicker` take their own size at the column's
+  leading edge.
 - **Only some of a Host's own styles reach the drawing.** `width`, `height` and `flex`
   size the box, `alignSelf` moves that box inside the Host's parent, and `padding` and
   `borderWidth` inset it. The `Column` starts inside either
@@ -183,6 +190,47 @@ tree, so a wrapper that renders a `Switch` **is** a direct child of the Host and
 hosted — wrapping a control in your own component does not opt it out. The flip side is
 the rule: a `Switch` inside an RN `View` inside a Host is not hosted, because the `View`
 is the direct child, and a `View` is what the check refuses.
+
+## Popups and dialogs
+
+Three of the seven hosted controls present something outside their own box: a
+`SegmentedControl` presents nothing (it is here because it is a control like the others),
+a `Picker` opens an `ExposedDropdownMenu`, and a `DatePicker` on Android opens a dialog in
+each of its `compact` modes. Those windows are **the Host composition's own**: a Compose
+popup opened from inside an `AndroidComposeView` is attached to that view, which is the
+same thing that happens when the same control opens a menu in a composition of its own,
+and the same thing Expo UI's shared host does. That is a fact about Compose, not a
+workaround added for Hosts, and it is what makes each of the following fall out rather
+than need engineering:
+
+| Situation | What a hosted popup does |
+| --------- | ------------------------ |
+| The Host is scrolled, or sits nowhere near the top of the screen | The menu opens under the box the **Host drew**, because that is the anchor node's position. React Native's frame for the child is never consulted — it is decorative (Sizing below), and anchoring to it would put the menu over the wrong row. Measured: `example/__tests__/HostPopups.harness.tsx`, "anchors under the box the Host drew, and follows it when it moves". |
+| Outside tap, the back gesture, or a row | Each closes it, exactly as unhosted, and the controlled handshake still decides whether the row is accepted. A refused choice still closes the menu and leaves the value where React kept it. |
+| The options change while it is open | The open menu relays the new rows; the chosen index is whatever the list now says. |
+| The control is disabled while its window is up | The window closes. A control that answers nothing cannot own a live dialog. |
+| The child is removed, reordered, or the Host is dropped (`onDropView`) while a window is open | Nothing is left behind. The window belongs to the composition that opened it, so when that composition goes — including `onDropView`, which disposes it — the window goes with it. Measured, including the case where a reorder moves the row under an open menu: the menu comes down rather than floating over the wrong control. |
+| Two popup owners in one Host | They open one after the other and neither stays stuck: the second one's window does not inherit the first one's state, and after both have been through, no window is left. |
+| TalkBack / VoiceOver | The rows are reachable while the menu is open, and the current choice is marked selected. On iOS a Host is a passthrough, so it is the ordinary `Picker` tree (`docs/components/picker.md`). |
+
+The `DatePicker`'s dialog is the same rule in a different widget: the dialog is composed
+from the model's own `presented` state inside the host composition (`docs/components/date-picker.md`),
+so a hosted field opens a dialog that follows a value React writes while it is up, closes
+when the field is disabled, and leaves nothing when the Host is dropped mid-dialog. The
+`time` and `datetime` modes present dialogs too, and are gated as well as `date`.
+
+Two G5 follow-ups live on that path and were fixed here rather than recorded: a dialog
+left open did not follow a programmatic value, and disabling a field while its dialog was
+up left the dialog live. Both are gated
+(`example/__tests__/HostPopups.harness.tsx`, "follows a value React writes while the
+dialog is open (G5)" and "closes when the control is disabled while the dialog is open
+(G5)").
+
+What is still refused is a **React Native** `Modal` child, or any other RN view that owns
+a window: that window is a sibling of the Host's, not a child of its composition, so the
+Host would own a rectangle and nothing would own the pixels. If a future control cannot
+be hosted, the refusal stays loud — a throw in development and a `console.error` in a
+release build, never a control that draws half of itself.
 
 ## Sizing (D24)
 
@@ -258,7 +306,8 @@ invisible from the outside. Dumped on an API 35 emulator (Android 15, 420 dpi) w
 Host screen showed three hosted Switches and a batch of 24:
 
 - **One labelled node per hosted control, from Compose.** Each hosted child — Switch,
-  Slider, either Progress variant, Button — publishes a `android.view.View` whose
+  Slider, either Progress variant, Button, SegmentedControl, Picker, DatePicker —
+  publishes a `android.view.View` whose
   `content-desc` is its `accessibilityLabel`, the same `Modifier.semantics {
   contentDescription }` as unhosted. Attribute for attribute (`class`, `content-desc`,
   `enabled`, `focusable`, `clickable`, `checkable`, `checked`) a hosted node and the
