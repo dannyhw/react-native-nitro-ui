@@ -4,9 +4,11 @@ Everything in this file is a contract: these are the exact commands the
 project's gates run. If you change one, change it here too.
 
 **The gates are local for now.** The GitHub workflows in `.github/workflows/`
-(CI, Release, Bench, Smoke) are disabled on purpose, so nothing runs on a push
-or a pull request. `bun run check` plus the device suites below, run on your
-machine, are what a change is judged by.
+(CI, Bench, Smoke) are disabled on purpose, so nothing runs on a push or a pull
+request. `bun run check` plus the device suites below, run on your machine, are
+what a change is judged by. The release path is the exception: `Release` and
+`Changeset status` are meant to be switched on (see "Releasing"), and until
+`Release` is enabled, merging to `main` publishes nothing.
 
 ## Prerequisites
 
@@ -78,8 +80,11 @@ Run from the repo root.
 | `bun run bench:report`      | Re-render an existing results file, no device needed                 |
 | `bun run probe:nitrogen`    | Regenerate the private `bench/modules/bench-probe` Nitro code        |
 | `bun run perf:renders`      | Reassure render-count gate for the JS wrappers                       |
+| `bun run changeset`         | Record a release entry for your change (see "Releasing")             |
+| `bun run release:version`   | Apply pending changesets, as the Version Packages PR does            |
+| `bun run release:publish`   | **Release job only.** `npm publish` — never run it locally           |
 | `bun run example <script>`  | Run an `example/` script, e.g. `bun run example ios`                 |
-| `bun run hooks:install`     | Install optional git hooks (see "Commit messages and releases")      |
+| `bun run hooks:install`     | Install optional git hooks (see "Commit messages and git hooks")     |
 | `bun run hooks:uninstall`   | Remove them again                                                    |
 | `bun run clean`             | Delete build outputs (`lib/`, native build dirs)                     |
 
@@ -488,11 +493,11 @@ and `docs/research/nitro-patterns.md`): prop setters only store and mark dirty, 
 resets everything, no JS↔main thread blocking hops, and controlled values use the
 event-count handshake.
 
-## Commit messages and releases
+## Commit messages and git hooks
 
-Conventional Commits — releases rely on them (`@release-it` with the
-conventional-changelog preset derives versions and changelogs from the messages,
-so `feat`/`fix`/`BREAKING CHANGE` matter).
+Conventional Commits, checked by the optional `commit-msg` hook below. Commit
+messages no longer decide anything about releases — Changesets entries do (see
+"Releasing") — but the history still reads better in the agreed shape.
 
 Git hooks are **opt-in**: `bun install` never installs them, because git hooks
 live in the `.git` directory that every worktree of this repo shares, and
@@ -509,9 +514,66 @@ and fail loudly instead of downloading a look-alike `tsc`/`eslint` package.
 `pre-commit` typechecks the whole program, which gets slow once `bench/` exists —
 `bun run check` is the gate that actually has to pass.
 
-Nothing has been released yet. Releases are meant to go through
-`.github/workflows/release.yml` (manual dispatch, npm trusted publishing), which
-is disabled for now. Do not run `bun run release` locally.
+## Releasing
+
+Releases are cut by [Changesets](https://changesets.dev) from GitHub Actions and
+published with npm **trusted publishing** (OIDC): there is no npm token in this
+repo, in the workflows, or on any laptop. 0.1.0 was published by hand (DECISIONS
+D26); everything after it is this path (D27).
+
+1. **Make the change, then `bun run changeset`.** Pick the bump (`patch` for a
+   fix, `minor` for a new capability, `major` for a breaking change) and write a
+   note that reads well in `CHANGELOG.md` — that text _is_ the release note.
+   Commit the file it writes in `.changeset/` with your pull request. A change
+   that must not release anything (docs, tooling, tests) still gets an entry:
+   `bunx changeset --empty`. `Changeset status` warns on a pull request that
+   changes `src/`, `ios/`, `android/`, `cpp/` or `nitrogen/` without one; the
+   warning never blocks a merge, because a maintainer can add the entry.
+   Only `react-native-nitro-ui` is ever versioned: the `example`, `bench` and
+   `bench/modules/bench-probe` workspaces are `private` and listed in `ignore`
+   in `.changeset/config.json`.
+2. **Merge pull requests to `main`.** The `Release` workflow runs
+   `bun run check`, then `changeset version`, and opens or updates a pull
+   request called **Version Packages**: it bumps `package.json`, prepends the
+   notes to `CHANGELOG.md` and deletes the changeset files. Everything merged
+   before it lands folds into that one pull request — you review the version and
+   the changelog there.
+3. **Merge the Version Packages pull request.** The next `Release` run finds no
+   pending changesets, runs `bun run check` again, publishes the version now
+   committed on `main`, tags `vX.Y.Z` and opens the GitHub release from the
+   changelog entry. `npm publish` runs this package's `prepare` (builder-bob →
+   nitrogen) while packing, and provenance comes from the job's OIDC token.
+
+Two things that look wrong and are not:
+
+- npm can show the new version briefly as a staged placeholder (`0.0.0-stage…`)
+  while it runs its automated scan of the package before the version goes live.
+  Check `npm view react-native-nitro-ui version` afterwards; that is the truth.
+- A release job that fails after the version is merged leaves the bump on `main`
+  with nothing published. Fix the cause and **re-run the failed job** from the
+  Actions run: `changeset publish` skips a version the registry already has, so
+  a half-finished run finishes instead of double-publishing.
+
+A version that is on npm stays on npm. `npm unpublish` breaks every lockfile
+pointing at it, so retreat with a deprecation and release a fix:
+
+```sh
+npm deprecate react-native-nitro-ui@0.1.2 "<why — point at the replacement>"
+```
+
+Never run `npm login`, `npm publish` or `bun run release:publish` locally: the
+only publishing credential is the release job's OIDC token. To see what a
+release would ship, use a dry run instead:
+
+```sh
+bun run prepare && npm publish --dry-run
+```
+
+The one-time owner setup — naming this repo and `release.yml` as the package's
+Trusted Publisher on npmjs.com, allowing GitHub Actions to create pull requests
+in the repository settings, enabling the `Release` workflow — is recorded with
+the R6 report (`docs/tasks/R6-changesets-release.report.md`); without it nothing
+publishes.
 
 ## Sending a pull request
 
