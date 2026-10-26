@@ -136,15 +136,24 @@ const CHECKS = {
   /**
    * A real tap must reach a Switch that React Native drew no view for.
    *
-   * Inside a `<Host>` the child's Android view is `GONE`, so nothing under the finger
-   * is a React Native view: the only thing that can answer is the Host's own Compose
-   * composition, and the only way to aim at it is the accessibility label Compose
-   * publishes. The echo is React's own render of the value, so a change can only be
-   * touch → Compose → Nitro → JS → re-render.
+   * Inside a `<Host>` the child's own Android view is laid out at `0 × 0` by the
+   * measure gate, so it draws nothing and is nobody's hit target. It is not `GONE` —
+   * Fabric re-asserts `VISIBLE` on it in every layout pass, so `GONE` is not what
+   * hides it. Nothing under the finger is therefore a React Native view: the only
+   * thing that can answer is the Host's own Compose composition, and the only way to
+   * aim at it is the accessibility label Compose publishes. The echo is React's own
+   * render of the value, so a change can only be touch → Compose → Nitro → JS →
+   * re-render.
    *
    * This is a separate control from `switch` because the path is different: here the
    * touch travels through a container that composes somebody else's controls, which is
    * the path a `<Host>` exists to create (H1).
+   *
+   * The check ends by reading the whole tree for the screen-reader contract (brief
+   * item 3, review S6): every hosted control must publish its own label, and the
+   * labelled nodes must arrive in mount order between the React Native siblings that
+   * surround the `<Host>`. A composition that published its children out of order, or
+   * as one anonymous blob, would still tap fine and fail this.
    *
    * @param {ReturnType<typeof makeContext>} t
    */
@@ -183,6 +192,42 @@ const CHECKS = {
       'the Host reported both changes it was asked for',
       t.requireEcho(ECHO.hostEvents),
       '2'
+    );
+
+    // What a screen reader is offered (brief item 3, review S6). `uiautomator dump`
+    // lists nodes in traversal order, so where a hosted label sits among the plain
+    // React Native text nodes around it is the order TalkBack reads them in. The
+    // `<Host>` here sits between two `Text`s and holds three labelled Switches, which
+    // gives both halves of the claim: one node per child, in mount order, between the
+    // RN siblings rather than before or after them.
+    const tree = t.dump();
+    /** @param {(node: import('./uiautomator.mjs').UiautomatorNode) => boolean} predicate */
+    const orderOf = (predicate) => tree.findIndex(predicate);
+    const section = orderOf((node) =>
+      node.text.includes('Three Switches, one composition')
+    );
+    const followingNote = orderOf((node) =>
+      node.text.includes('The Host has a height')
+    );
+    const hosted = [0, 1, 2].map((index) =>
+      orderOf((node) => node.contentDesc === `Hosted switch ${String(index)}`)
+    );
+
+    t.log.checkEquals(
+      'the RN text above the Host is read before every hosted Switch',
+      [section, ...hosted].every((at) => at > 0) &&
+        hosted.every((at) => at > section),
+      true
+    );
+    t.log.checkEquals(
+      'the RN note below the Host is read after every hosted Switch',
+      followingNote > 0 && hosted.every((at) => at < followingNote),
+      true
+    );
+    t.log.checkEquals(
+      'each hosted Switch is its own labelled node, in mount order',
+      hosted,
+      [...hosted].sort((left, right) => left - right)
     );
   },
 
