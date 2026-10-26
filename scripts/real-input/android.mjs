@@ -327,6 +327,10 @@ const CHECKS = {
 
     // And the counter is still live: without this, the line above could have passed
     // because the screen stopped rendering rather than because the Button refused.
+    // Tap it again - the node is looked up rather than reused because the echo above
+    // re-renders the row, and a stale box is how a check starts tapping a neighbour.
+    const again = await t.requireControlOnScreen('Hosted button');
+    await t.tapNode(again);
     const second = t.waitForEcho(
       ECHO.hostButtonPresses,
       '2',
