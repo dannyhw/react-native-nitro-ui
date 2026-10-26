@@ -34,9 +34,12 @@ export interface HostProps extends ViewProps {
  * composition: **1.10x** the shared host on mount JS CPU per op. Opt-in for that
  * reason, not a default.
  *
- * Only `Switch` is hosted today; anything else as a direct child throws in
- * development rather than rendering half a screen. Hosting another control means
- * adding one row to the table in `HostChildren.ts` (and a bench arm for it).
+ * Only `Switch` is hosted today. A direct child that JS can prove is not one (a
+ * text node, an RN view, one of our other controls) throws in development rather
+ * than rendering half a screen; a component JS cannot see through goes to the
+ * native Host, which composes it when what it renders is a control and logs what
+ * it had to skip in a debuggable build. Hosting another control means adding one
+ * row to the table in `HostChildren.ts` (and a bench arm for it).
  *
  * ## What a Host cannot contain
  *
@@ -68,25 +71,31 @@ export interface HostProps extends ViewProps {
  *
  * ## Sizing (D24)
  *
- * A hosted control **never measures**. While a Host composes it, its own measure
- * is declined, so it reports nothing to the sizing engine: no cache entry, no
- * correction, and D17's first-frame rule does not apply - there is no measurement
- * that could arrive late.
+ * A hosted control never measures **its content**, and so never reports: while a
+ * Host composes it, its own measure is declined and it builds no composition, so
+ * the sizing engine gains no cache entry, no correction, and nothing for D17's
+ * first-frame rule to govern.
  *
- * Its RN box still exists, and it is still the engine's answer for that
- * configuration (a measured size, or the declared fallback): the shadow node does
- * not know who draws the control. It is decorative - nothing reads it to place
- * pixels. The Host places its children itself, in a Compose `Column`, in mount
- * order, at the Host's own width. So `alignSelf: 'stretch'`, `width: '100%'` or a
- * `height` on a hosted control moves the frame RN computes, not what Compose draws.
+ * What does not stop is Yoga asking. The engine still answers a measure call per
+ * hosted child - the same count as the same children unhosted - from the cached
+ * size or the declared fallback, never from Compose. The frame that produces is
+ * real (it is what the Host's own height is made of) and decorative (no pixel is
+ * placed by it; on Android the view behind it is `GONE`, and reports `0x0` to
+ * anything reading real view bounds). So `alignSelf: 'stretch'`, `width: '100%'`
+ * or a `height` on a hosted control moves the frame RN computes, not what Compose
+ * draws, and does not space the rows.
+ *
+ * The Host places its children itself: one Compose `Column`, in mount order, at
+ * the Host's own width, from the top-leading edge of its box, clipped to the box.
  *
  * The Host measures nothing either. Its box is Yoga's: its own `style`, plus its
  * children's decorative boxes. Give it a `height` or `flex: 1` and that is the box;
  * give it neither and its height is the sum of its children's sizing-engine sizes -
  * a row of Compose controls only for as long as those declared sizes match what
  * Compose draws. Dense lists should therefore say how tall they are: when the two
- * disagree, Compose clips to the smaller box. A Host that ends up 0 tall (a
- * `height: 0`, or a parent that gave it none) says so once in development.
+ * disagree, Compose clips to the Host's box, so an over-tall list loses its bottom
+ * rows rather than its top. A Host that ends up 0 tall (a `height: 0`, or a parent
+ * that gave it none) says so once in development.
  *
  * @see docs/components/host.md for the same rule with the harness cases that hold
  * it, and docs/architecture/sizing.md §10 (D24) for where it sits in the sizing
