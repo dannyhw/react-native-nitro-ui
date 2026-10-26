@@ -36,24 +36,28 @@ export interface HostProps extends ViewProps {
  * an RN node *plus* a child of somebody else's composition: **1.18x** the shared host
  * on mount JS CPU per op. Opt-in for that reason, not a default.
  *
- * Four controls are hosted today - `Switch`, `Slider`, `Progress` and `Button`
- * (H1 and H2a) - and the rule is held on both sides of the bridge. A direct child
- * that JS can prove is not one (a text node, an RN view, one of our other controls,
- * another `<Host>`) throws in development rather than rendering half a screen. React
+ * Seven controls are hosted today - `Switch` (H1), `Slider`, `Progress` and `Button`
+ * (H2a), and `SegmentedControl`, `Picker` and `DatePicker` (H2b) - which is every
+ * control this library ships, and the rule is held on both sides of the bridge. A direct
+ * child that JS can prove is not one (a text node, an RN view, a `Modal`, another
+ * `<Host>`) throws in development rather than rendering half a screen. React
  * flattens components away, so JS cannot see through a `memo`: what arrives as an
  * unknown child is decided by the native allowlist (`NitroComposeHost.isHostable`),
- * which says yes to those four and - in a debuggable build - reports what it refused
+ * which says yes to those seven and - in a debuggable build - reports what it refused
  * to JavaScript as a `console.error`, not only to logcat. Hosting another control
- * means a row in `HostChildren.ts`, an `isHostable` override, and a bench arm for it;
- * `SegmentedControl`, `Picker` and `DatePicker` stay refused until that is done (H2b).
+ * means a row in `HostChildren.ts`, an `isHostable` override, and a bench arm for it.
+ * The last three are the ones a Host was said not to be able to hold because each
+ * presents a popup or a dialog: a Compose popup opened inside a Host's composition is
+ * that composition's window, so it anchors to the row the Host drew and goes away with
+ * the composition - which is why hosting them needed a measurement, not a waiver.
  *
  * ## What a Host cannot contain
  *
  * Each of these is a property of who owns the pixels, not a bug to fix later:
  *
  * - **Anything that is not a hosted control.** No RN views (`View`, `Text`,
- *   `ScrollView`, `Image`), no third-party native views, no plain text, and no
- *   nitro-ui control outside `Switch`, `Slider`, `Progress` and `Button`. A direct
+ *   `ScrollView`, `Image`, `Modal`), no third-party native views, no plain text, and no
+ *   nitro-ui control a future version ships without a row in `HOSTABLE_CONTROLS`. A direct
  *   child is composed by
  *   the Host or drawn by nobody, so an unsupported one throws in dev (see
  *   `HostChildren.ts`) instead of rendering invisibly on Android and normally on
@@ -66,7 +70,12 @@ export interface HostProps extends ViewProps {
  *   the content inside it, clip part of it (`removeClippedSubviews`) or transform
  *   one child. A list that virtualises has to add and remove whole children, and
  *   the Host recomposes its block when the set changes.
- * - **No `Modal`**, or anything else that owns a window.
+ * - **No React Native `Modal`**, or any other RN view that owns a window. A hosted
+ *   control's own popup or dialog is not this: a Compose popup opened from inside the
+ *   Host's composition is that composition's window, so it anchors under the row the
+ *   Host drew and closes with the composition (`docs/components/host.md`, "Popups and
+ *   dialogs`). What is refused is a window owned by React Native beside the Host, whose
+ *   pixels this container would never own.
  * - **No nesting.** A `<Host>` cannot hold another `<Host>`: the inner one would be a
  *   row of the outer one's column, measuring nothing, drawing a composition of its
  *   own and answering to no box. Put Hosts side by side, each with its own height.

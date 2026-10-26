@@ -286,8 +286,12 @@ export function DueDate() {
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
 iOS it is a plain `View`. Its only children may be hostable nitro-ui controls —
-Switches in 0.1.0, plus `Slider`, `Progress` and `Button` from the next release;
-anything else throws in development. Give it a height.
+Switches in 0.1.0, plus `Slider`, `Progress` and `Button` and then
+`SegmentedControl`, `Picker` and `DatePicker` from the next release, which is every
+control the library ships; an RN view, plain text or a nested `<Host>` throws in
+development. A hosted `Picker`'s menu or `DatePicker`'s dialog is the Host
+composition's own window: it opens under the row the Host drew and closes with the
+composition. Give it a height.
 
 ```tsx name=host
 export function NotificationSettings() {
