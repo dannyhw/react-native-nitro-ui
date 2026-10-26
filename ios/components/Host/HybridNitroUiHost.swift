@@ -8,11 +8,14 @@
 //  native implementation on a platform, `@platforms` included - so the iOS half of
 //  the spec has to be satisfiable, and this is the smallest thing that satisfies it.
 //
-//  If a Host is ever built for iOS, this is where it goes: one
-//  `UIHostingController` whose root view holds N SwiftUI children, which is the
-//  shape `docs/tasks/T16-host-spike.report.md` estimates against the iOS memory
-//  misses (Slider, Button, Progress). Until then nothing here composes anything,
-//  and a control inside a `<Host>` on iOS renders exactly as it does outside one.
+//  It stayed a no-op on purpose. T17 built the iOS shape anyway (one shared hosting
+//  controller, N children) and measured it on Switch: memory 0.92x/0.75x the shared
+//  SwiftUI host, but mount UI CPU 1.40x and unmount 6.27x. D23's rule is that a Host
+//  may only take a control out of the app's tree when it pays for that control's own
+//  hosting miss; a container that trades memory for mount CPU does not, so H3 is not
+//  built and this passthrough is the design (D23 outcome,
+//  docs/tasks/T17-ios-host-spike.report.md). Nothing here composes anything, and a
+//  control inside a `<Host>` on iOS renders exactly as it does outside one.
 //
 
 import NitroModules

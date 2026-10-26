@@ -241,7 +241,9 @@ function visit(
         : // A string tag is a host component whatever it is called, and none of them
           // is a nitro-ui control. RN's own are in the table above by identity; this
           // catches a raw tag and a third-party native component.
-          (typeof children.type === 'string' ? `<${String(children.type)}>` : null);
+          typeof children.type === 'string'
+          ? `<${String(children.type)}>`
+          : null;
   if (unhostable != null) {
     throw new Error(childError(unhostable, position));
   }

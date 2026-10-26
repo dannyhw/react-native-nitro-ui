@@ -26,8 +26,11 @@ export interface NitroUiHostMethods extends HybridViewMethods {}
  * Android only in behaviour: `Host.tsx` renders a plain view on iOS, so this
  * Hybrid View is never instantiated there — it exists because nitrogen requires
  * a native implementation on both platforms for a Hybrid View, and
- * `HybridNitroUiHost.swift` is the documented no-op that satisfies it (T16).
+ * `HybridNitroUiHost.swift` is the documented no-op that satisfies it. The iOS
+ * passthrough is permanent, not a port pending: T17 built and measured an iOS Host and
+ * D23's outcome was not to ship it.
  *
- * @internal Not app API in v0.1; exported for this repo's example and bench.
+ * Apps render `Host`, not this type; it is exported because this repo's example and
+ * bench screens are separate packages and cannot reach a non-exported component.
  */
 export type NitroUiHost = HybridView<NitroUiHostProps, NitroUiHostMethods>;

@@ -36,12 +36,15 @@ export interface HostProps extends ViewProps {
  * composition: **1.10x** the shared host on mount JS CPU per op. Opt-in for that
  * reason, not a default.
  *
- * Only `Switch` is hosted today. A direct child that JS can prove is not one (a
- * text node, an RN view, one of our other controls) throws in development rather
- * than rendering half a screen; a component JS cannot see through goes to the
- * native Host, which composes it when what it renders is a control and logs what
- * it had to skip in a debuggable build. Hosting another control means adding one
- * row to the table in `HostChildren.ts` (and a bench arm for it).
+ * Only `Switch` is hosted today, and the rule is held on both sides of the bridge.
+ * A direct child that JS can prove is not one (a text node, an RN view, one of our
+ * other controls, another `<Host>`) throws in development rather than rendering half
+ * a screen. React flattens components away, so JS cannot see through a `memo`: what
+ * arrives as an unknown child is decided by the native allowlist
+ * (`NitroComposeHost.isHostable`), which says yes only to `Switch` and - in a
+ * debuggable build - reports what it refused to JavaScript as a `console.error`, not
+ * only to logcat. Hosting another control means a row in `HostChildren.ts`, an
+ * `isHostable` override, and a bench arm for it.
  *
  * ## What a Host cannot contain
  *
@@ -62,7 +65,15 @@ export interface HostProps extends ViewProps {
  *   one child. A list that virtualises has to add and remove whole children, and
  *   the Host recomposes its block when the set changes.
  * - **No `Modal`**, or anything else that owns a window.
+ * - **No nesting.** A `<Host>` cannot hold another `<Host>`: the inner one would be a
+ *   row of the outer one's column, measuring nothing, drawing a composition of its
+ *   own and answering to no box. Put Hosts side by side, each with its own height.
  * - **No per-child size** - see the sizing rule below.
+ * - **Only some of its own styles reach the drawing.** `width`, `height`, `flex` and
+ *   `padding` do; `gap`, `flexDirection`, `alignItems`, `justifyContent`,
+ *   `borderWidth` and `pointerEvents` do not, because Compose arranges the rows and
+ *   Compose takes the touches - while Yoga still honours each of them in the *box*.
+ *   Dev builds warn once per instance about each of them.
  *
  * Components are transparent here, in both directions. React flattens them out of
  * the native tree, so a wrapper that renders a `Switch` *is* a direct child of the
@@ -82,8 +93,8 @@ export interface HostProps extends ViewProps {
  * hosted child - the same count as the same children unhosted - from the cached
  * size or the declared fallback, never from Compose. The frame that produces is
  * real (it is what the Host's own height is made of) and decorative (no pixel is
- * placed by it; on Android the view behind it is `GONE`, and reports `0x0` to
- * anything reading real view bounds). So `alignSelf: 'stretch'`, `width: '100%'`
+ * placed by it; on Android the view behind it declines to measure and is laid out at
+ * `0 x 0`, which is what anything reading real view bounds sees). So `alignSelf: 'stretch'`, `width: '100%'`
  * or a `height` on a hosted control moves the frame RN computes, not what Compose
  * draws, and does not space the rows.
  *
@@ -220,7 +231,8 @@ function warnAboutInertStyles(
     return;
   }
   const inert = INERT_HOST_STYLES.filter((key) => flat[key] != null);
-  const laysSideways = flat.flexDirection != null && flat.flexDirection !== 'column';
+  const laysSideways =
+    flat.flexDirection != null && flat.flexDirection !== 'column';
   if (pointerEvents == null && inert.length === 0 && !laysSideways) {
     return;
   }
@@ -234,8 +246,8 @@ function warnAboutInertStyles(
     'react-native-nitro-ui: a <Host> was given ' +
       `${named.join(', ')}, which sizes its box but does not reach what it draws - ` +
       'Compose arranges the children (one column, no gaps), the Host draws no border, ' +
-      'and touches go to Compose rather than RN\'s hit testing. Lay the rows out with ' +
-      '`padding` and the children\'s own heights, and space them inside each row ' +
+      "and touches go to Compose rather than RN's hit testing. Lay the rows out with " +
+      "`padding` and the children's own heights, and space them inside each row " +
       '(docs/components/host.md).'
   );
 }
