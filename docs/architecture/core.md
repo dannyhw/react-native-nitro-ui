@@ -1,13 +1,14 @@
 # The core runtime — how to build a component
 
 The contract every component follows, from T10 (the Switch tracer bullet) and `docs/research/core-architecture.md`; where
-the two disagree this file describes what the code does, and every claim has a `file:line` you can check. Everything is
+the two disagree this file describes what the code does, and every claim names the file you can check it in. Everything is
 one package (`react-native-nitro-ui`, D6) — the core is inside it, not a separate `@nitro-ui/core`.
 
 **Read the reference implementation first** — Switch is the model to copy, not reinvent: `Switch.nitro.ts`,
 `NativeNitroUiSwitch.ts` and `Switch.tsx` in `src/components/Switch/`, `ios/components/Switch/HybridNitroUiSwitch.swift`,
-`android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt`, `example/src/SwitchScreen.tsx`. Building Slider
-(T12)? §11 as well as everything here. Progress (T13)? §12, which also lists what you must *not* copy.
+`android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt`, `example/src/SwitchScreen.tsx`. Building a
+continuous control like Slider? §11 as well as everything here. A display-only one like Progress? §12, which also lists
+what you must *not* copy.
 
 ## 1. Layout
 
@@ -15,12 +16,12 @@ one package (`react-native-nitro-ui`, D6) — the core is inside it, not a separ
 | ------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
 | JS      | `src/core/` (`useStableCallback`, `useControlled`, `useProcessedColor`), `src/NitroUiCore.ts`            | `src/components/<Name>/` (`<Name>.tsx`, `Native<Name>.ts`, `<Name>Config.ts`) |
 | Spec    | `src/NitroUiCore.nitro.ts`                                                                             | `src/components/<Name>/<Name>.nitro.ts`                  |
-| iOS     | `ios/core/` (`NitroUIContent`, `NitroSwiftUIHost`, `NitroUiModel`, `NitroUiMainThread`, `UIColor+NitroUiColor`) | `ios/components/<Name>/HybridNitroUi<Name>.swift`        |
-| Android | `android/.../nitro/nitroui/core/` (`NitroComposeHost`, `NitroUiModel`, `NitroUiPerf`)                    | `android/.../nitro/nitroui/HybridNitroUi<Name>.kt`       |
-| C++     | `cpp/HybridNitroUiCore.{hpp,cpp}`, `cpp/core/NitroUiClock.hpp`, `cpp/core/NitroUiPerf.hpp`, `cpp/NitroUiPropsCompat.hpp` | —                                             |
+| iOS     | `ios/core/` (`NitroUIContent`, `NitroSwiftUIHost`, `NitroUiModel`, `NitroUiMainThread`, `UIColor+NitroUiColor`, `NitroUiDeclaredFallbacks`) | `ios/components/<Name>/HybridNitroUi<Name>.swift`        |
+| Android | `android/.../nitro/nitroui/core/` (`NitroComposeHost`, `NitroUiModel`, `NitroUiPerf`, `NitroUiSizing`, `NitroUiDeclaredFallbacks`, `NitroUiHost`) | `android/.../nitro/nitroui/HybridNitroUi<Name>.kt`       |
+| C++     | `cpp/HybridNitroUiCore.{hpp,cpp}`, `cpp/NitroUiSizingEngine.{hpp,cpp}`, `cpp/NitroUiIntrinsic.hpp`, `cpp/core/NitroUiClock.hpp`, `cpp/core/NitroUiPerf.hpp`, `cpp/core/NitroUiSizing.hpp`, `cpp/NitroUiPropsCompat.hpp` | —                                             |
 
 The Kotlin Hybrid View stays in package `com.margelo.nitro.nitroui`, not a subpackage — the generated manager resolves it
-through a wildcard import of exactly that package (`nitrogen/generated/.../HybridNitroUiSwitchManager.kt:17`). Core
+through a wildcard import of exactly that package (`nitrogen/generated/.../HybridNitroUiSwitchManager.kt`). Core
 helpers may live in `...nitroui.core`. Keep the KDoc above it free of text that reads like a package or class declaration:
 RN's Android autolinker matches text, not code (§10).
 
@@ -28,25 +29,29 @@ RN's Android autolinker matches text, not code (§10).
 
 Each Hybrid View owns exactly one host, created with it and never replaced.
 
+(One exception, on Android only: a `Switch` that is a direct child of `<Host>` still owns its host but builds no
+composition of its own — the `<Host>` composes it, and it is never measured. See `docs/components/host.md` and
+`docs/architecture/sizing.md` §10.)
+
 - **iOS** — `NitroSwiftUIHost<Content>` (a `UIView`) owns one `UIHostingController<NitroUiRoot<Content>>`, built in `init`
-  (`ios/core/NitroSwiftUIHost.swift:88-109`). `rootView` is never reassigned and the content type stays concrete — no
-  `AnyView`, so SwiftUI keeps structural identity (`ios/core/NitroUIContent.swift:22-25`). The hosted view is framed to
-  the Yoga box, not constrained (`ios/core/NitroSwiftUIHost.swift:118-128`), safe area is disclaimed twice
-  (`ios/core/NitroSwiftUIHost.swift:105-107`, `ios/core/NitroUIContent.swift:44`) and its background is clear.
+  (`ios/core/NitroSwiftUIHost.swift`). `rootView` is never reassigned and the content type stays concrete — no
+  `AnyView`, so SwiftUI keeps structural identity (`ios/core/NitroUIContent.swift`). The hosted view is framed to
+  the Yoga box, not constrained (`ios/core/NitroSwiftUIHost.swift`), safe area is disclaimed twice
+  (`ios/core/NitroSwiftUIHost.swift`, `ios/core/NitroUIContent.swift`) and its background is clear.
   `needsContainment` is only for controls that *present* UI (menus, pickers) — Switch sets it `false`
-  (`ios/components/Switch/HybridNitroUiSwitch.swift:99-101`); the containment walk skips nav/tab controllers
-  (`ios/core/NitroSwiftUIHost.swift:293-304`).
+  (`ios/components/Switch/HybridNitroUiSwitch.swift`); the containment walk skips nav/tab controllers
+  (`ios/core/NitroSwiftUIHost.swift`).
 - **Android** — `NitroComposeHost<M>` is a `FrameLayout` with one `AbstractComposeView` child, added in `init` and given a
-  fixed `Content()` (`android/.../nitroui/core/NitroComposeHost.kt:140-170`). The wrapper is load-bearing: RN measures a
+  fixed `Content()` (`android/.../nitroui/core/NitroComposeHost.kt`). The wrapper is load-bearing: RN measures a
   view before it has a window, and `AbstractComposeView.onMeasure` is `final` and resolves the window's `ViewRecomposer`, so
   a host that *is* the Compose view dies inside a `Modal` (§10). The host's own `onMeasure`/`onLayout` decline while detached
-  and run that measure at the first moment there is a window *and* a frame (`:278-332`). Lifecycle and saved-state owners are
-  filled only where the view has none, each gap separately (`:248-262`); the composition ends in `drop()`, which both
+  and run that measure at the first moment there is a window *and* a frame. Lifecycle and saved-state owners are
+  filled only where the view has none, each gap separately; the composition ends in `drop()`, which both
   `disposeComposition()` and *uninstalls* the `DisposeOnLifecycleDestroyed` strategy that was guarding it
   and takes back the sizing engine's pre-draw listeners
-  (`android/.../nitroui/core/NitroComposeHost.kt:355-372`) — §6 says when that runs and why a registration left behind
-  retains the whole host. The M3 theme
-  is `remember`ed per `(context, dark)`, not per instance (`:386-402`).
+  (`android/.../nitroui/core/NitroComposeHost.kt`) — §6 says when that runs and why a registration left behind
+  retains the whole host. The M3 colour scheme comes from a process-wide cache keyed on the context and dark mode
+  (`NitroUiColorSchemes`), not built per instance.
 
 `grep -n "rootView ="` (iOS) and `grep -n "setContent"` (Android) may only ever hit init paths: no props update may
 re-create a host, its controller, its composition or its `Recomposer`.
@@ -61,22 +66,22 @@ Fabric updateProps / updateState
 ```
 
 - Setters **only** store and mark dirty. `commit()` applies the batch and invalidates the UI **once** per React commit:
-  one `model.objectWillChange.send()` (`ios/core/NitroSwiftUIHost.swift:162-194`) / one
-  `Snapshot.sendApplyNotifications()` (`android/.../nitroui/core/NitroComposeHost.kt:207-214`).
+  one `model.objectWillChange.send()` (`ios/core/NitroSwiftUIHost.swift`) / one
+  `Snapshot.sendApplyNotifications()` (`android/.../nitroui/core/NitroComposeHost.kt`).
 - Bookkeeping props (the controlled value's JS copy, `mostRecentEventCount`, callbacks) must not mark dirty, so an
   interaction costs zero re-renders. **Anything rendered must mark dirty** — including `accessibilityLabel`
-  (`ios/components/Switch/HybridNitroUiSwitch.swift:189-196`, `android/.../HybridNitroUiSwitch.kt:211-222`): stored
+  (`ios/components/Switch/HybridNitroUiSwitch.swift`, `android/.../HybridNitroUiSwitch.kt`): stored
   without a commit, a label never reaches VoiceOver/TalkBack and no screenshot can show it.
 - **Nitro does not order props inside one batch**, so a setter must not interpret its value against another
   prop's. A `value` that has to be clamped or quantised against `minimumValue`/`maximumValue`/`step` cannot be
   normalised in the `value` setter: the range may arrive before it, after it, or not at all in this batch. Store
-  raw in the setters and interpret in `afterUpdate()` (`ios/components/Slider/HybridNitroUiSlider.swift:499`,
-  `android/.../HybridNitroUiSlider.kt:529`), which is also where `defaultValue` gets applied - and note the getter
+  raw in the setters and interpret in `afterUpdate()` (`ios/components/Slider/HybridNitroUiSlider.swift`,
+  `android/.../HybridNitroUiSlider.kt`), which is also where `defaultValue` gets applied - and note the getter
   then answers the *normalised* value, not the number React sent. A `Switch` gets away with applying
   `defaultValue` in the setter because a Bool has nothing to normalise against; anything numeric does not.
 - iOS `NitroUiModel` is an `ObservableObject` with a **manual** `objectWillChange` — `@Published` would fire per write
-  (`ios/core/NitroUiModel.swift:25-31`). Android's model uses `mutableStateOf` only for what renders and keeps logic-only
-  fields plain (`android/.../HybridNitroUiSwitch.kt:33-59`). Never replace or rebuild the model.
+  (`ios/core/NitroUiModel.swift`). Android's model uses `mutableStateOf` only for what renders and keeps logic-only
+  fields plain (`android/.../HybridNitroUiSwitch.kt`). Never replace or rebuild the model.
 
 **Android calls `updateState` twice for every newly created view** (measured in T02 round 3: `propsApplied` = 2.00 per
 instance on `mount`, 1.00 on `update`; iOS is 1.00 everywhere). Both deliveries are RN Fabric's doing, not the
@@ -96,7 +101,7 @@ snapshot, next to a 4 ms UI-thread gap in the same cell, so it is recorded as **
 The JS side guarantees the batching preconditions:
 
 - **Callbacks keep one identity forever.** `useStableCallback` builds `{ f: … }` once per mounted view and swaps only the
-  ref it reads (`src/core/useStableCallback.ts:49-61`); an inline `callback(…)` in JSX changes identity every render and
+  ref it reads (`src/core/useStableCallback.ts`); an inline `callback(…)` in JSX changes identity every render and
   re-applies the prop (lint `no-inline-callback-in-jsx`).
 - **No optional spec props** (nitro#1184, D7, upstream N2): Fabric sends `null` for a removed prop and Nitro treats only
   `undefined` as unset, so every prop is `T | null` and the wrapper always sends all of them (lint
@@ -105,7 +110,7 @@ The JS side guarantees the batching preconditions:
   Nitro sends `{ f: fn }` and unwraps `f` only when the prop type *is* a function (`IsFunctionProp`). `fn | null`
   generates `variant<std::function, NullType>`, which is not a function type: the wrapper is never unwrapped and
   converting the prop throws while mounting. Declare `fn?` and never send `null` while the view is mounted —
-  `useControlled` always keeps one, even with no user handler (`src/core/useControlled.ts:115-119`). Same for `hybridRef`.
+  `useControlled` always keeps one, even with no user handler (`src/core/useControlled.ts`). Same for `hybridRef`.
 
 ### Colours
 
@@ -115,15 +120,15 @@ iOS `processColor` is *unsigned* (`>>> 0`) and Android's is *signed* (`| 0`) tod
 double above `Int.MAX_VALUE`) silently drops every opaque iOS colour and the control keeps the platform accent — no error,
 just a wrong colour.
 
-- iOS: accept both halves, then truncate — `ios/core/UIColor+NitroUiColor.swift:16-27` (guard `:17`,
-  `UInt32(truncatingIfNeeded:)` `:20`); the inverse getter returns unsigned, like iOS `processColor` (`:30-44`).
-- Android: `raw.toLong().toInt()` (`android/.../HybridNitroUiSwitch.kt:188-199`, the write at `:193`). `Double.toInt()`
+- iOS: accept both halves, then truncate — `ios/core/UIColor+NitroUiColor.swift` (a guard, then
+  `UInt32(truncatingIfNeeded:)`); the inverse getter returns unsigned, like iOS `processColor`.
+- Android: `raw.toLong().toInt()` (`android/.../HybridNitroUiSwitch.kt`). `Double.toInt()`
   saturates — the mirror-image latent bug: Android is signed today so it never fires, and one RN change to unsigned would
   make every opaque colour `Int.MAX_VALUE`.
 - Each platform's getter returns what *its own* `processColor` produces, so JS can round-trip a colour by comparing sent
-  with read (`example/__tests__/Switch.harness.tsx:304-321`).
+  with read (`example/__tests__/Switch.harness.tsx`).
 - A colour with no integer form (iOS dynamic provider) becomes `null` in JS with a dev warning
-  (`src/core/useProcessedColor.ts:19-34`). Do not try to rescue it natively.
+  (`src/core/useProcessedColor.ts`). Do not try to rescue it natively.
 
 ### Shared objects: never build a theme or colour object per instance
 
@@ -156,18 +161,17 @@ hoisted out of the composable. Never `remember`-only, and never constructed inli
 ### testID and accessibility
 
 - **`testID`** — RN already puts it on the iOS component view as `accessibilityIdentifier`, so iOS hosts do not set it
-  again (`ios/components/Switch/HybridNitroUiSwitch.swift:170-180`): that would match a testID query twice. Android has no
+  again (`ios/components/Switch/HybridNitroUiSwitch.swift`): that would match a testID query twice. Android has no
   such pipeline for a Compose child, so the prop is required and lands on `host.tag`
-  (`android/.../HybridNitroUiSwitch.kt:201-209`), which is what the harness and `findNodeByName` read.
+  (`android/.../HybridNitroUiSwitch.kt`), which is what the harness and `findNodeByName` read.
 - **Labels belong on the control, never on the container** (review SF2). Android: `Modifier.semantics { contentDescription
-  = label }` on the M3 `Switch` itself (`android/.../HybridNitroUiSwitch.kt:92-98`) — the node TalkBack focuses, because
+  = label }` on the M3 `Switch` itself (`android/.../HybridNitroUiSwitch.kt`) — the node TalkBack focuses, because
   M3 gives it `Role.Switch`. On the container instead, the actionable switch announces "Switch, off" with no name *and*
   the empty box becomes a second focus stop. iOS: `content.accessibilityLabel(label)` on the hosted element, only when
-  set, since an empty label would silence the Toggle's own (`ios/components/Switch/HybridNitroUiSwitch.swift:79-89`,
-  applied `:57`). Both are rendered state: store + `markDirty()` (§3) or a late-set label never renders.
+  set, since an empty label would silence the Toggle's own (`ios/components/Switch/HybridNitroUiSwitch.swift`). Both are rendered state: store + `markDirty()` (§3) or a late-set label never renders.
 - **Gaps you must not paper over** (review NIT7): `Switch` does not forward `ref` and does not map
   `aria-label`/`aria-disabled` — only `accessibilityLabel`/`disabled` reach the control
-  (`src/components/Switch/Switch.tsx:16-63`). Because the wrapper spreads leftover `ViewProps` onto the Fabric container,
+  (`src/components/Switch/Switch.tsx`). Because the wrapper spreads leftover `ViewProps` onto the Fabric container,
   a caller setting `accessible`/`accessibilityRole` there can turn it into an accessibility element and hide the hosted
   control from VoiceOver. In a new component: keep labels on the control, and either strip those container a11y props from
   the spread or document container-level a11y as unsupported — never mirror a container label onto the control "to be
@@ -175,16 +179,16 @@ hoisted out of the composable. Never `remember`-only, and never constructed inli
 
 ## 4. Controlled values (the event-count handshake)
 
-`src/core/useControlled.ts` plus `NitroUiControlledValue` on each platform (`ios/core/NitroUiModel.swift:40-84`,
-`android/.../nitroui/core/NitroUiModel.kt:40-88`):
+`src/core/useControlled.ts` plus `NitroUiControlledValue` on each platform (`ios/core/NitroUiModel.swift`,
+`android/.../nitroui/core/NitroUiModel.kt`):
 
 - Native owns the *displayed* value and writes it immediately on interaction — no visual latency, and an uncontrolled
   control costs no React render at all.
 - Native emits `(value, eventCount)`; JS calls the user's handler and echoes `eventCount` back as `mostRecentEventCount`
   in the same commit — *before* the user's handler, so a handler that throws cannot strand native
-  (`src/core/useControlled.ts:102-113`).
+  (`src/core/useControlled.ts`).
 - Native accepts a `value` write only once it has seen at least that many of its own events: `jsEvents >= nativeEvents`
-  (`ios/core/NitroUiModel.swift:77-83`, `android/.../nitroui/core/NitroUiModel.kt:80-87`). That covers rejected changes
+  (`ios/core/NitroUiModel.swift`, `android/.../nitroui/core/NitroUiModel.kt`). That covers rejected changes
   (JS kept its value, so the prop is unchanged but the count moved → still a commit → native reverts), stale writes (a
   `value` in flight is ignored) and uncontrolled mode (`value === null`).
 - Native also refuses a write while `unreported` is set — the newest value an interaction reached that native has **not
@@ -193,27 +197,27 @@ hoisted out of the composable. Never `remember`-only, and never constructed inli
   seen. Accepting it would paint the app's number for a frame and then emit the interaction's value under it. The refusal
   is a drop, not a queue: the next commit decides again.
 - `defaultValue` seeds an uncontrolled control once, then is ignored
-  (`ios/components/Switch/HybridNitroUiSwitch.swift:126-141`, `android/.../HybridNitroUiSwitch.kt:152-165`).
+  (`ios/components/Switch/HybridNitroUiSwitch.swift`, `android/.../HybridNitroUiSwitch.kt`).
 - Uncontrolled → controlled is supported but warned: JS remembers counts in both modes and seeds the echo on the flip
-  (`src/core/useControlled.ts:59-74`), since otherwise every later `value` write looks stale until the next tap.
+  (`src/core/useControlled.ts`), since otherwise every later `value` write looks stale until the next tap.
 
 There is no accessibility *value* query in the harness, so the revert case is tested with a tap-twice oracle: after a
-rejected change, the next tap must report the pre-tap value again (`example/__tests__/Switch.harness.tsx:347-372`). The
+rejected change, the next tap must report the pre-tap value again (`example/__tests__/Switch.harness.tsx`). The
 section is opt-in — a component with no user-editable value skips it (§12).
 
 ## 5. Threading, `hybridRef`, and future imperative methods
 
-- Host code is main/UI thread only; `nitroUiAssertMainThread()` guards entries (`ios/core/NitroUiMainThread.swift:14-20`).
+- Host code is main/UI thread only; `nitroUiAssertMainThread()` guards entries (`ios/core/NitroUiMainThread.swift`).
 - A Hybrid View method callable from JS must not touch SwiftUI/Compose, so `measureContent()` reads a **cached** size
-  written on main during the last layout/commit — `NSLock` + `CGSize?` (`ios/core/NitroSwiftUIHost.swift:60-75`),
-  `@Volatile` (`android/.../nitroui/core/NitroComposeHost.kt:107-109`).
+  written on main during the last layout/commit — `NSLock` + `CGSize?` (`ios/core/NitroSwiftUIHost.swift`),
+  `@Volatile` (`android/.../nitroui/core/NitroComposeHost.kt`).
 - Never a synchronous JS↔main round trip in the props path; never `DispatchQueue.main.sync` (it can deadlock against JS);
   no redundant `main.async` hop when already on main.
 
-**`hybridRef` is a diagnostic handle, not an API** (D14). v0.1 publishes no Hybrid View types — `src/index.ts:1-15`
-exports components and the clock only — and `hybridRef`/`nuiPerfId` are `@internal`, for this repo's harness and
-benchmarks (`src/components/Switch/Switch.tsx:33-62`). The typed handle is **read-only**
-(`src/components/Switch/NativeNitroUiSwitch.ts:20-40`): reading props and calling `measureContent()` is all it is for.
+**`hybridRef` is a diagnostic handle, not an API** (D14). The package publishes no Hybrid View types — `src/index.ts`
+exports the components, `Host`, `nitroUiCore`, `prewarm` and the diagnostics' types only — and `hybridRef`/`nuiPerfId` are `@internal`, for this repo's harness and
+benchmarks (`src/components/Switch/Switch.tsx`). The typed handle is **read-only**
+(`src/components/Switch/NativeNitroUiSwitch.ts`): reading props and calling `measureContent()` is all it is for.
 
 - **Every prop write goes through React.** A direct write runs the Swift/Kotlin setter on the JS thread, mutates
   unsynchronised model state the UI thread owns (UIColor/`String` retain races, `View.tag` off the UI thread), and never
@@ -223,7 +227,7 @@ benchmarks (`src/components/Switch/Switch.tsx:33-62`). The typed handle is **rea
   explicit hop plus a commit — iOS `DispatchQueue.main.async { write; host.markDirty(); host.commit() }`, Android
   `view.post { … }`. Until that hop exists, a method may only read caches. Never hop implicitly from a setter.
 - **A changed `hybridRef` function is never re-invoked**: it is a callback prop, so it fires when the view mounts and a
-  new closure later changes only what `useStableCallback`'s ref points at (`src/core/useStableCallback.ts:49-61`). Treat
+  new closure later changes only what `useStableCallback`'s ref points at (`src/core/useStableCallback.ts`). Treat
   it as one-shot. (Its identity comes from `useMemo`, which React may discard — `useState(() => …)` is the guaranteed
   form; a lost memo costs one re-sent prop, not correctness.)
 
@@ -234,7 +238,7 @@ benchmarks (`src/components/Switch/Switch.tsx:33-62`). The typed handle is **rea
 A view is only ever reused when **both** switches are on:
 
 1. the Hybrid implements `RecyclableView` — that is what makes the generated manager call `setupViewRecycling()` at all
-   (`nitrogen/generated/.../HybridNitroUiSwitchManager.kt:31-36`);
+   (`nitrogen/generated/.../HybridNitroUiSwitchManager.kt`);
 2. `ReactNativeFeatureFlags.enableViewRecycling()` is on — **`false` by default** in RN 0.88
    (`node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/internal/featureflags/ReactNativeFeatureFlagsDefaults.kt:120`),
    and `ViewManager.setupViewRecycling()` allocates the pool only under that flag
@@ -247,18 +251,18 @@ the host app, not of this library: never assume your view was recycled.
 When both are on, the order is fixed by RN plus generated code. `ViewManager.onDropViewInstance`
 (`.../uimanager/ViewManager.java:245-273`) is the method that pushes to the pool, and it calls `prepareToRecycleView`
 inside itself (`:267-272`). The generated override calls `hybridView.onDropView()` **first** and only then
-`super.onDropViewInstance(view)` (`nitrogen/generated/.../HybridNitroUiSwitchManager.kt:66-71`); `prepareToRecycleView`
-then calls `hybridView.prepareForRecycle()` (`:73-91`). So `drop()` → `disposeComposition()`
-(`android/.../nitroui/core/NitroComposeHost.kt:355-372`) runs *before* `prepareForRecycle()`: **the composition does not
-survive a recycle** — the next attach runs a measure (`:274-283`), and Compose builds a new composition there, reading the
+`super.onDropViewInstance(view)` (`nitrogen/generated/.../HybridNitroUiSwitchManager.kt`); `prepareToRecycleView`
+then calls `hybridView.prepareForRecycle()` (in the generated manager). So `drop()` → `disposeComposition()`
+(`android/.../nitroui/core/NitroComposeHost.kt`) runs *before* `prepareForRecycle()`: **the composition does not
+survive a recycle** — the next attach runs a measure (`onAttachedToWindow`), and Compose builds a new composition there, reading the
 reset model from scratch.
 
 What recycling still saves: the `View`, the Hybrid Object, the host, the model, and the activity/owner wiring from
 `onAttachedToWindow`. What it does not: the composition, the `Recomposer`, the composition **strategy** (see below),
-`NitroUiTheme`'s `remember`ed colour scheme (per composition), and any animation in flight — which is why
+anything `remember`ed inside the composition, and any animation in flight — which is why
 `prepareForRecycle()` re-arms first-frame marking and the other per-mount flags
-(`android/.../nitroui/core/NitroComposeHost.kt:316-330`), while the strategy waits for the attach that follows the pool
-(`:475-501`). The dispose is deliberate: not disposing in `drop()` leaks a
+(`android/.../nitroui/core/NitroComposeHost.kt`), while the strategy waits for the attach that follows the pool
+(`armCompositionStrategy`). The dispose is deliberate: not disposing in `drop()` leaks a
 composition on every real unmount, and with the flag off every unmount *is* real. Keeping the composition alive is T02's
 measurement with the flag on, not an assumption made here.
 
@@ -270,14 +274,14 @@ that have nothing to do with unmounting it — a screen transition, `removeClipp
 one throws the composition away mid-life. It needs a `LifecycleOwner` (§10), and the host arms it in
 `onAttachedToWindow` — the first moment anything can compose, because the composition itself is created by the child's
 attach, which `super` dispatches only after the arming
-(`android/.../nitroui/core/NitroComposeHost.kt:475-501`, `:387-403`).
+(`android/.../nitroui/core/NitroComposeHost.kt`).
 
 What its name does not say is that it is a **registration, not a property**. `AbstractComposeView.setViewCompositionStrategy`
 installs the strategy immediately, and the strategy it installs is a `LifecycleEventObserver` added to the owner's
 `LifecycleRegistry`; `LifecycleRegistry` holds its observers strongly, and the only code that ever removes one is the
 uninstaller `setViewCompositionStrategy` runs when the **next** strategy is installed. Neither `disposeComposition()` nor
 a detach nor a drop touches it, identically in the two Compose versions this repo resolves: **1.11.4**, which the library
-and the example/harness app get from `compose-bom:2026.06.01` (`android/build.gradle:116`), and **1.12.1**, which the bench
+and the example/harness app get from `compose-bom:2026.06.01` (`android/build.gradle`), and **1.12.1**, which the bench
 app ends up on after Expo raises it (`ViewCompositionStrategy.installForLifecycle`, and
 `AbstractComposeView.disposeComposition`/`setViewCompositionStrategy` — verified against the bytecode of both). So the
 activity keeps a strong path `mLifecycleRegistry → observer → ComposeView` for every control that was ever mounted, which
@@ -286,8 +290,8 @@ cycle of 200 Switches, 3 `View`s and ~42 KiB per control, and it is what ran the
 `mount.<component>:nitro-ui:200` out of a 192 MiB heap (`docs/tasks/B1-android-mount-oom.report.md`).
 
 Hence the rule: **whatever registration a host makes, `drop()` undoes it**
-(`android/.../nitroui/core/NitroComposeHost.kt:355-372`). For the strategy, that means installing one that observes
-nothing — `DisposeWithTheHost` (`:416-419`, `:1023-1025`) — because that call is the only thing which ever uninstalls.
+(`android/.../nitroui/core/NitroComposeHost.kt`). For the strategy, that means installing one that observes
+nothing — `DisposeWithTheHost` — because that call is the only thing which ever uninstalls.
 `disposeComposition()` first, then the uninstall: the strategy's setter wants no composition in flight, and a guard is
 worth nothing once the composition is gone. Arm and unarm at attach/drop, never at `prepareForRecycle()`: pool entry is
 where a host may never be reused, since RN's pool is an unbounded stack it empties without a word to the views inside it
@@ -298,23 +302,23 @@ they land on the *window's* `ViewTreeObserver`, and a window outlives a control.
 `viewTreeObserver` is a fresh floating one, so a listener that unregisters itself through the current observer after a
 detach removes nothing and stays on the window's — which holds the listener, and the host through it, for the life of the
 window, and runs it on every frame. Both listeners therefore keep the observer they were registered on, remove themselves
-from *that* one, and are removed by `drop()` too (`:433-450`, `:590-637`, `:716-753`). A host that is dropped, pooled or
+from *that* one, and are removed by `drop()` too. A host that is dropped, pooled or
 discarded then holds no registration anywhere; a control that is truly still mounted keeps its guard.
 
 ### iOS: same hooks, deeper reuse
 
 `onDropView()` runs once per mount on both exits and never twice: the generated view guards it with `_didDropView` and
 calls it from `prepareForRecycle` and `invalidate`
-(`nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm:74-82`, `:178-189`), and RN's registry runs one or the
+(`nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm`), and RN's registry runs one or the
 other on unmount — `prepareForRecycle` when it pools the view, `invalidate` when the class refuses or the pool is full
 (`node_modules/react-native/React/Fabric/Mounting/RCTComponentViewRegistry.mm:104-118`). `+shouldBeRecycled` reports
-whether the Hybrid implements `RecyclableView` (`nitrogen/generated/ios/.../HybridNitroUiSwitchComponent.mm:174-176`).
+whether the Hybrid implements `RecyclableView` (`nitrogen/generated/ios/.../HybridNitroUiSwitchComponent.mm`).
 
 Reuse goes further than Android because there is no composition to dispose: the component view, the Hybrid Object, the
 model, `NitroSwiftUIHost`, its `UIHostingController` — root view included — and the SwiftUI state are all kept. `drop()`
-only detaches containment and clears cached measurements (`ios/core/NitroSwiftUIHost.swift:213-221`);
+only detaches containment and clears cached measurements (`ios/core/NitroSwiftUIHost.swift`);
 `prepareForRecycle()` resets the model and re-arms animation suppression, first-frame marking and a size re-measure
-(`ios/core/NitroSwiftUIHost.swift:196-206`). **An iOS recycled view keeps its composition; an Android one does not.**
+(`ios/core/NitroSwiftUIHost.swift`). **An iOS recycled view keeps its composition; an Android one does not.**
 Don't write a component that behaves differently because of it: both sides must be correct after a bare
 `prepareForRecycle()` reset.
 
@@ -322,10 +326,10 @@ Don't write a component that behaves differently because of it: both sides must 
 
 - `RecyclableView` is mandatory for anything that can live in a list.
 - Everything a setter writes appears in the reset — iOS lists it in `prepareForRecycle()`
-  (`ios/components/Switch/HybridNitroUiSwitch.swift:223-233`), Android in `model.reset()`
-  (`android/.../HybridNitroUiSwitch.kt:61-73`). A leaked `testID`, label or tint between rows is a bug.
+  (`ios/components/Switch/HybridNitroUiSwitch.swift`), Android in `model.reset()`
+  (`android/.../HybridNitroUiSwitch.kt`). A leaked `testID`, label or tint between rows is a bug.
 - `onDropView()` releases what must not outlive a mount: callbacks first (they hold JS refs), then host caches
-  (`ios/components/Switch/HybridNitroUiSwitch.swift:235-238`, `android/.../HybridNitroUiSwitch.kt:265-268`). It runs
+  (`ios/components/Switch/HybridNitroUiSwitch.swift`, `android/.../HybridNitroUiSwitch.kt`). It runs
   before the reset and, on Android, is also the unmount path — cheap, and it must not destroy the host.
 - Re-arm every per-mount flag (animation suppression, `firstFrame`, cached content size).
 - Undo every registration something else holds: on Android that is the composition strategy, whose uninstaller only
@@ -339,7 +343,7 @@ The mechanism — shadow node, size cache, corrections — is `docs/architecture
 host side of it: when a host is allowed to ask its content for a size, and how each platform asks. A Nitro Hybrid View is
 a plain Yoga leaf: with no style it is 0×0, so the first layout of a component uses the **fallback** the component
 declares (`NitroUiSizing.setFallback`), and that must be the control's real layout size — on iOS **OS-versioned**
-(`ios/components/Switch/HybridNitroUiSwitch.swift:104-113`, D14). It is registered at startup, by
+(`ios/components/Switch/HybridNitroUiSwitch.swift`, D14). It is registered at startup, by
 `NitroUiDeclaredFallbacks` on each platform, and not by the component's first view: Fabric measures a shadow node
 before it creates a view, so a fallback that waits for one is a measure too late for the first instance (T14):
 
@@ -361,12 +365,12 @@ only ever the first frame's guess — and why it still has to be close.
 
 Measurement cadence — this is where sizing costs performance:
 
-- **iOS**: `wantsContentSize` is off by default (`ios/core/NitroSwiftUIHost.swift:51-56`). When a component turns it on
-  (`ios/components/Switch/HybridNitroUiSwitch.swift:105`), `sizeThatFits(in: .infinity)` runs once per **bounds change,
+- **iOS**: `wantsContentSize` is off by default (`ios/core/NitroSwiftUIHost.swift`). When a component turns it on
+  (`ios/components/Switch/HybridNitroUiSwitch.swift`), `sizeThatFits(in: .infinity)` runs once per **bounds change,
   size-affecting trait change, first commit, or `invalidateContentSize()`** — never per commit
-  (`ios/core/NitroSwiftUIHost.swift:242`, `:190-193`, `:118-125`, `:140-148`). Content that can change size with neither
+  (`ios/core/NitroSwiftUIHost.swift`). Content that can change size with neither
   (`Picker`'s longer selected title, a re-wrapped label) must call `invalidateContentSize()`
-  (`ios/core/NitroSwiftUIHost.swift:225-234`) or the cache keeps the old size.
+  (`ios/core/NitroSwiftUIHost.swift`) or the cache keeps the old size.
 - **Android**: one `measure()` call per pass, or two when the content overruns its box (below), and the *constraints*
   it asks with depend on the component's sizing
   policy (`android/.../nitroui/core/NitroComposeHost.kt`, `NitroUiMeasuredRoot`). Either way the incoming constraints
@@ -376,7 +380,8 @@ Measurement cadence — this is where sizing costs performance:
   twice *within one pass* is also not available: a `Measurable` may be measured exactly once per pass
   (`MeasurePassDelegate` throws
   "measure() may not be called multiple times").
-  - Policy `intrinsic` (Switch, and the whole library today) asks **unbounded**: `Constraints()`, no minimum and no
+  - Policy `intrinsic` (Switch, Button, SegmentedControl, a circular Progress, a menu Picker, a compact DatePicker) asks
+    **unbounded**: `Constraints()`, no minimum and no
     maximum — the same question iOS asks with `sizeThatFits(in: .infinity)`. A control that wants more than its box
     reports what it wants, which is the only answer Yoga can act on. Capping it at the box maximum is what this did
     before T11, and it is wrong: a box *smaller* than the control records the box, and that number then sits in the
@@ -412,8 +417,9 @@ Measurement cadence — this is where sizing costs performance:
       row shows its unbounded (clipped) drawing for one traversal before the placement measure redraws it. Same shape as the
       one-frame fallback correction D17 already accepts; it is invisible unless the control is over-wide *and* the frame is
       caught.
-  - Policy `fillWidth` (a Slider, whose width *is* the box) keeps the maximum and drops only the minimum —
-    `constraints.copy(minWidth = 0, minHeight = 0)` — which asks for the height the control wants at the width it got.
+  - Policy `fillWidth` (a Slider, whose width *is* the box) keeps the maximum width, drops the minimums and lifts the
+    height cap — `constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)` — which asks for the
+    height the control wants at the width it got.
   - Consequence of the unbounded question: **`intrinsic` content must tolerate infinite constraints**. A scrollable
     child (`verticalScroll`, `LazyColumn`) throws when measured with no maximum, so a control that scrolls has to be
     `fillWidth` or bound its own scroll axis.
@@ -426,30 +432,30 @@ Measurement cadence — this is where sizing costs performance:
 `cpp/core/NitroUiPerf.hpp` is a header-only ring shared by C++, Swift (C++ interop) and Kotlin (JNI), so every entry point
 takes plain integers. A host with `nuiPerfId >= 0` records `propsApplied` and `firstFrame`;
 `nitroUiCore.setPerfEnabled(true)` starts recording (and clears), `nitroUiCore.drainPerf()` takes everything. Times are ms
-in the D1 base (`CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, `cpp/core/NitroUiClock.hpp:34-47`) — the same base as
+in the D1 base (`CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, `cpp/core/NitroUiClock.hpp`) — the same base as
 `CADisplayLink` and Choreographer, so marks are comparable with frame clocks.
 
 The two marks differ per platform — know which you are reading:
 
-- **`propsApplied`** — iOS marks *every* commit (`ios/core/NitroSwiftUIHost.swift:162-169`, before the dirty check), and
+- **`propsApplied`** — iOS marks *every* commit (`ios/core/NitroSwiftUIHost.swift`, before the dirty check), and
   `afterUpdate`/`commit` only run when the props snapshot actually differs
-  (`nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm:96-99`). Android marks every
-  `updateState` too, before its own dirty check (`android/.../nitroui/core/NitroComposeHost.kt:207-214`), so both platforms
+  (`nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm`). Android marks every
+  `updateState` too, before its own dirty check (`android/.../nitroui/core/NitroComposeHost.kt`), so both platforms
   count `updateState`s rather than one counting updates and the other visible updates. Neither mark implies pixels.
 - **`firstFrame`** — iOS: the first layout with non-empty bounds while in a window
-  (`ios/core/NitroSwiftUIHost.swift:269-275`, driven by `layoutSubviews`/`didMoveToWindow`). Android: the first pre-draw
+  (`ios/core/NitroSwiftUIHost.swift`, driven by `layoutSubviews`/`didMoveToWindow`). Android: the first pre-draw
   after attach, via a self-removing `OnPreDrawListener`, because `AbstractComposeView.onLayout` is final
-  (`android/.../nitroui/core/NitroComposeHost.kt:339-362`). **Neither is a GPU-completed frame**: they answer "props
+  (`android/.../nitroui/core/NitroComposeHost.kt`). **Neither is a GPU-completed frame**: they answer "props
   landed on the UI thread" and "the UI thread produced display content"; for a real frame boundary use T02's `BenchProbe`.
 - Both re-arm on recycle and drop, or a list reports nothing after the first mount.
 
 `drainPerf()` consumes the buffer, so a polling test must accumulate what it read or the first poll eats the marks it
-waits for (`example/__tests__/Switch.harness.tsx:487-500`). **Cost, exactly:** each host gates mark sites on its instance
-id (`ios/core/NitroSwiftUIHost.swift:277-284`, `android/.../nitroui/core/NitroUiPerf.kt:23-29`), so an unmarked view pays
+waits for (`example/__tests__/Switch.harness.tsx`). **Cost, exactly:** each host gates mark sites on its instance
+id (`ios/core/NitroSwiftUIHost.swift`, `android/.../nitroui/core/NitroUiPerf.kt`), so an unmarked view pays
 one integer compare and never enters the ring; a marked view with recording off pays one relaxed atomic load
-(`cpp/core/NitroUiPerf.hpp:71-79`, `:57-60`). With recording on it is a mutex-guarded ring, not a lock-free queue — on
+(`cpp/core/NitroUiPerf.hpp`). With recording on it is a mutex-guarded ring, not a lock-free queue — on
 purpose: marks are diagnostics a benchmark enables for one run, a handful per commit, and lock-free would buy nothing
-measurable while being much harder to prove correct (`cpp/core/NitroUiPerf.hpp:9-16`).
+measurable while being much harder to prove correct (`cpp/core/NitroUiPerf.hpp`).
 
 ## 9. Checklists for a new component
 
@@ -480,7 +486,7 @@ measurable while being much harder to prove correct (`cpp/core/NitroUiPerf.hpp:9
 7. `export { <Name>, type <Name>Props }` in `src/index.ts`; then `bun run api-extractor` and **commit**
    `etc/react-native-nitro-ui.api.md` (`api-extractor:check` is in the gate). An `ae-forgotten-export` warning means a
    public type names something unexported — mark internals `@internal` (D14) instead of exporting them.
-8. One import and one JSX line in `scripts/smoke/App.tsx` (`scripts/smoke/App.tsx:62-65`): it renders every exported
+8. One import and one JSX line in `scripts/smoke/App.tsx` (`scripts/smoke/App.tsx`): it renders every exported
    component exactly once with a `SMOKE-<name>` testID and is typechecked, so a public-API rename fails the gate here, not
    10 minutes into a smoke run.
 9. `docs/components/<name>.md` — API table, platform mapping, the sizes you measured, behaviour notes, limits (copy
@@ -498,20 +504,20 @@ measurable while being much harder to prove correct (`cpp/core/NitroUiPerf.hpp:9
   `android/src/test/java/com/margelo/nitro/nitroui/core/NitroUiControlledValueTest.kt` (JVM, `bun run
   test:native:android`). Copy the vector set: fresh/uncontrolled, `user()` counts and displays at once, rejected change
   reverts only after the echo, stale write dropped not queued, rapid interaction applies the newest write, first
-  controlled write after a mode switch, exact `Double` equality (`scripts/native-tests/handshake.test.swift:105-115`,
-  `android/src/test/.../NitroUiControlledValueTest.kt:97`). Change one twin's semantics and you change all three plus the
+  controlled write after a mode switch, exact `Double` equality (`scripts/native-tests/handshake.test.swift`,
+  `android/src/test/.../NitroUiControlledValueTest.kt`). Change one twin's semantics and you change all three plus the
   vectors, in one commit.
 - **On-device harness** (`bun run harness:ios` / `harness:android`; needs a built app, and installs it — see H1 in
   §10). Cover what the Switch suite covers: controlled both ways, rejected revert via the tap-twice oracle, a value
   written from JS, uncontrolled independence, disabled, mount/unmount cycles, many instances, reported content size,
   colour round-trip, perf marks for one instance. Use real taps (`userEvent.press`), never prop writes.
 - **Wait for testIDs.** `screen.findByTestId` has no timeout and throws on its first empty pass (upstream H3), so poll the
-  non-throwing `queryByTestId` first, then take the harness reference (`example/__tests__/Switch.harness.tsx:106-130`);
-  pay one-time process costs in `beforeAll` (`example/__tests__/Switch.harness.tsx:138-148`).
+  non-throwing `queryByTestId` first, then take the harness reference (`example/__tests__/Switch.harness.tsx`);
+  pay one-time process costs in `beforeAll` (`example/__tests__/Switch.harness.tsx`).
 - **Assert a non-event with a barrier, not an empty array.** "The disabled control fired nothing" is evidence only once an
   *enabled* control's event has been awaited: render a barrier Switch, press both, wait for the barrier's event, then
-  assert the empty array (`example/__tests__/Switch.harness.tsx:416-451`); the same trick proves a dropped view stopped
-  marking (`example/__tests__/Switch.harness.tsx:502-524`). A bare `expect(seen).toEqual([])` right after a press passes
+  assert the empty array (`example/__tests__/Switch.harness.tsx`); the same trick proves a dropped view stopped
+  marking (`example/__tests__/Switch.harness.tsx`). A bare `expect(seen).toEqual([])` right after a press passes
   for an event still in flight.
 - A recycled/retained-state case (a row that keeps `disabled`/tint across a recycle) needs its own on-device test: §6 is
   why the platform difference makes it easy to regress.
@@ -542,11 +548,11 @@ measurable while being much harder to prove correct (`cpp/core/NitroUiPerf.hpp:9
   (a `Modal`'s tree is laid out before `Dialog.show()`), and a detached `ComposeView` answering a measure throws
   "Cannot locate windowRecomposer; View … is not attached to a window" inside the mount batch, which aborts the update and
   kills the app. Hence the `FrameLayout` wrapper plus the decline-and-retry in `onMeasure`/`onLayout`/`runPendingMeasure`
-  (`android/.../nitroui/core/NitroComposeHost.kt:278-332`), and a `Modal` test in the on-device suite. Do not "simplify" the
+  (`android/.../nitroui/core/NitroComposeHost.kt`), and a `Modal` test in the on-device suite. Do not "simplify" the
   wrapper away.
 - **`DisposeOnLifecycleDestroyed` needs a `LifecycleOwner`** — cast the activity at runtime, do not assume it; and Compose
   needs the `SavedStateRegistryOwner` too, filled separately, because a parent may set one and not the other
-  (`android/.../nitroui/core/NitroComposeHost.kt:248-262`).
+  (`android/.../nitroui/core/NitroComposeHost.kt`).
 - **A `ViewCompositionStrategy` is an observer on somebody else's lifetime**, and `disposeComposition()` does not remove
   it (§6): a control left installed after its drop is retained by the activity forever, and the retention is invisible in
   the host — the leaking reference lives in the `LifecycleRegistry`. Arm it on attach, uninstall it on drop, and never at
@@ -575,8 +581,8 @@ Native fires while the finger moves, and a touch stream samples faster than the 
 emitted event per frame**, coalesced to the newest value. Never call the JS callback per touch-move: each call is a JS
 entry, the user's handler, a React render and a props commit back — at 120 Hz sampling you pay that ~2× per frame while
 the UI thread is also trying to draw. Keep a plain "value during this drag" field for the coalesced updates and call
-`NitroUiControlledValue.user(value)` **exactly once per emitted event** (`ios/core/NitroUiModel.swift:55-59`,
-`android/.../nitroui/core/NitroUiModel.kt:53-58`) — it is what increments `nativeEvents`, and its return value is the
+`NitroUiControlledValue.user(value)` **exactly once per emitted event** (`ios/core/NitroUiModel.swift`,
+`android/.../nitroui/core/NitroUiModel.kt`) — it is what increments `nativeEvents`, and its return value is the
 `eventCount` you emit. Calling it per touch-move is the same mistake as emitting per touch-move.
 
 ### Split the two callbacks
@@ -587,10 +593,10 @@ dirty. Do not let JS infer "finished" from a timeout — it drifts.
 
 ### The handshake at 60 Hz
 
-JS echoes the **latest** count it processed, not every count (`src/core/useControlled.ts:102-113` keeps a monotonic max),
+JS echoes the **latest** count it processed, not every count (`src/core/useControlled.ts` keeps a monotonic max),
 so intermediate counts are legitimately skipped whenever JS is slower than native. Hence `reconcile` accepts a write as
 soon as `jsEvents >= nativeEvents` and must **not** require 1:1 agreement — which is what the twins do
-(`ios/core/NitroUiModel.swift:78`, `android/.../nitroui/core/NitroUiModel.kt:81`), and "rapid interaction applies the
+(`ios/core/NitroUiModel.swift`, `android/.../nitroui/core/NitroUiModel.kt`), and "rapid interaction applies the
 newest write" is already a vector in both native suites. Do not "fix" a skipped echo by waiting for equality.
 
 What that costs during a drag, stated exactly: a parent's `value` write is ignored **while JS lags or a sample is still
@@ -616,11 +622,11 @@ apply normally.
   of the coalesced "value during this drag" field, the thumb renders the *previous* emitted value and trails the finger a
   frame at the exact moment the user is watching. One field is both what `set` writes and what `get` reads (a continuous
   control also records the write in `unreported`, §4) — the Switch's one-bit version is
-  `ios/components/Switch/HybridNitroUiSwitch.swift:42-51`.
+  `ios/components/Switch/HybridNitroUiSwitch.swift`.
 - **A drag start has two candidates, and neither is reliable alone.** `onEditingChanged(true)` and the first
   `Binding` write have no defined order, and a tap that jumps the thumb can write before it says editing started.
   Make the start idempotent (`if dragging { return }`) and call it from both, so whoever arrives first opens the
-  drag once (`ios/components/Slider/HybridNitroUiSlider.swift:163`). On Compose the same job falls to the first
+  drag once (`ios/components/Slider/HybridNitroUiSlider.swift`). On Compose the same job falls to the first
   value change, since there is no start callback at all.
 - **The end-of-drag hooks are platform-named, not invented.** SwiftUI: `Slider(value:in:step:onEditingChanged:)`, whose
   callback fires `true` at gesture start and `false` at release. Compose Material 3: `Slider`'s `onValueChangeFinished`,
@@ -636,11 +642,11 @@ apply normally.
 
 ### Float equality in `reconcile`
 
-Compare exactly — Swift `==` on `Double`, Kotlin `==`, `js != displayed`. No epsilon (`ios/core/NitroUiModel.swift:77-83`,
-`android/.../nitroui/core/NitroUiModel.kt:80-87`). It is safe because native computes the value, JS stores and re-sends
+Compare exactly — Swift `==` on `Double`, Kotlin `==`, `js != displayed`. No epsilon (`ios/core/NitroUiModel.swift`,
+`android/.../nitroui/core/NitroUiModel.kt`). It is safe because native computes the value, JS stores and re-sends
 the number it received, and Nitro carries `number` ↔ `double` without loss, so the round trip returns the same bits; both
-native suites test with `Double` (`scripts/native-tests/handshake.test.swift:105-115`,
-`android/src/test/.../NitroUiControlledValueTest.kt:97`). An epsilon is worse than useless: `js != displayed` is also how
+native suites test with `Double` (`scripts/native-tests/handshake.test.swift`,
+`android/src/test/.../NitroUiControlledValueTest.kt`). An epsilon is worse than useless: `js != displayed` is also how
 a *rejected* change is detected, so a tolerance turns a real small step into "unchanged" (the thumb stops moving) and a
 rejected revert into "close enough, keep what the user did" (the control silently lies), and the platforms would pick
 different tolerances. Want snapping? **Quantise in native before emitting** — round to the step, emit that — then compare
@@ -659,17 +665,18 @@ differently on purpose.
 
 - **iOS**: the `Binding` setter writes the handshake value, sends the change, then calls out to JS —
   `model.state.user(requested)`, `model.objectWillChange.send()`, `model.onChange?(...)`
-  (`ios/components/Switch/HybridNitroUiSwitch.swift:42-51`, send at `:48`). The `send()` is required: with the manual
+  (`ios/components/Switch/HybridNitroUiSwitch.swift`). The `send()` is required: with the manual
   publisher (§3) nothing else invalidates the view. **On a continuous control, put the `send()` on the frame tick
   with the emit, not in the `Binding` setter**: the write to the model is what the control itself renders, while
   `objectWillChange` re-evaluates the whole hosted body, and a `send()` per touch sample is exactly the
   per-sample invalidation this section exists to prevent
-  (`ios/components/Slider/HybridNitroUiSlider.swift:211`). Do **not** route an interaction through
+  (`ios/components/Slider/HybridNitroUiSlider.swift`). Do **not** route an interaction through
   `host.markDirty()`/`host.commit()` — that is the props path, and it adds a second invalidation plus a perf mark per
   frame. `objectWillChange` invalidates the whole hosted body, so keep it small.
 - **Android**: write the snapshot state and stop — `model.state.user(requested)` then `model.displayed = requested`
-  (`android/.../HybridNitroUiSwitch.kt:100-106`, write at `:104`). Do **not** call `Snapshot.sendApplyNotifications()`
-  there: that call belongs to `commit()` only (`android/.../nitroui/core/NitroComposeHost.kt:207-214`), where its
+  (`android/.../HybridNitroUiSwitch.kt`). Do **not** call `Snapshot.sendApplyNotifications()`
+  there: that call belongs to `commit()` (and `applyModelWrites()`, for model writes that do not come from a Compose
+  event) in `android/.../nitroui/core/NitroComposeHost.kt`, where its
   documented job is to make a *props* batch land inside the same UI-thread turn instead of waiting for Compose's own
   global apply. The interaction write lands in Compose's **global** snapshot, and the `GlobalSnapshotManager` applies it
   on the next frame — so the control does invalidate without help, one frame later, which is what a drag wants anyway.
@@ -679,7 +686,7 @@ differently on purpose.
 ### Recomposition scoping
 
 Read a fast-changing value in the narrowest composable that needs it, never at the root of `Component`. Switch's
-`Component` reads four model fields (`android/.../HybridNitroUiSwitch.kt:88-116`) — fine for a control that fires per tap,
+`Component` reads four model fields (`android/.../HybridNitroUiSwitch.kt`) — fine for a control that fires per tap,
 wrong for a Slider: put track+thumb in a composable that reads only `value` and let labels, legend and layout siblings
 read nothing (or only the release-time value), so a drag frame invalidates a handful of nodes. iOS is stricter — one
 `objectWillChange` re-evaluates the whole hosted body — so keep expensive siblings (images, formatted lists, nested
@@ -693,7 +700,7 @@ A progress bar has no user-editable value, so it has **no handshake, no event co
 you must not copy from Switch is a handshake part:
 
 - No `NitroUiControlledValue` in the model, no `value`/`js`/`nativeEvents`/`jsEvents`, no `reconcile()` in `afterUpdate()`
-  — compare `ios/components/Switch/HybridNitroUiSwitch.swift:205-221`; a Progress's `afterUpdate()` is just
+  — compare `ios/components/Switch/HybridNitroUiSwitch.swift`; a Progress's `afterUpdate()` is just
   `host.commit()`.
 - No `mostRecentEventCount` prop, and no `T | null` "uncontrolled" encoding: the value is a plain `progress: Double`,
   always sent.
@@ -704,7 +711,7 @@ you must not copy from Switch is a handshake part:
 What you still need, unchanged from §2-§8:
 
 - A model per platform, `mutableStateOf`/manual publisher only for what renders
-  (`android/.../HybridNitroUiSwitch.kt:33-59`, `ios/core/NitroUiModel.swift:25-31`); setters store + `markDirty()`;
+  (`android/.../HybridNitroUiSwitch.kt`, `ios/core/NitroUiModel.swift`); setters store + `markDirty()`;
   `afterUpdate()` → `commit()` exactly once.
 - `RecyclableView` with a full reset, and `onDropView()` → `host.drop()` (§6). With no callbacks to release,
   `onDropView()` is still not optional.
@@ -715,7 +722,7 @@ What you still need, unchanged from §2-§8:
 - Animation is yours, on the UI thread. Indeterminate motion is a render-time concern (`rememberInfiniteTransition` on
   Compose, a phase/`TimelineView` animator on SwiftUI) and needs no JS round trip. If a props write starts an animation,
   note that the host suppresses animation on the first commit and the first commit after a recycle
-  (`ios/core/NitroSwiftUIHost.swift:170-184`) — so a recycled row does not animate from the previous row's value.
+  (`ios/core/NitroSwiftUIHost.swift`) — so a recycled row does not animate from the previous row's value.
 
 ## 13. The Android baseline profile
 

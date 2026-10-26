@@ -77,7 +77,7 @@ different policies — the only component so far to need both:
 - **`linear` is `fillWidth`.** Its height is its own; its width *is* the box. The
   wrapper adds `alignSelf: 'stretch'` (sizing.md §6) so a parent's cross-axis
   alignment cannot shrink the box out from under it.
-- **`circular` is `intrinsic`** (`docs/architecture/sizing.md` §7, T11): it
+- **`circular` is `intrinsic`** (`docs/architecture/sizing.md` §5): it
   measures its own square, and the wrapper adds `alignSelf: 'flex-start'` so a
   `stretch`ing parent cannot widen the ring into an ellipse.
 
@@ -88,8 +88,8 @@ and `'circular'` for the ring.
 ### Measured sizes
 
 Both numbers below are what `measureContent()` and the Yoga box reported in the
-same harness run on this task's two devices (iPhone 17 / iOS 27, and
-`nitroui_t01` / API 35 at 420 dpi), and they are the same fixture the harness
+same harness run on two devices (an iPhone 17 simulator on iOS 27, and an
+API 35 emulator at 420 dpi), and they are the same fixture the harness
 asserts (`example/__tests__/Progress.harness.tsx`).
 
 | Variant  | iOS                                  | Android                                            |
@@ -98,7 +98,7 @@ asserts (`example/__tests__/Progress.harness.tsx`).
 | `circular` | **20 × 20 pt**                       | **40 × 40 dp**                                     |
 
 The component declares `320 × 4` with the `fillWidth` policy as its fallback on
-both platforms (`NitroUiDeclaredFallbacks`, T14 — a Fabric measure can happen
+both platforms (`NitroUiDeclaredFallbacks`, registered at startup — a Fabric measure can happen
 before any view exists). Two things follow, both measured rather than argued:
 
 - The declared height is the *linear* one, which is also the default variant, so
@@ -221,7 +221,7 @@ that says so.
     control" bullet below rules out.
   - What is left is our own drawing: a `ProgressViewStyle` or an arc we render. That
     buys a real determinate ring at the price of "the drawing is the platform's", so
-    it is a decision for a reviewer, not a fix for a fix round.
+    it is a design decision rather than a bug fix, and it has not been made.
 - **On iOS an indeterminate `linear` bar shows an empty track and does not
   visibly animate.** It is pixel-identical to the same bar at `value={0}`: rows
   `1024`–`1046` of three simulator screenshots taken 600 ms apart are

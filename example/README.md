@@ -1,83 +1,39 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# nitro-ui example app
 
-> This app is the example app of `react-native-nitro-ui` and shares the repo
-> root's bun install. Run its scripts from this directory with `bun run …`, or
-> from the repo root with `bun run example <script>`. See
-> [../CONTRIBUTING.md](../CONTRIBUTING.md) for the repository's own gates and
-> for the on-device (Harness) tests.
+The example app of `react-native-nitro-ui`: a bare React Native app (React
+Native CLI, new architecture) with one tab per component — Switch, Slider,
+Button, Progress, SegmentedControl, DatePicker, Picker and Host — in
+`src/App.tsx` and the `src/*Screen.tsx` files. It is also the app the
+on-device tests run in (`__tests__/*.harness.tsx`, through
+`react-native-harness`) and a Storybook showcase (below).
 
-# Getting Started
+It shares the repo root's bun install. Run its scripts from this directory with
+`bun run …`, or from the repo root with `bun run example <script>`. See
+[../CONTRIBUTING.md](../CONTRIBUTING.md) for prerequisites, the repository's
+gates and the on-device (Harness) tests.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## Running it
 
-## Step 1: Start Metro
-
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
+Make sure you have completed React Native's
+[Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment)
+guide, and run `bun install` at the repo root.
 
 ```sh
-bun run start
+bun run start      # Metro, on 8081
+bun run android    # build, install and launch on an emulator or device
+bun run ios        # build, install and launch on a simulator
 ```
 
-Metro uses port 8081 here; the Harness tests use `METRO_PORT` (8291 by default)
-instead — see `rn-harness.config.mjs`.
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
+On iOS, install the pods first, and again whenever native dependencies change:
 
 ```sh
-bun run android
-```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
+cd ios
+bundle install            # once, for CocoaPods itself
 bundle exec pod install
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-bun run ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+Metro uses port 8081 here; the Harness tests use `METRO_PORT` (8291 by default)
+instead — see [`rn-harness.config.mjs`](rn-harness.config.mjs).
 
 # Storybook
 
@@ -116,10 +72,11 @@ scripts set is read by `withStorybook` in `metro.config.js`, and the inline
   Harness tests and the real-input runner therefore bundle exactly what they
   bundled before Storybook existed.
 - **Stories** are CSF3 (`Meta` / `StoryObj`) and typecheck against the real
-  component props. Each component has a `Playground` story whose Controls panel
+  component props. Each control has a `Playground` story whose Controls panel
   carries every public prop, plus showcase stories for its variants, sizes,
-  states, both appearances and its sizing behaviour. Events log to the Actions
-  panel.
+  states, both appearances and its sizing behaviour. `Host` has no playground:
+  its stories compare hosted and unhosted Switches and churn a hosted batch.
+  Events log to the Actions panel.
 - **`storybook.requires.ts` is generated** (by the `withStorybook` Metro wrapper,
   or `bun run storybook:generate`) and is gitignored, so it is not reviewed.
 - **Adding a story file needs a Metro restart**: the generated file globs
@@ -132,14 +89,6 @@ Metro's default port (8081) is what these use; the Harness tests keep using
 
 # Troubleshooting
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+See React Native's
+[Troubleshooting](https://reactnative.dev/docs/troubleshooting) page for build
+and Metro problems that are not specific to this library.
