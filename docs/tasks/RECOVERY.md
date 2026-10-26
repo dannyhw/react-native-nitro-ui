@@ -31,7 +31,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | H1 Android Host | — | merged | Done | — |
 | D1 public docs | — | merged | Done | — |
 | R5 publish 0.1.0 | — | merged | **Published** `react-native-nitro-ui@0.1.0` (registry tarball sha256 = tested `fa1b7b96…`), tag `v0.1.0` + GitHub release | — |
-| X1 dev tooling (CI checks, build-app, lease) | `nitro-ui-worktrees/X1` · `task/X1-dev-tooling` | `9e0122a` (round 1) | Opus review running | Merge → `gh workflow enable CI`. Then X2 (gate ledger + short reports), X3 (registry codegen, after H2a), X4 (conformance), X5 (bench queue / second Mac). |
+| X1 dev tooling (CI checks, build-app, lease) | `nitro-ui-worktrees/X1` · `task/X1-dev-tooling` | `9e0122a` (round 1) | Review: FIX ROUND (lease TTL wipes others; stamp not bound to artifact; tree hashed after build; HEAD in hash). Fix round 1 running (`nitroui-X1-fix1`) on `nitroui_t03` | Re-review → merge → `gh workflow enable CI`. |
 | R6 Changesets release | `nitro-ui-worktrees/R6` · `task/R6-changesets-release` | `a59e527` (round 1) | Review: FIX ROUND (guard test blocks first release; tags would be `name@ver`; staged-only publisher). Fix round 1 running (`nitroui-R6-fix1`): stage publish + split jobs + `v` tag catch-up | Re-review → merge → owner setup → enable workflows. |
 | R5b post-publish smoke | — | merged | Done: all 6 rows green from the npm tarball | — |
 | H2a Host: Slider/Progress/Button | `nitro-ui-worktrees/H2a` · `task/H2a-host-more-controls` | `f69db4f` (round 1) | Opus review running | Fix round must also merge main (D1/R5 rewrote README/host.md) and re-run the bench on a quiet machine or label it. |
