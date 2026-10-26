@@ -61,7 +61,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - NitroUi (0.1.0):
+  - NitroUi (0.1.1):
     - hermes-engine
     - NitroModules
     - RCTRequired
@@ -2512,7 +2512,7 @@ SPEC CHECKSUMS:
   HarnessUI: aae88d05fe2eddceb8a6cc6a2368454815cdb87c
   hermes-engine: 6a00d96909f1648698fe5419972fe3c9e628755e
   NitroModules: c32f969b7c536e0b6b401a9dfdb35bb4eba071ef
-  NitroUi: 3e17faf18f227186f5bdeed771d620cbc643737f
+  NitroUi: 2fedec65d9b97664d21915ab78ec1bf295787929
   RCT-Folly: 82921e585c0400eda46fac1068297aa9dfb035e4
   RCTDeprecation: e134f2a2c096a6450f5fcbbe949531f913a2ff04
   RCTRequired: f1a68295837ee8f91e112ed1b5694d12e7ff1784
@@ -2600,6 +2600,6 @@ SPEC CHECKSUMS:
   SocketRocket: 37aec555668fb852ec12e3c0de59a86ca58f0871
   Yoga: d1c536142c5ff8ec8cd856ab2a7c227a1d875c8e
 
-PODFILE CHECKSUM: acde7c068b090d0687f6b568efb322bb970ed8b8
+PODFILE CHECKSUM: 1da09a1e8f4fcde2e2f4e3e58165b15bc1b07c00
 
 COCOAPODS: 1.17.0
