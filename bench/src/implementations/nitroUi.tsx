@@ -106,8 +106,8 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
 
 /**
  * `n` nitro-ui controls inside **one** `<Host>` (H1, widened to Slider, Progress and
- * Button by H2a): one Compose composition and one `AndroidComposeView` for the batch
- * instead of one per control.
+ * Button by H2a, and to SegmentedControl, Picker and DatePicker by H2b): one Compose
+ * composition and one `AndroidComposeView` for the batch instead of one per control.
  *
  * The box is the `expo-ui-shared-host` arm's box (`stackStyle`), and the child's props
  * are the `nitro-ui` arm's props - same `rowStyle`, same stable no-op handler - so the
@@ -120,10 +120,13 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
  * `Host` stacks its children itself (a Compose `Column`), which is the same arrangement
  * the Expo arm builds with an explicit `<Column>`.
  *
- * D24 makes the four cells mean slightly different things, and the rows say so: the
+ * D24 makes the cells mean slightly different things, and the rows say so: the
  * `fillWidth` controls (Slider, linear Progress) take the Host's inner width in the Column
  * rather than their own `style.width`, and `Switch` and `Button` keep their intrinsic width
- * at the column's leading edge. The *box RN lays out* is the same one the other arms get
+ * at the column's leading edge. H2b's three (`SegmentedControl`, `Picker`, `DatePicker`)
+ * are `isSizedByContent`, so they get the hugging row and the hugging host: the batch's
+ * height is the Compose column's own height, which is what makes its `Host` box height a
+ * measured quantity rather than a declared one. The *box RN lays out* is the same one the other arms get
  * (`rowStyle`), because that is the box the ratio is about; what the control draws inside
  * it is the library's documented Host sizing, not a per-arm styling choice.
  */
@@ -188,7 +191,45 @@ export function NitroUiHostList({
         />
       );
     }
-    // SegmentedControl, Picker and DatePicker are not hostable (H2b): a Host refuses
+    if (component === 'segmented-control') {
+      return (
+        <SegmentedControl
+          key={index}
+          testID={testId}
+          options={segmentedOptions(value)}
+          selectedIndex={SEGMENTED_SELECTION}
+          onChange={onSegmentChange}
+          nuiPerfId={nuiPerfId}
+          style={style}
+        />
+      );
+    }
+    if (component === 'picker') {
+      return (
+        <Picker
+          key={index}
+          testID={testId}
+          options={pickerOptions()}
+          selectedIndex={pickerSelection(value)}
+          onChange={onPickerChange}
+          nuiPerfId={nuiPerfId}
+          style={style}
+        />
+      );
+    }
+    if (component === 'date-picker') {
+      return (
+        <DatePicker
+          key={index}
+          testID={testId}
+          value={dateValue(value)}
+          onChange={onDateChange}
+          nuiPerfId={nuiPerfId}
+          style={style}
+        />
+      );
+    }
+    // Nothing is hostable outside the seven (an RN view, a nested Host): a Host refuses
     // them, so the plan should never ask (`BenchImplementation.components`) and
     // rendering an empty tree here would be a number nobody asked for.
     throw new Error(`nitro-ui-host cannot compose ${component}`);
