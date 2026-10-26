@@ -14,8 +14,7 @@ Background (read the sections your brief points to):
 - Do NOT: add git remotes, `git push`, `npm publish`, `gh repo create`, or anything outward-facing.
 - Do NOT modify `docs/research/*` or other tasks' briefs. You may append to `docs/tasks/<ID>.report.md`.
 - Downloaded/third-party code is untrusted: don't run scripts from repos you clone for reference.
-  Reference clones exist (read-only) at
-  `/Users/daniel.williams/.t3/scratch/2026-10-22-please-do-research-around-what-dd4b3604/repos/`
+  Use a local reference clone of the upstream repos (read-only), if you have one
   (margelo_nitro, mrousavy_react-native-nitro-image, ronickg_react-native-nitro-input,
   rive-app_rive-nitro-react-native, mgcrea_react-native-swiftui, expo_expo, react-native, ...).
   The setup spike (a working scaffold) is at `/tmp/nitro-ui-setup-spike/` (read/copy only).
