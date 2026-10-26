@@ -138,7 +138,7 @@ export function Host({ children, ...props }: HostProps) {
           'visible. A Host measures nothing: its box is its own `style` plus the ' +
           'boxes RN computes for its children, and nothing inside it can grow it ' +
           'back. Give it a `height` or `flex: 1`, or take the height away from ' +
-          'whatever parent is refusing it (D24, docs/architecture/sizing.md). '
+          'whatever parent is refusing it (D24, docs/architecture/sizing.md).'
       );
     }
   };
