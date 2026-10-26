@@ -36,7 +36,7 @@ timer "npm-install" "$START"
 if [ "$PLATFORM" != android ]; then
   START=$(date +%s)
   ( cd "$APP" && CI=1 npx expo prebuild --no-install )
-  ( cd "$APP/ios" && pod install )
+  node "$SMOKE_ROOT/scripts/pod-install.mjs" --dir "$APP/ios"
   timer "prebuild+pod-install" "$START"
 
   START=$(date +%s)

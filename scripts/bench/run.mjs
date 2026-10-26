@@ -809,6 +809,9 @@ export async function main(argv) {
     const outcome = writeBaseline(file, run, { force });
     if (outcome.written) {
       log(`Baseline written: ${path.relative(process.cwd(), file)}`);
+      if (outcome.note != null) {
+        log(`  ${outcome.note}`);
+      }
       if (force) {
         log('  (written with --force; review the guards below)');
       }
