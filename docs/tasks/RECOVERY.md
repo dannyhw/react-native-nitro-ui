@@ -29,7 +29,8 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | A1c iOS baseline | `nitro-ui-worktrees/A1c` · `task/A1c-baselines` | `c9548f6` (brief) | Apex running (`nitroui-A1c-2026-10-26`, started 01:05) | Last iOS attempt; if refused, iOS stays on `--compare`. Merge report (+ baseline if minted). |
 | G6 Picker | `nitro-ui-worktrees/G6` · `task/G6-picker` | `9bc3b7b` | Ready; G5 now on main | After 05:00: merge-main pass (Apex, `nitroui-G6-merge`), regenerate nitrogen, full gates both platforms, then merge. |
 | G5 DatePicker | — | merged | Done | — |
-| P1 iOS profiling | — | report merged | Done (H3 dropped) | — |
+| P1 iOS profiling | — | report merged | Done | — |
+| T17 iOS Host spike | — | brief on main | Queued (D23) | After A1c: Apex, iOS only, iPhone 17. |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
 ## Devices (D13)
