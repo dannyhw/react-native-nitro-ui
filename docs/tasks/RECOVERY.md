@@ -1,6 +1,6 @@
 # Recovery snapshot
 
-> **2026-10-26 20:50:** X6 (`nitroui-X6b`), X2 (`nitroui-X2b`) and H2b (`nitroui-H2b`) delegated to Apex; each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). Version Packages PR for 0.2.0 is open and waits for H2b. If sessions are gone, re-delegate each from its brief.
+> **2026-10-26 22:30:** X2 merged; X7 doctor merged. X6 (`nitroui-X6b`) and H2b (`nitroui-H2b`) in flight with Apex; each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). Version Packages PR for 0.2.0 is open and waits for H2b. If sessions are gone, re-delegate each from its brief.
  — 2026-10-23 23:50 local
 
 Written because the machine may restart (at 23:41:02 CoreSimulatorService got SIGTERM and shut down
@@ -50,7 +50,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | X1 dev tooling (CI checks, build-app, lease) | — | merged | Done; CI enabled (checks / native-tests / build-android) | Next: X2 gate ledger + short reports, X3 registry codegen (after H2a), X4 conformance, X5 bench queue / second Mac. |
 | R6 Changesets release | — | merged | **Validated end to end:** 0.1.1 staged by CI via OIDC with provenance, approved by the owner, `v0.1.1` tagged at `152e059` by Release tag | — |
 | X6 build speed | `nitro-ui-worktrees/X6` · `task/X6-build-speed` (clean, no commits) | brief on main | Apex round in progress (`nitroui-X6b`) | Opus review, merge. |
-| X2 gate ledger + short reports | `nitro-ui-worktrees/X2` · `task/X2-gate-ledger` (clean, no commits) | brief on main | Apex round in progress (`nitroui-X2b`) | Opus review, merge. |
+| X2 gate ledger + short reports | `nitro-ui-worktrees/X2` · `task/X2-gate-ledger` (clean, no commits) | brief on main | **Merged** (1 impl + 1 fix round; review FIX ROUND → fixed; merge exception: no iOS/real-input, diff reaches no app binary) | — |
 | R5b post-publish smoke | — | merged | Done: all 6 rows green from the npm tarball | — |
 | H2a Host: Slider/Progress/Button | — | merged | Done; ships in the next minor via `.changeset/host-composes-more-controls.md` | Quiet bench re-run pending (bench machine). |
 | H2b Host: SegmentedControl/Picker/DatePicker | `nitro-ui-worktrees/H2b` · `task/H2b-host-popups` | brief on main | Apex round in progress (`nitroui-H2b`) | Opus review, merge, then merge Version Packages PR #2 (0.2.0). |

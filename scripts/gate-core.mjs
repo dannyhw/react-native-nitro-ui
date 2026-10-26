@@ -112,6 +112,8 @@ export const TOOLING_FILES = [
   'scripts/package-files.mjs',
   'scripts/release-catch-up.mjs',
   'scripts/check-autolinking.mjs',
+  'scripts/doctor.mjs',
+  'scripts/doctor-core.mjs',
   '.gitignore',
   '.prettierignore',
 ];
