@@ -11,7 +11,7 @@
 // The launcher path comes from the environment (`CCACHE_GRADLE_LAUNCHER`, set by
 // the same script that looked for the binary), so this file never has to guess
 // where a toolchain is. ccache's cross-worktree settings (CCACHE_BASEDIR,
-// CCACHE_HASH_DIR=false) are environment too - see ccacheEnv() in
+// CCACHE_NOHASHDIR) are environment too - see ccacheEnv() in
 // scripts/build-speed-lib.mjs, which puts them where they win over every config
 // file, including the one React Native's ccache-clang.sh selects.
 

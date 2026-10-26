@@ -310,8 +310,10 @@ Four things make a local or agent build faster:
   app sets `USE_CCACHE=1` for the Podfile `expo prebuild` owns, and
   `scripts/gradle-ccache.init.gradle` (passed with `-I`, only when ccache
   exists) puts `CMAKE_<LANG>_COMPILER_LAUNCHER` in front of the NDK builds. The
-  scripts also export `CCACHE_BASEDIR` (this worktree) and `CCACHE_HASH_DIR`
-  (`false`), which is what makes the _same file in another worktree_ a hit
+  scripts also export `CCACHE_BASEDIR` (this worktree) and `CCACHE_NOHASHDIR`
+  (`1` - no underscore; ccache ignores `CCACHE_HASH_DIR` and keeps hashing the
+  compile directory, which is the silent miss-per-worktree this avoids), which is
+  what makes the _same file in another worktree_ a hit
   instead of a miss; environment is deliberate, because React Native points
   `CCACHE_CONFIGPATH` at its own config file for iOS builds and the environment
   outranks every config file. `NITRO_UI_CCACHE=0` keeps it out of one build.

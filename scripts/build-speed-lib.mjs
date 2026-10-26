@@ -95,8 +95,11 @@ export function ccacheRequested(env = {}) {
  *
  * - `CCACHE_BASEDIR` makes ccache record paths relative to this worktree, so the
  *   same file in `X6/` and in a fresh worktree hashes the same;
- * - `CCACHE_HASH_DIR=false` stops the compile-time working directory entering
- *   the hash, which is the other half of that cross-worktree hit.
+ * - `CCACHE_NOHASHDIR=1` stops the compile-time working directory entering the
+ *   hash, which is the other half of that cross-worktree hit. It has no
+ *   underscore: `CCACHE_HASH_DIR` is not an environment variable ccache reads,
+ *   so writing that leaves `hash_dir` on and every second-worktree compile a
+ *   silent miss. `ccacheEffectiveForWorktrees()` is how the build notices.
  *
  * Both are environment variables rather than a config file on purpose: React
  * Native's `ccache-clang.sh` points `CCACHE_CONFIGPATH` at *its* config file, so
@@ -113,8 +116,29 @@ export function ccacheEnv({ enabled, repoRoot }) {
   if (!enabled) return {};
   return {
     CCACHE_BASEDIR: repoRoot,
-    CCACHE_HASH_DIR: 'false',
+    CCACHE_NOHASHDIR: '1',
   };
+}
+
+/**
+ * Did ccache really take both of those settings?
+ *
+ * `ccache --show-config` prints the effective value of every setting next to
+ * where it came from, which is the only way to tell a variable ccache reads from
+ * one it quietly ignores. A build with `hash_dir` still on is not broken - it is
+ * just slow in a way nobody sees, so this is a warning and never a failure.
+ *
+ * @param {string} showConfigOutput stdout of `ccache --show-config`
+ * @returns {boolean}
+ */
+export function ccacheEffectiveForWorktrees(showConfigOutput) {
+  const read = (name) => {
+    const line = showConfigOutput
+      .split('\n')
+      .find((entry) => entry.includes(`${name} = `));
+    return line ? line.split(' = ').pop().trim() : null;
+  };
+  return read('hash_dir') === 'false' && Boolean(read('base_dir'));
 }
 
 /**
