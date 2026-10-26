@@ -455,13 +455,20 @@ Same rig as round 1: worktree root (harness from `example/`), Node 24 via `fnm e
 
 | Gate | Command | Result |
 | --- | --- | --- |
-| Everything | `bun run check` | **green** — typecheck, bench typecheck, lint, format, **226** unit tests, `test:native` (ASan), `perf:renders` 7/7, `nitrogen:check`, `autolinking:check`, `prepare`, `api-extractor:check`, `publint`, `manifest:check` (464 files), `readme:check` |
+| Everything, at the final commit | `bun run check` at `f780554` | **green** (exit 0) — typecheck, bench typecheck, lint, format, **226** unit tests, `test:native` (ASan), `perf:renders` 7/7, `nitrogen:check`, `autolinking:check`, `prepare`, `api-extractor:check`, `publint`, `manifest:check` (464 files), `readme:check` |
 | Android harness, full | `bunx react-native-harness --harnessRunner android` | **161 passed, 0 failed** (1 pending, and not in either Host file: both Host suites run alone with no pendings) in 839.5 s at `load1` 2.4 |
 | Host suites alone, Android | `… android Host.harness` / `… android MountChurn.harness` | **18/18** and **4/4**, no pendings — every fix-round case runs, `HostChurn` included |
 | iOS harness, full | `IOS_SIM_UDID=331EF109… bunx react-native-harness --harnessRunner ios` | **148 passed, 1 skipped, 0 failed** in 98.9 s — the skip is `MountChurn`'s documented "Android-only" pending test |
 | Real input, Android | `bun run test:real-input:android` | **7/7** at `load1` 3.51, `hosted-switch` included with the ordering checks |
 | Real input, iOS | `IOS_UDID=331EF109… bun run test:real-input:ios` | **7/7**, including `picker` (121 s) — round 1's load flake did not reappear at `load1` 2.2 |
 | Bench | `bun bench --platform android --plan quick` | the M1 table above, `problems: none` |
+
+What each gate was measured against: the last line of code moved at `efa9a16` (11:30), so the
+Android and iOS harness runs, both real-input suites and the two targeted Host runs all serve JS
+from a tree at or after it and install the native build described below; `check` was then re-run at
+the final commit, and everything after `efa9a16` is documentation. The bench is from `68a660b`, and
+nothing after it touches native code or the app's JS — only this report, `README.md`, `host.md`,
+`Host.tsx`'s doc comment and test files.
 
 Build freshness, checked rather than assumed:
 
