@@ -32,6 +32,7 @@ import {
   cellKey,
   ARM_SCOPES,
   armScopeCovers,
+  ARMS_WITHOUT_COMPONENT,
   comparableMetrics,
   componentOf,
   createLoadSampler,
@@ -70,12 +71,23 @@ const ITERATIONS = 20;
  * Android). Naming the arms a cell must have, rather than "all of them", is what keeps
  * these assertions true when an arm exists that cannot serve the component - a missing
  * arm is only acceptable when it is a scoped one.
+ *
+ * `ARMS_WITHOUT_COMPONENT` narrows the same way the scheduler does: an arm with no
+ * mountable cell on the named platform is not a missing arm. It only narrows when a
+ * platform is named, because a platform-less schedule asks for every arm that mounts
+ * the control somewhere.
  */
 function armsFor(component, platform = null) {
   return new Set(
     IMPLEMENTATIONS.filter((name) => {
       const scope = ARM_SCOPES[name];
       if (!armScopeCovers(name, component)) {
+        return false;
+      }
+      if (
+        platform != null &&
+        ARMS_WITHOUT_COMPONENT.includes(`${platform}:${name}:${component}`)
+      ) {
         return false;
       }
       if (scope == null) {
@@ -1296,12 +1308,23 @@ describe('the Button cells (--component button)', () => {
      * unscoped arms, plus one scoped arm's cells for each component it renders. Both
      * halves are measured rather than folded into a product: a component losing a cell
      * moves the first number, and an arm escaping (or losing) its scope moves the second.
-     * `date-picker` is the unscoped probe because a `<Host>` refuses it, so its schedule
-     * is exactly what every other component's would be without the Host arm.
+     * Since H2b every bench control is hostable, so no component's schedule is naturally
+     * free of the Host arm any more: the baseline is that same schedule with the scoped
+     * arms taken out, which measures the quantity instead of assuming a probe. The half
+     * that rode on the probe is asserted in its own right below — the Host arm is scoped
+     * to Android, so an iOS schedule must not carry one.
      */
-    const unscoped = buildSchedule({ plan: 'quick', component: 'date-picker' });
+    const unscoped = buildSchedule({
+      plan: 'quick',
+      component: 'date-picker',
+    }).filter((entry) => ARM_SCOPES[entry.implementation] == null);
+    const iosSwitch = buildSchedule({
+      plan: 'quick',
+      component: 'switch',
+      platform: 'ios',
+    });
     expect(
-      unscoped.some((entry) => entry.implementation === 'nitro-ui-host')
+      iosSwitch.some((entry) => entry.implementation === 'nitro-ui-host')
     ).toBe(false);
     const hostCells = buildSchedule({
       plan: 'quick',
@@ -1613,6 +1636,10 @@ describe('the DatePicker cells (--component date-picker)', () => {
    * ~2.45 s per mount iteration, past the runner's per-launch budget. So those
    * cells do not exist on Android, and the schedule says so instead of burning
    * 180 s timeouts per launch.
+   *
+   * `nitro-ui-host` is on this list's other side: a hosted date field is a Compose
+   * `Dialog` opened from the Host's composition, which mounts on Android (H2b), so its
+   * cells are here. The two names this test is about stay out either way.
    */
   it('omits the Android arms that cannot mount a DatePicker', () => {
     const android = buildSchedule({
@@ -1622,8 +1649,8 @@ describe('the DatePicker cells (--component date-picker)', () => {
     });
     expect(
       [...new Set(android.map((entry) => entry.implementation))].sort()
-    ).toEqual(['nitro-ui', 'rn-core']);
-    expect(android.length).toBe(3 * 2 * 4);
+    ).toEqual(['nitro-ui', 'nitro-ui-host', 'rn-core']);
+    expect(android.length).toBe(3 * 3 * 4);
   });
 
   /** The exclusion is a property of the platform, not of the arm or the cell. */
