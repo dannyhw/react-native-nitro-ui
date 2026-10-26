@@ -1,8 +1,9 @@
 # X2 — Gate ledger, re-run rules and short reports
 
-**Branch:** `task/X2-gate-ledger` (from `main` at `cdcd6a8`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** `X2-rcxej` (AVD leased as `emulator-5570` on a private adb server, Metro 8293) ·
-**Code tree:** `f4fccfdabe6f` (504 code files)
+**Branch:** `task/X2-gate-ledger` (from `main` at `cdcd6a8`) · **Rounds:** 1, then fix round 1 (of up
+to 3, D19) · **Leases:** `X2-rcxej` (round 1), `X2-tpbul` (fix round), both the AVD as
+`emulator-5570` on a private adb server, Metro 8293 · **Code tree:** `f4fccfdabe6f` (round 1),
+`93ddf2bd98d8` (fix round) — 504 code files both times
 
 ## Summary
 
@@ -104,33 +105,95 @@ The tool, run for real:
 
 - `scripts/gate-core.mjs` — the decisions: ledger shape, states, `need` rules, table, load summary.
 - `scripts/gate.mjs` — the runner and `status` / `need` / `table` / `export`.
-- `scripts/__tests__/gate.test.js` — 36 tests over the decisions in `gate-core.mjs` (the ledger
-  shape and its parser, the four gate states, both `need` stages, the table renderer, the counts and
-  load readers, the command table). The CLI in `gate.mjs` is those decisions plus spawn/print, and it
-  was exercised by hand on the real tree: every `status`, `need`, `table` and `export` line in this
-  report is its output.
+- `scripts/__tests__/gate.test.js` — tests for the decisions in `gate-core.mjs` (ledger shape and
+  parser, gate states, both `need` stages, the table, counts and load, the command table) and, from
+  fix round 1, for `gate.mjs` itself.
 - `.gitignore` — `.gates/` (ledgers and per-run logs stay machine-local; the committed evidence is
   the exported copy).
 - `docs/tasks/REPORT-TEMPLATE.md`, `AGENTS.md` — the short report format and the gate command.
-- `docs/tasks/X2/gates.jsonl` — this branch's 5 ledger lines, copied verbatim.
+- `docs/tasks/X2/gates.jsonl` — this branch's 7 ledger lines, copied verbatim.
 
 ## Follow-ups
 
-- `check`'s counts cell should come from its jest step, not the last summary in the log.
-- A `tooling` prefix class (`scripts/`, `eslint-rules/`, `etc/`, `.changeset/`) would let a
-  tools-only diff ask for `check` alone instead of both platforms.
 - `perf:renders` uses jest's 5 s default and flakes under another task's builds; it needs the same
   kind of knob `HARNESS_TEST_TIMEOUT` is.
 - `CONTRIBUTING.md` has no `gate.mjs` section — the brief scoped the doc change to `AGENTS.md`.
-- A `FAIL` row prints its tree but not the `(not this tree)` marker; only `stale` rows do.
 - The `mutations.json` helper from PROCESS §3 is not built; red proofs are the lines above.
 - `.gates/logs/` grows one file per run with no rotation.
+- The `gate.test.js` CLI block needs the runtime the gates need (see *One limit* in the fix round).
+- N4's signal forwarding has no test: nothing asserts the child gets the `SIGTERM`.
 
 ## Questions for orchestrator
 
 - Should `need --for review` treat a tools-only diff as `check` only? Recommendation: yes — add the
   `tooling` prefix class above in a fix round. Until then this task's own review bar reads
-  `missing: harness:ios`, which the one-proof-run brief could not satisfy.
+  `missing: harness:ios`, which the one-proof-run brief could not satisfy. **Answered in fix round 1:** the tooling list landed, and `need --for
+  review` now reads satisfied on this tree.
 - X2's merge bar (`harness:ios`, both real-input, on `f4fccfdabe6f`) was not run. Recommendation:
   merge on D19 with the follow-ups, and let the next task that touches `scripts/` pick up the
-  missing platform runs, rather than spending a device pair on a change that reaches no app binary.
+  missing platform runs, rather than spending a device pair on a change that reaches no app binary. **Taken:** the fix round merged on this, recorded under *The X2 merge
+  exception*.
+
+## Fix round 1
+
+The four M items in `X2-gate-ledger.review.md`, the tooling class, and the N list. Rules in
+`b72cf0c`, the docs that describe them in `bb0509e`.
+
+- **M1** the recorded name comes from `resolveGate`, never `argv[0]`: `harness:android --
+  ColdSizing` records `harness:android:ColdSizing` and satisfies nothing but itself. `check` refuses
+  arguments instead of dropping them, and the header example is no longer the disallowed form.
+- **M2** every line carries `trees: {ios, android}` - the same digest over that platform's files,
+  shared and unmapped code in both. At `review` a device gate is accepted on its own half, so a
+  one-platform fix no longer re-owes the other; `check` and all of `merge` keep the full-tree match.
+- **M3** `summaries` holds every step and the row reports the first, so `check` reads 415 tests over
+  23 suites rather than the 7-test perf step; failures still sum across steps.
+- **M4** `--no-renames` on both diffs, so a `git mv` out of `ios/` asks for iOS again.
+- **Tooling** is the review's named list, not `scripts/` wholesale: `app-stamp*`, `lease-core`,
+  `node-version`, `harness-timing-gate`, `harness.mjs`, `build-app.mjs` and `real-input/**` stay
+  device inputs and sit in both halves, so they still ask for both platforms.
+- **N** all eight (N1 `treeAfter`, N2 latest-line-for-this-tree and `stale` not `FAIL`, N3 the
+  `example/ios` and `nitrogen/generated` halves, N4 forwarded signals, N5 the rounded `start`, N6
+  the CLI block, N7 the template, N8 the bullet). None skipped; one gap is listed above - nothing
+  asserts N4's forwarding.
+
+Red proofs (mutation -> red, restored and green at 60/60 on Node 24):
+
+- `canonicalGateName` -> return `base` -> 2 red: *names a filtered run something other than the full
+  gate* and the CLI test that reads the ledger line back.
+- `digestKeyFor` -> always `full` -> *an Android-only fix does not re-owe the iOS run*.
+- `parseTestCounts` -> last summary -> 2 red: *reports the first summary, which is the unit step* and
+  the CLI's counts assertion.
+- `--no-renames` dropped -> 2 red: *never follows a rename…* and the CLI rename test.
+- the `treeAfter` comparison -> `false` -> *is never green when the tree moved while the run went on*.
+
+### Gates and bar, refreshed
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 415 tests / 23 suites | `93ddf2bd98d8` | 6 m 44 s | start 76.8 / med 73.9 / max 141.4 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | **PASS** | 187 tests / 12 suites | `93ddf2bd98d8` | 6 m 14 s | start 121.7 / med 37.6 / max 121.7 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`--for merge`, so both rows are the merge claim; round 1's table above is superseded.
+
+`need --for review` -> `need: review is satisfied on this code tree.`, with `note: the code diff is
+tooling (check-only) only: … no device gate is asked for beyond check`. `need --for merge` ->
+`3 gate(s) missing for merge: harness:ios, real-input:ios, real-input:android`.
+
+The harness run leased with `--platform android --wait-minutes 60` and released after: lease
+`X2-tpbul`, `emulator-5570`, log `.gates/logs/harness+android-2026-10-26T22-25-03.673Z.log`,
+`treeAfter` equal to `tree`.
+
+**The X2 merge exception.** X2's bar is `check` plus one `harness:android`, through `gate.mjs`, on
+this tree - the two rows above. `harness:ios` and both real-input gates are not required for X2:
+nothing here reaches an app binary (`scripts/` is in no tarball; 465 packed files, same as
+`etc/package-files.txt`). An orchestrator decision recorded here, not coded: `need` keeps the
+brief's rule and still names all three, so no other task inherits the exception.
+
+**One limit.** The CLI block runs only on a runtime the gates run on - on Node 25/26, `gate.mjs`
+re-execs under `.nvmrc`'s Node and that `node` shadows the fixture's fake runner, so two tests go
+red over the shell, not the ledger (`fnm exec --using 24 -- bun run test` -> 60/60; CI installs
+`.nvmrc`'s Node). The guard is three lines in `gate.test.js`; adding it would move the code tree and
+re-owe both runs above, so it stays a follow-up.
