@@ -131,10 +131,9 @@ code is compiled in.
 
 The consumer smoke tests (`scripts/smoke/`) install the packed tarball with
 `npm` into a fresh app, build **Release**, launch it and check that every
-control mounts with a non-zero size. They are run by hand — the GitHub
-workflows are disabled for now — and these rows are from the 0.1.0 scope (the
-five controls); they have not been re-run since Picker and DatePicker were
-added to `main`:
+control mounts with a non-zero size - the seven controls, plus a `<Host>`
+holding two Switches. They are run by hand — the GitHub workflows are disabled
+for now. Every ticked cell below was green for the 0.1.0 tarball on 2026-10-26:
 
 | Consumer              | iOS | Android |
 | --------------------- | --- | ------- |
@@ -142,9 +141,12 @@ added to `main`:
 | RN CLI 0.88.0         | ✅  | ✅      |
 | RN CLI 0.86.3         | n/a | ✅      |
 
-RN 0.86.3 is the supported floor. Its iOS install has not been verified: on an
-iOS 27 simulator runtime a fresh 0.86.3 app hangs at launch even without this
-library, and no run on an older runtime has been done.
+RN 0.86.3 is the supported floor, and its iOS cell cannot be ticked on this
+machine: UIKit terminates a freshly generated 0.86.3 app at launch on the iOS 27
+simulator runtime for not adopting the scene lifecycle, before any JavaScript
+runs, and the crash names UIKit's scene check with no library frames in it. The
+same launch failure was measured earlier with this library absent. The row needs
+a run on an older iOS runtime.
 
 ## Usage
 
