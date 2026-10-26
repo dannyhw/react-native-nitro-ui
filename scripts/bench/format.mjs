@@ -27,11 +27,16 @@ const PRETTIER_COMMAND = ['bunx', 'prettier'];
  * @param {string} file absolute path of the file to format in place
  * @param {(message: string) => void} [log]
  * @param {((file: string, args: string[], options: object) => { status: number | null, error?: Error })} [spawn]
+ * @param {string} [cwd] where to run prettier from. The caller passes the
+ *   repository root: `bunx` resolves the binary from the working directory, and
+ *   a baseline mint started inside `bench/` or `bench/app/` has its own
+ *   `package.json` there, so prettier resolves to something else or to nothing
+ *   (review N3). Prettier still picks the config by walking up from the file.
  * @returns {{ formatted: boolean, note: string | null }}
  */
 export function formatCommittedJsonFile(
   file,
-  { log = () => {}, spawn = spawnSync } = {}
+  { log = () => {}, spawn = spawnSync, cwd = null } = {}
 ) {
   const result = spawn(
     PRETTIER_COMMAND[0],
@@ -41,6 +46,7 @@ export function formatCommittedJsonFile(
       // Prettier picks the repo's config by walking up from the file, so no
       // flags here that could drift from `bun run format`.
       shell: false,
+      ...(cwd == null ? {} : { cwd }),
     }
   );
 
