@@ -365,34 +365,72 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     Component(model)
   }
 
-  /** Whether *we* hid this view because a Host took over drawing it. */
-  private var hiddenByHost = false
+  /**
+   * Whether a [NitroUiHostView] may compose this control.
+   *
+   * The native half of the "Switch only" rule (review M2). JS names the hostable
+   * controls in `src/components/Host/HostChildren.ts`, but React flattens
+   * components out of the native tree, so a `Picker` behind a `memo` arrives as a
+   * direct child of a Host that JS never saw a `Picker` in. Only this side can
+   * decide then, and the decision is this property: `false` on the base class, so a
+   * control opts in by overriding it and everything else - including another
+   * `<Host>`, which is a `NitroComposeHost` too - is composed by nobody and
+   * reported by [NitroUiHostView.reportUncomposableChild].
+   *
+   * `false` is the default because it is the honest answer for a control nobody has
+   * measured inside a Host: it is the state the round-1 report called "renders
+   * silently wrong", and an allowlist is what makes it a refusal instead.
+   */
+  internal open val isHostable: Boolean
+    get() = false
+
+  /** What RN last asked this view to show. `display: 'none'` arrives as `INVISIBLE`. */
+  private var visibilityRequestedByRn: Int = VISIBLE
 
   /**
-   * Take the view out of Android's drawing and touch dispatch while a Host renders
-   * it, and put it back when none does.
+   * Whether RN hid this child, so a Host must not draw it either (review S2).
    *
-   * `GONE` is Expo's choice for the same job (`ExpoComposeView` with
-   * `withHostingView = false`), and for the same reasons: nothing is drawn, the
-   * view leaves the accessibility tree so a screen reader gets one control per row
-   * instead of an empty container around it, and a touch falls through to the
-   * Host's `AndroidComposeView` - where the hit has to land, because Compose owns
-   * the pixels.
-   *
-   * Only ever reverts what this function set ([hiddenByHost]), so a control RN hid
-   * with `display: none` stays hidden across a detach: the hosted path must not
-   * change what an unhosted control does.
+   * A Host draws its children, so RN's `display: none` cannot be honoured by hiding
+   * the child's own view - there are no pixels there to hide. It has to take the
+   * child out of the composition, or a hidden row goes on drawing while the
+   * content-sized Host shrinks by a row and clips what it still shows.
    */
-  private fun applyHostedVisibility() {
+  internal val isHiddenByReact: Boolean
+    get() = visibilityRequestedByRn == INVISIBLE
+
+  /**
+   * Record what RN asked for, and tell a Host that its drawn content moved.
+   *
+   * RN never asks a view to hide: `display: none` reaches Android as `INVISIBLE`
+   * (RN 0.88's `SurfaceMountingManager.updateLayout`), and for a hosted child that
+   * has to mean "do not compose this one". Recorded before the delegate, so no hook
+   * can observe a stale answer.
+   */
+  override fun setVisibility(visibility: Int) {
+    val changedByRn = visibilityRequestedByRn != visibility
+    visibilityRequestedByRn = visibility
+    super.setVisibility(visibility)
+    if (changedByRn && isHostedByParent) {
+      (parent as? NitroUiHostView)?.hostedChildVisibilityChanged()
+    }
+  }
+
+  /**
+   * Tell Android this control's own view has no drawing of its own to do, while a
+   * Host composes it.
+   *
+   * This is *not* what keeps a hosted child out of the way, and round 1 said it was
+   * (review S1). The child is never set to `GONE`: Fabric re-asserts the visibility
+   * it believes in on the child in every layout pass
+   * (`SurfaceMountingManager.updateLayout` ends by coercing the view to
+   * `VISIBLE`/`INVISIBLE` and laying it out at its RN frame), so a write here would
+   * be undone before the next frame was drawn. The measure gate is the mechanism:
+   * [onMeasure] declines to `0 × 0`, so the child is laid out at `0 × 0`, draws
+   * nothing, is not a hit target, and is not visible-to-user for accessibility.
+   */
+  private fun applyHostedDrawFlag() {
     if (isHostedByParent) {
-      if (!hiddenByHost) {
-        visibility = GONE
-        hiddenByHost = true
-      }
       setWillNotDraw(true)
-    } else if (hiddenByHost) {
-      visibility = VISIBLE
-      hiddenByHost = false
     }
   }
 
@@ -461,16 +499,16 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     /**
      * A hosted control never builds a composition of its own.
      *
-     * `GONE` alone is not enough: `addView` attaches a `GONE` child all the same
-     * (visibility only takes it out of measure, layout, draw and the accessibility
-     * tree), and `AbstractComposeView` composes eagerly on attach by default. This
-     * flag is the seam the class offers for exactly that case - "subclasses may
-     * choose to override this property to prevent this eager initial composition".
-     * The only other trigger is the first measure, and a hosted control never gets
-     * one: a `GONE` child is skipped by its parent's measure pass, and
-     * [NitroComposeHost.onMeasure] declines it anyway. Together the two are what
-     * makes it one `Composition` per Host instead of one per control - the entire
-     * point of a Host, and the difference this spike measures.
+     * `AbstractComposeView` composes eagerly on attach by default, and attach is
+     * not something a Host can avoid - `addView` attaches its children whatever
+     * their visibility, and Fabric lays each child out from the frame C++ computed
+     * (review S1). So the flag is the seam the class offers for exactly this case -
+     * "subclasses may choose to override this property to prevent this eager initial
+     * composition". The only other trigger is the first measure, and a hosted control
+     * never gets one either: [NitroComposeHost.onMeasure] declines it before Compose
+     * sees a size spec. Both gates are load-bearing, and they are what makes it one
+     * `Composition` per Host instead of one per control - the entire point of a Host,
+     * and the difference this library measures.
      */
     override val shouldCreateCompositionOnAttachedToWindow: Boolean
       get() = !isHostedByParent
@@ -718,15 +756,16 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     super.onAttachedToWindow()
     // After `super`: a hosted child is attached by its Host's `addView`, so by now
     // `parent` is the Host and this is the first moment the answer is known.
-    applyHostedVisibility()
+    applyHostedDrawFlag()
     watchForFirstFrame()
   }
 
   override fun onDetachedFromWindow() {
     // A control that leaves the window also stops being composited, whether or not
-    // it is still a child of the Host (a list scrolling off detaches both). Restoring
-    // here means a re-attach under a different parent cannot inherit a hidden view.
-    applyHostedVisibility()
+    // it is still a child of the Host (a list scrolling off detaches both). Re-read
+    // here, so a control that moved out of a Host is not left flagged by the attach
+    // that went in.
+    applyHostedDrawFlag()
     super.onDetachedFromWindow()
   }
 
@@ -744,9 +783,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
     if (isHostedByParent) {
       // A Host draws us; measuring would build a second composition for content
-      // that is already in the Host's. Fabric measures every node it lays out, so
-      // this is reached whether or not the view is `GONE` - declining here is what
-      // keeps one `Composition` per Host instead of one per control.
+      // that is already in the Host's. Fabric measures every node it lays out,
+      // whatever the view's visibility, so this is the gate that matters: declining
+      // here is what keeps one `Composition` per Host instead of one per control, and
+      // the 0 x 0 it measures is what lays the child out of the way (review S1).
       isMeasurePending = true
       setMeasuredDimension(0, 0)
       return

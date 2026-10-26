@@ -1,9 +1,11 @@
-import { useRef, type ReactNode } from 'react';
+import { Children, useRef, type ReactNode } from 'react';
 import {
   Platform,
   View,
   type LayoutChangeEvent,
+  type StyleProp,
   type ViewProps,
+  type ViewStyle,
 } from 'react-native';
 
 import { assertHostChildren } from './HostChildren';
@@ -110,8 +112,9 @@ export interface HostProps extends ViewProps {
  * ```
  */
 export function Host({ children, ...props }: HostProps) {
-  assertHostChildren(children);
+  assertHostChildren(children, Host);
   const warnedAboutHeight = useRef(false);
+  const warnedAboutStyle = useRef(false);
   /**
    * Dev-only: a Host that was given no height has nothing to draw into.
    *
@@ -127,11 +130,15 @@ export function Host({ children, ...props }: HostProps) {
    */
   const onLayout = (event: LayoutChangeEvent) => {
     props.onLayout?.(event);
-    if (!__DEV__ || warnedAboutHeight.current) {
+    if (warnedAboutHeight.current) {
       return;
     }
     const { width, height } = event.nativeEvent.layout;
-    if (height === 0 && width > 0 && children != null) {
+    // `Children.toArray` rather than `children != null`: `{show && <Switch/>}` with
+    // `show = false`, and `items.map(...)` returning `[]`, are both non-null and both
+    // perfectly correct ways to have nothing to draw - and warning about them teaches
+    // a person to ignore the warning that matters.
+    if (height === 0 && width > 0 && Children.toArray(children).length > 0) {
       warnedAboutHeight.current = true;
       console.warn(
         'react-native-nitro-ui: a <Host> measured 0 tall, so nothing inside it is ' +
@@ -143,21 +150,120 @@ export function Host({ children, ...props }: HostProps) {
     }
   };
 
+  // Dev-only by construction (S4). Attaching a layout handler costs a layout event to
+  // JS on every relayout of every Host in a release build, and JS is the one axis a
+  // Host already loses on; in release the caller's handler is wired as if this
+  // component were not here, which is what its absence in the props table promises.
+  const layoutHandler = __DEV__ ? onLayout : props.onLayout;
+
+  if (__DEV__) {
+    warnAboutInertStyles(props.style, props.pointerEvents, warnedAboutStyle);
+  }
+
   if (Platform.OS !== 'android') {
-    // iOS passthrough, deliberately: the iOS Host is a spike (T17), and until it
-    // clears D23's bar an app that writes `<Host>` must not get a different tree on
-    // the other platform than it tested. The children render exactly as they do
-    // outside a Host, in a plain `View`; `HostChildren.ts` is why the *rule* is the
-    // same even while the mechanism is not.
+    // iOS passthrough, and permanent (D23's outcome, measured by T17): an iOS Host
+    // was built and measured, and it lost D23's rule - memory lower, mount UI CPU
+    // 1.40x on Switch and unmount UI CPU 6.27x - so H3 is not built and this `View`
+    // is what `<Host>` means there. Not a placeholder for a later port: an app that
+    // writes `<Host>` gets the same *rule* on both platforms and the mechanism only
+    // on one, which is the trade D23 decided to ship.
     return (
-      <View {...props} onLayout={onLayout} testID={props.testID}>
+      <View {...props} onLayout={layoutHandler} testID={props.testID}>
         {children}
       </View>
     );
   }
   return (
-    <NativeNitroUiHost {...props} onLayout={onLayout}>
+    <NativeNitroUiHost {...props} onLayout={layoutHandler}>
       {children}
     </NativeNitroUiHost>
   );
+}
+
+/**
+ * The Host's own styles that reach the drawing, and the ones that do not (review S3).
+ *
+ * A Host sizes its box in Yoga and arranges its children in Compose, and only some of
+ * `ViewStyle` survives the trip. `padding` does: the view manager forwards it, so the
+ * column starts inside it. What does not is listed here, because Yoga *does* honour
+ * each of them when it computes the Host's height - the props buy a box and no
+ * arrangement, which is the shape of a layout bug nobody debugs.
+ */
+const INERT_HOST_STYLES: readonly (keyof ViewStyle)[] = [
+  'gap',
+  'rowGap',
+  'columnGap',
+  'alignItems',
+  'alignContent',
+  'alignSelf',
+  'justifyContent',
+  'borderWidth',
+];
+
+/**
+ * Say once per Host instance that some of its `style` will not be drawn.
+ *
+ * Dev-only, and it can only see plain style objects: a `StyleSheet.create` id is a
+ * number to JS, and resolving it would mean reading the stylesheet registry for a
+ * warning. That is why `host.md` lists the same set rather than relying on this.
+ */
+function warnAboutInertStyles(
+  style: StyleProp<ViewStyle> | undefined,
+  pointerEvents: ViewProps['pointerEvents'],
+  warned: { current: boolean }
+): void {
+  if (warned.current) {
+    return;
+  }
+  const flat = flattenStyleForWarning(style);
+  if (flat == null) {
+    return;
+  }
+  const inert = INERT_HOST_STYLES.filter((key) => flat[key] != null);
+  const laysSideways = flat.flexDirection != null && flat.flexDirection !== 'column';
+  if (pointerEvents == null && inert.length === 0 && !laysSideways) {
+    return;
+  }
+  warned.current = true;
+  const named = [
+    ...inert.map((key) => `\`${key}\``),
+    ...(laysSideways ? ['`flexDirection` (only a column is drawn)'] : []),
+    ...(pointerEvents != null ? ['`pointerEvents`'] : []),
+  ];
+  console.warn(
+    'react-native-nitro-ui: a <Host> was given ' +
+      `${named.join(', ')}, which sizes its box but does not reach what it draws - ` +
+      'Compose arranges the children (one column, no gaps), the Host draws no border, ' +
+      'and touches go to Compose rather than RN\'s hit testing. Lay the rows out with ' +
+      '`padding` and the children\'s own heights, and space them inside each row ' +
+      '(docs/components/host.md).'
+  );
+}
+
+/**
+ * The style as a plain object, or `null` when JS cannot see into it.
+ *
+ * `StyleSheet.flatten` would resolve registered ids, but it also runs for every Host
+ * render to serve a dev warning; this reads only what is already an object, which is
+ * the common shape for the props this warns about.
+ */
+function flattenStyleForWarning(
+  style: StyleProp<ViewStyle> | undefined
+): ViewStyle | null {
+  if (style == null) {
+    return null;
+  }
+  if (Array.isArray(style)) {
+    const merged: ViewStyle = {};
+    for (const entry of style) {
+      const nested = flattenStyleForWarning(
+        entry as StyleProp<ViewStyle> | undefined
+      );
+      if (nested != null) {
+        Object.assign(merged, nested);
+      }
+    }
+    return merged;
+  }
+  return typeof style === 'object' ? (style as ViewStyle) : null;
 }
