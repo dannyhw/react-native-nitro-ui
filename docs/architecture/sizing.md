@@ -576,13 +576,18 @@ now has to cover is four controls with two different sizing policies:
   cache/fallback as an unhosted control — it has no idea who draws the pixels and must not
   start asking (§1) — so `<Host><Switch /></Host>` still gives the Switch a 48 dp row box and
   RN still computes a frame from it. Nothing places pixels with that frame; on Android the
-  platform view behind it declines to measure, so Android lays it out at `0 × 0` and that is
-  what anything reading real view bounds sees. It is *not* `GONE`, and an earlier draft of this
-  file said it was: `SurfaceMountingManager.updateLayout` re-asserts `VISIBLE` (or `INVISIBLE`
-  for `display: none`) on the child's view on every layout pass, so a visibility flag written
-  once at attach would be undone before the next frame was drawn. The measure gate is the
-  mechanism, and `0 × 0` is what makes the child neither a hit target nor visible-to-user for
-  accessibility.
+  platform view behind it declines to measure, so Android lays it out at `0 × 0` at mount.
+  That is not the whole answer, and a first draft of this file treated it as one: **the next
+  layout pass over that child writes its Yoga frame into its `View`** (F8). Measured — a
+  hosted child re-framed from 120 × 44 to 160 × 60 afterwards reads `[160, 60, 0, 48]`, a
+  child added later reads `[52, 48, 0, 96]`, and the drawing answers at the same offsets
+  before and after (`example/__tests__/Host.harness.tsx`). A `testID` box for a hosted
+  child is therefore the engine's frame or nothing, never the drawn rect, and only the
+  first is aim-at-able. It is *not* `GONE`, and an earlier draft of this file said it was:
+  `SurfaceMountingManager.updateLayout` re-asserts `VISIBLE` (or `INVISIBLE` for
+  `display: none`) on the child's view on every layout pass, which is exactly how the frame
+  above arrives — a visibility flag written once at attach would have been undone before
+  the next frame was drawn, and so would a zero size.
 
   A hosted child's `alignSelf: 'stretch'`, `width: '100%'` or `height` therefore moves the
   frame and not the drawing (D16's cross-axis opt-in means nothing inside a Host), and does
@@ -624,9 +629,11 @@ now has to cover is four controls with two different sizing policies:
   width. What cannot cross at all is `gap` / `rowGap` / `columnGap`, `flexDirection`,
   `alignItems`, `alignContent`, `justifyContent` and `pointerEvents`: Compose arranges one
   column and Compose takes the touches, while Yoga still spends box height on each of them. Dev
-  builds say so, once per instance. A child's own `alignSelf` is on neither list, and H2a
-  removed it from the warning: a self style never reached the drawing on either side, so calling
-  it out as an arrangement style that silently fails was a claim the code does not support.
+  builds say so, once per instance. `alignSelf` is on neither list, and H2a removed it from
+  the warning for the reason the warning itself gives: it reads the **Host's own** `style`,
+  and a Host's `alignSelf` positions the Host inside its parent, so it moves the box the
+  drawing sits in — it works. A *child's* `alignSelf` is the bullet above's business (it
+  moves that child's decorative frame), not an arrangement style's.
 - **Unhosted controls are untouched.** The hosted path is a branch on the direct parent, taken
   or reverted on attach and detach, and every case in §3–§7 runs unchanged for a control with
   any other parent — which is the regression `Switch.harness` and `Sizing.harness` keep true.

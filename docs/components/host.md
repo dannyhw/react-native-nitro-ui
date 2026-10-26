@@ -116,7 +116,7 @@ would make it a second list component.
 | ---------- | ----------------------- | --------------------------------------------------------------- |
 | `children` | `ReactNode`             | Hosted controls only — see "What a Host cannot hold".             |
 | `style`    | `ViewStyle`             | Its `height` is the box the content is drawn into (see Sizing).   |
-| `testID`   | `string \| undefined`   | Lands on the container, as usual. Hosted *children* keep theirs, but see the caveat under "Finding a hosted control" — on Android their box is `0 × 0`. |
+| `testID`   | `string \| undefined`   | Lands on the container, as usual. Hosted *children* keep theirs, but see the caveat under "Finding a hosted control" — on Android their box is the engine's frame, never the drawing's (`0 × 0` at mount). |
 | `onLayout` | callback                | Chained: the caller's handler runs first, then the dev-only warning. Attaching `onLayout` at all is a dev-only cost — a release build passes yours, or none. |
 
 ## What a Host cannot hold
@@ -157,7 +157,8 @@ rather than a screen that draws half of itself:
   `Progress` take the Host's inner width, `Button`, `Switch` and a circular `Progress`
   take their own size at the column's leading edge.
 - **Only some of a Host's own styles reach the drawing.** `width`, `height` and `flex`
-  size the box; `padding` and `borderWidth` inset it. The `Column` starts inside either
+  size the box, `alignSelf` moves that box inside the Host's parent, and `padding` and
+  `borderWidth` inset it. The `Column` starts inside either
   one, as in any other container — `borderWidth` because Fabric reports border and
   padding as one `layoutMetrics.contentInsets` and the Host view manager forwards
   `setPadding`, so `borderWidth: 2` moves the drawing in by 2 dp. What it does *not* do
@@ -169,9 +170,13 @@ rather than a screen that draws half of itself:
   `gap: 8` over ten children buys 72 dp of height and no space between rows, and
   `flexDirection: 'row'` buys a one-row-tall box around a stack of rows. Dev builds warn
   about each of them once per instance. Say how tall the Host is, and stack it in a
-  column. A child's own `alignSelf` is neither case: like every self style it moves that
-  child's decorative frame, which a Host ignores whether or not the Host itself has one,
-  so it is not warned about (H2a).
+  column. `alignSelf` is on neither list, and not because of anything about the children:
+  the warning reads the **Host's own** `style`, and a Host's `alignSelf` positions the Host
+  inside *its* parent, which moves the box — and the drawing is inside the box.
+  `<Host style={{ alignSelf: 'stretch' }}>` does exactly what it looks like, so warning
+  about it was a false claim and H2a took it off the list (H1 review F5/F6). A *child's*
+  `alignSelf` is still decorative, which is the "No per-child size" rule above, not an
+  arrangement style.
 
 Components are transparent in both directions. React flattens them out of the native
 tree, so a wrapper that renders a `Switch` **is** a direct child of the Host and is
@@ -201,7 +206,7 @@ it, from `example/__tests__/Host.harness.tsx`:
 | Eight hosted Switches on an invalidated cache                   | reports **0**, cache entries **0**, corrections **0**              |
 | The same eight unhosted                                          | reports **16**, cache entries **1**                                 |
 | Measure calls, hosted vs unhosted                                | **8 and 8** — Yoga still asks, and the engine still answers         |
-| A hosted child's own Android view                                | found by `testID`, and **0 × 0**: it declines to measure, and is laid out at nothing |
+| A hosted child's own Android view                                | found by `testID`; **`0 × 0` at mount**, its Yoga frame after any later pass over it — and never the drawn rect |
 | A Host with `padding: 32` vs the same Host with none              | the drawing starts **32 dp later**; the box is the same                |
 | A hosted child with `display: 'none'` vs shown                    | the hidden row draws and answers **nothing**; the shown one answers both |
 
@@ -260,11 +265,14 @@ Host screen showed three hosted Switches and a batch of 24:
   same control unhosted are identical, and a mixed Host of five children publishes five
   nodes, in mount order (`hosted-mixed`).
 - **No node from the React Native side.** A hosted child's own Android view is laid out
-  at `0 × 0` (Sizing above), which is not visible-to-user, so it contributes no
-  accessibility node and nothing reads out a control twice: three hosted children, three
-  labelled nodes; 24, twenty-four. (What it is *not* is `GONE`: Fabric re-asserts
-  `VISIBLE` on that view on every layout pass, which is why the measure gate rather than
-  a visibility flag is the mechanism.)
+  at `0 × 0` when it mounts (Sizing above), which is not visible-to-user, so it
+  contributes no accessibility node and nothing reads out a control twice: three hosted
+  children, three labelled nodes; 24, twenty-four. (What it is *not* is `GONE`: Fabric
+  re-asserts `VISIBLE` on that view on every layout pass, which is why the measure gate
+  rather than a visibility flag is the mechanism. A child that is re-framed later does get
+  a real rect — see "Finding a hosted control" — and whether *that* view then publishes a
+  node of its own is not measured, which is one more reason to address hosted controls by
+  label and not by box.)
 - **Reading order is mount order.** The labelled nodes sit between the RN text above
   the Host and the RN text below it, in the order the children were given, so the
   batch is read where it is — not after the whole screen.
@@ -285,12 +293,24 @@ Host screen showed three hosted Switches and a batch of 24:
 ### Finding a hosted control from a test
 
 `testID` survives hosting: the child's Android view still exists and still carries the
-id, so `queryByTestId` finds it. What it returns is **`0 × 0` at the Host's origin**,
-because that is where RN lays a view that declines to measure (that is what the harness
-measures at mount; whether a later layout pass can move it to its Yoga frame is not
-pinned down yet — either way it is not where the Switch is drawn). Detox, Maestro and
-Appium tap the centre of the view that carries the id, so `tap(by.id('wifi'))` inside a
-Host taps nothing, or the row above.
+id, so `queryByTestId` finds it. **What it returns is never where the control is drawn**,
+and it is not one stable answer:
+
+- **At mount: `0 × 0` at the Host's origin.** A view that declines to measure gets no
+  frame, so the id resolves to nothing a tool can aim at.
+- **After any later layout pass over that child: its Yoga frame.** F8, measured
+  (`example/__tests__/Host.harness.tsx`, `lays a re-framed hosted child at its Yoga
+  frame, not its drawing (F8)`): a hosted child whose own `style` goes from 120 × 44 to
+  160 × 60 then reads `[160, 60, 0, 48]` — the engine's box, in the row Yoga put it in —
+  while the drawing answers at exactly the same offsets as before. A child *added* to a
+  Host later reads the same way (measured `[52, 48, 0, 96]` for a third row), and so does
+  one whose row moved because a sibling above it was re-framed; a sibling growing
+  *outside* the Host moves nothing.
+
+So a hosted child's box is sometimes nothing and sometimes a plausible rectangle drawn
+around something else — 108 dp of box around a 52 × 32 switch. Detox, Maestro and Appium
+tap the centre of the view that carries the id, so `tap(by.id('wifi'))` inside a Host taps
+nothing, the middle of an empty box, or the row beside it.
 
 Inside a Host, find hosted controls by **`accessibilityLabel`** — the label is published
 by the Compose node, whose rect is the drawn one, which is what
