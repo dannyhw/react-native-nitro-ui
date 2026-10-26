@@ -4,9 +4,14 @@ Everything in this file is a contract: these are the exact commands the
 project's gates run. If you change one, change it here too.
 
 **The gates are local for now.** The GitHub workflows in `.github/workflows/`
-(CI, Release, Bench, Smoke) are disabled on purpose, so nothing runs on a push
-or a pull request. `bun run check` plus the device suites below, run on your
-machine, are what a change is judged by.
+(CI, Bench, Smoke) are disabled on purpose, so nothing runs on a push or a pull
+request. `bun run check` plus the device suites below, run on your machine, are
+what a change is judged by. The release path is the exception: `Release`,
+`Release tag` and `Changeset status` are meant to be switched on (see
+"Releasing"). No version reaches npm without a person approving it, whichever of
+the three are on — and a workflow file that is new to `main` is enabled as soon as
+it lands, so `Changeset status` starts commenting on pull requests with the merge
+that brings it.
 
 ## Prerequisites
 
@@ -51,39 +56,41 @@ docs/DECISIONS.md    the decisions, numbered (D1, D2, …)
 
 Run from the repo root.
 
-| Command                     | What it does                                                         |
-| --------------------------- | -------------------------------------------------------------------- |
-| `bun run check`             | **All static gates.** Run this before pushing.                       |
-| `bun run typecheck`         | `tsc` over the library and example                                   |
-| `bun run bench:typecheck`   | `tsc` over `bench/` for each platform                                |
-| `bun run lint`              | ESLint, including the local perf-contract rules                      |
-| `bun run format`            | Prettier check (`format:write` to fix)                               |
-| `bun run test`              | Jest unit tests (JS wrappers, lint rules, patch script)              |
-| `bun run test:native`       | Host-side C++ and Swift unit tests of the core (macOS only)          |
-| `bun run nitrogen`          | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`       |
-| `bun run nitrogen:check`    | Regenerate into a temp dir and fail on drift against `nitrogen/`     |
-| `bun run autolinking:check` | RN CLI + Expo autolinkers must both resolve `NitroUiPackage`         |
-| `bun run prepare`           | Build `lib/` with builder-bob (also runs `nitrogen`)                 |
-| `bun run api-extractor`     | Regenerate the public API report in `etc/` (`:check` compares)       |
-| `bun run publint`           | Validate `package.json` publish surface                              |
-| `bun run manifest:check`    | Tarball contents must equal `etc/package-files.txt`                  |
-| `bun run readme:check`      | README examples must equal `example/src/readme-examples.tsx`         |
-| `bun run manifest:update`   | Rewrite the manifest after an **intentional** publish-surface change |
-| `bun run build:app`         | Build + stamp the example app for one platform (see below)           |
-| `bun run lease <command>`   | Device/port leases for this machine: `acquire`, `release`, `list`    |
-| `bun run harness:ios`       | On-device tests on iOS (see below)                                   |
-| `bun run harness:android`   | On-device tests on Android (see below)                               |
-| `bun run smoke:pack`        | `npm pack` the library into `$SMOKE_TMP/tarballs` (see below)        |
-| `bun run smoke:expo`        | Install the packed lib into a fresh Expo app, Release, on-device     |
-| `bun run smoke:rn-cli`      | Same for a fresh React Native CLI app                                |
-| `bun bench`                 | Run the on-device benchmarks (see "Running the benchmarks")          |
-| `bun run bench:report`      | Re-render an existing results file, no device needed                 |
-| `bun run probe:nitrogen`    | Regenerate the private `bench/modules/bench-probe` Nitro code        |
-| `bun run perf:renders`      | Reassure render-count gate for the JS wrappers                       |
-| `bun run example <script>`  | Run an `example/` script, e.g. `bun run example ios`                 |
-| `bun run hooks:install`     | Install optional git hooks (see "Commit messages and releases")      |
-| `bun run hooks:uninstall`   | Remove them again                                                    |
-| `bun run clean`             | Delete build outputs (`lib/`, native build dirs)                     |
+| Command                     | What it does                                                                |
+| --------------------------- | --------------------------------------------------------------------------- |
+| `bun run check`             | **All static gates.** Run this before pushing.                              |
+| `bun run typecheck`         | `tsc` over the library and example                                          |
+| `bun run bench:typecheck`   | `tsc` over `bench/` for each platform                                       |
+| `bun run lint`              | ESLint, including the local perf-contract rules                             |
+| `bun run format`            | Prettier check (`format:write` to fix)                                      |
+| `bun run test`              | Jest unit tests (JS wrappers, lint rules, patch script)                     |
+| `bun run test:native`       | Host-side C++ and Swift unit tests of the core (macOS only)                 |
+| `bun run nitrogen`          | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`              |
+| `bun run nitrogen:check`    | Regenerate into a temp dir and fail on drift against `nitrogen/`            |
+| `bun run autolinking:check` | RN CLI + Expo autolinkers must both resolve `NitroUiPackage`                |
+| `bun run prepare`           | Build `lib/` with builder-bob (also runs `nitrogen`)                        |
+| `bun run api-extractor`     | Regenerate the public API report in `etc/` (`:check` compares)              |
+| `bun run publint`           | Validate `package.json` publish surface                                     |
+| `bun run manifest:check`    | Tarball contents must equal `etc/package-files.txt`                         |
+| `bun run readme:check`      | README examples must equal `example/src/readme-examples.tsx`                |
+| `bun run manifest:update`   | Rewrite the manifest after an **intentional** publish-surface change        |
+| `bun run harness:ios`       | On-device tests on iOS (see below)                                          |
+| `bun run harness:android`   | On-device tests on Android (see below)                                      |
+| `bun run smoke:pack`        | `npm pack` the library into `$SMOKE_TMP/tarballs` (see below)               |
+| `bun run smoke:expo`        | Install the packed lib into a fresh Expo app, Release, on-device            |
+| `bun run smoke:rn-cli`      | Same for a fresh React Native CLI app                                       |
+| `bun bench`                 | Run the on-device benchmarks (see "Running the benchmarks")                 |
+| `bun run bench:report`      | Re-render an existing results file, no device needed                        |
+| `bun run probe:nitrogen`    | Regenerate the private `bench/modules/bench-probe` Nitro code               |
+| `bun run perf:renders`      | Reassure render-count gate for the JS wrappers                              |
+| `bun run changeset`         | Record a release entry for your change (see "Releasing")                    |
+| `bun run release:version`   | Apply pending changesets, as the Version Packages PR does (see "Releasing") |
+| `bun run build:app`         | Build + stamp the example app for one platform (see below)                  |
+| `bun run lease <command>`   | Device/port leases for this machine: `acquire`, `release`, `list`           |
+| `bun run example <script>`  | Run an `example/` script, e.g. `bun run example ios`                        |
+| `bun run hooks:install`     | Install optional git hooks (see "Commit messages and git hooks")            |
+| `bun run hooks:uninstall`   | Remove them again                                                           |
+| `bun run clean`             | Delete build outputs (`lib/`, native build dirs)                            |
 
 `bun run check` = typecheck → bench:typecheck → lint → format → test →
 test:native → perf:renders → nitrogen:check → autolinking:check → prepare →
@@ -591,11 +598,11 @@ and `docs/research/nitro-patterns.md`): prop setters only store and mark dirty, 
 resets everything, no JS↔main thread blocking hops, and controlled values use the
 event-count handshake.
 
-## Commit messages and releases
+## Commit messages and git hooks
 
-Conventional Commits — releases rely on them (`@release-it` with the
-conventional-changelog preset derives versions and changelogs from the messages,
-so `feat`/`fix`/`BREAKING CHANGE` matter).
+Conventional Commits, checked by the optional `commit-msg` hook below. Commit
+messages no longer decide anything about releases — Changesets entries do (see
+"Releasing") — but the history still reads better in the agreed shape.
 
 Git hooks are **opt-in**: `bun install` never installs them, because git hooks
 live in the `.git` directory that every worktree of this repo shares, and
@@ -612,9 +619,190 @@ and fail loudly instead of downloading a look-alike `tsc`/`eslint` package.
 `pre-commit` typechecks the whole program, which gets slow once `bench/` exists —
 `bun run check` is the gate that actually has to pass.
 
-Nothing has been released yet. Releases are meant to go through
-`.github/workflows/release.yml` (manual dispatch, npm trusted publishing), which
-is disabled for now. Do not run `bun run release` locally.
+## Releasing
+
+Releases are cut by [Changesets](https://changesets.dev) from GitHub Actions and
+**staged** on npm (DECISIONS D27, D28). There is no npm token in this repo, in the
+workflows, or on any laptop — and no automated run can publish. The package's npm
+Trusted Publisher is configured for **staged publishing only**, so the last step of
+every release is a person approving it on npmjs.com. 0.1.0 was published by hand
+(D26); everything after it is this path.
+
+1. **Make the change, then `bun run changeset`.** Pick the bump (`patch` for a
+   fix, `minor` for a new capability, `major` for a breaking change) and write a
+   note that reads well in `CHANGELOG.md` — that text _is_ the release note.
+   Commit the file it writes in `.changeset/` with your pull request. A change
+   that must not release anything (docs, tooling, tests) still gets an entry:
+   `bun run changeset add --empty`. `Changeset status` warns on a pull request
+   that changes `src/`, `ios/`, `android/`, `cpp/` or `nitrogen/` without one;
+   the warning never blocks a merge, because a maintainer can add the entry.
+   Only `react-native-nitro-ui` is ever versioned: the `example`, `bench` and
+   `bench/modules/bench-probe` workspaces are `private` and listed in `ignore`
+   in `.changeset/config.json`. Changesets only versions packages listed in
+   `workspaces`, so the `"."` entry in `package.json` — the library itself — is
+   load-bearing: drop it and `changeset version` fails with "not in the
+   workspace", because it cannot see this package at all.
+2. **Merge pull requests to `main`.** The `Release` workflow runs `bun run check`
+   in a job with read-only rights. When it is green, a second job runs
+   `bun run release:version` and opens or updates a pull request called **Version
+   Packages**: it bumps `package.json`, prepends the notes to `CHANGELOG.md` and
+   deletes the changeset files. Everything merged before it lands folds into that
+   one pull request — you review the version and the changelog there.
+
+   That pull request arrives with no checks, which is expected rather than a gap:
+   a pull request opened with `GITHUB_TOKEN` starts no workflows. The same commit
+   runs the whole gate on `main` the moment it merges, and that run is the gate —
+   so `release:version` must never write a tree that fails it. (If `main` ever
+   grows required status checks, that pull request cannot merge until the action
+   is given a GitHub App token.)
+
+3. **Merge the Version Packages pull request.** The next `Release` run finds no
+   pending changesets, so nothing is versioned. What it does instead is pack the
+   version now committed on `main` and run `npm stage publish` on that tarball,
+   trading the job's OIDC token for staging rights — no npm credential. **Nothing
+   is live yet.** That is the end of what automation is allowed to do.
+4. **Approve the staged version on npmjs.com.** The package's **Staged Packages**
+   tab, or from a machine that already has your npm credentials:
+
+   ```sh
+   npm stage list react-native-nitro-ui
+   npm stage approve <id>
+   ```
+
+   This is where the proof-of-presence lives: 2FA is asked for here, not in CI.
+   Until it is approved the version does not exist for anyone installing the
+   package, and no tag is made.
+
+5. **The tag and the release follow on their own.** `Release tag` runs hourly:
+   when `package.json`'s version is on the registry and `v<version>` has no
+   release, it creates `v<version>` at the commit that bumped the version, with
+   that version's `CHANGELOG.md` section as the notes. Run it from **Run
+   workflow** rather than waiting out the hour.
+
+Nothing else makes a tag, and that is deliberate. The Changesets action's own git
+tags and GitHub releases are switched off — not for style: it writes
+`react-native-nitro-ui@0.1.1` instead of `v0.1.1` for any package whose workspace
+tool is not `root`, and `"."` in `workspaces` makes manypkg report `bun`. And
+tagging at publish time would be wrong anyway, because a staged version is not
+live yet.
+
+### Why the pipeline is split into jobs
+
+`npm pack` runs this package's `prepare` — builder-bob, then nitrogen — so packing
+pulls the repo's whole dependency tree into the process. That is not something to
+do while a token that can reach npm is in the environment, so the rights are split:
+
+| Job       | Rights                                    | Does                                                                                                        |
+| --------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pack`    | `contents: read`                          | install, `bun run check`, the committed-codegen and clean-tree checks, `npm pack`, and the tarball's sha256 |
+| `stage`   | `id-token: write`, and nothing else       | download the artifact, verify that sha256, ask the registry, `npm stage publish`                            |
+| `version` | `contents: write`, `pull-requests: write` | the Version Packages pull request, through the Changesets action                                            |
+
+`stage` checks out nothing, installs nothing and runs no script from the tree, so
+no code from the repository is ever running while it holds the OIDC token — and
+that token can stage one package and do nothing else with it.
+
+Nothing keys on "my run was the one that published", which is what makes a re-run
+boring:
+
+- a version that is already on the registry is left alone (`npm view`);
+- npm's answer to a version it already knows — staged or published — is treated as
+  the outcome we wanted, not as a failure;
+- `Release tag` does nothing when the release already exists.
+
+So a dropped, cancelled or re-run workflow loses nothing: the next run reads the
+same state. GitHub keeps one pending run per concurrency group and replaces an
+older pending one when pushes arrive quickly, which is exactly why the jobs key on
+state instead of on the run.
+
+### The changelog
+
+New entries come from `@changesets/changelog-git`: `## 0.1.2`, then
+`### Patch Changes`, then one line per changeset, each starting with the short sha
+of the commit that carried it. Two things worth knowing:
+
+- that sha is plain text. GitHub autolinks it in a release body, not in a rendered
+  `CHANGELOG.md`.
+- `@changesets/changelog-github` would link pull requests and their authors
+  instead. Inside Actions it would work — the action exports `GITHUB_TOKEN` to the
+  version script — but on a laptop `changeset version` would then refuse to run
+  without a token, and a changelog generator is not worth a credential on a path
+  meant to need none.
+
+The invariant that matters is tested, because a release note that points at the
+wrong section is worse than none: `0.1.0` stays the last version heading in
+`CHANGELOG.md`, and every heading above it is a version, newest first. Changesets
+prepends, so that is what the first Version Packages merge writes — and it is what
+`Release tag` reads the release notes out of.
+
+### When something goes wrong
+
+| Where it stopped                | What actually happened                                                | What to do                                                                                                                              |
+| ------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `pack` red                      | nothing was packed, versioned or staged                               | fix the cause and push, or re-run the failed run — a re-run uses its original commit                                                    |
+| run dropped before `stage`      | GitHub replaced a pending run with a newer one                        | nothing: the next run stages whatever is not on the registry yet                                                                        |
+| `version` opened no PR          | _Allow GitHub Actions to create and approve pull requests_ is off     | turn it on and re-run the job; the changesets are still on `main`                                                                       |
+| `stage` red                     | the OIDC exchange or the publisher config failed, and npm has nothing | fix the trusted publisher, then run `Release` from **Run workflow**                                                                     |
+| staged, never approved          | the version stays invisible, and no tag is made                       | approve it, or `npm stage reject <id>` and let the next run stage it again                                                              |
+| approved, no tag or release     | nothing failed: the hourly job has not run yet                        | wait, run `Release tag` by hand, or `gh release create v0.1.2 --target <sha> --title "react-native-nitro-ui 0.1.2" --notes-file <file>` |
+| a tag or release failed partway | `gh` failed mid-way                                                   | nothing: the next hourly run does only what is still missing                                                                            |
+
+A version that is on npm stays on npm. `npm unpublish` breaks every lockfile
+pointing at it, so retreat with a deprecation and release a fix:
+
+```sh
+npm deprecate react-native-nitro-ui@0.1.2 "<why — point at the replacement>"
+```
+
+Never run `npm login` or `npm publish` from a checkout. The only credentials in
+this pipeline are the release job's OIDC token, which may only stage, and your own
+npm account, which is for approving rather than for pushing a build out. To see
+what a release would ship:
+
+```sh
+bun run prepare && npm publish --dry-run
+```
+
+One `0.0.0-stage` entry does sit in this package's history, and it is npm's own
+placeholder for a package _name_ that did not exist yet — that is how 0.1.0's
+first minute looked while npm ran its scan. It is not what a staged version of
+yours shows up as: a staged version of an existing package simply is not on the
+registry until somebody approves it.
+
+Two more things that are as designed:
+
+- every push to `main` runs the whole gate, docs-only pushes included, because
+  staging a version is only worth what the run that staged it actually checked.
+- `bun run release:version` on a laptop writes the same files as the Version
+  Packages pull request, without pushing them. It is for checking what the next
+  version would look like, not for cutting one.
+
+### Owner setup, once
+
+None of this is a contributor's step, and none of it lives in this repo to change:
+
+1. npmjs.com → `react-native-nitro-ui` → **Settings** → **Trusted publisher** →
+   GitHub Actions: owner `dannyhw`, repository `react-native-nitro-ui`, workflow
+   name `release.yml`, and no environment name — the job uses none. Under **Allowed
+   actions**, leave it at staged publishing: **do not tick `npm publish`**. The
+   pipeline is built around a person approving each version, and that box is the
+   only thing that keeps it that way.
+2. On the same page: **Require 2FA and disallow tokens**.
+3. GitHub → this repository → Settings → Actions → General → tick **Allow GitHub
+   Actions to create and approve pull requests**, or the Version Packages pull
+   request cannot be opened.
+4. After merging, check `gh workflow list`. A workflow file that is new to the
+   default branch is enabled by itself, so `Changeset status` needs nothing; enable
+   `Release` and `Release tag` if either shows as inactive. `Release tag` has to be
+   enabled for the hourly schedule to fire at all.
+5. Optional: `main` has no branch protection today. The only commits that touch
+   `package.json` and `CHANGELOG.md` are the Version Packages ones, so reviewing
+   that pull request is the control. A rule that requires pull requests would also
+   have to bypass the accounts that push to `main` directly, or those pushes start
+   failing.
+6. First release, once 1 and 3 are done: merge a pull request with a changeset,
+   review the Version Packages pull request, merge it, check `npm stage list`,
+   approve, and confirm within the hour that `v<version>` and its release exist.
 
 ## Sending a pull request
 
