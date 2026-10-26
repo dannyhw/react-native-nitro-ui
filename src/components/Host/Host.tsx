@@ -31,7 +31,7 @@ export interface HostProps extends ViewProps {
  * all of its direct children **one** composition instead, so 50 Switches cost one
  * composition rather than fifty. Measured on the shipping container (H1, `quick`,
  * `speed-profile`): **0.86x** `expo-ui-shared-host` on mount memory (44.5 KiB per
- * Switch against its 51.9 KiB) and **0.87x** on mount UI CPU per op, against 2.63x and
+ * Switch against its 51.9 KiB) and **0.87x** on mount UI CPU per op, against 2.75x and
  * 1.39x without a Host. What it pays with is the JS thread - a hosted control is still
  * an RN node *plus* a child of somebody else's composition: **1.18x** the shared host
  * on mount JS CPU per op. Opt-in for that reason, not a default.

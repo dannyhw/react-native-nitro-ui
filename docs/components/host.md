@@ -8,7 +8,7 @@ every control brings its own.
 It is **opt-in**, and Android-only: on iOS `<Host>` is a documented passthrough `View`,
 so the same JSX renders normally there and an app gets one tree to reason about, not
 two (D23). That is settled, not provisional — T17 built an iOS Host and measured it
-losing on memory while giving back most of the win on unmount CPU, so it was not
+winning on memory but losing on mount and unmount UI CPU, so it was not
 shipped (D23 outcome, `docs/tasks/T17-ios-host-spike.report.md`). The passthrough is
 the design.
 
@@ -32,7 +32,7 @@ library gates on — every number below is the launch-paired ratio to
 
 |                                  | `nitro-ui` (no Host) | `expo-ui-shared-host` | `nitro-ui` + `<Host>` |
 | -------------------------------- | -------------------- | --------------------- | --------------------- |
-| Mount memory                     | 2.63x                | 1.00x                 | **0.86x**             |
+| Mount memory                     | 2.75x                | 1.00x                 | **0.86x**             |
 | Mount UI-thread CPU per op       | 1.39x                | 1.00x                 | **0.87x**             |
 | Mount wall time (`mounted`)      | 1.13x                | 1.00x                 | **0.97x**             |
 | Mount JS CPU per op              | 0.73x                | 1.00x                 | 1.18x                 |
