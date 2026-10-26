@@ -357,8 +357,8 @@ cells are noise-flagged and carry no verdict (review S5).
 * **Two device runs dropped a connection, and both are recorded rather than quietly rerun.** The
   Android `Host|MountChurn` gate lost its app bridge mid-suite in one attempt where the harness
   could not take Metro 8293 — a Metro left running by an earlier step of this task held the port, so
-  the harness ran the suite on 8294. With 8293 free the same gate passed twice (3 suites / 47), and
-  the run in Gates is one of those. Nothing refuses a port fallback while the wall-clock gates are
+  the harness ran the suite on 8294. With 8293 free the same gate passed (3 suites / 47), and the
+  run in Gates is that one. Nothing refuses a port fallback while the wall-clock gates are
   off, so a fallback run simply does not count as a gate result here. Separately, one iOS full run
   failed `reports a hosted drag through all three callbacks` on its first `log.sliders` lookup, in a
   test body no fix-round commit touched; the fix round's full iOS run passed it, and no cause is
