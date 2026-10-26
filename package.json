@@ -55,6 +55,8 @@
     "test:native:android": "bash scripts/native-tests-android.sh",
     "test:real-input:ios": "node scripts/real-input/ios.mjs",
     "test:real-input:android": "node scripts/real-input/android.mjs",
+    "build:app": "node scripts/build-app.mjs",
+    "lease": "node scripts/lease.mjs",
     "publint": "publint --strict",
     "manifest:check": "node scripts/package-files.mjs",
     "manifest:update": "node scripts/package-files.mjs --update",
@@ -236,6 +238,7 @@
   },
   "sideEffects": false,
   "patchedDependencies": {
-    "@react-native-harness/platform-apple@1.6.0": "patches/@react-native-harness%2Fplatform-apple@1.6.0.patch"
+    "@react-native-harness/platform-apple@1.6.0": "patches/@react-native-harness%2Fplatform-apple@1.6.0.patch",
+    "@react-native-harness/platform-android@1.6.0": "patches/@react-native-harness%2Fplatform-android@1.6.0.patch"
   }
 }

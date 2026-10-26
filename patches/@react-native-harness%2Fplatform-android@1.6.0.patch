@@ -1,0 +1,26 @@
+diff --git a/dist/emulator-startup.js b/dist/emulator-startup.js
+index 33621b6ae4025988e08d0618c27ccf7490341d61..bdc442bd4282062e1105a27a5e267337e3c3f5cb 100644
+--- a/dist/emulator-startup.js
++++ b/dist/emulator-startup.js
+@@ -26,7 +26,20 @@ export const getEmulatorStartupArgs = (name, mode) => {
+         : mode === 'snapshot-reuse'
+             ? ['-no-snapshot-save']
+             : ['-no-snapshot-load', '-no-snapshot-save'];
+-    return [`@${name}`, ...modeArgs, ...COMMON_EMULATOR_ARGS];
++    // nitro-ui patch: boot on the console port the caller was assigned.
++    // Several tasks share one machine, each with its own AVD, its own private
++    // adb server and a device the person owns that must never be used. Without
++    // `-port` the emulator takes the lowest free console port, so a leased AVD
++    // can land on a serial another task was told not to touch, and the serial
++    // the lease exported (`emulator-5574`) is not the one that exists. When
++    // EMULATOR_PORT is set, the emulator either gets that port or fails to
++    // start - which is the answer a lease needs. Drop this patch once
++    // react-native-harness accepts a port.
++    const port = process.env.EMULATOR_PORT ?? '';
++    const portArgs = /^\d+$/.test(port) && Number(port) % 2 === 0 && Number(port) >= 5554 && Number(port) <= 5682
++        ? ['-port', port]
++        : [];
++    return [`@${name}`, ...portArgs, ...modeArgs, ...COMMON_EMULATOR_ARGS];
+ };
+ /**
+  * Parses the output of `emulator -accel-check` to determine whether
