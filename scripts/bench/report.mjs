@@ -35,6 +35,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { formatCommittedJsonFile } from './format.mjs';
+
 import {
   SCHEMA_VERSION,
   baselineBlockers,
@@ -104,7 +106,11 @@ export function writeBaseline(file, run, { force = false } = {}) {
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(buildBaseline(run), null, 2)}\n`);
-  return { written: true, blockers: [], file };
+  // The baseline is a committed file, and `bun run format` checks committed
+  // files - so the mint formats what it wrote instead of leaving a formatting
+  // diff for whoever commits it (A1b follow-up).
+  const { note } = formatCommittedJsonFile(file);
+  return { written: true, blockers: [], file, formatted: note == null, note };
 }
 
 export function writeReportFiles({ run, markdown, fileName }) {
@@ -194,7 +200,8 @@ if (
     });
     if (outcome.written) {
       process.stdout.write(
-        `\nWrote baseline ${path.relative(REPO_ROOT, file)}\n`
+        `\nWrote baseline ${path.relative(REPO_ROOT, file)}\n` +
+          (outcome.note == null ? '' : `  ${outcome.note}\n`)
       );
     } else {
       process.stderr.write(

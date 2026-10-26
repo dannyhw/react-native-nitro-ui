@@ -35,11 +35,15 @@ timer "npm-install" "$START"
 
 if [ "$PLATFORM" != android ]; then
   START=$(date +%s)
-  # The RN template ships a Gemfile that pins CocoaPods - use it when present.
+  # The RN template ships a Gemfile that pins CocoaPods - keep using it when
+  # present (COCOAPODS_BIN), and go through the repo's one pod entry point either
+  # way so both paths pick a CocoaPods deliberately and say which.
   if [ -f "$APP/ios/Gemfile" ]; then
-    ( cd "$APP/ios" && bundle install && bundle exec pod install )
+    ( cd "$APP/ios" && bundle install )
+    ( cd "$APP/ios" && COCOAPODS_BIN='bundle exec pod' \
+        node "$SMOKE_ROOT/scripts/pod-install.mjs" --dir "$APP/ios" )
   else
-    ( cd "$APP/ios" && pod install )
+    node "$SMOKE_ROOT/scripts/pod-install.mjs" --dir "$APP/ios"
   fi
   timer "pod-install" "$START"
 
