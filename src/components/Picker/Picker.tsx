@@ -126,6 +126,13 @@ export interface PickerProps extends ViewProps {
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
         nuiTestSelect(index: number): void;
+        /**
+         * Test-only popup witness (H2b): `expanded=...;live=...;anchor=...;` +
+         * `menu=...;rows=...`. Android measures it; iOS answers `-1` in every field,
+         * because a SwiftUI `Picker` keeps its menu in the system's own presentation.
+         * `@internal` (D14) - see `NitroUiPickerHandle`.
+         */
+        nuiTestMenuReport(): string;
       }) => void)
     | undefined;
   /**

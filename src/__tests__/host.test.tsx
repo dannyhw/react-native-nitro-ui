@@ -20,6 +20,10 @@ import {
   HOSTABLE_NAMES,
 } from '../components/Host/HostChildren';
 import { Picker } from '../components/Picker/Picker';
+import {
+  HOSTABLE_CONTROLS,
+  UNHOSTABLE_CONTROLS,
+} from '../components/Host/HostChildren';
 import { Switch } from '../components/Switch/Switch';
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
 
@@ -184,19 +188,53 @@ describe('Host children', () => {
     expect(error?.message).toMatch(/Move it outside/);
   });
 
+  /**
+   * H2b hosted the last three controls, so **no control the library ships is refused
+   * for being what it is** any more. The refusal sentence for a nitro-ui control that
+   * has not been measured inside a Host is still the rule the *next* control meets
+   * (`UNHOSTABLE_CONTROLS` is where a Menu or a TextField starts), so it is proved
+   * here the only way it can be: by putting a stand-in in the table, asking the check,
+   * and taking the stand-in back out. A row that was never exercised is a row that can
+   * rot, and this is the difference between a rule and a comment.
+   */
   it('names a control the Host does not render yet', () => {
-    // H2a hosted Slider/Progress/Button, so the refused case has to be asked of a
-    // control that is still refused - and the same sentence is the one that has to
-    // keep working when the next control joins the table.
-    const error = errorFor(
-      <Picker options={['a', 'b']} selectedIndex={0} onChange={() => {}} />
-    );
-    expect(error).not.toBeNull();
-    expect(error?.message).toMatch(/<Picker>/);
-    // "nitro-ui's", so the sentence says whose control it is before saying what
-    // is wrong with it - `Switch` and `Picker` exist in more than one library.
-    expect(error?.message).toMatch(/react-native-nitro-ui's <Picker>/);
+    expect(UNHOSTABLE_CONTROLS.size).toBe(0);
+    // The allowlist is consulted first, so a control cannot be refused while it is
+    // still on it - which is the right order (a table cannot take back a permission
+    // the other table granted). To ask the sentence the question the next control
+    // will get, move `Picker` across for the length of the check.
+    UNHOSTABLE_CONTROLS.set(Picker, 'Picker');
+    HOSTABLE_CONTROLS.delete(Picker);
+    try {
+      const error = errorFor(
+        <Picker options={['a', 'b']} selectedIndex={0} onChange={() => {}} />
+      );
+      expect(error).not.toBeNull();
+      expect(error?.message).toMatch(/<Picker>/);
+      // "nitro-ui's", so the sentence says whose control it is before saying what
+      // is wrong with it - `Switch` and `Picker` exist in more than one library.
+      expect(error?.message).toMatch(/react-native-nitro-ui's <Picker>/);
+    } finally {
+      UNHOSTABLE_CONTROLS.delete(Picker);
+      HOSTABLE_CONTROLS.set(Picker, 'Picker');
+    }
+    expect(errorFor(createElement(Picker as never))).toBeNull();
   });
+
+  /**
+   * All seven shipped controls are accepted, by identity. The `Picker` row is H2b's:
+   * a control whose menu is a window of its own is accepted because the composition
+   * that opens the window is the one that closes it, which is what the device suite
+   * for the hosted popup measures.
+   */
+  it.each(['SegmentedControl', 'Picker', 'DatePicker'] as const)(
+    'accepts the control H2b hosted: <%s>',
+    (name) => {
+      const Control = (lib as Record<string, unknown>)[name];
+      expect(typeof Control).toBe('function');
+      expect(errorFor(createElement(Control as never))).toBeNull();
+    }
+  );
 
   /**
    * The controls H2a put on the allowlist must be accepted by *identity*, not by a
@@ -204,7 +242,7 @@ describe('Host children', () => {
    * because RN's own Slider/Button/Progress carry the same names.
    */
   it.each(['Slider', 'Progress', 'Button', 'Switch'] as const)(
-    'accepts its own <%s>',
+    'accepts its own <%s> (H1/H2a rows)',
     (name) => {
       const Control = (lib as Record<string, unknown>)[name];
       expect(typeof Control).toBe('function');
