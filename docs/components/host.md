@@ -32,20 +32,24 @@ library gates on — every number below is the launch-paired ratio to
 
 |                                  | `nitro-ui` (no Host) | `expo-ui-shared-host` | `nitro-ui` + `<Host>` |
 | -------------------------------- | -------------------- | --------------------- | --------------------- |
-| Mount memory                     | 2.68x                | 1.00x                 | **0.85x**             |
-| Mount UI-thread CPU per op       | 1.38x                | 1.00x                 | **0.81x**             |
-| Mount wall time (`mounted`)      | 1.17x                | 1.00x                 | **0.98x**             |
-| Mount JS CPU per op              | 0.78x                | 1.00x                 | 1.26x                 |
+| Mount memory                     | 2.63x                | 1.00x                 | **0.86x**             |
+| Mount UI-thread CPU per op       | 1.39x                | 1.00x                 | **0.87x**             |
+| Mount wall time (`mounted`)      | 1.13x                | 1.00x                 | **0.97x**             |
+| Mount JS CPU per op              | 0.73x                | 1.00x                 | 1.18x                 |
+| Unmount UI-thread CPU per op     | 1.31x                | 1.00x                 | **0.78x**             |
 
-T16's spike measured 0.87x and 0.80x the same way, so the container that ships
-reproduces the container that was proposed.
+Two runs of this library say the same thing: T16's spike measured 0.87x and 0.80x, and
+the container that ships measures 0.86x and 0.87x. The unmount column is the one that
+changed between H1's own runs, and it changed because round 1 was measuring a leak —
+nothing was being disposed, so unmount looked 0.25x. With the composition released it is
+0.78x (16% launch spread, so a number to read rather than a verdict).
 
 What it pays with is the JS thread: a hosted control is still a React Native node
 **and** a child of somebody else's composition, so the JS column goes the other way —
-1.26x the shared host, where the unhosted control is *below* it at 0.78x. (The spike
-was 1.10x: the productionised container does more bookkeeping per child, and closing
-that is a follow-up.) That cost is why `Host` is a component an app chooses for a dense
-list, and not what every container does by default.
+1.18x the shared host, where the unhosted control is *below* it at 0.73x. (The spike
+measured 1.10x and H1's first run 1.26x; read this column as roughly 1.2x and re-measure
+it rather than trusting one run.) That cost is why `Host` is a component an app chooses
+for a dense list, and not what every container does by default.
 
 ## API
 
