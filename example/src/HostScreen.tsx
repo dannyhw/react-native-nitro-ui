@@ -18,8 +18,8 @@ import { Host, Switch } from 'react-native-nitro-ui';
  * A Host gives its children **one** Compose composition instead of one each, and that
  * is the only thing this screen demonstrates: the same controls, batched and not
  * batched, on one screen, so the difference is something a person can toggle and feel
- * rather than a number in a report. `Host` is opt-in and Android-only today (iOS is a
- * documented passthrough while T17 runs), so nothing here is hidden.
+ * rather than a number in a report. `Host` is opt-in and Android-only - iOS is the
+ * documented passthrough, permanently (D23's outcome) - so nothing here is hidden.
  *
  * It is also the screen the real-input suite taps: `host-switch-*` carries an
  * accessibility label and the two `host-*` texts are the echoes it reads, so those

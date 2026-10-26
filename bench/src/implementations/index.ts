@@ -55,10 +55,11 @@ export const implementations: BenchImplementation[] = [
     enablePerfMarks: enableNitroUiPerfMarks,
     drainPerfMarks: drainNitroUiPerfMarks,
   },
-  // T16 spike: the same library's Switches inside one shared `<Host>`, so one Compose
-  // composition for the batch instead of one per control. Not gated (it is not the
-  // shipping arm) and Switch-only, which `components` makes visible in the report
-  // rather than silently measuring an empty tree on another component's cell.
+  // The same library's Switches inside one shared `<Host>`, so one Compose
+  // composition for the batch instead of one per control (H1). Switch-only, which
+  // `components` makes visible in the report rather than silently measuring an empty
+  // tree on another component's cell. This arm is where D24's numbers come from, and
+  // it is gated: a regression here is a regression in what apps ship.
   {
     name: 'nitro-ui-host',
     available: true,

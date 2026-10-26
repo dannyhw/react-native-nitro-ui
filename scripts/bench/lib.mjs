@@ -129,8 +129,9 @@ export const ARMS_WITHOUT_COMPONENT = [
  * (T16, productionised by H1) composes Switches and throws for anything else, so
  * any other cell is a launch that would render nothing and still report a
  * plausible mount time for zero controls; and on iOS `<Host>` is the documented
- * passthrough (T17 spikes an iOS one), so a cell there would price "nitro-ui plus
- * one extra `View`" under a name that promises a shared composition.
+ * passthrough - permanently, since T17 measured an iOS Host and D23's outcome was not
+ * to ship one - so a cell there would price "nitro-ui plus one extra `View`" under a
+ * name that promises a shared composition.
  *
  * The component scope is a property of the arm, so it applies whether or not the
  * caller named a platform; the platform scope only applies when one is named.

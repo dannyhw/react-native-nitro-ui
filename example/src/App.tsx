@@ -68,8 +68,8 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'segmented', label: 'Segments' },
   { id: 'datepicker', label: 'Dates' },
   { id: 'picker', label: 'Picker' },
-  // T16 spike only: the shared-`<Host>` screen, whose evidence is a real-input tap
-  // rather than a harness suite (iOS is not built on this branch).
+  // The shared-`<Host>` screen: real-input taps it (iOS included, where `Host` is the
+  // passthrough) and `Host.harness.tsx` measures it. `Host` composes on Android only.
   { id: 'host', label: 'Host' },
 ];
 
