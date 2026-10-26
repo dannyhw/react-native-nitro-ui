@@ -8,6 +8,19 @@ all simulators; the human's `emulator-5560` emulator exited the same minute; cau
 `softwareupdate --list` shows no pending update). Everything below is on disk; uncommitted work in
 worktrees survives a restart. Agent sessions do **not** survive — re-delegate with this context.
 
+## Moving the orchestrator to another machine
+
+Planned: the orchestrator moves to a second Mac once nothing is in flight (H2b, X6, X2 merged).
+
+1. On the new machine, `git clone` the repo to `~/Developer/oss/nitro-ui` and run `bun install`,
+   then `node scripts/doctor.mjs` until it shows 0 failing. Then run `node scripts/doctor.mjs --setup`
+   and set `NITRO_UI_MACHINE_LABEL=maintainer-mac-2`.
+2. Start the orchestrator session there with `docs/tasks/ORCHESTRATOR.md`, this file and `STATUS.md`.
+   Worktrees, leases and `devices.json` are per machine. Re-create worktrees from the pushed
+   branches, never by copying them.
+3. First device job there: mint that machine's bench baselines (`--exclusive`, idle, overnight).
+   This machine's baselines don't apply there.
+
 ## main (`~/Developer/oss/nitro-ui`)
 
 Merged and green: T01, T02, T03, T10, T11, T12, T13 (report only), T14, T15, T15b, FIX1, FIX2,
