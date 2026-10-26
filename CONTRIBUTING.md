@@ -168,7 +168,7 @@ with a reason when it refuses. It hands out `IOS_SIM_UDID`, `IOS_SIM`,
 which are the variables `example/rn-harness.config.mjs` and the real-input scripts
 already read, so a task stops naming devices and starts by leasing them.
 
-Three rules are enforced rather than written down:
+Four rules are enforced rather than written down:
 
 - at most **2 device leases** at a time (a third is refused: two device tasks is
   what one machine does without load turning duration gates red, D21);
@@ -177,6 +177,11 @@ Three rules are enforced rather than written down:
 - the emulator serial **`emulator-5560` can never be leased**, because an `adb`
   command without `-s` reaches it. A pool that contains it is refused when it is
   read, so the mistake is a config error rather than a borrowed device.
+- the emulator **boots on the port behind the serial** it was handed: the
+  harness passes `-port $EMULATOR_PORT`, so a leased AVD cannot come up as some
+  other console. A run whose `ANDROID_SERIAL` disagrees with its `EMULATOR_PORT`,
+  or which names the reserved serial, is refused by the harness config and by
+  real-input before anything is installed on a device.
 
 The pool is one file per machine, because UDIDs, AVD names and ports do not
 travel between machines. Copy `scripts/devices.example.json` and edit it:
