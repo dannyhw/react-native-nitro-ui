@@ -150,7 +150,8 @@ function collectMachine(platform, device, load) {
   const loadavg = os.loadavg();
   const cpuCount = os.cpus().length;
   const machine = {
-    hostname: os.hostname(),
+    // A label, not os.hostname(): results and baselines are committed to a public repo (D25).
+    hostname: process.env.NITRO_UI_MACHINE_LABEL ?? 'unlabelled',
     osPlatform: os.platform(),
     osRelease: os.release(),
     osVersion: os.version(),
