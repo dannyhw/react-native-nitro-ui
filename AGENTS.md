@@ -21,7 +21,7 @@ Background (read the sections your brief points to):
 
 ## Environment
 
-- macOS, Xcode 27, bun 1.4 (package manager for this repo), node 26, Java 17, CocoaPods 1.17.
+- macOS, Xcode 27, bun 1.4 (package manager for this repo), Node 24 (`.nvmrc`; use `fnm exec --using 24 --`), Java 17, CocoaPods 1.17.
 - `export ANDROID_HOME=$HOME/Library/Android/sdk; export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH`
 - Devices: use ONLY the simulator UDID / AVD assigned in your brief. Never shut down, wipe or
   kill devices you did not start. **Never touch the `emulator-5560` emulator —
