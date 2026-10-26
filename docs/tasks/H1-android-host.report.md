@@ -12,18 +12,23 @@ it cannot compose. `Switch` is the hosted control; every other control and every
 Native view is a dev-time throw, on both platforms, so the rule is not learned later on the
 platform that was not tested (D23).
 
-- **Device numbers reproduce the spike.** 200 hosted Switches cost **0.85×** `expo-ui-shared-host`
-  on mount memory and **0.81×** on mount UI CPU per op, where the same Switches unhosted cost
-  2.68× and 1.38× — from one clean run (`problems: none`, sampled load median 2.99).
+- **Device numbers reproduce the spike.** 200 hosted Switches cost **0.86×** `expo-ui-shared-host`
+  on mount memory (44.5 KiB against 51.9 KiB) and **0.87×** on mount UI CPU per op, where the
+  same Switches unhosted cost 2.75× and 1.39× — from one clean run (`problems: none`, sampled
+  load median 2.96). Fix round 1's numbers, from the run with the leak in it gone; round 1's
+  0.85× / 0.81× and its flattering 0.25× unmount are in the review.
 - **It pays on the JS thread, and now for more than the spike did**: mount JS CPU per op is
-  **1.26×** the shared host against the spike's 1.10×. Reported, not smoothed (follow-up 1).
+  **1.18×** the shared host against the spike's 1.10×, where round 1 measured 1.26×. The spread
+  between runs of the same code is that wide, so it is stated as *roughly 1.2×* and worth
+  re-measuring (follow-up 1).
 - **Placement was a real defect and is fixed.** T16's host centred its content in the box RN
   gave it, which is right for one control and wrong for a container: a Host 60 tall holding
   three Switches put the *second* row under a finger at the top of the box. Children now start
   at the top-leading edge, clipped at the bottom.
 - **D24 is what the device said, not what the design assumed** (see Decisions).
-- **iOS is a documented passthrough** while T17 runs, and it is a tested one: the iOS suite
-  exercises the same JSX, the same child rule and the real-input path.
+- **iOS is a documented passthrough, permanently** (D23's T17 outcome: the iOS Host measured
+  worse and is not built). It is a tested passthrough: the iOS suite exercises the same JSX, the
+  same child rule and the real-input path.
 
 ## D24 — what a hosted control's box is
 
@@ -46,7 +51,7 @@ What each clause is measured against (`example/__tests__/Host.harness.tsx`, Andr
 | Eight hosted Switches, cache invalidated | reports **0**, cache entries **0**, corrections **0** |
 | The same eight unhosted | reports **16**, cache entries **1** |
 | `measurements`, hosted vs unhosted | **8 and 8** — Yoga still asks, the engine answers from cache/fallback |
-| A hosted child's own Android view | found by `testID`, and **0 × 0**: it is `GONE` while the Host draws |
+| A hosted child's own Android view | found by `testID`, and **0 × 0**: laid out at zero inside the Host, because the Host draws it — not `GONE`, which Fabric re-asserts away each layout (fix round S1) |
 
 Three things the spike's design assumed and the device did not agree with:
 
@@ -67,11 +72,16 @@ Three things the spike's design assumed and the device did not agree with:
 
 ## Ratio table
 
-One run: `bun bench --platform android --plan quick`, all five arms, 4 launches × 5 warmup +
-20 measured iterations, `System.nanoTime`, ART `speed-profile` (primed in 1 attempt), device key
-`android35-emu-pixel9`, **sampled 418× → median 2.99 / p90 3.97 / max 9.66, 1.2 % over 7.0,
-`problems: none`**, duration 2794 s. Results file
-`bench/results/94e3fad-android-20261026T073843Z.json`. Ratios are the runner's own
+One run, taken after the M1 fix: `bun bench --platform android --plan quick`, all five arms, 4
+launches × 5 warmup + 20 measured iterations, `System.nanoTime`, ART `speed-profile` (primed in 1
+attempt), device key `android35-emu-pixel9`, **sampled 418× → median 2.96 / p90 5.27 / max 13.98,
+4.3 % over 7.0, `problems: none`**, `load1` 2.54 over 14 cores at start, `quiet: yes`, duration
+2795 s. Results file `bench/results/68a660b-android-20261026T095335Z.json`.
+
+Round 1's table (from `94e3fad-android-20261026T073843Z.json`) is superseded rather than wrong: it
+measured a Host that never ran `drop()` on unmount, so its unmount column (0.25×) was a container
+that did not unmount at all, and its memory and mount-UI columns were flattered by the same
+retained work. Everything below is one run of the code that ships. Ratios are the runner's own
 launch-paired `pairedLaunchRatios()` (D9) via `bench/tools/arm-ratios.mjs --arm=…`; the
 parenthesised number is that ratio's launch spread, and **ᴺ** marks a spread over 10 %
 (`NOISE_REL_SPREAD`) — reported, no verdict. Bold = ≤ 1.0× **and** a verdict.
@@ -80,52 +90,58 @@ parenthesised number is that ratio's launch spread, and **ᴺ** marks a spread o
 
 | Arm | presented | mounted | JS commit | JS CPU/op | UI CPU/op | UI CPU/unmount |
 | --- | --- | --- | --- | --- | --- | --- |
-| `rn-core` | 32.38 ms | 22.71 ms | 2.48 ms | 2.98 ms | 8.95 ms | — |
-| `expo-ui-host-per-control` | 33.04 ms | 25.27 ms | 7.52 ms | 8.19 ms | 15.36 ms | — |
-| `expo-ui-shared-host` | 32.04 ms | 20.99 ms | 2.35 ms | 3.29 ms | 7.60 ms | — |
-| `nitro-ui` | 32.29 ms | 24.56 ms | 2.02 ms | 2.48 ms | 10.85 ms | 0.79 ms |
-| `nitro-ui-host` | 31.89 ms | 20.47 ms | 3.35 ms | 4.03 ms | 6.19 ms | 0.15 ms |
+| `rn-core` | 32.15 ms | 22.13 ms | 2.67 ms | 3.00 ms | 8.56 ms | 0.33 ms |
+| `expo-ui-host-per-control` | 33.04 ms | 25.15 ms | 8.58 ms | 8.89 ms | 15.53 ms | 0.86 ms |
+| `expo-ui-shared-host` | 32.13 ms | 21.21 ms | 2.86 ms | 3.51 ms | 7.45 ms | 0.58 ms |
+| `nitro-ui` | 32.46 ms | 24.36 ms | 1.92 ms | 2.55 ms | 10.45 ms | 0.71 ms |
+| `nitro-ui-host` | 31.66 ms | 20.61 ms | 3.60 ms | 3.92 ms | 6.53 ms | 0.37 ms |
 
 ### Switch — launch-paired ratios to `expo-ui-shared-host` (the D15 question)
 
 | Cell | Arm | presented | mounted | JS commit | JS CPU/op | UI CPU/op | memory (N=200) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| mount | `nitro-ui` (today) | 1.02x(1%) | 1.17x(1%) | 0.78x(16%)ᴺ | 0.78x(4%) | 1.38x(3%) | 2.68x(1%) |
-| mount | `nitro-ui-host` | 1.00x(1%) | **0.98x**(3%) | 1.27x(9%) | 1.26x(3%) | **0.81x**(3%) | **0.85x**(1%) |
-| update | `nitro-ui` | 0.98x(1%) | 1.00x(1%) | 1.06x(19%)ᴺ | 0.98x(18%)ᴺ | 1.32x(10%) | — |
-| update | `nitro-ui-host` | 1.00x(18%)ᴺ | **0.95x**(3%) | 1.22x(25%)ᴺ | 1.19x(19%)ᴺ | 0.96x(24%)ᴺ | — |
+| mount | `nitro-ui` (today) | 1.01x(2%) | 1.13x(2%) | **0.64x**(4%) | **0.73x**(6%) | 1.39x(4%) | 2.75x(1%) |
+| mount | `nitro-ui-host` | **0.99x**(1%) | **0.97x**(5%) | 1.18x(8%) | 1.18x(4%) | **0.87x**(2%) | **0.86x**(1%) |
+| update | `nitro-ui` | 0.80x(21%)ᴺ | **0.98x**(2%) | 0.76x(17%)ᴺ | 0.80x(14%)ᴺ | 1.12x(21%)ᴺ | — |
+| update | `nitro-ui-host` | 0.98x(18%)ᴺ | **0.95x**(3%) | 1.27x(31%)ᴺ | 1.16x(22%)ᴺ | 0.82x(28%)ᴺ | — |
 
-`nitro-ui-host` vs `nitro-ui`, same run: memory **0.32×**, mount UI CPU **0.59×**, mounted
-**0.83×**, mount JS CPU **1.62×**, UI CPU/unmount 0.22×.
+The unmount column is a first for the Host: **0.78x(16%)** the shared host (0.37 ms against
+0.58 ms), and the first unmount number this task can quote, because it is the first run where a
+Host unmount was the work of disposing a composition rather than the work of not doing it.
+
+`nitro-ui-host` vs `nitro-ui`, same run: memory **0.31×**, mount UI CPU **0.61×**, mounted
+**0.83×**, mount JS CPU **1.54×**, UI CPU/unmount 0.50×.
 
 ### memory N=200 — bytes per instance
 
 | Arm | bytes/inst | ÷ `expo-ui-shared-host` |
 | --- | --- | --- |
-| `rn-core` | 54.1 KiB | n/a — see below |
-| `expo-ui-host-per-control` | 177.2 KiB | 3.44x(4%) |
-| `expo-ui-shared-host` | 53.3 KiB | — |
-| `nitro-ui` (today) | 142.9 KiB | 2.68x(1%) |
-| `nitro-ui-host` | **45.3 KiB** | **0.85x**(1%) |
+| `rn-core` | 54.6 KiB | n/a — see below |
+| `expo-ui-host-per-control` | 188.8 KiB | 3.63x(6%) |
+| `expo-ui-shared-host` | 51.9 KiB | — |
+| `nitro-ui` (today) | 143.5 KiB | 2.75x(1%) |
+| `nitro-ui-host` | **44.5 KiB** | **0.86x**(1%) |
 
 Only printed ratios go in that column: `arm-ratios.mjs` pairs launches and prints a row per
 numerator, and it prints no memory row with `rn-core` as numerator. Read the other way round
-(`--arm=expo-ui-shared-host`), the same run puts the shared host at **0.98×(0%)** `rn-core` and
-**0.29×(4%)** `expo-ui-host-per-control` — the denominator sits where the 0.1 reports say it
+(`--arm=expo-ui-shared-host`), the same run puts the shared host at **0.95×(1%)** `rn-core` and
+**0.28×(6%)** `expo-ui-host-per-control` — the denominator sits where the 0.1 reports say it
 sits.
 
-Against T16's spike, cell for cell: memory 0.87× → **0.85×**, mount UI CPU 0.80× → **0.81×**,
-mounted 0.96× → **0.98×**, presented 0.99× → **1.00×**, mount JS CPU/op 1.10× → **1.26×**,
-JS commit 1.21× → **1.27×**. The native side reproduces; the JS side got 0.16× more expensive,
-which is the one number in this report that moved the wrong way (follow-up 1).
+Against T16's spike, cell for cell: memory 0.87× → **0.86×**, mount UI CPU 0.80× → **0.87×**,
+mounted 0.96× → **0.97×**, presented 0.99× → **0.99×**, mount JS CPU/op 1.10× → **1.18×**,
+JS commit 1.21× → **1.18×**. The native side reproduces. The JS side is roughly 1.2× and has moved
+in both directions between three runs of near-identical code (1.26× → 1.18× against a 1.10×
+spike), which is why `README.md`, `host.md` and `HostProps` all state it with that spread rather
+than as a single figure (follow-up 1).
 
 Two honesty notes on this run:
 
-- The `update` cells for `nitro-ui-host` all have launch spreads over 10 %, so none of them is
-  a pass — they are measurements. The `mount` cells are all ≤ 9 %.
-- The quick plan's `--component=switch` filter did not restrict the run: it measured all 21
-  cells × 5 arms (that is what the 2794 s bought). The Switch rows above are the plan's
-  unnamed cells. The extra components' arms are in the results file and are untouched by H1.
+- Every `mount` cell for `nitro-ui-host` has a launch spread ≤ 8 %, so those are verdicts. The
+  `update` cells all carry spreads over 10 % except `mounted` (3 %), so they are measurements.
+- The quick plan's `--component=switch` filter did not restrict the run again: it measured all 21
+  cells × 5 arms (that is what the 2795 s bought). The Switch rows above are the plan's unnamed
+  cells. The extra components' arms are in the results file and are untouched by H1.
 
 ## Gates
 
@@ -154,8 +170,8 @@ Two gate stories that are not just numbers:
   rather than removing the assertion"*, which is exactly the behaviour that gate is for. With
   that Metro stopped, all five went green unaided.
 - **The sixth was H1's bug.** `finds a hosted child by testID` asserted the child's box is
-  `0 × 0` on both platforms. That claim is Android's — the view is `GONE` because the Host draws
-  it — and on iOS the passthrough gives the child a real view, so the suite found a real box
+  `0 × 0` on both platforms. That claim is Android's — the child is laid out at zero because the
+  Host draws it — and on iOS the passthrough gives the child a real view, so the suite found a real box
   (expected 0, got 61) and was right to. The test now asserts what each platform owes: `0 × 0`
   on Android, a laid-out non-zero box on iOS, with the exact box left to the passthrough suite
   so nothing is measured twice. Android re-run: 14/14.
@@ -201,8 +217,9 @@ owns, iOS asserts a laid-out child.
 - **Android** — `android/.../core/NitroUiHost.kt` (the host view), `NitroComposeHost.kt`
   (`centersContent`, the hosted-child measure path), `HybridNitroUiHost.kt`,
   `NitroUiHostViewManager.kt`, `NitroUiPackage.kt`.
-- **iOS** — `ios/components/Host/HybridNitroUiHost.swift` and the generated spec: a
-  passthrough that still enforces the same child rule.
+- **iOS** — `ios/components/Host/HybridNitroUiHost.swift` and the generated spec: a no-op
+  passthrough. The child rule it appears to enforce is held in JS (`HostChildren.ts`), which is
+  why the same JSX is refused on both platforms; the Swift class itself is never instantiated.
 - **Bench** — `bench/src/implementations/nitroUi.tsx` (`nitro-ui-host` arm), `bench/src/plan.ts`,
   `bench/src/types.ts`, `scripts/bench/lib.mjs` (per-cell arm scopes), `bench/tools/arm-ratios.mjs`
   (`--arm`).
@@ -275,28 +292,44 @@ by symbol count (`NitroUiExample.debug.dylib`, 737 `nitroui` symbols, including
    side of the hosted path (child bookkeeping per render, the `key(child)` scope) before a second
    component is hosted.
 2. Hosted churn is Android-only by `MountChurn.harness.tsx`'s own convention (the iOS side
-   reports a pending test); worth an iOS twin when T17 lands a real composition.
+   reports a pending test). Not worth an iOS twin: T17's outcome says no iOS composition is coming,
+   so the iOS passthrough has no Host lifecycle to churn.
 3. Our Android control publishes no toggle role or state to accessibility — `checkable=false`,
    `checked=false`, hosted *and* unhosted — so TalkBack reads the label and says nothing about
    on/off. A `Switch` semantics item, not a Host one.
-4. A `<Host>` inside a `<Host>` is not refused; it composes as a child of the outer Host. Ask
-   whether that is a supported thing to do.
+4. A `<Host>` inside a `<Host>`: round 1 composed it silently. Answered in the review —
+   refused — and it is now refused on both sides (`HostChildren.ts` table, and `isHostable` is
+   false for `NitroUiHostView`). See the fix-round section.
 5. `bun bench --component=switch` did not restrict the quick plan (all 21 cells ran).
 6. `SafeAreaView` deprecation warnings in the example app, unrelated to H1.
+7. N4 from the review: a hosted child still arms a `DisposeOnLifecycleDestroyed` observer and a
+   first-frame pre-draw listener at attach, for a composition it never builds. 200 children means
+   200 pairs of registrations per batch. Real, small, and measurable in the mount cell.
+8. N5 from the review: the Host keys children by `View` identity. Correct for `Switch`; a future
+   control that implements `RecyclableView` would keep the old mount's `remember` state across a
+   recycle, and needs keying by Fabric tag instead.
+9. Two probes on this machine are load-sensitive and were left alone rather than gated (the
+   orchestrator declined load ceilings for 0.2): `Slider.harness.tsx`'s accessibility-step check
+   (`steps to the next legal value when a screen reader asks`) and
+   `real-input/ios`'s `picker` unmount budget. Both are untouched by H1; both have failed inside a
+   full suite at loads from 5 to 142 and passed every time their own file ran.
+10. N6 from the review: `pointerEvents` on a `Host` is inert, now documented with the other styles
+    that do not reach the drawing.
 
 ## Questions for orchestrator
 
-1. Top-leading placement is decided and measured (above). If T17's iOS Host inherits the same
-   rule, the two platforms agree; if it centres, `docs/components/host.md` needs a per-platform
-   caveat — flagging so T17 can decide deliberately.
-2. Is `1.26×` shared-host mount JS CPU acceptable for shipping `Host` as opt-in in 0.2 (T16's
-   condition 3 said the JS cost has to be *stated*, which it now is), or should follow-up 1 gate
-   the announcement?
-3. Nested `<Host>`: refuse it in dev like every other unhostable child, or document it as
-   "composes as a child of the outer Host"?
-4. The Slider a11y-step probe and the iOS picker unmount both flake under heavy load. Both are
-   this library's gates on a shared machine — do you want a load ceiling enforced before those
-   two specific checks, or is the re-run-alone convention good enough evidence?
+Asked in round 1; all four answered in the fix-round brief and acted on. Kept here with the answer
+so the round-1 text is not read as still open.
+
+1. *Will T17's iOS Host inherit top-leading placement?* Answered: there is no iOS Host. T17
+   measured the shape (mount UI CPU 1.40×, unmount 6.27×) and D23's rule refuses it, so iOS stays
+   the passthrough and no per-platform caveat is needed. (Q1 of the review, answered the same way.)
+2. *Is the ~1.2× shared-host mount JS CPU a gate on 0.2?* Answered: no. It does not gate 0.2, and
+   it stays stated next to the win in `README.md`, `host.md` and `HostProps` (T16 condition 3).
+3. *Nested `<Host>`?* Answered: refused. Implemented natively (`isHostable`) and in JS, with a
+   harness case.
+4. *Load ceilings for the two flaky probes?* Answered: not this round; they are recorded as
+   follow-up 9.
 
 ## Commits
 
