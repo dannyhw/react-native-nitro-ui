@@ -16,6 +16,8 @@ import {
   onValueChange,
   range,
   rowStyle,
+  pickerOptions,
+  pickerSelection,
   segmentedOptions,
 } from './shared';
 
@@ -41,6 +43,13 @@ import {
  *   Padding and background are the minimum that makes it a button rather than
  *   tappable text - RN core owns no theme, so anything richer would be this
  *   arm's decoration, not the control's.
+ * - `picker`: RN core has no picker either, so the idiomatic core equivalent is a
+ *   `Pressable` whose `Text` says which option is chosen - what a pure-JS picker
+ *   without a popup is. Also a *floor*: it owns no popup, no list, and no native
+ *   control, which is exactly the cost this arm exists to make visible. The words
+ *   (`pickerOptions`) and the chosen index (`pickerSelection`) are shared with the
+ *   other arms, so the flip paints the same new title everywhere, and the box has
+ *   to grow with it the way the hosted controls' boxes do.
  * - `segmented-control`: RN core has no segmented control either, so the
  *   idiomatic core equivalent is a row of `Pressable`s, one `Text` each - which is
  *   what a pure-JS implementation of this control is. Also a *floor*: it owns no
@@ -68,6 +77,24 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
           >
             {dateLabel(value)}
           </Text>
+        ))}
+      </>
+    );
+  }
+  if (component === 'picker') {
+    const options = pickerOptions();
+    const selection = pickerSelection(value);
+    return (
+      <>
+        {range(n).map((index) => (
+          <Pressable
+            key={index}
+            testID={`bench-rn-core-picker-${String(index)}`}
+            onPress={onPress}
+            style={[style, pickerStyles.box]}
+          >
+            <Text style={pickerStyles.label}>{options[selection]}</Text>
+          </Pressable>
         ))}
       </>
     );
@@ -184,6 +211,23 @@ const buttonStyles = StyleSheet.create({
     borderRadius: 8,
   },
   label: { color: '#FFFFFF' },
+});
+
+/**
+ * The minimum that makes the core floor read as a picker rather than a line of
+ * text: a tappable box around the chosen option. It draws no chevron and no list,
+ * because a chevron is decoration this arm invented and the list is the part the
+ * other arms actually have to build - which is what the ratio is there to show.
+ */
+const pickerStyles = StyleSheet.create({
+  box: {
+    borderWidth: 1,
+    borderColor: '#79747E',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  label: { color: '#1D1B20' },
 });
 
 /**

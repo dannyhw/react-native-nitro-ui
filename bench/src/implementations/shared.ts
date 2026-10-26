@@ -13,7 +13,10 @@ import type { ComponentName } from '../types';
  * host).
  */
 const ROW_HEIGHTS: Record<
-  Exclude<ComponentName, 'button' | 'segmented-control' | 'date-picker'>,
+  Exclude<
+    ComponentName,
+    'button' | 'segmented-control' | 'date-picker' | 'picker'
+  >,
   number
 > = {
   // RN's Switch, SwiftUI's Toggle and M3's Switch all fit; 34 is T02/T10's row.
@@ -27,24 +30,30 @@ const ROW_HEIGHTS: Record<
   progress: 44,
 };
 
-/* Button, SegmentedControl and DatePicker have no row height on purpose - see `fitRowStyle`. */
+/* Button, SegmentedControl, DatePicker and Picker have no row height on purpose
+   - see `fitRowStyle`. */
 
 /**
  * Whether a component's own measurement decides its box, so no arm may be given a
  * box to fit into.
  *
- * Button (G2) and SegmentedControl (G4) are the components whose size comes from
- * their props: a fixed height and a stretched width would each silence the
- * re-measure the `update` cell is there to price (DECISIONS D16). Switch and
- * Slider are platform-sized, so they take a row.
+ * Button (G2), SegmentedControl (G4), DatePicker (G5) and Picker (G6) are the
+ * components whose size comes from their props: a fixed height and a stretched
+ * width would each silence the re-measure the `update` cell is there to price
+ * (DECISIONS D16). A Picker
+ * included - its box is the width of the title it paints, so a `stretch` would
+ * make the `update.picker` cell price a repaint of a fixed box rather than the
+ * re-measure a consumer actually pays. Switch and Slider are platform-sized, so
+ * they take a row.
  */
 function isSizedByContent(
   component: ComponentName
-): component is 'button' | 'segmented-control' | 'date-picker' {
+): component is 'button' | 'segmented-control' | 'date-picker' | 'picker' {
   return (
     component === 'button' ||
     component === 'segmented-control' ||
-    component === 'date-picker'
+    component === 'date-picker' ||
+    component === 'picker'
   );
 }
 
@@ -275,6 +284,50 @@ export function dateLabel(value: boolean): string {
  * runtime's own change-event signature without the bench importing those types.
  */
 export function onDateChange(): void {
+  // Intentionally empty: state is driven by the runner.
+}
+
+/**
+ * The option list every Picker arm draws, in both halves of the flip.
+ *
+ * Module-level for the same reason as `segmentedOptions`: the arms must not pay a
+ * prop-identity change the others avoid. The list is *constant* here, unlike the
+ * SegmentedControl's, because a Picker's own width follows the title it paints -
+ * so the flip below moves the selection, and the selection moves the width, and
+ * folding an options change in as well would charge two transactions to one number
+ * (the reasoning behind `SEGMENTED_SELECTION`, applied to the other half).
+ */
+const PICKER_OPTIONS: string[] = [
+  'Day',
+  'Month',
+  'A considerably longer choice',
+];
+
+/** The options every Picker arm mounts. */
+export function pickerOptions(): string[] {
+  return PICKER_OPTIONS;
+}
+
+/**
+ * The selected index each arm paints, flipped by the `update.picker` cell.
+ *
+ * First option versus last option, deliberately the shortest and longest titles in
+ * the list: a Picker's measured width is its title's width, so this is the flip
+ * that makes the control re-measure (D16). Two *different* indices also means the
+ * cell changes a prop every native arm really consumes - `selectedIndex` for
+ * nitro-ui, `selection` for Expo UI's `Picker`, and the drawn text for the RN core
+ * floor - which is what keeps `update.picker` a cell that produces a transaction
+ * on every arm, including the floor.
+ */
+export function pickerSelection(value: boolean): number {
+  return value ? PICKER_OPTIONS.length - 1 : 0;
+}
+
+/**
+ * Stable no-op `onChange` for the Picker arms, for the same reason as
+ * {@link onSegmentChange}.
+ */
+export function onPickerChange(): void {
   // Intentionally empty: state is driven by the runner.
 }
 

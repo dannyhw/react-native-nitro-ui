@@ -12,6 +12,8 @@
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
 // Forward declaration of `HybridNitroUiDatePickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiDatePickerSpec; }
+// Forward declaration of `HybridNitroUiPickerSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiPickerSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec` to properly resolve imports.
@@ -24,6 +26,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
 // Forward declaration of `NitroUiDatePickerSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiDatePickerSize; }
+// Forward declaration of `NitroUiPickerSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiPickerSize; }
 // Forward declaration of `NitroUiSegmentedControlSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSegmentedControlSize; }
 // Forward declaration of `NitroUiSize` to properly resolve imports.
@@ -36,6 +40,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
 // Forward declaration of `HybridNitroUiDatePickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiDatePickerSpec_cxx; }
+// Forward declaration of `HybridNitroUiPickerSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiPickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec_cxx` to properly resolve imports.
@@ -48,12 +54,14 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 // Include C++ defined types
 #include "HybridNitroUiButtonSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
+#include "HybridNitroUiPickerSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "NitroUiButtonSize.hpp"
 #include "NitroUiDatePickerSize.hpp"
+#include "NitroUiPickerSize.hpp"
 #include "NitroUiSegmentedControlSize.hpp"
 #include "NitroUiSize.hpp"
 #include "NitroUiSliderSize.hpp"
@@ -265,6 +273,53 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<std::string>::withError(error);
   }
   
+  // pragma MARK: std::vector<std::string>
+  /**
+   * Specialized version of `std::vector<std::string>`.
+   */
+  using std__vector_std__string_ = std::vector<std::string>;
+  inline std::vector<std::string> create_std__vector_std__string_(size_t size) noexcept {
+    std::vector<std::string> vector;
+    vector.reserve(size);
+    return vector;
+  }
+  
+  // pragma MARK: std::optional<std::function<void(double /* index */, double /* eventCount */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(double / * index * /, double / * eventCount * /)>>`.
+   */
+  using std__optional_std__function_void_double____index_____double____eventCount______ = std::optional<std::function<void(double /* index */, double /* eventCount */)>>;
+  inline std::optional<std::function<void(double /* index */, double /* eventCount */)>> create_std__optional_std__function_void_double____index_____double____eventCount______(const std::function<void(double /* index */, double /* eventCount */)>& value) noexcept {
+    return std::optional<std::function<void(double /* index */, double /* eventCount */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_double____index_____double____eventCount______(const std::optional<std::function<void(double /* index */, double /* eventCount */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(double /* index */, double /* eventCount */)> get_std__optional_std__function_void_double____index_____double____eventCount______(const std::optional<std::function<void(double /* index */, double /* eventCount */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiPickerSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiPickerSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiPickerSpec_ = std::shared_ptr<HybridNitroUiPickerSpec>;
+  std::shared_ptr<HybridNitroUiPickerSpec> create_std__shared_ptr_HybridNitroUiPickerSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiPickerSpec_(std__shared_ptr_HybridNitroUiPickerSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiPickerSpec>
+  using std__weak_ptr_HybridNitroUiPickerSpec_ = std::weak_ptr<HybridNitroUiPickerSpec>;
+  inline std__weak_ptr_HybridNitroUiPickerSpec_ weakify_std__shared_ptr_HybridNitroUiPickerSpec_(const std::shared_ptr<HybridNitroUiPickerSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiPickerSize>
+  using Result_NitroUiPickerSize_ = Result<NitroUiPickerSize>;
+  inline Result_NitroUiPickerSize_ create_Result_NitroUiPickerSize_(const NitroUiPickerSize& value) noexcept {
+    return Result<NitroUiPickerSize>::withValue(value);
+  }
+  inline Result_NitroUiPickerSize_ create_Result_NitroUiPickerSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiPickerSize>::withError(error);
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNitroUiProgressSpec>
   /**
    * Specialized version of `std::shared_ptr<HybridNitroUiProgressSpec>`.
@@ -293,32 +348,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
   }
   inline Result_bool_ create_Result_bool_(const std::exception_ptr& error) noexcept {
     return Result<bool>::withError(error);
-  }
-  
-  // pragma MARK: std::vector<std::string>
-  /**
-   * Specialized version of `std::vector<std::string>`.
-   */
-  using std__vector_std__string_ = std::vector<std::string>;
-  inline std::vector<std::string> create_std__vector_std__string_(size_t size) noexcept {
-    std::vector<std::string> vector;
-    vector.reserve(size);
-    return vector;
-  }
-  
-  // pragma MARK: std::optional<std::function<void(double /* index */, double /* eventCount */)>>
-  /**
-   * Specialized version of `std::optional<std::function<void(double / * index * /, double / * eventCount * /)>>`.
-   */
-  using std__optional_std__function_void_double____index_____double____eventCount______ = std::optional<std::function<void(double /* index */, double /* eventCount */)>>;
-  inline std::optional<std::function<void(double /* index */, double /* eventCount */)>> create_std__optional_std__function_void_double____index_____double____eventCount______(const std::function<void(double /* index */, double /* eventCount */)>& value) noexcept {
-    return std::optional<std::function<void(double /* index */, double /* eventCount */)>>(value);
-  }
-  inline bool has_value_std__optional_std__function_void_double____index_____double____eventCount______(const std::optional<std::function<void(double /* index */, double /* eventCount */)>>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline std::function<void(double /* index */, double /* eventCount */)> get_std__optional_std__function_void_double____index_____double____eventCount______(const std::optional<std::function<void(double /* index */, double /* eventCount */)>>& optional) noexcept {
-    return optional.value();
   }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiSegmentedControlSpec>

@@ -2,6 +2,7 @@ import {
   Button,
   DatePicker,
   nitroUiCore,
+  Picker,
   Progress,
   SegmentedControl,
   Slider,
@@ -59,6 +60,7 @@ const SMOKE_CONTROLS = [
   'progress',
   'segmented-control',
   'date-picker',
+  'picker',
 ] as const;
 
 type SmokeControl = (typeof SMOKE_CONTROLS)[number];
@@ -235,6 +237,11 @@ export default function App(): React.ReactElement {
         <DatePicker
           onLayout={measureFor('date-picker')}
           testID="SMOKE-date-picker"
+        />
+        <Picker
+          onLayout={measureFor('picker')}
+          options={['One', 'Two', 'Three']}
+          testID="SMOKE-picker"
         />
       </ScrollView>
     </View>

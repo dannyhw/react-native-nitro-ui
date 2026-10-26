@@ -19,6 +19,7 @@ import {
 
 import type { BenchListProps } from '../types';
 import {
+  onPickerChange,
   SEGMENTED_SELECTION,
   buttonTitle,
   dateValue,
@@ -30,6 +31,8 @@ import {
   progressValue,
   range,
   rowStyle,
+  pickerOptions,
+  pickerSelection,
   segmentedOptions,
   sliderValue,
   stackStyle,
@@ -77,6 +80,15 @@ const SEGMENTED_MODIFIERS = [pickerStyle('segmented'), labelsHidden()];
  * loud rather than passing `undefined` to a control if that ever changes.
  */
 const TAG_MODIFIERS = [[tag(0)], [tag(1)], [tag(2)]];
+
+/**
+ * `.menu`, the pull-up list - the platform control nitro-ui's `variant: 'menu'`
+ * hosts, reached through Expo's bridge. `labelsHidden()` for the reason
+ * `BenchSegmented` has: a labelled SwiftUI `Picker` lays out a label `Text` that
+ * neither the floor nor the control under test draws, and inflating this arm is
+ * what T02 review B3 is about.
+ */
+const MENU_MODIFIERS = [pickerStyle('menu'), labelsHidden()];
 
 /**
  * @param {number} segment
@@ -205,6 +217,28 @@ function BenchDatePicker({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
+ * A menu `Picker` whose options are the same three labels every other arm draws,
+ * with the same one selected - so the flip paints the same new title and the box
+ * has to follow it, as it does for every other arm.
+ */
+function BenchMenuPicker({ index, value }: { index: number; value: boolean }) {
+  return (
+    <Picker
+      testID={`bench-expo-picker-${String(index)}`}
+      selection={pickerSelection(value)}
+      onSelectionChange={onPickerChange}
+      modifiers={MENU_MODIFIERS}
+    >
+      {pickerOptions().map((label, option) => (
+        <Text key={label} modifiers={tagModifiers(option)}>
+          {label}
+        </Text>
+      ))}
+    </Picker>
+  );
+}
+
+/**
  * `@expo/ui` worst case for the library: one SwiftUI hosting view per control.
  * Expo UI always needs a `Host`, so both Expo arms are required for a fair
  * comparison (docs/research/setup-decisions.md SS6).
@@ -232,6 +266,10 @@ export function ExpoUiHostPerControlList({
         ) : component === 'date-picker' ? (
           <Host key={index} matchContents style={style}>
             <BenchDatePicker index={index} value={value} />
+          </Host>
+        ) : component === 'picker' ? (
+          <Host key={index} matchContents style={style}>
+            <BenchMenuPicker index={index} value={value} />
           </Host>
         ) : component === 'slider' ? (
           <Host key={index} style={style}>
@@ -262,7 +300,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
   if (
     component === 'button' ||
     component === 'segmented-control' ||
-    component === 'date-picker'
+    component === 'date-picker' ||
+    component === 'picker'
   ) {
     // `matchContents` for the batch's host too, for the same reason as the
     // per-control arm; the switch/slider hosts stay exactly as published.
@@ -274,6 +313,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
               <BenchButton key={index} index={index} value={value} />
             ) : component === 'date-picker' ? (
               <BenchDatePicker key={index} index={index} value={value} />
+            ) : component === 'picker' ? (
+              <BenchMenuPicker key={index} index={index} value={value} />
             ) : (
               <BenchSegmented key={index} index={index} value={value} />
             )

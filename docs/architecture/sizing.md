@@ -281,7 +281,10 @@ corrects. Nothing cached survives the change to be wrong forever.
 `POLICY_INTRINSIC` — the control's intrinsic size is its size: Switch, Button, SegmentedControl.
 `POLICY_FILL_WIDTH` — width comes from the Yoga box when it is finite, height stays intrinsic:
 Slider, linear Progress, wheel Picker (`cpp/core/NitroUiSizing.hpp:28`). The control declares the
-policy when it reports; the shadow node applies it. A component whose width is decided by its parent
+policy when it reports; the shadow node applies it. The `nitro-ui.sizing.json` entry therefore only
+selects the intrinsic shadow node and names the component's *default* policy: the policy that applies
+to an instance is the one its host reports, which is how a circular Progress stays `intrinsic` under an
+entry that says `fillWidth` and a `wheel` Picker goes `fillWidth` under an entry that says `intrinsic`. A component whose width is decided by its parent
 must use `fillWidth`, or it will fight the parent for its own preferred width.
 
 The policy also changes the **question the host asks the toolkit**, which is not obvious from either side of the

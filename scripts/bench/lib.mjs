@@ -166,6 +166,9 @@ export const PLANS = {
     { scenario: 'mount.date-picker', n: 50 },
     { scenario: 'update.date-picker', n: 50 },
     { scenario: 'memory.date-picker', n: 200 },
+    { scenario: 'mount.picker', n: 50 },
+    { scenario: 'update.picker', n: 50 },
+    { scenario: 'memory.picker', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -210,6 +213,13 @@ export const PLANS = {
     { scenario: 'update.date-picker', n: 50 },
     { scenario: 'memory.date-picker', n: 200 },
     { scenario: 'leak.date-picker', n: 200 },
+    { scenario: 'mount.picker', n: 1 },
+    { scenario: 'mount.picker', n: 50 },
+    { scenario: 'mount.picker', n: 200 },
+    { scenario: 'update.picker', n: 1 },
+    { scenario: 'update.picker', n: 50 },
+    { scenario: 'memory.picker', n: 200 },
+    { scenario: 'leak.picker', n: 200 },
   ],
 };
 

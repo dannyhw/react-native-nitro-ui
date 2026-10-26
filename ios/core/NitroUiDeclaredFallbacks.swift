@@ -33,6 +33,7 @@ enum NitroUiDeclaredFallbacks {
     HybridNitroUiProgress.declareFallback()
     HybridNitroUiSegmentedControl.declareFallback()
     HybridNitroUiDatePicker.declareFallback()
+    HybridNitroUiPicker.declareFallback()
     return true
   }()
 

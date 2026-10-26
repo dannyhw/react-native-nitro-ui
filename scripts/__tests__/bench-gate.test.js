@@ -1262,10 +1262,11 @@ describe('the Button cells (--component button)', () => {
         'progress',
         'segmented-control',
         'date-picker',
+        'picker',
       ])
     );
-    // Six components in the quick plan, each with the same three cells.
-    expect(all.length).toBe(button.length * 6);
+    // Seven components in the quick plan, each with the same three cells.
+    expect(all.length).toBe(button.length * 7);
   });
 });
 
@@ -1599,6 +1600,157 @@ describe('the DatePicker cells (--component date-picker)', () => {
       platform: 'android',
     });
     expect(new Set(androidSwitch.map((entry) => entry.implementation))).toEqual(
+      new Set(IMPLEMENTATIONS)
+    );
+  });
+});
+
+/**
+ * The Picker cells (`bun bench --component picker`, task G6).
+ *
+ * The same four claims the SegmentedControl block makes, with a fourth component
+ * in the file: G6 is the first component added since the pairing rule was
+ * written against six components, and the claim that has to survive that is that
+ * a Picker arm is divided by a *Picker* control - a crossed wire would read a
+ * ratio no arm in here can produce.
+ */
+describe('the Picker cells (--component picker)', () => {
+  /**
+   * A run holding Switch, Button, SegmentedControl and Picker cells at once.
+   *
+   * Four components whose controls are deliberately far apart (`mount` 100 us,
+   * `mount.button` 200 us, `mount.segmented-control` 300 us, `mount.picker`
+   * 400 us), and every arm exactly 1.1x over the control of *its own* cell. A
+   * gate that crossed the pairing would read 4.4x or 0.25x on the Picker rows,
+   * so 1.1 is only reachable through the right one.
+   */
+  function makeMixedRun(overrides = {}) {
+    const arms = {
+      'rn-core': {},
+      'expo-ui-host-per-control': { mounted: 210_000 },
+      'expo-ui-shared-host': { mounted: 80_000 },
+      'nitro-ui': { mounted: 110_000 },
+      ...overrides,
+    };
+    const scenarios = [
+      ['mount', 1],
+      ['mount.button', 2],
+      ['mount.segmented-control', 3],
+      ['mount.picker', 4],
+    ];
+    const records = [];
+    for (const [implementation, values] of Object.entries(arms)) {
+      for (const [scenario, scale] of scenarios) {
+        const action = scenarioActionOf(scenario);
+        const suffix = scenario === action ? '' : `.${componentOf(scenario)}`;
+        records.push(
+          ...cellRecords({
+            scenario,
+            implementation,
+            mounted: (values.mounted ?? 100_000) * scale,
+            presented: (values.presented ?? 130_000) * scale,
+          })
+        );
+        if (action === 'mount') {
+          records.push(
+            ...memoryRecords({
+              scenario: `memory${suffix}`,
+              implementation,
+              ...values,
+            })
+          );
+        }
+      }
+    }
+    return {
+      platform: 'ios',
+      cells: aggregateRecords(records, { keepRaw: true }),
+    };
+  }
+
+  /** `makeMixedRun` restricted to the Picker component, as `--component picker` runs it. */
+  function makePickerRun(overrides = {}) {
+    const run = makeMixedRun(overrides);
+    const cells = Object.fromEntries(
+      Object.entries(run.cells).filter(
+        ([key, cell]) => componentOf(cell.scenario ?? key) === 'picker'
+      )
+    );
+    // A run that came back empty would make every `gate()` assertion below pass
+    // by saying nothing, so the filter itself is part of what is under test.
+    if (Object.keys(cells).length === 0) {
+      throw new Error(
+        'the component-scoped filter found no Picker cells - ' +
+          '`componentOf` is crossed, and these cases would be vacuous'
+      );
+    }
+    return { platform: 'ios', cells };
+  }
+
+  it('divides a Picker arm by the Picker control, never another control', () => {
+    const table = ratioTable(makeMixedRun());
+    // 440 us over a 400 us control - and *not* 4.4x over the Switch control or
+    // 2.2x over the Button one.
+    expect(
+      table['mount.picker:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
+    expect(table['mount.picker:rn-core:50'].metrics.mountedNs.control).toBe(
+      true
+    );
+    // The other three components keep their own pairing, so this is a fifth row
+    // joining the table rather than a row that moved the others.
+    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
+      1.1,
+      4
+    );
+    expect(
+      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
+    expect(
+      table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.1, 4);
+  });
+
+  it('is silent when nothing changed', () => {
+    const result = gate({ head: makePickerRun(), base: makePickerRun() });
+    expect(result.failures).toEqual([]);
+  });
+
+  it('fails conclusively when the Picker arm doubles', () => {
+    const result = gate({
+      head: makePickerRun({
+        'nitro-ui': { mounted: 880_000, presented: 1_040_000 },
+      }),
+      base: makePickerRun(),
+    });
+    const mounted = result.failures.find(
+      (failure) => failure.metric === 'mountedNs'
+    );
+    expect(mounted).toBeDefined();
+    expect(mounted.implementation).toBe('nitro-ui');
+    expect(mounted.key).toBe('mount.picker:nitro-ui:50');
+  });
+
+  it('never gates a Picker reference arm', () => {
+    const result = gate({
+      head: makePickerRun({
+        'expo-ui-shared-host': { mounted: 1_280_000, presented: 1_560_000 },
+      }),
+      base: makePickerRun(),
+    });
+    expect(
+      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
+    ).toEqual([]);
+  });
+
+  it('schedules every picker cell and every arm', () => {
+    const picker = buildSchedule({ plan: 'quick', component: 'picker' });
+    expect([...new Set(picker.map((entry) => entry.scenario))]).toEqual([
+      'mount.picker',
+      'update.picker',
+      'memory.picker',
+    ]);
+    expect(new Set(picker.map((entry) => entry.implementation))).toEqual(
       new Set(IMPLEMENTATIONS)
     );
   });

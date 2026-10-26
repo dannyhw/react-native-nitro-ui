@@ -31,6 +31,7 @@
  *   | 'button'
  *   | 'segmented'
  *   | 'datepicker'
+ *   | 'picker'
  * } screen The example app's tab to be
  *   on. Must be a tab `example/src/App.tsx` actually renders, and the screen
  *   behind it has to render the on-screen `Text` the checks read.
@@ -64,6 +65,12 @@ export const REAL_INPUT_CONTROLS = Object.freeze([
     title:
       'real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back',
     screen: 'datepicker',
+  },
+  {
+    id: 'picker',
+    title:
+      'real tap opens the menu, a real tap on a row reports it, and an unmount while open leaks no popup',
+    screen: 'picker',
   },
 ]);
 
