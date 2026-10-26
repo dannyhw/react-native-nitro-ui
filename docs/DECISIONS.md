@@ -241,8 +241,23 @@ The owner's call: from 0.1.1 on, versions are cut by Changesets (a "Version Pack
 published from GitHub Actions with npm trusted publishing (OIDC) — no npm token in GitHub. release-it
 is removed. The `0.0.0-stage` version on npm is npm's own staged-publishing placeholder (it scans a
 package before release) — not ours, not a concern.
-- **D27 amendment (2026-10-26):** the owner keeps npm's trusted publisher at **staged publishing
-  only** (`npm publish` not allowed). CI stages each version (`npm stage publish`, OIDC); the owner
-  approves it on npmjs.com with 2FA; a catch-up workflow then tags `vX.Y.Z` and creates the GitHub
-  release once the version is live. Checks/pack and staging run in separate jobs; only staging gets
-  `id-token: write`.
+- **D27 amendment (2026-10-26):** staged publishing only — see D28.
+
+## D28 — CI stages on npm; a human approves the publish (2026-10-26)
+
+The owner's call, refining D27: the trusted publisher for `react-native-nitro-ui` will **not** allow `npm publish`, only
+staged publishing — npm's default for trust relationships created after 2026-09-03, and npm's own recommendation. So no
+automated run can put a version on the registry.
+
+`Release` builds, checks and packs in a job with `contents: read` and no OIDC rights, and a second job holding only
+`id-token: write` runs `npm stage publish` on the checksum-verified tarball. Staging needs no 2FA and no token; the
+owner approves afterwards on npmjs.com ("Staged Packages", or `npm stage approve <id>`), and that approval is where the
+proof-of-presence happens. Short-lived trust tokens may not run the other `npm stage` subcommands, and `npm view` does
+not list staged versions, so the jobs key on "is this version live" plus npm's own semver-uniqueness rejection rather
+than on reading the staged list.
+
+Because a staged version is not live yet, tags and GitHub releases cannot be made at publish time. A scheduled
+`Release tag` job (`contents: write`, no OIDC) waits until `package.json`'s version is actually on the registry, then
+creates `vX.Y.Z` at the commit that bumped it with notes from `CHANGELOG.md`. Changesets keeps versioning and the
+Version Packages PR, but its own tags and releases are switched off: with `.` in `workspaces` manypkg reports the tool
+as `bun`, not `root`, and Changesets then names tags `react-native-nitro-ui@0.1.1` instead of `v0.1.1`.

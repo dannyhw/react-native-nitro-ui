@@ -1,0 +1,63 @@
+name: Release tag
+
+# Tags and GitHub releases, once a version is really on npm (DECISIONS D28).
+#
+# Nothing creates them at publish time: publishing is not automated, because the
+# package's Trusted Publisher allows staged publishing only. When the release
+# workflow stages `0.1.1`, that version is not live — it waits for the owner to
+# approve it on npmjs.com. A tag made then would point at a release that does not
+# exist yet, and a tag made from the wrong run would be wrong in the other
+# direction. So this job keys on state instead: when `package.json`'s version is
+# on the registry and `v<version>` has no release, it creates `v<version>` at the
+# commit that bumped the version, with that version's `CHANGELOG.md` section as
+# the notes.
+#
+# Every path through `scripts/release-catch-up.mjs` is a no-op once the work is
+# done, which is what makes an hourly schedule, a manual run and a re-run of
+# either all safe. The script takes its arguments as argv arrays and never
+# through a shell, and this workflow interpolates nothing into `run:`.
+#
+# It needs no OIDC rights: creating a tag and a release is `GITHUB_TOKEN` work.
+
+on:
+  schedule:
+    # Hourly. Cheap: two registry/API reads and a no-op unless something is
+    # waiting for its tag, so the wait after an approval is at most an hour.
+    - cron: '0 * * * *'
+  # Run it by hand right after approving a staged version.
+  workflow_dispatch:
+
+# Only one at a time; there is nothing to gain from cancelling a run that is
+# already creating a release.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  catch-up:
+    name: Tag and release a live version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The script walks the history of `package.json` to find the commit
+          # that set the current version.
+          fetch-depth: 0
+          # `gh` talks to the API with GH_TOKEN; no git credential is needed.
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Catch up
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release-catch-up.mjs
