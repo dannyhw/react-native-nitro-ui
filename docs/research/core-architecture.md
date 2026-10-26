@@ -2,8 +2,8 @@
 
 Status: research / design proposal, 2026-10-22. Read `nitro-patterns.md` first.
 
-Citation prefixes (all paths are under the scratch clone root
-`~/.t3/scratch/2026-10-22-please-do-research-around-what-dd4b3604/repos/`):
+Citation prefixes (all paths are relative to a local reference clone of the
+upstream repos):
 
 | prefix | repo @ commit | root |
 |---|---|---|

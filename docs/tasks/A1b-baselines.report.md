@@ -214,7 +214,7 @@ so the next refresh does not rediscover it.
 - Booted/used only my own devices: iPhone 17 sim `F08675D3-A32B-4F88-BC81-02D7E0CB797E` and AVD
   `nitroui_t01` (`emulator-5570`), always addressed by serial, private adb server on port 5041
   (`ANDROID_ADB_SERVER_PORT=5041`) only. Never `adb kill-server` on the default port.
-- Never touched `PR1505_Pixel` / `emulator-5560`, iPhone Air, `nitroui_t02` / `emulator-5572`, nor
+- Never touched `emulator-5560`, iPhone Air, `nitroui_t02` / `emulator-5572`, nor
   the other project's booted `iPhone 17 (RNSB 26.4)` / `iPhone 17 (RNSB starter)` simulators. No
   `pkill`/`killall` by process name.
 - One platform at a time: iOS 00:38Z→03:12Z, then Android 03:17Z→06:10Z (which is also why the

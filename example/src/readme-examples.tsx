@@ -13,13 +13,16 @@
  */
 import {
   Button,
+  DatePicker,
+  Host,
+  Picker,
   Progress,
   SegmentedControl,
   Slider,
   Switch,
 } from 'react-native-nitro-ui';
 import { useState } from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 // #region switch
 export function WifiSettings() {
@@ -90,4 +93,54 @@ export function ViewToggle() {
     />
   );
 }
+// #endregion
+
+// #region picker
+export function SizePicker() {
+  const [index, setIndex] = useState(0);
+
+  return (
+    <Picker
+      label="Size"
+      options={['Small', 'Medium', 'Large']}
+      selectedIndex={index}
+      onChange={(event) => setIndex(event.index)}
+    />
+  );
+}
+// #endregion
+
+// #region date-picker
+export function DueDate() {
+  const [date, setDate] = useState(() => new Date());
+
+  return (
+    <DatePicker accessibilityLabel="Due date" value={date} onChange={setDate} />
+  );
+}
+// #endregion
+
+// #region host
+export function NotificationSettings() {
+  const [push, setPush] = useState(true);
+  const [email, setEmail] = useState(false);
+
+  // Android: both Switches render in one Compose composition.
+  // iOS: Host is a plain View, so this renders exactly as without it.
+  return (
+    <Host style={styles.settings}>
+      <Switch accessibilityLabel="Push" value={push} onValueChange={setPush} />
+      <Switch
+        accessibilityLabel="Email"
+        value={email}
+        onValueChange={setEmail}
+      />
+    </Host>
+  );
+}
+
+const styles = StyleSheet.create({
+  // Say how tall a Host is: it draws its children into this box.
+  settings: { height: 96 },
+});
 // #endregion

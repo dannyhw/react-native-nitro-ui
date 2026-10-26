@@ -30,7 +30,7 @@ failed with `cannot find symbol: class still`. The fix is comment-only.
   Re-runnable (fresh app dir per run), delete temp apps on success, keep logs
   under `$SMOKE_TMP/artifacts/<script>-<ts>-<pid>/`. `KEEP_TMP=1` retains the
   app dir. They only boot an emulator that is not already up, refuse
-  `PR1505_Pixel`/`emulator-5560` outright, stop the Gradle daemons they start,
+  `emulator-5560` outright, stop the Gradle daemons they start,
   and set `hide_error_dialogs` so System-UI-ANR dialogs don't cover screenshots.
 - `scripts/smoke/App.tsx` - renders every export once with `SMOKE-` testIDs;
   today: `NitroUiCore.now()` rendered + logged. Adding a component = its
@@ -70,7 +70,7 @@ failed with `cannot find symbol: class still`. The fix is comment-only.
 
 Devices: iOS sim `iPhone 17e` (`C5CD4A7F-…`, booted and shut down by me), AVD
 `nitroui_t03` on port 5574 (created, booted and shut down by me; the API 35
-google_apis arm64 image existed already). `PR1505_Pixel` untouched. No Metro
+google_apis arm64 image existed already). `emulator-5560` untouched. No Metro
 used (Release bundles).
 
 ## Timings (single-machine, warm npm/bundler caches; some runs overlapped)

@@ -4,11 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.1.0 — 2026-10-24
+## 0.1.0 — 2026-10-26
 
-First release with components. Five controls, each one the real platform view
-hosted by a shared native core: SwiftUI inside a `UIHostingController`, Jetpack
-Compose inside an `AbstractComposeView`, both wrapped in a Nitro Hybrid View.
+First release. Seven controls, each one the real platform view — SwiftUI inside
+a `UIHostingController`, Jetpack Compose inside an `AbstractComposeView`, both
+wrapped in a Nitro Hybrid View — on a shared native core that measures each one
+on the device and reports its size to Yoga. Plus `<Host>`, an opt-in container
+that renders a batch of Switches in one Compose composition on Android.
 
 ### Components
 
@@ -28,6 +30,30 @@ Compose inside an `AbstractComposeView`, both wrapped in a Nitro Hybrid View.
 - **`SegmentedControl`** — SwiftUI segmented `Picker` / Material 3
   `SingleChoiceSegmentedButtonRow`. `options` is the label list and decides the
   control's width. [`docs`](docs/components/segmented-control.md)
+- **`Picker`** — SwiftUI `Picker` (`.menu` / `.wheel`) / Material 3
+  `ExposedDropdownMenuBox`. `options`, controlled or uncontrolled
+  `selectedIndex`, `onChange` with `{ index, value }`, `variant`, `label`,
+  `disabled`, `tintColor`. Android has no wheel, so `variant="wheel"` renders
+  the menu there. [`docs`](docs/components/picker.md)
+- **`DatePicker`** — SwiftUI `DatePicker` (`.graphical` / `.wheel`, behind a
+  compact field that opens a popover) / Material 3 `DatePicker` and `TimePicker`
+  (inline, or `DatePickerDialog` / `TimePickerDialog` behind a compact field).
+  `mode="date" | "time" | "datetime"`,
+  `variant="compact" | "inline" | "wheel"`, `minimumDate` / `maximumDate`,
+  `disabled`, `tintColor`, controlled or uncontrolled `value`. Android has no
+  wheel and no combined date-and-time control.
+  [`docs`](docs/components/date-picker.md)
+
+### Container
+
+- **`<Host>`** — an opt-in container. On **Android** its direct nitro-ui
+  `Switch` children render in one shared Compose composition instead of one
+  each: measured at 0.86× `expo-ui-shared-host` mount memory and 0.87× mount UI
+  CPU for 200 Switches (2.75× and 1.39× without a Host), at the cost of about
+  1.2× mount JS CPU. `Switch` is the only control it can hold; any other child
+  throws in development. On **iOS** it is a passthrough `View` by design: a
+  shared iOS host was measured and not shipped (DECISIONS D23).
+  [`docs`](docs/components/host.md)
 
 ### Core
 
@@ -45,9 +71,44 @@ Compose inside an `AbstractComposeView`, both wrapped in a Nitro Hybrid View.
 - Supported floor: React Native `>= 0.86` with the new architecture,
   `react-native-nitro-modules ^0.37.1`, Android `minSdkVersion` 24.
 
+### Platform behaviour
+
+- **Android: content wider than its box fits the box.** A `SegmentedControl`,
+  `Button` or `Picker` whose content measured wider than the box Yoga gave it is
+  laid out a second time at the box's width, so Material 3 shares the row out
+  and ellipsises it instead of drawing past the edge with the hidden part
+  untappable. Content that fits is measured once.
+- **Android: dropping a control releases it.** A Compose view uninstalls its
+  composition strategy and the sizing engine's pre-draw listeners in `drop()`,
+  so a screen that mounts and unmounts controls does not retain one host per
+  mount; an on-device churn test gates the retained heap per cycle.
+- **A render React discards leaves nothing behind.** Sizing ids are hook state
+  rather than a ref written during render, and `Progress` derives one
+  normalised variant for its remount key, its sizing key and its native prop.
+
+### Benchmarks and tooling
+
+- **Committed bench baselines for both canonical devices:**
+  `bench/baselines/ios27-sim-iphone17.json` and
+  `bench/baselines/android35-emu-pixel9.json`, each from one clean
+  `--plan full --launches 8` run, so `bun bench --check` gates on iOS and
+  Android. See [Performance](README.md#performance) for what they say.
+- The bench's idle-machine rule judges the load average sampled across the
+  whole run instead of one sample at its end, and `--update-baseline` refuses
+  to start on a busy machine.
+- The bench has a `nitro-ui-host` arm (Android, Switch) for `<Host>`.
+- The consumer smoke test asserts that every control mounts with a non-zero
+  box, not only that the app launches.
+- The example app doubles as a React Native Storybook showcase
+  (`bun run storybook:ios` / `bun run storybook:android`).
+
 ### Not in 0.1
 
-`Picker` and `DatePicker` are planned for 0.2, along with an opt-in shared-host
-container for the Android mount CPU / memory gap
-([why it exists](README.md#performance)). Known limitations are listed in the
-[README](README.md#known-limitations) and per control in the component docs.
+- `<Host>` holds `Switch` only — hosting the other controls is 0.2.
+- There is no shared iOS host: one was built and measured, and it lost on UI
+  CPU (DECISIONS D23). iOS `<Host>` is a `View`.
+- No imperative surface. The native handle (`hybridRef`) stays internal
+  (DECISIONS D14); every prop flows through React.
+
+Known limitations are listed in the [README](README.md#known-limitations) and
+per control in the component docs.

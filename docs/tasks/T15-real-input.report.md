@@ -254,7 +254,7 @@ while a drag happens.
 
 Started and stopped by this task: `nitroui_t02` (`emulator-5572`, adb server
 5042), iPhone Air `331EF109-…`, Metro on 8294, and the `adb reverse` for 8294.
-`emulator-5560` / `PR1505_Pixel` and T14's iPhone 17 / `nitroui_t01` were never
+`emulator-5560` and T14's iPhone 17 / `nitroui_t01` were never
 touched.
 
 ## Commits

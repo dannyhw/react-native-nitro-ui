@@ -1,7 +1,7 @@
 # Recovery snapshot — 2026-10-23 23:50 local
 
 Written because the machine may restart (at 23:41:02 CoreSimulatorService got SIGTERM and shut down
-all simulators; the human's `PR1505_Pixel` emulator exited the same minute; cause unconfirmed —
+all simulators; the human's `emulator-5560` emulator exited the same minute; cause unconfirmed —
 `softwareupdate --list` shows no pending update). Everything below is on disk; uncommitted work in
 worktrees survives a restart. Agent sessions do **not** survive — re-delegate with this context.
 
@@ -29,7 +29,12 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | A1c iOS baseline | — | merged | Done: minted (median load 2.93, 3.4 % over) | — |
 | G6 Picker | — | merged | Done | — |
 | H1 Android Host | — | merged | Done | — |
-| H2a Host: Slider/Progress/Button | `nitro-ui-worktrees/H2a` · `task/H2a-host-more-controls` | brief on main | Running (Apex, `nitroui-H2a`) | Opus review → fix rounds (D19) → merge; then H2b. |
+| D1 public docs | — | merged | Done | — |
+| R5 publish 0.1.0 | — | merged | **Published** `react-native-nitro-ui@0.1.0` (registry tarball sha256 = tested `fa1b7b96…`), tag `v0.1.0` + GitHub release | — |
+| X1 dev tooling (CI checks, build-app, lease) | `nitro-ui-worktrees/X1` · `task/X1-dev-tooling` | `9e0122a` (round 1) | Review: FIX ROUND (lease TTL wipes others; stamp not bound to artifact; tree hashed after build; HEAD in hash). Fix round 1 running (`nitroui-X1-fix1`) on `nitroui_t03` | Re-review → merge → `gh workflow enable CI`. |
+| R6 Changesets release | `nitro-ui-worktrees/R6` · `task/R6-changesets-release` | `a59e527` (round 1) | Review: FIX ROUND (guard test blocks first release; tags would be `name@ver`; staged-only publisher). Fix round 1 running (`nitroui-R6-fix1`): stage publish + split jobs + `v` tag catch-up | Re-review → merge → owner setup → enable workflows. |
+| R5b post-publish smoke | — | merged | Done: all 6 rows green from the npm tarball | — |
+| H2a Host: Slider/Progress/Button | `nitro-ui-worktrees/H2a` · `task/H2a-host-more-controls` | `f69db4f` (round 1) | Review: MERGE WITH FIXES (noisy-cell verdicts in README; F8 not really tested; report overstates). Fix round 1 running (`nitroui-H2a-fix1`) incl. merge main, on iPhone Air + `nitroui_t01` | Merge (docs/tests only → no re-review unless native changes). |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
 | T17 iOS Host spike | branch only (`871c579`, pushed) | report merged | Done: iOS Host not better (D23); H3 dropped | — |
@@ -38,8 +43,8 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 ## Devices (D13)
 
 - Free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
-- H2a: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` + AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
-- Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
+- H2a fix: iPhone Air + `nitroui_t01`. X1 fix: `nitroui_t03`. Free: iPhone 17. Device config for `scripts/lease.mjs` (X1) is machine-local in `~/.nitro-ui/devices.json`.
+- Never touch `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
 

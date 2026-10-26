@@ -1,6 +1,6 @@
 # Benchmarks
 
-The perf guardrail every component task runs. It answers one question: **did this
+The perf guardrail every component change runs. It answers one question: **did this
 component make mounting, updating or memory worse than the same thing built on RN
 core?** Absolute milliseconds are not comparable between machines, so every gate
 is a **ratio against `rn-core` measured in the same run**.
@@ -45,14 +45,14 @@ The device comes from the environment, exactly like the Harness config:
 
 | Variable         | Meaning                                                            |
 | ---------------- | ------------------------------------------------------------------ |
-| `IOS_SIM_UDID`   | Simulator UDID from your task brief (boots it if needed)           |
+| `IOS_SIM_UDID`   | Simulator UDID to measure on (boots it if needed)                  |
 | `ANDROID_AVD`    | AVD name - the runner resolves the serial from the running AVD     |
 | `ANDROID_SERIAL` | Fallback when there is no AVD name (physical device)               |
-| `BENCH_ABIS`     | Android ABIs to build (`arm64-v8a` locally, `x86_64` on CI)        |
+| `BENCH_ABIS`     | Android ABIs to build (`arm64-v8a` by default, `x86_64` on Intel)  |
 | `BENCH_LAUNCH_TIMEOUT_S` | Wall-clock budget per launch; raise it on a busy machine |
 
 `ANDROID_AVD` is preferred over `ANDROID_SERIAL`: console ports are allocated by
-availability, so a serial from a brief goes stale as soon as another emulator
+availability, so a serial goes stale as soon as another emulator
 boots or dies. Matching on the AVD name is what keeps a run on its own device.
 
 There is **no Metro**: release builds embed the bundle, which is also what makes
@@ -64,6 +64,7 @@ Useful flags:
 | Flag                  | Effect                                                          |
 | --------------------- | --------------------------------------------------------------- |
 | `--only <impl,impl>`  | Restrict the implementation dimension                           |
+| `--component <name>`  | Restrict the run to one component's cells                       |
 | `--launches N`        | Overrides the launches per cell (for a fast smoke test)         |
 | `--skip-build`        | Reuse the installed release artifact instead of rebuilding       |
 | `--prebuild`          | Force `expo prebuild --clean` first                              |
@@ -132,8 +133,9 @@ ends at anything but `speed-profile` measured the interpreter, and `--update-bas
 
 Scenarios: `mount` (N = 1/50/200), `update` (N = 1/50, K flips awaited per
 frame), `memory` (N = 200, after GC), `leak` (repeated mount/unmount of N = 200).
-Plans: `quick` = `mount:50`, `update:50`, `memory:200`; `full` adds N = 1/200 and
-the leak slope.
+Plans, per component (switch, slider, button, progress, segmented-control,
+date-picker, picker): `quick` = `mount:50`, `update:50`, `memory:200`; `full` adds
+N = 1/200 and the leak slope. `--component` narrows either plan to one component.
 
 ### Native perf marks (`--perf-marks`)
 
@@ -141,7 +143,7 @@ the leak slope.
 knows about itself: a host with `nuiPerfId >= 0` records `propsApplied` (props
 landed on the UI thread) and `firstFrame` (the hosted content drew), in the same
 D1 clock base, and `nitroUiCore.drainPerf()` takes them
-(`docs/architecture/core.md` SS8). Neither mark is a GPU-completed frame, so they
+(`docs/architecture/core.md` §8). Neither mark is a GPU-completed frame, so they
 explain a `UI CPU/op` or `presented` number rather than replacing one.
 
 ```sh
@@ -233,17 +235,21 @@ matrix to that arm rather than burning launches that report nothing.
 ## Baselines and gating
 
 `bench/baselines/<deviceKey>.json` is the trend record, with
-`deviceKey = platform + OS runtime + device class` (D9): `ios27-sim-iphoneair`,
+`deviceKey = platform + OS runtime + device class` (D9): `ios27-sim-iphone17`,
 `android35-emu-pixel9`. A runtime change is a comparability break, so it gets a
 new file, and anything that is not the canonical device for its platform uses
 same-run ratio tables and `--compare`, never `--check`. Baselines are
 **ratio-only** - see `bench/baselines/README.md`.
 
-**As of T02 round 4 no latency baseline is committed on either platform** - the
-one Android file that existed was recorded while nitro-ui self-skipped and
-gated nothing, so it was deleted; `--check` reports `no baseline at …` and is
-inert until a clean `--plan full --launches 8` run mints one. The
-`renders.json` gate is separate, live, and committed.
+**Both canonical devices have a committed baseline**:
+`bench/baselines/ios27-sim-iphone17.json` (an iPhone 17 simulator on iOS 27) and
+`bench/baselines/android35-emu-pixel9.json` (an API 35 Pixel 9 emulator, ART
+`speed-profile`), each from one clean `--plan full --launches 8` run, so
+`--check` gates on both platforms. On iOS more of the cells are noise-suppressed
+(their own within-run spread is over 10 %) than on Android, so the iOS gate is
+real but narrower. Neither baseline records a leak slope — no arm climbed
+monotonically in either run — so the leak cells read `new arm` under `--check`.
+The `renders.json` gate is separate, live, and committed.
 
 The gate exists once (`gate()` in `scripts/bench/lib.mjs`) and is used identically
 by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:
@@ -258,9 +264,12 @@ by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:
    own run** - the relative MAD of its launch-paired ratios under 10 %. Noise is
    judged per cell and metric, never as absolute drift against a baseline: that
    is what made round 1 unable to fail.
-4. **Only `nitro-ui` arms gate.** `rn-core` is the control and the `expo-ui-*`
+4. **Only the `nitro-ui` arm gates.** `rn-core` is the control and the `expo-ui-*`
    arms are reference arms: an `@expo/ui` bump is review information, not a
-   failed nitro-ui pull request.
+   failed nitro-ui pull request. The `nitro-ui-host` arm (Switches inside
+   `<Host>`, scheduled on Android only, Switch cells only — `ARM_SCOPES` in
+   `scripts/bench/lib.mjs`) is reported and not gated either. The two Android
+   `expo-ui-*` arms have no DatePicker cells (`ARMS_WITHOUT_COMPONENT`).
 5. A leak fails the same way when the climb is **monotonic** and the slope ratio
    clears the threshold. A slope over a series that does not climb is not
    comparable and cannot gate.
@@ -281,15 +290,15 @@ every launch boundary, and stores `{ count, ceiling, median, p90, max, over,
 overFraction }` in `machine.loadSamples`. It refuses when the **median** sample
 or **more than 10 %** of the samples exceed the ceiling of 0.5 x core count, and
 it refuses `--update-baseline` **before the run starts** when `loadavg1` is
-already over the ceiling. The reason is A1b's iOS run: 154 quiet minutes,
-`load5` 4.06 against a 7.0 ceiling, and a single final sample of 7.60 threw the
-run away. Results files from before the sampler have only the instant they
+already over the ceiling. The reason is an earlier iOS baseline attempt: 154
+quiet minutes, `load5` 4.06 against a 7.0 ceiling, and a single final sample of
+7.60 threw the run away. Results files from before the sampler have only the instant they
 recorded, so they keep the single-sample rule.
 
 Every run also records what machine produced it - hostname, core count, CPU
 model (`os.cpus()[0].model`), load averages, RAM, Xcode version or Android image
-- because D15 keeps device *keys* class-level (`android35-emu-pixel9` is this
-desk's AVD and CI's) and uses the recorded CPU to tell same-class machines apart.
+- because D15 keeps device *keys* class-level (`android35-emu-pixel9` is any API 35
+Pixel 9 emulator) and uses the recorded CPU to tell same-class machines apart.
 On Android it records the ART state the run was measured in as well
 (`art: { packageName, status, primed, attempts }`), because that state decides which of the two
 regimes above a result belongs to; a result without it is pre-T12 and is a `verify` number.
@@ -374,8 +383,9 @@ details are load-bearing, both learned from the first real test (T02 round 4):
 `@callstack/reassure/measurement` path does not exist in reassure 1.6. Pick a
 scenario where you can state the exact expected count, then
 `bun run perf:renders -- --update-baseline` and review the one-line diff.
-`src/components/Switch/Switch.perf-test.tsx` is the live instance (count 6:
-mount, 3 flips, 2 parent renders).
+Every component has one (`src/components/<Name>/<Name>.perf-test.tsx`);
+`src/components/Switch/Switch.perf-test.tsx` is the reference (count 6: mount,
+3 flips, 2 parent renders).
 
 A root Profiler cannot see a `React.memo` bail-out inside the tree, nor prop
 churn going into the native host. Pair every perf-test with a deterministic Jest
@@ -388,7 +398,8 @@ instance of both.)
 ## Adding a component to the matrix
 
 1. Add the implementation in `bench/src/implementations/` and register it in
-   `bench/src/implementations/index.ts` (`{ name, available, skipReason, List }`).
+   `bench/src/implementations/index.ts` (see `BenchImplementation` in `bench/src/types.ts` for
+   the fields an arm declares).
    Pass **every** prop explicitly - never `undefined` (nitro#1184).
 2. Run the quick plan on both platforms, filtered to your component:
    `bun bench --platform ios --plan quick --component <name>` and
@@ -398,22 +409,22 @@ instance of both.)
    first component (`switch`) - so pre-existing plans, baselines and report rows
    still line up. `componentOf` (`scripts/bench/lib.mjs`) is the only reader of
    that encoding, and `--component` is the filter.
-3. Paste both summary tables (absolute **and** ratio-to-`rn-core`) into your task
-   report, plus the sanity/noise lines, so a reader can see the column was
+3. Paste both summary tables (absolute **and** ratio-to-`rn-core`) into your pull
+   request, plus the sanity/noise lines, so a reader can see the column was
    measurable.
-4. Add `src/<Component>.perf-test.tsx` per the scenario contract above and commit
+4. Add `src/components/<Component>/<Component>.perf-test.tsx` per the scenario contract above and commit
    the recorded render baseline.
 5. Do not gate on absolute milliseconds. Report and compare ratios to `rn-core`.
 6. A component's **first** `nitro-ui` arm cannot fail a gate - there is no prior
-   ratio to regress against (D15). Its report must show ratios to `rn-core` *and*
+   ratio to regress against (D15). Its pull request must show ratios to `rn-core` *and*
    to both `expo-ui-*` arms on `mount presented`, UI CPU and memory, and a miss
    against the D15 target (`<= 1.0x expo-ui-shared-host`, well below
    `expo-ui-host-per-control`) needs an explanation - a `--perf-marks` run is how
    to write one - plus a follow-up item.
 
 The `nitro-ui` arm is live: `bench/src/implementations/nitroUi.tsx` is the only
-file that renders the library (a named `import { Switch } from
-'react-native-nitro-ui'`, typechecked by `bun run bench:typecheck` through
+file that renders the library (named imports of every component and `Host` from
+`'react-native-nitro-ui'`, typechecked by `bun run bench:typecheck` through
 `bench/tsconfig.json`'s `paths`, which mirrors Metro's `extraNodeModules`). Before
 T10 exported a component the arm resolved `Switch` at runtime and reported itself
 *skipped* with a reason, so nobody benchmarked a stub; that lookup is gone, and an
@@ -434,7 +445,11 @@ unreportable by construction (`MAX_MISSING_SAMPLE_RATIO`) and each of its
 iterations pays the probe's timeout - visible in the log as
 `N without a mount signal`, which is expected rather than a fault.
 
-## CI
+## CI (disabled)
+
+All GitHub workflows are disabled for now, this one included, and
+`bench.yml` has never run; the local runs above are the only bench evidence.
+What follows is what it is written to do once it is enabled.
 
 `.github/workflows/bench.yml` is **report-only**: an on-demand `bench` label or a
 `/bench` comment (restricted to `OWNER`/`MEMBER`/`COLLABORATOR` commenters) builds

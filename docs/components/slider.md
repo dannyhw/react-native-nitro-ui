@@ -42,7 +42,8 @@ no core component to mirror.
 
 `hybridRef` and `nuiPerfId` are not app API (DECISIONS D14): v0.1 publishes no
 Hybrid View types and no way to write a prop from outside React. The handle is
-read-only (plus `measureContent()`, and the test-only `nuiTestDrag`), it is
+read-only (plus `measureContent()`, and the test-only `nuiTestDrag`,
+accessibility-step and frame-pump probes), it is
 invoked once when the view mounts, and a new function does not re-run it.
 
 ## Platform mapping
@@ -89,7 +90,7 @@ handshake's exact comparison sees a change on every commit (core.md §11).
 | iOS (26.4 and 27.0)   | 31 pt                       | box width × **31** |
 | Android               | 48 dp                       | box width × **48** |
 
-Both numbers are measured on the devices this task owns, not read out of a spec,
+Both numbers are measured on device, not read out of a spec,
 and both are asserted on-device by `example/__tests__/Slider.harness.tsx`: the
 box's height, `measureContent()`'s height, and the same height at a second box
 width (so the height provably does not move with the width). iOS was measured on
@@ -112,7 +113,7 @@ whose control turns out to be a different size corrects itself from its own
 measurement on the first layout rather than shipping a wrong constant.
 
 The base style is `{ alignSelf: 'stretch' }` (`FILL_WIDTH_BASE_STYLE`,
-`src/components/Slider/Slider.tsx:135`) — the opposite of `Switch`'s
+`src/components/Slider/Slider.tsx`) — the opposite of `Switch`'s
 `'flex-start'`, for the same reason in reverse: a Slider's width *is* the axis it
 wants filled, and `alignSelf` is what decides it. An explicit `width`, `height`,
 `flex` or `alignSelf` in the caller's `style` still wins (measured: a 300 × 60 box
@@ -120,9 +121,9 @@ keeps 60, and a `width: 200` keeps 200 while the height stays measured).
 
 One invariant belongs here because the first `fillWidth` component is what found
 it: the control must answer its height **even when its box has none**. The
-ordinary way that happens is a caller's `height: 0` (until T14 a cold first
-instance supplied its own zero too, because the declared fallback arrived only
-with the component's first view — `docs/architecture/sizing.md` §5 and §6).
+ordinary way that happens is a caller's `height: 0` (before declared fallbacks
+were registered at startup, a cold first instance supplied its own zero too,
+because the declared fallback arrived only with the component's first view — `docs/architecture/sizing.md` §5 and §6).
 Either way, a `fillWidth` measure that waits for a non-zero box height can starve
 forever, and on iOS a stalled host paints SwiftUI's minimum content: a thumb with
 no track, overflowing its neighbours. The gate is the box's *width* only

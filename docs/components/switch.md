@@ -30,7 +30,7 @@ controls it wraps (UIKit `UISwitch`, Compose `Switch`, React Native's own
 | `accessibilityLabel` | `string \| undefined`               | —         | Label of the control itself.                                        |
 | `hybridRef`          | `(view: handle) => void`            | —         | **Internal.** Read-only handle for this repo's harness and benchmarks. |
 | `nuiPerfId`          | `number \| null \| undefined`       | `null`    | **Internal.** Instance id for perf marks; `null` disables marks.        |
-| `nuiTestWidth`       | `number \| null \| undefined`       | `null`    | **Internal, temporary.** Test-only size-affecting prop so the sizing harness can drive a real size change through a prop (T11 review S1). Not app API; it goes away once the Button harness covers that case. |
+| `nuiTestWidth`       | `number \| null \| undefined`       | `null`    | **Internal.** Test-only size-affecting prop, so the sizing harness can drive a real size change through a prop. Not app API. |
 
 `Switch` is a `View`, so any other `ViewProps` (`accessibilityRole`,
 `onLayout`, …) work as usual.
@@ -38,7 +38,7 @@ controls it wraps (UIKit `UISwitch`, Compose `Switch`, React Native's own
 Uncontrolled Switches cost no React render per toggle: native owns the
 displayed value and JS is only told about it (see `useControlled`).
 
-`hybridRef` and `nuiPerfId` are not app API (DECISIONS D14). v0.1 publishes no
+`hybridRef` and `nuiPerfId` are not app API (DECISIONS D14). The package publishes no
 Hybrid View types and no way to write a prop from outside React: the handle is
 read-only (plus `measureContent()`, which is a cached value and thread-safe), it
 is invoked once when the view mounts, and a new function does not re-run it.
@@ -69,8 +69,8 @@ the Fabric node, and both are asserted on-device by
 | Android              | 52.19 × 48 dp    | **52.19 × 48**      |
 
 Content does not grow with the box: rendered in a 90 × 50 box it still reports
-the numbers above, and the control is centred inside the space (`docs/`
-`architecture/core.md` §7 explains how each platform is asked). The harness
+the numbers above, and the control is centred inside the space
+(`docs/architecture/core.md` §7 explains how each platform is asked). The harness
 asserts exactly that, because at the default box the two platforms' answers are
 indistinguishable.
 
@@ -87,21 +87,21 @@ Android's number is the Material 3 track (52×32 dp) inside the 48 dp minimum
 interactive size, so the box includes the touch target the platform enforces.
 The width is fractional (137 px at the test device's 2.625 density) because it is
 the control's real measurement and not a written-down constant.
-It is the one answer that is capped by the box: Android asks the control for its
-size with a minimum of zero inside the box it was given, so the recorded content
-can never be bigger than the box, while iOS asks unbounded and can report a
-control that overflows.
+Both platforms ask the control for its size unbounded (`Constraints()` on
+Android, an infinite proposal on iOS), so the recorded content is the control's
+own size, not the box's; a box smaller than that is the caller's choice and the
+control is centred in it.
 
-**Nothing here is a constant any more** (T11). The host measures what it hosts and
+**Nothing here is a constant.** The host measures what it hosts and
 reports it, and Yoga lays the node out at that (`docs/architecture/sizing.md`).
 What `Switch` declares is only the *fallback* — the size used for the very first
 layout, before any measurement exists
-(`NitroUiSizing.setFallback`, `ios/components/Switch/HybridNitroUiSwitch.swift:113`,
-`android/.../HybridNitroUiSwitch.kt:173`), and it still follows the running iOS
+(`NitroUiSizing.setFallback` in `ios/components/Switch/HybridNitroUiSwitch.swift`
+and `android/.../HybridNitroUiSwitch.kt`), and it still follows the running iOS
 for the reason above. A real measurement replaces it for the whole process after
 the first instance, so an OS whose control is a different size corrects itself
 rather than shipping a wrong constant. `DEFAULT_SIZE` is gone; the base style is
-just `alignSelf: 'flex-start'` (`src/components/Switch/Switch.tsx:91`), and the
+just `alignSelf: 'flex-start'` (`src/components/Switch/Switch.tsx`), and the
 harness now asserts the box the platform *drew*, not a style
 (`example/__tests__/Sizing.harness.tsx`).
 
@@ -117,6 +117,19 @@ changes size with font scale, measured at Android `font_scale 1.3` and iOS
 Accessibility Large (61 × 28 and 52.19 × 48 both unchanged). The environment epoch
 still fires on a real trait or configuration change — it just has nothing to
 invalidate here. See `docs/architecture/sizing.md` §9.
+
+## Inside a `<Host>`
+
+`Switch` is the one control `<Host>` can hold (`docs/components/host.md`). On
+Android, Switches that are direct children of a `<Host>` are drawn by the Host's
+single Compose composition instead of each owning one, which is what brings
+their mount memory and UI-thread cost under `@expo/ui`'s shared host. A hosted
+Switch keeps its props, events, controlled-value handshake and accessibility
+label; what changes is sizing — it is never measured, and its React Native frame
+no longer decides where it is drawn (the Host stacks its children in one column).
+Find a hosted Switch in UI tests by `accessibilityLabel`, not `testID`: the view
+carrying the id reads back `0 × 0` there. On iOS a `<Host>` is a plain `View`
+and a Switch inside it is exactly the Switch described on this page.
 
 ## Accessibility
 
@@ -134,6 +147,12 @@ is re-implemented in JS.
   translated, and there is no `ref` forwarding.
 - `testID` is RN's own on iOS (`accessibilityIdentifier`); on Android it lands on
   the host `View.tag`, because Compose has no test id.
+- **Android toggle state: unverified.** The Material 3 `Switch` is built with
+  `onCheckedChange`, which gives its node `Role.Switch` and a toggleable state.
+  But `uiautomator` dumps taken while building `<Host>` reported the labelled
+  node as `checkable=false`, `checked=false` (hosted and unhosted alike), which
+  would mean TalkBack reads the label without saying on or off. This has not
+  been confirmed with TalkBack itself yet.
 - Dynamic type does not change this control's size — measured at Android
   `font_scale 1.3` and iOS Accessibility Large, 61 × 28 and 52.19 × 48 both
   unchanged (Sizing above).
@@ -170,9 +189,9 @@ is re-implemented in JS.
   `View.tag`, which is what the harness and `findNodeByName` read.
 - A rejected change reverts *without* animation: the thumb snaps back to the
   value React kept. Only the first commit of a mount suppresses animation
-  deliberately (`ios/core/NitroSwiftUIHost.swift:171-184`); a post-mount revert
+  deliberately (`commit()` in `ios/core/NitroSwiftUIHost.swift`); a post-mount revert
   runs in a plain transaction, and neither platform wraps it in
-  `withAnimation`/`animate*AsState`. Deliberate for v0.1 — an animated revert is
+  `withAnimation`/`animate*AsState`. Deliberate for now — an animated revert is
   a visible contradiction of what the user just did — but it is a polish item.
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated;
   `accessibilityLabel` and `disabled` are the a11y API. The label belongs to the

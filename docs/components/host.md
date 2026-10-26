@@ -7,10 +7,10 @@ every control brings its own.
 
 It is **opt-in**, and Android-only: on iOS `<Host>` is a documented passthrough `View`,
 so the same JSX renders normally there and an app gets one tree to reason about, not
-two (D23). That is settled, not provisional — T17 built an iOS Host and measured it
-winning on memory but losing on mount and unmount UI CPU, so it was not
-shipped (D23 outcome, `docs/tasks/T17-ios-host-spike.report.md`). The passthrough is
-the design.
+two (D23). That is settled, not provisional — an iOS Host was built and measured: it
+won on memory (0.92× the unhosted Switch) but lost on mount UI CPU (1.40×) and unmount
+UI CPU (6.27×), so it was not shipped (`docs/DECISIONS.md`, D23 and its outcome). The
+passthrough is the design.
 
 ```tsx
 import { Host, Switch } from 'react-native-nitro-ui';
@@ -26,29 +26,29 @@ import { Host, Switch } from 'react-native-nitro-ui';
 
 When a screen mounts a batch of the same control at once and the mount is what
 costs: a settings list, a table of rows, a filter panel. That is where the win is —
-measured at N=200 Switches, `quick` plan, ART `speed-profile`, on the emulator this
-library gates on — every number below is the launch-paired ratio to
-`expo-ui-shared-host` from one run (`docs/tasks/H1-android-host.report.md`):
+measured with Switches (memory at N=200, the rest at N=50), `quick` plan, ART
+`speed-profile`, on the API 35 Pixel 9 emulator the bench baselines use — every number
+below is the launch-paired ratio to `expo-ui-shared-host` from one run (measurement
+details: `docs/tasks/H1-android-host.report.md`):
 
 |                                  | `nitro-ui` (no Host) | `expo-ui-shared-host` | `nitro-ui` + `<Host>` |
 | -------------------------------- | -------------------- | --------------------- | --------------------- |
 | Mount memory                     | 2.75x                | 1.00x                 | **0.86x**             |
 | Mount UI-thread CPU per op       | 1.39x                | 1.00x                 | **0.87x**             |
 | Mount wall time (`mounted`)      | 1.13x                | 1.00x                 | **0.97x**             |
+| Mount `presented`                | 1.01x                | 1.00x                 | **0.99x**             |
 | Mount JS CPU per op              | 0.73x                | 1.00x                 | 1.18x                 |
 | Unmount UI-thread CPU per op     | 1.31x                | 1.00x                 | **0.78x**             |
 
-Two runs of this library say the same thing: T16's spike measured 0.87x and 0.80x, and
-the container that ships measures 0.86x and 0.87x. The unmount column is the one that
-changed between H1's own runs, and it changed because round 1 was measuring a leak —
-nothing was being disposed, so unmount looked 0.25x. With the composition released it is
-0.78x (16% launch spread, so a number to read rather than a verdict).
+An earlier prototype of the same container measured 0.87x memory and 0.80x mount UI
+CPU, so the shape reproduces. The unmount figure is 0.78x with a 16% launch spread, so
+read it as a number rather than a verdict.
 
 What it pays with is the JS thread: a hosted control is still a React Native node
 **and** a child of somebody else's composition, so the JS column goes the other way —
-1.18x the shared host, where the unhosted control is *below* it at 0.73x. (The spike
-measured 1.10x and H1's first run 1.26x; read this column as roughly 1.2x and re-measure
-it rather than trusting one run.) That cost is why `Host` is a component an app chooses
+1.18x the shared host, where the unhosted control is *below* it at 0.73x. (Runs of
+near-identical code have put it between 1.10x and 1.26x, so read it as roughly 1.2x.)
+That cost is why `Host` is a component an app chooses
 for a dense list, and not what every container does by default.
 
 ### The other three controls (H2a)
@@ -241,7 +241,7 @@ Two consequences worth stating plainly:
 
 
 What a Host changes about accessibility is *who publishes the node*, and that is
-invisible from the outside. Dumped on `nitroui_t01` (Android 15, 420 dpi) while the
+invisible from the outside. Dumped on an API 35 emulator (Android 15, 420 dpi) while the
 Host screen showed three hosted Switches and a batch of 24:
 
 - **One labelled node per hosted control, from Compose.** Each hosted child — Switch,
@@ -278,7 +278,9 @@ Host screen showed three hosted Switches and a batch of 24:
 
 `testID` survives hosting: the child's Android view still exists and still carries the
 id, so `queryByTestId` finds it. What it returns is **`0 × 0` at the Host's origin**,
-because that is where RN lays a view that declines to measure. Detox, Maestro and
+because that is where RN lays a view that declines to measure (that is what the harness
+measures at mount; whether a later layout pass can move it to its Yoga frame is not
+pinned down yet — either way it is not where the Switch is drawn). Detox, Maestro and
 Appium tap the centre of the view that carries the id, so `tap(by.id('wifi'))` inside a
 Host taps nothing, or the row above.
 
@@ -288,9 +290,10 @@ by the Compose node, whose rect is the drawn one, which is what
 Compose (`Modifier.testTag` with `testTagsAsResourceId`) would put a `resource-id` on the
 drawn rect too; it is a follow-up, not today's behaviour.
 
-What a Host does **not** fix is the library's existing gap: our Android control
-publishes no toggle role or state — `checkable=false`, `checked=false`, hosted and
-unhosted alike — so TalkBack reads the label and says nothing about on or off. That is
-a `Switch` item, tracked with the other semantics work, and a Host neither adds nor
-loses it. On iOS a Host is a passthrough, so the iOS a11y tree is exactly what
+What a Host does **not** change is the Android Switch's toggle state as a screen reader
+sees it. The same dumps reported `checkable=false`, `checked=false` on the labelled node,
+hosted and unhosted alike, which would mean TalkBack reads the label and says nothing
+about on or off; that has not been confirmed with TalkBack yet (see
+`docs/components/switch.md`). Either way it is a `Switch` item, and a Host neither adds
+nor loses it. On iOS a Host is a passthrough, so the iOS a11y tree is exactly what
 `docs/components/switch.md` describes.

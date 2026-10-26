@@ -157,7 +157,7 @@ minted.
 
 - Touched exactly one device: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, which the runner
   booted and which I shut down with `xcrun simctl shutdown F08675D3-…` after the gates. No Android
-  emulator at all — no adb, no emulator, so `PR1505_Pixel` / `emulator-5560` was never in scope.
+  emulator at all — no adb, no emulator, so `emulator-5560` was never in scope.
 - Never touched the booted `iPhone 17 (RNSB 26.4)` / `iPhone 17 (RNSB starter)` sims, `iPhone 17e`,
   or `PR1492 iPhone 17`.
 - No `pkill`/`killall` by name, and no process I did not start was killed. The only process I

@@ -879,7 +879,7 @@ line each, attributed to the round-1 verification. None fixed here.
 | Android harness (this round's test) | `HARNESS_APP_PATH=… ANDROID_AVD=nitroui_t01 ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 bunx react-native-harness --harnessRunner android` | **54 passed, 3 suites** (red `1 failed, 53 passed` without the guard) |
 
 Emulator `nitroui_t01` was started on port 5570 against adb server 5041 and shut
-down at the end; the human's `PR1505_Pixel` (`emulator-5560`) and G2's
+down at the end; the human's `emulator-5560` and G2's
 `nitroui_t02` (adb 5042) were not used.
 
 ---
@@ -955,5 +955,5 @@ again. The final tree differs from `main` by the probe change only.
 Started only: `nitroui_t01` on `emulator-5570` (adb server 5041), which the
 harness shut down at the end. iPhone 17 (F08675D3) was already booted by the
 environment, so it was used and left as-is. Never touched: `emulator-5560` /
-PR1505_Pixel, iPhone Air, `nitroui_t02` (5042), the default adb server. Port 8293
+iPhone Air, `nitroui_t02` (5042), the default adb server. Port 8293
 Metro was left free.

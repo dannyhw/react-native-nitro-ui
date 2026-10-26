@@ -8,7 +8,7 @@
   "launches": 8,
   "updatedAt": "2026-10-26T04:41:07.556Z",
   "machine": {
-    "hostname": "INV-0391-Daniel-Williams",
+    "hostname": "maintainer-mac-1",
     "osPlatform": "darwin",
     "osRelease": "27.0.0",
     "osVersion": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:05:48 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6041",
