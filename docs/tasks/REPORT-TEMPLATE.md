@@ -14,8 +14,11 @@
   - Follow-ups: one line each, no investigation. Anything that needs a paragraph is a task.
   - Questions: concrete, with a recommendation. Only where you genuinely cannot proceed
     (AGENTS.md "Asking for help").
-  - Fix rounds: append a `## Fix round N` section of <= 200 words. Do not rewrite the summary,
-    and do not re-run or re-report gates that the ledger already shows green on this code tree.
+  - Fix rounds: append a `## Fix round N` section of <= 200 words and do not rewrite the summary.
+    Paste a **fresh** `node scripts/gate.mjs table` and the `need --for review` line into that
+    section: the table is generated, so refreshing it is not re-reporting, and leaving round 1's
+    table as the only gate evidence leaves the report showing a tree the fix round replaced.
+    Gates the ledger still shows green on this code tree need no re-run.
 
   Device hygiene is not reported. Leases and the scripts enforce it (X1): a device gate runs
   under `scripts/lease.mjs`, refuses an unstamped app, and refuses the reserved emulator
