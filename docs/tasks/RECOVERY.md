@@ -30,7 +30,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | G6 Picker | — | merged | Done | — |
 | H1 Android Host | — | merged | Done | — |
 | D1 public docs | — | merged | Done | — |
-| R5 publish 0.1.0 | `nitro-ui-worktrees/R5` · `task/R5-publish-0.1` | brief on main | Running (Apex, `nitroui-R5`) on iPhone 17 + `nitroui_t03` (5574 / adb 5043 / Metro 8295) | Review, merge; owner publishes. |
+| R5 publish 0.1.0 | — | merged | Done; tarball on main = tested (sha256 `fa1b7b96…`, 464 files) | Owner: `npm publish`, tag `v0.1.0`, GitHub release (checklist in the R5 report). |
 | H2a Host: Slider/Progress/Button | `nitro-ui-worktrees/H2a` · `task/H2a-host-more-controls` | brief on main | Running (Apex, `nitroui-H2a`) | Opus review → fix rounds (D19) → merge; then H2b. |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
