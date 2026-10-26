@@ -235,7 +235,7 @@ describe('changelog lookup', () => {
 });
 
 describe('version commit lookup', () => {
-  it('returns the newest commit carrying the version', () => {
+  it('returns the commit that bumped to the version, not a later one that kept it', () => {
     const versions = new Map([
       ['c5', '0.2.0'],
       ['c4', '0.1.1'],
@@ -246,7 +246,7 @@ describe('version commit lookup', () => {
       findVersionCommit(['c5', 'c4', 'c3', 'c2'], '0.1.1', (sha) =>
         versions.get(sha)
       )
-    ).toBe('c4');
+    ).toBe('c3');
     expect(
       findVersionCommit(['c5', 'c4'], '0.3.0', (sha) => versions.get(sha))
     ).toBeNull();

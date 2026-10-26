@@ -67,16 +67,21 @@ export function changelogEntry(changelog, version) {
 }
 
 /**
- * The newest commit whose `package.json` carries exactly this version. Walking the
- * history of the file matters: the Version Packages commit usually last touched
- * `package.json`, but anything merged after it — or a bump that already landed — must
- * not steal the tag.
+ * The commit that bumped `package.json` to this version: in the history of the file
+ * (newest first), the oldest commit of the newest run that carries exactly this
+ * version. A later commit that touches `package.json` without changing the version
+ * (a dependency bump) must not take the tag.
  */
 export function findVersionCommit(commits, version, readVersionAt) {
+  let found = null;
   for (const sha of commits) {
-    if (readVersionAt(sha) === version) return sha;
+    if (readVersionAt(sha) === version) {
+      found = sha;
+    } else if (found !== null) {
+      break;
+    }
   }
-  return null;
+  return found;
 }
 
 /**

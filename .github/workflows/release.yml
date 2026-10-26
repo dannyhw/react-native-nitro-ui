@@ -125,6 +125,8 @@ jobs:
   stage:
     name: Stage on npm
     needs: pack
+    # A manual dispatch from another branch must never stage a version.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The only job with OIDC rights, and staging a tarball is all it can spend
@@ -199,7 +201,7 @@ jobs:
           say "### Staging $PACKAGE@$VERSION"
           set +e
           OUTPUT="$(npm stage publish "$TARBALL_DIR/$TARBALL" \
-            --access public --tag latest --provenance 2>&1)"
+            --access public --tag latest --provenance --loglevel verbose 2>&1)"
           STATUS=$?
           set -e
           printf '%s\n' "$OUTPUT"
