@@ -112,3 +112,8 @@ bench/results/*
 # `main.ts`. It is generated, so it stays out of the tree: `bun run
 # storybook:generate` recreates it, and Metro regenerates it on its own.
 example/.rnstorybook/storybook.requires.*
+
+# X2 gate ledger: one JSONL per branch plus the logs each run teed. Machine
+# evidence, not reviewable source - what a report cites is the committed copy
+# `node scripts/gate.mjs export --task <ID>` writes into docs/tasks/<ID>/.
+.gates/
