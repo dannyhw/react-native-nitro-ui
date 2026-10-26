@@ -7,8 +7,12 @@ import {
   jest,
 } from '@jest/globals';
 import { fireEvent, render } from '@testing-library/react-native';
-import { Component, Fragment, type ReactNode } from 'react';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { Component, Fragment, createElement, type ReactNode } from 'react';
 import { ScrollView, Switch as RNCoreSwitch, Text, View } from 'react-native';
+
+import * as lib from '../index';
 
 import { Host } from '../components/Host/Host';
 import { assertHostChildren } from '../components/Host/HostChildren';
@@ -294,3 +298,64 @@ function fireLayout(
     nativeEvent: { layout: { x: 0, y: 0, ...layout } },
   });
 }
+
+/**
+ * What the check may *not* refuse: a component the library has never seen.
+ *
+ * React flattens components out of the native tree, so `<Host><Row/></Host>` puts
+ * whatever `Row` returns directly under the Host — a `Row` that renders a `Switch`
+ * is hosted, and the harness suite mounts exactly that shape. Refusing it for not
+ * being literally `<Switch>` would reject working code, and an app that wrapped a
+ * control once would have to stop wrapping it on one platform only.
+ */
+describe('Host children · components the library does not know', () => {
+  it('accepts an app component that renders a Switch', () => {
+    function Row({ id }: { id: string }) {
+      return <Switch testID={id} value />;
+    }
+    expect(errorFor(<Row id="a" />)).toBeNull();
+  });
+
+  it('accepts a third-party component, leaving the decision to the native Host', () => {
+    // No name here is ours, and nothing here renders: the check cannot see through
+    // a component, so it must not claim to. What the child returns is decided by
+    // the native Host, which refuses a child it cannot compose in dev.
+    expect(
+      errorFor(
+        (() => {
+          const Foreign = () => null;
+          return <Foreign />;
+        })()
+      )
+    ).toBeNull();
+  });
+});
+
+/**
+ * The two tables in `HostChildren.ts` are the whole rule, so they must not fall
+ * behind the library. Read off the filesystem rather than a second hand-written
+ * list: a control added without a row in one of them is exactly the drift this
+ * guards (`Host` is the row that is not a control).
+ */
+describe('Host children · tables cover the library', () => {
+  it('has an opinion on every control in src/components', () => {
+    const componentsDir = join(__dirname, '..', 'components');
+    const controls = readdirSync(componentsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name !== 'Host')
+      .map((entry) => entry.name);
+    expect(controls.length).toBeGreaterThanOrEqual(6);
+    for (const name of controls) {
+      // Imported through the index an app uses, so a component that stops being
+      // exported there cannot hide from this.
+      const exported = (lib as Record<string, unknown>)[name];
+      expect(exported).toBeDefined();
+      const refused = errorFor(createElement(exported as never));
+      if (name === 'Switch') {
+        expect(refused).toBeNull();
+      } else {
+        expect(refused).not.toBeNull();
+        expect(refused?.message).toContain(`<${name}>`);
+      }
+    }
+  });
+});
