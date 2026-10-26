@@ -30,4 +30,4 @@
 | A1b | Overnight baselines retry | Apex | orchestrator | merged — **Android baseline minted** (load 2.39, 1120/1120); iOS refused 7.60 vs 7.0 at run end → R4 then one more overnight attempt |
 | R4 | Bench load guard samples the whole run (median/≥10 % rule) | Apex | orchestrator | merged (1 round) |
 | C1 | Android intrinsic content wider than its box fits instead of clipping (0.2 wave 1) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE-AFTER-SMALL-FIXES, report corrected by orchestrator) |
-| G6 | Picker (0.2 wave 2) | Apex | Opus | fix round 2 done @ `9bc3b7b` (harness 24/24 both, real-input both; N2 spot-checked) — G5 merged; merge-main pass after 05:00 (after the 01:00 iOS baseline run) |
+| G6 | Picker (0.2 wave 2) | Apex | Opus | merge-main pass running (on top of G5 + A1c) |

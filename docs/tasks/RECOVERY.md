@@ -26,17 +26,17 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | A1b overnight baselines | — | merged | Android minted; iOS refused (end-of-run load) | One more overnight iOS attempt after R4 merges; if refused again, stop — iOS stays on `--compare`. |
 | R4 load guard | — | merged | Done | iOS overnight attempt scheduled 01:00 2026-10-26. |
 | C1 Android over-wide | — | merged | Done | — |
-| A1c iOS baseline | `nitro-ui-worktrees/A1c` · `task/A1c-baselines` | `c9548f6` (brief) | Apex running (`nitroui-A1c-2026-10-26`, started 01:05) | Last iOS attempt; if refused, iOS stays on `--compare`. Merge report (+ baseline if minted). |
-| G6 Picker | `nitro-ui-worktrees/G6` · `task/G6-picker` | `9bc3b7b` | Ready; G5 now on main | After 05:00: merge-main pass (Apex, `nitroui-G6-merge`), regenerate nitrogen, full gates both platforms, then merge. |
+| A1c iOS baseline | — | merged | Done: minted (median load 2.93, 3.4 % over) | — |
+| G6 Picker | `nitro-ui-worktrees/G6` · `task/G6-picker` | `9bc3b7b` | Merge-main pass running (Apex, `nitroui-G6-merge`) | Review conflict resolution, then merge. |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
-| T17 iOS Host spike | — | brief on main | Queued (D23) | After A1c: Apex, iOS only, iPhone 17. |
+| T17 iOS Host spike | `nitro-ui-worktrees/T17` · `task/T17-ios-host-spike` | brief on main | Running (Apex, `nitroui-T17`) | One round; report decides H3 (D23). |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
 ## Devices (D13)
 
-- G5: AVD `nitroui_t02` port 5572, adb 5042, Metro 8294; iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` (taken back from the idle Storybook thread 2026-10-25).
-- Reserved tonight for A1c iOS baseline (01:00): iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`. Free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
+- T17 iOS Host spike: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
+- G6 merge-main pass: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` + AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
 - Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
