@@ -12,11 +12,6 @@ TalkBack get the control's own accessibility instead of an approximation of it.
 Layout still belongs to Yoga — the control measures itself, reports its size to
 the layout engine, and React never sees a native node.
 
-> **Status: 0.1.0, not published yet.** The first release covers everything in
-> the table below — seven controls plus an opt-in `<Host>` — and `package.json`
-> says `0.1.0`. Nothing is on npm, and there is no git tag or GitHub release. To
-> try it today, [build it from source](#installation).
-
 ## Components
 
 | Component          | iOS                                                        | Android                                                      | Status | Docs                                                         |
@@ -70,15 +65,39 @@ native code.
 
 ## Installation
 
+```sh
+npm install react-native-nitro-ui react-native-nitro-modules
+```
+
 React Native autolinks the native code: no config plugin, no Podfile or Gradle
-edits, no manual linking.
+edits, no manual linking. `react-native-nitro-modules` is a peer dependency —
+every control here is a Nitro Hybrid View, so your app needs it too.
 
-### Today: build a tarball from source
+What is left is compiling the new native code in, which needs more than a Metro
+reload. Both routes below are what the consumer smoke tests run.
 
-The package is not on npm yet, and it needs a build step (`bob build`, which
-also regenerates the Nitro code) before an app can use it, so build it from a
-clone and install the tarball. You need [bun](https://bun.sh) 1.4 and Node 24
-(see [CONTRIBUTING](CONTRIBUTING.md#prerequisites)):
+Expo (Continuous Native Generation):
+
+```sh
+npx expo prebuild   # or: npx expo run:ios / npx expo run:android / eas build
+```
+
+Bare React Native CLI — the template ships a Gemfile, so use it:
+
+```sh
+cd ios && bundle install && bundle exec pod install
+```
+
+Then `npx expo run:ios` / `run:android`, or `npx react-native run-ios` /
+`run-android`.
+
+### Without npm
+
+From a clone (a fork, or a fix you need before the next release): the package
+needs a build step (`bob build`, which also regenerates the Nitro code) before
+an app can use it, so build the tarball and install that. You need
+[bun](https://bun.sh) 1.4 and Node 24 (see
+[CONTRIBUTING](CONTRIBUTING.md#prerequisites)).
 
 ```sh
 git clone https://github.com/dannyhw/react-native-nitro-ui.git
@@ -94,38 +113,14 @@ Then, in your app:
 npm install /path/to/react-native-nitro-ui-0.1.0.tgz react-native-nitro-modules
 ```
 
-and rebuild it the way you normally would (`npx expo prebuild` /
-`npx expo run:ios` for Expo, `bundle exec pod install` then
-`npx react-native run-ios` / `run-android` for the React Native CLI). This is the
-same path the consumer smoke tests take (`bun run smoke:pack`, then `npm install`
-of the tarball into a freshly generated app); see
-[Consumer smoke tests](CONTRIBUTING.md#consumer-smoke-tests).
+and rebuild as above. This is the path the consumer smoke tests take
+(`bun run smoke:pack`, then `npm install` of the tarball into a freshly
+generated app); see [Consumer smoke tests](CONTRIBUTING.md#consumer-smoke-tests).
 
 Installing straight from GitHub (`npm install github:dannyhw/react-native-nitro-ui`)
 is untested: npm would have to install this repo's development dependencies,
 including its example and benchmark workspaces, and run the build during your
 install. Use the tarball.
-
-### After the first release
-
-These are the commands for once the package is on npm. **They do not work yet.**
-
-Expo (Continuous Native Generation):
-
-```sh
-npm install react-native-nitro-ui react-native-nitro-modules
-npx expo prebuild   # or: npx expo run:ios / npx expo run:android / eas build
-```
-
-Bare React Native CLI:
-
-```sh
-npm install react-native-nitro-ui react-native-nitro-modules
-cd ios && bundle install && bundle exec pod install
-```
-
-Rebuild the app (`npx react-native run-ios` / `run-android`) so the new native
-code is compiled in.
 
 ### What has been tried
 
