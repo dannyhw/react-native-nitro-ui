@@ -28,7 +28,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | C1 Android over-wide | — | merged | Done | — |
 | A1c iOS baseline | — | merged | Done: minted (median load 2.93, 3.4 % over) | — |
 | G6 Picker | — | merged | Done | — |
-| H1 Android Host | `nitro-ui-worktrees/H1` · `task/H1-android-host` | brief on main | Running (Apex, `nitroui-H1`) | Opus review, then fix rounds (D19). |
+| H1 Android Host | `nitro-ui-worktrees/H1` · `task/H1-android-host` | `0689f41` (round 1 done) | Opus review running | Fix round 1 (iOS full harness on the final tree; T17-stale docs), then merge. |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
 | T17 iOS Host spike | branch only (`871c579`, pushed) | report merged | Done: iOS Host not better (D23); H3 dropped | — |
