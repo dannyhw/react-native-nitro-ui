@@ -26,6 +26,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | A1b overnight baselines | — | merged | Android minted; iOS refused (end-of-run load) | One more overnight iOS attempt after R4 merges; if refused again, stop — iOS stays on `--compare`. |
 | R4 load guard | — | merged | Done | iOS overnight attempt scheduled 01:00 2026-10-26. |
 | C1 Android over-wide | — | merged | Done | — |
+| A1c iOS baseline | `nitro-ui-worktrees/A1c` · `task/A1c-baselines` | `c9548f6` (brief) | Apex running (`nitroui-A1c-2026-10-26`, started 01:05) | Last iOS attempt; if refused, iOS stays on `--compare`. Merge report (+ baseline if minted). |
 | G6 Picker | `nitro-ui-worktrees/G6` · `task/G6-picker` | `9bc3b7b` | Ready; G5 now on main | After 05:00: merge-main pass (Apex, `nitroui-G6-merge`), regenerate nitrogen, full gates both platforms, then merge. |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done (H3 dropped) | — |
