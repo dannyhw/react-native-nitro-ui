@@ -129,3 +129,6 @@ mount UI CPU/op lower with a verdict, `presented` not worse (within its spread);
 (`<Host>`, `HostProps extends ViewProps`, direct nitro-ui children). The Host stays **opt-in** on
 both platforms: inside it controls are native content, not RN views (no interleaving, `ScrollView`,
 clip/transform, `Modal`), so it cannot be a silent default. Android H1/H2 proceed as planned.
+- **D23 outcome (T17, 2026-10-26):** the iOS Host failed the rule (memory 0.92x / 0.75x of nitro-ui,
+  but mount UI CPU 1.40x on Switch and unmount UI CPU 6.27x / 4.90x). H3 is not built; `<Host>` is
+  Android-only with an iOS passthrough. Revisit only with a new mechanism, not a re-run.
