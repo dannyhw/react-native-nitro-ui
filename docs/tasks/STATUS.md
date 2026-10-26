@@ -35,4 +35,5 @@
 | R5 | Publish prep 0.1.0 | Apex | orchestrator | merged (1 round; smoke Expo 58 + RN 0.88 both platforms, RN 0.86 Android; RN 0.86 iOS n/a on iOS 27) — **published 2026-10-26** (`v0.1.0`) |
 | R6 | Changesets + staged npm trusted publishing | Apex | Opus | merged (1 impl + 1 fix round); first automated release 0.1.1 shipped 2026-10-26 |
 | X1 | Dev tooling: CI checks, fresh-build stamp, device leases | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE WITH FOLLOW-UPS) |
+| H2a | Android `<Host>` for Slider, Progress, Button (+ N4) | Apex | Opus | merged (1 impl + 1 fix round; review MERGE WITH FIXES; bench indicative, busy machine) |
 | T17 | iOS `<Host>` spike | Apex | — | report merged; not better (D23) — iOS `<Host>` is a passthrough |
