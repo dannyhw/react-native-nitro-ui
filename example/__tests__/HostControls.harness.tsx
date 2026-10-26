@@ -228,7 +228,7 @@ function probeIn(
  * the Host's `AndroidComposeView`. iOS: the passthrough lays children out as RN views,
  * so the control's own box is the honest target — and its *centre*, because the RN
  * instance stretches across the Host while the SwiftUI control inside it is intrinsic and
- * centred. (Measured on iPhone Air with a `12 dp`-from-the-left press: a hosted Switch,
+ * centred. (Measured on the iOS simulator with a `12 dp`-from-the-left press: a hosted Switch,
  * whose instance hugs the control at 61 x 28, answered; a hosted Button, whose instance
  * stretches and whose button does not, answered for nothing.) Two answers, one question,
  * and the difference is the documented behaviour (`Host.harness` explains the same split).
@@ -1141,10 +1141,7 @@ if (Platform.OS === 'android') {
       // unregisters itself once it has marked, so a live-only probe would read `""` for
       // a hosted child whether or not the guard that stops it arming is there. Round 1's
       // mutation proved exactly that: with the guard deleted the test stayed green.
-      expect(read(aloneIds)).toEqual([
-        'strategy,preDraw',
-        'strategy,preDraw',
-      ]);
+      expect(read(aloneIds)).toEqual(['strategy,preDraw', 'strategy,preDraw']);
 
       // And it stays nothing after the control is used: a recomposition of a hosted child
       // must not lazily arm what its attach declined to arm.

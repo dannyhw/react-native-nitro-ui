@@ -284,10 +284,18 @@ const MIXED_HOST_STYLE = {
  * which holds the Host.
  *
  * Returns the box of one child of **each** kind, which is the witness that all four
- * were really composed by the Host: a hosted control declines to measure, so its own
- * Android view is laid out at `0 × 0` (D24 — not `GONE`, and not an absent view either).
- * A control the allowlist had quietly stopped composing would still be in the churn,
- * still be mounted and unmounted every cycle, and would report a real frame instead.
+ * were still declining to measure themselves when the cycle ended: a hosted control is
+ * laid out at `0 × 0` (D24 — not `GONE`, and not an absent view either). That is the
+ * half this can see, and it is the expensive half: a control that started measuring
+ * again would build a composition of its own per cycle, and the boxes below answer a
+ * real frame instead of `0 × 0`.
+ *
+ * What it cannot see is the allowlist. A control that had quietly come off it is
+ * measured by the same gate that a hosted one is (`isHostedByParent`, not `isHostable`),
+ * so it keeps answering `0 × 0` here and churns exactly as before — measured, with the
+ * `Slider` marked non-hostable, and this witness stayed green. Whether each control is
+ * really composed by the Host is gated in `HostControls.harness.tsx`, by the two gates
+ * that only a shared composition can satisfy (a hit-tested track and a semantics node).
  */
 async function churnMixedCycle(
   prefix: string
@@ -522,12 +530,13 @@ if (Platform.OS === 'android') {
         'NitroUiButton',
       ]);
       const warmUp = await churnMixedCycle('mixed-warmup');
-      // Every kind has to have been composed *by the Host*, not merely mounted next to
-      // it: 0x0 is what a hosted control's own Android view is laid out at, because a
-      // hosted control declines to measure (D24). A control the allowlist had quietly
-      // stopped composing would still churn, still be mounted and freed every cycle,
-      // and report a real frame instead - which would make every number below a
-      // measurement of the wrong thing.
+      // Every kind has to still be *hosted* when the cycle starts: 0x0 is what a hosted
+      // control's own Android view is laid out at, because a hosted control declines to
+      // measure (D24). A control that stopped declining would build a composition of its
+      // own every cycle, and the heap numbers below would be measuring a different
+      // fixture than the one the title names. The allowlist is not what this half can
+      // see - see the note on `churnMixedCycle` for what it answers when a control comes
+      // off it, and which gates cover that instead.
       for (const kind of MIXED_KINDS) {
         const box = warmUp[kind];
         expect(box).not.toBeNull();
