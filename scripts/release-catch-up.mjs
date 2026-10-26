@@ -18,10 +18,28 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { realpathSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, dirname, resolve } from 'node:path';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/**
+ * This file's path when Node was asked to run it, otherwise null. Read from
+ * `argv` rather than `import.meta` so the module stays importable: Jest
+ * transpiles to CommonJS, where `import.meta` is a syntax error. Comparing
+ * realpathed paths also avoids the percent-encoding trap that comparing against
+ * `file://` + argv[1] falls into.
+ */
+function entryPath() {
+  const entry = process.argv[1];
+  if (!entry) return null;
+  try {
+    const resolved = realpathSync(resolve(entry));
+    return basename(resolved) === 'release-catch-up.mjs' ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+const entry = entryPath();
+const repoRoot = entry ? resolve(dirname(entry), '..') : process.cwd();
 
 /**
  * The `## <version>` section of the changelog, heading text tolerant of the date the
@@ -67,10 +85,9 @@ export function findVersionCommit(commits, version, readVersionAt) {
  */
 export async function runCatchUp(options = {}) {
   const {
-    cwd = repoRoot,
     env = process.env,
     exec = runCommand,
-    read = (relative) => readFileSync(resolve(cwd, relative), 'utf8'),
+    read = (relative) => readFileSync(resolve(repoRoot, relative), 'utf8'),
     log = (message) => console.log(message),
     dryRun = false,
   } = options;
@@ -169,27 +186,7 @@ function runCommand([command, args]) {
   };
 }
 
-/**
- * Is this file the process entry point? Same reasoning as `patch-nitrogen.mjs`:
- * `import.meta.url === 'file://' + argv[1]` breaks on paths that need percent-
- * encoding, `import.meta.main` (Node >= 24, Bun) is exact, and the path comparison is
- * the fallback.
- */
-function invokedDirectly() {
-  if (typeof import.meta.main === 'boolean') return import.meta.main;
-  const entry = process.argv[1];
-  if (entry == null) return false;
-  try {
-    return (
-      realpathSync(fileURLToPath(import.meta.url)) ===
-      realpathSync(resolve(entry))
-    );
-  } catch {
-    return false;
-  }
-}
-
-if (invokedDirectly()) {
+if (entry) {
   runCatchUp({ dryRun: process.argv.includes('--dry-run') }).catch((error) => {
     console.error(`release-catch-up: ${error.message}`);
     process.exitCode = 1;
