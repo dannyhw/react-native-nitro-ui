@@ -46,11 +46,17 @@ import {
   findTab,
   parseHierarchy,
 } from './uiautomator.mjs';
-import { assertSupportedNode } from '../node-version.mjs';
+import { assertSupportedNodeOrReexec } from '../node-version.mjs';
+import { assertFreshApp, colorize } from '../app-stamp.mjs';
 
 // One Node across every device gate: the harness cannot run on Node 25/26 at
-// all, so a real-input run on that runtime is not comparable evidence.
-assertSupportedNode({ command: 'bun run test:real-input:android' });
+// all, so a real-input run on that runtime is not comparable evidence. When this
+// shell is on the wrong Node, restart under the `.nvmrc` one rather than refusing
+// a device run - `bun run test:real-input:*` is a device gate, not a shell test.
+assertSupportedNodeOrReexec({
+  command: 'bun run test:real-input:android',
+  entryUrl: import.meta.url,
+});
 
 const BUNDLE_ID = 'nitroui.example';
 const ACTIVITY = `${BUNDLE_ID}/.MainActivity`;
@@ -1195,7 +1201,6 @@ async function main() {
   const suite = new Suite('android', controls);
   const out = artifactsDir('android');
   const metroPort = Number(process.env.METRO_PORT ?? 8291);
-  const device = resolveDevice(process.env);
   const apk =
     process.env.HARNESS_APP_PATH ??
     path.resolve(
@@ -1203,6 +1208,24 @@ async function main() {
       'example/android/app/build/outputs/apk/debug/app-debug.apk'
     );
 
+  // This suite installs an APK rather than building one, so it is exactly as
+  // exposed to a stale artifact as the harness is: `adb install -r` of an old
+  // debug build would report green for code that is not here. The stamp says
+  // which tree the APK came from and which hybrids its dex contains.
+  try {
+    assertFreshApp({
+      platform: 'android',
+      artifact: apk,
+      command: 'bun run test:real-input:android',
+    });
+  } catch (error) {
+    // Before `adb` is even asked which devices exist, before Metro, before the
+    // emulator: a refusal must not touch a device another task is holding.
+    console.error(colorize(String(error?.message ?? error), 'red'));
+    throw error;
+  }
+
+  const device = resolveDevice(process.env);
   console.log(
     `real-input (android): ${device.serial} · ${device.avd} · adb server ` +
       `${process.env.ANDROID_ADB_SERVER_PORT ?? 'default'} · Metro ${String(metroPort)}`

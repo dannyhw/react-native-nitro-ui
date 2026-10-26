@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -11,6 +12,16 @@ import {
   appleSimulator,
 } from '@react-native-harness/platform-apple';
 import { assertSupportedNode } from '../scripts/node-version.mjs';
+import {
+  StaleAppError,
+  artifactPath,
+  assertFreshApp,
+  colorize,
+} from '../scripts/app-stamp.mjs';
+import {
+  platformForArtifact,
+  runnerFromArgv,
+} from '../scripts/app-stamp-core.mjs';
 // CommonJS, because `example/metro.config.js` requires the same module to serve
 // the state this publishes.
 import harnessTimingGate from '../scripts/harness-timing-gate.js';
@@ -21,6 +32,61 @@ const { publishTimingGate } = harnessTimingGate;
 // transform breaks on Node 25/26 with an ESM error that reads like a bug in the
 // test file. Say so here, before any device work, rather than after a build.
 assertSupportedNode({ command: 'bun run harness:ios|android' });
+
+// Second gate at the same point, for the other way a device run goes wrong:
+// `HARNESS_APP_PATH` pointing at an app that is not this checkout's (a stale
+// build, or an APK whose dex lost a generated hybrid). Refusing here happens
+// before a simulator or emulator is touched, so a refusal cannot hold a device
+// another task needs. `scripts/build-app.mjs` writes the stamp this reads.
+const runner = runnerFromArgv(process.argv) ?? 'ios';
+const explicitApp = process.env.HARNESS_APP_PATH ?? '';
+// No explicit path means the fixed one this worktree's build writes, when it is
+// there: publishing it back to the environment is what lets
+// `bun run harness:ios` run with no environment at all.
+const artifact =
+  explicitApp === ''
+    ? fs.existsSync(artifactPath({ platform: runner }))
+      ? artifactPath({ platform: runner })
+      : null
+    : path.resolve(explicitApp);
+
+if (artifact != null) {
+  process.env.HARNESS_APP_PATH = artifact;
+  const platform = platformForArtifact(artifact) ?? runner;
+  try {
+    const stamp = assertFreshApp({
+      platform,
+      artifact,
+      command: `bun run harness:${platform}`,
+    });
+    console.log(
+      colorize(
+        `app is fresh: ${artifact} (tree ${stamp.tree.slice(0, 12)}, ` +
+          `${Object.keys(stamp.counts).length} components registered)`,
+        'green'
+      )
+    );
+  } catch (error) {
+    // Red because the alternative - a green run against someone else's binary -
+    // reads like evidence. Printed before rethrowing so the fix is the last
+    // thing on the screen of whoever ran it.
+    console.error(
+      colorize(
+        error instanceof StaleAppError
+          ? String(error.message)
+          : `app.stamp: ${String(error?.message ?? error)}`,
+        'red'
+      )
+    );
+    throw error;
+  }
+} else {
+  console.log(
+    `app.stamp: no artifact to check; build one with ` +
+      `\`node scripts/build-app.mjs --platform ${runner}\` ` +
+      'or set HARNESS_APP_PATH.'
+  );
+}
 
 // react-native-harness does not build the app: build a Debug iOS .app or an
 // Android APK first and point HARNESS_APP_PATH at it (see CONTRIBUTING.md).
@@ -137,7 +203,7 @@ export default {
       }),
     }),
   ],
-  defaultRunner: 'ios',
+  defaultRunner: runner,
   resetEnvironmentBetweenTestFiles: 'runtime',
   // react-native-harness 1.6 has no per-test timeout: this is the budget for
   // the slowest test in the suite, not the average one. The sizing suite mounts
