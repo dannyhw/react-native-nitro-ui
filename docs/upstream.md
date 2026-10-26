@@ -11,9 +11,9 @@ delete the entry and the workaround it describes**; each entry ends with a
 requires an entry for every dev-tooling patch in `patches/`; D5 keeps those
 patches dev-only (never needed by consumers, never in the npm tarball).
 
-Line references point at this branch as of 2026-10-22. A few of these files are
-under active work, so each entry also names the symbol, helper or patch hunk it
-means.
+Line references into upstream packages are for the pinned versions named in
+each section. References into this repo name the file and the symbol, helper or
+patch hunk they mean rather than a line, because those files keep changing.
 
 ## Status
 
@@ -45,10 +45,10 @@ defects as "Builder-bob template bugs" (`docs/research/setup-decisions.md:630`).
 
 ## react-native-harness 1.6.0
 
-Harness is pinned exactly at 1.6.0 (`example/package.json:27-29,36`) and the CI
-action is `callstackincubator/react-native-harness@v1.6.0`
-(`docs/research/setup-decisions.md:527`). One of its packages is patched with
-bun `patchedDependencies` (`package.json:224-226`, mirrored in `bun.lock:82-84`)
+Harness is pinned exactly at 1.6.0 (`example/package.json`), and the (currently
+disabled) CI workflow would use the `callstackincubator/react-native-harness@v1.6.0`
+action (`docs/research/setup-decisions.md:527`). One of its packages is patched with
+bun `patchedDependencies` (`package.json`, mirrored in `bun.lock`)
 from `patches/@react-native-harness%2Fplatform-apple@1.6.0.patch`; `patches/` is
 not in `package.json` `files`, so it never reaches a consumer (D5).
 
@@ -59,8 +59,8 @@ not in `package.json` `files`, so it never reaches a consumer (D5).
 test. JS comes from Metro, native code does not, so a run silently executes an
 arbitrarily old binary against new JS. In T10 a two-hour-stale binary ran the
 whole suite (`docs/tasks/T10-core-switch.report.md:196-197`), and the failures
-looked like component bugs. Simulators here are long-lived and reused across
-tasks, which is exactly the case the check trusts.
+looked like component bugs. A simulator that is long-lived and reused across
+branches is exactly the case the check trusts.
 
 **Evidence.** The install check is upstream `dist/instance.js:67-74` (patch hunk
 `@@ -67,8 +67,12 @@`); it gates the install on an "is *some* build present"
@@ -139,7 +139,7 @@ plist. `getAppInfo` therefore never reaches its own "not installed" branch: the
 spawn rejects, `isAppInstalled` throws instead of returning `false`, and the
 harness dies on a simulator where the app simply is not installed yet.
 
-**Evidence.** Measured on this machine (Xcode 27, booted iOS 27.0 simulator,
+**Evidence.** Measured locally (Xcode 27, booted iOS 27.0 simulator,
 bundle id that is not installed):
 
 ```text
@@ -155,7 +155,7 @@ Underlying error (domain=NSPOSIXErrorDomain, code=3):
 ```
 
 stdout is empty, so the message is only on stderr — hence the patch tests both
-streams (`patches/…patch:35-36`). The same command against a **Shutdown**
+streams (`patches/…patch`). The same command against a **Shutdown**
 simulator exits **149** with `Unable to lookup in current state: Shutdown`, and
 the patch deliberately does not swallow that. The upstream branch that should
 have answered "not installed" is the entry-count check in `getAppInfo`
@@ -223,7 +223,7 @@ caller in dist/instance.js:125-126).
 Actual
 `simctl appinfo` exits with code 3 and writes the message to stderr, so the spawn
 rejects, `getAppInfo` throws, `isAppInstalled` throws, and the run fails on a
-simulator where the app is merely not installed. Exit 3 output on this machine:
+simulator where the app is merely not installed. Exit 3 output, measured locally:
 "An error was encountered processing the command (domain=NSPOSIXErrorDomain,
 code=3): … No application record found for that bundle identifier / Application
 not found". stdout is empty, so only stderr carries the signal.
@@ -237,7 +237,7 @@ Shutdown" is a real error and must not be read as "not installed".
 
 **Removal.** When `getAppInfo` handles exit 3, delete this entry and hunk 2 of
 the patch file; if hunk 1 is gone too, delete the file and the
-`patchedDependencies` entries in `package.json:224-226` and `bun.lock:82-84`.
+`patchedDependencies` entries in `package.json` and `bun.lock`.
 
 ### H3 — `screen.findByTestId` accepts no timeout
 
@@ -260,11 +260,11 @@ options (`node_modules/@react-native-harness/ui/dist/screen.js:8-15`), and
 (`node_modules/@react-native-harness/runtime/dist/waitFor.js:10`). `render`
 *does* take a timeout — the warm-up render passes `timeout: 15000` and the
 40-instance render passes `timeout: 20000`
-(`example/__tests__/Switch.harness.tsx:138,532`) — so the gap is specific to the
+(`example/__tests__/Switch.harness.tsx`) — so the gap is specific to the
 `find*` queries.
 
 **Today.** Worked around inside the suite, not patched. `waitForTestId`
-(`example/__tests__/Switch.harness.tsx:108`, rationale in the comment above it)
+(`example/__tests__/Switch.harness.tsx`, rationale in the comment above it)
 polls the non-throwing native query with a 10 s deadline at 50 ms intervals, then
 hands back the harness' own reference. After that, two consecutive iOS runs and
 an Android run came back 14/14
@@ -329,9 +329,8 @@ have to get geometry from somewhere else.
   base64 string only, so the PNG's real size never reaches JS.
 
 **Today.** Worked around, not patched: the suite reads bounds straight from the
-`HarnessUI` TurboModule's `queryByTestId`: `example/__tests__/Switch.harness.tsx:37-49`
-declares the module and its `ViewInfo`, and the tests read the laid-out box from it
-(`:177`, `:200`, `:274`). `screen`'s element references stay in use for presses.
+`HarnessUI` TurboModule's `queryByTestId`: `example/__tests__/Switch.harness.tsx`
+declares the module and its `ViewInfo`, and the tests read the laid-out box from it. `screen`'s element references stay in use for presses.
 
 **Issue draft** (repo `callstackincubator/react-native-harness`):
 
@@ -369,7 +368,7 @@ returns them — so element targets can pass a real box.
 
 **Removal.** When `screenshot(element)` reports real sizes, delete this entry and
 switch the `harnessUi.queryByTestId` box reads in
-`example/__tests__/Switch.harness.tsx:177,200,274` back to the harness API
+`example/__tests__/Switch.harness.tsx` back to the harness API
 (dropping the `HarnessUI` declaration at `:37-49` if `waitForTestId` is gone
 too).
 
@@ -497,7 +496,7 @@ Not ours to file; recorded so a reader does not rediscover them. All from
 | H5  | harness #197              | Android `TextureView`/`SurfaceView` screenshots come out transparent (`:385`)     | no such surfaces in the example app today                                       |
 | H6  | harness #198              | a missing image-snapshot baseline **passes** (`:378`)                             | commit the baselines; visual assertions are only trusted with a committed file |
 | H7  | harness #215              | two copies of `react-native` in a monorepo break view configs (`:384`)            | bun hoisted linker, one RN version everywhere (`docs/tasks/T01-scaffold.report.md:308`) |
-| H8  | harness #273              | the runner must start from the app directory (`:374`)                             | scripts run via `bun --cwd example` (`package.json:37`)                          |
+| H8  | harness #273              | the runner must start from the app directory (`:374`)                             | scripts run via `bun --cwd example` (`package.json`)                          |
 
 **Removal.** Re-check each against the pinned version; when one is fixed in a
 release we take, drop its row and its mitigation note.
@@ -507,7 +506,7 @@ release we take, drop its row and its mitigation note.
 ## react-native-nitro-modules / nitrogen 0.37.1
 
 This repo builds against `nitrogen ^0.37.1` and peers on
-`react-native-nitro-modules ^0.37.1` (`package.json:107` and peerDependencies),
+`react-native-nitro-modules ^0.37.1` (`package.json` and peerDependencies),
 with RN floor 0.86 (D8).
 
 ### N1 — Android base `ViewProps` dropped for Hybrid Views (nitro#1655 → #1656)
@@ -520,7 +519,7 @@ on an Android emulator with RN 0.88 the Nitro view ignored `backgroundColor` and
 consumer smoke apps (`docs/research/setup-decisions.md:241`). Cause: nitrogen
 0.37.1 generates a `Props` constructor whose body is empty, so
 `Props::initializeDynamicProps` is never called
-(`scripts/patch-nitrogen.mjs:4-8`).
+(`scripts/patch-nitrogen.mjs`).
 
 **Evidence — upstream state, as recorded.** `docs/research/setup-decisions.md:216-232`:
 
@@ -540,10 +539,10 @@ consumer smoke apps (`docs/research/setup-decisions.md:241`). Cause: nitrogen
   range and RN floor, shipping nightly codegen is not an option.
 
 **Evidence — what ships.** `bun run nitrogen` is `nitrogen src &&
-node scripts/patch-nitrogen.mjs` (`package.json:42`), and bob's `custom` target
-runs the same script (`package.json:130-137`), so `prepare` and `npm pack` always
+node scripts/patch-nitrogen.mjs` (`package.json`), and bob's `custom` target
+runs the same script (`package.json`), so `prepare` and `npm pack` always
 ship patched code. The script rewrites the empty ctor and adds the include
-(`scripts/patch-nitrogen.mjs:33-39`), producing committed output:
+(`scripts/patch-nitrogen.mjs`), producing committed output:
 
 ```cpp
 // nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp:12
@@ -556,13 +555,13 @@ ship patched code. The script rewrites the empty ctor and adds the include
 `cpp/NitroUiPropsCompat.hpp` is a header-only copy of the upstream helper under
 `::nitroui::compat` (not `nitroui::`, which would collide with the generated
 `margelo::nitro::nitroui`). Guards, in this order: skip files already containing
-upstream's `RawPropsCompat::initializeDynamicProps` (`scripts/patch-nitrogen.mjs:39,47`);
-idempotent via `PATCH_MARKER` (`:33`); **exit 1** if a generated
-`*Component.cpp` has neither the upstream call nor our anchor (`:116`), so a
+upstream's `RawPropsCompat::initializeDynamicProps` (`scripts/patch-nitrogen.mjs`);
+idempotent via `PATCH_MARKER`; **exit 1** if a generated
+`*Component.cpp` has neither the upstream call nor our anchor, so a
 nitrogen upgrade cannot silently drop the fix; no-op when there are no Hybrid
-Views. Covered by `scripts/__tests__/patch-nitrogen.test.js:49,72,93,106,156`,
+Views. Covered by `scripts/__tests__/patch-nitrogen.test.js`,
 and `bun run nitrogen:check` re-runs it to catch drift
-(`scripts/nitrogen-check.mjs:165`). Alternatives rejected: patch-package cannot
+(`scripts/nitrogen-check.mjs`). Alternatives rejected: patch-package cannot
 patch a consumer's `node_modules`, and a hand-written `ViewManager` duplicates
 generated state-updater code per view (`docs/research/setup-decisions.md:244-246`).
 
@@ -597,8 +596,8 @@ the script becomes a no-op because the output already contains
 `RawPropsCompat::initializeDynamicProps` — then delete this entry,
 `scripts/patch-nitrogen.mjs`, `scripts/__tests__/patch-nitrogen.test.js`,
 `cpp/NitroUiPropsCompat.hpp`, the `&& node scripts/patch-nitrogen.mjs` half of
-`package.json:42`, and the patch references in
-`scripts/nitrogen-check.mjs:165` and `CONTRIBUTING.md:72-77`.
+`package.json`, and the patch references in
+`scripts/nitrogen-check.mjs` and `CONTRIBUTING.md` ("Nitrogen and the ViewProps patch").
 
 ### N2 — a removed prop arrives as `null`, which crashes an optional prop (nitro#1184)
 
@@ -616,16 +615,16 @@ Exception in HostFunction: NitroUi.label: Value is null, expected a String
 `JSIConverter<std::optional<T>>` still accepts only `undefined`
 (`docs/research/setup-decisions.md:274-276`).
 
-**Today.** Worked around in code, by rule (D7, `docs/DECISIONS.md:14-15`),
+**Today.** Worked around in code, by rule (D7 in `docs/DECISIONS.md`),
 enforced three ways:
 
-- Lint: `nitro-ui/no-optional-view-props` (`eslint-rules/index.js:306-313,555`,
-  enabled `eslint.config.mjs:95`) reports the rule message naming
+- Lint: `nitro-ui/no-optional-view-props` (`eslint-rules/index.js`,
+  enabled `eslint.config.mjs`) reports the rule message naming
   `margelo/nitro#1184`.
 - Specs: no `?:` members; "unset" is `T | null`, which nitrogen maps to
-  `Variant_NullType_T` (`src/components/Switch/Switch.nitro.ts:10-13,18-43`).
+  `Variant_NullType_T` (`src/components/Switch/Switch.nitro.ts`).
 - Wrappers: always send every native prop, `?? null` for unset
-  (`src/components/Switch/Switch.tsx:119-125`), documented as a contract in
+  (`src/components/Switch/Switch.tsx`), documented as a contract in
   `docs/architecture/core.md` §3 (the "No optional props in a spec" bullet).
 
 Verified: with `label: string | null` toggling between a value and `null`, no
@@ -673,8 +672,8 @@ Android and 20+ on iOS.
 
 **Removal.** When the released converter accepts `null`, delete this entry and
 D7, then optional props become legal: drop
-`nitro-ui/no-optional-view-props` (`eslint-rules/index.js:306-313,555`,
-`eslint.config.mjs:95`) and relax the specs/wrappers at your own pace (they stay
+`nitro-ui/no-optional-view-props` (`eslint-rules/index.js`,
+`eslint.config.mjs`) and relax the specs/wrappers at your own pace (they stay
 correct as written).
 
 ### N3 — callback props must be optional; `fn | null` throws at mount
@@ -685,13 +684,13 @@ unwraps `f` only when the prop type *is* a function (`IsFunctionProp`). A
 `fn | null` union generates `std::variant<std::function, NullType>`, which is not
 a function type, so the wrapper is never unwrapped and converting the prop
 **throws while mounting**. Callbacks therefore have to be declared `fn?` — an
-explicit exception to D7, recorded as D7b (`docs/DECISIONS.md:32-34`,
+explicit exception to D7, recorded as D7b (`docs/DECISIONS.md`,
 `docs/architecture/core.md` §3, the "Callbacks are the one exception" bullet).
 
 **Evidence.** Spec comment and the resulting shape:
-`src/components/Switch/Switch.nitro.ts:46-59` (`onValueChange?:` at `:59`).
+`src/components/Switch/Switch.nitro.ts` (`onValueChange?:`).
 Lint enforces both directions — `callbackPropNotNullable` and
-`callbackPropMustBeOptional` (`eslint-rules/index.js:367-378`). The rule that
+`callbackPropMustBeOptional` (`eslint-rules/index.js`). The rule that
 makes it safe is behavioural: `useStableCallback` builds `{ f: … }` once per
 mounted view and the wrapper always passes a real callback while mounted, never
 `null` (`docs/architecture/core.md` §3, the "Callbacks keep one identity forever"
@@ -729,8 +728,8 @@ Either way the rule becomes visible at build time instead of a mount-time crash.
 ```
 
 **Removal.** If upstream makes nullable callbacks work, this entry, D7b, the
-`callbackProp*` lint messages (`eslint-rules/index.js:367-378`) and the spec
-comment at `src/components/Switch/Switch.nitro.ts:46-59` can go; until then D7
+`callbackProp*` lint messages (`eslint-rules/index.js`) and the spec
+comment at `src/components/Switch/Switch.nitro.ts` can go; until then D7
 and D7b stay as a pair.
 
 ### N4 — generated Android view manager ignores border and radius (documented limitation)
@@ -781,10 +780,10 @@ calls and "applied" marks separately.
 **Quantified (T12).** T12 measured the second delivery instead of guessing at it.
 It costs one perf mark and one JNI props diff against an unchanged snapshot, and
 no second composition: `commit()` marks unconditionally and returns when nothing
-is dirty (`android/.../core/NitroComposeHost.kt:207-214`), and `propsApplied` is
+is dirty (`android/.../core/NitroComposeHost.kt`), and `propsApplied` is
 2.00 on mount / 1.00 on update exactly as the Fabric floor predicts. On a
-launch-paired quick plan (`bench/results/b7b6acb-android-20261023T053110Z.json`,
-`mount:50`) our `jsCommitNs` is **1.60 ms** against the shared host's 1.89 ms and
+launch-paired quick plan (a local results file at `b7b6acb`; results files are
+not committed, `mount:50`) our `jsCommitNs` is **1.60 ms** against the shared host's 1.89 ms and
 rn-core's 1.37 ms, while the same cell's gap worth chasing is **14.85 ms of UI
 CPU** against the shared host's 10.48 ms. Deleting the diff entirely is a
 sub-millisecond item on a cell with a 4 ms UI-thread gap, and the traces put that
@@ -847,9 +846,8 @@ on iOS specifically. Three small codegen options remove a post-processing patch 
 every library that sizes its own controls.
 ```
 
-**Upstream status.** No issue filed yet. Task branches in this repo are not allowed
-to open issues, so T11 records the draft above for a maintainer to file; until then
-the post-processing stays, with its tests.
+**Upstream status.** No issue filed yet; the draft above is ready for a maintainer
+to file. Until then the post-processing stays, with its tests.
 
 **Removal.** When nitrogen offers the option in (2) and the hook in (3): point
 `nitro-ui.sizing.json`'s views at it, delete the alias/hook hunks from
@@ -881,14 +879,15 @@ Type com.facebook.fbreact.specs.NativeAccessibilityInfoSpec is defined multiple 
 ```
 
 Debug builds pass, so the failure goes unnoticed until a release build
-(`docs/research/setup-decisions.md:86`). It is invisible in CI unless CI builds
-release, which is why the Android CI job assembles release
-(`docs/research/setup-decisions.md:525`).
+(`docs/research/setup-decisions.md:86`). It is invisible to any check that only
+builds debug, which is why the (currently disabled) Android CI job is written to
+assemble release (`docs/research/setup-decisions.md:525`), and why the consumer
+smoke tests build Release.
 
 **Evidence.** `docs/research/setup-decisions.md:84-86`, which also notes Rive
 does the same thing and that it is "worth reporting upstream to builder-bob".
 
-**Today.** Fixed in our template copy: `android/build.gradle:42-46`.
+**Today.** Fixed in our template copy: `android/build.gradle`.
 
 ```groovy
 react {
@@ -940,9 +939,9 @@ the same scaffold run.
 ```
 
 **Removal.** Once the template generates the block, delete this entry and drop
-the manual note in `docs/research/setup-decisions.md:84-86` (research files are
-not edited by tasks — leave it to a notes cleanup). Keep
-`android/build.gradle:42-46`: it is correct either way.
+the manual note in `docs/research/setup-decisions.md:84-86` (the research notes are
+kept as written; leave it to a notes cleanup). Keep
+`android/build.gradle`: it is correct either way.
 
 ### B2 — `--tools a b c` keeps only the first value, silently
 
@@ -1001,7 +1000,7 @@ cleanup.
    and delete the workaround named in the entry's **Removal** line.
 3. Delete this entry, and its row in the Status table. Do not leave a "fixed"
    entry behind: an entry with no live workaround has nothing to attribute.
-4. `bun run check` (`CONTRIBUTING.md:40,62-64`) is the gate; for N1, `nitrogen:check`
+4. `bun run check` (`CONTRIBUTING.md`, "Scripts") is the gate; for N1, `nitrogen:check`
    reports patched-view drift, and for `patches/` entries a clean `bun install`
    must still succeed after the patch file is removed.
 
