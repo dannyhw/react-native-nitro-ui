@@ -535,7 +535,9 @@ calls.
 
 ## Contributing
 
-- [Development workflow](CONTRIBUTING.md#development-workflow)
+- [Development workflow](CONTRIBUTING.md) — prerequisites, the scripts, and the
+  gates. The GitHub workflows are disabled for now, so `bun run check` and the
+  device suites, run locally, are the gates
 - [Storybook](example/README.md#storybook) - the example app is also a showcase
   app: `bun run storybook:ios` / `bun run storybook:android` starts it, and
   `bun run storybook` runs its Metro server separately
@@ -544,4 +546,4 @@ calls.
 
 ## License
 
-MIT
+[MIT](LICENSE)
