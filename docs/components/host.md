@@ -23,20 +23,26 @@ import { Host, Switch } from 'react-native-nitro-ui';
 
 When a screen mounts a batch of the same control at once and the mount is what
 costs: a settings list, a table of rows, a filter panel. That is where the win is —
-measured at N=200 Switches, `quick` plan, ART `speed-profile`:
+measured at N=200 Switches, `quick` plan, ART `speed-profile`, on the emulator this
+library gates on — every number below is the launch-paired ratio to
+`expo-ui-shared-host` from one run (`docs/tasks/H1-android-host.report.md`):
 
-|                                | `nitro-ui` (no Host) | `expo-ui-shared-host` | `nitro-ui` + `<Host>` |
-| ------------------------------ | -------------------- | --------------------- | --------------------- |
-| Mount memory                   | 2.75x                | 1.00x                 | **0.87x**             |
-| Mount UI-thread CPU per op     | 1.50x                | 1.00x                 | **0.80x**             |
+|                                  | `nitro-ui` (no Host) | `expo-ui-shared-host` | `nitro-ui` + `<Host>` |
+| -------------------------------- | -------------------- | --------------------- | --------------------- |
+| Mount memory                     | 2.68x                | 1.00x                 | **0.85x**             |
+| Mount UI-thread CPU per op       | 1.38x                | 1.00x                 | **0.81x**             |
+| Mount wall time (`mounted`)      | 1.17x                | 1.00x                 | **0.98x**             |
+| Mount JS CPU per op              | 0.78x                | 1.00x                 | 1.26x                 |
 
-(Host numbers are T16's spike, `docs/tasks/T16-host-spike.report.md`; H1 re-measures
-them in `docs/tasks/H1-android-host.report.md`.)
+T16's spike measured 0.87x and 0.80x the same way, so the container that ships
+reproduces the container that was proposed.
 
 What it pays with is the JS thread: a hosted control is still a React Native node
-**and** a child of somebody else's composition (T16: 1.10x mount JS CPU per op against
-the same shared host). That cost is why `Host` is a component an app chooses, and not
-what every list does by default.
+**and** a child of somebody else's composition, so the JS column goes the other way —
+1.26x the shared host, where the unhosted control is *below* it at 0.78x. (The spike
+was 1.10x: the productionised container does more bookkeeping per child, and closing
+that is a follow-up.) That cost is why `Host` is a component an app chooses for a dense
+list, and not what every container does by default.
 
 ## API
 
