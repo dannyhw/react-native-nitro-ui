@@ -8,6 +8,11 @@
 # the tarball was not built from this exact commit.
 name: Smoke
 
+# Read-only like CI: these jobs build, launch and upload artifacts, and never
+# need to write to the repository (review S2).
+permissions:
+  contents: read
+
 # Manual only, like the other device jobs (docs/DECISIONS.md D22, D25): the
 # nightly schedule is off, so nothing runs here until a maintainer starts it.
 # The local entry points are `bun run smoke:pack` / `smoke:expo` / `smoke:rn-cli`.

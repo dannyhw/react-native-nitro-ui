@@ -1,5 +1,12 @@
 name: CI
 
+# Nothing in this workflow writes to the repository, and the jobs that upload
+# artifacts upload them to the run, not to a branch. Say so, so a dependency
+# compromise in a checked-out script cannot widen its reach with the default
+# write token (review S2).
+permissions:
+  contents: read
+
 # The triggered set is three free GitHub-hosted jobs:
 #
 #   1. `checks` - every static gate (`bun run check`) on Linux;
@@ -60,7 +67,11 @@ jobs:
   # have to be installed for a one-minute job.
   native-tests:
     name: Native tests (host, ASan)
-    runs-on: macos-latest
+    # Pinned rather than `macos-latest`: these tests need clang and swiftc, and
+    # a floating label means the toolchain changes under a green run - the same
+    # reason the iOS jobs name their Xcode. `macos-26` is the current stable
+    # macOS image; check it is registered before the next scheduled run.
+    runs-on: macos-26
 
     steps:
       - name: Checkout
@@ -182,11 +193,14 @@ jobs:
           cache-provider: basic
           cache-read-only: false
 
-      - name: Assemble debug APK
-        working-directory: example/android
+      # Through scripts/build-app.mjs rather than gradle directly: that is what
+      # writes example/android/app.stamp, and `rn-harness.config.mjs` refuses an
+      # APK it cannot prove was built from this tree. A raw `assembleDebug` here
+      # builds the same binary and then fails its own gate (review S1).
+      - name: Build stamped debug app
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
-        run: ./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64 --no-daemon --console=plain
+        run: node scripts/build-app.mjs --platform android --arch x86_64
 
       - name: Run Harness tests
         uses: callstackincubator/react-native-harness@3e3e25b8ddfd0018fbc0700e0932448ffe5a95db # v1.6.0
@@ -198,11 +212,13 @@ jobs:
           app: android/app/build/outputs/apk/debug/app-debug.apk
 
   # Builds a Debug simulator app and runs the Harness tests on it. Xcode 27 is
-  # required because rn-harness.config.mjs asks for an iOS 27 simulator (the
-  # label is currently a GitHub preview image). Add a `macos-26` row here once
-  # the supported iOS floor is decided; override IOS_VERSION for it. Opt-in as
-  # well: `xcode-27` is a preview label, so a run only starts where that image
-  # is registered, and a queued job that never gets a runner looks like a hang.
+  # required because rn-harness.config.mjs asks for an iOS 27 simulator. The
+  # label is GitHub's preview image rather than a versioned macOS one, and it
+  # does schedule: a run on 2026-10-24 got the `xcode-27-arm64` image (so the
+  # earlier worry that it might never get a runner was wrong). It stays opt-in
+  # because a preview image can still be pulled, and a job stuck queued reads
+  # exactly like a hung one. Add a `macos-26` row once the supported iOS floor
+  # is decided, with IOS_VERSION overridden for it.
   harness-ios:
     name: Harness (iOS)
     if: github.event_name == 'workflow_dispatch'
@@ -237,23 +253,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
 
-      - name: Install pods
-        working-directory: example
-        run: bundle exec pod install --project-directory=ios
-
-      - name: Build debug app for the simulator
-        working-directory: example/ios
-        run: |
-          set -o pipefail
-          xcodebuild \
-            -workspace NitroUiExample.xcworkspace \
-            -scheme NitroUiExample \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+      # The same build the local gate uses: pod install, xcodebuild into
+      # example/ios/build, and the stamp the harness config then checks (S1).
+      # build-app.mjs reuses the Pods cache above and refuses a red pod install
+      # rather than continuing with stale headers.
+      - name: Build stamped debug app
+        run: node scripts/build-app.mjs --platform ios
 
       - name: Run Harness tests
         uses: callstackincubator/react-native-harness@3e3e25b8ddfd0018fbc0700e0932448ffe5a95db # v1.6.0
