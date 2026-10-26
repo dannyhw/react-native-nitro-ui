@@ -64,7 +64,7 @@ and refuse honestly when fnm cannot provide it. `scripts/pod-install.mjs` is the
 | `bun run check` | **PASS** | exit 0 on the final tree: 21 suites / 344 tests, `test:native` PASS |
 | `bun run test` (new suites) | **PASS 84** | lease 46, app-stamp 22, pod-install 12, bench-baseline-format 4 |
 | `actionlint .github/workflows/*.yml` | **PASS** | clean; all action refs still SHA-pinned |
-| `lease acquire` → `source` → `renew` → `release` | **PASS** | `X1-kwv6c`; `list` empty afterwards |
+| `lease acquire` → `source` → `release` | **PASS** | `X1-kwv6c` for the device gate; `list` empty afterwards |
 | `build-app.mjs --platform android` | **PASS** | 30 s, tree `591f955534d3` (499 files), 8 components |
 | **harness:android — leased device gate** | **PASS 162 tests / 11 suites** | 175.3 s, through `build-app.mjs` + a lease; log shows "app is fresh" and "nitroui_t03 boots on console port 5574 (serial emulator-5574)" |
 | red: no `app.stamp` | **refused** | "nothing proves this binary was built from this checkout", exit 1, no device work |
@@ -73,6 +73,7 @@ and refuse honestly when fnm cannot provide it. `scripts/pod-install.mjs` is the
 | red: a `src/` edit after the build | **refused** | `591f9555` → `447fc3f4`, same HEAD — the digest moved, HEAD did not |
 | red: component missing from the APK | **refused** | re-ran `:app:packageDebug --rerun`, then refused when still missing |
 | red: unformatted baseline mint | **fails `bun run format`** | with the format step bypassed; green once restored |
+| `lease renew` on a live lease | **PASS** | `X1-renew-probe-l7zj9` → "renewed … - 240m from now" (its own ttl), then released |
 
 ## Fix round 1
 
@@ -84,7 +85,7 @@ tree re-run.
 | M1 lease judged by the caller's ttl | `6bcdf3d` | each lease ages by its own ttl, `renew` by that ttl, exclusive defaults to 960 min; a two-TTL test |
 | M2 stamp not bound to the artifact | `c67f7aa` | stamp v2 records `artifactPath` + scanned-bytes digest; copy-at-another-path refused above; three new tests |
 | M3 tree hashed after the build | `c67f7aa`, `3cada3e` | before/after hash in `build-app.mjs` and real-input iOS; no stamp written when they differ |
-| M4 HEAD in the digest | `c67f7aa` | docs commit keeps the stamp green (this file's own commit); a `src/` edit turns it red, same HEAD |
+| M4 HEAD in the digest | `c67f7aa` | HEAD `72645784` → `d7ac634` (docs only) keeps the stamp green at `591f955534d3`; a `src/` edit turns it red at the same HEAD |
 | S1 CI harness jobs build unstamped | `d251716` | dispatch jobs and `build-android` go through `build-app.mjs` |
 | S2 no `permissions:` | `d251716` | `contents: read` in `ci.yml` and `smoke.yml` |
 | S3 stale-lock steal race | `6bcdf3d` | lock token, steal by `rename` + re-check; two-stealer test takes two pairs |
