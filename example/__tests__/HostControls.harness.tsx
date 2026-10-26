@@ -127,6 +127,8 @@ type Log = {
   writeProgress: Record<string, (next: number | null) => void>;
   writeSwitch: Record<string, (next: boolean) => void>;
   setSliderDisabled?: (next: boolean) => void;
+  /** Make a wrapper `View` draw, so its child moves out of a Host's view group. */
+  setWrapperDraws?: (next: boolean) => void;
   setButtonDisabled?: (next: boolean) => void;
   setProgressValue?: (next: number | null) => void;
   setIds?: (ids: string[]) => void;
@@ -447,6 +449,51 @@ function EnableableSlide({
   return <Slide id={id} log={log} disabled={disabled} />;
 }
 
+/**
+ * A wrapper whose `View` the test can make layout-only after mount.
+ *
+ * RN collapses a layout-only `View` out of the native tree and attaches its children to
+ * the nearest view-owning ancestor, so what the *Host* sees as its child changes when
+ * the wrapper starts or stops owning a view - and RN's differ moves the control's own
+ * view between the two parents, same instance, without JS remounting anything. JS cannot
+ * see the flip (the Host's child is a component either way), which is what makes this the
+ * ordinary way an app moves a *mounted* control into or out of a Host (review S2).
+ *
+ * Measured, because "it has a style" is not enough: a wrapper with only a
+ * `backgroundColor` stayed flattened (the control inside it was hosted from the first
+ * frame), while a wrapper that also clips and sizes itself owns a view (the control
+ * inside it armed its own guards). Both halves of the flip were read on the device
+ * before this fixture was relied on.
+ */
+function Reparenter({
+  log,
+  initiallyOwnsAView,
+  children,
+}: {
+  log: Log;
+  initiallyOwnsAView: boolean;
+  children: React.ReactNode;
+}) {
+  const [ownsAView, setOwnsAView] = useState(initiallyOwnsAView);
+  log.setWrapperDraws = setOwnsAView;
+  return (
+    <View
+      style={
+        ownsAView
+          ? {
+              backgroundColor: '#ffffff',
+              overflow: 'hidden',
+              width: 200,
+              height: 48,
+            }
+          : undefined
+      }
+    >
+      {children}
+    </View>
+  );
+}
+
 /** A hosted (or plain) Switch, as `Host.harness` wires one, plus the N4 probe. */
 function Toggle({
   id,
@@ -606,10 +653,11 @@ describe('Host · a hosted Slider is still a Slider', () => {
     expect(log.acceptedSliders['refuse-0']).toBeUndefined();
     expect(log.sliders['refuse-0']?.value).toBeCloseTo(0, 5);
 
-    // The oracle Slider.harness uses, and the only one that does not trust a handle:
-    // `nuiTestDrag` begins on the value the control *displays*, so the value this drag
-    // starts from is a reading of what Compose drew. A hosted Slider that had shown
-    // 0.8 would start this drag at 0.8.
+    // The model's own account of what it shows: `runTestDrag` starts from
+    // `model.displayed`, which is the field the drawing is driven from rather than a
+    // reading of the drawing (review M3). A hosted Slider whose model had kept 0.8 would
+    // start this drag at 0.8, and that is all this can show — whether the *composition*
+    // snapped its thumb back is gated by a tap, in the D24 suite below.
     log.slides.length = 0;
     await drag('refuse-0', 0.9);
     expect(slidesFor('refuse-0')[0]?.value).toBeCloseTo(0, 5);
@@ -628,8 +676,9 @@ describe('Host · a hosted Slider is still a Slider', () => {
     log.writeSlider['write-slide-0']?.(0.4);
     await settle(500);
     // A handle is the model's last JS prop, not what is drawn: a Host whose composition
-    // never recomposed would read 0.4 here too. The next drag is the witness, because
-    // it starts from the displayed value.
+    // never recomposed would read 0.4 here too. The next drag narrows it to the model's
+    // displayed value — still a model field, not the drawing (review M3), which is what
+    // the tap case in the D24 suite below is for.
     expect(log.sliders['write-slide-0']?.value).toBeCloseTo(0.4, 5);
     expect(log.slides).toHaveLength(0);
 
@@ -726,8 +775,8 @@ describe('Host · a hosted Progress still draws what JS sets', () => {
 
   it('leaves a hosted circular Progress alone to size itself', async () => {
     // The variant that is `intrinsic` both ways: it has no width to fill, so the Host
-    // must not stretch it. The measurement of that is the accessibility tree (a
-    // `hosted-progress` case in `scripts/real-input/android.mjs`), because a Progress has
+    // must not stretch it. The measurement of that is the accessibility tree (the
+    // `hosted-mixed` case in `scripts/real-input/android.mjs`), because a Progress has
     // no press target to aim a probe at; what this case can prove on the harness side is
     // that the variant that fills and the variant that does not coexist in one
     // composition and both draw.
@@ -1131,17 +1180,34 @@ if (Platform.OS === 'android') {
       }
       await settle(400);
 
+      /** Split the probe's answer into its `ever` and `live` halves. */
       const read = (ids: string[]) =>
-        ids.map((id) => log.switches[id]?.nuiTestArmedGuards());
-      // The claim: nothing armed for a control the Host draws.
-      expect(read(hostedIds)).toEqual(['', '', '']);
+        ids.map((id) => {
+          const line = log.switches[id]?.nuiTestArmedGuards() ?? '';
+          const [ever = '', live = ''] = line.split('|live:');
+          return { ever, live };
+        });
+      // The claim: nothing armed, and nothing installed, for a control the Host draws.
+      expect(read(hostedIds).map((guards) => guards.ever)).toEqual([
+        '',
+        '',
+        '',
+      ]);
+      expect(read(hostedIds).map((guards) => guards.live)).toEqual([
+        '',
+        '',
+        '',
+      ]);
       // The witness that the probe reads a field that really gets written: the same
-      // control, mounted beside the Host, armed both of them. The answer is about the
-      // mount rather than about this instant on purpose — the first-frame listener
+      // control, mounted beside the Host, armed both of them. The `ever` half is about
+      // the mount rather than about this instant on purpose — the first-frame listener
       // unregisters itself once it has marked, so a live-only probe would read `""` for
       // a hosted child whether or not the guard that stops it arming is there. Round 1's
       // mutation proved exactly that: with the guard deleted the test stayed green.
-      expect(read(aloneIds)).toEqual(['strategy,preDraw', 'strategy,preDraw']);
+      expect(read(aloneIds).map((guards) => guards.ever)).toEqual([
+        'strategy,preDraw',
+        'strategy,preDraw',
+      ]);
 
       // And it stays nothing after the control is used: a recomposition of a hosted child
       // must not lazily arm what its attach declined to arm.
@@ -1149,8 +1215,86 @@ if (Platform.OS === 'android') {
       // `n4-hosted-0`.
       expect(await pressRow(host, 'n4-hosted-0', log)).toBe('n4-hosted-0');
       await settle(300);
-      expect(read(hostedIds)).toEqual(['', '', '']);
+      expect(read(hostedIds).map((guards) => guards.ever)).toEqual([
+        '',
+        '',
+        '',
+      ]);
       expect(log.acceptedSwitches['n4-hosted-0']).toBe(true);
+      unmount();
+    });
+
+    /**
+     * The other half of N4: a control that *moves* into a Host gives back what its
+     * unhosted mount armed (`NitroComposeHost.releaseOwnCompositionGuards`), and takes it
+     * back again when it moves out.
+     *
+     * The case above gates `armCompositionStrategy` declining for a child that arrives
+     * hosted. This is the transition that finds the guards already armed — reachable
+     * without an app doing anything exotic, because RN's flattening (not the app) decides
+     * who the Host's native child is, and a wrapper that starts or stops owning a view
+     * flips that decision (`Reparenter`).
+     *
+     * The `ever` half cannot see this release: an arming that was given back still
+     * happened. So this reads the `live` half, which is the only witness the release path
+     * has — deleting that call is what turns this red (review S2).
+     */
+    it('gives back its own guards when flattening moves a live control into a Host', async () => {
+      const id = 'move-in-0';
+      const { unmount } = await mount(
+        <View style={{ width: 320 }}>
+          <View testID="move-wrap" style={HUG}>
+            <Host style={{ width: 300, height: 120 }}>
+              <Reparenter log={log} initiallyOwnsAView>
+                <Toggle id={id} log={log} />
+              </Reparenter>
+            </Host>
+          </View>
+        </View>
+      );
+      /** Split the probe's answer into its `ever` and `live` halves. */
+      const guards = () => {
+        const line = log.switches[id]?.nuiTestArmedGuards() ?? '';
+        const [ever = '', live = ''] = line.split('|live:');
+        return { ever, live };
+      };
+      // Step 1 — the wrapper owns a view, so the Switch is a control like any other: it
+      // armed both guards for its own composition, and still holds the strategy that its
+      // composition is installed against. (Measured here: a real 52 x 48 box, and a press
+      // that answers.)
+      await boxOf(id);
+      await settle(600);
+      expect(guards().ever).toBe('strategy,preDraw');
+      expect(guards().live).toBe('strategy');
+      expect(await pressRow(await boxOf('move-wrap'), id, log)).toBe(id);
+      expect(log.acceptedSwitches[id]).toBe(true);
+
+      // Step 2 — make the wrapper layout-only and RN's differ reparents the Switch's view
+      // into the Host's group, which composes it. Its own composition is disposed, and the
+      // strategy — the activity `LifecycleRegistry` observer — has to go with it, or a
+      // control that once lived outside a Host keeps an observer for a composition that no
+      // longer exists. The `ever` half says the arming happened; the `live` half is what
+      // `releaseOwnCompositionGuards()` answers, and is the only witness that path has.
+      log.setWrapperDraws?.(false);
+      await settle(900);
+      expect(guards().ever).toBe('strategy,preDraw');
+      expect(guards().live).toBe('');
+
+      // And it is a control in its new home, not a corpse with tidy bookkeeping: the Host's
+      // composition draws it, so the column's first row answers — a second time, which says
+      // the press reached the same instance rather than a stale handle.
+      expect(await pressRow(await boxOf('move-wrap'), id, log)).toBe(id);
+      expect(log.acceptedSwitches[id]).toBe(false);
+
+      // Step 3 — the way back. Un-flattening the wrapper moves the control out again, and
+      // the arm a hosted attach declined has to run: `strategyArmed` is false, so this is
+      // the re-arm. (`watchForFirstFrame` stays declined for this mount, which has already
+      // marked a frame.)
+      log.setWrapperDraws?.(true);
+      await settle(900);
+      expect(guards().live).toBe('strategy');
+      expect(await pressRow(await boxOf('move-wrap'), id, log)).toBe(id);
+      expect(log.acceptedSwitches[id]).toBe(true);
       unmount();
     });
 
@@ -1310,6 +1454,85 @@ if (Platform.OS === 'android') {
       expect(Math.round(unstyled.value! * 10)).toBe(
         Math.round(wide.value! * 10)
       );
+    });
+
+    /**
+     * A hosted Slider's `disabled` and its snap-back, read out of the composition.
+     *
+     * `nuiTestDrag` drives `SliderModel` directly: it refuses on `model.enabled` before
+     * Compose is involved and starts from `model.displayed`, a model field rather than the
+     * drawing. So the Slider suite's versions of these two cases say the model behaved;
+     * they cannot say the Host's shared composition received the `enabled` recomposition
+     * or redrew the old value (review M3/S1). A tap can, because M3 turns a press on the
+     * track into a value *inside* that composition — or refuses it there.
+     */
+    it('asks the composition, not the model, whether a hosted Slider is enabled', async () => {
+      const id = 'tap-slide-0';
+      const { unmount } = await mount(
+        <View testID="tap-slide-host" style={HUG}>
+          <Host style={{ width: 300, height: 120 }}>
+            <EnableableSlide id={id} log={log} initiallyDisabled />
+          </Host>
+        </View>
+      );
+      const box = await boxOf('tap-slide-host');
+      // 200 dp along the track, twice over: a disabled M3 Slider refuses the press, and
+      // the refusal has to be the control's rather than the Host drawing nothing, so the
+      // same press at the same offset answers as soon as one prop changes.
+      expect(await probeIn(box, 200, 24, [id], log)).toBeNull();
+      expect(log.slides.filter((event) => event.id === id)).toHaveLength(0);
+
+      log.setSliderDisabled?.(false);
+      await settle(500);
+      expect(await probeIn(box, 200, 24, [id], log)).toBe(id);
+      const asked = log.slides
+        .filter((event) => event.id === id)
+        .map((event) => event.value);
+      expect(asked.length).toBeGreaterThan(0);
+      // 200 of a 300 dp Host: the value the composition was laid out to answer, not the
+      // child's own style width (D24) and not a value the test injected.
+      expect(Math.max(...asked)).toBeGreaterThan(0.3);
+      expect(Math.max(...asked)).toBeLessThan(1);
+      unmount();
+    });
+
+    it('redraws a refused hosted Slider, proven by the next tap on the track', async () => {
+      const id = 'tap-refuse-slide';
+      const { unmount } = await mount(
+        <View testID="tap-refuse-slider-host" style={HUG}>
+          <Host style={{ width: 300, height: 120 }}>
+            <Slide
+              id={id}
+              log={log}
+              accept={false}
+              minimumValue={0}
+              maximumValue={100}
+              defaultValue={0}
+            />
+          </Host>
+        </View>
+      );
+      const box = await boxOf('tap-refuse-slider-host');
+      // First tap, near the right end: the app is asked for something near the maximum
+      // and refuses, so the composition has to draw 0 again.
+      expect(await probeIn(box, 270, 24, [id], log)).toBe(id);
+      const first = log.slides.filter((event) => event.id === id);
+      expect(first[0]?.kind).toBe('start');
+      // The gesture opened at the value it was showing: 0.
+      expect(first[0]?.value).toBeCloseTo(0, 1);
+      const asked = first.map((event) => event.value);
+      expect(Math.max(...asked)).toBeGreaterThan(60);
+      expect(log.acceptedSliders[id]).toBeUndefined();
+
+      // Second tap, further left. `onSlidingStart` reports what the control showed when
+      // the gesture opened, which is the drawing's own answer to "did the refused value
+      // go back?" — a composition still showing ~90 would open this gesture at ~90.
+      log.slides.length = 0;
+      expect(await probeIn(box, 60, 24, [id], log)).toBe(id);
+      const second = log.slides.filter((event) => event.id === id);
+      expect(second[0]?.kind).toBe('start');
+      expect(second[0]?.value ?? 100).toBeLessThan(10);
+      unmount();
     });
 
     /** Mount one `Press` in a 260 dp Host and report which x offsets answered. */
