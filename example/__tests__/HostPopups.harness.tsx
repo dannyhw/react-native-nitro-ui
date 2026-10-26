@@ -1476,6 +1476,37 @@ if (Platform.OS === 'android') {
       ).toBe(0);
     });
 
+    it('takes a hosted menu down when a reorder moves the row under it', async () => {
+      // The same child, at a different index: `key` is unchanged, so React Native keeps
+      // both views and only the column's order moves under the open window. The popup
+      // has one signal available - its anchor's box - and the answer it gives is the one
+      // the control already gives when a scrolling ancestor carries an anchor away.
+      await mount(<SevenList log={log} ids={SEVEN} />);
+      const picker = need(log.pickers['mix-pk-5'], 'seven picker');
+      await pressWitnessedAndOpen(picker);
+      log.setIds?.([
+        'mix-pk-5',
+        'mix-sw-0',
+        'mix-sl-1',
+        'mix-pr-2',
+        'mix-btn-3',
+        'mix-seg-4',
+        'mix-dp-6',
+      ]);
+      const gone = await waitForMenu(
+        picker,
+        (r) => !r.expanded && r.live === 0
+      );
+      // No window, and no ghost of one in the report.
+      expect(gone.menu).toEqual([-1, -1, -1, -1]);
+      expect(gone.rows).toBe(0);
+      // The row answers where it now is: the press below is aimed at the rect the
+      // witness reports after the move, so a frozen anchor lands it on nothing.
+      await pressWitnessedAndOpen(picker);
+      picker.nuiTestSelect(picker.selectedIndex ?? 0);
+      await waitForMenu(picker, (r) => !r.expanded && r.live === 0);
+    });
+
     it('follows all seven when one is removed and another added back', async () => {
       await mount(<SevenList log={log} ids={SEVEN} />);
       const host = await boxOf('seven-host');
