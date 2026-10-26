@@ -109,7 +109,9 @@ export function writeBaseline(file, run, { force = false } = {}) {
   // The baseline is a committed file, and `bun run format` checks committed
   // files - so the mint formats what it wrote instead of leaving a formatting
   // diff for whoever commits it (A1b follow-up).
-  const { note } = formatCommittedJsonFile(file);
+  // From the repo root, so bunx finds this repo's prettier rather than the
+  // bench app's (see scripts/bench/format.mjs).
+  const { note } = formatCommittedJsonFile(file, { cwd: REPO_ROOT });
   return { written: true, blockers: [], file, formatted: note == null, note };
 }
 
