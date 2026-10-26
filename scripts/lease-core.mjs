@@ -233,6 +233,105 @@ export function assertLeasable(pair, devices, platform) {
 }
 
 /**
+ * The emulator console ports the emulator binary accepts: even numbers from 5554
+ * to 5682, one per device (5555 is the console of 5554, 5575 of 5574).
+ */
+export const EMULATOR_PORT_FLOOR = 5554;
+export const EMULATOR_PORT_CEILING = 5682;
+
+/**
+ * Is this adb serial the one nobody may use? Compared on the serial rather than
+ * the configuration, because by the time a script holds a serial the lease may
+ * have come from anywhere.
+ *
+ * @param {string} serial e.g. `emulator-5574`
+ * @param {number[]} [reservedPorts]
+ */
+export function isReservedSerial(
+  serial,
+  reservedPorts = RESERVED_EMULATOR_PORTS
+) {
+  const match = /^emulator-(\d+)$/.exec(String(serial ?? ''));
+  if (match == null) return false;
+  return reservedPorts.includes(Number(match[1]));
+}
+
+/**
+ * Check the emulator environment a lease exported, before anything boots or
+ * installs.
+ *
+ * The lease is the only thing standing between six concurrent tasks and one
+ * person's device, and it works by naming a serial - which holds only while the
+ * emulator really boots on that port. Two rules keep the promise honest (review
+ * S5): a port that is set has to be one the emulator can take, and nothing may
+ * name a reserved serial, whether it arrived as `EMULATOR_PORT` or as
+ * `ANDROID_SERIAL`. A serial and a port that disagree is the same mistake in
+ * two places, so it is refused as well rather than resolved by whoever reads
+ * them first.
+ *
+ * Nothing here requires a lease: a CI job boots its own emulator and sets
+ * neither variable, which is legal - the rule is about what is named, not about
+ * what is missing.
+ *
+ * @param {Record<string, string | undefined>} [env]
+ * @param {number[]} [reservedPorts]
+ * @returns {{ port: number | null, serial: string | null }}
+ */
+export function checkEmulatorEnv(
+  env = process.env,
+  reservedPorts = RESERVED_EMULATOR_PORTS
+) {
+  const rawPort = env.EMULATOR_PORT == null ? '' : String(env.EMULATOR_PORT);
+  const rawSerial =
+    env.ANDROID_SERIAL == null ? '' : String(env.ANDROID_SERIAL);
+  let port = null;
+  if (rawPort !== '') {
+    if (!/^\d+$/.test(rawPort)) {
+      throw new Error(
+        `lease: EMULATOR_PORT="${rawPort}" is not a port number. It comes from ` +
+          '`node scripts/lease.mjs acquire` and must be `source`d, not edited.'
+      );
+    }
+    port = Number(rawPort);
+    if (
+      port < EMULATOR_PORT_FLOOR ||
+      port > EMULATOR_PORT_CEILING ||
+      port % 2 !== 0
+    ) {
+      throw new Error(
+        `lease: EMULATOR_PORT=${port} is not a console port the emulator can ` +
+          `take (even numbers ${String(EMULATOR_PORT_FLOOR)}-${String(EMULATOR_PORT_CEILING)}). ` +
+          'Change `android.emulatorPort` in devices.json.'
+      );
+    }
+    if (reservedPorts.includes(port)) {
+      throw new Error(
+        `lease: EMULATOR_PORT=${port} is reserved (serial ` +
+          `${emulatorSerial(port)}) and can never be used.`
+      );
+    }
+  }
+  if (rawSerial !== '') {
+    if (isReservedSerial(rawSerial, reservedPorts)) {
+      throw new Error(
+        `lease: ANDROID_SERIAL=${rawSerial} is the reserved serial and can ` +
+          'never be used, whoever owns the device behind it.'
+      );
+    }
+    const match = /^emulator-(\d+)$/.exec(rawSerial);
+    if (match != null && port != null && Number(match[1]) !== port) {
+      throw new Error(
+        `lease: ANDROID_SERIAL=${rawSerial} and EMULATOR_PORT=${String(port)} ` +
+          'disagree about which emulator this run owns. Re-source the lease ' +
+          'file (`source <(node scripts/lease.mjs acquire ...)`) rather than ' +
+          'exporting one of them by hand.'
+      );
+    }
+  }
+  return { port, serial: rawSerial === '' ? null : rawSerial };
+}
+
+/**
  * Is this lease still alive? Every lease is judged by **its own** ttl, never by
  * the ttl of whoever happens to be asking (review M1): a `--ttl-minutes 1`
  * probe must not evict the 16-hour exclusive lease a bench is running under, and

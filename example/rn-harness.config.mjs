@@ -22,6 +22,7 @@ import {
   platformForArtifact,
   runnerFromArgv,
 } from '../scripts/app-stamp-core.mjs';
+import { checkEmulatorEnv, emulatorSerial } from '../scripts/lease-core.mjs';
 // CommonJS, because `example/metro.config.js` requires the same module to serve
 // the state this publishes.
 import harnessTimingGate from '../scripts/harness-timing-gate.js';
@@ -177,6 +178,32 @@ function iosDevice() {
 /** @returns {string} the AVD name to use (the harness creates it if missing). */
 function avd() {
   return process.env.ANDROID_AVD ?? process.env.AVD ?? DEFAULT_AVD;
+}
+
+/**
+ * Which console port the emulator may boot on, checked before the first device
+ * is touched (review S5).
+ *
+ * A lease names a serial, and that promise only holds while the emulator really
+ * boots on the port behind it. `react-native-harness` starts the emulator
+ * itself and used to pass no `-port`, so the console port was whatever happened
+ * to be free: a leased AVD could come up as the one serial this repo never
+ * touches, and the `ANDROID_SERIAL` the lease exported would name a device that
+ * does not exist. The port now travels through `EMULATOR_PORT`, which the
+ * harness reads through the patch in `patches/` (it adds `-port`, and the
+ * emulator refuses to start rather than quietly picking another port).
+ *
+ * What is checked here is what the patch is about to act on: a port that the
+ * emulator cannot take, a reserved serial in either variable, and a serial that
+ * disagrees with its own port. Refusing at config time means no device work has
+ * happened yet, so a mistake cannot leave a booted emulator behind.
+ */
+const emulatorBoot = checkEmulatorEnv(process.env);
+if (emulatorBoot.port != null) {
+  console.log(
+    `lease: ${avd()} boots on console port ${String(emulatorBoot.port)} ` +
+      `(serial ${emulatorSerial(emulatorBoot.port)})`
+  );
 }
 
 /**

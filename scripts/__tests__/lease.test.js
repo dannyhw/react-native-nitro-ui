@@ -30,6 +30,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import {
   DEFAULT_MAX_DEVICE_LEASES,
@@ -37,9 +38,11 @@ import {
   RESERVED_EMULATOR_PORTS,
   activeLeases,
   assertLeasable,
+  checkEmulatorEnv,
   decideAcquire,
   emulatorSerial,
   identifiersFor,
+  isReservedSerial,
   normalizeDevices,
   pruneExpired,
   renderEnvFile,
@@ -1167,5 +1170,111 @@ describe('the CLI, in a real state directory', () => {
     // The corpse and any `.stale-` copies are gone; nobody is locked out.
     expect(existsSync(lockFile)).toBe(false);
     expect(readdirSync(home).filter((f) => f.includes('.stale-'))).toEqual([]);
+  });
+});
+
+/**
+ * A lease is a promise about a *serial*, and a serial only exists because the
+ * emulator booted on that console port (review S5). `react-native-harness` used
+ * to start the emulator with no `-port`, so the port was whatever the machine
+ * had free: the leased AVD could come up as the one serial this repo never
+ * touches, and the `ANDROID_SERIAL` everyone was told to use named nothing.
+ */
+describe('the console port a lease owns', () => {
+  it('exports a port and a serial that agree, for every configured pair', () => {
+    const devices = normalizeDevices(
+      JSON.parse(readFileSync(EXAMPLE_CONFIG, 'utf8'))
+    );
+    for (const pair of devices.pairs) {
+      if (pair.android == null) continue;
+      const env = Object.fromEntries(
+        renderEnvFile({ id: 'X1-x', task: 'X1', platform: 'android' }, pair)
+          .split('\n')
+          .filter((line) => line.startsWith('export '))
+          .map((line) => {
+            const [name, ...rest] = line.slice('export '.length).split('=');
+            return [name, rest.join('=').replaceAll("'", '')];
+          })
+      );
+      expect(checkEmulatorEnv(env)).toEqual({
+        port: pair.android.emulatorPort,
+        serial: emulatorSerial(pair.android.emulatorPort),
+      });
+    }
+  });
+
+  it('refuses the reserved serial whichever variable names it', () => {
+    expect(isReservedSerial('emulator-5560')).toBe(true);
+    // The same device seen from the other side: naming the port instead of the
+    // serial is the same mistake.
+    expect(() => checkEmulatorEnv({ ANDROID_SERIAL: 'emulator-5560' })).toThrow(
+      /reserved serial/
+    );
+    expect(() => checkEmulatorEnv({ EMULATOR_PORT: '5560' })).toThrow(
+      /reserved/
+    );
+    // Not every serial is a console: a network adb address has no port to
+    // reserve, and must not be mistaken for one.
+    expect(isReservedSerial('10.0.0.5:5555')).toBe(false);
+  });
+
+  it('refuses a port the emulator could not take, or a serial that disagrees', () => {
+    // 5575 is the console *of* 5574; `-port` wants the even one. A run that got
+    // this wrong would boot a second emulator nobody can reach.
+    expect(() => checkEmulatorEnv({ EMULATOR_PORT: '5575' })).toThrow(
+      /console port/
+    );
+    expect(() => checkEmulatorEnv({ EMULATOR_PORT: 'eleven' })).toThrow(
+      /not a port number/
+    );
+    // Half a lease, sourced by hand: the two variables disagree, and guessing
+    // which one is right is how a task ends up on someone else's device.
+    expect(() =>
+      checkEmulatorEnv({
+        EMULATOR_PORT: '5574',
+        ANDROID_SERIAL: 'emulator-5554',
+      })
+    ).toThrow(/disagree/);
+    // A run with no lease at all (a CI job, which boots its own emulator) is
+    // legal: the rule is about what is named, not about what is missing.
+    expect(checkEmulatorEnv({})).toEqual({ port: null, serial: null });
+  });
+
+  it('makes the harness boot the AVD on the leased port', () => {
+    // The behaviour lives in a dependency patch
+    // (`patches/@react-native-harness%2Fplatform-android@1.6.0.patch`), so this
+    // asks the installed module what it would actually run. It is the only test
+    // here that reads node_modules: a patch that silently stops applying is
+    // exactly the kind of thing that makes a device rule stop being true.
+    const module = pathToFileURL(
+      join(
+        REPO_ROOT,
+        'node_modules',
+        '@react-native-harness',
+        'platform-android',
+        'dist',
+        'emulator-startup.js'
+      )
+    ).href;
+    const script =
+      `import(${JSON.stringify(module)}).then((m) => {` +
+      `process.stdout.write(m.getEmulatorStartupArgs('nitroui_t03', 'default-boot').join(' '));});`;
+    const withPort = spawnSync(process.execPath, ['-e', script], {
+      env: { ...process.env, EMULATOR_PORT: '5574' },
+      encoding: 'utf8',
+    });
+    expect(withPort.status).toBe(0);
+    expect(withPort.stdout).toContain('-port 5574');
+
+    const withoutPort = spawnSync(process.execPath, ['-e', script], {
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([name]) => name !== 'EMULATOR_PORT')
+      ),
+      encoding: 'utf8',
+    });
+    expect(withoutPort.status).toBe(0);
+    // No lease, no opinion: a CI runner boots its own emulator on the default
+    // console port, exactly as it did before this patch.
+    expect(withoutPort.stdout).not.toContain('-port');
   });
 });
