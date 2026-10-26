@@ -37,6 +37,18 @@ install (hoisted layout, see `bunfig.toml`):
 bun install
 ```
 
+To check a machine against all of the above (plus `gh` push access, the agent
+CLIs, disk and load), run the doctor. `--setup` also creates two simulator/AVD
+pairs (`nitro-ui A`/`B`, `nitroui_a`/`b`) and writes the `~/.nitro-ui/devices.json`
+the lease script reads (see "Leasing a device or port"). It only adds: it never
+touches an existing device or `devices.json`, never installs SDK packages or
+accepts licenses (it prints the command), and never boots anything.
+
+```sh
+node scripts/doctor.mjs           # exit 1 if anything required is missing
+node scripts/doctor.mjs --setup   # then create the device pairs
+```
+
 ## Repository layout
 
 ```
