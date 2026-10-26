@@ -8,6 +8,12 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.2.0
+
+### Minor Changes
+
+- 6b5b600: `<Host>` now composes `Slider`, `Progress` and `Button` as well as `Switch` on Android, each keeping its own documented sizing rule inside the shared composition.
+
 ## 0.1.1
 
 ### Patch Changes
