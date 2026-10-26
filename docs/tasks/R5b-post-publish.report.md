@@ -115,3 +115,8 @@ None. 5 of 5 device rows and the registry check passed on the first attempt.
   any ready line). Nothing observed here contradicts that.
 - `react-native-nitro-ui` has a `0.0.0-stage` version in `versions` (not in `dist-tags`),
   so `npm i react-native-nitro-ui` resolves `0.1.0`; noted, not acted on.
+
+## Orchestrator note (on merge)
+
+The `0.0.0-stage` version is npm's own staged-publishing placeholder (it scans a package before
+release), not ours — no action needed (D27).
