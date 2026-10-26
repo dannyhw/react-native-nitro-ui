@@ -90,8 +90,8 @@ type Log = {
   setDisabled?: (next: boolean) => void;
   /** Change which of a list fixture's children are `display: none`. */
   setHidden?: (next: boolean) => void;
-  /** Change a sibling's height, to force a later Fabric layout pass. */
-  setGrow?: (next: boolean) => void;
+  /** Change a hosted child's own `style`, to force a later layout pass for *it*. */
+  setSized?: (next: boolean) => void;
 };
 
 const newLog = (): Log => ({
@@ -310,33 +310,32 @@ function HostedList({
 }
 
 /**
- * Wraps `children` with a sibling whose height a test can grow after mount.
+ * A hosted Switch whose own `style` a test can change after mount.
  *
- * Any state change in the app makes Fabric re-run layout for the subtree, which is what a
- * hosted child's own (unmeasured) `View` sees several passes after it was attached.
+ * Only the child's own metrics make Fabric emit a layout update for that child: growing a
+ * sibling re-lays the screen without touching it, so `updateLayout` never runs again for
+ * it and a test built on that never exercises the second pass it claims to (review M2).
  */
-function Grower({
-  log,
-  testId,
-  children,
-}: {
-  log: Log;
-  testId: string;
-  children: React.ReactNode;
-}) {
-  const [grow, setGrow] = useState(false);
-  log.setGrow = setGrow;
+function Resizer({ id, log }: { id: string; log: Log }) {
+  const [big, setBig] = useState(false);
+  log.setSized = setBig;
   return (
-    <View style={{ flexDirection: 'column' }}>
-      <View testID={testId} style={HUG}>
-        {children}
-      </View>
-      <View
-        testID="grower-spacer"
-        style={{ width: 300, height: grow ? 120 : 8 }}
-      />
-    </View>
+    <Toggle
+      id={id}
+      log={log}
+      style={big ? { width: 160, height: 60 } : { width: 120, height: 44 }}
+    />
   );
+}
+
+/** `[width, height, x, y]`, rounded — the shape every box assertion in this file uses. */
+function frame(b: ViewInfo): number[] {
+  return [
+    Math.round(b.width),
+    Math.round(b.height),
+    Math.round(b.x),
+    Math.round(b.y),
+  ];
 }
 
 afterEach(() => {
@@ -489,7 +488,18 @@ describe('Host · hosted controls are still controls', () => {
     // have at mount, in the order the app asked for.
     log.setIds?.(['list-c', 'list-a', 'list-d']);
     await settle(500);
-    expect(await boxOf('list-d')).not.toBeNull();
+    // `list-d` is a child Fabric laid out *after* the Host mounted, so this is F8 from
+    // the other side: a child added later rather than one re-framed. Its box is nothing
+    // on Android — the `testID` caveat in docs/components/host.md holds for children the
+    // Host did not have at mount, not only for the ones it drew from the start.
+    const addedBox = frame(await boxOf('list-d'));
+    // A child added after the Host's first layout is F8 from the other side, and it
+    // behaves the same way as one re-framed later: on Android the frame Yoga computed
+    // reaches its `View` (measured `[52, 48, 0, 96]` — the engine box, third row), while
+    // children mounted with the Host stay at `[0, 0, 0, 0]`. Either way it is the
+    // engine's frame and not the drawn one, which is the caveat in host.md.
+    expect(addedBox[0]).toBeGreaterThan(0);
+    expect(addedBox[1]).toBeGreaterThan(0);
     const listBox = await boxOf('list-host');
     const order: string[] = [];
     for (let offset = 4; offset <= 200; offset += 8) {
@@ -549,7 +559,7 @@ describe('Host · hosted controls are still controls', () => {
    */
   it('finds a hosted child by testID', async () => {
     const { unmount } = await mount(
-      <Grower log={log} testId="find-host">
+      <View testID="find-host" style={HUG}>
         <Host style={{ width: 300, height: 200 }}>
           <Toggle id="find-0" log={log} />
           <Toggle id="find-1" log={log} />
@@ -559,7 +569,7 @@ describe('Host · hosted controls are still controls', () => {
             style={{ width: 120, height: 44 }}
           />
         </Host>
-      </Grower>
+      </View>
     );
     const zero = await boxOf('find-0');
     const one = await boxOf('find-1');
@@ -586,43 +596,105 @@ describe('Host · hosted controls are still controls', () => {
       expect(one.width).toBeGreaterThan(0);
       expect(one.height).toBeGreaterThan(0);
     }
+    // Whether a *later* layout pass changes that answer is the F8 case below; on Android
+    // it does, and into the child's engine frame rather than the drawing's rect.
+    unmount();
+  });
 
-    // F8: the same boxes after a *later* Fabric layout pass. Any state change elsewhere
-    // in the app lays this subtree out again, and whatever the child's `View` reports
-    // from then on is what an E2E tool reads for the rest of the session — so the caveat
-    // above has to hold after the first pass, not only during it. `find-sized` asks for
-    // 120 x 44 in its own `style`, so it is the child whose Yoga frame a wrong
-    // implementation would hand back.
-    const sizedBefore = await boxOf('find-sized');
-    log.setGrow?.(true);
+  /**
+   * F8: the box of a hosted child after a later Fabric layout pass *over that child*.
+   *
+   * The first version of this case grew a sibling's height, which lays the screen out
+   * again and changes nothing about the hosted child, so it passed whether or not a
+   * second pass would hand back a frame (review M2). Here the child's own `style` goes
+   * from 120 x 44 to 160 x 60, which changes its metrics and therefore emits a layout
+   * update for it, and the Host's own box growing by the same 16 is the witness that the
+   * pass really happened. What the child reports afterwards is what an E2E tool reads for
+   * the rest of the session, which is why the `testID` caveat has to hold after the
+   * first pass and not only during it.
+   */
+  /**
+   * F8: a hosted child's box after a later Fabric layout pass *over that child*.
+   *
+   * The first version of this case grew a sibling's height and read the child again. That
+   * never exercised anything: Fabric emits a layout update for a node whose own metrics
+   * changed, so a sibling's height runs no `updateLayout` for the hosted child and the
+   * `[0, 0, 0, 0]` passed whatever the answer turned out to be (review M2). Here the
+   * child's own `style` changes instead, 120 x 44 to 160 x 60 — a real second pass over
+   * the same `View`.
+   *
+   * Measured on Android inside a 300 x 200 Host at the window origin:
+   *
+   *  - at mount the child reads `[0, 0, 0, 0]`, which is what the docs said;
+   *  - after the re-frame it reads `[160, 60, 0, 48]` — **its own Yoga frame**. F8 is
+   *    real: the next layout update lays the child out at the frame Yoga computed, so a
+   *    hosted child's `testID` box is not permanently zero. (A child *added* later is the
+   *    same story: `list-d` in the case above reads `[52, 48, 0, 96]`.)
+   *  - what did not move is the drawing: the same x offsets down the column answered
+   *    before the re-frame and after it, and the drawing still stops at the control —
+   *    60 dp inside a box 160 wide.
+   *
+   * So the caveat is not "a hosted child's box is nothing", it is "a hosted child's box
+   * is the engine's frame, not the drawn one" — sometimes zero, sometimes a plausible
+   * rectangle that is 108 dp of box around a 52 x 32 control. Both readings send a test
+   * tool to `accessibilityLabel` instead (`docs/components/host.md`).
+   */
+  it('lays a re-framed hosted child at its Yoga frame, not its drawing (F8)', async () => {
+    const { unmount } = await mount(
+      <View testID="f8-host" style={HUG}>
+        <Host testID="f8-box" style={{ width: 300, height: 200 }}>
+          <Toggle id="f8-0" log={log} />
+          <Resizer id="f8-sized" log={log} />
+        </Host>
+      </View>
+    );
+    /**
+     * Which x offsets, down the second row's band, answer the hosted Switch.
+     *
+     * A pair, not a number: Compose's row pitch and the drawn control's width are
+     * Compose's business, so this asks where the drawing answers and compares two moments.
+     */
+    const drawnColumns = async () => {
+      const host = await boxOf('f8-box');
+      const hit: number[] = [];
+      for (let x = 4; x <= 220; x += 8) {
+        if (
+          (await probeIn(host, x, 70, ['f8-0', 'f8-sized'], log)) === 'f8-sized'
+        ) {
+          hit.push(x);
+        }
+      }
+      return hit;
+    };
+    const sizedBefore = frame(await boxOf('f8-sized'));
+    const drawnBefore = await drawnColumns();
+    expect(drawnBefore.length).toBeGreaterThan(0);
+
+    log.setSized?.(true);
     await settle(600);
-    const laterSized = await boxOf('find-sized');
-    const laterUnsized = await boxOf('find-0');
+
+    const sizedAfter = frame(await boxOf('f8-sized'));
+    const drawnAfter = await drawnColumns();
+    // The re-frame moved the frame and not the drawing, on both platforms.
+    expect(drawnAfter).toEqual(drawnBefore);
+
     if (Platform.OS === 'android') {
-      // Still nothing — for the styled child included, and identical to the child that
-      // asked for nothing. Where a hosted control is, is the Host's `Column`'s business,
-      // and a re-layout does not revive the child's own frame; the `testID` box stays
-      // decorative for the whole mount.
-      const box = (b: ViewInfo) => [
-        Math.round(b.width),
-        Math.round(b.height),
-        Math.round(b.x),
-        Math.round(b.y),
-      ];
-      expect(box(laterSized)).toEqual([0, 0, 0, 0]);
-      // And the same for the row-0 child this test opened with, and for the styled
-      // sibling: the boxes did not drift into something a tool could aim at between the
-      // first layout pass and the last.
-      expect(box(laterUnsized)).toEqual(box(laterSized));
+      expect(sizedBefore).toEqual([0, 0, 0, 0]);
+      // F8: the child's own engine box, in the row Yoga put it in.
+      expect(sizedAfter).toEqual([160, 60, 0, 48]);
+      // A child nobody re-framed keeps the mount answer, so this is per-child and not a
+      // Host-wide revival of the children's frames.
+      expect(frame(await boxOf('f8-0'))).toEqual([0, 0, 0, 0]);
+      // And the new box is still not the drawn rect: the drawing stops at the control,
+      // 60 dp short of a box 160 wide.
+      const widest = drawnBefore.at(-1) ?? 0;
+      expect(widest).toBeLessThan((sizedAfter[0] ?? 0) - 60);
     } else {
-      // The passthrough gives the child a real view, so the box *is* the child's own
-      // Yoga frame - 120 x 44, what `find-sized` asked for - and a later layout pass
-      // leaves it exactly there. That is the other half of the caveat above: on iOS the
-      // `testID` box is somewhere a tool can aim at, and on Android it is nowhere.
-      const size = (b: ViewInfo) => [Math.round(b.width), Math.round(b.height)];
-      expect(size(sizedBefore)).toEqual([120, 44]);
-      expect(size(laterSized)).toEqual([120, 44]);
-      expect(Math.round(laterUnsized.width)).toBeGreaterThan(0);
+      // The passthrough gives the child a real view, so its box is its Yoga frame before
+      // the re-frame and after it — and on iOS that frame is where the control is drawn.
+      expect(sizedBefore.slice(0, 2)).toEqual([120, 44]);
+      expect(sizedAfter.slice(0, 2)).toEqual([160, 60]);
+      expect(Math.round((await boxOf('f8-0')).width)).toBeGreaterThan(0);
     }
     unmount();
   });

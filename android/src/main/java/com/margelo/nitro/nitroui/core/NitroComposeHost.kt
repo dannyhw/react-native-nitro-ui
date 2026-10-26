@@ -440,8 +440,11 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * (`SurfaceMountingManager.updateLayout` ends by coercing the view to
    * `VISIBLE`/`INVISIBLE` and laying it out at its RN frame), so a write here would
    * be undone before the next frame was drawn. The measure gate is the mechanism:
-   * [onMeasure] declines to `0 × 0`, so the child is laid out at `0 × 0`, draws
-   * nothing, is not a hit target, and is not visible-to-user for accessibility.
+   * [onMeasure] declines to `0 × 0`, so the child builds no composition of its own,
+   * draws nothing and is not a hit target. It is laid out at `0 × 0` by the pass that
+   * mounts it and at its RN frame by any later pass over it - measured, F8 - which is
+   * why the frame must not be read as a place: the pixels are the Host's and the view
+   * has no content of its own.
    */
   private fun applyHostedDrawFlag() {
     if (isHostedByParent) {

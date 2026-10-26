@@ -520,8 +520,9 @@ The full list per control is in its doc; these are the ones that bite.
   simulator even without this library, and no older runtime has been tried.
 - **`testID` lands on the host** on Android (`View.tag`): Compose has no test id,
   which is what `findNodeByName` and the harness read. Inside a `<Host>` the view
-  that carries a Switch's `testID` is not where the Switch is drawn (it reads
-  back `0 × 0`), so find hosted controls by `accessibilityLabel`.
+  that carries a Switch's `testID` is not where the Switch is drawn — it reads
+  back `0 × 0` at mount and the child's Yoga frame after any later layout pass
+  over it — so find hosted controls by `accessibilityLabel`.
 - **Accessibility props belong on the control, not the box.** The label lives on
   the hosted control, so adding `accessible` or an `accessibilityRole` to a
   control's container can hide that control from VoiceOver / TalkBack. Style the

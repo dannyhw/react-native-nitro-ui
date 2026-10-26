@@ -97,8 +97,10 @@ export interface HostProps extends ViewProps {
  * hosted child - the same count as the same children unhosted - from the cached
  * size or the declared fallback, never from Compose. The frame that produces is
  * real (it is what the Host's own height is made of) and decorative (no pixel is
- * placed by it; on Android the view behind it declines to measure and is laid out at
- * `0 x 0`, which is what anything reading real view bounds sees). So `alignSelf: 'stretch'`, `width: '100%'`
+ * placed by it; on Android the view behind it declines to measure, so it is `0 x 0` for
+ * the pass that mounts it and gets its RN frame from any later pass over it - measured,
+ * F8 - and neither is where the control is drawn). So `alignSelf: 'stretch'`, `width:
+ * '100%'`
  * or a `height` on a hosted control moves the frame RN computes, not what Compose
  * draws, and does not space the rows.
  *
