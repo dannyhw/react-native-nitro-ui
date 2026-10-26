@@ -90,6 +90,8 @@ type Log = {
   setDisabled?: (next: boolean) => void;
   /** Change which of a list fixture's children are `display: none`. */
   setHidden?: (next: boolean) => void;
+  /** Change a sibling's height, to force a later Fabric layout pass. */
+  setGrow?: (next: boolean) => void;
 };
 
 const newLog = (): Log => ({
@@ -267,6 +269,7 @@ function HostedList({
   hostStyle,
   childStyle,
   hideLast,
+  refuseLast,
 }: {
   log: Log;
   ids: string[];
@@ -274,6 +277,14 @@ function HostedList({
   childStyle?: ViewStyle;
   /** Start with the last child `display: none`; `setHidden(false)` shows it. */
   hideLast?: boolean;
+  /**
+   * Make the last child refuse every press it receives.
+   *
+   * A refused press still reaches `onValueChange`, so the child keeps answering probes,
+   * but its value cannot drift: press it ten times and it is still whatever JS last
+   * wrote. That is what lets a case ask "what is the drawing showing?" with a press.
+   */
+  refuseLast?: boolean;
 }) {
   const [current, setCurrent] = useState(ids);
   const [hidden, setHidden] = useState(hideLast ?? false);
@@ -286,6 +297,7 @@ function HostedList({
           key={id}
           id={id}
           log={log}
+          accept={!(refuseLast && index === current.length - 1)}
           style={
             hidden && index === current.length - 1
               ? { ...childStyle, display: 'none' }
@@ -294,6 +306,36 @@ function HostedList({
         />
       ))}
     </Host>
+  );
+}
+
+/**
+ * Wraps `children` with a sibling whose height a test can grow after mount.
+ *
+ * Any state change in the app makes Fabric re-run layout for the subtree, which is what a
+ * hosted child's own (unmeasured) `View` sees several passes after it was attached.
+ */
+function Grower({
+  log,
+  testId,
+  children,
+}: {
+  log: Log;
+  testId: string;
+  children: React.ReactNode;
+}) {
+  const [grow, setGrow] = useState(false);
+  log.setGrow = setGrow;
+  return (
+    <View style={{ flexDirection: 'column' }}>
+      <View testID={testId} style={HUG}>
+        {children}
+      </View>
+      <View
+        testID="grower-spacer"
+        style={{ width: 300, height: grow ? 120 : 8 }}
+      />
+    </View>
   );
 }
 
@@ -507,12 +549,17 @@ describe('Host · hosted controls are still controls', () => {
    */
   it('finds a hosted child by testID', async () => {
     const { unmount } = await mount(
-      <View testID="find-host" style={HUG}>
+      <Grower log={log} testId="find-host">
         <Host style={{ width: 300, height: 200 }}>
           <Toggle id="find-0" log={log} />
           <Toggle id="find-1" log={log} />
+          <Toggle
+            id="find-sized"
+            log={log}
+            style={{ width: 120, height: 44 }}
+          />
         </Host>
-      </View>
+      </Grower>
     );
     const zero = await boxOf('find-0');
     const one = await boxOf('find-1');
@@ -538,6 +585,44 @@ describe('Host · hosted controls are still controls', () => {
       expect(zero.height).toBeGreaterThan(0);
       expect(one.width).toBeGreaterThan(0);
       expect(one.height).toBeGreaterThan(0);
+    }
+
+    // F8: the same boxes after a *later* Fabric layout pass. Any state change elsewhere
+    // in the app lays this subtree out again, and whatever the child's `View` reports
+    // from then on is what an E2E tool reads for the rest of the session — so the caveat
+    // above has to hold after the first pass, not only during it. `find-sized` asks for
+    // 120 x 44 in its own `style`, so it is the child whose Yoga frame a wrong
+    // implementation would hand back.
+    const sizedBefore = await boxOf('find-sized');
+    log.setGrow?.(true);
+    await settle(600);
+    const laterSized = await boxOf('find-sized');
+    const laterUnsized = await boxOf('find-0');
+    if (Platform.OS === 'android') {
+      // Still nothing — for the styled child included, and identical to the child that
+      // asked for nothing. Where a hosted control is, is the Host's `Column`'s business,
+      // and a re-layout does not revive the child's own frame; the `testID` box stays
+      // decorative for the whole mount.
+      const box = (b: ViewInfo) => [
+        Math.round(b.width),
+        Math.round(b.height),
+        Math.round(b.x),
+        Math.round(b.y),
+      ];
+      expect(box(laterSized)).toEqual([0, 0, 0, 0]);
+      // And the same for the row-0 child this test opened with, and for the styled
+      // sibling: the boxes did not drift into something a tool could aim at between the
+      // first layout pass and the last.
+      expect(box(laterUnsized)).toEqual(box(laterSized));
+    } else {
+      // The passthrough gives the child a real view, so the box *is* the child's own
+      // Yoga frame - 120 x 44, what `find-sized` asked for - and a later layout pass
+      // leaves it exactly there. That is the other half of the caveat above: on iOS the
+      // `testID` box is somewhere a tool can aim at, and on Android it is nowhere.
+      const size = (b: ViewInfo) => [Math.round(b.width), Math.round(b.height)];
+      expect(size(sizedBefore)).toEqual([120, 44]);
+      expect(size(laterSized)).toEqual([120, 44]);
+      expect(Math.round(laterUnsized.width)).toBeGreaterThan(0);
     }
     unmount();
   });
@@ -954,6 +1039,76 @@ if (Platform.OS === 'android') {
       hiddenLog.setHidden?.(false);
       await settle(500);
       expect(await sweep()).toEqual(['hidden-a', 'hidden-b']);
+      unmount();
+    });
+
+    /**
+     * S2's other half: a value a hosted child is given *while it is hidden* has to be
+     * what the child draws when it comes back.
+     *
+     * Hiding takes a hosted child out of the composition, so the write lands on a
+     * control with no Compose state behind it. An implementation that composed the child
+     * from the value it happened to have when it was hidden — or that skipped the write
+     * because nothing was listening — shows the old thumb position the moment `display`
+     * flips back, which is a silently wrong control on the screen the app returns to.
+     *
+     * The oracle is a press on the last child with `refuseLast`: JS never accepts it, so
+     * the value can only be the one the test wrote. A drawing that caught the write is ON
+     * and therefore reports `false`; a drawing that did not is OFF and reports `true`.
+     */
+    it('applies a value written while the hosted child was hidden', async () => {
+      const s2Log = newLog();
+      const { unmount } = await mount(
+        <View testID="s2-host" style={HUG}>
+          <HostedList
+            log={s2Log}
+            ids={['s2-a', 's2-b']}
+            hostStyle={{ width: 300, height: 200 }}
+            hideLast
+            refuseLast
+          />
+        </View>
+      );
+      const box = await boxOf('s2-host');
+      await boxOf('s2-a');
+      await boxOf('s2-b');
+
+      // The write, while `display: none` still hides the child.
+      s2Log.write['s2-b']?.(true);
+      await settle(500);
+      // JavaScript has the value and sent the prop; that half is easy and only the
+      // premise. (Read off the handle rather than `accepted`: this is a JS write, which
+      // never passes through `onValueChange`.)
+      expect(s2Log.handles['s2-b']?.value).toBe(true);
+
+      // Hidden is still hidden: a value change must not put the child back in the
+      // drawing, so the only answer a sweep can get is from the shown child.
+      const offsetsFor = async () => {
+        const found: { offset: number; hit: string }[] = [];
+        for (let offset = 4; offset <= 180; offset += 8) {
+          const hit = await probeIn(box, 8, offset, ['s2-a', 's2-b'], s2Log);
+          if (hit != null && found[found.length - 1]?.hit !== hit) {
+            found.push({ offset, hit });
+          }
+        }
+        return found;
+      };
+      expect((await offsetsFor()).map((entry) => entry.hit)).toEqual(['s2-a']);
+
+      // Show it. The child that comes back has to be the one JS wrote.
+      s2Log.setHidden?.(false);
+      await settle(600);
+      const shown = await offsetsFor();
+      expect(shown.map((entry) => entry.hit)).toEqual(['s2-a', 's2-b']);
+      const firstB = shown.find((entry) => entry.hit === 's2-b');
+      expect(firstB).toBeDefined();
+
+      const before = s2Log.requests.length;
+      expect(
+        await probeIn(box, 8, firstB!.offset, ['s2-a', 's2-b'], s2Log)
+      ).toBe('s2-b');
+      // The drawn thumb was ON, so the press the drawing reports is the turn-off.
+      expect(s2Log.requests.slice(before)).toEqual(['s2-b:false']);
       unmount();
     });
   });
