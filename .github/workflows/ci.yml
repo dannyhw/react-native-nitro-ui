@@ -153,11 +153,16 @@ jobs:
           cache-provider: basic
           cache-read-only: false
 
+      # No -PreactNativeArchitectures here on purpose: this job is the one that
+      # proves the release path for every ABI a library user can get, which is
+      # gradle.properties' full list. The debug and emulator jobs narrow to
+      # x86_64 because that is all their runner's emulator can run
+      # (docs/tasks/X6-build-speed.md).
       - name: Assemble release APK
         working-directory: example/android
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
-        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --console=plain
+        run: ./gradlew :app:assembleRelease --no-daemon --console=plain
 
   # On-device tests (example/__tests__/*.harness.tsx) against a debug build.
   # The harness action boots and caches the AVD named in rn-harness.config.mjs.

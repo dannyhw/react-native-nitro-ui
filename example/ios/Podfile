@@ -28,7 +28,30 @@ target 'NitroUiExample' do
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      # :ccache_enabled => true
+      # C++/ObjC++ compiles go through ccache when it is installed. React Native
+      # checks for the binary itself and only then sets CC/CXX, so on a machine
+      # or CI runner without ccache this line changes nothing (X6-build-speed).
+      :ccache_enabled => true
     )
+
+    # ... but React Native writes those settings into *every* project it finds,
+    # and one of the app project's build settings is then `CCACHE_BINARY` with a
+    # path that belongs to one machine. That file is tracked, so the settings
+    # come back out of here: the compiles worth caching are all in the Pods
+    # project, which is not tracked, and they keep their launcher.
+    ccache_keys = %w[CC CXX LD LDPLUSPLUS CCACHE_BINARY]
+    installer.aggregate_targets
+      .map(&:user_project)
+      .uniq { |project| project.path }
+      .each do |project|
+        touched = false
+        project.build_configurations.each do |configuration|
+          ccache_keys.each do |key|
+            touched = true unless configuration.build_settings[key].nil?
+            configuration.build_settings.delete(key)
+          end
+        end
+        project.save if touched
+      end
   end
 end
