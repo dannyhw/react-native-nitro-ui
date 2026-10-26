@@ -593,9 +593,13 @@ export function resolveGate(name, extraArgs = []) {
     }
     const suites = [...suite, ...args];
     return {
+      // `../scripts/` because the cwd is `example/`, exactly as `bun --cwd
+      // example harness:android` expands its own script line. A root-relative
+      // path here fails to resolve before the suite starts (found by the first
+      // real run of this file, not by a unit test).
       argv: [
         'node',
-        'scripts/harness.mjs',
+        '../scripts/harness.mjs',
         '--harnessRunner',
         platform,
         ...suites,

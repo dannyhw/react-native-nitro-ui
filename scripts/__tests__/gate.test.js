@@ -635,7 +635,7 @@ describe('resolveGate', () => {
     // The harness entry point, not `bun run`, so arguments survive (S9's Node
     // guard lives in that script) and cwd matches `bun --cwd example harness:ios`.
     expect(resolveGate('harness:android')).toMatchObject({
-      argv: ['node', 'scripts/harness.mjs', '--harnessRunner', 'android'],
+      argv: ['node', '../scripts/harness.mjs', '--harnessRunner', 'android'],
       cwd: 'example',
       platform: 'android',
     });
@@ -651,7 +651,7 @@ describe('resolveGate', () => {
   it('appends a suite to a harness gate, in the name or after --', () => {
     expect(resolveGate('harness:android:ColdSizing').argv).toEqual([
       'node',
-      'scripts/harness.mjs',
+      '../scripts/harness.mjs',
       '--harnessRunner',
       'android',
       'ColdSizing',
