@@ -1114,6 +1114,13 @@ class HybridNitroUiPicker(
         // otherwise leave a live list of choices on screen that nothing can close -
         // `onExpandedChange` stops firing for a disabled anchor, so the popup would
         // ignore the very taps that should dismiss it.
+        //
+        // Material 3 dismisses it too: `ExposedDropdownMenuBox` stops composing a menu
+        // whose `menuAnchor(enabled = …)` went false, which is what the harness sees
+        // happen (measured - deleting this line leaves the gate green, and a
+        // `menuAnchor(enabled = true)` mutation turns it red). This write keeps the
+        // rule ours rather than the widget library's, so the gate stays true whatever
+        // Material does with a disabled anchor.
         model.expanded = false
       }
       // Repaints only: a disabled control is the same size.
