@@ -19,6 +19,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   ccacheEnv,
+  ccacheEffectiveForWorktrees,
   ccacheRequested,
   decideSkipBuild,
   gradleArchArgs,
@@ -92,11 +93,33 @@ describe('ccache', () => {
   it('makes the cache belong to the source, not to the worktree', () => {
     expect(ccacheEnv({ enabled: true, repoRoot: '/w/X6' })).toEqual({
       CCACHE_BASEDIR: '/w/X6',
-      CCACHE_HASH_DIR: 'false',
+      // No underscore: CCACHE_HASH_DIR is not a variable ccache reads, and the
+      // mistake is invisible in the timings it causes.
+      CCACHE_NOHASHDIR: '1',
     });
     expect(
       gradleCcacheArgs({ enabled: true, initScript: '/i.gradle' })
     ).toEqual(['--init-script=/i.gradle']);
+  });
+
+  it('only believes the two settings ccache agrees to', () => {
+    expect(
+      ccacheEffectiveForWorktrees(
+        [
+          '(environment) base_dir = /w/X6',
+          '(environment) hash_dir = false',
+        ].join('\n')
+      )
+    ).toBe(true);
+    // What the build looked like while CCACHE_HASH_DIR was spelled wrong.
+    expect(
+      ccacheEffectiveForWorktrees(
+        ['(default) base_dir = ', '(default) hash_dir = true'].join('\n')
+      )
+    ).toBe(false);
+    expect(ccacheEffectiveForWorktrees('(environment) hash_dir = false')).toBe(
+      false
+    );
   });
 
   it('obeys the documented escape hatch', () => {

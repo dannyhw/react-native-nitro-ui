@@ -52,6 +52,7 @@ import {
 import {
   ccacheEnv,
   ccacheRequested,
+  ccacheEffectiveForWorktrees,
   decideSkipBuild,
   gradleArchArgs,
   gradleCcacheArgs,
@@ -129,15 +130,32 @@ function ccacheSetup() {
   if (binary == null) {
     return { enabled: false, binary: null, env: {}, gradleArgs: [] };
   }
+  const env = {
+    ...ccacheEnv({ enabled: true, repoRoot: REPO_ROOT }),
+    // Read by scripts/gradle-ccache.init.gradle: the file is passed with -I
+    // only when ccache exists, and it needs the path, not a guess.
+    CCACHE_GRADLE_LAUNCHER: binary,
+  };
+  // ccache ignores an environment variable it does not recognise, so the two
+  // settings that make a second worktree a hit are worth reading back once:
+  // a wrong name costs every build a cache and says nothing about it.
+  const effective = spawnSync(binary, ['--show-config'], {
+    env: { ...process.env, ...env },
+    encoding: 'utf8',
+  });
+  if (
+    effective.status === 0 &&
+    !ccacheEffectiveForWorktrees(effective.stdout ?? '')
+  ) {
+    console.warn(
+      'build-app: ccache is missing base_dir/hash_dir - expect a miss in every ' +
+        'new worktree (see ccacheEnv in scripts/build-speed-lib.mjs)'
+    );
+  }
   return {
     enabled: true,
     binary,
-    env: {
-      ...ccacheEnv({ enabled: true, repoRoot: REPO_ROOT }),
-      // Read by scripts/gradle-ccache.init.gradle: the file is passed with -I
-      // only when ccache exists, and it needs the path, not a guess.
-      CCACHE_GRADLE_LAUNCHER: binary,
-    },
+    env,
     // The NDK's CMake projects live in `android/` of the published package and
     // in nitro-modules, neither of which this repo may edit for packaging
     // reasons, so the launcher goes in through an init script instead.
