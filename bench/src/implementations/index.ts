@@ -55,16 +55,19 @@ export const implementations: BenchImplementation[] = [
     enablePerfMarks: enableNitroUiPerfMarks,
     drainPerfMarks: drainNitroUiPerfMarks,
   },
-  // The same library's Switches inside one shared `<Host>`, so one Compose
-  // composition for the batch instead of one per control (H1). Switch-only, which
-  // `components` makes visible in the report rather than silently measuring an empty
-  // tree on another component's cell. This arm is where D24's numbers come from, and
-  // it is gated: a regression here is a regression in what apps ship.
+  // The same library's controls inside one shared `<Host>`, so one Compose
+  // composition for the batch instead of one per control (H1, widened by H2a). The
+  // hostable four are listed, which `components` makes visible in the report rather than
+  // silently measuring an empty tree on another component's cell: SegmentedControl,
+  // Picker and DatePicker stay refused by a Host until H2b. This arm is where D24's numbers come from. Not
+  // gated (`GATED_IMPLEMENTATIONS` is `nitro-ui` alone): like the two `expo-ui-*` arms it
+  // is a reference arm — measured and reported, never gated against a baseline (T02 S9).
+  // H1's re-review F3 caught an earlier draft of this comment claiming otherwise.
   {
     name: 'nitro-ui-host',
     available: true,
     skipReason: null,
-    components: ['switch'],
+    components: ['switch', 'slider', 'progress', 'button'],
     List: NitroUiHostList,
     enablePerfMarks: null,
     drainPerfMarks: null,
