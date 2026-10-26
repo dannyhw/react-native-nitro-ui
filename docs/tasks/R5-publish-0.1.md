@@ -30,5 +30,11 @@ passthrough). Host support for more controls becomes 0.2.
    release text from the CHANGELOG), and the post-publish check (`npm view`, a fresh smoke from the
    registry).
 
+6. **Leftovers from the public-docs pass (D1):** README status note + component table + CHANGELOG move
+   Picker / DatePicker / Host from "unreleased (main)" to `0.1.0`; the README smoke matrix must
+   cover all seven (from step 3); `Picker.tsx`'s `tintColor` doc comment ("active outline/label")
+   must match the four Android tint roles in `docs/components/picker.md`; add `swiftui`,
+   `jetpack-compose`, `nitro-modules` (and similar) to `package.json` `keywords`.
+
 Gates: `bun run check`; smoke as in 3. No harness/bench runs needed unless a smoke failure points at
 library code. Report in `docs/tasks/R5-publish-0.1.report.md`.
