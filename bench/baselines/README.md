@@ -1,17 +1,24 @@
 # Committed benchmark baselines
 
-**Status (A1b): Android is committed, iOS is not.** `android35-emu-pixel9.json`
-comes from one clean `--plan full --launches 8` run on the canonical API 35
-Pixel 9 emulator at `3533d64` — 1120/1120 launches, no problems, ART
-`speed-profile`, load average 2.39 over 14 cores (`quiet: true`) — so
-`--check` on Android gates: 90 nitro-ui rows within tolerance, 44 suppressed by
-their own within-run spread, 0 failures. There is still no iPhone 17 baseline
-(`ios27-sim-iphone17.json`): two iOS `--plan full` runs have completed
-problem-free since (A1 at load 10.50, A1b at 7.60, ceiling 7.0) and both were
-refused by the idle-machine guard, so `--check` on iOS still exits with
-`no baseline at bench/baselines/<deviceKey>.json` and gates nothing. Both
-refusals came from one sample taken in the run's last minute; R4 changed the
-guard to judge the whole run, so the next iOS attempt is measured, not guessed.
+**Status (A1c): both canonical devices are committed.**
+`android35-emu-pixel9.json` comes from one clean `--plan full --launches 8` run
+on the canonical API 35 Pixel 9 emulator at `3533d64` — 1120/1120 launches, no
+problems, ART `speed-profile`, load average 2.39 over 14 cores (`quiet: true`) —
+so `--check` on Android gates: 90 nitro-ui rows within tolerance, 44 suppressed
+by their own within-run spread, 0 failures.
+
+`ios27-sim-iphone17.json` comes from one clean `--plan full --launches 8` run on
+the canonical iPhone 17 (iOS 27) simulator at `c9548f6` — 1344/1344 launches
+(42 cells x 4 implementations x 8, the `full` plan now includes DatePicker), no
+problems, and a quiet run rather than a quiet last minute: 1740 load samples,
+median 2.93 against the 7.0 ceiling, p90 4.24, 59 of them (3.4 %) over it.
+`--check` on iOS gates: 59 nitro-ui rows within tolerance, 107 suppressed by
+their own within-run spread, 6 `new arm` (the leak cells, which recorded no
+slope), 0 failures — and halving one quiet `presented` ratio, in both `ratio`
+and all eight `launchRatios`, makes it exit 1. It took three attempts: A1 and
+A1b each completed problem-free and were refused by the single end-of-run
+sample (10.50 and 7.60 against 7.0). R4's whole-run judgement is what let this
+one through, and its `max` of 75.64 shows why one sample was never enough.
 
 The one Android baseline committed before this one (`bb41d00`) was recorded
 while nitro-ui self-skipped: all seven of its nitro-ui cells carry a

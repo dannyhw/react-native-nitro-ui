@@ -1,5 +1,6 @@
 import {
   Button,
+  DatePicker,
   Picker,
   Progress,
   SegmentedControl,
@@ -12,6 +13,8 @@ import type { BenchListProps, BenchPerfMark } from '../types';
 import {
   SEGMENTED_SELECTION,
   buttonTitle,
+  dateValue,
+  onDateChange,
   onPress,
   onPickerChange,
   onSegmentChange,
@@ -117,6 +120,29 @@ export function NitroUiList({
     return null;
   }
   const style = rowStyle(component);
+  if (component === 'date-picker') {
+    // The `compact` `date` picker: the control's default presentation, and the
+    // only one whose box the reference arms can also take (`matchContents` on
+    // the Expo hosts). `dateValue(value)` is the same instant every arm shows,
+    // so `update.date-picker` is a real value change here: the field's text
+    // changes, the control re-emits nothing, and the controlled handshake runs.
+    // `disabled` and `tintColor` stay at their defaults - the arms compare each
+    // control's platform default, including the size that default measures.
+    return (
+      <>
+        {range(n).map((index) => (
+          <DatePicker
+            key={index}
+            testID={`bench-nitro-ui-date-${String(index)}`}
+            value={dateValue(value)}
+            onChange={onDateChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
   if (component === 'picker') {
     // `pickerSelection(value)` is the same index the other arms paint and the
     // options list is the list they mount, so the `update` cell is a real selection

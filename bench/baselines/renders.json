@@ -2,6 +2,7 @@
   "$comment": "JS render counts recorded by `bun run perf:renders -- --update-baseline`. The gate is exact equality (every run must produce this count), plus Reassure `issues` checks: no render right after mount and no redundant commit. Re-run with --update-baseline and review the diff when a wrapper legitimately changes how often it renders.",
   "tests": {
     "Button: mount, 3 title changes, 2 unrelated parent renders": 6,
+    "DatePicker: mount, 3 value changes, 2 bound changes, 2 unrelated parent renders": 8,
     "Picker: mount, 3 selection changes, 2 unrelated parent renders": 6,
     "Progress: mount, 3 value changes, 2 unrelated parent renders, 1 variant change": 7,
     "SegmentedControl: mount, 3 selection changes, 2 unrelated parent renders": 6,

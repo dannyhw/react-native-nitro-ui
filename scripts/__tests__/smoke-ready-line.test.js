@@ -33,7 +33,8 @@ import {
 const READY_LINE =
   'I/ReactNative( 1234): ' +
   `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 ` +
-  'progress=310x4 segmented-control=214x32 picker=72x35';
+  'progress=310x4 segmented-control=214x32 ' +
+  'date-picker=138x34 picker=72x35';
 
 /**
  * What the two platforms actually printed the first time this gate ran on
@@ -46,10 +47,11 @@ const READY_LINE_FRACTIONAL =
   'I/ReactNativeJS(13147): ' +
   `${READY_PREFIX} switch=52.19047546386719x48 slider=363.4285583496094x48 ` +
   'button=91.04762268066406x48 progress=363.4285583496094x4.19049072265625 ' +
-  'segmented-control=256x48 picker=280x56.09523010253906';
+  'segmented-control=256x48 date-picker=120.76190185546875x48 ' +
+  'picker=280x56.09523010253906';
 
 describe('smoke ready line', () => {
-  it('passes on a non-zero box per control', () => {
+  it('passes on one non-zero box per control', () => {
     const verdict = checkReadyLine(READY_LINE);
     expect(verdict.ok).toBe(true);
     expect(verdict.problems).toEqual([]);
@@ -136,7 +138,8 @@ describe('smoke ready line', () => {
     // must not satisfy the contract for the missing one.
     const verdict = checkReadyLine(
       `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 progress=310x4 ` +
-        'picker=72x35 message mentions segmented-control here'
+        'date-picker=138x34 picker=72x35 ' +
+        'message mentions segmented-control here'
     );
     expect(verdict.ok).toBe(false);
     expect(verdict.problems.join('\n')).toContain('segmented-control');
@@ -146,7 +149,8 @@ describe('smoke ready line', () => {
     // One token cannot cover two controls, and a box cannot move between them.
     const verdict = checkReadyLine(
       `${READY_PREFIX} switch=30x20x1 slider=310x20 button=88x36 ` +
-        'progress=310x4 segmented-control=214x32 picker=72x35'
+        'progress=310x4 segmented-control=214x32 ' +
+        'date-picker=138x34 picker=72x35'
     );
     expect(verdict.ok).toBe(false);
     expect(verdict.problems.join('\n')).toContain('switch');
@@ -161,7 +165,8 @@ describe('smoke ready line', () => {
   it('finds the last of several lines, and the pending line', () => {
     const log = [
       'something else',
-      `${READY_PREFIX} switch=1x1 slider=1x1 button=1x1 progress=1x1 segmented-control=1x1`,
+      `${READY_PREFIX} switch=1x1 slider=1x1 button=1x1 progress=1x1 ` +
+        'segmented-control=1x1 date-picker=1x1',
       READY_LINE,
       `${PENDING_PREFIX} progress=0x0`,
     ].join('\n');

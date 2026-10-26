@@ -18,7 +18,7 @@
 | FIX2 | Stale Yoga measurement after a correction (iOS Switch at 0 width after `value` update, found by T15) | Apex | Opus | merged (1 impl + 1 fix round; iOS+Android Sizing 24/24, real input 3/3 both) |
 | G4 | SegmentedControl (Picker → 0.2, D19) | Apex | Opus | merged (1 impl + 1 fix round; fix round comment-only in native) |
 | T15b | Add Button to the real-input runner + fix the Android Slider drag/JS-write test (red on main) | Apex | — | merged (real input 3/3 both platforms) |
-| G5 | DatePicker | Apex | Opus | in progress (0.2 wave 2) |
+| G5 | DatePicker | Apex | Opus | merged (1 impl + 2 fix rounds; final re-review MERGE) |
 | R1 | Release readiness: gate hygiene (D21 timing tag, real-input Metro bug, Node 26 check) | Apex | Opus (orchestrator) | merged |
 | R2 | Release readiness 2: README + component docs, smoke with all 5 components, pack check, D18 baselines | Apex | orchestrator | merged (1 round; baselines measured but not minted — runner needs a full plan) |
 | S1 | React Native Storybook in the example app (showcase/tester) | Apex | orchestrator | merged (1 round; disabled bundle byte-identical, harness 99/99 + real-input 4/4 both) |
@@ -30,4 +30,4 @@
 | A1b | Overnight baselines retry | Apex | orchestrator | merged — **Android baseline minted** (load 2.39, 1120/1120); iOS refused 7.60 vs 7.0 at run end → R4 then one more overnight attempt |
 | R4 | Bench load guard samples the whole run (median/≥10 % rule) | Apex | orchestrator | merged (1 round) |
 | C1 | Android intrinsic content wider than its box fits instead of clipping (0.2 wave 1) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE-AFTER-SMALL-FIXES, report corrected by orchestrator) |
-| G6 | Picker (0.2 wave 2) | Apex | Opus | in progress |
+| G6 | Picker (0.2 wave 2) | Apex | Opus | merge-main pass running (on top of G5 + A1c) |

@@ -1,5 +1,6 @@
 import {
   Button,
+  DatePicker,
   Host,
   Picker,
   ProgressView,
@@ -21,6 +22,8 @@ import {
   onPickerChange,
   SEGMENTED_SELECTION,
   buttonTitle,
+  dateValue,
+  onDateChange,
   onPress,
   onSegmentChange,
   onSliderChange,
@@ -196,6 +199,24 @@ function BenchSegmented({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
+ * A compact SwiftUI `DatePicker` showing the same instant every other arm shows.
+ *
+ * The default style (a field plus the calendar popover), which is the same
+ * presentation nitro-ui's `compact` variant has, so both arms can be laid out by
+ * their own content. `displayedComponents` stays at its `['date']` default: a
+ * `datetime` arm would compare a two-column control against a one-column one.
+ */
+function BenchDatePicker({ index, value }: { index: number; value: boolean }) {
+  return (
+    <DatePicker
+      testID={`bench-expo-date-${String(index)}`}
+      selection={dateValue(value)}
+      onDateChange={onDateChange}
+    />
+  );
+}
+
+/**
  * A menu `Picker` whose options are the same three labels every other arm draws,
  * with the same one selected - so the flip paints the same new title and the box
  * has to follow it, as it does for every other arm.
@@ -242,6 +263,10 @@ export function ExpoUiHostPerControlList({
           <Host key={index} matchContents style={style}>
             <BenchSegmented index={index} value={value} />
           </Host>
+        ) : component === 'date-picker' ? (
+          <Host key={index} matchContents style={style}>
+            <BenchDatePicker index={index} value={value} />
+          </Host>
         ) : component === 'picker' ? (
           <Host key={index} matchContents style={style}>
             <BenchMenuPicker index={index} value={value} />
@@ -275,6 +300,7 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
   if (
     component === 'button' ||
     component === 'segmented-control' ||
+    component === 'date-picker' ||
     component === 'picker'
   ) {
     // `matchContents` for the batch's host too, for the same reason as the
@@ -285,6 +311,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
           {range(n).map((index) =>
             component === 'button' ? (
               <BenchButton key={index} index={index} value={value} />
+            ) : component === 'date-picker' ? (
+              <BenchDatePicker key={index} index={index} value={value} />
             ) : component === 'picker' ? (
               <BenchMenuPicker key={index} index={index} value={value} />
             ) : (
