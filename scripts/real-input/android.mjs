@@ -16,7 +16,7 @@
  * Usage (devices and ports come from the environment, as everywhere else here):
  *
  *   ANDROID_AVD=<avd> ANDROID_ADB_SERVER_PORT=<port> METRO_PORT=<port> \
- *     bun run test:real-input:android [--control switch|slider|button|segmented-control]
+ *     bun run test:real-input:android [--control <id>]   # ids: controls.mjs
  *
  * The emulator must already be booted: AGENTS.md says only touch devices you
  * started, so this script boots nothing and shuts nothing down.
@@ -68,6 +68,8 @@ const ECHO = {
   segmentedEvents: 'real-input-segmented-events',
   rejectEvents: 'real-input-reject-events',
   rejectValue: 'real-input-reject-value',
+  dateValue: 'real-input-date-value',
+  dateEvents: 'real-input-date-events',
   pickerIndex: 'real-input-picker-index',
   pickerEvents: 'real-input-picker-events',
   pickerGone: 'real-input-drop-gone',
@@ -383,6 +385,120 @@ const CHECKS = {
     );
   },
   /**
+   * A real tap must open the Material 3 date dialog, a tap on one of its day
+   * cells must reach JS as a new instant, and a parent that refuses it has to
+   * snap the field back.
+   *
+   * Two things make this check longer than the Switch's. The dialog is a *second
+   * window*, so while it is open the app's own text is simply absent from the
+   * tree: the dialog's cells are read, then the echo is read after the dialog
+   * closes. And a day cell is a Compose semantics node with no testID - it names
+   * itself with a localised date - so the check aims at a cell in the middle of
+   * the grid, and retries: the day already showing reports nothing (the
+   * same-value rule core.md section 4), which from outside would look exactly
+   * like a touch path that does not work.
+   *
+   * This is `RealInputTests.testRealInputDatePicker` on the other platform,
+   * assertion for assertion.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'date-picker': async (t) => {
+    t.log.checkEquals(
+      'the DatePicker has reported no day before a touch',
+      t.requireEcho(ECHO.dateValue),
+      '-'
+    );
+    t.log.checkEquals(
+      'no change has been reported before a touch',
+      t.requireEcho(ECHO.dateEvents),
+      '0'
+    );
+
+    // The uncontrolled picker: the parent stores what it is told, so the echo is
+    // the pick. Three aims, because a pick of the day the picker already shows is
+    // a correct no-op - and Material 3 gives an outside observer no flag to avoid
+    // it with (verified against a dialog dump: the selected cell is not marked
+    // `selected`, and today's cell only says so in its label).
+    const attempts = [0, 7, -7];
+    let picked = null;
+    for (const offset of attempts) {
+      const day = await openAndPick(t, 'Real-input date picker', offset);
+      if (t.echoWithin(ECHO.dateEvents, (v) => v === '1') === '1') {
+        picked = day;
+        break;
+      }
+    }
+    t.log.checkEquals(
+      `a real tap on a dialog day (${picked ?? 'no pick reported'}) reaches JS as a change`,
+      t.requireEcho(ECHO.dateEvents),
+      '1'
+    );
+    const shown = t.requireEcho(ECHO.dateValue);
+    t.log.check(
+      `the day JS was told is the day React paints: "${shown}" is Y-M-D, written by ` +
+        'hand so that no locale can move the assertion',
+      /^\d{4}-\d{2}-\d{2}$/.test(shown)
+    );
+
+    // The refusing parent: same touch path, and the two assertions core.md
+    // section 4 is about - the pick was reported, and the day did not move.
+    const rejecting = 'Real-input rejecting date picker';
+    const PINNED = '2024-06-15';
+    t.log.checkEquals(
+      'the refusing parent pins its DatePicker to one day',
+      t.requireEcho(ECHO.rejectValue),
+      PINNED
+    );
+    t.log.checkEquals(
+      'nothing has been reported on the controlled control yet',
+      t.requireEcho(ECHO.rejectEvents),
+      '0'
+    );
+    for (const offset of attempts) {
+      await openAndPick(t, rejecting, offset);
+      if (t.echoWithin(ECHO.rejectEvents, (v) => v === '1') === '1') {
+        break;
+      }
+    }
+    t.log.checkEquals(
+      'a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4)',
+      t.requireEcho(ECHO.rejectEvents),
+      '1'
+    );
+    t.log.checkEquals(
+      'the parent never accepted the change, so the day it sends is unchanged',
+      t.requireEcho(ECHO.rejectValue),
+      PINNED
+    );
+    // The snap-back oracle, as on the SegmentedControl: another pick is only a
+    // fresh selection - so can only report a second change - once the refused one
+    // has been rolled back.
+    for (const offset of attempts) {
+      await openAndPick(t, rejecting, offset);
+      if (t.echoWithin(ECHO.rejectEvents, (v) => v === '2') === '2') {
+        break;
+      }
+    }
+    t.log.checkEquals(
+      'a second pick is a fresh selection, which is only true if the refused one was rolled back',
+      t.requireEcho(ECHO.rejectEvents),
+      '2'
+    );
+    t.log.checkEquals(
+      'and the parent should still be refusing',
+      t.requireEcho(ECHO.rejectValue),
+      PINNED
+    );
+
+    // The inline calendar's own write guard: a tap back onto the day the model last
+    // wrote has to reach JS. The dialog above cannot show this (its selection is
+    // provisional and the model is written once, on OK), and `nuiTestSelect` cannot
+    // reach it either: the test seam writes through the model, which is exactly what
+    // the guard exists to ignore. So it is the inline calendar, tapped for real.
+    await tapBackToTheDisplayedDay(t);
+  },
+  /**
    * A menu picker: a real tap must open a popup, a real tap on a row must bring the
    * choice back to JS, a refused choice must go away again, and a popup that outlives
    * the view that opened it must not survive it.
@@ -682,6 +798,263 @@ const CHECKS = {
   },
 };
 
+/**
+ * Tap back onto the day an inline calendar is showing, and require that JS is told.
+ *
+ * `syncDatePicker` remembers the day it last wrote into Material 3's state so that
+ * `LaunchedEffect(selected)` can tell the model's own write from a person's tap.
+ * Writing that memory only on the branch that *had* to write left it on the day from
+ * before an accepted pick - and the next tap, back onto that day, then reads as the
+ * model's own write: nothing is emitted, and the calendar snaps forward under the
+ * finger. A pick the parent accepted needs no write, which is precisely the case the
+ * memory was missing.
+ *
+ * Aimed by the accessibility tree, asserted only through the app's own hand-written
+ * echoes (`change-count`, `controlled-value`): the cells call themselves "Thursday,
+ * January 1, 2026", and the only thing read out of that is the day and year at its
+ * end, so no locale can move an assertion.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+async function tapBackToTheDisplayedDay(t) {
+  const COUNT = 'change-count';
+  const VALUE = 'controlled-value';
+  // The tab bar is pinned to the top of the window and draws over whatever the page
+  // scrolls under it: a "cell" up there is a tab as far as `adb shell input` is
+  // concerned, so the band a tap may aim at starts below it.
+  const bandTop = 250;
+
+  // The echoes that say what a tap did sit under a calendar taller than the screen,
+  // so scroll until they are readable at all...
+  for (
+    let attempt = 0;
+    attempt < 6 && t.nodeByTestId(VALUE) == null;
+    attempt += 1
+  ) {
+    await t.scrollPage(350);
+  }
+  if (t.nodeByTestId(VALUE) == null) {
+    t.log.abort(
+      `no "${VALUE}" echo on screen after scrolling the date-picker page - the ` +
+        'inline calendar cannot be checked without the text that says what a tap did'
+    );
+  }
+  const baseline = t.requireEcho(VALUE);
+  const shown = baseline.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (shown == null) {
+    t.log.abort(
+      `"${VALUE}" reads "${baseline}", which is not Y-M-D as this screen writes it`
+    );
+  }
+  const shownDay = Number(shown[3]);
+  const shownYear = Number(shown[1]);
+
+  // ...then ease back up until the *first* cell of the grid is inside the band. The
+  // first cell of a Material 3 page is its 1st, so when that cell is also the day the
+  // value names, the grid is on the value's month and `a` is the day to come back to.
+  /** @type {{ a: import('./uiautomator.mjs').UiautomatorNode, b: import('./uiautomator.mjs').UiautomatorNode, bDay: number } | null} */
+  let aimed = null;
+  for (let attempt = 0; attempt < 8 && aimed == null; attempt += 1) {
+    const echoNode = t.nodeByTestId(VALUE);
+    if (echoNode != null) {
+      const cells = t
+        .dump()
+        .filter(
+          (node) =>
+            isDayCell(node) &&
+            node.bounds.y1 >= bandTop &&
+            node.bounds.y2 <= echoNode.bounds.y1
+        )
+        .sort(
+          (left, right) =>
+            left.bounds.y1 - right.bounds.y1 || left.bounds.x1 - right.bounds.x1
+        );
+      const first = cells[0];
+      const firstDay = dayNumberAtEnd(first?.text ?? '');
+      if (
+        first != null &&
+        cells.length >= 14 &&
+        firstDay === shownDay &&
+        yearAtEnd(first.text) === shownYear
+      ) {
+        const far = cells.find((node) => {
+          const day = dayNumberAtEnd(node.text);
+          return day != null && Math.abs(day - shownDay) >= 7;
+        });
+        const last = cells[cells.length - 1];
+        const b = far ?? (dayNumberAtEnd(last.text) !== shownDay ? last : null);
+        if (b != null) {
+          aimed = { a: first, b, bDay: dayNumberAtEnd(b.text) ?? -1 };
+        }
+      }
+      t.log.note(
+        `grid: ${String(cells.length)} cells in the band, first = ` +
+          `"${first?.text ?? '-'}", value = "${baseline}"`
+      );
+    }
+    if (aimed == null) {
+      await t.scrollPage(-250);
+    }
+  }
+  if (aimed == null) {
+    t.log.abort(
+      `never found a month grid whose first cell is the value's own day ` +
+        `("${baseline}") with another day at least a week away on screen`
+    );
+  }
+  const { a, b, bDay } = aimed;
+
+  // The day the control was built with is the day its guard remembers, so tapping it
+  // first is the documented no-op - the same instant twice is not a change on either
+  // platform. It is also this check's own proof that `a` is the cell the model holds,
+  // which is what makes the red below about the fix and not about the aim.
+  await t.tapNode(a);
+  t.requireEchoToStay(
+    COUNT,
+    '0',
+    'a tap on the day the calendar already shows'
+  );
+
+  await t.tapNode(b);
+  t.waitForEcho(COUNT, '1', `a real tap on another day (day ${String(bDay)})`);
+  const afterB = t.requireEcho(VALUE);
+  t.log.check(
+    `the tap moved the value it is echoing: "${afterB}" is not "${baseline}"`,
+    afterB !== baseline
+  );
+
+  // The bug: back onto the day it came from. With the memory written only where a
+  // write happened, this emitted nothing and the calendar snapped forward again.
+  await t.tapNode(a);
+  t.waitForEcho(
+    COUNT,
+    '2',
+    'the tap back onto the previous day - the snap-back leaves this at 1'
+  );
+  t.log.checkEquals(
+    'and the day it accepted is the instant that day echoed before, time of day kept',
+    t.requireEcho(VALUE),
+    baseline
+  );
+
+  // The guard is not simply gone: the pick after the returned one is still a fresh
+  // selection, and one write per pick is what the exact counts above say.
+  await t.tapNode(b);
+  t.waitForEcho(COUNT, '3', 'a pick after the returned one to be fresh');
+}
+
+/**
+ * The day of month at the end of a Material 3 day cell's own name, or `null`.
+ *
+ * Cells name themselves with a localised date - "Thursday, January 1, 2026", and
+ * "Today, Sunday, October 25, 2026" for today - whose last two numbers are the day
+ * and the year in every locale this emulator offers. Only those are read.
+ *
+ * @param {string} label
+ */
+function dayNumberAtEnd(label) {
+  const match = label.match(/(\d{1,2})\D{0,3}\d{4}\s*$/);
+  return match == null ? null : Number(match[1]);
+}
+
+/**
+ * @param {string} label
+ */
+function yearAtEnd(label) {
+  const match = label.match(/(\d{4})\s*$/);
+  return match == null ? null : Number(match[1]);
+}
+
+/**
+ * Open a `compact` picker's dialog, tap one day cell, and confirm.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} description the field's `accessibilityLabel`
+ * @param {number} offset how far from the middle of the grid to aim, for a retry
+ * @returns {Promise<string>} what the tapped cell called itself, for the report
+ */
+async function openAndPick(t, description, offset) {
+  const field = await t.requireControl(description);
+  await t.tapNode(field);
+  const cells = dayGrid(t, description);
+  const middle = Math.floor(cells.length / 2);
+  const target =
+    cells[Math.min(cells.length - 1, Math.max(0, middle + offset))];
+  t.log.note(`tapping dialog day "${target.text}"`);
+  await t.tapNode(target);
+  // The dialog is a window of its own, so the app's text is unreadable until it
+  // closes - which is what the confirm button, and nothing else, does.
+  const confirm = t.waitForNodes(
+    isConfirmLabel,
+    "the dialog's OK button",
+    1
+  )[0];
+  await t.tapNode(confirm);
+  await t.settle(500);
+  return target.text;
+}
+
+/**
+ * The day cells of an open Material 3 date dialog, in reading order.
+ *
+ * What the cells actually look like was read out of a dump of the running dialog,
+ * not guessed: a cell is a *clickable* node whose own `text` is the localised
+ * date ("Sunday, October 4, 2026", and "Today, Sunday, October 25, 2026" for
+ * today), and it is square. That filter is what excludes the things in the dialog
+ * that also name a date: the headline ("Oct 25, 2026", not clickable), the month
+ * toggle ("October 2026", not clickable) and the weekday headers (no year).
+ *
+ * Cells whose box is `[0,0][0,0]` are Compose's off-screen ones - the tree keeps
+ * them, and they cannot be touched - so the box has to be real.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} description what to name in the failure line
+ */
+function dayGrid(t, description) {
+  const cells = t.waitForNodes(
+    isDayCell,
+    `${description}'s dialog to open with a month grid`,
+    14
+  );
+  // Reading order, so the middle of the list is the middle of the month: furthest
+  // from the 1st, the 30th and today, which are the days a picker may be showing.
+  return cells.sort(
+    (a, b) => a.bounds.y1 - b.bounds.y1 || a.bounds.x1 - b.bounds.x1
+  );
+}
+
+/**
+ * A day cell of Material 3's calendar: clickable, square, and named with a date
+ * that carries its year.
+ *
+ * @param {import('./uiautomator.mjs').UiautomatorNode} node
+ */
+function isDayCell(node) {
+  const { width, height } = node.bounds;
+  return (
+    node.clickable === 'true' &&
+    node.enabled === 'true' &&
+    width >= 24 &&
+    Math.abs(width - height) <= 4 &&
+    /\d{4}/.test(`${node.text} ${node.contentDesc}`)
+  );
+}
+
+/**
+ * The dialog's confirm affordance.
+ *
+ * Material 3's dialog button is a clickable box that holds a `TextView` with its
+ * label; the label is the node `uiautomator` reports the text on, and a tap on it
+ * lands on the button, so the check aims at the label. `OK` is what this emulator
+ * says; the alternatives are what other Android builds label the same button, so
+ * the check does not hinge on one locale.
+ *
+ * @param {import('./uiautomator.mjs').UiautomatorNode} node
+ */
+function isConfirmLabel(node) {
+  return /^(OK|Done|Set|Confirm)$/.test(node.text.trim());
+}
+
 async function main() {
   const controls = chosenControls(process.argv.slice(2));
   const suite = new Suite('android', controls);
@@ -969,9 +1342,10 @@ class DeviceHarness {
   }
 
   /**
-   * The example's three tabs are its only navigation.
+   * The example's tabs are its only navigation.
    *
-   * @param {'switch' | 'slider' | 'button' | 'segmented' | 'picker'} screen
+   * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
+   *   | 'picker'} screen
    */
   async goToScreen(screen) {
     const label = {
@@ -979,6 +1353,7 @@ class DeviceHarness {
       slider: 'Slider',
       button: 'Button',
       segmented: 'Segments',
+      datepicker: 'Dates',
       picker: 'Picker',
     }[screen];
     const anchor = {
@@ -986,6 +1361,7 @@ class DeviceHarness {
       slider: ECHO.sliderStart,
       button: ECHO.buttonCount,
       segmented: ECHO.segmentedIndex,
+      datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
     }[screen];
     if (findByTestId(this.hierarchy(), anchor) != null) {
@@ -1214,6 +1590,25 @@ function makeContext(harness, log) {
     },
 
     /**
+     * A fresh accessibility tree, for a check that has to look at several things in
+     * one breath - which half of a calendar is on screen, for instance.
+     */
+    dump() {
+      return harness.hierarchy();
+    },
+
+    /**
+     * The node React Native gives an on-screen `testID`, or `null` when nothing on
+     * screen carries it. `requireEcho` reads the same node's text and aborts; this
+     * is for scrolling, where "not yet" is the expected answer.
+     *
+     * @param {string} testID
+     */
+    nodeByTestId(testID) {
+      return findByTestId(harness.hierarchy(), testID);
+    },
+
+    /**
      * Scroll the screen until this control is on it, then look it up.
      *
      * `uiautomator dump` lists no off-screen nodes, so a row below the fold is not
@@ -1252,6 +1647,96 @@ function makeContext(harness, log) {
     async tapNode(node) {
       harness.tap(node);
       await sleep(250);
+    },
+
+    /**
+     * What an echo says right now, or `null` when nothing carries that id.
+     *
+     * `requireEcho` aborts, which is right for a check's assertions and wrong for
+     * a loop that is trying several gestures - a dialog, for instance, is another
+     * window, so the app's own text is simply absent until it closes.
+     *
+     * @param {string} testID
+     * @returns {string | null}
+     */
+    echo(testID) {
+      return echo(testID);
+    },
+
+    /**
+     * @param {number} ms
+     */
+    async settle(ms) {
+      await sleep(ms);
+    },
+
+    /**
+     * Scroll the page by `pixels` with one swipe (negative scrolls up).
+     *
+     * The swipe is aimed at the empty strip at the right edge of the window,
+     * outside the page's content column. Anywhere else it could start on a day
+     * cell, and Material 3's calendar is itself a vertical scroller: a swipe that
+     * starts there turns the calendar to another month instead of scrolling the
+     * page, which would move the grid the check is about to tap.
+     *
+     * @param {number} pixels
+     */
+    async scrollPage(pixels) {
+      const nodes = harness.hierarchy();
+      const width = Math.max(...nodes.map((node) => node.bounds.x2), 1);
+      const height = Math.max(...nodes.map((node) => node.bounds.y2), 1);
+      const x = width - 8;
+      const from = height * 0.7;
+      harness.swipe(x, from, x, from - pixels, 400);
+      await sleep(500);
+    },
+
+    /**
+     * The echo's text, polled until `matches` accepts it or `timeoutMs` passes.
+     *
+     * `waitForEcho` aborts, which is right for an assertion and wrong for a retry
+     * loop that has to be able to notice a no-op and try another cell.
+     *
+     * @param {string} testID
+     * @param {(text: string | null) => boolean} matches
+     * @param {number} timeoutMs
+     * @returns {string | null} the last text seen, matched or not
+     */
+    echoWithin(testID, matches, timeoutMs = 2500) {
+      const deadline = Date.now() + timeoutMs;
+      for (;;) {
+        const shown = echo(testID);
+        if (matches(shown) || Date.now() > deadline) {
+          return shown;
+        }
+        blockMs(100);
+      }
+    },
+
+    /**
+     * Every node `predicate` accepts, once at least `minCount` of them are on
+     * screen - or the run aborts saying what it was waiting for.
+     *
+     * For the things a check cannot aim at by id: Material 3's calendar day cells
+     * belong to Compose, in a dialog window of its own, and name themselves with a
+     * localised date rather than a testID.
+     *
+     * @param {(node: import('./uiautomator.mjs').UiautomatorNode) => boolean} predicate
+     * @param {string} why What the check was waiting for, for the failure line.
+     * @param {number} minCount How many matches make the tree worth returning.
+     */
+    waitForNodes(predicate, why, minCount = 1, timeoutMs = REACT_TIMEOUT) {
+      const deadline = Date.now() + timeoutMs;
+      for (;;) {
+        const found = harness.hierarchy().filter(predicate);
+        if (found.length >= minCount) {
+          return found;
+        }
+        if (Date.now() > deadline) {
+          log.abort(`timed out waiting for ${why}`);
+        }
+        blockMs(250);
+      }
     },
 
     /**

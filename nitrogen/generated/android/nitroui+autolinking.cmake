@@ -36,6 +36,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiDatePickerSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiPickerSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
@@ -51,6 +53,8 @@ target_sources(
   ../nitrogen/generated/android/c++/JVariant_NullType_Double.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_String.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiPickerSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp

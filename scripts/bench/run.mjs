@@ -45,6 +45,7 @@ import {
   simctl,
 } from './devices.mjs';
 import {
+  ARMS_WITHOUT_COMPONENT,
   LAUNCHES_PER_CELL,
   MARK_CAPABLE_IMPLEMENTATIONS,
   PLANS,
@@ -677,7 +678,21 @@ export async function main(argv) {
     only: flag(argv, '--only'),
     perfMarks,
     component,
+    platform,
   });
+
+  // An arm with no cell for this platform's version of the component is a
+  // missing row in the table, not a slow one, so say which rows to expect.
+  const omittedArms = ARMS_WITHOUT_COMPONENT.filter(
+    (key) =>
+      key.startsWith(`${platform}:`) &&
+      (component == null || key.endsWith(`:${component}`))
+  ).map((key) => key.split(':')[1]);
+  if (omittedArms.length > 0) {
+    log(
+      `Arms:      no ${omittedArms.join(', ')} cell on ${platform} (ARMS_WITHOUT_COMPONENT)`
+    );
+  }
 
   // Counted from the schedule itself: `--only` narrows the implementation
   // dimension, and the progress counter below is `schedule.length`.

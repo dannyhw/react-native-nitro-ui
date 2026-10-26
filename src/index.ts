@@ -54,3 +54,10 @@ export {
   type ProgressProps,
   type ProgressVariant,
 } from './components/Progress/Progress';
+
+export {
+  DatePicker,
+  type DatePickerMode,
+  type DatePickerProps,
+  type DatePickerVariant,
+} from './components/DatePicker/DatePicker';

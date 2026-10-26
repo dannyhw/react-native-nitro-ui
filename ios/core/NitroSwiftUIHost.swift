@@ -560,6 +560,18 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     containerViewController = nil
   }
 
+  /// The view controller this host is contained in, once containment has happened.
+  ///
+  /// `nil` for every shipped control except the one that presents something: a
+  /// component that opens a window of its own needs a view controller to present
+  /// from, and `needsContainment` is the flag that makes this one exist. It is
+  /// read at present time rather than cached because containment follows the view
+  /// in and out of a window (`didMoveToWindow`), so the answer legitimately changes
+  /// over an instance's life.
+  var containingViewController: UIViewController? {
+    containerViewController
+  }
+
   /// Walk the responder chain for the nearest usable view controller.
   ///
   /// Deliberately no `import React`: `reactViewController()` is just this walk,

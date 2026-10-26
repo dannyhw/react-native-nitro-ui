@@ -117,3 +117,15 @@ all GitHub workflows (CI, Release, Bench, Smoke) are disabled. Local gates (`bun
 real-input, smoke, bench) are the only gates. Phase A = committed bench baselines + deferred small
 fixes (A1/A2). 0.2 scope: Picker, DatePicker, Android over-wide content fix, opt-in Android `<Host>`
 (Switch first, then the rest), iOS mount profiling to decide an iOS Host.
+
+## D23 — Try `<Host>` on both platforms; ship it where it is better (2026-10-26)
+
+The human's call: try the shared `<Host>` on iOS as well as Android, and use it if it is better. This
+reverses P1's H3 drop (P1 found the iOS *mount time* cost is the first measure, but the per-instance
+*memory* is host-attributable and nothing else measured fixes it). T17 spikes the iOS Host (Switch +
+Slider, one round). "Better" = vs nitro-ui without a Host, on the same run: mount memory (N=200) and
+mount UI CPU/op lower with a verdict, `presented` not worse (within its spread); reported against
+`expo-ui-shared-host` too. If T17 clears that, H3 productionises the iOS Host with Android's API
+(`<Host>`, `HostProps extends ViewProps`, direct nitro-ui children). The Host stays **opt-in** on
+both platforms: inside it controls are native content, not RN views (no interleaving, `ScrollView`,
+clip/transform, `Modal`), so it cannot be a silent default. Android H1/H2 proceed as planned.

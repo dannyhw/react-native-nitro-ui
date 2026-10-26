@@ -36,6 +36,41 @@ import {
 } from './shared';
 
 /**
+ * `@expo/ui` has no DatePicker arm on Android, and a launch that asks for one
+ * fails here rather than reaching Compose.
+ *
+ * Its only picker surface is the inline Material 3 `DateTimePicker` (there is no
+ * date *field*: `DatePickerDialog` is a whole dialog, not a mountable control),
+ * and neither shape of it is priceable against this library's compact field.
+ * Measured on `nitroui_t02` (2026-10-25):
+ *
+ * - inside the `matchContents` host every self-sizing arm gets, the calendar's
+ *   horizontally scrollable month pager is measured with infinite width and the
+ *   process dies: `IllegalStateException: Horizontally scrollable component was
+ *   measured with an infinity maximum width constraints`;
+ * - with the width bounded it mounts, at 2.45 s of mount work per iteration of
+ *   50 inline calendars (~96 s per launch for one host per batch, more once each
+ *   calendar gets its own host), which is the runner's entire per-launch budget.
+ *
+ * The runner therefore never schedules these cells on Android
+ * (`scripts/bench/lib.mjs` `ARMS_WITHOUT_COMPONENT`); this is the loud failure
+ * for a launch that asks anyway, in place of an opaque Compose crash or 50
+ * calendars that took three minutes to lay out.
+ *
+ * Plainly, for anyone reading this looking for a number: this arm is **never
+ * rendered**, on any launch, so no table in `docs/benchmarks.md` has an Android
+ * `@expo/ui` DatePicker row to compare against. It is *not* an inline calendar
+ * that lost a comparison - there is no Android date-picker arm at all.
+ */
+function unsupportedDatePicker(): never {
+  throw new Error(
+    'expo-ui has no DatePicker arm on Android: @expo/ui exposes no mountable date ' +
+      'field, and its inline M3 calendar cannot be measured by a matchContents ' +
+      'host (see ARMS_WITHOUT_COMPONENT in scripts/bench/lib.mjs).'
+  );
+}
+
+/**
  * Module-level so the anchor gets the same `modifiers` array identity every render
  * (T02 review NIT), the way the other arms' modifier arrays are built.
  */
@@ -95,12 +130,18 @@ function BenchPicker({ value }: { value: boolean }) {
  * (one `AndroidComposeView` each). Expo UI always needs a `Host`, so both Expo
  * arms are required for a fair comparison
  * (docs/research/setup-decisions.md SS6).
+ *
+ * For `date-picker` it defers to [unsupportedDatePicker], which says why there is
+ * no Android arm to write here.
  */
 export function ExpoUiHostPerControlList({
   n,
   value,
   component,
 }: BenchListProps) {
+  if (component === 'date-picker') {
+    return unsupportedDatePicker();
+  }
   const style = rowStyle(component);
   return (
     <>
@@ -234,6 +275,9 @@ function BenchSegmented({ value }: { value: boolean }) {
  * tree and one recomposition scope for the whole batch.
  */
 export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
+  if (component === 'date-picker') {
+    return unsupportedDatePicker();
+  }
   if (n === 0) {
     return null;
   }

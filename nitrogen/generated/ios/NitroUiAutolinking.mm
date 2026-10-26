@@ -15,6 +15,7 @@
 #include "HybridNitroUiProgressSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
 #include "HybridNitroUiSwitchSpecSwift.hpp"
+#include "HybridNitroUiDatePickerSpecSwift.hpp"
 #include "HybridNitroUiSegmentedControlSpecSwift.hpp"
 #include "HybridNitroUiPickerSpecSwift.hpp"
 
@@ -61,6 +62,13 @@
     "NitroUiSwitch",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiSwitchSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiSwitch();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiDatePicker",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiDatePickerSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiDatePicker();
       return hybridObject;
     }
   );
