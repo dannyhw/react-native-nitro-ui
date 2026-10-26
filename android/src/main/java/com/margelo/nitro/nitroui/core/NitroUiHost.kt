@@ -53,15 +53,23 @@ internal class NitroUiHostModel : NitroUiModel() {
  * **Which of the Host's own styles reach the drawing.** `width` / `height` / `flex`
  * size the box, and `padding` insets it: [NitroUiHostViewManager] forwards
  * `setPadding`, so the `Column` starts inside the padding as in any other
- * container. `gap`, `flexDirection`, `alignItems`, `justifyContent`, `borderWidth`
- * and `pointerEvents` do not - Compose does the arranging (one `Column`, no gaps),
- * the Host draws no border, and hits go to Compose rather than RN's hit testing.
- * Yoga still honours each of them in the *box*, which is the trap: a `gap` buys
- * height and no space, and `flexDirection: row` buys a one-row-tall box around a
- * stack of rows. Say how tall the Host is, and stack it in a column (review S3).
+ * container. `borderWidth` insets it the same way and paints nothing: Fabric sends
+ * border and padding as one `layoutMetrics.contentInsets`, and the view manager
+ * forwards `setPadding`, so `borderWidth: 2` moves the column in by 2 dp without
+ * drawing a border. What does not cross at all is `gap` / `rowGap` / `columnGap`,
+ * `flexDirection`, `alignItems`, `alignContent`, `justifyContent` and
+ * `pointerEvents` - Compose does the arranging (one `Column`, no gaps) and hits go
+ * to Compose rather than RN hit testing. Yoga still honours each of them in the
+ * *box*, which is the trap: a `gap` buys height and no space, and
+ * `flexDirection: row` buys a one-row-tall box around a stack of rows. Say how tall
+ * the Host is, and stack it in a column (review S3). A child's own `alignSelf`
+ * belongs to neither list: like every self style it moves that child's decorative
+ * frame, which a Host ignores either way, so warning about it as if it were an
+ * arrangement style was a false claim (H2a).
  *
  * **The allowlist is native, not only JS.** [NitroComposeHost.isHostable] decides who
- * may be composed here, and only `SwitchHost` says yes. JS refuses what it can name
+ * may be composed here: Switch, Slider, Progress and Button say yes (H1, then H2a),
+ * and every other control says no. JS refuses what it can name
  * (`src/components/Host/HostChildren.ts`), but React flattens components out of the
  * native tree: a `Picker` behind a `memo` arrives as a direct child that JS saw as a
  * `<Row>`, and a nested `<Host>` is a child like any other. Both are refused here and
