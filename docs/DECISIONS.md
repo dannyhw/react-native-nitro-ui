@@ -129,3 +129,62 @@ mount UI CPU/op lower with a verdict, `presented` not worse (within its spread);
 (`<Host>`, `HostProps extends ViewProps`, direct nitro-ui children). The Host stays **opt-in** on
 both platforms: inside it controls are native content, not RN views (no interleaving, `ScrollView`,
 clip/transform, `Modal`), so it cannot be a silent default. Android H1/H2 proceed as planned.
+
+## D24 (H1) — What a hosted control's box is (2026-10-26)
+
+T16's condition 2 ("decide D17 and a Host in the same breath") and the sizing half of the
+H1 brief, decided with the Android `<Host>` and then measured on a device rather than
+argued:
+
+- **A hosted control never measures its content, so it never reports.** While a
+  `NitroUiHostView` composes it, the control's own `onMeasure` and `onLayout` decline and it
+  builds no composition of its own (`isHostedByParent`) — measuring would build a second
+  composition for content already in the Host's. Measured over eight hosted Switches on a
+  cache the test had just invalidated: **reports 0, cache entries 0, corrections 0**. So
+  **D17 does not apply to a hosted control**: there is no measurement that could arrive a
+  frame late. A control outside a Host is unchanged and keeps every D17 case.
+- **Yoga still asks it for a size, and the engine still answers.** The shadow node does not
+  know who draws the control, and it must not start asking: `sizingStats().measurements`
+  rises by one per hosted child, *exactly* as it does for the same eight children unhosted
+  (8 and 8). The answer is the cached size or the declared fallback — never a fresh Compose
+  measurement — and nothing is reported back from it. "A hosted control never measures" is
+  therefore a sentence about content, and this is the line between it and a false one.
+- **Its RN frame is real and decorative.** Real because it is what the Host's own height is
+  built from; decorative because no pixel is placed by it. On Android the child's platform
+  view is `GONE` while the Host draws it, so anything reading real view bounds — the
+  harness, `uiautomator` — reports it as `0x0`, and the frame survives only in the shadow
+  tree. So a cross-axis opt-in on a hosted child (`alignSelf: 'stretch'`, `width: '100%'`,
+  D16) moves the frame and not the drawing, and a `height` on a hosted child does not space
+  the rows: two Hosts whose children were 96 dp and 20 dp tall answered the same presses at
+  the same offsets.
+- **The Host places its children itself**: one Compose `Column`, in mount order, at the
+  Host's own width, **starting at the box's top-leading edge and clipped to the box**.
+  Centring the drawing in the box — what every single control does with that same measured
+  root, and what the first port of the Host did — is wrong for a container: a Host 60 tall
+  holding 144 of content centred its column at y = −42, so the *second* row sat under a
+  finger aimed at the first. Top-leading is what RN means by a container and what Expo's
+  Host does.
+- **The Host measures nothing either.** Its view config has no measure function, so its box
+  is pure Yoga: `height` / `flex: 1` wins, and with neither its height is the sum of its
+  children's engine boxes (measured: three children with `height: 24` → a Host 72 tall while
+  Compose drew 144). Growing to *measured* Compose content is the rejected alternative: it
+  needs a main-thread Compose measurement on the layout path, which sizing.md §1 forbids, or
+  a hard-coded row height, which is a declared fallback with no cache to correct it. Dense
+  lists say how tall they are; where the two boxes disagree Compose clips to the Host's, so
+  an over-tall list loses its **bottom** rows rather than its top. A Host that ends up 0
+  tall says so once per instance in dev, and a debuggable build logs a Host that is handed a
+  child it cannot compose.
+- **One child rule, both platforms.** JS refuses what it can prove unhostable — a text node,
+  a host component, one of RN's own views, a nitro-ui control that is not hosted yet — and
+  throws on iOS as well as Android, so the container keeps one contract while the iOS Host is
+  still a spike (D23). Components are transparent: React flattens them out of the native
+  tree, so a wrapper that renders a `Switch` *is* a direct child and **is** hosted. That is
+  why an unknown component passes the JS check and the native Host decides — and why a
+  `Switch` inside an RN `View` inside a Host is not hosted, because the `View` is the direct
+  child.
+
+Held by `example/__tests__/Host.harness.tsx` (geometry asserted in **pairs** — children 96
+tall versus 20, a short Host versus a tall one, `width: '100%'` versus nothing — plus the
+sizing counters, whose "no cache entry" claim is made against a cache the test invalidated
+and whose positive control is the same eight controls unhosted) and by
+`src/__tests__/host.test.tsx` + `src/__tests__/hostLayoutWarning.test.tsx` for the JS half.
