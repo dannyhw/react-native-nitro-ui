@@ -976,17 +976,17 @@ if (Platform.OS === 'android') {
     /** The device event a debuggable `NitroUiHost` emits for a refused child. */
     type Report = { message?: string; childClass?: string };
 
-    function listen(reports: Report[]) {
+    function listen(sink: Report[]) {
       return DeviceEventEmitter.addListener(
         'NitroUiHostUnhostableChild',
         (report: Report) => {
-          reports.push(report);
+          sink.push(report);
         }
       );
     }
 
     /** A control behind a component, which is what JS cannot see through. */
-    const WrappedPicker = memo(function WrappedPicker() {
+    const WrappedPicker = memo(function PickerBehindMemo() {
       return (
         <Picker
           options={['Cinder', 'Mica', 'Shale']}
@@ -1005,7 +1005,7 @@ if (Platform.OS === 'android') {
      * Host is handed.
      */
     const PickerThroughForwardRef = forwardRef<View>(
-      function PickerThroughForwardRef(_props, _ref) {
+      function PickerBehindForwardRef(_props, _ref) {
         return (
           <Picker
             options={['Cinder', 'Mica', 'Shale']}
@@ -1027,8 +1027,8 @@ if (Platform.OS === 'android') {
     }
 
     it('will not compose a control behind a component, and tells JS', async () => {
-      const reports: Report[] = [];
-      const subscription = listen(reports);
+      const refused: Report[] = [];
+      const subscription = listen(refused);
       try {
         const { unmount } = await mount(
           <View testID="refuse-host" style={HUG}>
@@ -1069,10 +1069,10 @@ if (Platform.OS === 'android') {
         // report per refused child is the proof that all three shapes reached the
         // native rule rather than being dropped without a word.
         expect(
-          reports.filter((report) => /Picker/.test(report.message ?? '')).length
+          refused.filter((report) => /Picker/.test(report.message ?? '')).length
         ).toBe(3);
         expect(
-          reports.some((report) =>
+          refused.some((report) =>
             /docs\/components\/host\.md/.test(report.message ?? '')
           )
         ).toBe(true);
@@ -1090,9 +1090,9 @@ if (Platform.OS === 'android') {
      * "refused").
      */
     it('will not compose a Host behind a component either', async () => {
-      const reports: Report[] = [];
-      const subscription = listen(reports);
-      const WrappedHost = memo(function WrappedHost() {
+      const refused: Report[] = [];
+      const subscription = listen(refused);
+      const WrappedHost = memo(function HostBehindMemo() {
         return (
           <Host style={{ width: 300, height: 48 }}>
             <Toggle id="nested-0" log={log} />
@@ -1111,7 +1111,7 @@ if (Platform.OS === 'android') {
         const host = await boxOf('nested-hosts');
         expect(await probeIn(host, 8, 24, [], log)).toBeNull();
         expect(
-          reports.some((report) => /another <Host>/.test(report.message ?? ''))
+          refused.some((report) => /another <Host>/.test(report.message ?? ''))
         ).toBe(true);
         unmount();
       } finally {
