@@ -4,7 +4,7 @@
 `F08675D3-A32B-4F88-BC81-02D7E0CB797E` (the canonical iOS bench device) and AVD
 `nitroui_t01` (`emulator-5570`, private adb server `5041`), Metro `8293` for the device
 suites — both booted by hand for this task and shut down at the end. iPhone Air,
-`nitroui_t02` and `emulator-5560` / `PR1505_Pixel` were not touched. · **Platforms:** both.
+`nitroui_t02` and `emulator-5560` were not touched. · **Platforms:** both.
 · **Not done, deliberately:** no push, no tag, no publish, no repo creation.
 
 ## Verdict

@@ -254,7 +254,7 @@ harness test on both platforms plus a mutation-checked host case for the half th
   - T15's Finding 1 is gone on the platform where it was visible, and the JS-only path (`flip from JS`) is
     covered by the harness test, which never touches the screen.
 - Devices: iPhone Air and `nitroui_t02` were started by FIX2 and are shut down at the end; G2's iPhone 17 /
-  `nitroui_t01` / adb 5041 / Metro 8293 and `emulator-5560` / `PR1505_Pixel` were not used, and no
+  `nitroui_t01` / adb 5041 / Metro 8293 and `emulator-5560` were not used, and no
   `adb kill-server` was run anywhere.
 
 ## `Slider › finishes a drag that a write from JS lands inside` is red on Android on `main`

@@ -1,7 +1,7 @@
 # Recovery snapshot — 2026-10-23 23:50 local
 
 Written because the machine may restart (at 23:41:02 CoreSimulatorService got SIGTERM and shut down
-all simulators; the human's `PR1505_Pixel` emulator exited the same minute; cause unconfirmed —
+all simulators; the human's `emulator-5560` emulator exited the same minute; cause unconfirmed —
 `softwareupdate --list` shows no pending update). Everything below is on disk; uncommitted work in
 worktrees survives a restart. Agent sessions do **not** survive — re-delegate with this context.
 
@@ -39,7 +39,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 
 - Free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
 - H2a: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` + AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
-- Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
+- Never touch `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
 

@@ -3,7 +3,7 @@
 **Branch:** `task/R1-gate-hygiene` (from `main` at `d9ad897`) · **Devices:** iPhone 17
 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`, AVD `nitroui_t01` (`emulator-5570`, adb server
 `5041`), Metro `8293` — both booted by hand for this task and shut down at the end
-(iPhone Air, `nitroui_t02`/`emulator-5572` and `emulator-5560` belong to G4 and PR1505 and
+(iPhone Air, `nitroui_t02`/`emulator-5572` and `emulator-5560` belong to G4 and the owner and
 were not touched) · **Platforms:** both.
 
 ## Verdict

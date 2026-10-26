@@ -72,9 +72,9 @@ window, not one moment:
 | Run end (guard) | 10.50 / 14.35 | → refusal |
 
 None of it came from the bench. At the peak the box was running ~2000 processes, four *foreign*
-booted simulators, another task's Xcode builds and a `spindump` storm; the human's `rs2client`
-(OldSchool RuneScape) has been at 47–120 % CPU for hours and was still running at 18:52. During
-this report's own bounded wait the load went 12.76 → 29.04 with that client and the T3 Code app
+booted simulators, another task's Xcode builds and a `spindump` storm; an unrelated foreground
+app has been at 47–120 % CPU for hours and was still running at 18:52. During
+this report's own bounded wait the load went 12.76 → 29.04 with that app and the agent host app
 dominant. A 14-core desk that a human is actively using cannot satisfy `load1 ≤ 0.5 × cores` for a
 three-hour window.
 
@@ -157,8 +157,8 @@ Consequences:
    `--plan quick`, whose mount cells stop at N=50, and the one Android baseline T02 committed
    self-skipped — so `mount.<component>:nitro-ui:200` on Android has never completed anywhere in
    this repo's history. This is the real obstacle, and it is a bigger deal than the load guard.
-3. Load drifted out from under the run again anyway: 3.41 at start, and by 18:58 the human's
-   `rs2client` (30–80 % for hours) had company from a Riot Client (105 % + 42 %), pushing load1 back
+3. Load drifted out from under the run again anyway: 3.41 at start, and by 18:58 the unrelated
+   foreground app (30–80 % for hours) had company from a second one (105 % + 42 %), pushing load1 back
    to 10.4.
 
 ## Headline ratios — nitro-ui ÷ `expo-ui-shared-host`
@@ -250,7 +250,7 @@ would is what makes it `FAIL`. Median bookkeeping alone cannot satisfy the gate.
   exercise `--check`, and nothing derived was committed.
 - **One attempt per platform**, then stop (D19). The bounded wait is the brief's, not a retry loop.
 - Device hygiene: booted only my own iPhone 17 sim and my assigned `nitroui_t01`; both shut down at
-  the end. Never touched `PR1505_Pixel`/`emulator-5560`, iPhone Air `331EF109…`,
+  the end. Never touched `emulator-5560`, iPhone Air `331EF109…`,
   `nitroui_t02`/`emulator-5572`/adb 5042/Metro 8294. Private adb server only (5041), devices always
   addressed by serial.
 
@@ -299,7 +299,7 @@ a small new task (or a fix round for A1, your call) with a scheduled multi-hour 
 
 **3. iOS: may I re-run once in a genuinely idle window?** The run I have is complete, problem-free and
 reproduces R2 within a few percent; it only failed the load guard, at 10.50 against a 7.0 ceiling while
-a game client held a core for hours. Recommendation: one re-run overnight on the same commit (~3 h),
+an unrelated app held a core for hours. Recommendation: one re-run overnight on the same commit (~3 h),
 **not** `--force` on the existing run — a `--force`-minted baseline would carry `quiet: false` and
 ~58 % noise-flagged nitro-ui cells, i.e. a gate that mostly cannot fire. If you would rather accept
 this run than schedule one, say so explicitly and I will do it with the reasons in the commit message.

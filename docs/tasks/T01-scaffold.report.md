@@ -125,9 +125,9 @@ the device, so the harness's own install path is covered too.
   (`system-images;android-35;google_apis;arm64-v8a`, `-d pixel_9`), booted
   headless on port 5570. Shut down at the end of this task. The `iPhone 17`
   simulator booted by the harness was shut down too. `emulator-5560`
-  (`PR1505_Pixel`) was never touched.
+  (`emulator-5560`) was never touched.
 - **Lefthook side effect:** `bun install` auto-installs its git hooks into the
-  shared `git` directory, i.e. `/Users/daniel.williams/Developer/oss/nitro-ui/.git/hooks/{pre-commit,commit-msg}`,
+  shared `git` directory, i.e. `<repo>/.git/hooks/{pre-commit,commit-msg}`,
   with absolute paths pointing at this worktree's `node_modules`. That would make
   commits in the main checkout (which has no `node_modules`) shell out to
   `npx eslint`. I removed both hooks again after committing; contributors who run
@@ -187,7 +187,7 @@ than a fix (#5, third bullet).
    repo with this `package.json` + `bun.lock`, `bun install` leaves
    `.git/hooks` at `*.sample` only, and `bun pm untrusted` blocks exactly
    lefthook. `lefthook` remains in `devDependencies` and the shared
-   `/Users/daniel.williams/Developer/oss/nitro-ui/.git/hooks/` was checked: it
+   `<repo>/.git/hooks/` was checked: it
    already holds only `*.sample` files, so there was nothing to delete. This
    also retires the round-1 "Lefthook side effect" note above.
    - Finding worth recording: **bun treats an empty `trustedDependencies` array
@@ -297,7 +297,7 @@ round); Android was not re-run, which the round-2 brief allows. After the harnes
 run the simulator was `Shutdown`, nothing was listening on 8291, and no
 harness/Metro processes remained. Devices started in round 1 (`nitroui_t01` AVD,
 `iPhone 17` sim) were already shut down at the time, and `emulator-5560`
-(`PR1505_Pixel`) was never touched.
+(`emulator-5560`) was never touched.
 
 ## Follow-ups
 

@@ -768,7 +768,7 @@ From the review, one line each, recorded and not chased:
 - **Devices addressed by serial throughout** (AGENTS.md): Android was
   `emulator-5572` / `nitroui_t02` with `ANDROID_ADB_SERVER_PORT=5042`, iOS was
   `331EF109-21DD-422B-AEF8-DFFFC6998DC3`. The `adb` server on the default port was never
-  used or restarted, and `emulator-5560` / `PR1505_Pixel` was never touched.
+  used or restarted, and `emulator-5560` was never touched.
 - **iPhone 17 (`F08675D3-…`) and `nitroui_t01` (adb 5041, Metro 8293) belong to G3 and
   were left alone.** That is also why the iOS bench numbers are non-canonical: the
   canonical device was not available, so this task took the honest label rather than the
