@@ -16,27 +16,44 @@
  *   - the generated table saying FAIL/stale where a hand-written one said PASS.
  */
 
-import { describe, expect, it } from '@jest/globals';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterAll, describe, expect, it } from '@jest/globals';
 
 import {
   LEDGER_VERSION,
   MERGE_GATES,
   decideNeed,
   deviceFromEnv,
+  countsForDisplay,
+  changedPathsGitArgs,
   gatesSeen,
+  gateRowFor,
   gateStateFor,
+  isToolingPath,
   ledgerFileName,
   ledgerLineFromRun,
   ledgerRelativePath,
   latestByGate,
+  listByGate,
   parseLedger,
   parseTestCounts,
+  parseTestSummaries,
+  platformMappingFor,
+  platformTreesFromEntries,
+  platformsOwningFile,
   platformsTouchedByPaths,
   renderGateTable,
   requiredGatesFor,
   resolveGate,
   summarizeGates,
   summarizeLoad,
+  codeTreeDigest,
+  contentHash,
+  isCodeFile,
 } from '../gate-core.mjs';
 
 /** Tree digest used as "the code this ledger line was about" in these tests. */
@@ -69,11 +86,17 @@ function line({
   device = null,
   exitCode = result === 'pass' ? 0 : 1,
   logPath = `.gates/logs/${gate}-1.log`,
+  trees = null,
+  treeAfter = tree,
+  summaries = null,
 }) {
   return ledgerLineFromRun({
     gate,
     command: `bun run ${gate}`,
     tree,
+    trees,
+    treeAfter,
+    summaries,
     head: commit,
     branch: 'task/X2-gate-ledger',
     platform: gate.includes('ios')
@@ -111,6 +134,12 @@ describe('ledger lines', () => {
       durationMs: 175300,
       result: 'pass',
       logPath: '.gates/logs/harness:android-1.log',
+      // v2 (M1-M4 review): the per-platform halves, the tree after the run, and
+      // every summary the gate printed rather than the last one.
+      trees: null,
+      treeAfter: TREE_A,
+      summaries: null,
+      signal: null,
     });
     expect(entry.ts).toBe('2026-10-26T10:00:00.000Z');
     expect(entry.load).toEqual({
@@ -140,7 +169,9 @@ describe('ledger lines', () => {
     expect(parsed).toHaveLength(2);
     expect(parsed.every((entry) => entry.corrupt === true)).toBe(true);
     expect(latestByGate(parsed)).toEqual({});
-    expect(gateStateFor(undefined, TREE_A).state).toBe('missing');
+    expect(
+      gateStateFor({ gate: 'check', tree: TREE_A, entry: undefined }).state
+    ).toBe('missing');
   });
 
   it('takes the last line per gate by append order, not by clock', () => {
@@ -179,25 +210,33 @@ describe('ledger lines', () => {
 
 describe('gateStateFor / summarizeGates', () => {
   it('reads green, red, stale and missing apart', () => {
-    expect(gateStateFor(line({ gate: 'check' }), TREE_A).state).toBe('green');
+    const ask = { gate: 'check', stage: 'merge', tree: TREE_A };
+    expect(gateStateFor({ ...ask, entry: line({ gate: 'check' }) }).state).toBe(
+      'green'
+    );
     expect(
-      gateStateFor(line({ gate: 'check', tree: TREE_B }), TREE_A).state
+      gateStateFor({ ...ask, entry: line({ gate: 'check', tree: TREE_B }) })
+        .state
     ).toBe('stale');
     expect(
-      gateStateFor(line({ gate: 'check', result: 'fail' }), TREE_A).state
+      gateStateFor({
+        ...ask,
+        entry: line({ gate: 'check', result: 'fail' }),
+      }).state
     ).toBe('red');
     // A red on the current tree stays red even if an older run was green: the
     // newest word on the tree is the one a reader needs.
     expect(
-      gateStateFor(
-        latestByGate([
+      gateRowFor({
+        gate: 'check',
+        list: [
           line({ gate: 'check' }),
           line({ gate: 'check', result: 'fail' }),
-        ]).check,
-        TREE_A
-      ).state
+        ],
+        ...ask,
+      }).state
     ).toBe('red');
-    expect(gateStateFor(undefined, TREE_A).state).toBe('missing');
+    expect(gateStateFor({ ...ask, entry: undefined }).state).toBe('missing');
   });
 
   it('lists the merge set plus anything else that ran, merge order first', () => {
@@ -213,7 +252,7 @@ describe('gateStateFor / summarizeGates', () => {
   it('shows a suite run beside the full harness rather than instead of it', () => {
     const rows = summarizeGates({
       entries: [line({ gate: 'harness:android:ColdSizing' })],
-      codeTree: TREE_A,
+      tree: TREE_A,
     });
     const full = rows.find((row) => row.gate === 'harness:android');
     expect(full.state).toBe('missing');
@@ -228,15 +267,18 @@ describe('platformsTouchedByPaths', () => {
     expect(platformsTouchedByPaths(['android/src/main/Ui.kt'])).toEqual({
       platforms: ['android'],
       unmapped: [],
+      tooling: [],
     });
     expect(platformsTouchedByPaths(['ios/ui/Switch.swift'])).toEqual({
       platforms: ['ios'],
       unmapped: [],
+      tooling: [],
     });
     for (const shared of [
       'cpp/ui/Switch.cpp',
       'src/index.ts',
-      'nitrogen/generated/ios/X.swift',
+      'nitrogen/generated/shared/Y.h',
+      'nitrogen/types/Config.ts',
     ]) {
       expect(platformsTouchedByPaths([shared]).platforms).toEqual([
         'ios',
@@ -269,7 +311,7 @@ describe('platformsTouchedByPaths', () => {
         'README.md',
         'bench/results/abc-android.json',
       ])
-    ).toEqual({ platforms: [], unmapped: [] });
+    ).toEqual({ platforms: [], unmapped: [], tooling: [] });
   });
 });
 
@@ -299,7 +341,7 @@ describe('requiredGatesFor / decideNeed', () => {
         line({ gate: 'harness:android' }),
         line({ gate: 'harness:ios', result: 'fail' }),
       ],
-      codeTree: TREE_A,
+      tree: TREE_A,
       stage: 'review',
       touchedPlatforms: platformsTouchedByPaths(['android/src/main/Ui.kt'])
         .platforms,
@@ -322,7 +364,7 @@ describe('requiredGatesFor / decideNeed', () => {
         line({ gate: 'harness:android' }),
         line({ gate: 'check', result: 'fail' }),
       ],
-      codeTree: TREE_A,
+      tree: TREE_A,
       stage: 'review',
       touchedPlatforms: ['android'],
     });
@@ -350,7 +392,7 @@ describe('requiredGatesFor / decideNeed', () => {
     expect(docsOnly).toEqual([]);
     const decision = decideNeed({
       entries,
-      codeTree: TREE_A,
+      tree: TREE_A,
       stage: 'review',
       touchedPlatforms: docsOnly,
     });
@@ -369,7 +411,7 @@ describe('requiredGatesFor / decideNeed', () => {
     const decision = decideNeed({
       entries,
       // The tree after the fix round's edit; every entry above predates it.
-      codeTree: TREE_B,
+      tree: TREE_B,
       stage: 'review',
       touchedPlatforms: ['android'],
     });
@@ -389,7 +431,7 @@ describe('requiredGatesFor / decideNeed', () => {
         line({ gate: 'harness:ios' }),
         line({ gate: 'harness:android' }),
       ],
-      codeTree: TREE_A,
+      tree: TREE_A,
       stage: 'review',
       touchedPlatforms: ['ios', 'android'],
     });
@@ -401,7 +443,7 @@ describe('requiredGatesFor / decideNeed', () => {
         line({ gate: 'harness:ios' }),
         line({ gate: 'harness:android' }),
       ],
-      codeTree: TREE_A,
+      tree: TREE_A,
       stage: 'merge',
     });
     expect(merge.ok).toBe(false);
@@ -409,7 +451,7 @@ describe('requiredGatesFor / decideNeed', () => {
 
     const complete = decideNeed({
       entries: MERGE_GATES.map((gate) => line({ gate })),
-      codeTree: TREE_A,
+      tree: TREE_A,
       stage: 'merge',
     });
     expect(complete.ok).toBe(true);
@@ -427,7 +469,7 @@ describe('requiredGatesFor / decideNeed', () => {
     for (const stage of ['review', 'merge']) {
       const decision = decideNeed({
         entries,
-        codeTree: TREE_A,
+        tree: TREE_A,
         stage,
         touchedPlatforms: ['ios', 'android'],
       });
@@ -436,7 +478,7 @@ describe('requiredGatesFor / decideNeed', () => {
       ).toBe(false);
     }
     expect(
-      decideNeed({ entries, codeTree: TREE_A, stage: 'merge' }).missing
+      decideNeed({ entries, tree: TREE_A, stage: 'merge' }).missing
     ).toEqual([
       'harness:ios',
       'harness:android',
@@ -451,7 +493,7 @@ describe('requiredGatesFor / decideNeed', () => {
         line({ gate: 'check' }),
         line({ gate: 'harness:android:ColdSizing' }),
       ],
-      codeTree: TREE_A,
+      tree: TREE_A,
       stage: 'review',
       touchedPlatforms: ['android'],
     });
@@ -461,7 +503,7 @@ describe('requiredGatesFor / decideNeed', () => {
   it('says when it could not read the diff instead of asking for nothing', () => {
     const decision = decideNeed({
       entries: [line({ gate: 'check' })],
-      codeTree: TREE_A,
+      tree: TREE_A,
       stage: 'review',
       touchedPlatforms: ['ios', 'android'],
       diffUnknown: true,
@@ -485,7 +527,7 @@ describe('renderGateTable', () => {
         }),
         line({ gate: 'harness:android', device: 'emulator-5570' }),
       ],
-      codeTree: TREE_A,
+      tree: TREE_A,
     });
     const rows = table.split('\n');
     expect(rows[0]).toBe(
@@ -508,7 +550,7 @@ describe('renderGateTable', () => {
   it('will not print PASS for a run from another code tree', () => {
     const table = renderGateTable({
       entries: [line({ gate: 'check', tree: TREE_B })],
-      codeTree: TREE_A,
+      tree: TREE_A,
     });
     const check = table.split('\n').find((row) => row.includes('`check`'));
     expect(check).toContain('stale');
@@ -529,7 +571,7 @@ describe('renderGateTable', () => {
           },
         }),
       ],
-      codeTree: TREE_A,
+      tree: TREE_A,
     });
     const row = table
       .split('\n')
@@ -541,12 +583,12 @@ describe('renderGateTable', () => {
   it('appends the log path only when asked', () => {
     const plain = renderGateTable({
       entries: [line({ gate: 'check' })],
-      codeTree: TREE_A,
+      tree: TREE_A,
     });
     expect(plain).not.toContain('.gates/logs');
     const full = renderGateTable({
       entries: [line({ gate: 'check' })],
-      codeTree: TREE_A,
+      tree: TREE_A,
       evidence: (entry) => `log \`${entry.logPath}\``,
     });
     expect(full).toContain('log `.gates/logs/check-1.log`');
@@ -579,14 +621,30 @@ describe('parseTestCounts', () => {
     });
   });
 
-  it('keeps the last summary when a gate printed several', () => {
-    // `check` runs jest, then perf, then more jest; the summary it exited on is
-    // the one that describes the result being recorded.
+  it('reports the first summary, which is the unit step', () => {
+    // M3. `check` prints jest, then the perf step, and "the last one wins" made
+    // its row read `7 tests / 7 suites` while the unit run in the same log had
+    // 391 tests across 23 suites. The one number a reviewer uses to notice a
+    // deleted suite was the one that went missing.
+    const log =
+      'Test Suites: 23 passed, 23 total\n' +
+      'Tests: 391 passed, 391 total\n' +
+      'Test Suites: 7 passed, 7 total\n' +
+      'Tests: 7 passed, 7 total';
+    expect(parseTestCounts(log).tests.total).toBe(391);
+    expect(parseTestCounts(log).suites.total).toBe(23);
+    expect(parseTestSummaries(log)).toHaveLength(2);
+    expect(parseTestSummaries(log)[1].tests.total).toBe(7);
     expect(
       parseTestCounts(
-        'Tests: 344 passed, 344 total\nTests: 12 passed, 12 total'
+        'Tests: 12 passed, 14 total\nTest Suites: 2 failed, 12 total'
       ).tests.total
-    ).toBe(12);
+    ).toBe(14);
+  });
+
+  it('pairs a `Test Suites` line with the `Tests` line that follows it', () => {
+    const [only] = parseTestSummaries('Test Suites: 11 passed, 11 total');
+    expect(only).toEqual({ suites: { passed: 11, total: 11 }, tests: null });
   });
 
   it('returns null rather than inventing counts', () => {
@@ -661,6 +719,38 @@ describe('resolveGate', () => {
     ]);
   });
 
+  it('names a filtered run something other than the full gate (M1)', () => {
+    // The name is what the ledger records and what `need` matches on, so this is
+    // where "one suite is not the platform gate" is actually decided. Round 1
+    // recorded `argv[0]`, and a filtered run satisfied the full gate.
+    expect(resolveGate('harness:ios', ['ColdSizing']).gate).not.toBe(
+      'harness:ios'
+    );
+    expect(resolveGate('harness:ios', ['ColdSizing']).gate).toBe(
+      'harness:ios:ColdSizing'
+    );
+    expect(resolveGate('harness:android:ColdSizing').gate).toBe(
+      'harness:android:ColdSizing'
+    );
+    expect(
+      resolveGate('real-input:android', ['--control', 'switch']).gate
+    ).toBe('real-input:android:--control:switch');
+    // A name that carries its arguments is a legal command, so a recorded gate
+    // can be pasted straight back.
+    expect(resolveGate('real-input:android:--control:switch').gate).toBe(
+      'real-input:android:--control:switch'
+    );
+    // An argument with a separator in it cannot impersonate two arguments.
+    expect(resolveGate('harness:android', ['a:b']).gate).toBe(
+      'harness:android:a%3Ab'
+    );
+    expect(resolveGate('harness:android').gate).toBe('harness:android');
+    expect(resolveGate('check').gate).toBe('check');
+    expect(() => resolveGate('check', ['--coverage'])).toThrow(
+      /check takes no arguments/
+    );
+  });
+
   it('routes bench to the bench runner and marks it a bench', () => {
     expect(resolveGate('bench')).toMatchObject({ bench: true, platform: null });
     expect(resolveGate('bench', ['--plan', 'quick']).argv.slice(1)).toEqual([
@@ -714,5 +804,676 @@ describe('deviceFromEnv', () => {
     expect(
       deviceFromEnv({ ANDROID_AVD: 'nitroui_t01' }, null).device
     ).toBeNull();
+  });
+});
+
+/**
+ * The fix-round review items. These four describes are the reason this round
+ * exists: M2 (a one-platform fix re-owed the other platform), M3 (`check`'s counts
+ * cell), M4 (rename detection) and the tooling allow-list the review specified.
+ */
+
+/** `path -> content` -> `path -> content hash`, code files only, as the stamp does. */
+function hashOf(files) {
+  const entries = {};
+  for (const [file, content] of Object.entries(files)) {
+    if (isCodeFile(file)) entries[file] = contentHash(content);
+  }
+  return entries;
+}
+
+/** The full code-tree digest for a file set, the way `currentCodeTree()` reads it. */
+function fullTreeOf(files) {
+  return codeTreeDigest(hashOf(files));
+}
+
+function platformTreesOf(files) {
+  return platformTreesFromEntries(hashOf(files));
+}
+
+describe('platformMappingFor / tooling class', () => {
+  it('maps the platform directories, including the halves N3 left coarse', () => {
+    expect(
+      platformMappingFor('ios/components/Button/Switch.swift').platforms
+    ).toEqual(['ios']);
+    // example/ios is a Podfile, a lockfile and an Xcode project: iOS only, the
+    // same as example/android was already.
+    expect(platformMappingFor('example/ios/Podfile').platforms).toEqual([
+      'ios',
+    ]);
+    expect(
+      platformMappingFor('example/android/app/build.gradle').platforms
+    ).toEqual(['android']);
+    expect(
+      platformMappingFor('nitrogen/generated/ios/Autolink.swift').platforms
+    ).toEqual(['ios']);
+    expect(
+      platformMappingFor('nitrogen/generated/android/Autolink.kt').platforms
+    ).toEqual(['android']);
+    for (const shared of [
+      'nitrogen/generated/shared/Types.hpp',
+      'src/index.ts',
+      'cpp/ui/Switch.cpp',
+    ]) {
+      expect(platformMappingFor(shared).platforms).toEqual(['ios', 'android']);
+    }
+  });
+
+  it('treats the check-only allow-list as no platform at all', () => {
+    for (const tooling of [
+      'scripts/__tests__/gate.test.js',
+      'scripts/gate.mjs',
+      'scripts/gate-core.mjs',
+      'scripts/bench/run.mjs',
+      'scripts/perf/renders.mjs',
+      'scripts/smoke/pack.sh',
+      'scripts/package-files.mjs',
+      'eslint-rules/no-raw-colors.js',
+      'etc/package-files.txt',
+      '.changeset/config.json',
+      '.gitignore',
+      '.prettierignore',
+    ]) {
+      expect(isToolingPath(tooling)).toBe(true);
+      expect(platformsOwningFile(tooling)).toEqual([]);
+    }
+    expect(
+      platformsTouchedByPaths(['scripts/gate.mjs', 'eslint-rules/x.js'])
+    ).toEqual({ platforms: [], unmapped: [], tooling: expect.any(Array) });
+  });
+
+  it('keeps every path a device run depends on out of the allow-list', () => {
+    // The review's warning: a device run imports a lot of `scripts/`, so
+    // tooling is an allow-list and not `scripts/` wholesale. Each of these is
+    // loaded by the harness config, Metro, or the binary, so it must still ask
+    // for both platforms.
+    for (const deviceRunInput of [
+      'scripts/app-stamp.mjs',
+      'scripts/app-stamp-core.mjs',
+      'scripts/lease-core.mjs',
+      'scripts/node-version.mjs',
+      'scripts/harness-timing-gate.js',
+      'scripts/harness.mjs',
+      'scripts/real-input/android.mjs',
+      'scripts/build-app.mjs',
+      'scripts/pod-install.mjs',
+      'scripts/patch-nitrogen.mjs',
+    ]) {
+      expect(isToolingPath(deviceRunInput)).toBe(false);
+      expect(platformsOwningFile(deviceRunInput)).toEqual(['ios', 'android']);
+    }
+  });
+});
+
+describe('platformTreesFromEntries (the key M2 rests on)', () => {
+  const ROUND_ONE = {
+    'ios/components/Button/Switch.swift': 'swift-v1',
+    'android/src/main/ui/Switch.kt': 'kt-v1',
+    'src/ui/Shared.ts': 'ts-v1',
+    'scripts/gate.mjs': 'tooling-v1',
+  };
+
+  it('puts shared code in both halves and tooling in neither', () => {
+    const trees = platformTreesOf(ROUND_ONE);
+    const iosOnly = platformTreesFromEntries(
+      hashOf({ 'ios/a.swift': 'x', 'example/ios/Podfile': 'y' })
+    );
+    expect(trees.ios).not.toBe(trees.android);
+    expect(iosOnly.android).toBe(
+      platformTreesFromEntries(hashOf({})).android,
+      'a tree of only iOS files has an empty Android half'
+    );
+    // Adding tooling changes neither half, which is what stops a tooling fix
+    // round re-owing two device runs.
+    expect(
+      platformTreesOf({ ...ROUND_ONE, 'scripts/gate.mjs': 'tooling-v2' })
+    ).toEqual(trees);
+  });
+
+  it('moves only the Android half when only Android changed', () => {
+    const before = platformTreesOf(ROUND_ONE);
+    const after = platformTreesOf({
+      ...ROUND_ONE,
+      'android/src/main/ui/Switch.kt': 'kt-v2',
+    });
+    expect(after.ios).toBe(before.ios);
+    expect(after.android).not.toBe(before.android);
+    expect(fullTreeOf(ROUND_ONE)).not.toBe(fullTreeOf(after));
+  });
+
+  it('moves both halves when shared code changed', () => {
+    const before = platformTreesOf(ROUND_ONE);
+    const after = platformTreesOf({
+      ...ROUND_ONE,
+      'src/ui/Shared.ts': 'ts-v2',
+    });
+    expect(after.ios).not.toBe(before.ios);
+    expect(after.android).not.toBe(before.android);
+  });
+});
+
+describe('the fix-round rule (M2)', () => {
+  const ROUND_ONE = {
+    'ios/components/Button/Switch.swift': 'swift-v1',
+    'android/src/main/ui/Switch.kt': 'kt-v1',
+  };
+  const roundOneTree = fullTreeOf(ROUND_ONE);
+  const roundOneTrees = platformTreesOf(ROUND_ONE);
+
+  function lineOn(gate, tree, trees, result = 'pass') {
+    return line({ gate, tree, trees, result });
+  }
+
+  /** Round 1: an iOS file and an Android file, and all three gates green. */
+  function afterRoundOne() {
+    expect(platformsTouchedByPaths(Object.keys(ROUND_ONE)).platforms).toEqual([
+      'ios',
+      'android',
+    ]);
+    return [
+      lineOn('check', roundOneTree, roundOneTrees),
+      lineOn('harness:ios', roundOneTree, roundOneTrees),
+      lineOn('harness:android', roundOneTree, roundOneTrees),
+    ];
+  }
+
+  it('an Android-only fix does not re-owe the iOS run', () => {
+    const fixed = { ...ROUND_ONE, 'android/src/main/ui/Switch.kt': 'kt-v2' };
+    const tree = fullTreeOf(fixed);
+    const trees = platformTreesOf(fixed);
+    // The fix itself touches Android only...
+    expect(
+      platformsTouchedByPaths(['android/src/main/ui/Switch.kt']).platforms
+    ).toEqual(['android']);
+    // ... and `need` still reads the *branch* diff, because that is what a diff
+    // against the base ref is: the branch touched both platforms, so iOS stays
+    // required. What M2 changes is that it stops being required *again*: the
+    // round-1 line is keyed to the iOS half of the tree, and that half did not
+    // move. Before it, this row read "not this code tree: re-run it".
+    const touched = platformsTouchedByPaths(Object.keys(fixed));
+    expect(touched.platforms).toEqual(['ios', 'android']);
+
+    const entries = [
+      ...afterRoundOne(),
+      lineOn('check', tree, trees),
+      lineOn('harness:android', tree, trees),
+    ];
+    const review = decideNeed({
+      entries,
+      tree,
+      trees,
+      stage: 'review',
+      touchedPlatforms: touched.platforms,
+    });
+    expect(review.ok).toBe(true);
+    expect(review.required.map((row) => row.gate)).toEqual([
+      'check',
+      'harness:ios',
+      'harness:android',
+    ]);
+    expect(review.missing).toEqual([]);
+    const iosRow = review.required.find((row) => row.gate === 'harness:ios');
+    // This is the whole point: the iOS line is from the *previous* tree.
+    expect(iosRow.entry.tree).toBe(roundOneTree);
+    expect(iosRow.state).toBe('green');
+    expect(iosRow.matched).toBe('ios');
+
+    // Merge is not impressed: it still wants every gate once on the final tree.
+    expect(
+      decideNeed({ entries, tree, trees, stage: 'merge' }).missing
+    ).toContain('harness:ios');
+  });
+
+  it('an iOS-only fix still re-ows Android, because it must', () => {
+    const fixed = { ...ROUND_ONE, 'ios/components/Button/Switch.swift': 'v2' };
+    const tree = fullTreeOf(fixed);
+    const trees = platformTreesOf(fixed);
+    const entries = [
+      ...afterRoundOne(),
+      lineOn('check', tree, trees),
+      lineOn('harness:ios', tree, trees),
+    ];
+    const review = decideNeed({
+      entries,
+      tree,
+      trees,
+      stage: 'review',
+      touchedPlatforms: platformsTouchedByPaths([
+        'ios/components/Button/Switch.swift',
+      ]).platforms,
+    });
+    expect(review.required.map((row) => row.gate)).toEqual([
+      'check',
+      'harness:ios',
+    ]);
+    // Android is not asked for at review here (the diff is iOS-only), and at
+    // merge the round-1 line is stale: the full tree moved.
+    expect(
+      decideNeed({ entries, tree, trees, stage: 'merge' }).missing
+    ).toContain('harness:android');
+  });
+
+  it('a shared-code fix re-ows both platforms', () => {
+    const fixed = { ...ROUND_ONE, 'src/ui/Shared.ts': 'ts-v2' };
+    const tree = fullTreeOf(fixed);
+    const trees = platformTreesOf(fixed);
+    const touched = platformsTouchedByPaths(['src/ui/Shared.ts']);
+    expect(touched.platforms).toEqual(['ios', 'android']);
+    const review = decideNeed({
+      entries: afterRoundOne(),
+      tree,
+      trees,
+      stage: 'review',
+      touchedPlatforms: touched.platforms,
+    });
+    // `check` is keyed to the whole tree, so it is owed too; the two device runs
+    // are owed because both binaries contain the shared file.
+    expect(review.missing).toEqual(['check', 'harness:ios', 'harness:android']);
+  });
+
+  it('a tooling-only fix asks for check and nothing else', () => {
+    const fixed = { ...ROUND_ONE, 'scripts/gate.mjs': 'tooling-v2' };
+    const tree = fullTreeOf(fixed);
+    const trees = platformTreesOf(fixed);
+    expect(trees).toEqual(roundOneTrees);
+    const touched = platformsTouchedByPaths(['scripts/gate.mjs']);
+    expect(touched.platforms).toEqual([]);
+    const review = decideNeed({
+      entries: afterRoundOne(),
+      tree,
+      trees,
+      stage: 'review',
+      touchedPlatforms: touched.platforms,
+      toolingPaths: touched.tooling,
+    });
+    expect(review.required.map((row) => row.gate)).toEqual(['check']);
+    expect(review.notes.join(' ')).toMatch(/tooling \(check-only\)/);
+  });
+});
+
+describe('a line that is not about this tree (N1, N2)', () => {
+  it('is never green when the tree moved while the run went on', () => {
+    const moved = line({ gate: 'check', tree: TREE_A, treeAfter: TREE_B });
+    expect(
+      gateStateFor({
+        gate: 'check',
+        entry: moved,
+        tree: TREE_A,
+        stage: 'merge',
+      }).state
+    ).toBe('stale');
+    expect(
+      gateStateFor({
+        gate: 'check',
+        entry: moved,
+        tree: TREE_A,
+        stage: 'merge',
+      }).why
+    ).toBe('moved');
+    // A run that started clean on this tree outranks an interrupted one: the
+    // interrupted run may have failed on code that is not here now.
+    const rows = gateRowFor({
+      gate: 'check',
+      list: [line({ gate: 'check' }), moved],
+      tree: TREE_A,
+      stage: 'merge',
+    });
+    expect(rows.state).toBe('green');
+    // ... and a moved-tree fail does not stay green either.
+    expect(
+      gateRowFor({
+        gate: 'check',
+        list: [moved],
+        tree: TREE_A,
+        stage: 'merge',
+      }).state
+    ).toBe('stale');
+  });
+
+  it('prefers the latest line for the tree being asked about', () => {
+    const entries = [
+      line({ gate: 'check', tree: TREE_A, commit: 'c1' }),
+      line({ gate: 'check', tree: TREE_B, commit: 'c2', result: 'fail' }),
+    ];
+    // Reverted back to TREE_A: the code that passed is the code in front of us.
+    expect(
+      gateRowFor({
+        gate: 'check',
+        list: listByGate(entries).check,
+        tree: TREE_A,
+      }).state
+    ).toBe('green');
+    expect(
+      gateRowFor({
+        gate: 'check',
+        list: listByGate(entries).check,
+        tree: TREE_B,
+      }).state
+    ).toBe('red');
+  });
+
+  it('prints an older tree as stale, never as FAIL', () => {
+    const table = renderGateTable({
+      entries: [
+        line({ gate: 'harness:android', tree: TREE_A, result: 'fail' }),
+      ],
+      tree: TREE_B,
+      stage: 'merge',
+    });
+    expect(table).toContain('stale');
+    expect(table).not.toContain('**FAIL**');
+    expect(table).toContain('(not this tree)');
+  });
+});
+
+describe('changedPathsGitArgs (M4)', () => {
+  it('never follows a rename when asking what a diff touched', () => {
+    const [committed, withWorktree] = changedPathsGitArgs('deadbeef');
+    for (const args of [committed, withWorktree]) {
+      expect(args).toContain('--no-renames');
+      expect(args).toContain('--name-only');
+    }
+    expect(committed.join(' ')).toContain('deadbeef...HEAD');
+    expect(withWorktree).not.toContain('deadbeef...HEAD');
+  });
+});
+
+describe('countsForDisplay (M3)', () => {
+  const JEST = {
+    suites: { passed: 23, total: 23 },
+    tests: { passed: 391, total: 391 },
+  };
+  const PERF = {
+    suites: { passed: 7, total: 7 },
+    tests: { passed: 7, total: 7 },
+  };
+
+  it('reports the unit step when every step passed', () => {
+    const entry = line({
+      gate: 'check',
+      counts: JEST,
+      summaries: [JEST, PERF],
+    });
+    expect(countsForDisplay(entry)).toEqual(JEST);
+    expect(renderGateTable({ entries: [entry], tree: TREE_A })).toContain(
+      '391 tests / 23 suites'
+    );
+  });
+
+  it('sums the failures across steps when any step failed', () => {
+    const failingPerf = {
+      suites: { passed: 6, failed: 1, total: 7 },
+      tests: { passed: 5, failed: 2, total: 7 },
+    };
+    const entry = line({
+      gate: 'check',
+      result: 'fail',
+      counts: JEST,
+      summaries: [JEST, failingPerf],
+    });
+    const shown = countsForDisplay(entry);
+    expect(shown.tests.failed).toBe(2);
+    expect(shown.tests.total).toBe(398);
+    expect(
+      renderGateTable({
+        entries: [{ ...entry, result: 'fail' }],
+        tree: TREE_A,
+      })
+    ).toMatch(/2 failed of 398 tests/);
+  });
+
+  it('still reports a single step as itself', () => {
+    expect(
+      countsForDisplay(line({ gate: 'harness:ios', counts: JEST }))
+    ).toEqual(JEST);
+    expect(countsForDisplay(undefined)).toBeNull();
+  });
+});
+
+describe('summarizeLoad rounding (N5)', () => {
+  it('rounds the start sample like the others', () => {
+    // `os.loadavg()` returns a float, and the committed ledger had
+    // "start":13.54443359375 in it.
+    const samples = [13.54443359375, 20.4, 31.9];
+    const load = summarizeLoad({ start: 13.54443359375, samples });
+    expect(load).toEqual({ start: 13.54, median: 20.4, max: 31.9, count: 3 });
+    expect(summarizeLoad({ start: 13.54443359375, samples: [] }).start).toBe(
+      13.54
+    );
+    expect(summarizeLoad({ start: null, samples: [] }).count).toBe(0);
+  });
+});
+
+/**
+ * The CLI layer (`scripts/gate.mjs`), which no amount of pure-function testing
+ * can see: M1 lives in "which name gets recorded", and M4 lives in "which git
+ * command asks the question". Both are tested by running the real file in a
+ * throwaway checkout with a fake runner on `PATH` that prints a jest summary and
+ * exits 0, so the assertions are about what lands in the ledger and what `need`
+ * answers - the two things a round actually reads.
+ */
+
+const CLI = path.join(process.cwd(), 'scripts', 'gate.mjs');
+
+function gitIn(dir, args) {
+  const result = spawnSync('git', args, {
+    cwd: dir,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_SYSTEM: '/dev/null',
+      GIT_AUTHOR_NAME: 'Test',
+      GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'Test',
+      GIT_COMMITTER_EMAIL: 'test@example.invalid',
+      HOME: dir,
+    },
+  });
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+  }
+  return String(result.stdout).trim();
+}
+
+/**
+ * A minimal checkout: the marker `repoRootOf()` looks for, an `example/` for the
+ * harness gate to run in, and a `main` ref for `need --base` to diff against.
+ *
+ * @param {Record<string, string>} files path -> contents at the base commit
+ * @param {(dir: string) => void} [onBranch] what the task branch then changes
+ */
+function makeCheckout(files, onBranch = () => {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'x2-gate-'));
+  for (const [file, content] of Object.entries(files)) {
+    const target = path.join(dir, file);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content);
+  }
+  fs.mkdirSync(path.join(dir, 'example'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'example/package.json'), '{"name":"x"}\n');
+  // The real repo gitignores `.gates/`; a fixture that does not has its own
+  // ledger and logs counted as code, so the tree moves while a gate runs and
+  // every line reads stale. (Found by running this file: the N1 check caught it.)
+  fs.writeFileSync(path.join(dir, '.gitignore'), '.gates/\nfake-bin/\n');
+  gitIn(dir, ['init', '-q', '-b', 'main']);
+  gitIn(dir, ['add', '-A']);
+  gitIn(dir, ['commit', '-qm', 'base']);
+  gitIn(dir, ['checkout', '-qb', 'task/x2-fixture']);
+  onBranch(dir);
+  return dir;
+}
+
+function writeFakeRunner(dir) {
+  const bin = path.join(dir, 'fake-bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const script =
+    '#!/bin/sh\n' +
+    'echo "fake runner: $0 $*"\n' +
+    'echo "Test Suites: 23 passed, 23 total"\n' +
+    'echo "Tests: 391 passed, 391 total"\n' +
+    'if [ -n "$FAKE_SECOND_SUMMARY" ]; then\n' +
+    '  echo "Test Suites: 7 passed, 7 total"\n' +
+    '  echo "Tests: 7 passed, 7 total"\n' +
+    'fi\n' +
+    'exit 0\n';
+  for (const name of ['node', 'bun']) {
+    const shim = path.join(bin, name);
+    fs.writeFileSync(shim, script);
+    fs.chmodSync(shim, 0o755);
+  }
+  return bin;
+}
+
+function runCli(dir, args, extraEnv = {}) {
+  const bin = writeFakeRunner(dir);
+  return spawnSync(process.execPath, [CLI, ...args], {
+    cwd: dir,
+    encoding: 'utf8',
+    timeout: 120_000,
+    env: {
+      ...process.env,
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      ...extraEnv,
+    },
+  });
+}
+
+function ledgerLines(dir) {
+  const file = path.join(dir, '.gates', 'task', 'x2-fixture.jsonl');
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .filter((raw) => raw.trim() !== '')
+    .map((raw) => JSON.parse(raw));
+}
+
+describe('gate.mjs (the CLI, in a throwaway checkout)', () => {
+  const cleanup = [];
+
+  function checkout(files, onBranch) {
+    const dir = makeCheckout(files, onBranch);
+    cleanup.push(dir);
+    return dir;
+  }
+
+  afterAll(() => {
+    for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('records a filtered run under its own name, and need still wants the gate', async () => {
+    const dir = checkout(
+      {
+        'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
+        'ios/components/Button/Switch.swift': 'v1\n',
+      },
+      (target) => {
+        fs.mkdirSync(path.join(target, 'android/src/main/ui'), {
+          recursive: true,
+        });
+        fs.writeFileSync(
+          path.join(target, 'android/src/main/ui/Switch.kt'),
+          'v1\n'
+        );
+        gitIn(target, ['add', '-A']);
+        gitIn(target, ['commit', '-qm', 'touch android']);
+      }
+    );
+    const run = runCli(dir, ['harness:android', '--', 'ColdSizing']);
+    expect(run.status).toBe(0);
+    const lines = ledgerLines(dir);
+    expect(lines).toHaveLength(1);
+    // M1: the recorded name carries the filter, so it is visibly not the
+    // platform gate. `argv[0]` used to be recorded, and one suite satisfied
+    // `harness:android`.
+    expect(lines[0].gate).toBe('harness:android:ColdSizing');
+    expect(lines[0].result).toBe('pass');
+    expect(lines[0].trees.ios).toEqual(expect.any(String));
+    expect(lines[0].treeAfter).toBe(lines[0].tree);
+
+    const need = runCli(dir, ['need', '--for', 'review', '--base', 'main']);
+    expect(need.status).toBe(1);
+    expect(need.stdout).toContain('harness:android — never run on this tree');
+    expect(need.stdout).not.toContain('✓ harness:android —');
+  }, 60_000);
+
+  it('records the full run under the bare name, and review then passes', async () => {
+    const dir = checkout(
+      {
+        'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
+        'android/src/main/ui/Switch.kt': 'v1\n',
+      },
+      (target) => {
+        fs.writeFileSync(
+          path.join(target, 'android/src/main/ui/Switch.kt'),
+          'v2\n'
+        );
+        gitIn(target, ['add', '-A']);
+        gitIn(target, ['commit', '-qm', 'touch android']);
+      }
+    );
+    expect(runCli(dir, ['check'], { FAKE_SECOND_SUMMARY: '1' }).status).toBe(0);
+    expect(runCli(dir, ['harness:android']).status).toBe(0);
+    const lines = ledgerLines(dir);
+    expect(lines.map((entry) => entry.gate)).toEqual([
+      'check',
+      'harness:android',
+    ]);
+    // M3 at the layer that writes the line: `counts` is the jest step, and the
+    // perf step that printed last is kept beside it rather than in its place.
+    expect(lines[0].counts.tests.total).toBe(391);
+    expect(lines[0].summaries).toHaveLength(2);
+    expect(lines[0].summaries[1].tests.total).toBe(7);
+
+    const need = runCli(dir, ['need', '--for', 'review', '--base', 'main']);
+    expect(need.stdout).toContain('need: review is satisfied');
+    expect(need.status).toBe(0);
+    const table = runCli(dir, ['table']);
+    // Scoped to the `check` row on purpose: the fake runner prints the same
+    // summary for every gate, so a loose substring would match another row.
+    const checkRow = table.stdout
+      .split('\n')
+      .find((row) => row.startsWith('| `check` '));
+    expect(checkRow).toContain('**PASS**');
+    expect(checkRow).toContain('391 tests / 23 suites');
+    // Merge is a different bar, on the same lines.
+    const merge = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(merge.status).toBe(1);
+    expect(merge.stdout).toContain('real-input:ios');
+  }, 60_000);
+
+  it('refuses arguments to check and records nothing', () => {
+    const dir = checkout({
+      'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
+    });
+    const run = runCli(dir, ['check', '--', '--coverage']);
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain('check takes no arguments');
+    expect(ledgerLines(dir)).toEqual([]);
+  });
+
+  it('still asks for iOS when a rename moves a file out of ios/', () => {
+    // M4: git follows renames by default, so a `git mv` out of a platform
+    // directory used to read as "this branch touches no platform-specific code".
+    const dir = checkout(
+      {
+        'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
+        'ios/components/Button/Switch.swift': 'v1\n',
+      },
+      (target) => {
+        fs.mkdirSync(path.join(target, 'bench/attic'), { recursive: true });
+        gitIn(target, [
+          'mv',
+          'ios/components/Button/Switch.swift',
+          'bench/attic/Switch.swift',
+        ]);
+        gitIn(target, ['commit', '-qm', 'move the button out']);
+      }
+    );
+    const need = runCli(dir, ['need', '--for', 'review', '--base', 'main']);
+    expect(need.status).toBe(1);
+    expect(need.stdout).toContain('harness:ios');
+    expect(need.stdout).not.toContain('touches no platform-specific code');
   });
 });
