@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.util.Log
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
 import android.view.View
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.bridge.WritableNativeMap
@@ -30,7 +32,7 @@ internal class NitroUiHostModel : NitroUiModel() {
 
 /**
  * The Android `<Host>`: one Compose composition shared by every nitro-ui control
- * placed directly inside it (T16 spike - `docs/tasks/T16-host-spike.md`).
+ * placed directly inside it (H1 - `docs/components/host.md`).
  *
  * **Mechanism (Expo's shape, read from `@expo/ui`'s `HostView` +
  * `ExpoComposeView.Children`).** RN still mounts one Fabric node and one `View`
@@ -186,6 +188,38 @@ internal class NitroUiHostView(
   private fun hostedChildrenChanged() {
     hostedVersion.intValue = hostedVersion.intValue + 1
     Snapshot.sendApplyNotifications()
+  }
+
+  /**
+   * The platform's own answer to "can a reader receive events right now?".
+   *
+   * Declared here because the guard below needs it, and this view is the one that
+   * announces for every hosted control.
+   */
+  private val systemAccessibility =
+    context.getSystemService(AccessibilityManager::class.java)
+
+  /**
+   * Hand an accessibility event to the platform only when it can accept one.
+   *
+   * This is the Slider's guard (`HybridNitroUiSlider.kt`), and a Host needs it for the
+   * same reason *on behalf of* everything it composes: an announcement leaves the
+   * Host's own `AndroidComposeView`, so the platform asks **this** view, not the
+   * control. A hosted Slider or Progress publishes `ProgressBarRangeInfo`, and Compose
+   * announces a semantics change up the parent chain - which with no reader connected
+   * answers `IllegalStateException: Accessibility off. Did you forget to check that?`
+   * and takes the app down (measured with a hosted Slider's screen-reader step in the
+   * harness). Refusing is the outcome the platform was reaching anyway, and it is
+   * inert while a reader is connected, because then the check passes and [super] runs.
+   */
+  override fun requestSendAccessibilityEvent(
+    child: View,
+    event: AccessibilityEvent,
+  ): Boolean {
+    if (systemAccessibility?.isEnabled != true) {
+      return false
+    }
+    return super.requestSendAccessibilityEvent(child, event)
   }
 
   /**

@@ -5,7 +5,7 @@ import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.nitroui.core.NitroUiHostView
 
 /*
- * The Host component (T16 spike). Like every other Hybrid View here it lives in
+ * The Host component (H1, `docs/components/host.md`). Like every other Hybrid View here it lives in
  * package `com.margelo.nitro.nitroui`, because that is the package the generated
  * `HybridNitroUiHostStateUpdater` imports with a wildcard; the view it owns is
  * core, in `...nitroui.core`.

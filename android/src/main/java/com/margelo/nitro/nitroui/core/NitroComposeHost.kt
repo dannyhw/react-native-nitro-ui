@@ -487,6 +487,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
         // and the control is composed in exactly one place. Idempotent, and a no-op
         // when nothing was ever composed.
         disposeComposition()
+        // Same for the two registrations an unhosted mount armed (H1 N4): a control
+        // that moves *into* a Host mid-mount holds an activity lifecycle observer and
+        // possibly a pre-draw listener for a composition that has just been disposed.
+        // The steady state is handled by [armCompositionStrategy] and
+        // [watchForFirstFrame] declining; this is the transition that finds them
+        // already armed. Both are idempotent for the same reason as the dispose.
+        releaseOwnCompositionGuards()
       }
       // The first moment this view has a window, which is the first moment
       // Compose can resolve a composition against one. If Yoga already gave the
@@ -647,6 +654,18 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       // transition, `removeClippedSubviews`) must not pay for a second observer.
       return
     }
+    if (isHostedByParent) {
+      // A hosted child builds no composition of its own ([ComposeContent.
+      // shouldCreateCompositionOnAttachedToWindow] and [onMeasure] both decline it),
+      // so there is nothing for this guard to guard: the observer it installs is
+      // keyed to *this* view's composition, and the composition that can leak here
+      // is the Host's - which arms one for itself, as the attach of a view it owns.
+      // Arming one per hosted child was H1's follow-up N4: 200 hosted Switches meant
+      // 200 `LifecycleRegistry` registrations and 200 removals per mount, to protect
+      // nothing. `parent` is already the Host here - `ViewGroup.addViewInner` assigns
+      // it before it dispatches the attach - so this is decided, not guessed.
+      return
+    }
     val owner = owner ?: return
     // `installFor` throws rather than skip when the owner is already DESTROYED, and
     // a view can be attached while an activity is being torn down (a surface that is
@@ -673,6 +692,40 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private fun unarmCompositionStrategy() {
     composeContent.setViewCompositionStrategy(DisposeWithTheHost)
     strategyArmed = false
+  }
+
+  /**
+   * Give up the two registrations that only this view's *own* composition needs.
+   *
+   * The pair [drop] releases, minus the sizing bookkeeping: this is for a control that
+   * is still mounted and still has state, but is no longer the one drawing itself.
+   */
+  private fun releaseOwnCompositionGuards() {
+    unarmCompositionStrategy()
+    unregisterPreDraw(firstFrameWatch)
+    firstFrameWatch = null
+    firstFrameWatchRegistered = false
+  }
+
+  /**
+   * What a harness asks about (H1 N4): the guards this view holds for a composition of
+   * its own, as one line.
+   *
+   * `strategy` while a [ViewCompositionStrategy] is installed (the activity
+   * `LifecycleRegistry` observer), `preDraw` while the first-frame listener is on its
+   * observer. A hosted control answers the empty string - it composes inside somebody
+   * else's view - and a control outside a Host answers both, which is the pair the
+   * test needs. Read-only, and answers from the same fields the arming writes.
+   */
+  internal fun armedGuardsReport(): String {
+    val parts = mutableListOf<String>()
+    if (strategyArmed) {
+      parts.add("strategy")
+    }
+    if (firstFrameWatch != null) {
+      parts.add("preDraw")
+    }
+    return parts.joinToString(",")
   }
 
   /**
@@ -917,6 +970,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    */
   private fun watchForFirstFrame() {
     if (hasMarkedFirstFrame || firstFrameWatchRegistered) {
+      return
+    }
+    if (isHostedByParent) {
+      // Same rule as [armCompositionStrategy], different registrar (H1 N4). What this
+      // listener marks is the first frame *this view* drew, and records the box it
+      // drew into (D24: for a hosted child that box is `0 x 0`, and the pixels are the
+      // Host's). The Host arms one for itself, which is the frame anyone can read.
       return
     }
     val observer = viewTreeObserver

@@ -341,6 +341,19 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     return NitroUiSize(width: Double(size.width), height: Double(size.height))
   }
 
+  /// Always empty on iOS, honestly: there is nothing here to arm.
+  ///
+  /// The Android host registers two things for a composition of its own - a
+  /// `ViewCompositionStrategy` (an observer on the activity's `LifecycleRegistry`) and a
+  /// first-frame pre-draw listener - and a control inside a `<Host>` must not register
+  /// either, which is what the probe lets a test see (H1 follow-up N4). iOS has neither
+  /// mechanism: a `UIHostingController` is torn down with its host and there is no
+  /// pre-draw registrar to leak through. The test that reads this is gated to Android,
+  /// so the empty string states a fact rather than a measurement.
+  func nuiTestArmedGuards() throws -> String {
+    return ""
+  }
+
   private var model: SwitchModel {
     return host.model
   }

@@ -78,6 +78,7 @@ namespace margelo::nitro::nitroui {
   public:
     // Methods
     NitroUiSize measureContent() override;
+    std::string nuiTestArmedGuards() override;
 
   private:
     jni::global_ref<JHybridNitroUiSwitchSpec::JavaPart> _javaPart;

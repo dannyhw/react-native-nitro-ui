@@ -512,4 +512,13 @@ class HybridNitroUiSwitch(
     val size = host.contentSize ?: return NitroUiSize(0.0, 0.0)
     return NitroUiSize(size.width, size.height)
   }
+
+  /**
+   * What the Switch's own view has armed, for a composition of its own (see the spec).
+   *
+   * `Switch` is the control that carries this probe because it is the one a Host has
+   * composed since H1, so it is the one a test can put in both states in one render.
+   * The mechanism is `NitroComposeHost`'s, so every control shares the answer.
+   */
+  override fun nuiTestArmedGuards(): String = host.armedGuardsReport()
 }

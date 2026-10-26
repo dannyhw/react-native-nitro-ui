@@ -79,6 +79,21 @@ export interface NitroUiSwitchMethods extends HybridViewMethods {
    * synchronous measure that needs the UI thread).
    */
   measureContent(): NitroUiSize;
+
+  /**
+   * TEMPORARY, test-only (task H2a, follow-up N4 from H1's re-review): the guards
+   * this view currently holds **for a composition of its own**, as one line —
+   * `strategy` while the Compose composition strategy is installed (the activity
+   * `LifecycleRegistry` observer), `preDraw` while its first-frame pre-draw listener
+   * is registered.
+   *
+   * A control a `<Host>` composes answers the empty string: it builds no composition,
+   * so both registrations would guard nothing, and the Host arms its own. A control
+   * outside a Host answers both. Android-only meaning: iOS has no composition strategy
+   * and no pre-draw listener, so it answers the empty string for every Switch and the
+   * test that reads this is gated to Android.
+   */
+  nuiTestArmedGuards(): string;
 }
 
 /**

@@ -78,6 +78,7 @@ namespace margelo::nitro::nitroui {
     public:
       // Methods
       virtual NitroUiSize measureContent() = 0;
+      virtual std::string nuiTestArmedGuards() = 0;
 
     protected:
       // Hybrid Setup
