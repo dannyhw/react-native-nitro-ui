@@ -12,6 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -19,6 +20,7 @@ import process from 'node:process';
 import {
   STAMP_BASENAME,
   codeTreeDigest,
+  componentNeedle,
   findRepoRoot,
   contentHash,
   countOccurrences,
@@ -101,6 +103,9 @@ export function currentCodeTree({
   cached = null,
 } = {}) {
   if (cached != null) return cached;
+  // HEAD is read for the stamp's own record ("which commit built this"), not for
+  // the digest: see codeTreeDigest. A docs-only commit must not invalidate a
+  // build, and it did until review M4.
   const head = git(repoRoot, ['rev-parse', 'HEAD'], '<none>');
   const listing = git(repoRoot, [
     '-c',
@@ -133,7 +138,8 @@ export function currentCodeTree({
     }
     files += 1;
   }
-  return { tree: codeTreeDigest(entries, head), head, files };
+  // No head here: the digest is the files the compiler read (review M4).
+  return { tree: codeTreeDigest(entries), head, files };
 }
 
 /**
@@ -263,7 +269,7 @@ export function inspectArtifact({
 
   const counts = {};
   for (const component of components) {
-    const needle = `HybridNitroUi${component}`;
+    const needle = componentNeedle(platform, component);
     counts[component] = buffers.reduce(
       (total, buffer) => total + countOccurrences(buffer, needle),
       0
@@ -272,8 +278,35 @@ export function inspectArtifact({
   return {
     counts,
     scanned,
+    fingerprint: fingerprintOf({ artifact, scanned, buffers }),
     missing: components.filter((component) => counts[component] === 0),
   };
+}
+
+/**
+ * A digest of the bytes the gate actually looked at.
+ *
+ * The stamp has to bind to a file, and the honest way to say "the same file" is
+ * the content it was checked against - not its inode, its mtime, or the path
+ * string, each of which survives a copy, a `touch` or another worktree. Size
+ * goes in as well so a file whose scanned region happens to be unchanged but
+ * which grew elsewhere is still a different artifact.
+ *
+ * @param {object} options
+ * @param {string} options.artifact
+ * @param {string[]} options.scanned
+ * @param {Buffer[]} options.buffers
+ * @returns {string}
+ */
+function fingerprintOf({ artifact, scanned, buffers }) {
+  const hash = createHash('sha256');
+  hash.update(`size:${String(fs.statSync(artifact).size)}\n`);
+  scanned.forEach((name, index) => {
+    const buffer = buffers[index];
+    if (buffer == null) return;
+    hash.update(`${name}: ${contentHash(buffer)}\n`);
+  });
+  return hash.digest('hex');
 }
 
 /** @param {string} file @returns {object | null} */
@@ -294,6 +327,10 @@ export function readStamp(file) {
  * @param {string} [options.repoRoot]
  * @param {'ios'|'android'} options.platform
  * @param {string} options.artifact
+ * @param {{tree: string, head: string, files: number}} [options.treeBefore] the
+ *   code tree as it was when the build started. A stamp is a claim that this
+ *   binary came from these sources, so it can only be made when the sources did
+ *   not move while the compiler was reading them.
  * @param {((message: string) => void)} [options.log]
  * @returns {object} the stamp
  */
@@ -301,8 +338,27 @@ export function recordBuild({
   repoRoot = repoRootOf(),
   platform,
   artifact,
+  treeBefore = null,
   log = (message) => process.stderr.write(`${message}\n`),
 }) {
+  // M3: the tree the build started from has to be the tree the stamp describes.
+  // A build that ran while files changed proves nothing about either - the most
+  // likely shape is a generator (nitrogen, pod install, a second task in the same
+  // checkout) writing during the compile, and the most likely outcome is a green
+  // stamp over a binary that does not match the sources anyone can see. Checked
+  // first, before anything is read out of the artifact: the claim this function
+  // is about to make is already broken, and proving that needs no binary. So
+  // nothing is written, and the fix is the same build again.
+  const tree = currentCodeTree({ repoRoot });
+  if (treeBefore != null && treeBefore.tree !== tree.tree) {
+    throw new Error(
+      `the code tree changed during the build ` +
+        `(before ${treeBefore.tree.slice(0, 12)}, after ${tree.tree.slice(0, 12)}: ` +
+        `${String(treeBefore.files)} files when it started, ${String(tree.files)} now). ` +
+        'No stamp was written - nothing here proves which sources this binary ' +
+        'came from. Run the build again with nothing else writing to the tree.'
+    );
+  }
   const components = registeredComponents({ repoRoot, platform });
   if (components.length === 0) {
     throw new Error(
@@ -310,12 +366,8 @@ export function recordBuild({
         'run `bun run nitrogen` (the gate cannot prove anything without them)'
     );
   }
-  const { counts, scanned, missing } = inspectArtifact({
-    platform,
-    artifact,
-    components,
-  });
-  const tree = currentCodeTree({ repoRoot });
+  const inspected = inspectArtifact({ platform, artifact, components });
+  const { counts, scanned, missing } = inspected;
   if (missing.length > 0) {
     throw new Error(
       `${path.basename(artifact)} does not contain ${missing.join(', ')} ` +
@@ -323,9 +375,14 @@ export function recordBuild({
     );
   }
   const stamp = {
-    version: 1,
+    // Version 2: artifactPath and fingerprint bind the stamp to the file it
+    // was read from (review M2). A v1 stamp cannot be checked against them, and
+    // decideFreshness says so rather than guessing.
+    version: 2,
     platform,
     artifact,
+    artifactPath: realpath(artifact),
+    fingerprint: inspected.fingerprint,
     builtAt: new Date().toISOString(),
     tree: tree.tree,
     head: tree.head,
@@ -346,6 +403,23 @@ export function recordBuild({
       `${Math.min(...Object.values(counts))}..${Math.max(...Object.values(counts))} mentions`
   );
   return stamp;
+}
+
+/**
+ * The absolute, symlink-free path of an artifact, or the input when even that
+ * fails. Two checkouts hold the same relative path; `realpath` is what tells
+ * them apart (`/tmp` on macOS is itself a symlink, so a resolved path is what
+ * two processes on the same file agree on).
+ *
+ * @param {string} artifact
+ * @returns {string}
+ */
+export function realpath(artifact) {
+  try {
+    return fs.realpathSync(artifact);
+  } catch {
+    return path.resolve(artifact);
+  }
 }
 
 /** Raised by `assertFreshApp`, so a caller can print it red and stop early. */
@@ -378,12 +452,19 @@ export function assertFreshApp({
         `       build it: node scripts/build-app.mjs --platform ${platform}`
     );
   }
-  const { counts } = inspectArtifact({ platform, artifact, components, warn });
+  const { counts, fingerprint } = inspectArtifact({
+    platform,
+    artifact,
+    components,
+    warn,
+  });
   const decision = decideFreshness({
     stamp,
     current: currentCodeTree({ repoRoot }),
     platform,
     artifact,
+    artifactPath: realpath(artifact),
+    fingerprint,
     components,
     counts,
   });

@@ -19,11 +19,13 @@
 
 import { describe, expect, it } from '@jest/globals';
 import { Buffer } from 'node:buffer';
+import { existsSync, readFileSync } from 'node:fs';
 import { deflateRawSync } from 'node:zlib';
 
 import {
   NON_CODE_PREFIXES,
   codeTreeDigest,
+  componentNeedle,
   countOccurrences,
   decideFreshness,
   dexBlobs,
@@ -34,7 +36,12 @@ import {
   runnerFromArgv,
   zipEntries,
 } from '../app-stamp-core.mjs';
-import { registeredComponents } from '../app-stamp.mjs';
+import {
+  currentCodeTree,
+  recordBuild,
+  registeredComponents,
+  stampPath,
+} from '../app-stamp.mjs';
 
 /**
  * Build a ZIP with the given entries, so the dex reader is tested against real
@@ -114,11 +121,10 @@ describe('the code tree digest', () => {
     expect(
       codeTreeDigest({ 'src/a.ts': '1', 'src/b.ts': '3' }, 'head')
     ).not.toBe(a);
-    // A merge that leaves the files identical is still a different tree: what
-    // was reviewed is named by `head`, not only by content.
-    expect(
-      codeTreeDigest({ 'src/a.ts': '1', 'src/b.ts': '2' }, 'other')
-    ).not.toBe(a);
+    // Review M4: HEAD is not in here. The digest is what the compiler read, so
+    // a commit that moves no source file must not invalidate a build - writing
+    // a report used to cost a rebuild of the example app.
+    expect(codeTreeDigest({ 'src/a.ts': '1', 'src/b.ts': '2' })).toBe(a);
   });
 });
 
@@ -158,6 +164,34 @@ describe('the component list', () => {
       );
       expect(components).not.toContain('');
     }
+  });
+});
+
+describe('the needle (review S7)', () => {
+  it('asks for the class on Android and the length-prefixed name on iOS', () => {
+    expect(componentNeedle('android', 'Switch')).toBe(
+      'Lcom/margelo/nitro/nitroui/HybridNitroUiSwitch;'
+    );
+    // 19 is 'HybridNitroUiSwitch'.length - the prefix Swift's metadata writes,
+    // which is what separates the class from its generated spec.
+    expect(componentNeedle('ios', 'Switch')).toBe('19HybridNitroUiSwitch');
+    expect('HybridNitroUiSwitch').toHaveLength(19);
+  });
+
+  it('does not match the generated spec it is supposed to be distinct from', () => {
+    // Measured on a real Debug .app: the plain name occurs ~2300 times because
+    // every HybridNitroUiSwitchSpec mention contains it, the length-prefixed
+    // class name occurs 4 times, and the length-prefixed spec name never.
+    const spec = 'HybridNitroUiSwitchSpec';
+    expect(spec).toContain('HybridNitroUiSwitch');
+    expect(spec).not.toContain(componentNeedle('ios', 'Switch'));
+    expect(spec).not.toContain(componentNeedle('android', 'Switch'));
+    expect(
+      countOccurrences(
+        Buffer.from('x' + componentNeedle('ios', 'Switch') + 'y'),
+        componentNeedle('ios', 'Switch')
+      )
+    ).toBe(1);
   });
 });
 
@@ -229,13 +263,25 @@ describe('the binary scan', () => {
 });
 
 describe('the refusal', () => {
+  // A v2 stamp: the tree, and the file the tree was built into. Both halves are
+  // needed - see the two worktrees below.
+  const APK = '/repo/example/android/app/build/outputs/apk/debug/app-debug.apk';
   const decide = (override) =>
     decideFreshness({
-      stamp: { tree: CURRENT.tree, head: CURRENT.head, counts: {} },
+      stamp: {
+        version: 2,
+        tree: CURRENT.tree,
+        head: CURRENT.head,
+        artifact: APK,
+        artifactPath: APK,
+        fingerprint: 'f'.repeat(64),
+        counts: {},
+      },
       current: CURRENT,
       platform: 'android',
-      artifact:
-        '/repo/example/android/app/build/outputs/apk/debug/app-debug.apk',
+      artifact: APK,
+      artifactPath: APK,
+      fingerprint: 'f'.repeat(64),
       components: COMPONENTS,
       counts: { Switch: 671, Slider: 690 },
       ...override,
@@ -251,6 +297,57 @@ describe('the refusal', () => {
     if (decision.ok) throw new Error('expected a refusal');
     expect(decision.problems.join('\n')).toMatch(/no app\.stamp for android/);
     expect(decision.fix).toMatch(/scripts\/build-app\.mjs --platform android/);
+  });
+
+  it('refuses a stamp written for another checkout', () => {
+    // The M2 case, and the one this repo makes easy: every worktree has the same
+    // relative path for the APK, so a stamp from a sibling worktree reads green
+    // for a binary that was built elsewhere.
+    const decision = decide({
+      artifactPath:
+        '/other-worktree/X1/example/android/app/build/outputs/apk/debug/app-debug.apk',
+    });
+    expect(decision.ok).toBe(false);
+    if (decision.ok) throw new Error('expected a refusal');
+    expect(decision.problems.join(' ')).toMatch(/different file than the one/);
+  });
+
+  it('refuses an app whose bytes changed under the stamp', () => {
+    // Same path, different file: an APK dropped in by hand, or a build that ran
+    // without writing its stamp.
+    const decision = decide({ fingerprint: 'a'.repeat(64) });
+    expect(decision.ok).toBe(false);
+    if (decision.ok) throw new Error('expected a refusal');
+    expect(decision.problems.join(' ')).toMatch(/changed since app.stamp/);
+  });
+
+  it('refuses a stamp that cannot name the file it was written for', () => {
+    const stamp = { tree: CURRENT.tree, head: CURRENT.head, counts: {} };
+    const decision = decide({ stamp });
+    expect(decision.ok).toBe(false);
+    if (decision.ok) throw new Error('expected a refusal');
+    expect(decision.problems.join(' ')).toMatch(
+      /predates the artifact binding/
+    );
+  });
+
+  it('does not care which commit produced the tree', () => {
+    // M4, the other direction: a docs-only commit moved HEAD and left every
+    // source byte alone. The stamp stays green - the live proof of this is in
+    // docs/tasks/X1-dev-tooling.report.md.
+    expect(
+      decide({
+        stamp: {
+          version: 2,
+          tree: CURRENT.tree,
+          head: 'deadbeef'.repeat(8),
+          artifact: APK,
+          artifactPath: APK,
+          fingerprint: 'f'.repeat(64),
+          counts: {},
+        },
+      })
+    ).toEqual({ ok: true });
   });
 
   it('refuses a tree that moved after the build, and names both', () => {
@@ -278,5 +375,59 @@ describe('the refusal', () => {
     });
     if (decision.ok) throw new Error('expected a refusal');
     expect(decision.problems).toHaveLength(2);
+  });
+});
+
+describe('a build that ran while the tree moved (review M3)', () => {
+  const stampFile = stampPath({ platform: 'android' });
+  const contentsNow = () =>
+    existsSync(stampFile) ? readFileSync(stampFile, 'utf8') : null;
+
+  it('writes no stamp when the tree at the end is not the tree at the start', () => {
+    // The shape that bites: an agent backgrounds a build, edits a component (or
+    // merges) while xcodebuild is reading the tree, and the stamp would then
+    // describe the edited tree over a binary compiled before the edit. The
+    // artifact here does not even exist - the check has to come first, because
+    // a tree that moved makes the artifact irrelevant.
+    const before = contentsNow();
+    const moved = { tree: 'c'.repeat(64), head: 'no-such-commit', files: 1 };
+    /** @type {string} */
+    let message = '';
+    try {
+      recordBuild({
+        platform: 'android',
+        artifact: '/nonexistent/app-debug.apk',
+        treeBefore: moved,
+        log: () => {},
+      });
+    } catch (error) {
+      message = String(error?.message ?? error);
+    }
+    expect(message).toMatch(/changed during the build/);
+    // Both digests, so whoever sees it can tell which run was which.
+    expect(message).toMatch(/before c{12}/);
+    expect(message).toMatch(/after [0-9a-f]{12}/);
+    expect(message).toMatch(/No stamp was written/);
+    expect(contentsNow()).toBe(before);
+  });
+
+  it('gets past the check when the tree stood still', () => {
+    // The same call with a tree that did not move: the refusal must be about the
+    // missing artifact, which is the next check - not about the tree.
+    const still = currentCodeTree();
+    /** @type {string} */
+    let message = '';
+    try {
+      recordBuild({
+        platform: 'android',
+        artifact: '/nonexistent/app-debug.apk',
+        treeBefore: still,
+        log: () => {},
+      });
+    } catch (error) {
+      message = String(error?.message ?? error);
+    }
+    expect(message).not.toMatch(/changed during the build/);
+    expect(message).not.toBe('');
   });
 });

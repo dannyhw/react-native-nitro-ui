@@ -92,24 +92,63 @@ export function isCodeFile(file) {
  * A stable digest of `path -> content hash`. Sorted, and hashed as text rather
  * than as JSON so two runs of the same tree agree regardless of key order.
  *
+ * HEAD is deliberately not mixed in (review M4). It was folded in "so a merge
+ * that leaves the working files identical still reads as a different tree", but
+ * what it actually did was make every commit invalidate every build: a docs-only
+ * commit changes HEAD, so the gate refused an app whose sources had not moved,
+ * and a 10-minute rebuild became the price of editing a report. The file hashes
+ * are what the compiler reads; HEAD is recorded in the stamp beside the digest,
+ * where it answers "which commit produced this" without gating on it. The merge
+ * case is not lost either - a merge that brings different code changes the file
+ * hashes, and one that does not is the same app.
+ *
  * @param {Record<string, string>} entries path -> content hash (already digested)
- * @param {string} [head] `git rev-parse HEAD`, folded in so a merge that leaves
- *   the working files identical (a rename recorded as identical content) still
- *   reads as a different tree
  * @returns {string}
  */
-export function codeTreeDigest(entries, head = '') {
+export function codeTreeDigest(entries) {
   const hash = createHash('sha256');
   for (const file of Object.keys(entries).sort()) {
     hash.update(`${file}\0${entries[file]}\n`);
   }
-  hash.update(`HEAD\0${head}\n`);
   return hash.digest('hex');
 }
 
 /** @param {string|Buffer} content @returns {string} */
 export function contentHash(content) {
   return createHash('sha256').update(content).digest('hex');
+}
+
+/**
+ * The string that means "this component's *hybrid class* is in the binary".
+ *
+ * The plain `HybridNitroUi<Name>` is not it: on iOS it occurs ~2 200 times per
+ * component because every `HybridNitroUi<Name>Spec`, `...SpecBridging` and
+ * protocol mention contains it, so an app that registered nothing but the
+ * generated interface would pass. Measured on the two artifacts in this repo on
+ * 2026-10-26 (`example/android/.../app-debug.apk` and a Debug `.app`):
+ *
+ *   | needle                                    | Android | iOS  |
+ *   | ----------------------------------------- | ------- | ---- |
+ *   | `HybridNitroUiSwitch`                      |      61 | 2300 |
+ *   | `NitroUiSwitchSpec` (the generated spec)   |      14 | 1365 |
+ *   | `Lcom/margelo/nitro/nitroui/HybridNitroUiSwitch;` | 5 |    - |
+ *   | `20HybridNitroUiSwitch` (length-prefixed)  |       - |    4 |
+ *
+ * So Android asks for the JVM class descriptor, whose leading `L` and trailing
+ * `;` no spec name can borrow, and iOS for the length-prefixed name that
+ * Swift's metadata reflection writes - which the spec name is not, because the
+ * spec's length prefix differs (measured: 0 matches).
+ *
+ * @param {'ios' | 'android'} platform
+ * @param {string} name component name, e.g. `Switch`
+ * @returns {string}
+ */
+export function componentNeedle(platform, name) {
+  const symbol = `HybridNitroUi${name}`;
+  if (platform === 'android') {
+    return `Lcom/margelo/nitro/nitroui/${symbol};`;
+  }
+  return `${symbol.length}${symbol}`;
 }
 
 /**
@@ -302,10 +341,12 @@ export function platformForArtifact(artifact) {
  * callers (harness config, real-input, `build-app.mjs`) all say the same thing.
  *
  * @param {object} options
- * @param {{tree?: string, head?: string, artifact?: string, counts?: Record<string, number>} | null} options.stamp
+ * @param {{tree?: string, head?: string, artifact?: string, artifactPath?: string, fingerprint?: string, counts?: Record<string, number>} | null} options.stamp
  * @param {{tree: string, head: string, files: number}} options.current
  * @param {string} options.platform
  * @param {string} options.artifact
+ * @param {string} [options.artifactPath] the resolved path of the artifact under test
+ * @param {string} [options.fingerprint] content digest of what was scanned in it
  * @param {string[]} options.components
  * @param {Record<string, number>} [options.counts] what the binary contains now
  * @param {string} [options.buildCommand] the command that fixes it
@@ -319,6 +360,8 @@ export function decideFreshness({
   components,
   counts = {},
   buildCommand = `node scripts/build-app.mjs --platform ${platform}`,
+  artifactPath = null,
+  fingerprint = null,
 }) {
   const problems = [];
   if (stamp == null || typeof stamp.tree !== 'string') {
@@ -332,6 +375,50 @@ export function decideFreshness({
         `(stamp ${String(stamp.tree).slice(0, 8)} at ${String(stamp.head ?? 'unknown HEAD')}, ` +
         `now ${current.tree.slice(0, 8)} at ${current.head || 'unknown HEAD'})`
     );
+  }
+
+  // The stamp has to describe *this file*. Two worktrees of this repo each have
+  // an `example/android/app/build/outputs/apk/debug/app-debug.apk` at the same
+  // path with different contents, and a stamp from one made the other's gate
+  // read green (review M2). Path and content both have to agree: the path alone
+  // is a copy or a symlink, the content alone is another worktree's identical
+  // build, and the pair is what makes "this binary came from this tree" mean
+  // something.
+  if (stamp != null && typeof stamp.tree === 'string') {
+    const stampedPath =
+      typeof stamp.artifactPath === 'string' ? stamp.artifactPath : null;
+    const artifactName = String(stamp.artifact ?? artifact ?? 'the app')
+      .split('/')
+      .pop();
+    if (stampedPath == null) {
+      // Written before the binding existed. Nothing about the file can be
+      // checked, which is the whole point of the stamp.
+      problems.push(
+        `app.stamp for ${platform} predates the artifact binding and cannot ` +
+          `say which ${artifactName} it was written for`
+      );
+    } else if (
+      artifactPath != null &&
+      artifactPath !== '' &&
+      stampedPath !== artifactPath
+    ) {
+      problems.push(
+        'app.stamp was written for a different file than the one about to be ' +
+          `tested (stamped ${stampedPath}, testing ${artifactPath})`
+      );
+    }
+    if (
+      typeof stamp.fingerprint === 'string' &&
+      fingerprint != null &&
+      fingerprint !== '' &&
+      stamp.fingerprint !== fingerprint
+    ) {
+      problems.push(
+        `the app changed since app.stamp was written - the binary now at ${artifactName} ` +
+          'is not the one that was built and checked (rebuild so the stamp ' +
+          'describes it)'
+      );
+    }
   }
 
   const missing = components.filter((name) => (counts[name] ?? 0) === 0);
