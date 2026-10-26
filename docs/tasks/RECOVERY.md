@@ -31,7 +31,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | H1 Android Host | — | merged | Done | — |
 | D1 public docs | — | merged | Done | — |
 | R5 publish 0.1.0 | — | merged | **Published** `react-native-nitro-ui@0.1.0` (registry tarball sha256 = tested `fa1b7b96…`), tag `v0.1.0` + GitHub release | — |
-| X1 dev tooling (CI checks, build-app, lease) | `nitro-ui-worktrees/X1` · `task/X1-dev-tooling` | `9e0122a` (round 1) | Review: FIX ROUND (lease TTL wipes others; stamp not bound to artifact; tree hashed after build; HEAD in hash). Fix round 1 running (`nitroui-X1-fix1`) on `nitroui_t03` | Re-review → merge → `gh workflow enable CI`. |
+| X1 dev tooling (CI checks, build-app, lease) | — | merged | Done; CI enabled (checks / native-tests / build-android) | Next: X2 gate ledger + short reports, X3 registry codegen (after H2a), X4 conformance, X5 bench queue / second Mac. |
 | R6 Changesets release | — | merged | **Validated end to end:** 0.1.1 staged by CI via OIDC with provenance, approved by the owner, `v0.1.1` tagged at `152e059` by Release tag | — |
 | R5b post-publish smoke | — | merged | Done: all 6 rows green from the npm tarball | — |
 | H2a Host: Slider/Progress/Button | `nitro-ui-worktrees/H2a` · `task/H2a-host-more-controls` | `f69db4f` (round 1) | Review: MERGE WITH FIXES (noisy-cell verdicts in README; F8 not really tested; report overstates). Fix round 1 running (`nitroui-H2a-fix1`) incl. merge main, on iPhone Air + `nitroui_t01` | Merge (docs/tests only → no re-review unless native changes). |
