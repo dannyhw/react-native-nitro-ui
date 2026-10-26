@@ -354,3 +354,123 @@ missing went in on their own, in `9872c78`, because `manifest:check` was red wit
 re-run section above is a commit of its own, on top of the report. The bench results file is
 named for `94e3fad`,
 the commit that was checked out when the run started.
+
+---
+
+# Fix round 1 (D19)
+
+The review (`docs/tasks/H1-android-host.review.md`, verdict **FIX ROUND**) found two native
+defects and a set of claims the device does not support. `main` was merged in first (`dc0693c`) so
+D24 sits after D23 *and* its outcome, then every finding was fixed and the gates re-run on the
+final tree. T17's result (no iOS Host) means nothing here is provisional: iOS `<Host>` is a
+permanent, documented passthrough.
+
+The orchestrator's four answers, applied: the ~1.2× JS CPU does **not** gate 0.2 and stays stated
+next to the win; a nested `<Host>` is **refused**; there is no iOS Host to ask about; no load
+ceilings are added this round, and the two load-sensitive probes are recorded in Follow-ups 9.
+
+## M1 — the Host leaked on every unmount (B1's bug, one level up)
+
+`HybridNitroUiHost` had no `onDropView`, so `host.drop()` never ran when Fabric dropped a Host. The
+`DisposeOnLifecycleDestroyed` observer armed at attach stays on the activity's `LifecycleRegistry`,
+which holds observers strongly: `activity → LifecycleRegistry → observer → ComposeContent → Host`
+retained the Host, its composition, its slot table and — for a Host that died before its first
+frame — its `PreDrawWatch`, for the life of the activity. The override is the whole fix; `drop()`
+already did the work.
+
+**Red proof, the way B1's was done.** A new churn cycle (`HostChurn` in
+`example/__tests__/MountChurn.harness.tsx`) mounts many small Hosts per cycle, which the
+one-Host-per-cycle cycle round 1 inherited cannot see: it gates at 2 MiB per cycle, so a leak of
+one Host per cycle sat two orders of magnitude under it, which is exactly how round 1 stayed green.
+With the `onDropView` override removed it measures **10.98 MiB per cycle** against that 2 MiB
+bound; with the override it is **0**. The older one-Host cycle passes either way — the new cycle is
+the gate. (`f790f76`.)
+
+**What it did to the numbers.** The bench mount/memory cells for Switch were re-run (one `quick`
+run, all five arms, 4 launches, `problems: none`, `quiet: yes`, load sampled median 2.96, 4.3 % of
+samples over 7.0, `bench/results/68a660b-android-20261026T095335Z.json`):
+
+| Cell | Round 1 (leak in it) | Fix round | `expo-ui-shared-host` |
+| --- | --- | --- | --- |
+| memory / instance | **0.85×** (45.3 KiB) | **0.86×** (44.5 KiB) | 51.9 KiB |
+| mount UI CPU / op | **0.81×** | **0.87×** | 7.45 ms |
+| mount JS CPU / op | 1.26× | **1.18×** | 3.51 ms |
+| mounted | **0.98×** | **0.97×** | 21.21 ms |
+| unmount UI CPU / op | 0.25× (flattered) | **0.78×** | 0.58 ms |
+
+Round 1's 0.25× unmount was not a container that unmounted quickly; it was a container that did not
+unmount at all. 0.78× is the first honest unmount figure, and `docs/components/host.md` now says
+that next to the number rather than in a footnote. `README.md`, `host.md`, `HostProps` and this
+report's ratio table all carry the new run (`d1c9f14`, `6a130ea`). The JS column moved 1.26× →
+1.18× against the spike's 1.10×, so it is stated as *roughly 1.2× with a spread*, not as a single
+figure.
+
+## M2 — "Switch only" is held natively, and JS cannot be walked around
+
+`NitroComposeHost.isHostable` is the native allowlist: `false` on the base class, `true` only on
+`SwitchHost`. `HostedChildren` composes nothing else, and `NitroUiHostView` is not hostable, so a
+nested `<Host>` cannot be composed either. JS refuses a nested `<Host>` too, in the same table that
+refuses every other control (`e31899a`). A `Picker` behind `memo`, `forwardRef` or a plain user
+component — the shapes JS cannot see through — is now skipped by the native rule and reported,
+instead of being composed into a container it was never measured for (`f790f76`, harness cases
+`will not compose a control behind a component, and tells JS` and
+`will not compose a Host behind a component either`).
+
+## Finding → commit → evidence
+
+| Finding | Fix | Evidence |
+| --- | --- | --- |
+| M1 Host leak on unmount | `e31899a` (`onDropView`) | `f790f76` churn: 10.98 MiB/cycle red, 0 green; re-run bench `68a660b-…` |
+| M2 native allowlist + nested refusal | `e31899a` | two harness cases; `host.test.tsx` JS cases |
+| S1 the `GONE` claim was false | `e31899a` code, `d2e884b` docs | Fabric re-asserts `VISIBLE` each layout; D24, `sizing.md`, `host.md`, harness comments, this report |
+| S2 `display: 'none'` honoured | `e31899a` | `does not draw a hosted child RN hid with display: none` |
+| S3 padding forwarded, inert styles named | `e31899a` | `insets its drawing for its own padding`; `host.md`/D24 list; dev warning lists them (`Host.tsx`) |
+| S4 dev `onLayout` only in `__DEV__` | `e31899a` | release builds attach the caller's handler or none |
+| S5 refusal reaches JS in dev | `e31899a` | device event → `console.error` (`HostChildren.ts`), asserted by the refusal cases |
+| S6 three cases proved nothing | `f790f76` | JS-write presses and reads the drawn state; disabled re-enables to show something was drawn; add/remove/reorder really adds `list-d` |
+| S6 real-input TalkBack order | `f6962d6` | hosted labels sit between the RN siblings, in mount order — 7/7 Android |
+| S7 stale docs and spike wording | `68a660b`, `d2e884b`, `6a130ea` | `index.ts`, `Host.nitro.ts`, `App.tsx`, bench arm, iOS header, `HostProps`, `host.md` `onLayout` claims |
+| S8 `testID` → 0 × 0 for E2E | `d2e884b` | `host.md` says drive hosted controls by `accessibilityLabel` |
+| lint warnings from the new cases | `efa9a16` | `bun run lint` back to no new warnings |
+| report's own false claims | `6a130ea` | Summary, ratio table, `GONE` rows, iOS Files-changed row |
+
+Two of these are worth a sentence because they were not what they looked like:
+
+- **S1 changed the mechanism, not just the prose.** The child was never `GONE`: Fabric's
+  `SurfaceMountingManager.updateLayout` re-asserts `VISIBLE` on it every layout pass, so the child
+  lived as `VISIBLE`, laid out at `0 × 0` by our own measure gate. `applyHostedVisibility` became
+  `applyHostedDrawFlag`, and the rule that actually matters is written down: a child laid out at
+  zero is neither a hit target nor visible-to-user, which is *why* `testID` reads back a zero box
+  (S8) and why a real finger reaches it only through the Host's composition.
+- **The real-input ordering check went red for the wrong reason** (`f6962d6`). The tree had every
+  node in the right place; the screen's `textTransform: 'uppercase'` heading meant the check
+  searched for JSX's spelling, got `-1`, and reported a wrong order when the truth was "this node
+  is not in the tree". The check now distinguishes the two and prints the positions it found.
+
+## Gates on the final tree
+
+Same rig as round 1: worktree root (harness from `example/`), Node 24 via `fnm exec --using 24 --`,
+`ANDROID_ADB_SERVER_PORT=5041`, `ANDROID_SERIAL=emulator-5570`, `ANDROID_AVD=nitroui_t01`, Metro
+8293, iOS on iPhone Air `331EF109…`, `HARNESS_TIMING` unset (wall-clock gates off).
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Everything | `bun run check` | **green** — typecheck, bench typecheck, lint, format, **226** unit tests, `test:native` (ASan), `perf:renders` 7/7, `nitrogen:check`, `autolinking:check`, `prepare`, `api-extractor:check`, `publint`, `manifest:check` (464 files), `readme:check` |
+| Android harness, full | `bunx react-native-harness --harnessRunner android` | **161 passed, 0 failed** (1 pending, and not in either Host file: both Host suites run alone with no pendings) in 839.5 s at `load1` 2.4 |
+| Host suites alone, Android | `… android Host.harness` / `… android MountChurn.harness` | **18/18** and **4/4**, no pendings — every fix-round case runs, `HostChurn` included |
+| iOS harness, full | `IOS_SIM_UDID=331EF109… bunx react-native-harness --harnessRunner ios` | **148 passed, 1 skipped, 0 failed** in 98.9 s — the skip is `MountChurn`'s documented "Android-only" pending test |
+| Real input, Android | `bun run test:real-input:android` | **7/7** at `load1` 3.51, `hosted-switch` included with the ordering checks |
+| Real input, iOS | `IOS_UDID=331EF109… bun run test:real-input:ios` | **7/7**, including `picker` (121 s) — round 1's load flake did not reappear at `load1` 2.2 |
+| Bench | `bun bench --platform android --plan quick` | the M1 table above, `problems: none` |
+
+Build freshness, checked rather than assumed:
+
+- **Android**: no Kotlin changed after the 09:42 APK, and the compiled class carries the fix —
+  `javap` on `android/build/…/debug/…/HybridNitroUiHost.class` lists `public void onDropView();`.
+  The installed APK was re-verified the same way by content (`NitroUiHostView` 18 hits,
+  `centersContent` 1) before the harness run.
+- **iOS**: `bun run build:ios` was run again (it reported success and nothing to do — the trap
+  round 1 noted), so freshness was proven by content instead: every `.swift`/`.mm`/`.h` under
+  `ios/` and `example/ios/` predates the binary (newest 10:48 vs binary 11:11), the app carries 925
+  `NitroUiHost` symbols, and `NitroUiExample.app` has no embedded `main.jsbundle`, so JS came from
+  Metro at 8293.
