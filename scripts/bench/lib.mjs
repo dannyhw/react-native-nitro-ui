@@ -378,7 +378,9 @@ export function buildSchedule({
     throw new Error(
       `--only matched no implementation for platform ${String(platform)} ` +
         `(scoped arms: ${Object.entries(ARM_SCOPES)
-          .map(([name, scope]) => `${name} = ${scope.platform} ${scope.component}`)
+          .map(
+            ([name, scope]) => `${name} = ${scope.platform} ${scope.component}`
+          )
           .join(', ')})`
     );
   }
