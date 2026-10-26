@@ -53,11 +53,15 @@ for a dense list, and not what every container does by default.
 
 ### The other three controls (H2a)
 
-H2a re-ran the same plan with `Slider`, `Progress` and `Button` in the host arm, so the
-four are priced by one run (`quick`, ART `speed-profile`, 4 launches, one results file;
-`bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`). Ratios to
-`expo-ui-shared-host`, launch-paired; memory from the N=200 cell, the rest from the N=50
-`mount` cell; **ᴺ** = spread over 10 % and no verdict:
+`Slider`, `Progress` and `Button` can be hosted on `main`. That is **unreleased**: the
+published 0.1.0 Host holds Switches only, and these three land in the next release.
+
+H2a re-ran the same plan with them in the host arm, so the four are priced by one run
+(`quick`, ART `speed-profile`, 4 launches, one results file;
+`bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`). That machine was **not
+quiet — 37 % of its load samples sat over the ceiling — so the run is indicative and a
+quiet re-run is pending**. Ratios to `expo-ui-shared-host`, launch-paired; memory from the
+N=200 cell, the rest from the N=50 `mount` cell; **ᴺ** = spread over 10 % and no verdict:
 
 | Control              | Mount memory (no Host → +`<Host>`) | Mount UI CPU (no Host → +`<Host>`) | Mount JS CPU (no Host → +`<Host>`) |
 | -------------------- | ---------------------------------- | ---------------------------------- | ---------------------------------- |
@@ -88,15 +92,19 @@ Four things that table says, stated at the size they were measured:
   below the shared host there (0.85x), so a `Progress` inside a Host is the one case where
   both halves of the comparison are wins rather than one of each.
 - **The JS column is roughly flat, not uniformly worse.** `Switch` pays the H1 tax
-  (0.80x → 1.23x). `Slider` and `Progress` land near parity (1.07xᴺ, 0.92x). `Button`
-  stays *below* the shared host (0.71x) even hosted — with a 10.5 % spread, so read that as
-  "no worse", not as a win.
+  (0.80x → 1.23x, within spread). `Progress` lands near parity (0.92x, within spread).
+  `Slider` (1.07x) and `Button` (0.71x) are both ᴺ in this run, so neither gets a
+  verdict: the honest summary is that the JS tax seen on `Switch` was not measured on the
+  other three, not that they avoid it.
+- **No unmount claim.** All four unmount UI CPU cells are ᴺ (launch spreads of 21 % to
+  40 %), so this run says nothing about hosting and unmounting beyond H1's `Switch` row.
 - **Nothing here was measured on a quiet machine.** That run's load samples: 459 of them,
   median 5.51, 170 over the ceiling of 7 (37 %, against a 10 % bar for `quiet`), so this
-  run is same-run paired readings and nothing else — it mints no baseline, and the
-  `update` cells are all ᴺ. The `mount` cells still agree with H1's quiet run on the
-  `Switch` row (0.88x/0.84x against 0.86x/0.87x), which is the check that says the run is
-  readable rather than sound.
+  run is same-run paired readings and nothing else — it mints no baseline. Its `update`
+  cells are mixed: several sit within spread (`update` UI CPU 0.84x, `update.slider` UI CPU
+  0.70x), several are ᴺ, and none of them is used for a claim here. The `mount` cells
+  still agree with H1's quiet run on the `Switch` row (0.88x/0.84x against 0.86x/0.87x),
+  which is the check that says the run is readable rather than sound.
 
 ## API
 

@@ -23,12 +23,12 @@ the layout engine, and React never sees a native node.
 | `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                    | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)      | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
-| `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its `Switch` children     | 0.1.0  | [host.md](docs/components/host.md)                           |
+| `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
 
-`Host` is a container, not a control: an opt-in way to give a batch of Switches
-one Compose composition on Android instead of one each. `Switch` is the only
-control it can hold today. See [Performance](#performance) for what it buys and
-what it costs.
+`Host` is a container, not a control: an opt-in way to give a batch of controls
+one Compose composition on Android instead of one each. Released 0.1.0 holds
+Switches only; `Slider`, `Progress` and `Button` join it on `main`, unreleased.
+See [Performance](#performance) for what it buys and what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
 monotonic clock, `CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, plus sizing
@@ -284,9 +284,10 @@ export function DueDate() {
 
 ### Host
 
-Opt-in. On Android its direct `Switch` children share one Compose composition;
-on iOS it is a plain `View`. Its only children may be Switches (anything else
-throws in development), and it should be given a height.
+Opt-in. On Android its direct hosted children share one Compose composition; on
+iOS it is a plain `View`. Its only children may be hostable nitro-ui controls —
+Switches in 0.1.0, plus `Slider`, `Progress` and `Button` from the next release;
+anything else throws in development. Give it a height.
 
 ```tsx name=host
 export function NotificationSettings() {
@@ -446,8 +447,28 @@ That is 44.5 KiB per hosted Switch against the shared host's 51.9 KiB. The axis
 it loses on is the JS thread — roughly 1.2× the shared host, where the unhosted
 control is below it — because a hosted control is still a React Native node
 _and_ a child of somebody else's composition. That is why `Host` is something an
-app opts into for a dense list rather than what every container does. Only
-`Switch` can be hosted today; on iOS `Host` is a passthrough `View`.
+app opts into for a dense list rather than what every container does. On iOS
+`Host` is a passthrough `View`, and only `Switch` can be hosted in 0.1.0.
+
+The next release extends the same mechanism to `Slider`, `Progress` and `Button`.
+All four were re-priced by one further run on the same emulator, and that machine
+was **busy — 37 % of its load samples over the ceiling — so those numbers are
+indicative and a quiet re-run is pending**. Cells with a launch spread over 10 %
+are `n/v` and carry no verdict. Against `expo-ui-shared-host`:
+
+|                       | `Switch`  | `Slider`  | `Progress` | `Button`  |
+| --------------------- | --------- | --------- | ---------- | --------- |
+| Mount memory (N=200)  | 0.88×     | 1.00×     | **0.37×**  | **0.80×** |
+| Mount UI CPU per op   | **0.84×** | **0.86×** | **0.50×**  | **0.87×** |
+| Mount JS CPU per op   | 1.23×     | `n/v`     | 0.92×      | `n/v`     |
+| Unmount UI CPU per op | `n/v`     | `n/v`     | `n/v`      | `n/v`     |
+
+The `Switch` row reproduces the published 0.86× / 0.87× within spread, which is what
+makes the rest of the run readable. What it shows: the memory and UI-thread win holds
+on all four controls, `Progress` most of all; the JS cost is a measured 1.23× on
+`Switch` (four runs of near-identical code read 1.10×–1.26×, so read it as about
+1.2×) and was not measured on `Slider` or `Button`; and the unmount cells are spread
+too wide for any claim at all.
 
 ### Baselines and gating
 
@@ -459,7 +480,8 @@ baseline run has to meet. Measurement details — absolutes, per-launch spreads,
 noise flags and the update cells — are in the reports for the
 [iOS baseline](docs/tasks/A1c-baselines.report.md),
 [Android baseline](docs/tasks/A1b-baselines.report.md) and
-[`<Host>`](docs/tasks/H1-android-host.report.md) runs.
+[`<Host>`](docs/tasks/H1-android-host.report.md) and
+[its H2a follow-up](docs/tasks/H2a-host-more-controls.report.md) runs.
 
 ## Known limitations
 
@@ -487,10 +509,11 @@ The full list per control is in its doc; these are the ones that bite.
   but Material 3 has no wheel, so Android renders the menu (`Picker`) or the
   inline calendar (`DatePicker`). Android also has no combined date-and-time
   control: `mode="datetime"` opens a date dialog and then a time dialog.
-- **`<Host>` holds Switches only, and only helps on Android.** Any other child
-  — an RN view, text, another nitro-ui control, another `<Host>` — throws in
-  development. Give a Host a height; per-child sizes, `gap`, `flexDirection` and
-  `alignItems` do not reach what it draws.
+- **`<Host>` only helps on Android, and holds a limited set of children.**
+  Released 0.1.0 holds Switches only; the next release adds `Slider`, `Progress`
+  and `Button`. Any other child — an RN view, text, another nitro-ui control,
+  another `<Host>` — throws in development. Give a Host a height; per-child
+  sizes, `gap`, `flexDirection` and `alignItems` do not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules
   needs native code.
 - **RN 0.86 on iOS is not verified** — a fresh 0.86 app hangs on the iOS 27
