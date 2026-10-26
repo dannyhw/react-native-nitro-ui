@@ -109,7 +109,8 @@ behind either way.
   Material 3 puts a 48 dp interactive minimum under a 40 dp outline), so a cold mount is
   laid out at its own size and pays no correction. The width is locale-dependent — a
   locale whose date format is wider costs that configuration's first instance one
-  horizontal correction — and `nitroUiCore.prewarm` is the way to make even that exact.
+  horizontal correction. `prewarm` cannot help here: it seeds only a component's
+  empty configuration, and a DatePicker's key always names its variant and mode.
 - Because the width never comes from the value, a value change is a props-only turn: no
   re-measure, no correction. Changing `mode` or `variant` does re-measure (different
   key, and `variant` also moves the sizing policy), and that costs the D17 one frame.
@@ -158,7 +159,7 @@ A screen-reader user hears a *label* and a *localised value* ("Saturday, 14 Marc
   `Button` / `DatePicker`, Android's `OutlinedButton` / `DatePicker` / `TimePicker` — and
   never to a box around it. A container `contentDescription` is a stop of its own, so the
   user hears the label and then arrives at a nameless control (`docs/architecture/core.md`
-  §3 bans it; SF2 found it here).
+  §3 bans it).
 - **Where the value comes from.** On the picker variants the platform control already
   knows its value. The `compact` field is ours on both platforms, so it announces the same
   localised string it paints: iOS through `accessibilityValue`, Android through
@@ -188,6 +189,8 @@ A screen-reader user hears a *label* and a *localised value* ("Saturday, 14 Marc
 - The calendar's tappable area, week-start, era and calendar system are the platform's.
 - The picker does not validate that `minimumDate <= maximumDate`. The clamp applies the
   upper bound and then the lower one, so an inverted range is **not** empty: the lower
-  bound wins and the control settles on `minimumDate` (both platforms, and JS agrees).
+  bound wins and the control settles on `minimumDate` on both platforms. (The JS
+  wrapper checks the lower bound first, so the value it sends can be `maximumDate`;
+  native then moves it to `minimumDate`.)
   A greyed calendar grid on Android is what that looks like, because no day is inside the
   range — while the *value* is `minimumDate`, and selecting it reports nothing.
