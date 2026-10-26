@@ -1136,11 +1136,15 @@ if (Platform.OS === 'android') {
       // The claim: nothing armed for a control the Host draws.
       expect(read(hostedIds)).toEqual(['', '', '']);
       // The witness that the probe reads a field that really gets written: the same
-      // control, mounted beside the Host, holds its lifecycle observer. (`preDraw` is not
-      // in the expected string because the first frame has drawn by now — the listener is
-      // released after it, which is exactly what it is for. The half this pair cannot
-      // show is proved by mutation in `docs/tasks/H2a-host-more-controls.report.md`.)
-      expect(read(aloneIds)).toEqual(['strategy', 'strategy']);
+      // control, mounted beside the Host, armed both of them. The answer is about the
+      // mount rather than about this instant on purpose — the first-frame listener
+      // unregisters itself once it has marked, so a live-only probe would read `""` for
+      // a hosted child whether or not the guard that stops it arming is there. Round 1's
+      // mutation proved exactly that: with the guard deleted the test stayed green.
+      expect(read(aloneIds)).toEqual([
+        'strategy,preDraw',
+        'strategy,preDraw',
+      ]);
 
       // And it stays nothing after the control is used: a recomposition of a hosted child
       // must not lazily arm what its attach declined to arm.

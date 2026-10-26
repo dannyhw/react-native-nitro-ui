@@ -170,6 +170,20 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private var strategyArmed = false
 
   /**
+   * Whether this mount has *ever* armed each of the two own-composition guards,
+   * outliving the live flags above going false again.
+   *
+   * [armedGuardsReport] reads these instead of the live pair. Arming is what costs,
+   * and a first-frame listener that has already marked is still a listener that was
+   * armed and then had to be taken out; a probe that reads only what is live right
+   * now cannot tell "never armed" from "armed and released", which makes it a race
+   * with the first frame rather than a gate. Both are reset with the live flags in
+   * [prepareForRecycle], so the answer is about the mount, as the report is.
+   */
+  private var everArmedStrategy = false
+  private var everArmedPreDraw = false
+
+  /**
    * The size the sizing engine already has from this host, in dp. Compared with an
    * epsilon so a measure that wobbles by a fraction of a dp does not become a
    * Fabric commit (risk R12). This only skips the JNI call - the engine drops a
@@ -588,6 +602,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     // for it again: the listener it registered for the previous mount is gone.
     hasMarkedFirstFrame = false
     firstFrameWatchRegistered = false
+    everArmedStrategy = false
+    everArmedPreDraw = false
     releaseSizingInstance()
   }
 
@@ -677,6 +693,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
     composeContent.setViewCompositionStrategy(DisposeOnLifecycleDestroyed(owner))
     strategyArmed = true
+    everArmedStrategy = true
   }
 
   /**
@@ -709,21 +726,27 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
-   * What a harness asks about (H1 N4): the guards this view holds for a composition of
+   * What a harness asks about (H1 N4): the guards this mount armed for a composition of
    * its own, as one line.
    *
-   * `strategy` while a [ViewCompositionStrategy] is installed (the activity
-   * `LifecycleRegistry` observer), `preDraw` while the first-frame listener is on its
-   * observer. A hosted control answers the empty string - it composes inside somebody
-   * else's view - and a control outside a Host answers both, which is the pair the
-   * test needs. Read-only, and answers from the same fields the arming writes.
+   * `strategy` once a [ViewCompositionStrategy] has been installed for the mount (the
+   * activity `LifecycleRegistry` observer), `preDraw` once the first-frame listener has
+   * gone onto its observer. Both are *ever* answers, deliberately: the live fields go
+   * false again on their own schedule - the first-frame listener takes itself off as
+   * soon as it marks - so reading those would make a hosted child and an unhosted one
+   * answer the same thing a frame after mount. The cost this reports is the arming, so
+   * that is what the report counts.
+   *
+   * A hosted control answers the empty string - it composes inside somebody else's view
+   * - and a control outside a Host answers both, which is the pair the test needs.
+   * Read-only, and answers from the same fields the arming writes.
    */
   internal fun armedGuardsReport(): String {
     val parts = mutableListOf<String>()
-    if (strategyArmed) {
+    if (everArmedStrategy) {
       parts.add("strategy")
     }
-    if (firstFrameWatch != null) {
+    if (everArmedPreDraw) {
       parts.add("preDraw")
     }
     return parts.joinToString(",")
@@ -985,6 +1008,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       return
     }
     firstFrameWatchRegistered = true
+    everArmedPreDraw = true
     val listener =
       object : ViewTreeObserver.OnPreDrawListener {
         override fun onPreDraw(): Boolean {
