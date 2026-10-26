@@ -80,14 +80,32 @@ if (artifact != null) {
     );
     throw error;
   }
-} else {
+} else if (process.env.NITRO_UI_ALLOW_UNSTAMPED === '1') {
+  // The escape hatch, for the runs that legitimately have nothing here: an app
+  // built by Xcode or Android Studio at a path this file does not know, and a CI
+  // action that builds the app itself. Loud, because the day a suite runs with
+  // this set is the day its green means something else.
   console.log(
-    `app.stamp: no artifact to check; build one with ` +
-      `\`node scripts/build-app.mjs --platform ${runner}\` ` +
-      'or set HARNESS_APP_PATH.'
+    colorize(
+      'app.stamp: NITRO_UI_ALLOW_UNSTAMPED=1 - no artifact was checked, so this ' +
+        'run proves nothing about any app in this checkout.',
+      'red'
+    )
+  );
+} else {
+  // Review S10. The harness never builds, so with no artifact there is no binary
+  // at all - and on Android the run then goes on against whatever the emulator
+  // already has installed, which is a previous task's app or none. Printing a
+  // note and continuing is how a suite ends up reporting results for a binary
+  // nobody has, which is the exact failure this file exists to stop.
+  throw new Error(
+    `bun run harness:${runner}: no app to test.\n` +
+      `       build it: node scripts/build-app.mjs --platform ${runner}\n` +
+      '       (it writes app.stamp, which is what this check reads)\n' +
+      '       or point HARNESS_APP_PATH at an app built another way;\n' +
+      '       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite without this check.'
   );
 }
-
 // react-native-harness does not build the app: build a Debug iOS .app or an
 // Android APK first and point HARNESS_APP_PATH at it (see CONTRIBUTING.md).
 //
