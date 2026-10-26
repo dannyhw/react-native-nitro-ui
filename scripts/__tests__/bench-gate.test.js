@@ -1303,9 +1303,10 @@ describe('the Button cells (--component button)', () => {
     expect(
       unscoped.some((entry) => entry.implementation === 'nitro-ui-host')
     ).toBe(false);
-    const hostCells = buildSchedule({ plan: 'quick', component: 'switch' }).filter(
-      (entry) => entry.implementation === 'nitro-ui-host'
-    ).length;
+    const hostCells = buildSchedule({
+      plan: 'quick',
+      component: 'switch',
+    }).filter((entry) => entry.implementation === 'nitro-ui-host').length;
     expect(all.length).toBe(
       unscoped.length * 7 +
         hostCells * ARM_SCOPES['nitro-ui-host'].components.length
@@ -1848,9 +1849,10 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
       resolve(__dirname, '../../bench/src/implementations/index.ts'),
       'utf8'
     );
-    const listed = /name: 'nitro-ui-host',[\s\S]{0,400}?components: \[([^\]]*)\]/.exec(
-      source
-    );
+    const listed =
+      /name: 'nitro-ui-host',[\s\S]{0,400}?components: \[([^\]]*)\]/.exec(
+        source
+      );
     expect(listed).not.toBeNull();
     expect(
       listed[1]
