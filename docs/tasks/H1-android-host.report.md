@@ -481,3 +481,13 @@ Build freshness, checked rather than assumed:
   `ios/` and `example/ios/` predates the binary (newest 10:48 vs binary 11:11), the app carries 925
   `NitroUiHost` symbols, and `NitroUiExample.app` has no embedded `main.jsbundle`, so JS came from
   Metro at 8293.
+
+## Orchestrator note (on merge)
+
+Re-review (`docs/tasks/H1-android-host.rereview.md`): MERGE WITH FOLLOW-UPS, M1/M2 fixed, no regressions
+outside a Host. Fixed on merge (`fix(host): …`): F1 — unhosted mount memory vs the shared host is
+**2.75x** (2.63x was the ratio to `rn-core`) in README / host.md / Host.tsx / sizing.md; F2 —
+`ImageBackground` and `SafeAreaView` dropped from the JS refusal table (reading them at module load
+made RN log deprecation warnings in every app importing `Host`; the native check still refuses them);
+host.md's T17 sentence (it won on memory, lost on UI CPU); the churn-gate comment (~11 MiB/cycle red).
+`bun run check` green after. Remaining follow-ups in FOLLOWUPS.

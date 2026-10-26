@@ -31,3 +31,5 @@
 | R4 | Bench load guard samples the whole run (median/≥10 % rule) | Apex | orchestrator | merged (1 round) |
 | C1 | Android intrinsic content wider than its box fits instead of clipping (0.2 wave 1) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE-AFTER-SMALL-FIXES, report corrected by orchestrator) |
 | G6 | Picker (0.2 wave 2) | Apex | Opus | merged (1 impl + 2 fix rounds + merge-main pass; harness iOS 140/141 (1 skip), Android 142, real-input 6/6 both) |
+| H1 | Android `<Host>` for Switch (0.2 wave 3) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE WITH FOLLOW-UPS; Host vs shared host: memory 0.86x, mount UI CPU 0.87x, JS CPU ~1.2x) |
+| T17 | iOS `<Host>` spike | Apex | — | report merged; not better (D23) — iOS `<Host>` is a passthrough |
