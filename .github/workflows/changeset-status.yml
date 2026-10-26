@@ -1,0 +1,55 @@
+name: Changeset status
+
+# A reminder, not a gate: `changeset status --since=origin/main` exits 1 when a
+# pull request changes library code with nothing in `.changeset/` to describe
+# it. That prints a warning annotation and stays green — a maintainer can
+# always add the missing entry or merge a change that must not release.
+#
+# Its own workflow on purpose: `ci.yml` belongs to another task's changes, and
+# this must never be the reason a contribution is red.
+#
+# Only reads the pull request: nothing here runs code from the fork, and the
+# job has no write permission. On a fork pull request `origin/main` is the
+# fork's own `main`, which can only make the warning wrong in one direction
+# (a missing entry it does not see), never block anything.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'ios/**'
+      - 'android/**'
+      - 'cpp/**'
+      - 'nitrogen/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    name: Changeset present
+    runs-on: ubuntu-latest
+
+    # The Version Packages pull request deletes changesets; it is never missing one.
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # `--since=origin/main` needs the base branch.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Check for a changeset
+        run: |
+          if ! bun run changeset status --since=origin/main; then
+            echo "::warning title=Missing changeset::No changeset in .changeset/ describes the library code this pull request changes, so merging it will not release anything. Add one with \`bun run changeset\`, or an empty one with \`bunx changeset --empty\` when it really should not release."
+          fi
