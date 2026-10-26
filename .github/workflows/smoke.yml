@@ -8,6 +8,9 @@
 # the tarball was not built from this exact commit.
 name: Smoke
 
+# Manual only, like the other device jobs (docs/DECISIONS.md D22, D25): the
+# nightly schedule is off, so nothing runs here until a maintainer starts it.
+# The local entry points are `bun run smoke:pack` / `smoke:expo` / `smoke:rn-cli`.
 on:
   workflow_dispatch:
     inputs:
@@ -16,9 +19,6 @@ on:
         type: choice
         default: both
         options: [both, ios, android]
-  schedule:
-    # Nightly, after the main CI window.
-    - cron: '30 4 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -68,7 +68,10 @@ jobs:
 
   # Shared steps for both consumer jobs.
   expo:
-    name: Expo consumer ${{ env.SDK }} (${{ matrix.platform }})
+    # `env` is not available in a job name, so the SDK is written here as
+    # well as in `env.SDK` below (a wrong name is cosmetic; the run uses the
+    # env value).
+    name: Expo consumer 58 (${{ matrix.platform }})
     needs: [plan, pack]
     strategy:
       fail-fast: false

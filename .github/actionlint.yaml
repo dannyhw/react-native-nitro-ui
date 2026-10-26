@@ -1,0 +1,7 @@
+# `xcode-27` is a GitHub preview image label, not one of the standard runner
+# labels actionlint knows, and it is used by the opt-in device jobs. Declaring it
+# here is what actionlint's own error message asks for, so `actionlint` stays a
+# useful local check (`bunx actionlint` / brew's actionlint).
+self-hosted-runner:
+  labels:
+    - xcode-27
