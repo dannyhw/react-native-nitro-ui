@@ -29,6 +29,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | A1c iOS baseline | — | merged | Done: minted (median load 2.93, 3.4 % over) | — |
 | G6 Picker | — | merged | Done | — |
 | H1 Android Host | — | merged | Done | — |
+| H2a Host: Slider/Progress/Button | `nitro-ui-worktrees/H2a` · `task/H2a-host-more-controls` | brief on main | Running (Apex, `nitroui-H2a`) | Opus review → fix rounds (D19) → merge; then H2b. |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
 | T17 iOS Host spike | branch only (`871c579`, pushed) | report merged | Done: iOS Host not better (D23); H3 dropped | — |
@@ -37,7 +38,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 ## Devices (D13)
 
 - Free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
-- H1: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` + AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
+- H2a: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` + AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
 - Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these

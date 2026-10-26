@@ -10,8 +10,9 @@ first, then the rest), iOS mount profiling, and (D23) an iOS `<Host>` spike — 
 | 1 | **P1** iOS mount-cost profiling (one round, decides iOS `<Host>`) | iOS | A1 |
 | 2 | **G6** Picker (`menu` / `wheel`) | both | C1 |
 | 2 | **G5** DatePicker (brief refreshed 2026-10-25) | both | C1 |
-| 3 | **H1** Android `<Host>` productionised for Switch, D17 rule for hosted controls (brief: `H1-android-host.md`) | Android | C1 |
-| 3 | **H2** Host support for Slider, Progress, Button, SegmentedControl, Picker, DatePicker | Android | H1, G5, G6 |
+| 3 | **H1** Android `<Host>` for Switch — merged | Android | C1 |
+| 3 | **H2a** Host for Slider, Progress, Button + N4 (brief `H2a-host-more-controls.md`) | Android | H1 |
+| 3 | **H2b** Host for SegmentedControl, Picker, DatePicker (popups/dialogs) | Android | H2a |
 | 3 | **T17** iOS `<Host>` spike — done, report merged | iOS | A1c |
 | 3 | ~~**H3** iOS `<Host>`~~ — not built: T17 failed D23 (memory better, mount/unmount UI CPU worse) | iOS | — |
 | 4 | **R3** 0.2 readiness: docs, stories, smoke, baselines refresh, changelog | both | all |
