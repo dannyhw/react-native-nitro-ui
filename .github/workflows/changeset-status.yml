@@ -51,5 +51,5 @@ jobs:
       - name: Check for a changeset
         run: |
           if ! bun run changeset status --since=origin/main; then
-            echo "::warning title=Missing changeset::No changeset in .changeset/ describes the library code this pull request changes, so merging it will not release anything. Add one with \`bun run changeset\`, or an empty one with \`bunx changeset --empty\` when it really should not release."
+            echo "::warning title=Missing changeset::No changeset in .changeset/ describes the library code this pull request changes, so merging it will not release anything. Add one with \`bun run changeset\`, or an empty one with \`bun run changeset add --empty\` when it really should not release."
           fi

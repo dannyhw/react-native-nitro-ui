@@ -93,6 +93,10 @@ jobs:
         id: release
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
+          # The action's default is to push the version commit, the tag and the
+          # release through the GitHub API (`push-with-git-cli: false`), so no
+          # git credentials are needed and the commits are signed. It also
+          # creates the `vX.Y.Z` tag and the GitHub release by default.
           version-script: bun run release:version
           publish-script: bun run release:publish
           github-token: ${{ secrets.GITHUB_TOKEN }}
