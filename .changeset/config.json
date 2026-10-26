@@ -1,9 +1,6 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
-  "changelog": [
-    "@changesets/changelog-github",
-    { "repo": "dannyhw/react-native-nitro-ui" }
-  ],
+  "changelog": "@changesets/changelog-git",
   "baseBranch": "main",
   "access": "public",
   "format": "prettier",
