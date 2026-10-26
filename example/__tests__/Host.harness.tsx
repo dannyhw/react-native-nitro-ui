@@ -422,7 +422,8 @@ describe('Host · hosted controls are still controls', () => {
    *
    * Android keeps the child's `View` alive (`GONE`, drawing nothing) and that view is
    * what carries the id, so this is the query every other suite relies on. Its box is
-   * reported for the record — on Android it is RN's frame, not where the control drew.
+   * reported for the record — on Android it is RN's frame, not where the control drew,
+   * and on iOS it is RN's frame too, because there is no composition to draw instead.
    */
   it('finds a hosted child by testID', async () => {
     const { unmount } = await mount(
@@ -435,15 +436,29 @@ describe('Host · hosted controls are still controls', () => {
     );
     const zero = await boxOf('find-0');
     const one = await boxOf('find-1');
-    // Found — which is the contract the harness suites rely on — and *no size at all*
-    // on Android: the child's `View` is `GONE` while a Host draws it, so it takes no
-    // part in Android's layout or touch dispatch. Its RN frame still exists (the Host
-    // below is 96 tall, two children's engine boxes) and is simply decorative, which is
-    // D24's whole sentence in one measurement.
-    expect(Math.round(zero.width)).toBe(0);
-    expect(Math.round(zero.height)).toBe(0);
-    expect(Math.round(one.width)).toBe(0);
-    expect(Math.round(one.height)).toBe(0);
+    // Found — which is the contract the harness suites rely on; `boxOf` throws if the
+    // id resolves to nothing. What the box says differs by who owns the pixels, and
+    // both halves are the point of looking.
+    if (Platform.OS === 'android') {
+      // *No size at all*: the child's `View` is `GONE` while a Host draws it, so it
+      // takes no part in Android's layout or touch dispatch. Its RN frame still exists
+      // (the Host is 96 tall, two children's engine boxes) and is simply decorative,
+      // which is D24's whole sentence in one measurement.
+      expect(Math.round(zero.width)).toBe(0);
+      expect(Math.round(zero.height)).toBe(0);
+      expect(Math.round(one.width)).toBe(0);
+      expect(Math.round(one.height)).toBe(0);
+    } else {
+      // The passthrough gives its children real views, so the same query finds a child
+      // that is laid out and touchable — the zero above is a statement about Compose
+      // taking the drawing over, not about `testID` surviving a Host. The exact box is
+      // the `Host · iOS passthrough` suite's business; a number here would only be a
+      // second copy of it.
+      expect(zero.width).toBeGreaterThan(0);
+      expect(zero.height).toBeGreaterThan(0);
+      expect(one.width).toBeGreaterThan(0);
+      expect(one.height).toBeGreaterThan(0);
+    }
     unmount();
   });
 });
