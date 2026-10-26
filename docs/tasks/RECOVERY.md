@@ -27,7 +27,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | R4 load guard | — | merged | Done | iOS overnight attempt scheduled 01:00 2026-10-26. |
 | C1 Android over-wide | — | merged | Done | — |
 | A1c iOS baseline | — | merged | Done: minted (median load 2.93, 3.4 % over) | — |
-| G6 Picker | `nitro-ui-worktrees/G6` · `task/G6-picker` | `9bc3b7b` | Merge-main pass running (Apex, `nitroui-G6-merge`) | Review conflict resolution, then merge. |
+| G6 Picker | — | merged | Done | — |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
 | T17 iOS Host spike | `nitro-ui-worktrees/T17` · `task/T17-ios-host-spike` | brief on main | Running (Apex, `nitroui-T17`) | One round; report decides H3 (D23). |
@@ -36,7 +36,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 ## Devices (D13)
 
 - T17 iOS Host spike: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
-- G6 merge-main pass: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` + AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
+- Free: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` + AVD `nitroui_t01` port 5570, adb 5041, Metro 8293 (next: H1).
 - Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
