@@ -85,7 +85,6 @@ function armsFor(component, platform = null) {
   );
 }
 
-
 /**
  * Per-launch multipliers. The quiet one is what an idle machine produces; the
  * loud one is a machine doing something else while a cell is measured, which is
