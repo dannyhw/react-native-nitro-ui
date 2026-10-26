@@ -20,6 +20,7 @@
 
 import {
   closeSync,
+  linkSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -28,11 +29,29 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 /** A lease that never releases (a killed task) must not wedge the machine. */
 export const DEFAULT_TTL_MINUTES = 240;
+
+/**
+ * The default for an `--exclusive` lease. A bench or baseline mint runs 8 to 14
+ * hours (PROCESS review §4), so inheriting the 4-hour default would expire
+ * mid-run and let a device task start next to the very measurement that needs a
+ * quiet machine (D21). Sixteen hours covers the longest run so far, and `renew`
+ * covers anything longer.
+ */
+export const EXCLUSIVE_TTL_MINUTES = 960;
+
+/**
+ * How long a *waiting* exclusive request's `pendingExclusive` marker stays
+ * without a refresh. The waiter refreshes it on every poll, so this only has to
+ * outlive one poll gap: a killed waiter stops refreshing and its marker expires
+ * in about a minute instead of holding the machine drain forever.
+ */
+export const PENDING_EXCLUSIVE_TTL_MS = 60_000;
 
 /** How long a lock file may sit before its owner is assumed dead. */
 export const LOCK_STALE_MS = 30_000;
@@ -53,8 +72,11 @@ const NODE_FS = {
   openSync,
   closeSync,
   writeFileSync,
+  readFileSync,
   statSync,
   unlinkSync,
+  renameSync,
+  linkSync,
 };
 
 /** Two device tasks is what one 14-core machine does without load-induced flakes. */
@@ -211,15 +233,54 @@ export function assertLeasable(pair, devices, platform) {
 }
 
 /**
+ * Is this lease still alive? Every lease is judged by **its own** ttl, never by
+ * the ttl of whoever happens to be asking (review M1): a `--ttl-minutes 1`
+ * probe must not evict the 16-hour exclusive lease a bench is running under, and
+ * a bench must not evict a short one.
+ *
+ * @param {{acquiredAt: number, ttlMinutes?: number}} lease
+ * @param {number} now
+ */
+export function leaseIsLive(lease, now) {
+  const ttlMinutes = Number(lease?.ttlMinutes) || DEFAULT_TTL_MINUTES;
+  return now - lease.acquiredAt < ttlMinutes * 60_000;
+}
+
+/** A waiting exclusive request that is still refreshing its marker? */
+export function pendingIsLive(pending, now) {
+  return now - pending.requestedAt < PENDING_EXCLUSIVE_TTL_MS;
+}
+
+/**
  * @param {unknown} state the parsed leases.json
  * @param {number} now
- * @param {number} ttlMinutes
+ * @returns {object[]} the leases that have not outlived their own ttl
  */
-export function activeLeases(state, now, ttlMinutes = DEFAULT_TTL_MINUTES) {
-  const ttlMs = ttlMinutes * 60_000;
-  return (Array.isArray(state?.leases) ? state.leases : []).filter(
-    (lease) => now - lease.acquiredAt < ttlMs
+export function activeLeases(state, now) {
+  return (Array.isArray(state?.leases) ? state.leases : []).filter((lease) =>
+    leaseIsLive(lease, now)
   );
+}
+
+/**
+ * Drop what has expired - each lease by its own ttl, each waiting request by
+ * its refresh gap - and return the state to write back.
+ *
+ * Pure and shared, so the eviction rule has one home and one test. It used to
+ * live in the CLI, take the *caller's* ttl and get persisted, which is how a
+ * short probe deleted someone else's long lease (review M1).
+ *
+ * @param {unknown} state
+ * @param {number} now
+ */
+export function pruneExpired(state, now) {
+  const pending = (
+    Array.isArray(state?.pendingExclusive) ? state.pendingExclusive : []
+  ).filter((entry) => pendingIsLive(entry, now));
+  const pruned = { ...state, leases: activeLeases(state, now) };
+  if (pending.length > 0) pruned.pendingExclusive = pending;
+  else delete pruned.pendingExclusive;
+  return pruned;
 }
 
 /**
@@ -237,6 +298,7 @@ export function activeLeases(state, now, ttlMinutes = DEFAULT_TTL_MINUTES) {
  * @param {boolean} options.exclusive
  * @param {'ios'|'android'|'both'} options.platform
  * @param {string} options.task
+ * @param {object[]} [options.pending] live `pendingExclusive` requests (others')
  * @returns {{ok: true, pair: object} | {ok: false, reason: string, waiting: string[]}}
  */
 export function decideAcquire({
@@ -246,9 +308,28 @@ export function decideAcquire({
   exclusive,
   platform,
   task,
+  pending = [],
 }) {
   const held = active.filter((lease) => lease.task !== task);
   const waiting = held.map((lease) => `${lease.task} (${lease.id})`);
+
+  // A waiting exclusive request has to see the machine go quiet. Without this,
+  // two overlapping device tasks refill each other's slots forever and the bench
+  // starves until its `--wait-minutes` runs out (review S4): new non-exclusive
+  // leases are held back while somebody is waiting for the whole machine.
+  const blockers = pending.filter((entry) => entry.task !== task);
+  if (!exclusive && blockers.length > 0) {
+    return {
+      ok: false,
+      reason:
+        `${blockers.map((entry) => entry.task).join(', ')} is waiting for an ` +
+        'exclusive lease, so new device leases are held back while the machine drains',
+      waiting: [
+        ...waiting,
+        ...blockers.map((entry) => `${entry.task} (waiting, exclusive)`),
+      ],
+    };
+  }
 
   if (held.length === 0) {
     // Nothing to wait for; the exclusive case still has to take a pair below.
@@ -362,13 +443,20 @@ export function renderEnvFile(lease, pair, platform = lease.platform) {
  * stolen rather than kept: a wedged lease file would block every task on the
  * machine, which is the failure this whole file exists to prevent.
  *
+ * Two rules keep the steal honest (review S3): the file records a random token,
+ * and a stealer moves it aside with `rename` - a single-winner operation -
+ * instead of unlinking whatever is there. Otherwise two processes that both see
+ * the same corpse can each delete the other's fresh lock, and the release of the
+ * first then deletes the lock of an unrelated third writer.
+ *
  * @param {object} options
  * @param {string} options.lockFile
  * @param {() => object} options.mutate runs inside the lock and returns the state to keep
- * @param {{openSync: Function, closeSync: Function, writeFileSync: Function, statSync: Function, unlinkSync: Function}} [options.fsImpl]
+ * @param {{openSync: Function, closeSync: Function, writeFileSync: Function, readFileSync: Function, statSync: Function, unlinkSync: Function, renameSync: Function, linkSync: Function}} [options.fsImpl]
  * @param {((ms: number) => void)} [options.sleep]
  * @param {(() => number)} [options.now]
  * @param {() => object} [options.empty]
+ * @param {(() => string)} [options.token] written into the lock; release is by token
  * @returns {object} what `mutate` returned
  */
 export function withLock({
@@ -381,15 +469,25 @@ export function withLock({
   timeoutMs = LOCK_TIMEOUT_MS,
   staleMs = LOCK_STALE_MS,
   pid = process.pid,
+  token = () => randomBytes(6).toString('hex'),
 }) {
   const fs = fsImpl;
+  const mine = token();
   const deadline = now() + timeoutMs;
+  // The mtime of a lock we moved aside and found to belong to a live process.
+  // The restore puts the file back with that same old mtime, so without
+  // remembering it every retry steals and hands back the same lock forever: a
+  // waiter that should sleep turns into a core pinned at 100%.
+  let provedAliveAt = null;
+  // Set when this iteration removed a lock left by a dead process.
+  let clearedCorpse = false;
   for (;;) {
+    clearedCorpse = false;
     try {
       mkdirSync(dirname(lockFile), { recursive: true });
       const fd = fs.openSync(lockFile, 'wx');
       try {
-        fs.writeFileSync(fd, `${pid} ${now()}\n`);
+        fs.writeFileSync(fd, `${pid} ${now()} ${mine}\n`);
       } finally {
         fs.closeSync(fd);
       }
@@ -400,16 +498,44 @@ export function withLock({
       try {
         holderMtime = fs.statSync(lockFile).mtimeMs;
       } catch {
-        continue; // released between the EEXIST and the stat - retry at once
+        // Released between the EEXIST and the stat. Retry, but the deadline
+        // below still applies: a loop that only reaches it by falling through
+        // is how a wait turns into a spin.
       }
-      if (holderMtime != null && now() - holderMtime > staleMs) {
+      if (
+        holderMtime != null &&
+        holderMtime !== provedAliveAt &&
+        now() - holderMtime > staleMs
+      ) {
+        // One stealer wins the rename; the loser retries and waits.
+        const aside = `${lockFile}.stale-${mine}`;
+        let stoleIt = false;
         try {
-          fs.unlinkSync(lockFile);
-          continue;
+          fs.renameSync(lockFile, aside);
+          stoleIt = true;
         } catch {
-          // Someone else stole it first; fall through to waiting.
+          // Someone else stole it first, or it was released a moment ago.
+        }
+        if (stoleIt) {
+          // Confirm the file we moved is the corpse we stat'ed. A lock written
+          // after our stat belongs to somebody live: put it back untouched.
+          const movedAt = parseLockTime(fs, aside);
+          if (movedAt != null && now() - movedAt <= staleMs) {
+            provedAliveAt = holderMtime;
+            restoreAside(fs, aside, lockFile);
+          } else {
+            clearedCorpse = true;
+            try {
+              fs.unlinkSync(aside);
+            } catch {
+              // Already cleaned up; the corpse is out of the way either way.
+            }
+          }
         }
       }
+      // Every failure path reaches this check. A loop where one branch jumps
+      // past it is how a wait becomes a spin: the restore above puts the old
+      // mtime back, so re-stealing the same lock never ends by itself.
       if (now() >= deadline) {
         throw new Error(
           `could not take ${lockFile} within ${timeoutMs} ms - another lease ` +
@@ -417,7 +543,9 @@ export function withLock({
             `${staleMs} ms) is held by a dead process`
         );
       }
-      sleep(20);
+      // A corpse just cleared out of the way is worth an immediate retry;
+      // anything else gets a short sleep before asking again.
+      if (!clearedCorpse) sleep(20);
     }
   }
 
@@ -425,10 +553,41 @@ export function withLock({
     return mutate();
   } finally {
     try {
-      fs.unlinkSync(lockFile);
+      // Release by token: unlink only the lock this call wrote. Deleting an
+      // unrelated lock is what let a third writer in alongside a live one.
+      if (fs.readFileSync(lockFile, 'utf8').includes(mine)) {
+        fs.unlinkSync(lockFile);
+      }
     } catch {
-      // Already gone (stolen as stale): releasing someone else's lock would be worse.
+      // Already gone (stolen as stale, or never ours): whoever holds it keeps it.
     }
+  }
+}
+
+/** The `now()` recorded inside a lock file, or null when it cannot be read. */
+function parseLockTime(fs, file) {
+  try {
+    const parts = fs.readFileSync(file, 'utf8').trim().split(' ');
+    const created = Number(parts[1]);
+    return Number.isFinite(created) ? created : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Put back a lock that turned out not to be stale. `link` refuses when the path
+ * is taken again, which is the point: a lock another process created while we
+ * were looking must not be overwritten. If the restore cannot happen, the live
+ * owner simply finds its lock missing when it releases - harmless, because
+ * release is by token and it will not delete someone else's lock.
+ */
+function restoreAside(fs, aside, lockFile) {
+  try {
+    fs.linkSync(aside, lockFile);
+    fs.unlinkSync(aside);
+  } catch {
+    // A newer lock owns the path now. Leave ours aside under a `.stale-` name.
   }
 }
 
