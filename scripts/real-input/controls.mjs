@@ -79,6 +79,23 @@ export const REAL_INPUT_CONTROLS = Object.freeze([
       'real tap toggles a Switch inside a <Host>, where the control has no view of its own',
     screen: 'host',
   },
+  {
+    id: 'hosted-button',
+    title:
+      'real tap presses a Button inside a <Host>, and a disabled one beside it stays unpressed',
+    screen: 'host',
+  },
+  {
+    id: 'hosted-slider',
+    title: 'real drag moves a Slider inside a <Host>, whose width is the track',
+    screen: 'host',
+  },
+  {
+    id: 'hosted-mixed',
+    title:
+      'one <Host> composes four kinds of control, and each keeps its own node, order and geometry',
+    screen: 'host',
+  },
 ]);
 
 /**

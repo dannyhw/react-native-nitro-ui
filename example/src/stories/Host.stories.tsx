@@ -1,14 +1,14 @@
 /**
- * Host stories (H1). What it is and what it refuses: `docs/components/host.md`.
+ * Host stories (H1, H2a). What it is and what it refuses: `docs/components/host.md`.
  *
  * The story is the comparison, because that is the only thing a Host changes: the
- * same Switches, drawn by one composition or by N of them. `style.height` on the
+ * same controls, drawn by one composition or by N of them. `style.height` on the
  * Host is not decoration — a hosted control reports no size, so the box is the
  * height the app gives it (D24).
  */
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Host, Switch } from 'react-native-nitro-ui';
+import { Button, Host, Progress, Slider, Switch } from 'react-native-nitro-ui';
 
 import type { Meta, StoryObj } from '@storybook/react-native';
 
@@ -119,11 +119,64 @@ export const Churn: Story = {
   },
 };
 
+/**
+ * Four kinds of control, one composition (H2a).
+ *
+ * A `Switch`, a `Slider`, both `Progress` variants and a `Button` in one `Column`,
+ * which is where the per-control sizing rule shows itself: the Slider stretches to
+ * the Host's width, the Button and the circular indicator keep their own width at the
+ * leading edge, and none of them was asked how big it is.
+ */
+export const Mixed: Story = {
+  render: function MixedStory() {
+    const [on, setOn] = useState(false);
+    const [value, setValue] = useState(0.4);
+    const [presses, setPresses] = useState(0);
+    return (
+      <Showcase>
+        <View style={styles.card}>
+          <Host style={styles.mixedHost}>
+            <Switch
+              value={on}
+              onValueChange={setOn}
+              accessibilityLabel="Mixed switch"
+            />
+            <Slider
+              value={value}
+              onValueChange={setValue}
+              accessibilityLabel="Mixed slider"
+            />
+            <Progress value={0.35} accessibilityLabel="Mixed linear progress" />
+            <Progress
+              variant="circular"
+              value={0.65}
+              accessibilityLabel="Mixed circular progress"
+            />
+            <Button
+              title="Mixed action"
+              onPress={() => setPresses((current) => current + 1)}
+              accessibilityLabel="Mixed button"
+            />
+          </Host>
+        </View>
+        <Note>
+          {`${on ? 'on' : 'off'} · slider ${value.toFixed(2)} · ${presses} press${
+            presses === 1 ? '' : 'es'
+          } — five controls, one composition, and each one still answers for itself.`}
+        </Note>
+      </Showcase>
+    );
+  },
+};
+
 const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     paddingHorizontal: 6,
   },
   host: { width: '100%', height: ROWS * ROW },
+  // Four kinds of control draw their own heights, and RN is not told any of them, so
+  // this is room rather than a measurement (D24). A Host that is too short clips.
+  mixedHost: { width: '100%', height: 280 },
   link: { color: '#3b82f6', paddingVertical: 6 },
 });
