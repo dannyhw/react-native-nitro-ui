@@ -20,15 +20,20 @@ import { describe, expect, it, beforeEach } from '@jest/globals';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   copyFileSync,
+  existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   writeFileSync,
+  unlinkSync,
+  utimesSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
   DEFAULT_MAX_DEVICE_LEASES,
+  EXCLUSIVE_TTL_MINUTES,
   RESERVED_EMULATOR_PORTS,
   activeLeases,
   assertLeasable,
@@ -36,6 +41,7 @@ import {
   emulatorSerial,
   identifiersFor,
   normalizeDevices,
+  pruneExpired,
   renderEnvFile,
   statePaths,
   withLock,
@@ -51,6 +57,10 @@ const EXAMPLE_CONFIG = join(REPO_ROOT, 'scripts', 'devices.example.json');
 /**
  * An in-memory `node:fs` subset for `withLock`, plus a clock the test advances.
  * `failOpenWith` is how a test says "someone else holds it".
+ *
+ * `contents` matters as much as `mtimeMs`: `withLock` records `pid now token`
+ * inside the lock and re-reads it before stealing, so a fixture that wants a
+ * corpse needs an old *timestamp in the file*, not just an old mtime.
  */
 function fakeFs({ failOpenWith = null, mtimeMs = 0 } = {}) {
   const files = new Map();
@@ -77,6 +87,15 @@ function fakeFs({ failOpenWith = null, mtimeMs = 0 } = {}) {
       entry.contents = String(contents);
       files.set(file, entry);
     },
+    readFileSync(file) {
+      const entry = files.get(file);
+      if (entry == null) {
+        const error = new Error(`ENOENT: ${file}`);
+        error.code = 'ENOENT';
+        throw error;
+      }
+      return entry.contents;
+    },
     closeSync() {},
     statSync(file) {
       const entry = files.get(file);
@@ -94,6 +113,31 @@ function fakeFs({ failOpenWith = null, mtimeMs = 0 } = {}) {
         throw error;
       }
     },
+    renameSync(from, to) {
+      const entry = files.get(from);
+      if (entry == null) {
+        const error = new Error(`ENOENT: ${from}`);
+        error.code = 'ENOENT';
+        throw error;
+      }
+      files.delete(from);
+      files.set(to, entry);
+    },
+    linkSync(from, to) {
+      // Like the real thing: refuses when the destination path is taken.
+      if (files.has(to)) {
+        const error = new Error(`EEXIST: ${to}`);
+        error.code = 'EEXIST';
+        throw error;
+      }
+      const entry = files.get(from);
+      if (entry == null) {
+        const error = new Error(`ENOENT: ${from}`);
+        error.code = 'ENOENT';
+        throw error;
+      }
+      files.set(to, entry);
+    },
   };
   return {
     fs,
@@ -102,7 +146,9 @@ function fakeFs({ failOpenWith = null, mtimeMs = 0 } = {}) {
       now += ms;
       for (const entry of files.values()) entry.mtimeMs = now;
     },
-    hold: (file) => files.set(file, { mtimeMs: now, contents: 'other 123' }),
+    /** A lock held by somebody else, recorded at `created` with `token`. */
+    hold: (file, { created = 123, token = 'other' } = {}) =>
+      files.set(file, { mtimeMs: now, contents: `other ${created} ${token}` }),
   };
 }
 
@@ -181,7 +227,8 @@ describe('withLock', () => {
     // `staleMs`, which is what a killed task leaves behind. Without the steal
     // the machine is wedged until someone notices a `leases.lock` by hand.
     const { fs, files } = fakeFs();
-    files.set(holder, { mtimeMs: -60_000, contents: 'dead 99' });
+    // A corpse as the real one reads: `pid createdAt token`, both timestamps old.
+    files.set(holder, { mtimeMs: -60_000, contents: 'dead -60000 dead-token' });
     const result = withLock({
       lockFile: holder,
       fsImpl: fs,
@@ -195,6 +242,85 @@ describe('withLock', () => {
     });
     expect(result).toBe('stole it');
     expect(files.size).toBe(0);
+  });
+
+  it('does not unlink a live lock just because a second stealer arrived', () => {
+    const holder = '/tmp/x/leases.lock';
+    const { fs, files } = fakeFs();
+    files.set(holder, { mtimeMs: -60_000, contents: 'dead -60000 dead-token' });
+
+    let sawLiveLockInsideTheGuard = false;
+    const result = withLock({
+      lockFile: holder,
+      fsImpl: fs,
+      token: () => 'AAA',
+      sleep: () => {},
+      now: () => 0,
+      staleMs: 30_000,
+      timeoutMs: 200,
+      mutate: () => {
+        // A second process arrives while this one holds the lock and finds a
+        // file whose *timestamp* says it is young. Stealing that is review S3:
+        // the release of the first process then deletes a lock it no longer owns.
+        let bWaits = 0;
+        let bClock = 0;
+        expect(() =>
+          withLock({
+            lockFile: holder,
+            fsImpl: fs,
+            token: () => 'BBB',
+            sleep: () => {
+              bWaits += 1;
+            },
+            // A waiting loop needs a clock that moves, which is what a real
+            // sleep does. Frozen, the deadline never arrives.
+            now: () => bClock++,
+            staleMs: 30_000,
+            timeoutMs: 100,
+            mutate: () => 'B must never get here',
+          })
+        ).toThrow(/could not take/);
+        expect(bWaits).toBeGreaterThan(0);
+        sawLiveLockInsideTheGuard = (
+          files.get(holder)?.contents ?? ''
+        ).includes('AAA');
+        return 'A finished';
+      },
+    });
+
+    expect(sawLiveLockInsideTheGuard).toBe(true);
+    expect(result).toBe('A finished');
+    // A released its own lock; nothing was left behind for the next task.
+    expect(files.size).toBe(0);
+  });
+
+  it('puts back a lock that turned out not to be the stale one it saw', () => {
+    const holder = '/tmp/x/leases.lock';
+    const { fs, files } = fakeFs({ mtimeMs: -60_000 });
+    // The mtime says "old enough to steal", but the timestamp written inside the
+    // file is current: a live process took this path after our stat. The steal
+    // has to notice and hand it back.
+    files.set(holder, { mtimeMs: -60_000, contents: 'live 0 live-token' });
+    let waits = 0;
+    let clock = 0;
+    expect(() =>
+      withLock({
+        lockFile: holder,
+        fsImpl: fs,
+        token: () => 'thief',
+        sleep: () => {
+          waits += 1;
+        },
+        now: () => clock++,
+        staleMs: 30_000,
+        timeoutMs: 2_000,
+        mutate: () => 'never',
+      })
+    ).toThrow(/could not take/);
+    expect(waits).toBeGreaterThan(0);
+    expect(files.get(holder)?.contents).toBe('live 0 live-token');
+    // And not sitting next to it under a `.stale-` name either.
+    expect([...files.keys()].filter((f) => f.includes('.stale-'))).toEqual([]);
   });
 
   it('does not steal a lock that is still young', () => {
@@ -410,6 +536,80 @@ describe('the limits', () => {
     expect(decision.ok).toBe(true);
   });
 
+  it('holds back a new lease while somebody waits for an exclusive one', () => {
+    // The starvation fix (review S4): a waiting exclusive request is recorded,
+    // so the machine drains instead of being refilled by the next task.
+    const decision = decideAcquire({
+      active: [lease('G6', ['pair-a'])],
+      pairs: DEVICES.pairs,
+      maxDeviceLeases: 2,
+      exclusive: false,
+      platform: 'both',
+      task: 'G7',
+      pending: [{ task: 'B1', id: 'B1-1', requestedAt: Date.now() }],
+    });
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) {
+      expect(decision.reason).toContain('waiting for an exclusive lease');
+      expect(decision.waiting).toContain('B1 (waiting, exclusive)');
+    }
+
+    // The waiter itself is not held back by its own marker, and an ordinary
+    // lease with nobody waiting is unaffected.
+    const forTheWaiter = decideAcquire({
+      active: [],
+      pairs: DEVICES.pairs,
+      maxDeviceLeases: 2,
+      exclusive: true,
+      platform: 'both',
+      task: 'B1',
+      pending: [{ task: 'B1', id: 'B1-1', requestedAt: Date.now() }],
+    });
+    expect(forTheWaiter.ok).toBe(true);
+  });
+
+  describe('ttl (review M1)', () => {
+    const now = 1_700_000_000_000;
+    const heldFor = (minutes, ttlMinutes) => ({
+      id: `x-${ttlMinutes}`,
+      task: `T${ttlMinutes}`,
+      holds: ['pair-a'],
+      acquiredAt: now - minutes * 60_000,
+      ttlMinutes,
+    });
+
+    it("judges each lease by its own ttl, never by the caller's", () => {
+      // The reproduced failure: a bench holds a 900-minute exclusive lease, and
+      // a 1-minute probe asks a minute later. The old prune judged both by the
+      // probe's ttl and persisted the result, which evicted the bench.
+      const state = {
+        leases: [heldFor(5, 900), heldFor(5, 1)],
+      };
+      const kept = pruneExpired(state, now).leases;
+      expect(kept.map((entry) => entry.ttlMinutes)).toEqual([900]);
+      expect(activeLeases(state, now).map((e) => e.task)).toEqual(['T900']);
+    });
+
+    it('drops a waiting exclusive marker that stopped refreshing', () => {
+      const fresh = {
+        leases: [],
+        pendingExclusive: [{ task: 'B1', requestedAt: now - 5_000 }],
+      };
+      expect(pruneExpired(fresh, now).pendingExclusive).toHaveLength(1);
+      const stale = {
+        leases: [],
+        pendingExclusive: [{ task: 'B1', requestedAt: now - 120_000 }],
+      };
+      expect(pruneExpired(stale, now).pendingExclusive).toBeUndefined();
+    });
+
+    it('defaults an exclusive lease to longer than a bench run', () => {
+      // 8 to 14 hours (PROCESS review §4), so the quiet window cannot expire
+      // mid-measurement the way the 4-hour device default would.
+      expect(EXCLUSIVE_TTL_MINUTES).toBeGreaterThanOrEqual(14 * 60);
+    });
+  });
+
   it('says so when no pair has the platform that was asked for', () => {
     const decision = decideAcquire({
       active: [],
@@ -594,6 +794,13 @@ describe('the CLI, in a real state directory', () => {
     copyFileSync(EXAMPLE_CONFIG, config);
   });
 
+  /**
+   * Block this thread, the same way the lease CLI waits (and the way `withLock`
+   * sleeps). Only safe where no concurrent child has to make progress.
+   */
+  const sleepMs = (ms) =>
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
   const stateFile = () => statePaths(home).leases;
   const readState = () => JSON.parse(readFileSync(stateFile(), 'utf8'));
 
@@ -762,5 +969,203 @@ describe('the CLI, in a real state directory', () => {
     expect(env).toContain('IOS_SIM_UDID');
     expect(env).not.toContain('ANDROID_AVD');
     expect(result.stderr).toContain(out);
+  });
+
+  it('lets a short ttl and a long one coexist (review M1)', () => {
+    // The exact scenario from the review: a long lease is in the file, a short
+    // acquire happens afterwards, and the short one's ttl must not be used to
+    // judge the long one. One ttl for every lease is what deleted a bench run's
+    // lease a minute into the run.
+    expect(
+      cli([
+        'acquire',
+        '--task',
+        'LONG',
+        '--ttl-minutes',
+        '900',
+        '--config',
+        config,
+      ]).status
+    ).toBe(0);
+    expect(
+      cli([
+        'acquire',
+        '--task',
+        'SHORT',
+        '--ttl-minutes',
+        '0.02',
+        '--config',
+        config,
+      ]).status
+    ).toBe(0);
+    expect(
+      readState()
+        .leases.map((entry) => entry.task)
+        .sort()
+    ).toEqual(['LONG', 'SHORT']);
+
+    // Past the short lease's own ttl, and still nowhere near the long one's:
+    // `list` shows one row, and it is the 900-minute lease.
+    sleepMs(1_500);
+    const midList = cli(['list']).stdout;
+    expect(midList).not.toContain('SHORT');
+    expect(midList).toMatch(/LONG[\s\S]*900m ttl left/);
+
+    const probe = cli([
+      'acquire',
+      '--task',
+      'PROBE',
+      '--ttl-minutes',
+      '1',
+      '--config',
+      config,
+    ]);
+    expect(probe.status).toBe(0);
+    const tasks = readState()
+      .leases.map((entry) => entry.task)
+      .sort();
+    // Only the lease whose own ttl ran out is gone.
+    expect(tasks).toEqual(['LONG', 'PROBE']);
+    expect(
+      readState().leases.find((entry) => entry.task === 'LONG').ttlMinutes
+    ).toBe(900);
+
+    // And the long lease still shows its own ttl in `list`, not the probe's.
+    expect(cli(['list']).stdout).toMatch(/LONG[\s\S]*900m ttl left/);
+  });
+
+  it('gives an exclusive lease a ttl that outlasts a bench run (review M1)', () => {
+    // Nothing passed `--ttl-minutes` here: the default is what protects a 14 h
+    // bench from losing its devices halfway through, which the old 240-minute
+    // default did not.
+    expect(
+      cli(['acquire', '--task', 'BENCH', '--exclusive', '--config', config])
+        .status
+    ).toBe(0);
+    const bench = readState().leases.find((entry) => entry.task === 'BENCH');
+    expect(bench.exclusive).toBe(true);
+    expect(bench.ttlMinutes).toBe(EXCLUSIVE_TTL_MINUTES);
+    expect(bench.ttlMinutes * 60).toBeGreaterThanOrEqual(14);
+  });
+
+  it('renews a lease by its own ttl, and says so when it is gone', () => {
+    expect(
+      cli([
+        'acquire',
+        '--task',
+        'G6',
+        '--ttl-minutes',
+        '30',
+        '--config',
+        config,
+      ]).status
+    ).toBe(0);
+    const renewed = cli(['renew', 'G6']);
+    expect(renewed.status).toBe(0);
+    expect(renewed.stdout).toContain('renewed');
+    expect(readState().leases[0].ttlMinutes).toBe(30);
+
+    // An expired lease is not resurrected: its devices may already be handed to
+    // someone else, so a heartbeat has to fail loudly.
+    cli(['release', 'G6']);
+    const missing = cli(['renew', 'G6']);
+    expect(missing.status).toBe(1);
+    expect(missing.stderr).toContain('no live lease');
+  });
+
+  it('holds new leases back for a waiting exclusive request (review S4)', async () => {
+    expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+
+    // A bench asking for the whole machine, parked in the wait loop.
+    const waiting = spawnLease([
+      'acquire',
+      '--task',
+      'B1',
+      '--exclusive',
+      '--wait-minutes',
+      '2',
+      '--config',
+      config,
+    ]);
+    // Give it a few polls to write its marker and start waiting.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const third = cli([
+      'acquire',
+      '--task',
+      'G7',
+      '--platform',
+      'ios',
+      '--config',
+      config,
+    ]);
+    expect(third.status).toBe(1);
+    expect(third.stderr).toContain('waiting for an exclusive lease');
+    // It stayed free: the refusal is the drain, not a quiet take of pair-b.
+    expect(readState().leases.map((entry) => entry.task)).toEqual(['G6']);
+
+    expect(cli(['release', 'G6']).status).toBe(0);
+    const won = await waiting;
+    expect(won.code).toBe(0);
+    expect(won.stdout).toContain('exclusive)');
+    // The marker goes away with the wait.
+    expect(readState().pendingExclusive).toBeUndefined();
+    expect(readState().leases[0].task).toBe('B1');
+  });
+
+  it('keeps a lock-timeout from ending a wait (review S4)', async () => {
+    // The state lock is held by a live pid, so an acquire cannot take it. The
+    // reviewer's bug: one lock timeout ended the whole wait, so a task that
+    // asked for `--wait-minutes 5` gave up in a third of a second. The lock
+    // gives up in 200 ms here and the caller waits a minute, so exit 0 proves
+    // the timeout turned into a retry.
+    expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+    const lockFile = statePaths(home).lock;
+    writeFileSync(lockFile, `999999 ${Date.now()} busy\n`);
+
+    const waiting = spawnLease(
+      ['acquire', '--task', 'G7', '--wait-minutes', '1', '--config', config],
+      { NITRO_UI_LEASE_LOCK_TIMEOUT_MS: '200' }
+    );
+
+    // Let it burn a couple of lock timeouts. Then clear the way: the lock goes
+    // away first, because a release that has to queue behind the lock it is
+    // testing would block for its own ten-second timeout.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    unlinkSync(lockFile);
+    expect(cli(['release', 'G6']).status).toBe(0);
+
+    const result = await waiting;
+    expect(result.stderr).toContain('lock busy');
+    expect(result.code).toBe(0);
+    expect(readState().leases.map((entry) => entry.task)).toEqual(['G7']);
+  });
+
+  it('hands one stale lock to one stealer, and no pair to both', async () => {
+    // A corpse from a task that died mid-write, plus two tasks asking at the
+    // same instant (review S3). The old unlink-the-world steal let the second
+    // delete the first's live lock, so both read an empty lease file and both
+    // took pair-a. Whatever happens here, two pairs must go to two tasks.
+    const lockFile = statePaths(home).lock;
+    writeFileSync(lockFile, '999998 1 dead-token\n');
+    // A Date, not a number: utimesSync reads a number as *seconds*, and a
+    // millisecond figure lands in the far future - the lock then looks young
+    // and nobody steals it, which silently tests nothing.
+    const dead = new Date(Date.now() - 120_000);
+    utimesSync(lockFile, dead, dead);
+
+    const results = await Promise.all([
+      spawnLease(['acquire', '--task', 'G6', '--config', config]),
+      spawnLease(['acquire', '--task', 'G7', '--config', config]),
+    ]);
+    expect(results.map((entry) => entry.code)).toEqual([0, 0]);
+
+    const pairs = readState()
+      .leases.map((entry) => entry.holds[0])
+      .sort();
+    expect(pairs).toEqual(['pair-a', 'pair-b']);
+    // The corpse and any `.stale-` copies are gone; nobody is locked out.
+    expect(existsSync(lockFile)).toBe(false);
+    expect(readdirSync(home).filter((f) => f.includes('.stale-'))).toEqual([]);
   });
 });
