@@ -10,7 +10,16 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import { Button, Host, Progress, Slider, Switch } from 'react-native-nitro-ui';
+import {
+  Button,
+  DatePicker,
+  Host,
+  Picker,
+  Progress,
+  SegmentedControl,
+  Slider,
+  Switch,
+} from 'react-native-nitro-ui';
 
 /**
  * The `<Host>` screen.
@@ -108,6 +117,32 @@ export default function HostScreen() {
     setMixedPresses((count) => count + 1);
   }, []);
 
+  // The popup Host (H2b): the three controls that reach outside the box for a
+  // window of their own. Each echo above the box is what a gate reads back; the
+  // two `disable while open` switches exist because the ask is what happens to a
+  // window on a control that can no longer answer.
+  const [popSegmented, setPopSegmented] = useState(0);
+  const [popPicker, setPopPicker] = useState(1);
+  const [popOptions, setPopOptions] = useState(0);
+  const [popDate, setPopDate] = useState(
+    () => new Date(2026, 4, 17, 0, 0, 0, 0)
+  );
+  const [popPickerDisabled, setPopPickerDisabled] = useState(false);
+  const [popDateDisabled, setPopDateDisabled] = useState(false);
+  const POP_CHOICE_SETS: string[][] = [
+    ['Alpha', 'Beta', 'Gamma'],
+    ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'],
+  ];
+  const popChoices = POP_CHOICE_SETS[popOptions] ?? POP_CHOICE_SETS[0] ?? [];
+
+  const noteSegmented = useCallback((event: { index: number }) => {
+    setPopSegmented(event.index);
+  }, []);
+
+  const notePicker = useCallback((event: { index: number }) => {
+    setPopPicker(event.index);
+  }, []);
+
   // Both halves of the comparison mount the same number of controls, at the same
   // pitch, in the same box - the only difference is who composes them.
   const batch = useMemo(
@@ -139,8 +174,8 @@ export default function HostScreen() {
         <Text style={[styles.note, { color: ink.muted }]}>
           Everything inside a Host is one Compose composition: N controls, one
           AndroidComposeView, one LayoutNode tree. Outside a Host each one
-          brings its own. Switch, Slider, Progress and Button can be hosted; on
-          iOS a Host is a plain view today.
+          brings its own. All seven controls can be hosted, including the three
+          that open a popup or a dialog; on iOS a Host is a plain view today.
         </Text>
 
         <Text style={[styles.section, { color: ink.ink }]}>
@@ -297,6 +332,110 @@ export default function HostScreen() {
         </Text>
 
         <Text style={[styles.section, { color: ink.ink }]}>
+          Popups and dialogs, one composition
+        </Text>
+        <Row label="hosted SegmentedControl, as JS sees it">
+          <Text
+            testID="host-segmented-index"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {popSegmented}
+          </Text>
+        </Row>
+        <Row label="hosted Picker, as JS sees it">
+          <Text
+            testID="host-picker-index"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {popPicker}
+          </Text>
+        </Row>
+        <Row label="hosted DatePicker, as JS sees it">
+          <Text
+            testID="host-datepicker-value"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {popDate.getFullYear()}-
+            {String(popDate.getMonth() + 1).padStart(2, '0')}-
+            {String(popDate.getDate()).padStart(2, '0')}
+          </Text>
+        </Row>
+        <View style={[styles.actions, { borderColor: ink.box }]}>
+          <Pressable
+            onPress={() => setPopOptions((current) => (current === 0 ? 1 : 0))}
+            testID="host-picker-change-options"
+            hitSlop={4}
+          >
+            <Text style={[styles.link, { color: ink.link }]}>
+              {popOptions === 0 ? 'add two choices' : 'cut back to three'}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setPopPickerDisabled((current) => !current)}
+            testID="host-picker-toggle-disabled"
+            hitSlop={4}
+          >
+            <Text style={[styles.link, { color: ink.link }]}>
+              {popPickerDisabled ? 'enable the picker' : 'disable the picker'}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setPopDateDisabled((current) => !current)}
+            testID="host-datepicker-toggle-disabled"
+            hitSlop={4}
+          >
+            <Text style={[styles.link, { color: ink.link }]}>
+              {popDateDisabled ? 'enable the field' : 'disable the field'}
+            </Text>
+          </Pressable>
+        </View>
+        <View style={[styles.hostBox, { backgroundColor: ink.box }]}>
+          <Host style={styles.popupRows}>
+            <SegmentedControl
+              options={['One', 'Two', 'Three']}
+              selectedIndex={popSegmented}
+              onChange={noteSegmented}
+              testID="host-segmented"
+              accessibilityLabel="Hosted segmented"
+            />
+            <Picker
+              options={popChoices}
+              selectedIndex={popPicker}
+              onChange={notePicker}
+              label="Hosted picker"
+              accessibilityLabel="Hosted picker"
+              testID="host-picker"
+            />
+            <Picker
+              options={['Only choice']}
+              defaultSelectedIndex={0}
+              disabled
+              label="Disabled picker"
+              accessibilityLabel="Hosted disabled picker"
+              testID="host-picker-disabled"
+            />
+            <DatePicker
+              value={popDate}
+              onChange={setPopDate}
+              accessibilityLabel="Hosted date picker"
+              testID="host-datepicker"
+            />
+            <DatePicker
+              defaultValue={popDate}
+              disabled
+              accessibilityLabel="Hosted disabled date picker"
+              testID="host-datepicker-disabled"
+            />
+          </Host>
+        </View>
+        <Text style={[styles.note, { color: ink.muted }]}>
+          The menu and the dialog are windows of their own, and they belong to
+          this composition: each opens under the row the Host drew, and closing
+          it is the same outside tap, back gesture or row that has always closed
+          it. Disabling a control while its window is up closes it.
+        </Text>
+
+        <Text style={[styles.section, { color: ink.ink }]}>
           {BATCH} Switches, {batchHosted ? 'in one Host' : 'each on its own'}
         </Text>
         <View style={[styles.actions, { borderColor: ink.box }]}>
@@ -403,6 +542,9 @@ const styles = StyleSheet.create({
   // is given, and RN does not know it (D24).
   sliderButtonRows: { width: '100%', height: 170 },
   mixedRows: { width: '100%', height: 280 },
+  // Five rows of popup controls, generously: a Host clips to its box, so extra
+  // height at the bottom is empty space while too little height loses a row.
+  popupRows: { width: '100%', height: 300 },
   batchRows: { width: '100%', height: BATCH * ROW },
   hostBox: { borderRadius: 10, paddingVertical: 4 },
   actions: {
