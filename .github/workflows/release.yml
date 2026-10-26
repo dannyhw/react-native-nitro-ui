@@ -1,119 +1,275 @@
 name: Release
 
-# Releases are cut by Changesets (DECISIONS D27). Merging a pull request into
-# `main` opens or updates the "Version Packages" pull request; merging *that*
-# publishes `react-native-nitro-ui` and tags `vX.Y.Z` with a GitHub release
-# built from the changelog entry.
+# Releases are cut by Changesets (DECISIONS D27) and *staged* on npm (D28).
 #
-# Publishing uses npm trusted publishing — there is no npm token anywhere:
-#   1. the package's Trusted Publisher on npmjs.com names this repo and this
-#      workflow file (set up once by the owner);
-#   2. `id-token: write` gives the job an OIDC token, and npm >= 11.5.1
-#      exchanges it for publish rights.
-# Provenance is attached from the same token (see NPM_CONFIG_PROVENANCE below).
+# Nothing in this workflow can put a version on the registry. The package's npm
+# Trusted Publisher allows staged publishing only, so the last step is a person:
+#
+#   a changeset -> the Version Packages pull request -> merge -> this workflow
+#   stages the new tarball -> the owner approves it on npmjs.com -> `Release
+#   tag` creates `vX.Y.Z` and the GitHub release once the version is live.
+#
+# There is no npm token anywhere. `stage` trades the job's OIDC token for
+# staging rights, and that is the only thing it can do with them.
+#
+# Why a tarball travels between jobs instead of one job doing everything:
+# packing runs this package's `prepare` (builder-bob -> nitrogen), which pulls in
+# the repo's whole dependency tree. That must not happen while a process holds
+# credentials that can reach npm. So the checks and the packing happen in `pack`
+# behind read-only rights, and `stage` — which holds the OIDC token — checks out
+# nothing, installs nothing and runs no repository script: it verifies a
+# checksum, looks at the registry and stages.
 
 on:
   push:
     branches:
       - main
+  # Re-running by hand is how a dropped or failed run is recovered.
+  workflow_dispatch:
 
-# One release at a time, and never cancel one: a queued run must publish from
-# the main it was queued for, not be replaced mid-publish.
+# Never cancel a run that is already going: it may be mid-way through staging.
+# Note what `cancel-in-progress: false` does *not* do: GitHub keeps one pending
+# run per group, so a burst of merges can still drop a queued run in favour of
+# the newest one. That is safe here because no job keys on "my run published" —
+# `package.json` and the registry are the state, so the next run stages whatever
+# a dropped run did not, and re-running a dropped run works from its commit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write # version commit, vX.Y.Z tag, GitHub release
-  pull-requests: write # the Version Packages pull request
-  id-token: write # npm trusted publishing + provenance
+# No job inherits rights; each one declares what it needs.
+permissions: {}
 
 jobs:
-  release:
-    name: Release
+  pack:
+    name: Check and pack
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
+    # Everything that runs repository code lives in a job with read rights only.
+    permissions:
+      contents: read
+    outputs:
+      package: ${{ steps.pack.outputs.package }}
+      version: ${{ steps.pack.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
+      # `.nvmrc`, handed to the staging job, which has no checkout to read it from.
+      node: ${{ steps.node.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Changesets compares the tree with the base branch and with existing
-          # tags, so it needs the full history. The version commit and the tag
-          # go through the GitHub API, so no git credentials stay on disk.
-          fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          registry-url: 'https://registry.npmjs.org'
+      - name: Setup
+        uses: ./.github/actions/setup
 
-      # npm trusted publishing needs npm >= 11.5.1. Pinned so a new npm major
-      # cannot quietly change what `changeset publish` asks the registry for;
-      # bump it deliberately.
-      - name: Update npm
-        run: |
-          npm install --global npm@11.19.1
-          npm --version
+      - name: Publish the Node version
+        id: node
+        run: printf 'version=%s\n' "$(sed 's/^v//' .nvmrc)" >> "$GITHUB_OUTPUT"
 
-      - name: Setup bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      # Publish exactly what CI validates: typecheck, lint, tests, nitrogen
-      # drift, the bob build, publint and the tarball manifest.
+      # Stage exactly what CI validates: typecheck, lint, tests, nitrogen drift,
+      # the bob build, publint and the tarball manifest.
       - name: Run all checks
         run: bun run check
 
       - name: Verify committed codegen
         run: git diff --exit-code -- nitrogen/
 
-      # `changesets/action` commits whatever the working tree holds, so nothing
-      # the gates leave behind may ride into the Version Packages pull request.
+      # The tarball is packed from this tree, so nothing the gates leave behind
+      # may be sitting there when it happens.
       - name: Verify a clean working tree
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git status --porcelain
-            echo "::error title=Unclean tree::bun run check modified tracked files; the release commit would include them."
+            echo "::error title=Unclean tree::bun run check modified tracked files; they would end up in the tarball."
             exit 1
           fi
 
-      # Version mode: run `release:version` (changeset version + lockfile
-      # refresh) and open/update the pull request. Publish mode: run
-      # `release:publish`, which is `changeset publish` -> `npm publish` for the
-      # version already committed on main. The publish needs no extra build
-      # step: npm runs this package's `prepare` (bob -> nitrogen, both pure
-      # Node) before packing, which is what `bun run check` just verified.
-      - name: Version or publish
-        id: release
+      # `npm pack` runs `prepare`, so the artifact is byte-for-byte what would be
+      # published, and the manifest gate above already covers its contents.
+      - name: Pack
+        id: pack
+        env:
+          TARBALL_DIR: ${{ runner.temp }}/package
+        run: |
+          set -euo pipefail
+          mkdir -p "$TARBALL_DIR"
+          NAME="$(node -p 'require("./package.json").name')"
+          VERSION="$(node -p 'require("./package.json").version')"
+          TARBALL="$(npm pack --pack-destination "$TARBALL_DIR" | tail -n 1)"
+          if [ ! -f "$TARBALL_DIR/$TARBALL" ]; then
+            echo "::error title=Packing failed::npm pack did not write $TARBALL"
+            exit 1
+          fi
+          SHA256="$(sha256sum "$TARBALL_DIR/$TARBALL" | cut -d ' ' -f1)"
+          {
+            echo "package=$NAME"
+            echo "version=$VERSION"
+            echo "tarball=$TARBALL"
+            echo "sha256=$SHA256"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "Packed **$NAME@$VERSION** as $TARBALL"
+            echo "- sha256: $SHA256"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the tarball
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-package-tarball
+          path: ${{ runner.temp }}/package/*.tgz
+          if-no-files-found: error
+          retention-days: 30
+
+  stage:
+    name: Stage on npm
+    needs: pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The only job with OIDC rights, and staging a tarball is all it can spend
+    # them on. Deliberately: no checkout, no bun, no install, no repository
+    # script, so nothing from the tree runs while a publish-capable token is in
+    # the environment.
+    permissions:
+      id-token: write
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Handed over by the pack job: there is no checkout here to read
+          # `.nvmrc` from, and trusted publishing needs npm >= 11.5.1 on a
+          # supported Node.
+          node-version: ${{ needs.pack.outputs.node }}
+          registry-url: 'https://registry.npmjs.org'
+          # npm's own docs: never use a package cache in a release build.
+          package-manager-cache: false
+
+      # Pinned so a new npm major cannot quietly change what we ask the registry
+      # for. Bump it deliberately, with `npm view` and `npm stage publish` re-read.
+      - name: Pin npm
+        run: |
+          npm install --global npm@11.19.1
+          npm --version
+
+      - name: Download the tarball
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: npm-package-tarball
+          path: ${{ runner.temp }}/package
+
+      - name: Verify the checksum
+        env:
+          SHA256: ${{ needs.pack.outputs.sha256 }}
+          TARBALL: ${{ needs.pack.outputs.tarball }}
+        run: |
+          printf '%s  %s\n' "$SHA256" "$TARBALL" \
+            | (cd "$RUNNER_TEMP/package" && sha256sum --check --status)
+          echo "Verified the tarball's sha256." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stage the tarball
+        env:
+          PACKAGE: ${{ needs.pack.outputs.package }}
+          VERSION: ${{ needs.pack.outputs.version }}
+          TARBALL: ${{ needs.pack.outputs.tarball }}
+          TARBALL_DIR: ${{ runner.temp }}/package
+        run: |
+          set -euo pipefail
+          say() {
+            printf '%s\n' "$1"
+            printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          # State, not memory: a version that is live needs nothing from us.
+          if npm view "$PACKAGE@$VERSION" version >/dev/null 2>&1; then
+            say "**$PACKAGE@$VERSION** is already on the registry — nothing to stage."
+            exit 0
+          fi
+
+          # Best effort only. Shortlived trust tokens may not run `npm stage
+          # list`, so this reads anonymously and comes back empty; what makes a
+          # re-run safe is npm's own "cannot publish over the previously
+          # published versions" rejection, handled below.
+          STAGED="$(npm stage list --json "$PACKAGE" 2>/dev/null || true)"
+          if printf '%s' "$STAGED" | grep -qF "\"version\": \"$VERSION\""; then
+            say "**$PACKAGE@$VERSION** is already staged, waiting to be approved."
+            exit 0
+          fi
+
+          say "### Staging $PACKAGE@$VERSION"
+          set +e
+          OUTPUT="$(npm stage publish "$TARBALL_DIR/$TARBALL" \
+            --access public --tag latest --provenance 2>&1)"
+          STATUS=$?
+          set -e
+          printf '%s\n' "$OUTPUT"
+
+          if [ "$STATUS" -eq 0 ]; then
+            say "Staged. Nothing is live until the owner approves it on npmjs.com (Staged Packages, or npm stage approve <id>), and **Release tag** then creates v$VERSION once the version appears on the registry."
+            exit 0
+          fi
+
+          # Re-running this run, or a run that raced with one already approved:
+          # npm already knows this version, which is the outcome we wanted.
+          if printf '%s' "$OUTPUT" | grep -qiF 'cannot publish over the previously published versions'; then
+            say "**$PACKAGE@$VERSION** is already known to the registry — staged or published, nothing more to do."
+            exit 0
+          fi
+
+          echo "::error title=Staging failed::npm stage publish exited $STATUS for $PACKAGE@$VERSION"
+          say "Staging failed (exit $STATUS). Fix the cause and re-run this workflow, or stage by hand from the artifact."
+          exit "$STATUS"
+
+  version:
+    name: Version Packages pull request
+    needs: pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Enough to commit a version bump and open a pull request. No OIDC rights:
+    # this job runs the repository's own scripts, so it must not be able to
+    # reach npm either.
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Changesets compares the tree with `main` and with the existing tags.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      # `publish-script` is unset on purpose: with none, the action only ever
+      # versions and opens or updates the pull request, and never publishes —
+      # which is what the stage job above is for.
+      - name: Version the changesets
+        id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
-          # The action's default is to push the version commit, the tag and the
-          # release through the GitHub API (`push-with-git-cli: false`), so no
-          # git credentials are needed and the commits are signed. It also
-          # creates the `vX.Y.Z` tag and the GitHub release by default.
           version-script: bun run release:version
-          publish-script: bun run release:publish
+          # Changesets would tag a release `react-native-nitro-ui@0.1.1`, not
+          # `v0.1.1`: it only writes a plain `vX.Y.Z` for a package whose
+          # workspace tool is `root`, and `"."` in `workspaces` makes manypkg
+          # report `bun`. `Release tag` makes the tags and the release instead,
+          # once the version is actually live. Both stay off as a guard, even
+          # though the action only reads them in publish mode.
+          push-git-tags: 'false'
+          create-github-releases: 'false'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          # `changeset publish` calls `npm publish` with its own flags only, so
-          # provenance goes in through npm's config environment. It is made
-          # from the job's OIDC token, the same one trusted publishing uses.
-          NPM_CONFIG_PROVENANCE: 'true'
 
       - name: Report
+        if: always()
+        env:
+          PR_NUMBER: ${{ steps.changesets.outputs.pr-number }}
+          HAS_CHANGESETS: ${{ steps.changesets.outputs.has-changesets }}
         run: |
           {
-            echo "version pull request: ${PR_NUMBER:-none}"
-            echo "published: ${PUBLISHED:-false}"
-            echo "published packages: ${PUBLISHED_PACKAGES:-none}"
+            if [ "${HAS_CHANGESETS:-false}" = "true" ]; then
+              echo "Changesets found. Version Packages pull request: ${PR_NUMBER:-not opened}."
+            else
+              echo "No pending changesets, so there is nothing to version. The version already on main is handled by **Stage on npm**."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
-        env:
-          PR_NUMBER: ${{ steps.release.outputs.pr-number }}
-          PUBLISHED: ${{ steps.release.outputs.published }}
-          PUBLISHED_PACKAGES: ${{ steps.release.outputs.published-packages }}
