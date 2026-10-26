@@ -48,6 +48,18 @@ public final class NitroUiAutolinking {
     return HybridNitroUiSlider.self is any RecyclableView.Type
   }
   
+  public static func createNitroUiHost() -> bridge.std__shared_ptr_HybridNitroUiHostSpec_ {
+    let hybridObject = HybridNitroUiHost()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiHostSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiHostRecyclable() -> Bool {
+    return HybridNitroUiHost.self is any RecyclableView.Type
+  }
+  
   public static func createNitroUiSwitch() -> bridge.std__shared_ptr_HybridNitroUiSwitchSpec_ {
     let hybridObject = HybridNitroUiSwitch()
     return { () -> bridge.std__shared_ptr_HybridNitroUiSwitchSpec_ in

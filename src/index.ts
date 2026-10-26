@@ -29,6 +29,13 @@ export type {
 export { Slider, type SliderProps } from './components/Slider/Slider';
 export { Switch, type SwitchProps } from './components/Switch/Switch';
 
+// An opt-in shared native composition (H1): a container whose nitro-ui children render
+// into one Compose composition instead of one each. Android only - on iOS `Host` is the
+// documented passthrough `View`, permanently (D23 and its T17 outcome). Switch is the
+// only hosted control today; hosting another one means a row in `HostChildren.ts`, a
+// native `isHostable` override, and a bench arm for it.
+export { Host, type HostProps } from './components/Host/Host';
+
 export {
   SegmentedControl,
   type SegmentedControlChange,

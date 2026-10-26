@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import ButtonScreen from './ButtonScreen';
 import DatePickerScreen from './DatePickerScreen';
+import HostScreen from './HostScreen';
 import PickerScreen from './PickerScreen';
 import ProgressScreen from './ProgressScreen';
 import SliderScreen from './SliderScreen';
@@ -24,7 +25,8 @@ type Screen =
   | 'progress'
   | 'segmented'
   | 'datepicker'
-  | 'picker';
+  | 'picker'
+  | 'host';
 
 /**
  * Which screen a cold launch shows.
@@ -66,6 +68,9 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'segmented', label: 'Segments' },
   { id: 'datepicker', label: 'Dates' },
   { id: 'picker', label: 'Picker' },
+  // The shared-`<Host>` screen: real-input taps it (iOS included, where `Host` is the
+  // passthrough) and `Host.harness.tsx` measures it. `Host` composes on Android only.
+  { id: 'host', label: 'Host' },
 ];
 
 /**
@@ -115,6 +120,7 @@ export default function App() {
         {screen === 'segmented' ? <SegmentedControlScreen /> : null}
         {screen === 'datepicker' ? <DatePickerScreen /> : null}
         {screen === 'picker' ? <PickerScreen /> : null}
+        {screen === 'host' ? <HostScreen /> : null}
       </View>
     </View>
   );

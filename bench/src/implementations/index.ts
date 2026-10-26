@@ -1,6 +1,7 @@
 import type { BenchImplementation } from '../types';
 import { ExpoUiHostPerControlList, ExpoUiSharedHostList } from './expoUi';
 import {
+  NitroUiHostList,
   NitroUiList,
   drainNitroUiPerfMarks,
   enableNitroUiPerfMarks,
@@ -22,6 +23,7 @@ export const implementations: BenchImplementation[] = [
     name: 'rn-core',
     available: true,
     skipReason: null,
+    components: null,
     List: RnCoreList,
     enablePerfMarks: null,
     drainPerfMarks: null,
@@ -30,6 +32,7 @@ export const implementations: BenchImplementation[] = [
     name: 'expo-ui-host-per-control',
     available: true,
     skipReason: null,
+    components: null,
     List: ExpoUiHostPerControlList,
     enablePerfMarks: null,
     drainPerfMarks: null,
@@ -38,6 +41,7 @@ export const implementations: BenchImplementation[] = [
     name: 'expo-ui-shared-host',
     available: true,
     skipReason: null,
+    components: null,
     List: ExpoUiSharedHostList,
     enablePerfMarks: null,
     drainPerfMarks: null,
@@ -46,9 +50,24 @@ export const implementations: BenchImplementation[] = [
     name: 'nitro-ui',
     available: true,
     skipReason: null,
+    components: null,
     List: NitroUiList,
     enablePerfMarks: enableNitroUiPerfMarks,
     drainPerfMarks: drainNitroUiPerfMarks,
+  },
+  // The same library's Switches inside one shared `<Host>`, so one Compose
+  // composition for the batch instead of one per control (H1). Switch-only, which
+  // `components` makes visible in the report rather than silently measuring an empty
+  // tree on another component's cell. This arm is where D24's numbers come from, and
+  // it is gated: a regression here is a regression in what apps ship.
+  {
+    name: 'nitro-ui-host',
+    available: true,
+    skipReason: null,
+    components: ['switch'],
+    List: NitroUiHostList,
+    enablePerfMarks: null,
+    drainPerfMarks: null,
   },
 ];
 

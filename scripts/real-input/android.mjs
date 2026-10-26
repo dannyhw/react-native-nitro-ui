@@ -73,6 +73,8 @@ const ECHO = {
   pickerIndex: 'real-input-picker-index',
   pickerEvents: 'real-input-picker-events',
   pickerGone: 'real-input-drop-gone',
+  hostValue: 'host-controlled-value',
+  hostEvents: 'host-events-count',
 };
 
 /** The system Back key, which is how a person dismisses an open popup. */
@@ -128,6 +130,139 @@ const CHECKS = {
       'a second real tap flips it back (React renders "off")',
       back,
       'off'
+    );
+  },
+
+  /**
+   * A real tap must reach a Switch that React Native drew no view for.
+   *
+   * Inside a `<Host>` the child's own Android view is laid out at `0 × 0` by the
+   * measure gate, so it draws nothing and is nobody's hit target. It is not `GONE` —
+   * Fabric re-asserts `VISIBLE` on it in every layout pass, so `GONE` is not what
+   * hides it. Nothing under the finger is therefore a React Native view: the only
+   * thing that can answer is the Host's own Compose composition, and the only way to
+   * aim at it is the accessibility label Compose publishes. The echo is React's own
+   * render of the value, so a change can only be touch → Compose → Nitro → JS →
+   * re-render.
+   *
+   * This is a separate control from `switch` because the path is different: here the
+   * touch travels through a container that composes somebody else's controls, which is
+   * the path a `<Host>` exists to create (H1).
+   *
+   * The check ends by reading the whole tree for the screen-reader contract (brief
+   * item 3, review S6): every hosted control must publish its own label, and the
+   * labelled nodes must arrive in mount order between the React Native siblings that
+   * surround the `<Host>`. A composition that published its children out of order, or
+   * as one anonymous blob, would still tap fine and fail this.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-switch': async (t) => {
+    const control = await t.requireControl('Hosted switch 0');
+    const before = t.requireEcho(ECHO.hostValue);
+    t.log.checkEquals('the hosted Switch starts off', before, 'off');
+
+    await t.tapNode(control);
+    const flipped = t.waitForEchoToChange(
+      ECHO.hostValue,
+      before,
+      'a real tap on a hosted Switch to register'
+    );
+    t.log.checkEquals(
+      'one real tap flips a hosted Switch (React renders "on")',
+      flipped,
+      'on'
+    );
+
+    await t.tapNode(control);
+    const back = t.waitForEchoToChange(
+      ECHO.hostValue,
+      'on',
+      'a second real tap to register'
+    );
+    t.log.checkEquals(
+      'a second real tap flips it back, so the check is not one fluke',
+      back,
+      'off'
+    );
+
+    // The taps were answered by the app, not by a lucky render: the screen counts the
+    // changes it accepted, and two taps have to be two changes.
+    t.log.checkEquals(
+      'the Host reported both changes it was asked for',
+      t.requireEcho(ECHO.hostEvents),
+      '2'
+    );
+
+    // What a screen reader is offered (brief item 3, review S6). `uiautomator dump`
+    // lists nodes in traversal order, so where a hosted label sits among the plain
+    // React Native text nodes around it is the order TalkBack reads them in. The
+    // `<Host>` here sits between two `Text`s and holds three labelled Switches, which
+    // gives both halves of the claim: one node per child, in mount order, between the
+    // RN siblings rather than before or after them.
+    const tree = t.dump();
+    // Matched without case because the tree carries what is drawn, not what JSX says:
+    // this screen's section headings carry `textTransform: 'uppercase'`, so the node
+    // reads "THREE SWITCHES, ONE COMPOSITION" and a JSX-exact search finds nothing -
+    // which then reads as "the tree has no such node" when it has exactly that node.
+    const textOrder = (needle) =>
+      tree.findIndex((node) =>
+        node.text.toLowerCase().includes(needle.toLowerCase())
+      );
+    const descOrder = (description) =>
+      tree.findIndex((node) => node.contentDesc === description);
+    const section = textOrder('Three Switches, one composition');
+    const followingNote = textOrder('The Host has a height');
+    const hosted = [0, 1, 2].map((index) =>
+      descOrder(`Hosted switch ${String(index)}`)
+    );
+
+    // A red ordering claim has to say where the tree actually put things, and a
+    // missing node has to say what it saw instead: -1 against true would otherwise
+    // read as "the order is wrong" when the truth is "this node is not in the tree".
+    const where = tree
+      .map((node, index) =>
+        node.text || node.contentDesc
+          ? `${String(index)}:${(node.text || node.contentDesc).slice(0, 22)}`
+          : null
+      )
+      .filter(Boolean)
+      .join(' | ');
+    t.log.note(
+      `tree positions — section=${String(section)}, hosted=${hosted.join(
+        '/'
+      )}, note=${String(followingNote)}; named nodes: ${where}`
+    );
+
+    t.log.checkEquals(
+      'the tree carries the RN text above the Host',
+      section >= 0,
+      true
+    );
+    t.log.checkEquals(
+      'the tree carries the RN note below the Host',
+      followingNote >= 0,
+      true
+    );
+    t.log.checkEquals(
+      'the tree carries a node for each hosted Switch',
+      hosted.map((at) => at >= 0),
+      [true, true, true]
+    );
+    t.log.checkEquals(
+      'each hosted Switch is its own labelled node, in mount order',
+      hosted,
+      [...hosted].sort((left, right) => left - right)
+    );
+    t.log.checkEquals(
+      'the RN text above the Host is read before every hosted Switch',
+      hosted.map((at) => at > section),
+      [true, true, true]
+    );
+    t.log.checkEquals(
+      'the RN note below the Host is read after every hosted Switch',
+      hosted.map((at) => at < followingNote),
+      [true, true, true]
     );
   },
 
@@ -1345,7 +1480,7 @@ class DeviceHarness {
    * The example's tabs are its only navigation.
    *
    * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker'} screen
+   *   | 'picker' | 'host'} screen
    */
   async goToScreen(screen) {
     const label = {
@@ -1355,6 +1490,7 @@ class DeviceHarness {
       segmented: 'Segments',
       datepicker: 'Dates',
       picker: 'Picker',
+      host: 'Host',
     }[screen];
     const anchor = {
       switch: ECHO.switchValue,
@@ -1363,6 +1499,7 @@ class DeviceHarness {
       segmented: ECHO.segmentedIndex,
       datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
+      host: ECHO.hostValue,
     }[screen];
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
