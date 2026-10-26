@@ -4,7 +4,7 @@
 `F08675D3-A32B-4F88-BC81-02D7E0CB797E` and AVD `nitroui_t01` (`emulator-5570`, private adb
 server `5041`), Metro `8293` — both booted by this task and shut down at the end. iPhone Air
 `331EF109…`, `nitroui_t02` / `emulator-5572` / adb `5042` / Metro `8294` and
-`PR1505_Pixel` / `emulator-5560` were not touched. · **Node:** `v24.18.0` (`.nvmrc`; the device
+`emulator-5560` were not touched. · **Node:** `v24.18.0` (`.nvmrc`; the device
 runners refuse 25/26). · **Platforms:** both, everywhere it matters. · **Not done,
 deliberately:** no push, no workflow changes (D22).
 

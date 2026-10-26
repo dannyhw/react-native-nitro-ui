@@ -19,7 +19,7 @@ What is good:
 - Exit codes propagate.
 - Logs are kept on failure and app dirs are deleted on success.
 - There are no hardcoded UDIDs. Devices come from env.
-- The `PR1505_Pixel` guard is in place.
+- The `emulator-5560` guard is in place.
 - The KDoc fix is correct.
 - The App.tsx "one import + one JSX line" contract is simple.
 

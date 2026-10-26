@@ -25,7 +25,7 @@ Background (read the sections your brief points to):
 - macOS, Xcode 27, bun 1.4 (package manager for this repo), node 26, Java 17, CocoaPods 1.17.
 - `export ANDROID_HOME=$HOME/Library/Android/sdk; export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH`
 - Devices: use ONLY the simulator UDID / AVD assigned in your brief. Never shut down, wipe or
-  kill devices you did not start. **Never touch the `PR1505_Pixel` emulator (`emulator-5560`) —
+  kill devices you did not start. **Never touch the `emulator-5560` emulator —
   it belongs to the human.** Shut down simulators/emulators you started when you finish.
 - Use unique Metro ports if your brief assigns one (`--port`), and kill Metro/Gradle daemons you
   started when done.
