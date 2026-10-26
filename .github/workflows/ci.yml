@@ -119,6 +119,8 @@ jobs:
       - name: Build stamped debug app
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
+          # See the release job: a hosted runner's ccache starts empty every run.
+          NITRO_UI_CCACHE: '0'
         run: node scripts/build-app.mjs --platform android --arch x86_64
 
   # A release build of the example app: this is what catches codegen/dex/R8
@@ -153,15 +155,23 @@ jobs:
           cache-provider: basic
           cache-read-only: false
 
-      # No -PreactNativeArchitectures here on purpose: this job is the one that
-      # proves the release path for every ABI a library user can get, which is
-      # gradle.properties' full list. The debug and emulator jobs narrow to
-      # x86_64 because that is all their runner's emulator can run
-      # (docs/tasks/X6-build-speed.md).
+      # No -PreactNativeArchitectures here on purpose: the brief for X6 asks that
+      # the release build keep all four ABIs, and this is the one job that would
+      # catch an armeabi-v7a/x86 compile break in cpp/ (a library user's app
+      # builds all four by default). It costs roughly four times the native
+      # compile on a hosted runner, which is why the job is workflow_dispatch
+      # only and never runs on a pull request. Before X6 this passed
+      # -PreactNativeArchitectures=x86_64: the review asked for that to be a
+      # chosen cost rather than an accident, so it is recorded here and in
+      # docs/tasks/X6-build-speed.report.md.
       - name: Assemble release APK
         working-directory: example/android
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
+          # Hosted runners ship ccache with an empty cache, where a launcher is
+          # pure overhead. Say "no" rather than depend on the runner image: this
+          # is what makes the local-only nature of the cache (X6) explicit.
+          NITRO_UI_CCACHE: '0'
         run: ./gradlew :app:assembleRelease --no-daemon --console=plain
 
   # On-device tests (example/__tests__/*.harness.tsx) against a debug build.
@@ -209,6 +219,8 @@ jobs:
       - name: Build stamped debug app
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
+          # See the release job: a hosted runner's ccache starts empty every run.
+          NITRO_UI_CCACHE: '0'
         run: node scripts/build-app.mjs --platform android --arch x86_64
 
       - name: Run Harness tests
