@@ -1048,8 +1048,17 @@ describe('DatePicker · G5', () => {
     }
 
     // Two more renders under the open presentation, and a value that moved to another
-    // month while it was up: a value-only change is not a rebuild either, so the page
-    // the dialog opened on stays put until a *bound* moves.
+    // month while it was up. A value-only change is not a rebuild, and since H2b it is
+    // also not something the open dialog ignores: the model's value reaches an open
+    // dialog in one direction only (it never *emits* - the pick stays provisional until
+    // OK), so the page and the lit day follow React's value while the user is looking at
+    // it. That is the G5 follow-up `docs/tasks/FOLLOWUPS.md` recorded and H2b fixed; the
+    // round this case was written in asserted the opposite, because a page that stayed
+    // put was the easiest visible sign that no rebuild had happened. The sign is now
+    // ambiguous in exactly the wrong way - a rebuild would also land the dialog on the
+    // value's month - so the rebuild is asserted with the instrument that cannot be
+    // confused: the settled control-build count, plus a presentation that never went
+    // down and came back.
     for (const tick of [4, 5]) {
       await rerender(tree(tick, laterValue));
     }
@@ -1059,14 +1068,22 @@ describe('DatePicker · G5', () => {
       'the value moved under the open dialog'
     );
     expect(reportOf('fresh-dialog').controlBuilds).toBe(buildsOpen); // the open presentation was not rebuilt
+    // The same control, still up: a rebuild tears the presentation down and this count
+    // is read from the live one.
+    await waitForLivePresentations(
+      'fresh-dialog',
+      1,
+      'the presentation across a value that moved'
+    );
     if (isAndroid) {
-      // The user's view of the same fact: a rebuild would re-seed the page from the
-      // value, so this July page is the dialog's own selection surviving the re-render.
+      // And the user sees the value the control has, not the one the dialog opened on.
+      // Against a `followValueInDialog` that does not run, this stays on July and goes
+      // red; against a rebuild, the count above goes red first.
       await waitForMonth(
         'fresh-dialog',
-        2026,
-        7,
-        'the dialog after a millisecond-only bound move'
+        laterValue.getFullYear(),
+        laterValue.getMonth() + 1,
+        'the open dialog following a value React wrote'
       );
     }
 
