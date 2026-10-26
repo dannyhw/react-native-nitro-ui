@@ -112,6 +112,8 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
 
 ## D22 — No public release and no CI for now (2026-10-24)
 
+_Partly superseded: the repo went public in D25 and 0.1.0 is to be published per D26; CI is still off._
+
 The human's call: the repo stays private (`dannyhw/react-native-nitro-ui`), nothing goes to npm, and
 all GitHub workflows (CI, Release, Bench, Smoke) are disabled. Local gates (`bun run check`, harness,
 real-input, smoke, bench) are the only gates. Phase A = committed bench baselines + deferred small
