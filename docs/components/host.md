@@ -5,9 +5,12 @@ instead of one per control. On Android that means one Compose `Composition`, one
 `AndroidComposeView` and one `LayoutNode` tree for the whole batch; outside a Host
 every control brings its own.
 
-It is **opt-in**, and Android-only for now: on iOS `<Host>` is a documented
-passthrough `View` while the iOS spike (T17) runs, so the same JSX renders normally
-there and an app gets one tree to reason about, not two (D23).
+It is **opt-in**, and Android-only: on iOS `<Host>` is a documented passthrough `View`,
+so the same JSX renders normally there and an app gets one tree to reason about, not
+two (D23). That is settled, not provisional — T17 built an iOS Host and measured it
+losing on memory while giving back most of the win on unmount CPU, so it was not
+shipped (D23 outcome, `docs/tasks/T17-ios-host-spike.report.md`). The passthrough is
+the design.
 
 ```tsx
 import { Host, Switch } from 'react-native-nitro-ui';
@@ -54,8 +57,8 @@ would make it a second list component.
 | ---------- | ----------------------- | --------------------------------------------------------------- |
 | `children` | `ReactNode`             | Hosted controls only — see "What a Host cannot hold".             |
 | `style`    | `ViewStyle`             | Its `height` is the box the content is drawn into (see Sizing).   |
-| `testID`   | `string \| undefined`   | Lands on the container, as usual.                                 |
-| `onLayout` | callback                | Chained: the dev warning below runs before the caller's handler.  |
+| `testID`   | `string \| undefined`   | Lands on the container, as usual. Hosted *children* keep theirs, but see the caveat under "Finding a hosted control" — on Android their box is `0 × 0`. |
+| `onLayout` | callback                | Chained: the caller's handler runs first, then the dev-only warning. Attaching `onLayout` at all is a dev-only cost — a release build passes yours, or none. |
 
 ## What a Host cannot hold
 
@@ -64,10 +67,21 @@ rather than a screen that draws half of itself:
 
 - **Anything that is not a hosted control.** Only `Switch` is hosted today. One of our
   other controls, an RN view (`View`, `Text`, `ScrollView`, `Image`, …), a third-party
-  native view, or plain text as a direct child throws in dev — on **both** platforms, so
-  the rule is not learned later on the platform that was not tested. A component the
-  check cannot see through is passed to the native Host, which composes it when what it
-  renders is a control and logs a warning in a debuggable build when it cannot.
+  native view, plain text as a direct child, or another `<Host>` throws in dev — on
+  **both** platforms, so the rule is not learned later on the platform that was not
+  tested.
+- **The rule is enforced twice, because the two sides see different trees.** JavaScript
+  refuses what it can *name*. It cannot see through a component, so a `<Row>` that
+  renders a `Picker` arrives at the native Host looking like a direct child, and there
+  the allowlist decides: `NitroComposeHost.isHostable` is `false` for every control and
+  `true` only for `Switch`, so a `Picker`, a `Slider`, or a `<Host>` behind a wrapper is
+  **not** composed. In a debuggable build that refusal is not only a log line — the Host
+  reports it to JavaScript, where it becomes a `console.error` in Metro and LogBox that
+  names the child's class. In a release build it draws nothing and says nothing, so a
+  control outside the allowlist must stay outside the `<Host>`.
+- **No nesting.** A `<Host>` cannot hold another `<Host>`. The inner one would become a
+  row of the outer one's column: measuring nothing, drawing a composition of its own,
+  and answering to no box. Put Hosts side by side, each with its own height.
 - **No interleaving.** RN cannot put an RN view between two hosted controls, or beside
   one: RN hands the Host one rectangle and everything inside it is Compose's.
 - **No RN scrolling, clipping or transforming of the children.** A `ScrollView` around a
@@ -78,6 +92,16 @@ rather than a screen that draws half of itself:
 - **No `Modal`**, or anything else that owns a window.
 - **No per-child size.** A `width`, `height` or `alignSelf` on a hosted child moves the
   frame React Native computes, not the drawing (Sizing below).
+- **Only some of a Host's own styles reach the drawing.** `width`, `height` and `flex`
+  size the box, and `padding` insets it — the `Column` starts inside the padding, as in
+  any other container. `gap`, `flexDirection`, `alignItems`, `justifyContent`,
+  `borderWidth` and `pointerEvents` do **not**: Compose arranges the rows (one column,
+  no gaps), a Host draws no border, and touches go to Compose rather than to React
+  Native's hit testing. Yoga still honours each of them in the *box*, which is the trap
+  a host can fall into: `gap: 8` over ten children buys 72 dp of height and no space
+  between rows, and `flexDirection: 'row'` buys a one-row-tall box around a stack of
+  rows. Dev builds warn about each of them once per instance. Say how tall the Host is,
+  and stack it in a column.
 
 Components are transparent in both directions. React flattens them out of the native
 tree, so a wrapper that renders a `Switch` **is** a direct child of the Host and is
@@ -107,13 +131,16 @@ it, from `example/__tests__/Host.harness.tsx`:
 | Eight hosted Switches on an invalidated cache                   | reports **0**, cache entries **0**, corrections **0**              |
 | The same eight unhosted                                          | reports **16**, cache entries **1**                                 |
 | Measure calls, hosted vs unhosted                                | **8 and 8** — Yoga still asks, and the engine still answers         |
-| A hosted child's own Android view                                | found by `testID`, and **0 × 0**: it is `GONE` while the Host draws it |
+| A hosted child's own Android view                                | found by `testID`, and **0 × 0**: it declines to measure, and is laid out at nothing |
+| A Host with `padding: 32` vs the same Host with none              | the drawing starts **32 dp later**; the box is the same                |
+| A hosted child with `display: 'none'` vs shown                    | the hidden row draws and answers **nothing**; the shown one answers both |
 
 Two consequences worth stating plainly:
 
 - **A Host that ends up 0 tall draws nothing.** It cannot grow: nothing inside it
-  reports a size. RN does not send `onLayout` for a view it laid out at zero, so the
-  dev warning also fires from the parent's box — one warning per instance, in dev.
+  reports a size. Dev builds warn once per instance from the Host's own `onLayout`,
+  which Fabric does send at height 0 — the harness measures the sibling below it
+  instead, so the rule does not depend on the Host reporting anything about itself.
 - **D17 does not apply to a hosted control.** There is no measurement that could arrive
   a frame late, so there is nothing for the first-frame rule to govern. Unhosted
   controls are unchanged, and every case in `sizing.md` §3–§7 still runs for them.
@@ -130,14 +157,17 @@ Host screen showed three hosted Switches and a batch of 24:
   the same `Modifier.semantics { contentDescription }` as unhosted. Attribute for
   attribute (`class`, `content-desc`, `enabled`, `focusable`, `clickable`,
   `checkable`, `checked`) a hosted node and an unhosted Switch node are identical.
-- **No node from the React Native side.** A hosted child's own Android view is `GONE`
-  (Sizing above), so it contributes no accessibility node and nothing reads out a
-  control twice: three hosted children, three labelled nodes; 24, twenty-four.
+- **No node from the React Native side.** A hosted child's own Android view is laid out
+  at `0 × 0` (Sizing above), which is not visible-to-user, so it contributes no
+  accessibility node and nothing reads out a control twice: three hosted children, three
+  labelled nodes; 24, twenty-four. (What it is *not* is `GONE`: Fabric re-asserts
+  `VISIBLE` on that view on every layout pass, which is why the measure gate rather than
+  a visibility flag is the mechanism.)
 - **Reading order is mount order.** The labelled nodes sit between the RN text above
   the Host and the RN text below it, in the order the children were given, so the
   batch is read where it is — not after the whole screen.
 - **The rect is the box that is drawn.** A hosted Switch reports 137 × 84 px — the
-  52 × 32 dp Compose switch, not RN's frame, which is `GONE`. That is why
+  52 × 32 dp Compose switch, not RN's frame, which is laid out at nothing. That is why
   `scripts/real-input/` can find `Hosted switch 0` by content description at
   `42,856 → 179,940` and toggle it with `adb shell input tap`: for a hosted control
   the focused rect, the drawn rect and the hit rect are one rect.
@@ -149,6 +179,20 @@ Host screen showed three hosted Switches and a batch of 24:
   where they reported real ones. Nothing virtualises the a11y tree, so a screen reader
   can reach every hosted control — but the whole set is in the tree at once, which is
   the same thing a Host does to composition.
+
+### Finding a hosted control from a test
+
+`testID` survives hosting: the child's Android view still exists and still carries the
+id, so `queryByTestId` finds it. What it returns is **`0 × 0` at the Host's origin**,
+because that is where RN lays a view that declines to measure. Detox, Maestro and
+Appium tap the centre of the view that carries the id, so `tap(by.id('wifi'))` inside a
+Host taps nothing, or the row above.
+
+Inside a Host, find hosted controls by **`accessibilityLabel`** — the label is published
+by the Compose node, whose rect is the drawn one, which is what
+`scripts/real-input/android.mjs` does for `Hosted switch 0`. Carrying `testID` into
+Compose (`Modifier.testTag` with `testTagsAsResourceId`) would put a `resource-id` on the
+drawn rect too; it is a follow-up, not today's behaviour.
 
 What a Host does **not** fix is the library's existing gap: our Android control
 publishes no toggle role or state — `checkable=false`, `checked=false`, hosted and
