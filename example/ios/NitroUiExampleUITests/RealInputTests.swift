@@ -46,6 +46,7 @@ final class RealInputTests: XCTestCase {
     static let segmentedTab = "tab-segmented"
     static let datePickerTab = "tab-datepicker"
     static let pickerTab = "tab-picker"
+    static let hostTab = "tab-host"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -69,6 +70,8 @@ final class RealInputTests: XCTestCase {
     static let dropRemount = "real-input-drop-remount"
     static let dropGone = "real-input-drop-gone"
     static let dropArmed = "real-input-drop-armed"
+    static let hostValue = "host-controlled-value"
+    static let hostEvents = "host-events-count"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -147,6 +150,49 @@ final class RealInputTests: XCTestCase {
       readUntil(Echo.switchValue) { $0 == "off" },
       "off",
       "a second real tap should flip it back, so the check is not one fluke"
+    )
+  }
+
+  /// A real tap must toggle a Switch that sits inside a `<Host>`.
+  ///
+  /// On iOS a `<Host>` is the documented passthrough `View` while T17 runs, so this is
+  /// the regression the passthrough has to keep: the children of a Host are still
+  /// React Native's own views, laid out by React Native, and a finger's touch still
+  /// reaches them. On Android the same control has no view of its own and answers from
+  /// the Host's composition instead (`CHECKS['hosted-switch']`), which is why the check
+  /// is written twice rather than skipped - one contract, two mechanisms (D23).
+  func testRealInputHostedSwitch() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    let control = try required("host-switch-0", as: "the Switch inside the Host")
+    let whereItStarted = control.frame
+    XCTAssertEqual(
+      try read(Echo.hostValue),
+      "off",
+      "the hosted Switch should start off before any touch is delivered"
+    )
+
+    control.centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostValue) { $0 == "on" },
+      "on",
+      "one real tap should flip a Switch inside a Host, and React should render \"on\""
+    )
+
+    try assertStillInPlace("host-switch-0", startedAt: whereItStarted, after: "the first real tap")
+
+    try required("host-switch-0", as: "the Switch inside the Host").centre.tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostValue) { $0 == "off" },
+      "off",
+      "a second real tap should flip it back, so the check is not one fluke"
+    )
+
+    // Two taps that each travelled the whole way: the screen counts the changes it
+    // accepted, so two taps must read as two changes and not as one lucky render.
+    XCTAssertEqual(
+      try read(Echo.hostEvents),
+      "2",
+      "the Host should have reported both changes its child was asked for"
     )
   }
 

@@ -73,6 +73,8 @@ const ECHO = {
   pickerIndex: 'real-input-picker-index',
   pickerEvents: 'real-input-picker-events',
   pickerGone: 'real-input-drop-gone',
+  hostValue: 'host-controlled-value',
+  hostEvents: 'host-events-count',
 };
 
 /** The system Back key, which is how a person dismisses an open popup. */
@@ -128,6 +130,59 @@ const CHECKS = {
       'a second real tap flips it back (React renders "off")',
       back,
       'off'
+    );
+  },
+
+  /**
+   * A real tap must reach a Switch that React Native drew no view for.
+   *
+   * Inside a `<Host>` the child's Android view is `GONE`, so nothing under the finger
+   * is a React Native view: the only thing that can answer is the Host's own Compose
+   * composition, and the only way to aim at it is the accessibility label Compose
+   * publishes. The echo is React's own render of the value, so a change can only be
+   * touch → Compose → Nitro → JS → re-render.
+   *
+   * This is a separate control from `switch` because the path is different: here the
+   * touch travels through a container that composes somebody else's controls, which is
+   * the path a `<Host>` exists to create (H1).
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-switch': async (t) => {
+    const control = await t.requireControl('Hosted switch 0');
+    const before = t.requireEcho(ECHO.hostValue);
+    t.log.checkEquals('the hosted Switch starts off', before, 'off');
+
+    await t.tapNode(control);
+    const flipped = t.waitForEchoToChange(
+      ECHO.hostValue,
+      before,
+      'a real tap on a hosted Switch to register'
+    );
+    t.log.checkEquals(
+      'one real tap flips a hosted Switch (React renders "on")',
+      flipped,
+      'on'
+    );
+
+    await t.tapNode(control);
+    const back = t.waitForEchoToChange(
+      ECHO.hostValue,
+      'on',
+      'a second real tap to register'
+    );
+    t.log.checkEquals(
+      'a second real tap flips it back, so the check is not one fluke',
+      back,
+      'off'
+    );
+
+    // The taps were answered by the app, not by a lucky render: the screen counts the
+    // changes it accepted, and two taps have to be two changes.
+    t.log.checkEquals(
+      'the Host reported both changes it was asked for',
+      t.requireEcho(ECHO.hostEvents),
+      '2'
     );
   },
 
@@ -1345,7 +1400,7 @@ class DeviceHarness {
    * The example's tabs are its only navigation.
    *
    * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker'} screen
+   *   | 'picker' | 'host'} screen
    */
   async goToScreen(screen) {
     const label = {
@@ -1355,6 +1410,7 @@ class DeviceHarness {
       segmented: 'Segments',
       datepicker: 'Dates',
       picker: 'Picker',
+      host: 'Host',
     }[screen];
     const anchor = {
       switch: ECHO.switchValue,
@@ -1363,6 +1419,7 @@ class DeviceHarness {
       segmented: ECHO.segmentedIndex,
       datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
+      host: ECHO.hostValue,
     }[screen];
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
