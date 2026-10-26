@@ -28,6 +28,7 @@ public protocol HybridNitroUiPickerSpec_protocol: HybridObject, HybridView {
   // Methods
   func measureContent() throws -> NitroUiPickerSize
   func nuiTestSelect(index: Double) throws -> Void
+  func nuiTestMenuReport() throws -> String
 }
 
 public extension HybridNitroUiPickerSpec_protocol {

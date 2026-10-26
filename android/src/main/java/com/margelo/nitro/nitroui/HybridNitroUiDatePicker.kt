@@ -903,6 +903,21 @@ private class DatePickerHost(
   model: DatePickerModel,
 ) : NitroComposeHost<DatePickerModel>(context, activity, model) {
   /**
+   * A `<Host>` composes this control, dialog and all (H2b).
+   *
+   * The allowlist line the other controls have, with the matching JS row in
+   * `src/components/Host/HostChildren.ts`. A Material 3 dialog is a window, and a
+   * window is what a Host was said not to be able to own. What decides it is *which
+   * composition* composes the `Dialog`, because that composition is what closes the
+   * window: composed by the Host, the dialog goes away with the Host's disposal - the
+   * same rule that keeps an unhosted dialog from outliving its mount (`onDropView`),
+   * with the Host's composition standing in for the control's own.
+   * `example/__tests__/HostControls.harness.tsx` measures it rather than reasoning it.
+   */
+  override val isHostable: Boolean
+    get() = true
+
+  /**
    * Whether this device shows clocks in 24-hour time.
    *
    * Read once from the context this host belongs to: it is a device setting rather
@@ -1128,6 +1143,12 @@ private class DatePickerHost(
       // back into the model; what it does publish is the page and whether a day is lit,
       // so `nuiTestStateReport` can see a dialog opened on the wrong month.
       publishCalendarFacts(model, state)
+      // ...and the model's value reaches the dialog in one direction only. The
+      // provisional pick belongs to the user, so an open dialog never *emits*; a value
+      // React sends while it is up is a different thing, and it moves the dialog's page
+      // and lit day with it (the G5 follow-up, fixed here because H2b made the hosted
+      // case observable - `docs/tasks/FOLLOWUPS.md`).
+      followValueInDialog(model, state)
       DatePickerDialog(
         // Outside tap, the platform back gesture and the back *button* all land here:
         // `DialogProperties` defaults dismiss on both, which is the brief's "the app's
@@ -1169,6 +1190,8 @@ private class DatePickerHost(
         initialMinute = fields.get(Calendar.MINUTE),
         is24Hour = twentyFourHour,
       )
+      // [followValueInDialog] for the dial: the same one-directional rule.
+      followTimeValueInDialog(model, state)
       TimePickerDialog(
         onDismissRequest = { model.setPresented(false) },
         title = { Text(stringResource(androidx.compose.material3.R.string.m3c_time_picker_dialog_title)) },
@@ -1328,6 +1351,59 @@ private fun syncTimePicker(
     if (state.hour != wanted.first || state.minute != wanted.second) {
       state.hour = wanted.first
       state.minute = wanted.second
+    }
+  }
+}
+
+/**
+ * [syncDatePicker]'s model -> dialog half, for a dialog whose selection is provisional.
+ *
+ * The half, not the whole: an open Material 3 dialog does not emit while the user turns
+ * its calendar, so the second effect of [syncDatePicker] - the one that reads a changed
+ * state back as a pick - would turn every provisional tap into an event and break the
+ * confirm-button contract the dialog exists for. What stays is the direction that was
+ * missing: a value React writes *while the dialog is open* now moves the dialog's day
+ * and page, instead of the dialog sitting on a date the control no longer has until it
+ * is closed.
+ *
+ * A user's provisional pick does not move `model.displayed` - only OK does - so the two
+ * writers cannot race: this fires when React changes the value, and a provisional tap
+ * is not such a change. `DatePickerState` keeps what it was handed
+ * (`rememberDatePickerState` does not re-read its arguments), which is exactly why the
+ * write has to be made here rather than at construction.
+ */
+@Composable
+private fun followValueInDialog(
+  model: DatePickerModel,
+  state: DatePickerState,
+) {
+  val shown = model.displayed
+  LaunchedEffect(shown) {
+    val wanted = model.toUtcMidnightOfLocalDay(shown)
+    if (state.selectedDateMillis != wanted) {
+      state.selectedDateMillis = wanted
+    }
+    val wantedMonth = model.toUtcMonthStartOfLocalDay(shown)
+    if (state.displayedMonthMillis != wantedMonth) {
+      state.displayedMonthMillis = wantedMonth
+    }
+  }
+}
+
+/** [followValueInDialog] for Material 3's clock dialog, which stores hour and minute. */
+@Composable
+private fun followTimeValueInDialog(
+  model: DatePickerModel,
+  state: TimePickerState,
+) {
+  val shown = model.displayed
+  LaunchedEffect(shown) {
+    val fields = model.localFields(shown)
+    val hour = fields.get(Calendar.HOUR_OF_DAY)
+    val minute = fields.get(Calendar.MINUTE)
+    if (state.hour != hour || state.minute != minute) {
+      state.hour = hour
+      state.minute = minute
     }
   }
 }
@@ -1679,6 +1755,15 @@ class HybridNitroUiDatePicker(
       model.state.displayed = shown
       model.displayed = shown
       host.markDirty()
+    }
+    // A control that has been disabled does not keep a dialog on screen (H2b; the G5
+    // review's recommendation for this exact path). Its picks were already refused -
+    // `applyUserSelection` is inert while disabled - but a window that offers a list
+    // which answers nothing is the half-open state that report named. `enabled` and the
+    // open flag can land in one batch, which is why this is here and not in the
+    // `disabled` setter, and the Picker closes its menu on the same rule.
+    if (!model.enabled && model.presented) {
+      model.setPresented(false)
     }
     // A batch can move the displayed instant without any rendered change (React
     // confirming what native already picked), and the report must not go stale; the call
