@@ -154,8 +154,7 @@ function changedCodePaths({ base }) {
  * the same mistake `build-app.mjs` fixed by hashing before and after (X1 review
  * M3), and the reason `status` is honest about a concurrent edit.
  */
-async function runGate(name, extraArgs) {
-  const resolved = resolveGate(name, extraArgs);
+async function runGate(name, resolved) {
   const branch = currentBranch();
   const before = currentCodeTree({ repoRoot });
   const device = deviceFromEnv(process.env, resolved.platform);
@@ -442,8 +441,9 @@ async function main(argv) {
     return commandExport({ task, out });
   }
 
+  // A gate is a name in this table, not a shell command: passing through whatever
+  // arrived would make `gate.mjs rm -rf` a thing that works.
   const separator = rest.indexOf('--');
-  const gateName = command;
   const extraArgs = separator === -1 ? rest : rest.slice(separator + 1);
   if (separator !== -1 && rest.slice(0, separator).length > 0) {
     process.stderr.write(
@@ -451,7 +451,14 @@ async function main(argv) {
     );
     return 2;
   }
-  return await runGate(gateName, extraArgs);
+  let resolved;
+  try {
+    resolved = resolveGate(command, extraArgs);
+  } catch (error) {
+    process.stderr.write(`gate: ${String(error?.message ?? error)}\n${USAGE}`);
+    return 2;
+  }
+  return await runGate(command, resolved);
 }
 
 assertSupportedNodeOrReexec({
