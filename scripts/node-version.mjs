@@ -132,18 +132,24 @@ export function pinnedNodeMajor() {
  * @param {string} options.command What is starting, for the refusal message.
  * @param {string[]} [options.argv] `process.argv` to re-run.
  * @param {NodeJS.ProcessEnv} [options.env] Environment to hand over.
- * @param {((file: string, args: string[], options: object) => { status: number | null, error?: Error, signal?: string | null })} [options.spawn]
+ * @param {string} [options.currentVersion] `process.versions.node`, injectable so
+ *   a machine without the pinned toolchain can be described here.
+ * @param {((file: string, args: string[], options: object) => { status: number | null, error?: Error, signal?: string | null, stdout?: string })} [options.spawn]
  * @returns {{ ran: false } | { ran: true, exitCode: number }} `ran` is false
- *   only when there was nothing to re-exec (right Node, no `fnm`, or fnm itself
- *   failed - in the last two cases the caller still gets `assertSupportedNode`).
+ *   when there was nothing to re-exec (right Node) or the pinned toolchain could
+ *   not be proven (no `fnm`, fnm has no such version, fnm could not start) - in
+ *   every one of those the caller still gets `assertSupportedNode`, which refuses.
+ *   `ran: true` means the gate ran under the pinned runtime and this is its exit
+ *   code.
  */
 export function reexecUnderPinnedNode({
   command,
   argv = process.argv,
   env = process.env,
   spawn = spawnSync,
+  currentVersion = process.versions.node,
 }) {
-  if (isSupportedNodeVersion(process.versions.node)) return { ran: false };
+  if (isSupportedNodeVersion(currentVersion)) return { ran: false };
   // Already tried: the re-exec'd process is on the wrong Node too (an fnm
   // install without the pinned version). Refusing is the useful answer.
   if (env[REEXEC_FLAG] === '1') return { ran: false };
@@ -152,6 +158,46 @@ export function reexecUnderPinnedNode({
 
   const [, script, ...rest] = argv;
   if (script == null) return { ran: false };
+
+  // Ask fnm which node it would run before handing the gate over to it.
+  // `fnm exec --using 24` on a machine with no node@24 exits 1 having started
+  // nothing, and this used to report that as a re-exec (review N1): the gate
+  // printed "re-ran under Node 24" while nothing had run. A toolchain that
+  // cannot start is a refusal, not a run.
+  const probe = spawn(
+    'fnm',
+    ['exec', '--using', major, '--', 'node', '--version'],
+    { encoding: 'utf8', env: { ...env, [REEXEC_FLAG]: '1' } }
+  );
+  const pinned = pinnedVersion() ?? major;
+  const found = String(probe?.stdout ?? '').trim();
+  if (probe?.error == null && probe?.status !== 0) {
+    // fnm is installed and says it has no such version. Say that, with the fix,
+    // instead of starting a command that cannot run and calling its exit code a
+    // gate result.
+    const complaint =
+      String(probe.stderr ?? '')
+        .split('\n')
+        .find((line) => line.trim() !== '') ?? 'no output from fnm';
+    process.stderr.write(
+      `${command}: fnm has no Node ${major} (${complaint}). .nvmrc pins ` +
+        `${pinned}; install it with: fnm install ${major}\n`
+    );
+    return { ran: false };
+  }
+  if (
+    probe?.error == null &&
+    probe?.status === 0 &&
+    !found.startsWith(`v${major}.`)
+  ) {
+    // fnm switched into something, just not the version .nvmrc names.
+    process.stderr.write(
+      `${command}: fnm exec --using ${major} reported ` +
+        `${found || '(no version)'}, not the pinned ${pinned}. Refusing to run ` +
+        'a gate on an unproven runtime.\n'
+    );
+    return { ran: false };
+  }
 
   // `node` is resolved from the PATH fnm exports, so the child gets the pinned
   // runtime; `process.execPath` would re-run the runtime we are rejecting.
@@ -173,9 +219,17 @@ export function reexecUnderPinnedNode({
     return { ran: false };
   }
 
+  // fnm ran something. Only its exit status says whether that was the gate, so
+  // report the status instead of a success the process never earned: an fnm that
+  // refused to start the command exits non-zero, and a caller that treated this
+  // as "re-ran" would print instructions nobody followed.
   process.stderr.write(
-    `${command}: re-ran under Node ${major} from .nvmrc ` +
-      `(this shell is on Node ${process.versions.node}; \`fnm use\` to match it).\n`
+    `${command}: ` +
+      (result.status === 0
+        ? `ran under Node ${major} from .nvmrc (this shell is on Node ${currentVersion}; \`fnm use\` to match it).`
+        : `exited ${String(result.status)} under fnm exec --using ${major}, which is where .nvmrc ` +
+          `pins it (${pinned}). This shell is on Node ${currentVersion}.`) +
+      '\n'
   );
   if (result.signal != null) process.kill(process.pid, result.signal);
   return { ran: true, exitCode: result.status ?? 0 };
