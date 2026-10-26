@@ -163,9 +163,35 @@ Two gate stories that are not just numbers:
 `test:real-input:ios`'s picker failure is a load story: the suite ran while this session's own
 Xcode and Gradle builds put `load1` at 22–37 on 14 cores, and the check's 10-second budget for
 an armed unmount to land while a menu is up is a timing budget. Run alone at `load1` ≈ 3 it
-passed in 120.8 s. The Android full suite showed the same shape earlier in the round: one
-`Slider` accessibility-step probe failed at `load1` ≈ 142 and passed 21/21 when its file was
-re-run alone.
+passed in 120.8 s. The Android full suite showed the same shape: one `Slider`
+accessibility-step probe (`steps to the next legal value when a screen reader asks`) has failed
+in two full-suite runs of this task — once at `load1` ≈ 142, once at `load1` ≈ 5 — and passed
+21/21 every time its file ran alone, including at that same low load. So it is a shared-machine
+flake, but load is not its only trigger and `load1` ≈ 5 does not rule it out, which is worth
+knowing for question 4. `Slider.harness.tsx` is untouched by H1 (`git diff 915e73c..HEAD` on it
+is empty).
+
+### Re-run at the final commits
+
+The last five commits are one `Host.tsx` line, a bench-script format, a test-only platform
+branch, the package manifest and these docs — so the cheap gates and the Android device gates
+were re-run from `c844d8a`, to make the commit that ships the commit that was measured. Against
+an APK that Gradle called `packageDebug UP-TO-DATE` and that was therefore checked by *content*
+rather than trusted: its dex carries `centersContent` (1 hit) and `NitroUiHostView` (18), which
+exist only after the placement fix.
+
+| Gate | Result at `c844d8a` |
+| --- | --- |
+| `bun run typecheck`, `bun run lint`, `bun run test` | green, green, **218 passed** (14 suites) |
+| `manifest:check`, `api-extractor:check`, `readme:check`, `format` | green (the manifest was four `HostChildren` entries short → `9872c78`) |
+| `Host.harness`, Android | **14/14** (wall-clock gates off; load 12.5 from the build that ran just before) |
+| Android harness, full | **157/157** in ~121 s at load 3.6; the run before it was 156/157 on the `Slider` probe above |
+| `test:real-input:android` | **7/7** — `hosted-switch` flipped on a real tap, flipped back on the second, and the Host reported 2 changes |
+
+iOS was not rebuilt or re-run here: this machine is running T17's bench, and an Xcode build is
+not a polite way to ask it to wait. Its two rows stand as measured, and what they were measured
+against (`810dfb0`) is a test-only platform branch — Android asserts the `0 × 0` that the Host
+owns, iOS asserts a laid-out child.
 
 ## Files changed
 
@@ -287,8 +313,11 @@ by symbol count (`NitroUiExample.debug.dylib`, 737 `nitroui` symbols, including
 | `810dfb0` | test(host): let the iOS passthrough keep its children's boxes |
 | `f6a8587` | chore(bench): format the host arm-scope helpers |
 | `e0afbd4` | fix(host): end the zero-height warning on its full stop |
+| `9872c78` | chore(pack): list the Host child-rule modules in the manifest |
 
-The commit that adds this report also carries the measured numbers into `README.md` and
-`docs/components/host.md`, and the regenerated `etc/package-files.txt` (four entries that
-`HostChildren` added to the published output). The bench results file is named for `94e3fad`,
+`c844d8a` adds this report and carries the measured numbers into `README.md` and
+`docs/components/host.md`. The four `HostChildren` entries the published-output manifest was
+missing went in on their own, in `9872c78`, because `manifest:check` was red without them. The
+re-run section above is a commit of its own, on top of the report. The bench results file is
+named for `94e3fad`,
 the commit that was checked out when the run started.
