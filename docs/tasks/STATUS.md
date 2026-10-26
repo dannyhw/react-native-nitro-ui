@@ -34,4 +34,5 @@
 | H1 | Android `<Host>` for Switch (0.2 wave 3) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE WITH FOLLOW-UPS; Host vs shared host: memory 0.86x, mount UI CPU 0.87x, JS CPU ~1.2x) |
 | R5 | Publish prep 0.1.0 | Apex | orchestrator | merged (1 round; smoke Expo 58 + RN 0.88 both platforms, RN 0.86 Android; RN 0.86 iOS n/a on iOS 27) — **published 2026-10-26** (`v0.1.0`) |
 | R6 | Changesets + staged npm trusted publishing | Apex | Opus | merged (1 impl + 1 fix round); first automated release 0.1.1 shipped 2026-10-26 |
+| X1 | Dev tooling: CI checks, fresh-build stamp, device leases | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE WITH FOLLOW-UPS) |
 | T17 | iOS `<Host>` spike | Apex | — | report merged; not better (D23) — iOS `<Host>` is a passthrough |
