@@ -286,12 +286,13 @@ per-window) and the only remaining lever is an opt-in Expo-style shared `<Host>`
 container, which is a public-API decision for 0.2 (DECISIONS D19: documented with
 a follow-up, not chased). Absolute numbers, per-launch spreads and the noise flags
 for these runs are in `docs/tasks/R2-release-0.1.report.md`, the per-component
-history in `docs/tasks/`. Committed ratio baselines live in `bench/baselines/`:
-Android has one (an idle `--plan full --launches 8` run at `3533d64`, which
+history in `docs/tasks/`. Committed ratio baselines live in `bench/baselines/`,
+one per canonical device, and both now exist: Android at `3533d64` (which
 reproduces this table — memory 1.10–2.72×, mount UI CPU 1.02–1.59×, presented
-0.89–1.02× — so `bun bench --platform android --check` now gates), iOS does not
-yet, because two iOS full runs were completed and then refused by the
-idle-machine guard.
+0.89–1.02×) and iOS at `c9548f6`, whose idle `--plan full --launches 8` run
+reproduces the iOS side of it too (memory 0.83–1.48× the shared host, mount UI
+CPU 0.66–1.20×, presented 0.24–1.00×). So `bun bench --check` gates on both
+platforms.
 
 ## Known limitations
 
