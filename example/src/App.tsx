@@ -94,6 +94,9 @@ export default function App() {
             ]}
           >
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
               style={[
                 styles.tabLabel,
                 screen === tab.id && (dark ? styles.ink : styles.inkLight),
@@ -136,8 +139,18 @@ const styles = StyleSheet.create({
   tabsLight: {
     backgroundColor: '#ececec',
   },
+  /**
+   * Seven intrinsic-width tabs do not fit a 420 pt window: with G5's Dates tab
+   * and this task's Picker tab both appended, the Picker tab drew from x 434 and
+   * was wholly outside the window, so a real tap on it could never land (the
+   * iOS real-input check measured it). Sharing the row equally keeps every tab on
+   * screen, and the row exactly one line tall - a second row costs the body 32 pt
+   * of height, which is enough to flip where UIKit anchors a `DatePicker` popover
+   * and break G5's anchoring check. The label shrinks to fit instead.
+   */
   tab: {
-    paddingHorizontal: 12,
+    flex: 1,
+    alignItems: 'center',
     paddingVertical: 6,
     borderRadius: 6,
   },
