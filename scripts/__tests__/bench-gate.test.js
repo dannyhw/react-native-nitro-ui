@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -31,6 +31,7 @@ import {
   buildBaseline,
   cellKey,
   ARM_SCOPES,
+  armScopeCovers,
   comparableMetrics,
   componentOf,
   createLoadSampler,
@@ -65,20 +66,20 @@ const ITERATIONS = 20;
  * The arms a component's cells must carry.
  *
  * `IMPLEMENTATIONS` is every arm the runner knows about; `ARM_SCOPES` narrows the
- * ones that render a single control (`nitro-ui-host`, Switch on Android). Naming
- * the arms a cell must have, rather than "all of them", is what keeps these
- * assertions true when an arm exists that cannot serve the component - a missing
+ * ones that render only some controls (`nitro-ui-host`, the four hostable controls on
+ * Android). Naming the arms a cell must have, rather than "all of them", is what keeps
+ * these assertions true when an arm exists that cannot serve the component - a missing
  * arm is only acceptable when it is a scoped one.
  */
 function armsFor(component, platform = null) {
   return new Set(
     IMPLEMENTATIONS.filter((name) => {
       const scope = ARM_SCOPES[name];
+      if (!armScopeCovers(name, component)) {
+        return false;
+      }
       if (scope == null) {
         return true;
-      }
-      if (scope.component !== component) {
-        return false;
       }
       return platform == null || scope.platform === platform;
     })
@@ -1291,18 +1292,23 @@ describe('the Button cells (--component button)', () => {
       ])
     );
     /**
-     * Seven components in the quick plan, each with the same three cells, and one
-     * arm (the Switch-only Host) that exists on one of them. The extra launches are
-     * spelled out instead of folded into a product, so a component gaining a cell
-     * changes one number here and an arm escaping its scope changes the other.
+     * Seven components in the quick plan, each with the same three cells of the four
+     * unscoped arms, plus one scoped arm's cells for each component it renders. Both
+     * halves are measured rather than folded into a product: a component losing a cell
+     * moves the first number, and an arm escaping (or losing) its scope moves the second.
+     * `date-picker` is the unscoped probe because a `<Host>` refuses it, so its schedule
+     * is exactly what every other component's would be without the Host arm.
      */
+    const unscoped = buildSchedule({ plan: 'quick', component: 'date-picker' });
+    expect(
+      unscoped.some((entry) => entry.implementation === 'nitro-ui-host')
+    ).toBe(false);
+    const hostCells = buildSchedule({ plan: 'quick', component: 'switch' }).filter(
+      (entry) => entry.implementation === 'nitro-ui-host'
+    ).length;
     expect(all.length).toBe(
-      button.length * 7 +
-        buildSchedule({
-          plan: 'quick',
-          component: 'switch',
-          platform: 'android',
-        }).filter((entry) => entry.implementation === 'nitro-ui-host').length
+      unscoped.length * 7 +
+        hostCells * ARM_SCOPES['nitro-ui-host'].components.length
     );
   });
 });
@@ -1794,43 +1800,99 @@ describe('the Picker cells (--component picker)', () => {
 });
 
 /**
- * The shared-`<Host>` arm's scope (H1, productionising T16's `nitro-ui-host`).
+ * The shared-`<Host>` arm's scope (H1, widened to four controls by H2a).
  *
- * The arm composes Switches and refuses every other control, and on iOS `<Host>`
- * is a passthrough rather than a shared composition. Either way a cell outside
- * that scope is a launch that measures nothing under a name that promises
- * something, so the claim these tests hold is that such cells are never scheduled
- * — and that the arm is still measured where it *does* apply, or the D15 ratio
- * against `expo-ui-shared-host` would silently lose its head row.
+ * The arm composes what a `<Host>` can draw - Switch, Slider, linear Progress, Button -
+ * and refuses the three a Host refuses (SegmentedControl, Picker, DatePicker, H2b's
+ * scope); on iOS `<Host>` is a passthrough rather than a shared composition. Either way a
+ * cell outside that scope is a launch that measures nothing under a name that promises
+ * something, so the claim these tests hold is that such cells are never scheduled - and
+ * that the arm is still measured where it *does* apply, or the D15 ratio against
+ * `expo-ui-shared-host` would silently lose its head row for a whole component.
  */
 describe('the shared-Host arm is scheduled only where it renders something', () => {
   const HOST = 'nitro-ui-host';
 
-  it('schedules the Switch cells it renders on Android', () => {
-    const schedule = buildSchedule({
-      plan: 'quick',
-      component: 'switch',
-      platform: 'android',
-    });
-    const host = schedule.filter((entry) => entry.implementation === HOST);
-    expect([...new Set(host.map((entry) => entry.scenario))].sort()).toEqual([
-      'memory',
-      'mount',
-      'update',
-    ]);
-    // One launch per cell, like every other arm — a ratio needs the same pairing.
-    expect(host.length).toBe(3 * 4);
-  });
+  /** Every component the quick plan carries, hostable and not. */
+  const EVERY_COMPONENT = [
+    'switch',
+    'slider',
+    'button',
+    'progress',
+    'segmented-control',
+    'date-picker',
+    'picker',
+  ];
 
-  it('schedules no cell of another component', () => {
-    for (const component of [
-      'slider',
+  /**
+   * The arm's scope, as two files write it.
+   *
+   * `ARM_SCOPES` decides which cells are scheduled and
+   * `bench/src/implementations/index.ts` repeats the same list as the arm's
+   * `components`, which is what the report prints and what `NitroUiHostList` holds
+   * itself to (it throws for anything else). A schedule widened without the list is a
+   * cell that launches and throws, which reads as a broken bench run rather than as
+   * drift, so the pair is asserted here. The bench app cannot be imported into this
+   * file - its `@expo/ui` arm is ESM that jest cannot transform - so the second list
+   * is read from the source it is written in.
+   */
+  it('keeps its component scope in one place across the two lists', () => {
+    const scoped = ARM_SCOPES[HOST].components;
+    expect([...scoped].sort()).toEqual([
       'button',
       'progress',
-      'segmented-control',
-      'date-picker',
-      'picker',
-    ]) {
+      'slider',
+      'switch',
+    ]);
+    const source = readFileSync(
+      resolve(__dirname, '../../bench/src/implementations/index.ts'),
+      'utf8'
+    );
+    const listed = /name: 'nitro-ui-host',[\s\S]{0,400}?components: \[([^\]]*)\]/.exec(
+      source
+    );
+    expect(listed).not.toBeNull();
+    expect(
+      listed[1]
+        .split(',')
+        .map((entry) => entry.trim().replaceAll("'", ''))
+        .filter(Boolean)
+    ).toEqual(scoped);
+  });
+
+  /**
+   * The four hostable controls each get their cells, per launch, like every other
+   * arm. A component quietly dropping out of the arm is how a ratio table loses a
+   * head row without any test going red.
+   */
+  it('schedules a full set of cells for every control a Host can draw', () => {
+    for (const component of ARM_SCOPES[HOST].components) {
+      const schedule = buildSchedule({
+        plan: 'quick',
+        component,
+        platform: 'android',
+      });
+      const host = schedule.filter((entry) => entry.implementation === HOST);
+      const scenario = component === 'switch' ? '' : `.${component}`;
+      expect([...new Set(host.map((entry) => entry.scenario))].sort()).toEqual([
+        `memory${scenario}`,
+        `mount${scenario}`,
+        `update${scenario}`,
+      ]);
+      // One launch per cell, like every other arm - a ratio needs the same pairing.
+      expect(host.length).toBe(3 * 4);
+      // And it is paired with the arms it is ratioed against in the same cell.
+      expect(new Set(schedule.map((entry) => entry.implementation))).toEqual(
+        armsFor(component, 'android')
+      );
+    }
+  });
+
+  it('schedules no cell of a control a Host refuses', () => {
+    for (const component of EVERY_COMPONENT.filter(
+      (name) => !ARM_SCOPES[HOST].components.includes(name)
+    )) {
+      expect(ARM_SCOPES[HOST].components.includes(component)).toBe(false);
       for (const platform of ['android', 'ios']) {
         const schedule = buildSchedule({
           plan: 'quick',
@@ -1840,24 +1902,31 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
         expect(
           schedule.filter((entry) => entry.implementation === HOST)
         ).toEqual([]);
+        // The refused component keeps its other arms: the scope is one arm's
+        // property, not a hole in the cell. (`armsFor` is not asserted here because
+        // `ARMS_WITHOUT_COMPONENT` already removes the Expo arms from Android's
+        // date-picker cells, which is a different rule with its own tests.)
       }
     }
   });
 
-  it('schedules no cell on iOS, where a Host is a passthrough', () => {
-    const schedule = buildSchedule({
-      plan: 'quick',
-      component: 'switch',
-      platform: 'ios',
-    });
-    expect(schedule.filter((entry) => entry.implementation === HOST)).toEqual(
-      []
-    );
-    // The other arms keep their Switch cells: the scope is one arm's property.
-    expect(new Set(schedule.map((entry) => entry.implementation))).toEqual(
-      armsFor('switch', 'ios')
-    );
-  });
+  it.each(ARM_SCOPES[HOST].components)(
+    'schedules no %s cell on iOS, where a Host is a passthrough',
+    (component) => {
+      const schedule = buildSchedule({
+        plan: 'quick',
+        component,
+        platform: 'ios',
+      });
+      expect(schedule.filter((entry) => entry.implementation === HOST)).toEqual(
+        []
+      );
+      // The other arms keep their cells: the scope is one arm's property.
+      expect(new Set(schedule.map((entry) => entry.implementation))).toEqual(
+        armsFor(component, 'ios')
+      );
+    }
+  );
 
   /**
    * Asking for nothing but the scoped arm on a platform it does not exist on has
@@ -1865,13 +1934,15 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
    * green run that measured nothing is the failure mode this file exists for.
    */
   it('refuses an --only that the platform leaves nothing to measure', () => {
-    expect(() =>
-      buildSchedule({
-        plan: 'quick',
-        component: 'switch',
-        platform: 'ios',
-        only: 'nitro-ui-host',
-      })
-    ).toThrow(/matched no implementation for platform ios/);
+    for (const component of ARM_SCOPES[HOST].components) {
+      expect(() =>
+        buildSchedule({
+          plan: 'quick',
+          component,
+          platform: 'ios',
+          only: 'nitro-ui-host',
+        })
+      ).toThrow(/matched no implementation for platform ios/);
+    }
   });
 });
