@@ -59,7 +59,9 @@ it('names the styles that size the box without reaching the drawing', async () =
   ] as const) {
     const warnings = await warningsFor(style as ViewStyle);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatch(/sizes its box but does not reach what it draws/);
+    expect(warnings[0]).toMatch(
+      /sizes its box but does not reach what it draws/
+    );
     // The sentence names the prop it is complaining about, rather than a generic
     // "some of your styles do nothing".
     expect(warnings[0]).toContain(
@@ -74,11 +76,15 @@ it('says nothing about the styles that do reach the drawing', async () => {
   // The F5/F6 pair. `alignSelf` moves the box (so the drawing moves with it), and
   // `borderWidth` insets the drawing through RN's padding. `padding` always did.
   expect(await warningsFor({ alignSelf: 'flex-start' })).toEqual([]);
-  expect(await warningsFor({ alignSelf: 'stretch', width: '100%' })).toEqual([]);
+  expect(await warningsFor({ alignSelf: 'stretch', width: '100%' })).toEqual(
+    []
+  );
   expect(await warningsFor({ borderWidth: 2, padding: 4 })).toEqual([]);
   // A row `flexDirection` is still a lie about the arrangement, even next to a style
   // that works, so the pair above cannot be read as "any single style is fine".
-  expect(await warningsFor({ borderWidth: 2, flexDirection: 'row' })).toHaveLength(1);
+  expect(
+    await warningsFor({ borderWidth: 2, flexDirection: 'row' })
+  ).toHaveLength(1);
 });
 
 it('warns once per Host instance about an inert style', async () => {

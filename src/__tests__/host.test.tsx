@@ -203,18 +203,16 @@ describe('Host children', () => {
    * name match: this is the row that would go red if a table keyed on `displayName`,
    * because RN's own Slider/Button/Progress carry the same names.
    */
-  it.each([
-    'Slider',
-    'Progress',
-    'Button',
-    'Switch',
-  ] as const)('accepts its own <%s>', (name) => {
-    const Control = (lib as Record<string, unknown>)[name];
-    expect(typeof Control).toBe('function');
-    // No props: the check never mounts the child, so it only has to survive
-    // element creation. A crash here would be the control's, not the Host's.
-    expect(errorFor(createElement(Control as never))).toBeNull();
-  });
+  it.each(['Slider', 'Progress', 'Button', 'Switch'] as const)(
+    'accepts its own <%s>',
+    (name) => {
+      const Control = (lib as Record<string, unknown>)[name];
+      expect(typeof Control).toBe('function');
+      // No props: the check never mounts the child, so it only has to survive
+      // element creation. A crash here would be the control's, not the Host's.
+      expect(errorFor(createElement(Control as never))).toBeNull();
+    }
+  );
 
   /**
    * Matching on `displayName` would host RN's own Switch - same name, different

@@ -273,7 +273,7 @@ function warnAboutInertStyles(
       `${named.join(', ')}, which sizes its box but does not reach what it draws - ` +
       'Compose arranges the children (one column, no gaps), and touches go to Compose ' +
       "rather than RN's hit testing. Lay the rows out with `padding` (or a " +
-      '`borderWidth`, which insets the same way) and the children\'s own heights, and ' +
+      "`borderWidth`, which insets the same way) and the children's own heights, and " +
       'space them inside each row (docs/components/host.md).'
   );
 }
