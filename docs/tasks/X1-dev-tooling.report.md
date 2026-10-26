@@ -81,13 +81,13 @@ and refuse honestly when fnm cannot provide it. `scripts/pod-install.mjs` is the
 Four must-fix items and ten should-fix, all addressed; the `Gates` rows above are the fixed
 tree re-run.
 
-| Finding | Commit | Evidence |
+| Finding | Fix | Evidence |
 | --- | --- | --- |
 | M1 lease judged by the caller's ttl | `6bcdf3d` | each lease ages by its own ttl, `renew` by that ttl, exclusive defaults to 960 min; a two-TTL test |
-| M2 stamp not bound to the artifact | `c67f7aa` | stamp v2 records `artifactPath` + scanned-bytes digest; copy-at-another-path refused above; three new tests |
+| M2 stamp not bound to the artifact | `c67f7aa` | stamp v2 records `artifactPath` + scanned-bytes digest; copy-at-another-path refused; three new tests |
 | M3 tree hashed after the build | `c67f7aa`, `3cada3e` | before/after hash in `build-app.mjs` and real-input iOS; no stamp written when they differ |
 | M4 HEAD in the digest | `c67f7aa` | HEAD `72645784` → `d7ac634` (docs only) keeps the stamp green at `591f955534d3`; a `src/` edit turns it red at the same HEAD |
-| S1 CI harness jobs build unstamped | `d251716` | dispatch jobs and `build-android` go through `build-app.mjs` |
+| S1 CI harness jobs build unstamped | `d251716`, `52611fc` | the dispatch jobs and `build-android` all go through `build-app.mjs` |
 | S2 no `permissions:` | `d251716` | `contents: read` in `ci.yml` and `smoke.yml` |
 | S3 stale-lock steal race | `6bcdf3d` | lock token, steal by `rename` + re-check; two-stealer test takes two pairs |
 | S4 exclusive starvation | `6bcdf3d` | `pendingExclusive` marker holds new acquires back; a lock timeout retries inside the wait |
@@ -96,7 +96,7 @@ tree re-run.
 | S7 needle matched the spec | `c67f7aa` | JVM class descriptor / length-prefixed Swift name |
 | S8 `pod install` exit ignored | `3cada3e` | both callers throw on a non-zero status |
 | S9 harness refused the wrong Node | `a06cad1` | `scripts/harness.mjs`; a missing pinned Node now refuses with `fnm install 24` |
-| S10 Android with no artifact | `c67f7aa` | refuses; `NITRO_UI_ALLOW_UNSTAMPED=1` is the logged escape hatch |
+| S10 Android with no artifact | `c67f7aa` | refuses; `NITRO_UI_ALLOW_UNSTAMPED=1` is the logged escape |
 | S11 device names in this report | this commit | no device outside the lease named; two claims corrected above |
 | N1–N4 (fnm, config docs, prettier cwd, macOS pin) | `a06cad1`, `f0cd251`, `d36993f`, `d251716` | each message |
 | lint red left by round 1's lease tests | `7264578` | `bun run check` exit 0 |
