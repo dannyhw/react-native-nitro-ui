@@ -340,7 +340,7 @@ Run at this commit on `nitroui_t02` with the same commands as below; the sharing
 | `node bench/tools/arm-ratios.mjs bench/results/<run>.json` | paired ratios above |
 
 All device work was on AVD `nitroui_t02` (`emulator-5572`, private adb server on 5042, Metro 8294), as
-assigned. `PR1505_Pixel` (`emulator-5560`) and the other task's device were never addressed; the device
+assigned. `emulator-5560` and the other task's device were never addressed; the device
 this task used was started by this task and is shut down at the end of it.
 
 ## Files changed

@@ -1,6 +1,6 @@
 # Committed benchmark baselines
 
-**Status (A1c): both canonical devices are committed.**
+**Status: both canonical devices are committed.**
 `android35-emu-pixel9.json` comes from one clean `--plan full --launches 8` run
 on the canonical API 35 Pixel 9 emulator at `3533d64` — 1120/1120 launches, no
 problems, ART `speed-profile`, load average 2.39 over 14 cores (`quiet: true`) —
@@ -15,16 +15,21 @@ median 2.93 against the 7.0 ceiling, p90 4.24, 59 of them (3.4 %) over it.
 `--check` on iOS gates: 59 nitro-ui rows within tolerance, 107 suppressed by
 their own within-run spread, 6 `new arm` (the leak cells, which recorded no
 slope), 0 failures — and halving one quiet `presented` ratio, in both `ratio`
-and all eight `launchRatios`, makes it exit 1. It took three attempts: A1 and
-A1b each completed problem-free and were refused by the single end-of-run
-sample (10.50 and 7.60 against 7.0). R4's whole-run judgement is what let this
-one through, and its `max` of 75.64 shows why one sample was never enough.
+and all eight `launchRatios`, makes it exit 1. It took three attempts: the
+first two each completed problem-free and were refused by the single end-of-run
+sample (10.50 and 7.60 against 7.0). Judging load over the whole run is what
+let this one through, and its `max` of 75.64 shows why one sample was never
+enough.
+
+Components added after a baseline was recorded have no entries in it yet:
+`Picker` on both platforms and `DatePicker` on Android. `--check` reports their
+cells as `new arm` until the next refresh.
 
 The one Android baseline committed before this one (`bb41d00`) was recorded
 while nitro-ui self-skipped: all seven of its nitro-ui cells carry a
 `skipReason` and zero metrics, so every `--check` against it degraded to
 `new-arm` and could never fail. It measured Android `presented` through the
-probe bug fixed in round 4 too. Deleting it was honest; the replacement above
+Android frame-probe bug that was fixed afterwards. Deleting it was honest; the replacement above
 comes from one clean `--plan full --launches 8` run on an idle canonical device
 per the rules below — never from a quick run.
 
@@ -37,12 +42,12 @@ Rules (docs/DECISIONS.md D9, enforced by `baselineBlockers()` in
 
 - **Ratio-only.** A baseline stores, per `(scenario, N, metric)`, the median
   launch-paired ratio to `rn-core` plus the within-run spread of that ratio. No
-  absolute nanoseconds: those belong in CI artifacts, where the machine is
-  recorded. Absolute control drift is what made round 1's `--check` unable to
+  absolute nanoseconds: those belong in the per-run results files
+  (`bench/results/`, gitignored), where the machine is recorded. Absolute control drift is what made round 1's `--check` unable to
   ever fail.
 - **Clean tree only.** A run from a dirty worktree is named `<sha>-dirty-...json`
   and cannot become a `--compare` base or a baseline.
-- **Idle machine, judged over the whole run (R4).** The runner samples
+- **Idle machine, judged over the whole run.** The runner samples
   `os.loadavg()[0]` every 30 s and at every launch boundary, and records the
   summary as `machine.loadSamples`: `{ count, ceiling, median, p90, max, over,
 overFraction }`. A run is refused when its **median** sample is over the
@@ -56,10 +61,10 @@ overFraction }`. A run is refused when its **median** sample is over the
   in the file as the end-of-run instant, and a results file with no
   `loadSamples` (anything recorded before R4) is still judged by that single
   sample, because that is all it has. Load is the largest single source of ratio
-  noise on this host.
+  noise on a shared development machine.
 - **`--plan full` with 8 launches**, no `problems`, on the canonical device.
   `--plan quick` numbers are local feedback, not baseline material.
-- **Device key = platform + OS runtime + class** (`ios27-sim-iphoneair`,
+- **Device key = platform + OS runtime + class** (`ios27-sim-iphone17`,
   `android35-emu-pixel9`). A runtime change is a comparability break, so it gets
   a new file. Anything that is not the canonical device uses same-run ratio
   tables and `--compare <ref>`, never `--check`.

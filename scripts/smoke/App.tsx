@@ -1,6 +1,7 @@
 import {
   Button,
   DatePicker,
+  Host,
   nitroUiCore,
   Picker,
   Progress,
@@ -48,6 +49,13 @@ import {
 //
 // Adding a component = add its import + ONE line to the JSX list below + its
 // name to SMOKE_CONTROLS. Do not touch the ready-line logic. See CONTRIBUTING.md.
+//
+// `<Host>` is in the list as one control, `host`, with two hosted Switches
+// inside it and no boxes of their own: a hosted control is drawn by the Host's
+// composition and its own RN view is deliberately laid out at nothing
+// (docs/components/host.md, Sizing), so the box worth asserting is the
+// container's. Never add a hosted child to SMOKE_CONTROLS — it would fail the
+// contract by design.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type SmokeStatus = 'starting' | 'ready' | 'layout' | 'error';
@@ -61,6 +69,7 @@ const SMOKE_CONTROLS = [
   'segmented-control',
   'date-picker',
   'picker',
+  'host',
 ] as const;
 
 type SmokeControl = (typeof SMOKE_CONTROLS)[number];
@@ -243,6 +252,17 @@ export default function App(): React.ReactElement {
           options={['One', 'Two', 'Three']}
           testID="SMOKE-picker"
         />
+        {/* One Host, two hosted Switches: the Android path where a batch of
+            controls shares one Compose composition. iOS renders this as a
+            plain View (D23). The Host needs a height of its own. */}
+        <Host
+          onLayout={measureFor('host')}
+          style={styles.host}
+          testID="SMOKE-host"
+        >
+          <Switch defaultValue={true} testID="SMOKE-host-switch-a" />
+          <Switch defaultValue={false} testID="SMOKE-host-switch-b" />
+        </Host>
       </ScrollView>
     </View>
   );
@@ -255,6 +275,11 @@ const styles = StyleSheet.create({
     padding: 24,
     // Stay clear of the iOS status bar / notch in screenshots.
     paddingTop: 60,
+  },
+  host: {
+    // Two Switches, one row each: say how tall the Host is.
+    height: 96,
+    alignSelf: 'stretch',
   },
   layoutText: {
     fontSize: 11,

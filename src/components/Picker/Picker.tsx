@@ -83,10 +83,12 @@ export interface PickerProps extends ViewProps {
   /**
    * Accent colour of the control. Default: the platform's own.
    *
-   * What it paints differs: on Android the field's active outline/label, on iOS
-   * the menu picker's title (a SwiftUI menu `Picker` does take `.tint()`, unlike
-   * a segmented one). Measured on both platforms in
-   * `docs/components/picker.md`.
+   * What it paints differs. **Android** takes four roles of the outlined field:
+   * the focused outline, the focused label, the focused trailing icon and the
+   * unfocused label — every other role keeps the scheme's colours. **iOS** tints
+   * the menu picker's title and chevron (a SwiftUI menu `Picker` does take
+   * `.tint()`, unlike a segmented one); a wheel does not take it at all.
+   * Measured on both platforms in `docs/components/picker.md`.
    */
   tintColor?: ColorValue | undefined;
   /**

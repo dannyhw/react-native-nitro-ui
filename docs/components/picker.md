@@ -34,7 +34,7 @@ reused rather than forked; what is new here is a control that *presents* UI.
 | `variant`              | `'menu' \| 'wheel'`                      | `'menu'` | SwiftUI `.menu` / `.wheel`; on Android both are the M3 menu.      |
 | `label`                | `string \| undefined`                    | —        | Android: the field's label. iOS: the `Picker`'s label (a11y).     |
 | `disabled`             | `boolean \| undefined`                   | `false`  | SwiftUI `.disabled()` / Compose `enabled = false`.                |
-| `tintColor`            | `ColorValue \| undefined`                | platform | iOS: the menu's title. Android: the field's active outline/label. |
+| `tintColor`            | `ColorValue \| undefined`                | platform | iOS: the menu's title. Android: the field's outline, label and chevron accents. |
 | `style`                | `ViewStyle`                              | —        | Overrides the measured box (see Sizing).                          |
 | `testID`               | `string \| undefined`                    | —        | iOS: RN's `accessibilityIdentifier`. Android: the host `View.tag`. |
 | `accessibilityLabel`   | `string \| undefined`                    | —        | Names the control that opens the list; the options keep their own labels. |
@@ -153,7 +153,7 @@ forge a separator and share another configuration's cached size. `disabled` and
 in through the epoch (`docs/architecture/sizing.md`).
 
 Measured on the devices this library's tests run on (iPhone 17 / iOS 27 in pt;
-`nitroui_t01`, API 35 at 420 dpi, in dp), with nothing overridden:
+an API 35 emulator at 420 dpi, in dp), with nothing overridden:
 
 | Configuration                                  | iOS             | Android         |
 | ----------------------------------------------- | ----------------- | ----------------- |
@@ -177,7 +177,7 @@ with the menu control under the wheel's layout policy (see Limits).
 the `['One','Two','Three']` row above, height rounded up, because a fallback smaller
 than the control is the dead-touch story in `core.md` §7. A `wheel`'s width half
 never reaches it: a `fillWidth` shadow node replaces the width with the box's.
-Registered at startup through `NitroUiDeclaredFallbacks` (T14), not from the first
+Registered at startup through `NitroUiDeclaredFallbacks`, not from the first
 view. Every other configuration is a first instance of its own: laid out at the
 fallback, corrected the turn it measures (D17).
 
@@ -186,7 +186,7 @@ wired: an `options` change (`options` setter → `noteContentSizeMayHaveChanged(
 iOS, Compose observation on Android), a **selection** change (a new title in the
 button), and a `variant` change. Both platforms reset the host's last-reported size
 when `nuiSizingKey` changes, so a new configuration that happens to measure exactly
-what the old one did still gets its correcting report through (G2's F1), and D20
+what the old one did still gets its correcting report through, and D20
 keeps a corrected instance re-measuring on later props turns.
 
 There is one measure point no props batch can provide: a **pick** paints a new title
@@ -209,8 +209,8 @@ the key and the pixels together:
 
 The `update` benchmark cell drives `selectedIndex` from JS, so it exercises the props
 path rather than a pick; the pick path is exercised by the `nuiTestSelect` hook (the
-harness runs a row's own code path) and by the real-input `menu box follows a picked
-title` case.
+harness runs a row's own code path) and by the real-input Picker check, which
+picks a longer title with a real tap and asserts the box followed it.
 
 **Over-wide content fits its box** (C1): a menu wider than the caller's box is
 measured a second time at the box's width and placed at that width, so the field,
@@ -222,19 +222,19 @@ legibility: keep option lists within the width you give the control.
 ## Tint
 
 `tintColor` reaches something real on both platforms here, which is more than
-SegmentedControl can say (G4's F1: a SwiftUI *segmented* `Picker` ignores
-`.tint()`):
+SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
 
 - **iOS** tints the **menu's title and chevron** — measured visually
   (`docs/tasks/G6-picker/ios-light-lower-tint-wheel.png`: a `#FF3B30` picker paints
   a red title). A **wheel does not take it**: its rows keep the scheme's primary and
   secondary label colours, so a tinted wheel looks untinted.
-- **Android** tints the field's **active outline and label** — the `TextFieldColors`
-  accent roles (the green `Wheel` caption in
+- **Android** tints the field's **focused outline, focused label, focused trailing
+  icon and unfocused label** — `OutlinedTextFieldDefaults.colors(focusedBorderColor,
+  focusedLabelColor, focusedTrailingIconColor, unfocusedLabelColor)` (the green `Wheel` caption in
   `docs/tasks/G6-picker/android-light-lower-tint-wheel.png`). Every other role keeps
   the scheme's colours, the same one-role trade the Switch and Button make. The
   colour set is served from a bounded process-wide cache keyed on
-  `(colour scheme, tint)`, because `TextFieldDefaults.colors()` allocates and
+  `(colour scheme, tint)`, because `OutlinedTextFieldDefaults.colors()` allocates and
   rebuilding it per recomposition per mounted field is exactly the cost the
   "Shared objects" rule in `core.md` is about.
 
@@ -253,7 +253,7 @@ SegmentedControl can say (G4's F1: a SwiftUI *segmented* `Picker` ignores
   affordance iOS does not have, so it is semantics only: `selected = isSelected` on
   the row.
 - **Disabled is exposed on the node a screen reader lands on.** Read out of
-  `uiautomator dump` on `nitroui_t01`: the control used to appear as two nodes — the
+  `uiautomator dump` on an API 35 emulator: the control used to appear as two nodes — the
   focusable `android.widget.EditText` showing the title with `content-desc=""`, and a
   separate `android.view.View` carrying the name with `clickable=false` and
   `enabled=true` *even when the picker was disabled*. That second node is a **Compose

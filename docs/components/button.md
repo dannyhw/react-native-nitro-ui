@@ -12,8 +12,8 @@ import { Button } from 'react-native-nitro-ui';
 <Button title="Save" onPress={save} variant="tonal" size="small" />;
 ```
 
-There are no children: v0.1 supports only leaf Hybrid Views
-(`docs/architecture/core.md`), so the label is the `title` string.
+There are no children: the label is the `title` string. (`Button` cannot be
+placed inside a `<Host>` either; `Switch` is the only hostable control.)
 
 ## API
 
@@ -106,14 +106,14 @@ owns the R3 verification of `docs/architecture/sizing.md` (D16):
 control's own measurement after every `title` and `size` change.
 
 The sizing key is `variant|size|systemImage|title`
-(`src/components/Button/Button.tsx:126-133`, passed as `nuiSizingKey` at
-`src/components/Button/Button.tsx:215`) — everything that moves the control's
+(`src/components/Button/Button.tsx`, passed as `nuiSizingKey` at
+`src/components/Button/Button.tsx`) — everything that moves the control's
 size, nothing that only repaints it (`disabled`, `tintColor`) and no environment
 inputs, which native folds in through the epoch. Free-form values come last so a
 `|` inside one cannot shift a fixed field.
 
 Measured, with `title="Save"` and nothing overridden (iPhone Air / iOS 27 in pt;
-`nitroui_t02`, API 35 at 420 dpi, in dp):
+an API 35 emulator at 420 dpi, in dp):
 
 | `variant`  | iOS S        | iOS M        | iOS L        | Android S   | Android M   | Android L    |
 | ---------- | -------------- | -------------- | -------------- | -------------- | -------------- | -------------- |
@@ -138,13 +138,16 @@ width of the first one).
 
 **What the engine starts from.** The fallback is the one number declared before
 any measurement exists, and the engine keys fallbacks per component, so it is one
-pair: `77 × 35` pt (`ios/components/Button/HybridNitroUiButton.swift:210`) and
-`91 × 48` dp (`android/.../HybridNitroUiButton.kt:481`). Both are the middle of
+pair: `77 × 35` pt (`ios/components/Button/HybridNitroUiButton.swift`) and
+`91 × 48` dp (`android/.../HybridNitroUiButton.kt`). Both are the middle of
 the measured table above rather than a guess, because a fallback smaller than the
 control makes SwiftUI paint outside its box. Per D17 the first instance of a
 configuration may show that fallback for one frame and is then corrected; every
 instance whose configuration is already exact in the cache must be exact on its
-first frame. `prewarmKeys` is the way to make even the first mount exact.
+first frame. There is no way yet to make that first mount exact: `prewarm`
+seeds a component's default (empty) configuration only, and a Button's key
+always names its variant, size and title, so `prewarm(['NitroUiButton'])` does
+not cover any real Button.
 
 Whether a prop change is stale is about the *configuration*, not the platform:
 changing to one the engine has not measured for this epoch is a cold change on either
@@ -173,7 +176,7 @@ The cross axis is the documented
 difference from stock RN: once the engine has written a size, Yoga has nothing
 left to stretch, so a parent's `alignItems: 'stretch'` does not widen a Button —
 ask for it with `alignSelf: 'stretch'`. The base style is `alignSelf:
-'flex-start'` (`src/components/Button/Button.tsx:146`) for the same reason RN's
+'flex-start'` (`src/components/Button/Button.tsx`) for the same reason RN's
 own `Switch` has one: in a column, stretch would decide the width for us and the
 measurement would never be asked for.
 
@@ -218,7 +221,8 @@ semantics node on Android.
   update; no hosting recreation per update.
 - **Cached, never rebuilt.** The M3 `ButtonColors` per `(scheme, variant, tint)`
   and the derived `labelLarge` at 18 sp are served from a cache keyed on the
-  theme's identity (`android/.../HybridNitroUiButton.kt:175`, `:295`), so a
+  theme's identity (`ButtonColorsCache` and `ButtonLabelStyles` in
+  `android/.../HybridNitroUiButton.kt`), so a
   recomposition does not build a colour scheme — the same rule the Switch follows.
 - **Perf marks.** With `nitroUiCore.setPerfEnabled(true)` and a `nuiPerfId`,
   native records `propsApplied` and `firstFrame` per instance; drain with
@@ -234,8 +238,7 @@ semantics node on Android.
   Material roles (see the mapping above).
 - The five variants share one declared fallback pair, so the first `text`
   instance on iOS starts from a box larger than it needs and shrinks on its
-  correction (D17). T14 (`docs/tasks/T14-early-fallbacks.md`) is where a
-  finer-grained fallback story belongs.
+  correction (D17). Fallbacks are declared per component, not per variant.
 - Its size is measured, not declared, so the first Button of a new configuration
   costs one layout correction. A cold batch of 200 distinct titles lands over
   several frames — logged, not gated (D17).

@@ -112,6 +112,8 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
 
 ## D22 — No public release and no CI for now (2026-10-24)
 
+_Partly superseded: the repo went public in D25 and 0.1.0 is to be published per D26; CI is still off._
+
 The human's call: the repo stays private (`dannyhw/react-native-nitro-ui`), nothing goes to npm, and
 all GitHub workflows (CI, Release, Bench, Smoke) are disabled. Local gates (`bun run check`, harness,
 real-input, smoke, bench) are the only gates. Phase A = committed bench baselines + deferred small
@@ -216,3 +218,31 @@ tall versus 20, a short Host versus a tall one, `width: '100%'` versus nothing �
 sizing counters, whose "no cache entry" claim is made against a cache the test invalidated
 and whose positive control is the same eight controls unhosted) and by
 `src/__tests__/host.test.tsx` + `src/__tests__/hostLayoutWarning.test.tsx` for the JS half.
+
+## D25 — The repo is public (2026-10-26)
+
+The human made `dannyhw/react-native-nitro-ui` public. Supersedes D22's "private" part only:
+nothing is on npm yet, there is no tag or release, and the GitHub workflows stay disabled. User docs
+must say so (no "install from npm" without that caveat, no "verified in CI"). Internal process docs
+(`docs/tasks/`, `PLAN.md`, this file, `AGENTS.md`) stay in the repo as a development log on the
+condition that they carry no personal information — no personal emails, absolute home paths, names
+of the human's own devices or apps; tasks and reports must keep it that way.
+
+## D26 — First npm release is 0.1.0 from main (2026-10-26)
+
+The owner's call: publish `react-native-nitro-ui@0.1.0` from current `main` (seven controls plus
+`<Host>` on Android for Switch), after the public-docs pass and a fresh tarball smoke on both
+platforms (R5). The owner runs `npm publish` by hand (first publish is manual; no npm login on the
+build machine). Host support for more controls (H2a/H2b) is 0.2.
+
+## D27 — Releases via Changesets and npm trusted publishing (2026-10-26)
+
+The owner's call: from 0.1.1 on, versions are cut by Changesets (a "Version Packages" PR) and
+published from GitHub Actions with npm trusted publishing (OIDC) — no npm token in GitHub. release-it
+is removed. The `0.0.0-stage` version on npm is npm's own staged-publishing placeholder (it scans a
+package before release) — not ours, not a concern.
+- **D27 amendment (2026-10-26):** the owner keeps npm's trusted publisher at **staged publishing
+  only** (`npm publish` not allowed). CI stages each version (`npm stage publish`, OIDC); the owner
+  approves it on npmjs.com with 2FA; a catch-up workflow then tags `vX.Y.Z` and creates the GitHub
+  release once the version is live. Checks/pack and staging run in separate jobs; only staging gets
+  `id-token: write`.

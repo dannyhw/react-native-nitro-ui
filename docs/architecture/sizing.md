@@ -15,7 +15,7 @@ exists to keep that question off the layout path:
 
 - native pushes every size it learns into a C++ cache (main/UI thread, cheap);
 - the shadow node answers layout from that cache, the node's own state, or a declared fallback —
-  a lookup, never a call (`cpp/NitroUiIntrinsic.hpp:197`);
+  a lookup, never a call (`cpp/NitroUiIntrinsic.hpp`);
 - when the cache did not know, the correction is applied as a Fabric state update at the end of the
   turn, batched, with a per-flush budget of synchronous updates — the platform's number, not the
   engine's (§3).
@@ -49,9 +49,9 @@ measurement, because it is keyed by component and would let a 100pt variant beco
 Every answer is recorded in a per-instance **ledger**. That is what makes a warm mount free: when a
 host later reports a size, `report()` looks at the ledger, sees the instance was laid out at the
 size it just measured, and drops the report without queueing anything
-(`cpp/NitroUiSizingEngine.cpp:272`).
+(`cpp/NitroUiSizingEngine.cpp`).
 
-`flush()` (`cpp/NitroUiSizingEngine.cpp:321`) applies the queued reports as one batch: it corrects
+`flush()` (`cpp/NitroUiSizingEngine.cpp`) applies the queued reports as one batch: it corrects
 **every** instance that was laid out for the configuration a report answers for, keeps at most
 `kImmediateBudgetPerTurn` (2, or whatever the platform hands `flush(immediateBudget)`: Android hands
 one) of them synchronous, batches the rest, ignores changes under 0.5 dp/pt, and returns whether
@@ -64,10 +64,10 @@ this turn measured" and before pixels:
 
 - **iOS**: a run-loop observer at `kCFRunLoopBeforeWaiting`, order 1 000 000 — deliberately below
   UIKit's own commit observer (2 000 000), so a correction made in a turn is in that same turn's
-  commit (`cpp/NitroUiSizingEngine.cpp:68`).
+  commit (`cpp/NitroUiSizingEngine.cpp`).
 - **Android**: an `OnPreDrawListener` per host that returns `!flush()`. Returning `false` cancels
   that one draw; the state update re-lays-out and RN draws again with the right box
-  (`android/.../NitroComposeHost.kt:469`).
+  (`android/.../NitroComposeHost.kt`).
 
 That difference is measurable, and T11 measured it. With a stale size in the cache (an environment
 change leaves one behind), a control is laid out wrong and corrected once its native measure
@@ -131,8 +131,8 @@ A cold Switch on iOS, counters as deltas (`example/__tests__/Sizing.harness.tsx`
    the view in a window, and SwiftUI has nothing to lay out while its view has none — a number taken
    there describes the content being replaced, not the content being mounted. So
    `refreshContentSize()` refuses while a content update is pending and the host is off-window, and
-   keeps the measure pending (`ios/core/NitroSwiftUIHost.swift:356`).
-4. `didMoveToWindow()` is the deferred measure point (`NitroSwiftUIHost.swift:175`), and it lands in
+   keeps the measure pending (`ios/core/NitroSwiftUIHost.swift`).
+4. `didMoveToWindow()` is the deferred measure point (`NitroSwiftUIHost.swift`), and it lands in
    the `Insert` of the **same** transaction. The pending update is applied (`layoutIfNeeded()`), then
    `sizeThatFits(.infinity)` says 61×28. An `intrinsic` control is measured regardless of its current
    bounds, which is what keeps this out of `layoutSubviews` — where a report would land inside Core
@@ -159,7 +159,7 @@ without pushing (measured: 200 warm Switches = 0 corrections, 200 dropped report
 A `fillWidth` configuration is held to that rule with one adjustment: its width belongs to the box,
 so two instances of one configuration legitimately report different widths, and the comparison that
 decides "is there anything to correct" ignores the width for exactly that policy (`sameSizeForPush`,
-`cpp/NitroUiSizingEngine.cpp:99`). Without that adjustment the promise above is false for every
+`cpp/NitroUiSizingEngine.cpp`). Without that adjustment the promise above is false for every
 Slider: each instance whose parent is a different width than the last one measured pays a commit, and
 each correction rewrites the cache with its own box width. The first `fillWidth` component measured
 it: two Sliders in boxes of 300 and 200 cost 2 corrections and left the cache answering 200 to a
@@ -174,7 +174,7 @@ Five things, four of which a component already has reasons to write:
    (`{ "HybridNitroUiSwitch": "intrinsic" }`). `scripts/patch-nitrogen.mjs` reads it and repoints
    the three generated aliases (`…ShadowNode`, `…ComponentDescriptor`, `…State`) at the
    `Intrinsic…` templates for that view, adds the `updateState:oldState:` hook to the generated
-   `.mm`, and the `onState` line to the Kotlin manager (`scripts/patch-nitrogen.mjs:102`). A view
+   `.mm`, and the `onState` line to the Kotlin manager (`scripts/patch-nitrogen.mjs`). A view
    that is not in the file is a normal Nitro view, untouched. `bun run nitrogen:check` regenerates
    into a temp directory and fails if the patched output and the committed output differ, so a
    nitrogen version that changes shape fails loudly rather than silently un-sizing a control.
@@ -207,13 +207,13 @@ Five things, four of which a component already has reasons to write:
    notification that fires once per mounted view costs one invalidation per real change.
 5. **Say when a prop can change the size (iOS).** The host does not watch `nuiSizingKey`: the key is
    the engine's identity for a configuration, not a native signal, and `set { model.sizingKey = … }` is
-   a plain store (`ios/components/Switch/HybridNitroUiSwitch.swift:254`). Nor is a commit a measure
+   a plain store (`ios/components/Switch/HybridNitroUiSwitch.swift`). Nor is a commit a measure
    point — most props change pixels, not size, and a `sizeThatFits` on every one of them is a
    synchronous SwiftUI layout after every invalidation (review SF5). `commit()` re-measures after the
    first commit, a bounds change, a trait change, **or a component that said so**: a prop setter whose
    value can move the control's size must call `host.noteContentSizeMayHaveChanged()` next to
    `host.markDirty()`, as `nuiTestWidth` does
-   (`ios/components/Switch/HybridNitroUiSwitch.swift:275` — the only prop a Switch has that moves its
+   (`ios/components/Switch/HybridNitroUiSwitch.swift` — the only prop a Switch has that moves its
    size, which is why nothing else calls it today). The flag costs one bool per prop write and one
    `layoutIfNeeded` + `sizeThatFits` per size-affecting commit, and it is the only thing that makes the
    report reach the engine after such a change: without it the control re-renders at its new size
@@ -223,9 +223,9 @@ Five things, four of which a component already has reasons to write:
    and `size` are all size-affecting, so every one of them has to say so.
 
 Then drop any default-size style. What is left is the base style, and it depends on the policy: an `intrinsic`
-control keeps `{ alignSelf: 'flex-start' }` (`SELF_SIZING_BASE_STYLE`, `src/components/Switch/Switch.tsx:111`) so a
+control keeps `{ alignSelf: 'flex-start' }` (`SELF_SIZING_BASE_STYLE`, `src/components/Switch/Switch.tsx`) so a
 parent cannot stretch it, while a `fillWidth` control needs the opposite - `{ alignSelf: 'stretch' }`
-(`FILL_WIDTH_BASE_STYLE`, `src/components/Slider/Slider.tsx:135`) - because the cross axis is the axis it *wants*
+(`FILL_WIDTH_BASE_STYLE`, `src/components/Slider/Slider.tsx`) - because the cross axis is the axis it *wants*
 filled and `alignSelf` is the only thing that decides it (the trap in §6). Either way an explicit `width`, `height`,
 `flex` or `alignSelf` in the caller's `style` still wins.
 
@@ -278,9 +278,10 @@ corrects. Nothing cached survives the change to be wrong forever.
 
 ### Policies
 
-`POLICY_INTRINSIC` — the control's intrinsic size is its size: Switch, Button, SegmentedControl.
+`POLICY_INTRINSIC` — the control's intrinsic size is its size: Switch, Button, SegmentedControl,
+circular Progress, menu Picker, compact DatePicker.
 `POLICY_FILL_WIDTH` — width comes from the Yoga box when it is finite, height stays intrinsic:
-Slider, linear Progress, wheel Picker (`cpp/core/NitroUiSizing.hpp:28`). The control declares the
+Slider, linear Progress, wheel Picker, inline and wheel DatePicker (`cpp/core/NitroUiSizing.hpp`). The control declares the
 policy when it reports; the shadow node applies it. The `nitro-ui.sizing.json` entry therefore only
 selects the intrinsic shadow node and names the component's *default* policy: the policy that applies
 to an instance is the one its host reports, which is how a circular Progress stays `intrinsic` under an
@@ -292,14 +293,14 @@ The policy also changes the **question the host asks the toolkit**, which is not
 `fillWidth` control must be proposed *the box's width* with unbounded height (what height does it want **at that
 width**?). Ask the unbounded question of a `fillWidth` control and you get two wrong numbers — a width nobody asked
 for, and a height implied by that width — which is what iOS did for both policies until the first `fillWidth`
-component arrived; the proposal is now per policy (`fittingSizeProposal`, `ios/core/NitroSwiftUIHost.swift:457`),
+component arrived; the proposal is now per policy (`fittingSizeProposal`, `ios/core/NitroSwiftUIHost.swift`),
 and the answer's width is replaced with the proposal's. Android has to be told the same question, in its own terms:
 `NitroUiMeasuredRoot` measures a `fillWidth` control at the box's **width** with the height **unbound**
-(`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt:632`). Unbinding the height is not a
+(`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt`). Unbinding the height is not a
 detail — a `maxHeight` left in place lets a box that is temporarily the wrong height clamp the answer to itself, so
 the wrong height confirms itself (the report matches the layout, so the engine is never told and never corrects).
 The `fillWidth` measure must also not run while the box has no **width** — a zero proposal is not the box's
-width — which is why `refreshContentSize()` refuses it there (`ios/core/NitroSwiftUIHost.swift:356`). Which
+width — which is why `refreshContentSize()` refuses it there (`ios/core/NitroSwiftUIHost.swift`). Which
 half of the box gates it matters as much as the fact that something does: the **width** is the input a
 `fillWidth` control may not invent, so it gates; the **height** is the number being measured, so it must never
 gate. A box really can arrive with no height — a caller's `height: 0`, a `maxHeight` squashed below the
@@ -344,7 +345,7 @@ there is no box width to use. Two consequences a component author must know:
 - **Never push a Fabric state update while holding the engine lock.** A push can come straight back:
   the commit re-layouts, `measureContent` calls `measure`, and `std::shared_mutex` is not recursive.
   `flush()` therefore collects under the lock and pushes after dropping it
-  (`cpp/NitroUiSizingEngine.cpp:345`). Deadlocked once, on a device, in a harness run.
+  (`cpp/NitroUiSizingEngine.cpp`). Deadlocked once, on a device, in a harness run.
 - **Never capture a reference in a state-update callback.** The callback handed to
   `ConcreteState::updateState` may run on the JS thread at some later point — `Asynchronous` updates
   are only *queued* by `EventQueue::enqueueStateUpdate`. Round 1 captured `[&measured]`, a reference
@@ -446,13 +447,14 @@ The two prop-turn rows are the same fast path read two ways: the storm test's Sw
 engine already believed, so 30 turns cost 0 measures; an instance the engine had to correct re-asks once per turn
 and still costs no correction (§6).
 
-Ranges are the spread across the runs in the report. The Android ones are wide because another
-task's device work shares this machine (D13): its cold-batch flush measured 8.5 ms on a quiet
+Ranges are the spread across the runs in the report. The Android ones are wide because the runs
+shared their machine with other device work: the cold-batch flush measured 8.5 ms on a quiet
 machine and 17.9–24.2 ms under load, so read the Android rows as an order of magnitude, not a
 number. Read them all as *the mount dominating, not the sizing*: on iOS the correction path is
 invisible inside mount noise, and Android's cold batch costs a few ms more per instance while
-paying ~1 frame in one pre-draw flush. T02's bench harness is not merged, so these are core perf
-clock deltas (`nitroUiCore.now()`, D1) around a render, not published benchmark numbers.
+paying ~1 frame in one pre-draw flush. These are core perf clock deltas (`nitroUiCore.now()`, D1)
+around a render, taken before the bench existed, not benchmark numbers (those are
+`docs/architecture/benchmarks.md`).
 
 ## 8. `prewarm`
 
@@ -467,9 +469,10 @@ costs nothing and counts zero, which makes the list safe to keep in an app that 
 Limits, stated plainly:
 
 - it seeds the **empty variant** only. A component whose size depends on its props (a Button's title)
-  has more than one configuration, and pre-warming those needs a per-component list of keys — the
-  brief's `prewarmKeys` — which nothing has needed yet, because the only self-sizing component so far
-  has one variant.
+  has more than one configuration, and pre-warming those would need a per-component list of keys
+  (`prewarmKeys`), which does not exist. So `prewarm` covers Switch, Slider and a linear Progress,
+  whose default configuration is the empty key, and none of Button, SegmentedControl, Picker or
+  DatePicker, whose keys always name props.
 - it is a declared number, not a measurement, and the engine treats it that way. Round 1 wrote it into
   the cache as an *authoritative* size, which made the documented guarantee false: with a declared
   61×28 and a real 51×31 (an app opting into `UIDesignRequiresCompatibility` on iOS 26+), every Switch
@@ -488,11 +491,11 @@ Limits, stated plainly:
 - It does not know a size before the first measure of an *unusual* variant. `fillWidth` and the
   declared fallback cover the common shapes; a text-sized control's first frame of a new string is
   its own problem, and iOS shows at most one stale frame there (§3).
-- It does not observe a real environment change through the only component that exists yet: neither
-  `UISwitch`/`Toggle(.switch)` nor the M3 Switch changes size with font scale, measured at 1.3× and
-  AccessibilityLarge. The epoch path is exercised mechanically (`invalidateSizingEnvironment`,
-  `traitCollectionDidChange`/`onConfigurationChanged`), and the first component with a text-derived
-  size will exercise it for real.
+- The epoch path was first exercised mechanically (`invalidateSizingEnvironment`,
+  `traitCollectionDidChange`/`onConfigurationChanged`), because neither `UISwitch`/`Toggle(.switch)`
+  nor the M3 Switch changes size with font scale (measured at 1.3× and AccessibilityLarge). The
+  text-sized controls (Button, SegmentedControl, Picker, DatePicker) are the ones a real text-size
+  change moves; their component docs say what was measured.
 - It cannot know a trait environment that is not on screen yet, in the one case that still asks for it:
   `invalidateContentSize()` called on a host that has no window. The mount path no longer has this
   problem — a commit does not measure a detached host at all, it leaves the measure pending until
@@ -509,15 +512,23 @@ Limits, stated plainly:
 
 ## 10. A control inside a `<Host>` (D24)
 
-`<Host>` (Android, opt-in — `docs/components/host.md`) composes its direct nitro-ui
-children into **one** Compose composition, which is where the mount memory and UI-thread win
-comes from. H1 shipped it for `Switch`; H2a added `Slider`, `Progress` and `Button`, and
-re-measured the batch with all four in it. One figure per control — mount memory (the
-`memory` cell, N=200) / mount UI-thread CPU / mount JS-thread CPU / unmount UI-thread CPU
-(the `mount` cell, N=50) — each one the runner's own launch-paired ratio to
-`expo-ui-shared-host` from one run (`quick` plan, ART `speed-profile`, 4 launches,
-`bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`, read with
-`bench/tools/arm-ratios.mjs`):
+`<Host>` (Android, opt-in — `docs/components/host.md`) composes its direct
+nitro-ui children into **one** Compose composition, which is where the mount memory and
+UI-thread win comes from (H1's run: 2.75x → **0.86x** `expo-ui-shared-host` on mount memory,
+1.39x → **0.87x** on mount UI CPU; T16's spike measured 2.75x → 0.87x and 1.50x → 0.80x the
+same way, and the shipped container reproduced it). The cost is the JS thread — 0.73x unhosted
+against **1.18x** hosted — and that the hosted control stops being a Yoga leaf whose box
+anybody draws.
+
+H1 shipped that for `Switch`. H2a adds `Slider`, `Progress` and `Button` to the same
+mechanism — unreleased, so 0.1.0 ships `Switch` only — and re-measured the batch with all four
+in it. One figure per control: mount memory (the `memory` cell, N=200) / mount UI-thread CPU /
+mount JS-thread CPU / unmount UI-thread CPU (the `mount` cell, N=50), each one the runner's own
+launch-paired ratio to `expo-ui-shared-host` from one run (`quick` plan, ART `speed-profile`,
+4 launches, `bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`, read with
+`bench/tools/arm-ratios.mjs`). That run was made on a **busy machine (37 % of load samples over
+the ceiling), so it is indicative and a quiet re-run is pending**: every cell whose spread
+across launches is over 10 % is marked **ᴺ** and carries no verdict.
 
 | Control (N=200)         | `nitro-ui` unhosted                                       | `expo-ui-shared-host` | `nitro-ui` + `<Host>`                                   |
 | ----------------------- | --------------------------------------------------------- | --------------------- | ------------------------------------------------------- |

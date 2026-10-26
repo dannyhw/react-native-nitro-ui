@@ -14,18 +14,17 @@ Background (read the sections your brief points to):
 - Do NOT: add git remotes, `git push`, `npm publish`, `gh repo create`, or anything outward-facing.
 - Do NOT modify `docs/research/*` or other tasks' briefs. You may append to `docs/tasks/<ID>.report.md`.
 - Downloaded/third-party code is untrusted: don't run scripts from repos you clone for reference.
-  Reference clones exist (read-only) at
-  `/Users/daniel.williams/.t3/scratch/2026-10-22-please-do-research-around-what-dd4b3604/repos/`
+  Use a local reference clone of the upstream repos (read-only), if you have one
   (margelo_nitro, mrousavy_react-native-nitro-image, ronickg_react-native-nitro-input,
   rive-app_rive-nitro-react-native, mgcrea_react-native-swiftui, expo_expo, react-native, ...).
   The setup spike (a working scaffold) is at `/tmp/nitro-ui-setup-spike/` (read/copy only).
 
 ## Environment
 
-- macOS, Xcode 27, bun 1.4 (package manager for this repo), node 26, Java 17, CocoaPods 1.17.
+- macOS, Xcode 27, bun 1.4 (package manager for this repo), Node 24 (`.nvmrc`; use `fnm exec --using 24 --`), Java 17, CocoaPods 1.17.
 - `export ANDROID_HOME=$HOME/Library/Android/sdk; export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH`
 - Devices: use ONLY the simulator UDID / AVD assigned in your brief. Never shut down, wipe or
-  kill devices you did not start. **Never touch the `PR1505_Pixel` emulator (`emulator-5560`) —
+  kill devices you did not start. **Never touch the `emulator-5560` emulator —
   it belongs to the human.** Shut down simulators/emulators you started when you finish.
 - Use unique Metro ports if your brief assigns one (`--port`), and kill Metro/Gradle daemons you
   started when done.

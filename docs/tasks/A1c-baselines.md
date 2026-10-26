@@ -25,5 +25,5 @@ sample). R4 merged: the guard now judges the whole run (`machine.loadSamples`).
 
 Constraints: the human may be using the machine; don't kill or touch any process you didn't start,
 don't touch other simulators (the `RNSB …` ones belong to another thread) or any Android emulator
-(never `PR1505_Pixel` / `emulator-5560`), no `pkill`/`killall` by name. `bun run check` green
+(never `emulator-5560`), no `pkill`/`killall` by name. `bun run check` green
 before committing.

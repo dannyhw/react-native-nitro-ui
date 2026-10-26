@@ -55,8 +55,8 @@ read-only plus `measureContent()`, and it runs once, when the view mounts.
 | Recycle         | hosting controller reused                           | objects reused; composition rebuilt (`core.md` §6)            |
 
 Because the control presents nothing, this host needs no view-controller
-containment — unlike the `.menu` Picker, which is the 0.2 `Picker` component
-(`docs/tasks/G4-segmented-picker.md`, deferred by D19) and will have to own one.
+containment — unlike the `.menu` style, which is the separate `Picker` component
+(`docs/components/picker.md`) and does own one.
 
 ## Selection
 
@@ -73,7 +73,7 @@ The selection is a number, so it goes through the event-count handshake
 - **A tap on the segment that is already selected reports nothing, on both
   platforms.** A SwiftUI `Picker` binding only writes when the selection moves,
   while Material 3 fires `onClick` for every press, so the Android implementation
-  suppresses the no-op (`android/.../HybridNitroUiSegmentedControl.kt:305`).
+  suppresses the no-op (`android/.../HybridNitroUiSegmentedControl.kt`).
   This is what makes the two platforms report the same events, and it is what
   makes a snap-back observable at all: `scripts/real-input` taps the refused
   segment *twice*, and the second tap can only be reported if native put the
@@ -111,8 +111,8 @@ R3 verification DECISIONS D16 asks for, in
 `example/__tests__/SegmentedControl.harness.tsx`.
 
 The sizing key is `optionCount|label|label|…`
-(`src/components/SegmentedControl/SegmentedControl.tsx:128`), with every label
-escaped (`\` → `\\`, `|` → `\|`, `src/components/SegmentedControl/SegmentedControl.tsx:113`)
+(`src/components/SegmentedControl/SegmentedControl.tsx`), with every label
+escaped (`\` → `\\`, `|` → `\|`, `src/components/SegmentedControl/SegmentedControl.tsx`)
 so a label containing the separator cannot forge one. Without the escape, a
 same-count pair like `['aa|bb', 'c']` and `['aa', 'bb|c']` would build one key and
 share one cached size, one of which is wrong for the life of the process. The
@@ -121,7 +121,7 @@ joined. `disabled` and `tintColor` repaint, they do not resize, and the text siz
 size are not in the key: native folds the environment in through the epoch
 (`docs/architecture/sizing.md`, "Building `nuiSizingKey`").
 
-Measured, with nothing overridden (iPhone Air / iOS 27 in pt; `nitroui_t02`,
+Measured, with nothing overridden (iPhone Air / iOS 27 in pt; an API 35 emulator,
 API 35 at 420 dpi, in dp):
 
 | `options`                          | iOS             | Android         |
@@ -140,25 +140,25 @@ what the real-input taps assume.
 
 **What the engine starts from.** The engine keys fallbacks per component, so this
 component has one declared pair however many option lists exist: `165 × 31` pt
-(`ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift:201`) and
-`256 × 48` dp (`android/.../HybridNitroUiSegmentedControl.kt:400`) — the
+(`ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift`) and
+`256 × 48` dp (`android/.../HybridNitroUiSegmentedControl.kt`) — the
 three-short-labels row above, measured rather than guessed, because a fallback
 smaller than the control is the dead-touch story in `core.md` §7. Every other
 option list is a first instance of *its own* configuration: it is laid out at the
 fallback and corrected the turn it measures (D17). Registered at startup through
-`NitroUiDeclaredFallbacks` (T14), not from the first view.
+`NitroUiDeclaredFallbacks`, not from the first view.
 
 **What makes a change re-measure.** Compose observes `options` and its own
 measure pass reports the new size, so Android needs nothing extra. iOS needs to
 be told: the `options` setter calls `host.noteContentSizeMayHaveChanged()` next to
-`markDirty()` (`ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift:235`)
+`markDirty()` (`ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift`)
 — no bounds change and no trait change is coming, so without it the control would
 repaint at the old width and Yoga would keep the old box. Both platforms reset the
 host's last-reported size when `nuiSizingKey` changes
-(`…/HybridNitroUiSegmentedControl.swift:336`,
-`android/.../HybridNitroUiSegmentedControl.kt:551`): a new list that happens to
+(`…/HybridNitroUiSegmentedControl.swift`,
+`android/.../HybridNitroUiSegmentedControl.kt`): a new list that happens to
 measure exactly what the old one did would otherwise have its correcting report
-swallowed by the dedupe and stay at the fallback (G2's F1). D20 then keeps a
+swallowed by the dedupe and stay at the fallback. D20 then keeps a
 corrected instance re-measuring on later props turns.
 
 A user `style` still wins: `width`, `height` or `flex` fixes the box and the
@@ -176,7 +176,7 @@ distributes the widths its own way. Keep option lists short enough to read; see
 Limits.
 
 The base style is `alignSelf: 'flex-start'`
-(`src/components/SegmentedControl/SegmentedControl.tsx:144`) for the same reason
+(`src/components/SegmentedControl/SegmentedControl.tsx`) for the same reason
 `Switch` and `Button` have one: in a column, `alignItems: stretch`
 would decide the width for us and the measurement would never be asked for. Ask
 for a stretched row with `alignSelf: 'stretch'`.
@@ -193,7 +193,7 @@ drops the now-wrong cached sizes.
   `checked=true`. On iOS the segmented `Picker` is the platform element VoiceOver
   already knows.
 - `accessibilityLabel` describes the **group**: on Android it goes on the row
-  (`android/.../HybridNitroUiSegmentedControl.kt:292`), on iOS on the `Picker`, and
+  (`android/.../HybridNitroUiSegmentedControl.kt`), on iOS on the `Picker`, and
   on both it is applied only when set — an empty label would silence the segments.
 - `testID` is RN's own base prop and lands on the container; on iOS it is
   deliberately *not* also put on the hosted element, which would make the id match
@@ -211,7 +211,7 @@ drops the now-wrong cached sizes.
 - **Every prop is always sent.** `options` is `[]` rather than absent, and the
   rest use `null`, because Nitro treats a missing prop as "unset" (D7) and a
   recycled view would otherwise keep the previous row's segments.
-- **Recycling is safe.** `NitroUiSegmentedControl` implements `RecyclableView` on
+- **Recycling is safe.** `HybridNitroUiSegmentedControl` implements `RecyclableView` on
   both platforms: the model resets (options, selection, default-seed flag, tint,
   label, sizing key, callback), and on Android the composition is disposed before
   reuse and rebuilt on the next attach (`core.md` §6). One batched commit per JS
@@ -219,7 +219,7 @@ drops the now-wrong cached sizes.
   no open-menu state to leak on recycle either.
 - **Cached, never rebuilt.** The M3 `SegmentedButtonColors` per `(scheme, tint)`
   are served from a bounded process-wide cache keyed on the theme's identity
-  (`android/.../HybridNitroUiSegmentedControl.kt:174`) — `SegmentedButtonDefaults.colors()`
+  (`android/.../HybridNitroUiSegmentedControl.kt`) — `SegmentedButtonDefaults.colors()`
   allocates, and building it per recomposition per mounted control is the cost the
   "Shared objects" rule in `core.md` is about. `itemShape` is *not* cached: it is
   derived from the index and count, not from the theme.
@@ -257,17 +257,17 @@ drops the now-wrong cached sizes.
   end caps are drawn and every segment is tappable — which is what iOS has always
   done by proposing the box to SwiftUI. Fitting is not legibility: Material 3
   splits the row's width equally, so four options in a 140 dp box each show an
-  ellipsis (`docs/tasks/C1-android-overwide/android-after.png`, before it
-  `…/android-before.png`). This is shared `intrinsic` host behaviour (it applies to
+  ellipsis. This is shared `intrinsic` host behaviour (it applies to
   `Button` too, where the label usually survives). Keep option lists within the
   available width.
 - One declared fallback pair per component, so the first instance of a wider option
   list starts from a 165 pt / 256 dp box and is corrected on the turn it measures
   (D17). A cold batch of 200 distinct option lists lands over several frames —
-  logged, not gated; finer fallbacks are T14's story.
+  logged, not gated. Fallbacks are declared per component, not per option list.
 - Android has no `testID` inside the Compose view; the id lands on the host
   `View.tag`, which is what the harness reads.
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated.
-- `Picker` (menu / wheel) is **not** this component and is not in v0.1 (D19). A
-  `.menu` Picker needs view-controller containment and an open-popup lifecycle that
-  this control does not have.
+- A menu or wheel picker is **not** this component: that is `Picker`
+  (`docs/components/picker.md`, shipping in 0.1.0), because a `.menu` Picker
+  needs view-controller containment and an open-popup lifecycle that this control
+  does not have.

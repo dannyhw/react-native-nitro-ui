@@ -347,7 +347,7 @@ light one is the evidence for the over-wide menu being fitted and ellipsised.
 
 - Android addressed by serial throughout (`-s emulator-5570`, `ANDROID_ADB_SERVER_PORT=5041`,
   `ANDROID_AVD=nitroui_t01`). The default-port adb server was never used or restarted;
-  `emulator-5560` / `PR1505_Pixel`, G5's `emulator-5572` / `nitroui_t02` / adb 5042 / Metro
+  `emulator-5560`, G5's `emulator-5572` / `nitroui_t02` / adb 5042 / Metro
   8294, and the `PR1501R2_Pixel` (port 5600) emulator another session booted mid-task were
   never touched.
 - iOS only on `F08675D3-…` (iPhone 17, iOS 27). No `agent-device` session was started

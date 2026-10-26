@@ -42,8 +42,8 @@ ANDROID_AVD="${ANDROID_AVD:-${AVD:-}}"
 EMULATOR_PORT="${EMULATOR_PORT:-5554}"
 EMULATOR_SERIAL="emulator-$EMULATOR_PORT"
 # Never steal the human's emulator, no matter what env says.
-if [ "$ANDROID_AVD" = "PR1505_Pixel" ] || [ "$EMULATOR_SERIAL" = "emulator-5560" ]; then
-  echo "smoke: refusing to use PR1505_Pixel / emulator-5560 (belongs to the human)" >&2
+if [ "$EMULATOR_SERIAL" = "emulator-5560" ]; then
+  echo "smoke: refusing to use emulator-5560 (reserved on the maintainer machine)" >&2
   exit 1
 fi
 
