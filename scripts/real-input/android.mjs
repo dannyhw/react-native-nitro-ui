@@ -201,33 +201,68 @@ const CHECKS = {
     // gives both halves of the claim: one node per child, in mount order, between the
     // RN siblings rather than before or after them.
     const tree = t.dump();
-    /** @param {(node: import('./uiautomator.mjs').UiautomatorNode) => boolean} predicate */
-    const orderOf = (predicate) => tree.findIndex(predicate);
-    const section = orderOf((node) =>
-      node.text.includes('Three Switches, one composition')
-    );
-    const followingNote = orderOf((node) =>
-      node.text.includes('The Host has a height')
-    );
+    // Matched without case because the tree carries what is drawn, not what JSX says:
+    // this screen's section headings carry `textTransform: 'uppercase'`, so the node
+    // reads "THREE SWITCHES, ONE COMPOSITION" and a JSX-exact search finds nothing -
+    // which then reads as "the tree has no such node" when it has exactly that node.
+    const textOrder = (needle) =>
+      tree.findIndex((node) =>
+        node.text.toLowerCase().includes(needle.toLowerCase())
+      );
+    const descOrder = (description) =>
+      tree.findIndex((node) => node.contentDesc === description);
+    const section = textOrder('Three Switches, one composition');
+    const followingNote = textOrder('The Host has a height');
     const hosted = [0, 1, 2].map((index) =>
-      orderOf((node) => node.contentDesc === `Hosted switch ${String(index)}`)
+      descOrder(`Hosted switch ${String(index)}`)
+    );
+
+    // A red ordering claim has to say where the tree actually put things, and a
+    // missing node has to say what it saw instead: -1 against true would otherwise
+    // read as "the order is wrong" when the truth is "this node is not in the tree".
+    const where = tree
+      .map((node, index) =>
+        node.text || node.contentDesc
+          ? `${String(index)}:${(node.text || node.contentDesc).slice(0, 22)}`
+          : null
+      )
+      .filter(Boolean)
+      .join(' | ');
+    t.log.note(
+      `tree positions — section=${String(section)}, hosted=${hosted.join(
+        '/'
+      )}, note=${String(followingNote)}; named nodes: ${where}`
     );
 
     t.log.checkEquals(
-      'the RN text above the Host is read before every hosted Switch',
-      [section, ...hosted].every((at) => at > 0) &&
-        hosted.every((at) => at > section),
+      'the tree carries the RN text above the Host',
+      section >= 0,
       true
     );
     t.log.checkEquals(
-      'the RN note below the Host is read after every hosted Switch',
-      followingNote > 0 && hosted.every((at) => at < followingNote),
+      'the tree carries the RN note below the Host',
+      followingNote >= 0,
       true
+    );
+    t.log.checkEquals(
+      'the tree carries a node for each hosted Switch',
+      hosted.map((at) => at >= 0),
+      [true, true, true]
     );
     t.log.checkEquals(
       'each hosted Switch is its own labelled node, in mount order',
       hosted,
       [...hosted].sort((left, right) => left - right)
+    );
+    t.log.checkEquals(
+      'the RN text above the Host is read before every hosted Switch',
+      hosted.map((at) => at > section),
+      [true, true, true]
+    );
+    t.log.checkEquals(
+      'the RN note below the Host is read after every hosted Switch',
+      hosted.map((at) => at < followingNote),
+      [true, true, true]
     );
   },
 
