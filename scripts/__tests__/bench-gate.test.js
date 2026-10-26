@@ -66,7 +66,7 @@ const ITERATIONS = 20;
  * The arms a component's cells must carry.
  *
  * `IMPLEMENTATIONS` is every arm the runner knows about; `ARM_SCOPES` narrows the
- * ones that render only some controls (`nitro-ui-host`, the four hostable controls on
+ * ones that render only some controls (`nitro-ui-host`, the seven hostable controls on
  * Android). Naming the arms a cell must have, rather than "all of them", is what keeps
  * these assertions true when an arm exists that cannot serve the component - a missing
  * arm is only acceptable when it is a scoped one.
@@ -1801,11 +1801,11 @@ describe('the Picker cells (--component picker)', () => {
 });
 
 /**
- * The shared-`<Host>` arm's scope (H1, widened to four controls by H2a).
+ * The shared-`<Host>` arm's scope (H1, widened to four controls by H2a and to seven by H2b).
  *
- * The arm composes what a `<Host>` can draw - Switch, Slider, linear Progress, Button -
- * and refuses the three a Host refuses (SegmentedControl, Picker, DatePicker, H2b's
- * scope); on iOS `<Host>` is a passthrough rather than a shared composition. Either way a
+ * The arm composes what a `<Host>` can draw - Switch, Slider, linear Progress, Button,
+ * SegmentedControl, Picker, DatePicker - and refuses what a Host refuses (an RN view, a
+ * nested Host); on iOS `<Host>` is a passthrough rather than a shared composition. Either way a
  * cell outside that scope is a launch that measures nothing under a name that promises
  * something, so the claim these tests hold is that such cells are never scheduled - and
  * that the arm is still measured where it *does* apply, or the D15 ratio against
@@ -1841,7 +1841,10 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     const scoped = ARM_SCOPES[HOST].components;
     expect([...scoped].sort()).toEqual([
       'button',
+      'date-picker',
+      'picker',
       'progress',
+      'segmented-control',
       'slider',
       'switch',
     ]);
@@ -1863,7 +1866,7 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
   });
 
   /**
-   * The four hostable controls each get their cells, per launch, like every other
+   * Every hostable control gets its cells, per launch, like every other
    * arm. A component quietly dropping out of the arm is how a ratio table loses a
    * head row without any test going red.
    */
@@ -1890,10 +1893,19 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     }
   });
 
+  /**
+   * Since H2b the arm covers every planned control, so the loop below walks an empty
+   * list. That is asserted out loud rather than left to pass silently: an empty loop is
+   * exactly how a scope grows without any test noticing, and the rule the loop guards -
+   * never schedule a cell for an arm that would render nothing - still has to hold for
+   * whatever a future plan adds that a Host cannot draw.
+   */
   it('schedules no cell of a control a Host refuses', () => {
-    for (const component of EVERY_COMPONENT.filter(
+    const refused = EVERY_COMPONENT.filter(
       (name) => !ARM_SCOPES[HOST].components.includes(name)
-    )) {
+    );
+    expect(refused).toEqual([]);
+    for (const component of refused) {
       expect(ARM_SCOPES[HOST].components.includes(component)).toBe(false);
       for (const platform of ['android', 'ios']) {
         const schedule = buildSchedule({
