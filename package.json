@@ -76,8 +76,7 @@
     "probe:nitrogen": "bun --cwd bench/modules/bench-probe nitrogen",
     "perf:renders": "node scripts/perf/renders.mjs",
     "changeset": "changeset",
-    "release:version": "changeset version && bun install --no-frozen-lockfile --ignore-scripts",
-    "release:publish": "changeset publish",
+    "release:version": "changeset version",
     "api-extractor": "api-extractor run --local --config etc/api-extractor.json",
     "api-extractor:check": "api-extractor run --config etc/api-extractor.json",
     "readme:check": "node scripts/readme-examples-check.mjs"

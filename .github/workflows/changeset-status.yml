@@ -8,10 +8,16 @@ name: Changeset status
 # Its own workflow on purpose: `ci.yml` belongs to another task's changes, and
 # this must never be the reason a contribution is red.
 #
-# Only reads the pull request: nothing here runs code from the fork, and the
-# job has no write permission. On a fork pull request `origin/main` is the
-# fork's own `main`, which can only make the warning wrong in one direction
-# (a missing entry it does not see), never block anything.
+# It does run code from the pull request: the composite setup action and the
+# `changeset` command both come from the PR's own tree. That is the safe way to
+# read a pull request, because a `pull_request` run from a fork gets a read-only
+# `GITHUB_TOKEN` and no access to secrets, and this job asks for `contents: read`
+# and nothing else — untrusted code here has nothing to take and no way to be
+# anything but a warning.
+#
+# On a `pull_request` event `origin` is the base repository, so
+# `--since=origin/main` compares the pull request against upstream `main` even
+# when it comes from a fork.
 
 on:
   pull_request:
