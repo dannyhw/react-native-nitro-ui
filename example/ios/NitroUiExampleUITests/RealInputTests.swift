@@ -261,11 +261,12 @@ final class RealInputTests: XCTestCase {
     try goToTab(Tab.hostTab, showing: Echo.hostValue)
     try scrollIntoView("host-slider", as: "the Slider inside the Host")
     let control = try required("host-slider", as: "the Slider inside the Host")
-    let before = number(in: try read(Echo.hostSliderValue))
+    let startEcho = try read(Echo.hostSliderValue)
+    let before = number(in: startEcho)
     XCTAssertEqual(
       before,
       0.4,
-      "the hosted Slider should start where the screen says it does (echo: \(try read(Echo.hostSliderValue)))"
+      "the hosted Slider should start where the screen says it does (echo: \(startEcho))"
     )
 
     // A `fillWidth` control inside a Host has the Host's width, so it should read as a
