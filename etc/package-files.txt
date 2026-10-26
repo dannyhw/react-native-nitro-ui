@@ -1,3 +1,4 @@
+CHANGELOG.md
 LICENSE
 NitroUi.podspec
 README.md
