@@ -27,8 +27,9 @@
  * business, and a test that hard-coded it would be a second layout implementation
  * rather than a witness of the one under test.
  */
-import { useState } from 'react';
+import { forwardRef, memo, useState } from 'react';
 import {
+  DeviceEventEmitter,
   Platform,
   TurboModuleRegistry,
   View,
@@ -45,7 +46,7 @@ import {
   render,
 } from 'react-native-harness';
 import { userEvent } from '@react-native-harness/ui';
-import { Host, Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { Host, Picker, Switch, nitroUiCore } from 'react-native-nitro-ui';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
@@ -85,6 +86,10 @@ type Log = {
   write: Record<string, (next: boolean) => void>;
   /** Reorder the children of a list fixture. */
   setIds?: (ids: string[]) => void;
+  /** Change a fixture's `disabled` after mount. */
+  setDisabled?: (next: boolean) => void;
+  /** Change which of a list fixture's children are `display: none`. */
+  setHidden?: (next: boolean) => void;
 };
 
 const newLog = (): Log => ({
@@ -137,11 +142,13 @@ async function mount(ui: Parameters<typeof render>[0], timeoutMs = 30000) {
 /**
  * Press at an absolute point and report which control answered, or `null`.
  *
- * "Answered" means that instance's `onValueChange` reached JS. On Android the hosted
- * view is `GONE` and outside the touch path, so the only way an answer can arrive is
- * through the Host's composition — which is the property under test, not an
- * assumption. More than one answer per press is a failure in itself (overlapping hit
- * areas between two hosted controls).
+ * "Answered" means that instance's `onValueChange` reached JS. On Android a hosted
+ * control declines to measure, so its own view is laid out at `0 x 0` — not a hit
+ * target, and not visible-to-user (review S1 corrects an earlier draft that called it
+ * `GONE`: Fabric re-asserts `VISIBLE` on that view every layout pass). The only way an
+ * answer can arrive is therefore through the Host's composition, which is the property
+ * under test rather than an assumption. More than one answer per press is a failure in
+ * itself (overlapping hit areas between two hosted controls).
  */
 async function probeAt(
   x: number,
@@ -232,24 +239,59 @@ function Toggle({
   );
 }
 
+/**
+ * A Switch the test can enable after mount.
+ *
+ * A `disabled` assertion that only ever presses a disabled control passes for a Host
+ * that drew nothing at all, so the fixture has to be able to answer: same box, same
+ * press, one prop different (review S6).
+ */
+function Enableable({
+  id,
+  log,
+  initiallyDisabled,
+}: {
+  id: string;
+  log: Log;
+  initiallyDisabled: boolean;
+}) {
+  const [disabled, setDisabled] = useState(initiallyDisabled);
+  log.setDisabled = setDisabled;
+  return <Toggle id={id} log={log} disabled={disabled} />;
+}
+
 /** A Host whose child list the test can change. */
 function HostedList({
   log,
   ids,
   hostStyle,
   childStyle,
+  hideLast,
 }: {
   log: Log;
   ids: string[];
   hostStyle?: ViewStyle;
   childStyle?: ViewStyle;
+  /** Start with the last child `display: none`; `setHidden(false)` shows it. */
+  hideLast?: boolean;
 }) {
   const [current, setCurrent] = useState(ids);
+  const [hidden, setHidden] = useState(hideLast ?? false);
   log.setIds = setCurrent;
+  log.setHidden = setHidden;
   return (
     <Host style={hostStyle}>
-      {current.map((id) => (
-        <Toggle key={id} id={id} log={log} style={childStyle} />
+      {current.map((id, index) => (
+        <Toggle
+          key={id}
+          id={id}
+          log={log}
+          style={
+            hidden && index === current.length - 1
+              ? { ...childStyle, display: 'none' }
+              : childStyle
+          }
+        />
       ))}
     </Host>
   );
@@ -368,10 +410,15 @@ describe('Host · hosted controls are still controls', () => {
     expect(log.handles['write-0']?.value).toBe(false);
     log.write['write-0']?.(true);
     await settle(400);
-    // The control has no view of its own to update on Android: this is the Host's
-    // composition recomposing that one child, and the handle is what says so.
+    // The handle records the write, but a handle is the model's last JS prop, not what
+    // is drawn: a Host whose composition never recomposed would read the same here
+    // (review S6). The press is the witness — a Switch still showing `false` would ask
+    // for `true`, and only one showing `true` asks to go back.
     expect(log.handles['write-0']?.value).toBe(true);
     expect(log.events).toEqual([]);
+    expect(await pressFirstControl('write-host', 'write-0')).toBe('write-0');
+    expect(log.requests).toEqual(['write-0:false']);
+    expect(log.handles['write-0']?.value).toBe(false);
     unmount();
   });
 
@@ -394,7 +441,30 @@ describe('Host · hosted controls are still controls', () => {
     await settle(500);
     expect(await pressFirstControl('list-host', 'list-c')).toBe('list-c');
 
-    // And removing the child that was just pressed must not take the Host with it.
+    // Add: a child that was never mounted has to become drawable, which is the brief's
+    // "added" and something the two steps above cannot show (review S6). `list-d` joins
+    // at the end, so a sweep that reaches it means the Host composed a child it did not
+    // have at mount, in the order the app asked for.
+    log.setIds?.(['list-c', 'list-a', 'list-d']);
+    await settle(500);
+    expect(await boxOf('list-d')).not.toBeNull();
+    const listBox = await boxOf('list-host');
+    const order: string[] = [];
+    for (let offset = 4; offset <= 200; offset += 8) {
+      const hit = await probeIn(
+        listBox,
+        8,
+        offset,
+        ['list-c', 'list-a', 'list-d'],
+        log
+      );
+      if (hit != null && order[order.length - 1] !== hit) {
+        order.push(hit);
+      }
+    }
+    expect(order).toEqual(['list-c', 'list-a', 'list-d']);
+
+    // And removing every child but one must not take the Host with it.
     log.setIds?.(['list-a']);
     await settle(400);
     expect(await pressFirstControl('list-host', 'list-a')).toBe('list-a');
@@ -406,7 +476,7 @@ describe('Host · hosted controls are still controls', () => {
     const { unmount } = await mount(
       <View testID="off-host" style={HUG}>
         <Host style={{ width: 300, height: 140 }}>
-          <Toggle id="off-0" log={log} disabled />
+          <Enableable id="off-0" log={log} initiallyDisabled />
         </Host>
       </View>
     );
@@ -414,16 +484,26 @@ describe('Host · hosted controls are still controls', () => {
     expect(log.handles['off-0']?.disabled).toBe(true);
     expect(await pressFirstControl('off-host', 'off-0')).toBeNull();
     expect(log.events).toEqual([]);
+
+    // A Host that drew nothing would answer `null` forever, so the same press has to
+    // answer once the control is enabled: the first `null` was the Switch refusing,
+    // not the composition being missing (review S6).
+    log.setDisabled?.(false);
+    await settle(400);
+    expect(await pressFirstControl('off-host', 'off-0')).toBe('off-0');
+    expect(log.requests).toEqual(['off-0:true']);
     unmount();
   });
 
   /**
-   * `testID` on a hosted child: the harness must still find it.
+   * `testID` on a hosted child: the harness must still find it — and what its box
+   * means, which is the caveat an E2E tool needs (review S8).
    *
-   * Android keeps the child's `View` alive (`GONE`, drawing nothing) and that view is
-   * what carries the id, so this is the query every other suite relies on. Its box is
-   * reported for the record — on Android it is RN's frame, not where the control drew,
-   * and on iOS it is RN's frame too, because there is no composition to draw instead.
+   * Android keeps the child's `View` alive and that view is what carries the id, so
+   * this is the query every other suite relies on. The box it reports is *not* where
+   * the control is: the child is laid out at `0 x 0` at the Host's origin, so a tool
+   * that taps the centre of the `testID` view taps nothing. Inside a Host, find hosted
+   * controls by `accessibilityLabel` (docs/components/host.md).
    */
   it('finds a hosted child by testID', async () => {
     const { unmount } = await mount(
@@ -440,10 +520,10 @@ describe('Host · hosted controls are still controls', () => {
     // id resolves to nothing. What the box says differs by who owns the pixels, and
     // both halves are the point of looking.
     if (Platform.OS === 'android') {
-      // *No size at all*: the child's `View` is `GONE` while a Host draws it, so it
-      // takes no part in Android's layout or touch dispatch. Its RN frame still exists
-      // (the Host is 96 tall, two children's engine boxes) and is simply decorative,
-      // which is D24's whole sentence in one measurement.
+      // *No size at all*: the child declines to measure while a Host draws it, so it is
+      // laid out at nothing and is neither a hit target nor visible-to-user. Its RN
+      // frame still exists (the Host is 96 tall, two children's engine boxes) and is
+      // simply decorative, which is D24's whole sentence in one measurement.
       expect(Math.round(zero.width)).toBe(0);
       expect(Math.round(zero.height)).toBe(0);
       expect(Math.round(one.width)).toBe(0);
@@ -782,6 +862,262 @@ if (Platform.OS === 'android') {
       // instances the engine has answered for, so its delta is Fabric's instance-id
       // churn across mounts rather than work done by either fixture.
     });
+
+    /**
+     * `padding` on a Host moves the drawing, not just the box (review S3).
+     *
+     * The pair is sequential like every other pair here: the same sweep of offsets on
+     * an unpadded Host and on one with 32 dp of `paddingVertical`. Vertical only,
+     * because a sweep presses at a fixed x — a left padding would move the drawing out
+     * from under every press in it, which is the same fact told badly (it was the first
+     * version of this test, and it failed for exactly that reason). If `setPadding`
+     * never reaches the view (the base `ViewManager` setter is a no-op), the padded
+     * Host answers at the top edge exactly like the plain one.
+     */
+    it('insets its drawing for its own padding', async () => {
+      const offsets = [8, 24, 40, 56, 72, 88, 104, 120, 136, 152, 168];
+      const plain = await sweepThree({
+        hostTestId: 'nopad-host',
+        hostStyle: { width: 300, height: 240 },
+        prefix: 'nopad',
+        offsets,
+        axis: 'y',
+      });
+      const padded = await sweepThree({
+        hostTestId: 'pad-host',
+        hostStyle: { width: 300, height: 240, paddingVertical: 32 },
+        prefix: 'pad',
+        offsets,
+        axis: 'y',
+      });
+      const drawn = (hits: string[]) =>
+        new Set(hits.filter((hit) => hit !== 'none'));
+      // Both draw all three rows, so the difference is a shift and not a Host that
+      // stopped composing. A sweep is allowed to fall in the dead band between two
+      // rows — that is why the comparison below is about *which* offset first bites.
+      expect(drawn(plain.hits)).toEqual(new Set(['0', '1', '2']));
+      expect(drawn(padded.hits)).toEqual(new Set(['0', '1', '2']));
+      const firstHitOffset = (hits: string[]) => {
+        const index = hits.findIndex((hit) => hit !== 'none');
+        return index < 0 ? Number.POSITIVE_INFINITY : (offsets[index] ?? 0);
+      };
+      // The plain drawing is reachable above the padding and the padded one is not:
+      // 8 dp into a padded Host is padding, and 8 dp into a plain one is row 0.
+      expect(firstHitOffset(plain.hits)).toBeLessThan(32);
+      expect(firstHitOffset(padded.hits)).toBeGreaterThanOrEqual(32);
+      // And the box is the same either way — padding is inside the Host's own height.
+      expect(padded.hostBox).toEqual(plain.hostBox);
+    });
+
+    /**
+     * `display: 'none'` on a hosted child takes it out of the drawing too (S2).
+     *
+     * A Host draws its children, so RN's hiding cannot be honoured by hiding a view
+     * that draws nothing anyway: the child has to leave the composition. The witness
+     * is that the hidden child is not tappable *and the shown child still is* — a Host
+     * that drew nothing at all would pass the first half alone.
+     */
+    it('does not draw a hosted child RN hid with display: none', async () => {
+      const hiddenLog = newLog();
+      const { unmount } = await mount(
+        <View testID="hidden-host" style={HUG}>
+          <HostedList
+            log={hiddenLog}
+            ids={['hidden-a', 'hidden-b']}
+            hostStyle={{ width: 300, height: 200 }}
+            hideLast
+          />
+        </View>
+      );
+      const box = await boxOf('hidden-host');
+      await boxOf('hidden-a');
+      const sweep = async () => {
+        const answers: string[] = [];
+        for (let offset = 4; offset <= 180; offset += 8) {
+          const hit = await probeIn(
+            box,
+            8,
+            offset,
+            ['hidden-a', 'hidden-b'],
+            hiddenLog
+          );
+          if (hit != null && answers[answers.length - 1] !== hit) {
+            answers.push(hit);
+          }
+        }
+        return answers;
+      };
+      // `hidden-b` is `display: none`: only `hidden-a` is composed, so only it answers.
+      expect(await sweep()).toEqual(['hidden-a']);
+      // Show it and the same sweep reaches both. Before the fix the *first* sweep
+      // already reached `hidden-b`, because the composition never looked at `display`.
+      hiddenLog.setHidden?.(false);
+      await settle(500);
+      expect(await sweep()).toEqual(['hidden-a', 'hidden-b']);
+      unmount();
+    });
+  });
+
+  /**
+   * What a Host will not compose, and how loudly it says so (review M2, S5).
+   *
+   * JS refuses the children it can name. It cannot see through a component, so
+   * `memo(() => <Picker />)` arrives as an unknown child and the native allowlist is
+   * the only rule left — and in round 1 there was none, so it composed the Picker.
+   * The report was a `Log.w`, which is a line no app author reads, so these cases
+   * assert that JavaScript hears about it too.
+   */
+  describe('Host · what it refuses', () => {
+    let log: Log;
+    beforeEach(() => {
+      log = newLog();
+    });
+
+    /** The device event a debuggable `NitroUiHost` emits for a refused child. */
+    type Report = { message?: string; childClass?: string };
+
+    function listen(reports: Report[]) {
+      return DeviceEventEmitter.addListener(
+        'NitroUiHostUnhostableChild',
+        (report: Report) => {
+          reports.push(report);
+        }
+      );
+    }
+
+    /** A control behind a component, which is what JS cannot see through. */
+    const WrappedPicker = memo(function WrappedPicker() {
+      return (
+        <Picker
+          options={['Cinder', 'Mica', 'Shale']}
+          defaultSelectedIndex={0}
+          testID="wrapped-picker"
+        />
+      );
+    });
+
+    /**
+     * The two other shapes the review named (M2). `forwardRef` hands React a third
+     * element type, and a plain function component is what most apps actually write.
+     * Each is opaque to JS in its own way, so each has to be caught by the native rule
+     * rather than the JS one. The ref is deliberately not handed on: none of this
+     * library's controls accept one, and what matters here is the element type the
+     * Host is handed.
+     */
+    const PickerThroughForwardRef = forwardRef<View>(
+      function PickerThroughForwardRef(_props, _ref) {
+        return (
+          <Picker
+            options={['Cinder', 'Mica', 'Shale']}
+            defaultSelectedIndex={0}
+            testID="wrapped-picker-forwarded"
+          />
+        );
+      }
+    );
+
+    function PickerFromUserComponent() {
+      return (
+        <Picker
+          options={['Cinder', 'Mica', 'Shale']}
+          defaultSelectedIndex={0}
+          testID="wrapped-picker-user"
+        />
+      );
+    }
+
+    it('will not compose a control behind a component, and tells JS', async () => {
+      const reports: Report[] = [];
+      const subscription = listen(reports);
+      try {
+        const { unmount } = await mount(
+          <View testID="refuse-host" style={HUG}>
+            <Host style={{ width: 300, height: 140 }}>
+              <WrappedPicker />
+              <PickerThroughForwardRef />
+              <PickerFromUserComponent />
+            </Host>
+          </View>
+        );
+        // The Picker's view exists — it is a Fabric node like any other — but nobody
+        // composed it, and it declined to measure, so it is nothing. That holds for
+        // every shape the control hides behind, not only the one JS would unwrap.
+        const boxes: string[] = [];
+        for (const testId of [
+          'wrapped-picker',
+          'wrapped-picker-forwarded',
+          'wrapped-picker-user',
+        ]) {
+          const picker = await boxOf(testId);
+          boxes.push(
+            `${testId}=${String(Math.round(picker.width))}x${String(
+              Math.round(picker.height)
+            )}`
+          );
+        }
+        expect(boxes).toEqual([
+          'wrapped-picker=0x0',
+          'wrapped-picker-forwarded=0x0',
+          'wrapped-picker-user=0x0',
+        ]);
+        // Nothing in the Host's box answers: there is no composition there to press.
+        const host = await boxOf('refuse-host');
+        for (const offset of [24, 60, 100]) {
+          expect(await probeIn(host, 8, offset, [], log)).toBeNull();
+        }
+        // And the refusal reached JavaScript, naming the control (S5: not logcat). One
+        // report per refused child is the proof that all three shapes reached the
+        // native rule rather than being dropped without a word.
+        expect(
+          reports.filter((report) => /Picker/.test(report.message ?? '')).length
+        ).toBe(3);
+        expect(
+          reports.some((report) =>
+            /docs\/components\/host\.md/.test(report.message ?? '')
+          )
+        ).toBe(true);
+        unmount();
+      } finally {
+        subscription.remove();
+      }
+    });
+
+    /**
+     * A `<Host>` inside a `<Host>` is refused in JS when JS can see it. Behind a
+     * component it is the native allowlist that refuses it — and a Host is a
+     * `NitroComposeHost` like any control, so this is the child that had no rule at
+     * all in round 1 (M2, and the orchestrator's answer to the nesting question is
+     * "refused").
+     */
+    it('will not compose a Host behind a component either', async () => {
+      const reports: Report[] = [];
+      const subscription = listen(reports);
+      const WrappedHost = memo(function WrappedHost() {
+        return (
+          <Host style={{ width: 300, height: 48 }}>
+            <Toggle id="nested-0" log={log} />
+          </Host>
+        );
+      });
+      try {
+        const { unmount } = await mount(
+          <View testID="nested-hosts" style={HUG}>
+            <Host style={{ width: 300, height: 140 }}>
+              <WrappedHost />
+            </Host>
+          </View>
+        );
+        await settle(400);
+        const host = await boxOf('nested-hosts');
+        expect(await probeIn(host, 8, 24, [], log)).toBeNull();
+        expect(
+          reports.some((report) => /another <Host>/.test(report.message ?? ''))
+        ).toBe(true);
+        unmount();
+      } finally {
+        subscription.remove();
+      }
+    });
   });
 
   /**
@@ -789,10 +1125,12 @@ if (Platform.OS === 'android') {
    *
    * The dev warning is unit-tested in `src/__tests__/host.test.tsx`. This is the
    * on-device half: the box is read from the layout RN actually produced — the
-   * sibling below the Host starts where the Host started — rather than from an
-   * `onLayout`, which RN does not send for a view it laid out at zero. A rule that
-   * only held in the fake case would show up here, and so would a Compose column
-   * that overflowed the box it was given.
+   * sibling below the Host starts where the Host started — rather than from the
+   * Host's own `onLayout`. Fabric does report a zero-height layout (an earlier draft
+   * of these docs claimed it does not), but a sibling's frame is the measurement that
+   * does not need the Host to say anything about itself. A rule that only held in the
+   * fake case would show up here, and so would a Compose column that overflowed the
+   * box it was given.
    */
   describe('Host · a box of none (D24)', () => {
     it('lays a zero-height Host at zero, and its content is not tappable', async () => {

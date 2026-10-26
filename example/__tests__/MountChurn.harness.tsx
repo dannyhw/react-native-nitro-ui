@@ -214,10 +214,10 @@ const HOST_STYLE = { width: '100%' as const, height: COUNT * 48 };
  * it. A leak here is therefore bigger per node than the one above, which is what makes
  * it worth gating separately rather than assuming the shared path inherits B1's fix.
  *
- * Returns the last child's box so the caller can prove the batch was hosted: on
- * Android a hosted control's own view is `GONE`, which is reported as `0x0`. A Host
- * that silently composed nothing would churn an empty tree and pass every heap
- * assertion below.
+ * Returns the last child's box so the caller can prove the batch was hosted: a hosted
+ * control declines to measure, so its own view is laid out at `0x0` (review S1 - not
+ * `GONE`; Fabric re-asserts `VISIBLE` on it every layout pass). A Host that silently
+ * composed nothing would churn an empty tree and pass every heap assertion below.
  */
 async function churnHostedCycle(prefix: string): Promise<ViewInfo | null> {
   const { unmount } = await render(
@@ -240,6 +240,66 @@ async function churnHostedCycle(prefix: string): Promise<ViewInfo | null> {
   unmount();
   await settle(300);
   return lastChild;
+}
+
+/**
+ * Hosts per cycle for the leak a shared Host cannot see (review M1).
+ *
+ * `churnHostedCycle` churns **one** Host, and the floor bound below is 2 MiB per
+ * cycle, so a Host that leaks on unmount climbs the floor by one Host's ~42 KiB per
+ * cycle and passes while leaking every screen the app visits. Many small Hosts make
+ * the same bug a per-cycle event: 200 of them is the N this file already churns, and
+ * 200 leaked Hosts is ~8 MiB, four times what the bound allows.
+ *
+ * One Switch each is what an app actually writes - a Host per settings row, a Host
+ * per card - and it is the shape where the leak is worst, because a Host is a whole
+ * composition, an `AndroidComposeView` and a lifecycle observer.
+ */
+const HOST_COUNT = 200;
+
+/** One row per Host, so every Host has a reason to exist and a box to be in. */
+const SMALL_HOST_STYLE = { width: '100%' as const, height: 48 };
+
+/**
+ * Mount `HOST_COUNT` Hosts of one Switch each, let them draw, unmount the lot.
+ *
+ * Returns the last Host's box and its child's box: a real Host is a real height and
+ * its child is 0x0 (composed by the Host, not by its own view), which is the witness
+ * that the cycle churned 200 compositions rather than 200 empty `FrameLayout`s.
+ */
+async function churnManyHostsCycle(prefix: string): Promise<{
+  host: ViewInfo;
+  child: ViewInfo;
+}> {
+  const { unmount } = await render(
+    <View>
+      {Array.from({ length: HOST_COUNT }, (_, index) => index).map((row) => (
+        <Host
+          key={row}
+          testID={`${prefix}-host-${String(row)}`}
+          style={SMALL_HOST_STYLE}
+        >
+          <Switch
+            defaultValue={row % 2 === 0}
+            testID={`${prefix}-${String(row)}`}
+          />
+        </Host>
+      ))}
+    </View>,
+    // 200 compositions plus 400 Fabric nodes: the generous end of the file.
+    { timeout: 60000 }
+  );
+  await waitForTestId(`${prefix}-${String(HOST_COUNT - 1)}`, 45000);
+  const host = harnessUi.queryByTestId(
+    `${prefix}-host-${String(HOST_COUNT - 1)}`
+  );
+  const child = harnessUi.queryByTestId(`${prefix}-${String(HOST_COUNT - 1)}`);
+  expect(host).not.toBeNull();
+  expect(child).not.toBeNull();
+  await settle(400);
+  unmount();
+  await settle(400);
+  return { host: host!, child: child! };
 }
 
 afterEach(() => {
@@ -308,8 +368,8 @@ if (Platform.OS === 'android') {
       nitroUiCore.prewarmSizing([COMPONENT]);
       // The witness that the fixture is what the title says. A `Host` that drew
       // nothing would still churn 200 Fabric nodes and free them, and the heap would
-      // be flat for the wrong reason; a hosted control's own view is `GONE`, so 0x0
-      // here means the Host took the batch over.
+      // be flat for the wrong reason; a hosted control declines to measure and is
+      // laid out at 0x0, so 0x0 here means the Host took the batch over.
       const warmUp = await churnHostedCycle('hosted-warmup');
       expect(warmUp).not.toBeNull();
       expect([Math.round(warmUp!.width), Math.round(warmUp!.height)]).toEqual([
@@ -348,6 +408,70 @@ if (Platform.OS === 'android') {
       // D24 again, this time as a churn assertion: a hosted control reports nothing,
       // so a warm hosted loop cannot be growing the heap because the engine learned a
       // size. Zero here is also the number that makes the heap slope mean retention.
+      expect(corrections).toBe(0);
+      expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
+      expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
+    });
+
+    /**
+     * The leak a shared Host hides (review M1).
+     *
+     * A Host's teardown is `onDropView` -> `host.drop()`. Without it the observer
+     * armed at attach keeps the Host alive on the activity's `LifecycleRegistry` for
+     * the life of the process, which is B1's bug one level up: one leak per Host
+     * rather than one per control. The cycle above cannot see that - one Host per
+     * cycle against a 2 MiB bound is two orders of magnitude too quiet - so this
+     * churns 200 of them and gates the same floor.
+     *
+     * It was shown red: with the `onDropView` override deleted from
+     * `HybridNitroUiHost`, the floors climb by ~2 MiB per cycle here (the report has
+     * the numbers); with it, they are flat.
+     */
+    const manyHostsTitle =
+      `keeps the post-GC heap floor flat across ${String(CYCLES)} churn cycles ` +
+      `of ${String(HOST_COUNT)} single-child <Host>s`;
+    it(manyHostsTitle, async () => {
+      nitroUiCore.prewarmSizing([COMPONENT]);
+      const warmUp = await churnManyHostsCycle('many-hosts-warmup');
+      // The witness, both ways round: the Host is a box (it drew something) and its
+      // child is not (the Host drew it).
+      expect(Math.round(warmUp.host.height)).toBeGreaterThan(20);
+      expect([
+        Math.round(warmUp.child.width),
+        Math.round(warmUp.child.height),
+      ]).toEqual([0, 0]);
+
+      const statsBefore = nitroUiCore.sizingStats();
+      const floors: HeapStats[] = [];
+      for (let cycle = 0; cycle < CYCLES; cycle += 1) {
+        await churnManyHostsCycle(`many-hosts-${String(cycle)}`);
+        floors.push(await heapStats());
+      }
+      const first = floors[0];
+      const last = floors[floors.length - 1];
+      if (first == null || last == null) {
+        throw new Error(
+          `Expected ${String(CYCLES)} heap floors, read ${String(floors.length)}.`
+        );
+      }
+      const after = nitroUiCore.sizingStats();
+      const corrections =
+        after.correctionsImmediate -
+        statsBefore.correctionsImmediate +
+        (after.correctionsBatched - statsBefore.correctionsBatched);
+      const growthMib = toMib(
+        (last.usedBytes - first.usedBytes) / (floors.length - 1)
+      );
+      console.log(
+        `many-hosts churn: N=${String(HOST_COUNT)} cycles=${String(floors.length)} ` +
+          `floorsMiB=[${floors.map((f) => toMib(f.usedBytes)).join(', ')}] ` +
+          `growthMiBPerCycle=${String(growthMib)} ` +
+          `maxHeapMiB=${String(toMib(last.maxBytes))} ` +
+          `corrections=${String(corrections)}`
+      );
+
+      // A hosted control reports no size (D24), so a warm loop has nothing else that
+      // could legitimately grow the heap.
       expect(corrections).toBe(0);
       expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
       expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
