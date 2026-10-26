@@ -45,7 +45,7 @@ import {
   it,
   render,
 } from 'react-native-harness';
-import { Picker, Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { Host, Picker, Switch, nitroUiCore } from 'react-native-nitro-ui';
 import { userEvent } from '@react-native-harness/ui';
 
 /** Controls per cycle: the N the bench died at. */
@@ -196,6 +196,52 @@ async function churnPickerCycle(prefix: string) {
   await settle(300);
 }
 
+/**
+ * The box a hosted batch needs: 48 dp per Switch is the box the sizing engine gives
+ * that configuration on Android, and a Host with no `height` of its own would be
+ * exactly that sum anyway (D24). Module-level, so the churn does not hand the Host a
+ * new style object per cycle.
+ */
+const HOST_STYLE = { width: '100%' as const, height: COUNT * 48 };
+
+/**
+ * Mount `COUNT` Switches inside **one** `<Host>`, let the batch draw, unmount.
+ *
+ * The Host is the answer to this leak, not an exemption from it: two hundred hosted
+ * Switches are one Compose composition and one `AndroidComposeView`, so what a cycle
+ * can retain is one composition plus two hundred Fabric nodes — and the unmounted
+ * `NitroUiHostView` stays reachable if anything in that composition still points at
+ * it. A leak here is therefore bigger per node than the one above, which is what makes
+ * it worth gating separately rather than assuming the shared path inherits B1's fix.
+ *
+ * Returns the last child's box so the caller can prove the batch was hosted: on
+ * Android a hosted control's own view is `GONE`, which is reported as `0x0`. A Host
+ * that silently composed nothing would churn an empty tree and pass every heap
+ * assertion below.
+ */
+async function churnHostedCycle(prefix: string): Promise<ViewInfo | null> {
+  const { unmount } = await render(
+    <Host testID={`${prefix}-host`} style={HOST_STYLE}>
+      {Array.from({ length: COUNT }, (_, index) => index).map((row) => (
+        <Switch
+          key={row}
+          defaultValue={row % 2 === 0}
+          testID={`${prefix}-${String(row)}`}
+        />
+      ))}
+    </Host>,
+    // The same generous wait the unhosted batch needs; hosting does not make 200
+    // nodes cheaper to attach, only cheaper to compose.
+    { timeout: 40000 }
+  );
+  await waitForTestId(`${prefix}-${String(COUNT - 1)}`, 30000);
+  const lastChild = harnessUi.queryByTestId(`${prefix}-${String(COUNT - 1)}`);
+  await settle(300);
+  unmount();
+  await settle(300);
+  return lastChild;
+}
+
 afterEach(() => {
   cleanup();
 });
@@ -251,6 +297,58 @@ if (Platform.OS === 'android') {
       expect(corrections).toBe(0);
       // The last floor still has to have room to grow: a run that passes the
       // slope while sitting at the heap limit is not a pass.
+      expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
+      expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
+    });
+
+    const hostedTitle =
+      `keeps the post-GC heap floor flat across ${String(CYCLES)} churn cycles ` +
+      `of ${String(COUNT)} Switches inside one <Host>`;
+    it(hostedTitle, async () => {
+      nitroUiCore.prewarmSizing([COMPONENT]);
+      // The witness that the fixture is what the title says. A `Host` that drew
+      // nothing would still churn 200 Fabric nodes and free them, and the heap would
+      // be flat for the wrong reason; a hosted control's own view is `GONE`, so 0x0
+      // here means the Host took the batch over.
+      const warmUp = await churnHostedCycle('hosted-warmup');
+      expect(warmUp).not.toBeNull();
+      expect([Math.round(warmUp!.width), Math.round(warmUp!.height)]).toEqual([
+        0, 0,
+      ]);
+
+      const statsBefore = nitroUiCore.sizingStats();
+      const floors: HeapStats[] = [];
+      for (let cycle = 0; cycle < CYCLES; cycle += 1) {
+        await churnHostedCycle(`hosted-${String(cycle)}`);
+        floors.push(await heapStats());
+      }
+      const first = floors[0];
+      const last = floors[floors.length - 1];
+      if (first == null || last == null) {
+        throw new Error(
+          `Expected ${String(CYCLES)} heap floors, read ${String(floors.length)}.`
+        );
+      }
+      const after = nitroUiCore.sizingStats();
+      const corrections =
+        after.correctionsImmediate -
+        statsBefore.correctionsImmediate +
+        (after.correctionsBatched - statsBefore.correctionsBatched);
+      const growthMib = toMib(
+        (last.usedBytes - first.usedBytes) / (floors.length - 1)
+      );
+      console.log(
+        `hosted churn: N=${String(COUNT)} cycles=${String(floors.length)} ` +
+          `floorsMiB=[${floors.map((f) => toMib(f.usedBytes)).join(', ')}] ` +
+          `growthMiBPerCycle=${String(growthMib)} ` +
+          `maxHeapMiB=${String(toMib(last.maxBytes))} ` +
+          `corrections=${String(corrections)}`
+      );
+
+      // D24 again, this time as a churn assertion: a hosted control reports nothing,
+      // so a warm hosted loop cannot be growing the heap because the engine learned a
+      // size. Zero here is also the number that makes the heap slope mean retention.
+      expect(corrections).toBe(0);
       expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
       expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
     });

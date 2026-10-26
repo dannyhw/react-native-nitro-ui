@@ -32,6 +32,7 @@
  *   | 'segmented'
  *   | 'datepicker'
  *   | 'picker'
+ *   | 'host'
  * } screen The example app's tab to be
  *   on. Must be a tab `example/src/App.tsx` actually renders, and the screen
  *   behind it has to render the on-screen `Text` the checks read.
@@ -71,6 +72,12 @@ export const REAL_INPUT_CONTROLS = Object.freeze([
     title:
       'real tap opens the menu, a real tap on a row reports it, and an unmount while open leaks no popup',
     screen: 'picker',
+  },
+  {
+    id: 'hosted-switch',
+    title:
+      'real tap toggles a Switch inside a <Host>, where the control has no view of its own',
+    screen: 'host',
   },
 ]);
 
