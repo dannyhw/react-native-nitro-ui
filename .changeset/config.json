@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+  "changelog": [
+    "@changesets/changelog-github",
+    { "repo": "dannyhw/react-native-nitro-ui" }
+  ],
+  "baseBranch": "main",
+  "access": "public",
+  "format": "prettier",
+  "ignore": [
+    "react-native-nitro-ui-example",
+    "nitro-ui-bench",
+    "nitro-bench-probe"
+  ],
+  "privatePackages": { "version": false, "tag": false }
+}
