@@ -85,6 +85,8 @@ const ECHO = {
   hostSliderValue: 'host-slider-value',
   hostButtonPresses: 'host-button-presses',
   hostMixedState: 'host-mixed-state',
+  hostSegmentedIndex: 'host-segmented-index',
+  hostPickerIndex: 'host-picker-index',
 };
 
 /** The system Back key, which is how a person dismisses an open popup. */
@@ -552,6 +554,179 @@ const CHECKS = {
         'a real tap on the mixed Host Switch to register'
       ),
       'on 0.50 1'
+    );
+  },
+
+  /**
+   * A real tap must select a segment of a `SegmentedControl` that lives inside a
+   * `<Host>`.
+   *
+   * H2b's three popup-era controls are the first ones a Host has ever held that are
+   * not `fillWidth`, so the question this answers is the plainest one: does a control
+   * drawn by somebody else's composition still take a finger? The `SegmentedControl`
+   * owns no window, which is what makes it the clean case of the three - a hit that
+   * lands on the wrong row would show up here as the wrong index rather than as a
+   * popup in the wrong place.
+   *
+   * The echo is React's own render (`HostScreen`'s `popSegmented`), so it moves only
+   * if the touch reached the Host's Compose column, Compose told Nitro, Nitro told JS,
+   * and JS rendered. A second, different segment is owed because a control that echoed
+   * once and then froze would satisfy the first line alone.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-segmented': async (t) => {
+    const control = await t.requireControlOnScreen('Hosted segmented');
+    const startedAt = t.boundsText(control);
+    t.log.checkEquals(
+      'the hosted SegmentedControl shows the index JS gave it',
+      t.requireEcho(ECHO.hostSegmentedIndex),
+      '0'
+    );
+    t.log.checkEquals(
+      'no window belongs to the app before a touch',
+      t.popupWindowCount(),
+      0
+    );
+
+    await t.tapControlAt(control, 0.5);
+    t.log.checkEquals(
+      'a real tap on the middle segment of a hosted SegmentedControl reaches JS as index 1',
+      t.waitForEcho(
+        ECHO.hostSegmentedIndex,
+        '1',
+        'a real tap on a hosted segment to register'
+      ),
+      '1'
+    );
+
+    const moved = await t.requireControl('Hosted segmented');
+    t.log.checkEquals(
+      'the drawing did not move out from under the finger',
+      t.boundsText(moved),
+      startedAt
+    );
+
+    await t.tapControlAt(moved, 0.9);
+    t.log.checkEquals(
+      'a real tap on the last segment reaches JS as index 2',
+      t.waitForEcho(
+        ECHO.hostSegmentedIndex,
+        '2',
+        'a second real tap to register'
+      ),
+      '2'
+    );
+    t.log.checkEquals(
+      'and a SegmentedControl opens no window of its own, hosted or not',
+      t.popupWindowCount(),
+      0
+    );
+  },
+
+  /**
+   * A real tap must open a hosted `Picker`'s menu, and a real tap on one of its rows
+   * must reach JS.
+   *
+   * This is the claim H2b exists to make: a Compose popup opened from a Host's shared
+   * composition is a window that belongs to that composition, so it opens under the row
+   * the Host drew - not under the decorative React Native frame, and not at the top of
+   * the screen - and closes to the same outside tap, back gesture or row it always had.
+   *
+   * Three things are read, in the order a person would meet them:
+   *
+   * 1. Opening costs a window (`popupWindowCount` 0 -> 1) and the menu's first row sits
+   *    below the top of the anchor the Host drew. The Host screen is scrolled before
+   *    this check runs, so the anchor is nowhere near the top of the screen: a menu
+   *    anchored to the RN frame instead of the drawing would land elsewhere, and this
+   *    is where that shows up.
+   * 2. A row is a choice - it closes the menu and reports its index, and the row already
+   *    chosen is marked selected to TalkBack.
+   * 3. Back closes it and reports nothing, and no window is left behind.
+   *
+   * While the menu is open the app's own `Text` is a different window's business, so no
+   * echo is read until the popup is down - the same rule `CHECKS['picker']` follows.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-picker': async (t) => {
+    // The three choices of the popup Host, spelled as `HostScreen` spells them. `Beta`
+    // is the index JS starts the control at (1), `Gamma` is the one this check picks.
+    // None of the three appears anywhere else on the screen, which is what lets a text
+    // match name a popup row.
+    const CHOSEN = 'Beta';
+    const PICK = 'Gamma';
+
+    const anchor = await t.requireControlOnScreen('Hosted picker');
+    t.log.checkEquals(
+      'the hosted Picker shows the index JS gave it',
+      t.requireEcho(ECHO.hostPickerIndex),
+      '1'
+    );
+    t.log.checkEquals(
+      'no popup window belongs to the app before a touch',
+      t.popupWindowCount(),
+      0
+    );
+
+    // 1. Open. The rows exist only while the menu is open, which is also the witness
+    //    that the hosted anchor answered a touch at all.
+    await t.tapNode(anchor);
+    t.log.checkEquals(
+      'a real tap on the hosted anchor opens the menu as a popup window',
+      t.popupWindowCount(),
+      1
+    );
+    const row = t.waitForOption(PICK, 'the hosted menu to open');
+    t.log.note(
+      `menu row "${PICK}" at ${String(row.bounds.x1)},${String(
+        row.bounds.y1
+      )} -> ${String(row.bounds.x2)},${String(
+        row.bounds.y2
+      )}; hosted anchor at ${String(anchor.bounds.x1)},${String(
+        anchor.bounds.y1
+      )} -> ${String(anchor.bounds.x2)},${String(anchor.bounds.y2)}`
+    );
+    t.log.check(
+      'the menu opens below the top of the box the Host drew, not at the top of the screen',
+      row.bounds.y1 >= anchor.bounds.y1
+    );
+    t.log.check(
+      `the hosted menu marks the current choice ("${CHOSEN}") selected to TalkBack`,
+      t.optionIsSelected(CHOSEN)
+    );
+
+    // 2. A row is a choice.
+    await t.tapNode(row);
+    t.log.checkEquals(
+      'a real tap on a hosted menu row closes the popup',
+      t.popupWindowCount(),
+      0
+    );
+    t.log.checkEquals(
+      'and the row reaches JS as index 2',
+      t.waitForEcho(
+        ECHO.hostPickerIndex,
+        '2',
+        'a pick from a hosted menu to reach JS'
+      ),
+      '2'
+    );
+
+    // 3. The way out that changes nothing. Aim again: choosing a row widens the title
+    //    the anchor paints, so the box this check has may be stale.
+    await t.tapNode(await t.requireControlAt('Hosted picker', anchor));
+    t.waitForOption(PICK, 'the hosted menu to reopen');
+    await t.pressBack();
+    t.log.checkEquals(
+      'Back shuts the hosted popup (no window left behind)',
+      t.popupWindowCount(),
+      0
+    );
+    t.log.checkEquals(
+      'opening and dismissing reported no selection - a menu is not a choice',
+      t.requireEcho(ECHO.hostPickerIndex),
+      '2'
     );
   },
 
