@@ -6,6 +6,13 @@
 //  View owns exactly one of these, created with it and never replaced
 //  (docs/research/core-architecture.md §2).
 //
+//  T17 added a second answer to "who renders this control": inside a `<Host>` the
+//  control's SwiftUI content is composed by the Host's own hosting controller
+//  (`NitroUiHost.swift`) and this view creates no controller at all. That is why
+//  the controller below is no longer built in `init`: a control cannot know who is
+//  going to mount it until Fabric has placed it, and building one anyway is the
+//  exact cost the Host exists to remove.
+//
 
 import ObjectiveC
 import SwiftUI
@@ -54,10 +61,17 @@ let nitroUiSizingNoInstance: Int64 = 0
 final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// The component's state. Never replaced.
   let model: Content.Model
-  /// The hosted controller. Never replaced, and its `rootView` is never reassigned.
-  private let hostingController: UIHostingController<NitroUiRoot<Content>>
-  /// `hostingController.view`, kept non-optional so layout code stays readable.
-  private let hostedView: UIView
+  /// The hosted controller, or `nil` while no controller has been asked for.
+  ///
+  /// Created at most once and never replaced, and its `rootView` is never
+  /// reassigned. `nil` means one of two things, and ``resolveHosting()`` is what
+  /// tells them apart: a `<Host>` composes this control, so it never needs one
+  /// (T17), or this control has not been placed in the view tree yet, so nobody
+  /// knows whether it will.
+  private var hostingController: UIHostingController<NitroUiRoot<Content>>?
+  /// `hostingController.view`, so layout code stays readable. `nil` with the
+  /// controller.
+  private var hostedView: UIView?
 
   /// Set `true` by components that present something (Picker menu, DatePicker,
   /// Menu): they need a view-controller parent for presentation and traits.
@@ -80,6 +94,19 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   var sizingInstanceId: Int64 = nitroUiSizingNoInstance
   /// Declared by the component: whether the width comes from Yoga's box.
   var sizingPolicy: NitroUiSizingPolicy = .intrinsic
+
+  /// Whether a `<Host>` composes this control right now (T17).
+  private(set) var isHosted = false
+  /// The Host that composes this control, while ``isHosted``.
+  private weak var hostContainer: NitroUiHostContainerView?
+  /// The RN component view that wraps this control, while a Host has disabled it.
+  ///
+  /// Weak: it belongs to Fabric, not to us. It is remembered because a Host stops
+  /// it from taking touches (see ``hostAdopt(host:shell:)``), and the flag has to
+  /// be lifted on the way out even if this control is gone by then.
+  private weak var hostShell: UIView?
+  /// ``hostedContent``, built once per instance.
+  private var cachedHostedContent: AnyView?
 
   /// Last measured content size, in points, or `nil` if never measured.
   ///
@@ -135,18 +162,28 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
 
   init(model: Content.Model) {
     nitroUiAssertMainThread()
+    self.model = model
+    super.init(frame: .zero)
+    backgroundColor = .clear
+  }
+
+  /// Build the hosting controller - once per instance, the first time anything
+  /// needs this control to render itself.
+  ///
+  /// The other half of the T17 rule: only ``resolveHosting()`` decides *whether*
+  /// to call this, and nothing here ever re-creates the controller afterwards.
+  private func createHosting() {
+    guard hostingController == nil, !isHosted else {
+      return
+    }
     let controller = UIHostingController(rootView: NitroUiRoot<Content>(model: model))
     // `UIViewController.view` is optional in Swift even though a hosting
     // controller always has one; load it once and keep it non-optional.
     guard let hosted = controller.view else {
       fatalError("nitro-ui: UIHostingController has no view")
     }
-    self.model = model
-    self.hostingController = controller
-    self.hostedView = hosted
-    super.init(frame: .zero)
-    backgroundColor = .clear
-
+    hostingController = controller
+    hostedView = hosted
     hosted.backgroundColor = .clear
     // RN owns the keyboard, and a hosting controller must not reserve safe area
     // for the control; see NitroUiRoot for the pre-16.4 half of this.
@@ -154,6 +191,104 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
       controller.safeAreaRegions = []
     }
     addSubview(hosted)
+  }
+
+  // MARK: - Shared hosting (T17)
+
+  /// Say who this control is going to render as, unless that is already settled.
+  ///
+  /// Fabric applies props before it mounts a view, so at the first `commit()` a
+  /// control cannot yet see whether a `<Host>` is about to adopt it; this is
+  /// called from every point that needs an answer instead.
+  ///
+  /// The Host is looked for among the **siblings** of this control's RN component
+  /// view, not above it. React Native mounts a component view's children into the
+  /// component view itself (`RCTViewComponentView`'s `currentContainerView` is its
+  /// own view unless a border, shadow or filter forces a wrapper), so a `<Host>`'s
+  /// container view sits *beside* the child's component view - both are subviews
+  /// of the Host's component view - and nothing above the shell is ever a Host.
+  ///
+  /// Deliberately not called from `didMoveToSuperview`/`didMoveToWindow`: a control
+  /// is mounted into its shell before the shell is mounted at all, so resolving
+  /// that early would build a controller for a control that is about to be
+  /// composed somewhere else.
+  private func resolveHosting() {
+    nitroUiAssertMainThread()
+    guard !isHosted, hostingController == nil else {
+      return
+    }
+    guard let shell = superview, let mountRoot = shell.superview else {
+      // Not placed: no controller, and the first measure point will ask again.
+      return
+    }
+    if let container = mountRoot.subviews.first(where: { $0 is NitroUiHostContainerView })
+      as? NitroUiHostContainerView {
+      container.host(self, shell: shell)
+    } else {
+      // Placed under something that is not a Host. Settled: render ourselves.
+      createHosting()
+      // Today's first-measure point, kept: a control that only now learns it is
+      // on its own still owes the sizing engine a size in this turn.
+      refreshContentSize()
+    }
+  }
+
+  /// This control's SwiftUI content, as the Host composes it.
+  var hostedContent: AnyView {
+    if let cached = cachedHostedContent {
+      return cached
+    }
+    let content = AnyView(NitroUiRoot<Content>(model: model))
+    cachedHostedContent = content
+    return content
+  }
+
+  /// Start being SwiftUI content inside `host` instead of a view of our own.
+  ///
+  /// Three things stop, and all three come back in ``hostRelease()``:
+  /// - the controller is never built, which is the memory and mount time at stake;
+  /// - this view stops drawing, so a control that already had a controller (one
+  ///   recycled from outside a Host into inside one) cannot paint a second copy;
+  /// - its RN shell stops taking touches. RN mounts the child's shell *beside*
+  ///   and above the Host's container view (see ``resolveHosting()``), and an
+  ///   `RCTViewComponentView` with interaction on answers `hitTest` with itself,
+  ///   so without this the SwiftUI control underneath would never see the tap.
+  func hostAdopt(host: NitroUiHostContainerView, shell: UIView) {
+    nitroUiAssertMainThread()
+    guard !isHosted else {
+      return
+    }
+    isHosted = true
+    hostContainer = host
+    hostShell = shell
+    isHidden = true
+    isUserInteractionEnabled = false
+    shell.isUserInteractionEnabled = false
+    // A measure already reported for a previous (unhosted) mount must not survive:
+    // hosted, this control has no size of its own (D17 as the Host applies it).
+    if hostingController != nil || contentSize != nil {
+      releaseSizingInstance()
+      sizeLock.lock()
+      _contentSize = nil
+      sizeLock.unlock()
+    }
+  }
+
+  /// Stop being SwiftUI content, and go back to being an RN view.
+  func hostRelease() {
+    nitroUiAssertMainThread()
+    guard isHosted else {
+      return
+    }
+    isHosted = false
+    hostContainer?.childDidRelease(self)
+    hostContainer = nil
+    isHidden = false
+    isUserInteractionEnabled = true
+    hostShell?.isUserInteractionEnabled = true
+    hostShell = nil
+    // The next measure point decides again; a control that never had a controller
+    // gets none until something actually needs one.
   }
 
   @available(*, unavailable)
@@ -165,6 +300,20 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
 
   override func layoutSubviews() {
     super.layoutSubviews()
+    if hostingController == nil {
+      resolveHosting()
+    }
+    // Hosted (nothing of ours to lay out) or not placed in the tree yet.
+    guard let hostedView, !isHosted else {
+      return
+    }
+    pin(hostedView: hostedView)
+    markFirstFrameIfNeeded()
+    refreshContentSize()
+  }
+
+  /// Frame the hosted view to ours: RN already decided this control's size in Yoga.
+  private func pin(hostedView: UIView) {
     if hostedView.frame != bounds, bounds.width > 0, bounds.height > 0 {
       // Frame, not Auto Layout constraints: RN already decided our size in Yoga.
       hostedView.frame = bounds
@@ -179,8 +328,6 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
         lastReportedSize = nil
       }
     }
-    markFirstFrameIfNeeded()
-    refreshContentSize()
   }
 
   override func didMoveToWindow() {
@@ -188,6 +335,16 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     if window == nil {
       detachFromContainer()
     } else {
+      // A control that reaches a window has been placed, so this is the first
+      // point where "am I in a Host?" is always answerable - and the point where
+      // today's first measure happens (`refreshContentSize` below), which is why
+      // the controller has to exist before it runs.
+      if hostingController == nil {
+        resolveHosting()
+      }
+      guard !isHosted else {
+        return
+      }
       markFirstFrameIfNeeded()
       attachToContainerIfNeeded()
       // The other half of ``refreshContentSize()``'s rule: a content update whose
@@ -317,6 +474,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     hasMarkedFirstFrame = false
     releaseSizingInstance()
     detachFromContainer()
+    hostRelease()
   }
 
   /// Tear down what must not outlive a mount.
@@ -327,6 +485,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   func drop() {
     nitroUiAssertMainThread()
     detachFromContainer()
+    hostRelease()
     hasMarkedFirstFrame = false
     releaseSizingInstance()
     sizeLock.lock()
@@ -377,6 +536,13 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     // after the sizing flusher - so the first frame is always drawn at the
     // fallback (review S5). Measuring in the first `commit()` instead puts the
     // report in the same turn as the mount.
+    // A control composed by a Host has no box and no size of its own: the Host's
+    // SwiftUI layout decides both, and reporting a measured size into the child's
+    // Fabric node would only resize a box nothing looks at (T17, D17 as it
+    // applies to a hosted child).
+    guard !isHosted else {
+      return contentSize
+    }
     let boundsIndependent = sizingPolicy == .intrinsic
     // What a `fillWidth` measure may not run without is the box's **width**: it
     // is the half the control is not allowed to invent, and proposing 0 of it
@@ -394,6 +560,18 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
       // The hot path: three bools, no SwiftUI.
       return contentSize
     }
+    if hostingController == nil {
+      // Nothing has decided yet, and a measure needs a controller: ask, and if
+      // the answer is still "not placed", keep the measure pending rather than
+      // inventing one. The next `layoutSubviews`/`didMoveToWindow` is placed.
+      resolveHosting()
+      if hostingController == nil {
+        return contentSize
+      }
+    }
+    guard let hostedView else {
+      return contentSize
+    }
     if contentUpdatePending, hostedView.window == nil {
       // The content was just changed and cannot be laid out yet, so any number
       // measured now belongs to the content this one replaced. Keep the measure
@@ -402,7 +580,10 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
       return contentSize
     }
     contentSizeNeedsMeasure = false
-    let size = measureFittingSize()
+    guard let hostingController else {
+      return contentSize ?? .zero
+    }
+    let size = measureFittingSize(hostingController: hostingController, hostedView: hostedView)
     sizeLock.lock()
     _contentSize = size
     sizeLock.unlock()
@@ -438,7 +619,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     "\(traitCollection.preferredContentSizeCategory.rawValue),\(traitCollection.legibilityWeight.rawValue)"
   }
 
-  private func measureFittingSize() -> CGSize {
+  private func measureFittingSize(hostingController: UIHostingController<NitroUiRoot<Content>>, hostedView: UIView) -> CGSize {
     // The number has to describe the content as it now is, and after a commit the
     // `send()` above may not have been rendered yet. Laying the hosted view out
     // here makes SwiftUI apply that update, so what follows is the new content's
@@ -540,7 +721,7 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   // MARK: - View controller containment
 
   private func attachToContainerIfNeeded() {
-    guard needsContainment, containerViewController == nil else {
+    guard needsContainment, containerViewController == nil, let hostingController else {
       return
     }
     guard let parent = findContainerViewController() else {
@@ -555,8 +736,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     guard let parent = containerViewController else {
       return
     }
-    hostingController.willMove(toParent: nil)
-    hostingController.removeFromParent()
+    hostingController?.willMove(toParent: nil)
+    hostingController?.removeFromParent()
     containerViewController = nil
   }
 

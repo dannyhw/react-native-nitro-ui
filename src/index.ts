@@ -26,6 +26,11 @@ export type {
   NitroUiSizingTraceEvent,
 } from './NitroUiCore.nitro';
 
+// T17 spike: an opt-in shared SwiftUI composition on iOS (the Android twin is on
+// branch `task/T16-host-spike`). Exported on the spike branch so the bench arm and
+// the example screen can render it; whether it ships is the report's recommendation.
+export { Host, type HostProps } from './components/Host/Host';
+
 export { Slider, type SliderProps } from './components/Slider/Slider';
 export { Switch, type SwitchProps } from './components/Switch/Switch';
 

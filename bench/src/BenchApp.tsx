@@ -148,6 +148,29 @@ function BenchRunner({
         return;
       }
 
+      // An arm that implements some components and not others (T17's
+      // `nitro-ui-host`, Switch and Slider only) must be *said* to be absent on the
+      // rest, not launch and render an empty tree: zero controls still mounts fast,
+      // and a fast mount of nothing is exactly the kind of number a table should not
+      // contain.
+      if (
+        implementation.components !== null &&
+        !implementation.components.includes(plan.component)
+      ) {
+        emit(meta(0, 0));
+        emit({
+          kind: 'skip',
+          scenario: plan.scenario,
+          implementation: plan.implementation,
+          n: plan.n,
+          launch: 0,
+          reason: `implements ${implementation.components.join(', ')} only`,
+        });
+        finish();
+        setPhase('skipped');
+        return;
+      }
+
       await new Promise<void>((resolve) => {
         setTimeout(() => {
           resolve();

@@ -12,6 +12,8 @@
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
 // Forward declaration of `HybridNitroUiDatePickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiDatePickerSpec; }
+// Forward declaration of `HybridNitroUiHostSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiHostSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec` to properly resolve imports.
@@ -36,6 +38,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
 // Forward declaration of `HybridNitroUiDatePickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiDatePickerSpec_cxx; }
+// Forward declaration of `HybridNitroUiHostSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiHostSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec_cxx` to properly resolve imports.
@@ -48,6 +52,7 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 // Include C++ defined types
 #include "HybridNitroUiButtonSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
+#include "HybridNitroUiHostSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
@@ -264,6 +269,18 @@ namespace margelo::nitro::nitroui::bridge::swift {
   inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
     return Result<std::string>::withError(error);
   }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiHostSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiHostSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiHostSpec_ = std::shared_ptr<HybridNitroUiHostSpec>;
+  std::shared_ptr<HybridNitroUiHostSpec> create_std__shared_ptr_HybridNitroUiHostSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiHostSpec_(std__shared_ptr_HybridNitroUiHostSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiHostSpec>
+  using std__weak_ptr_HybridNitroUiHostSpec_ = std::weak_ptr<HybridNitroUiHostSpec>;
+  inline std__weak_ptr_HybridNitroUiHostSpec_ weakify_std__shared_ptr_HybridNitroUiHostSpec_(const std::shared_ptr<HybridNitroUiHostSpec>& strong) noexcept { return strong; }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiProgressSpec>
   /**

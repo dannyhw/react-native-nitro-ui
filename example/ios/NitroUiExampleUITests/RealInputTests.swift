@@ -339,6 +339,159 @@ final class RealInputTests: XCTestCase {
     )
   }
 
+  // MARK: - T17: the shared `<Host>`
+  //
+  // These two are deliberately *not* named `testRealInput…`: the shared table in
+  // `scripts/real-input/controls.mjs` is one row per control on *both* platforms, and
+  // the Host exists on iOS only on this branch. They run directly:
+  //
+  //   xcodebuild test-without-building -workspace NitroUiExample.xcworkspace \
+  //     -scheme NitroUiExample -destination 'platform=iOS Simulator,id=<udid>' \
+  //     -derivedDataPath build -collect-test-diagnostics never \
+  //     -only-testing:NitroUiExampleUITests/RealInputTests/testHostedSwitchAnswersARealTap
+  //
+  // The coverage guard matches `func testRealInput\w+(`, so it neither requires an
+  // Android twin for these nor lets them pass unnoticed here.
+
+  /// The Host screen's tab and echoes (`example/src/HostSpikeScreen.tsx`).
+  private enum Hosted {
+    static let tab = "tab-host"
+    /// A `testID` only the Host screen renders, for `goToTab`.
+    static let anchor = "host-events-count"
+    static let switchValue = "host-switch-value"
+    static let sliderValue = "host-slider-value"
+    static let events = "host-events-count"
+    static let jsToggle = "host-js-toggle"
+    static let firstSwitchLabel = "Hosted switch 0"
+    static let sliderLabel = "Hosted slider"
+  }
+
+  /// The SwiftUI element a `<Host>` composes for a control, found by the label React
+  /// gave it.
+  ///
+  /// Not by `testID`, unlike every other check in this file. Inside a Host the
+  /// `testID` still sits on the control's React Native shell, and the shell stops
+  /// drawing and stops taking touches the moment the Host adopts it
+  /// (`NitroUiHostable.hostAdopt`) so that the touch can reach the SwiftUI copy - the
+  /// shell is therefore not what a finger meets. What is left is SwiftUI's own
+  /// element, carrying the `accessibilityLabel` React set: the element VoiceOver
+  /// announces, which is the right thing to check.
+  private func hostedControl(label: String) throws -> XCUIElement {
+    let node = app
+      .descendants(matching: .any)
+      .matching(NSPredicate(format: "label == %@", label))
+      .firstMatch
+    if !node.waitForExistence(timeout: reactTimeout) {
+      dumpHierarchy("no hosted element labelled \"\(label)\"")
+      XCTFail(
+        "no SwiftUI element labelled \"\(label)\" appeared within \(reactTimeout)s - a "
+          + "<Host> that composes its children should publish one for each"
+      )
+      throw RealInputCheckAborted(identifier: label)
+    }
+    // Where SwiftUI placed it, in the log: inside a Host the control's box is the
+    // composition's business, not Yoga's, and a drag that lands beside the track is
+    // otherwise indistinguishable from a control that ignores touches.
+    print("real-input (ios): hosted \"\(label)\" is drawn at \(node.frame)")
+    return node
+  }
+
+  /// A real tap on a Switch inside a `<Host>` must flip it, and the new value has to
+  /// come all the way back to React: touch → the Host's SwiftUI copy → Nitro → JS →
+  /// re-render → the echo. The echo is React's own render, so nothing but a finger is
+  /// in the middle of it.
+  ///
+  /// Twice, the other way, as everywhere else in this file - one change could be an
+  /// echo that moved by itself. Then a prop write with no touch at all, which is the
+  /// other half of the handshake: the control has to take a new value from React when
+  /// it has no view of its own to update.
+  func testHostedSwitchAnswersARealTap() throws {
+    try goToTab(Hosted.tab, showing: Hosted.anchor)
+    let control = try hostedControl(label: Hosted.firstSwitchLabel)
+    let whereItStarted = control.frame
+    XCTAssertEqual(
+      try read(Hosted.switchValue),
+      "off",
+      "the hosted Switch should start off before any touch is delivered"
+    );
+    XCTAssertEqual(
+      try readNumberUntil(Hosted.events) { $0 != nil },
+      0,
+      "no change should have reached JS before the first touch"
+    )
+
+    control.centre.tap()
+    XCTAssertEqual(
+      readUntil(Hosted.switchValue) { $0 == "on" },
+      "on",
+      "one real tap should flip the hosted Switch and React should render \"on\""
+    )
+    XCTAssertEqual(
+      readNumberUntil(Hosted.events) { ($0 ?? -1) == 1 },
+      1,
+      "and exactly one `onValueChange` should have reached JS for one touch"
+    )
+
+    // Same place, still hittable: the Host must not move a child when its value
+    // changes, or the second touch would be proving nothing about the first control.
+    try assertStillInPlace(
+      Hosted.firstSwitchLabel,
+      startedAt: whereItStarted,
+      after: "the first real tap",
+      byLabel: true
+    )
+
+    try hostedControl(label: Hosted.firstSwitchLabel).centre.tap()
+    XCTAssertEqual(
+      readUntil(Hosted.switchValue) { $0 == "off" },
+      "off",
+      "a second real tap should flip it back, so the check is not one fluke"
+    )
+
+    try required(Hosted.jsToggle, as: "the JS-side flip button").centre.tap()
+    XCTAssertEqual(
+      readUntil(Hosted.switchValue) { $0 == "on" },
+      "on",
+      "a prop write with no touch at all has to reach a control with no view of its own"
+    )
+  }
+
+  /// A real drag on a Slider inside a `<Host>` must move the thumb and report the new
+  /// value to React, which renders it.
+  ///
+  /// The echo is React's own state again, so a moving echo is the whole loop working:
+  /// SwiftUI's Slider under the finger, Nitro carrying the event out, React accepting
+  /// it, and the value going back down into the same composition.
+  ///
+  /// The drag starts on the thumb, because a SwiftUI Slider ignores a touch that
+  /// lands anywhere else on the track (measured in `testRealInputSlider`).
+  func testHostedSliderAnswersARealDrag() throws {
+    try goToTab(Hosted.tab, showing: Hosted.anchor)
+    let slider = try hostedControl(label: Hosted.sliderLabel)
+    let started = try readNumberUntil(Hosted.sliderValue) { $0 != nil } ?? -1
+    XCTAssertEqual(
+      started,
+      0.25,
+      accuracy: 0.001,
+      "the hosted Slider should start at 0.25"
+    )
+
+    slider.dragFromThumb(atValue: started, toFraction: 0.7)
+
+    let moved = readNumberUntil(Hosted.sliderValue) { ($0 ?? 0) > 0.45 }
+    XCTAssertGreaterThan(
+      moved ?? 0,
+      0.45,
+      "a real drag should move the hosted thumb and report the new value to React"
+    )
+    let accepted = readNumberUntil(Hosted.events) { ($0 ?? 0) >= 1 }
+    XCTAssertGreaterThanOrEqual(
+      accepted ?? 0,
+      1,
+      "and at least one `onValueChange` should have reached JS for the drag"
+    )
+  }
+
   // MARK: - Reading the screen
 
   /// A real tap on the `compact` field must open SwiftUI's own presentation, and a
@@ -816,6 +969,10 @@ final class RealInputTests: XCTestCase {
   /// Fail, with the hierarchy, if a control has moved out of the window since it
   /// was last looked at.
   ///
+  /// - Parameter byLabel: look the control up by its accessibility *label* rather
+  ///   than its `testID`, which is how a control inside a `<Host>` has to be found
+  ///   (see ``hostedControl(label:)``).
+  ///
   /// Every check here taps or drags a control more than once, and a control that
   /// has been laid out somewhere else - or nowhere - cannot be reached again.
   /// Saying so here turns "the query found nothing" into the measurement that
@@ -823,9 +980,15 @@ final class RealInputTests: XCTestCase {
   private func assertStillInPlace(
     _ identifier: String,
     startedAt: CGRect,
-    after action: String
+    after action: String,
+    byLabel: Bool = false
   ) throws {
-    let node = app.descendants(matching: .any)[identifier].firstMatch
+    let node = byLabel
+      ? app
+        .descendants(matching: .any)
+        .matching(NSPredicate(format: "label == %@", identifier))
+        .firstMatch
+      : app.descendants(matching: .any)[identifier].firstMatch
     if !node.exists || !node.isHittable {
       dumpHierarchy("\(action) on \(identifier)")
       XCTFail(
