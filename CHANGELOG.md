@@ -1,8 +1,18 @@
 # Changelog
 
-All notable changes to this project are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
-adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to this project are documented here, newest version first.
+Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+`0.1.0` below was written by hand. Every entry above it is written by Changesets
+out of the release notes contributors record with `bun run changeset`, grouped
+under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
+`### Patch Changes`.
+
+## 0.1.1
+
+### Patch Changes
+
+- 306b07f: Ship `CHANGELOG.md` inside the published package, so the release notes travel with the code into `node_modules`.
 
 ## 0.1.0 — 2026-10-26
 

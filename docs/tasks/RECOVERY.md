@@ -32,9 +32,9 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | D1 public docs | — | merged | Done | — |
 | R5 publish 0.1.0 | — | merged | **Published** `react-native-nitro-ui@0.1.0` (registry tarball sha256 = tested `fa1b7b96…`), tag `v0.1.0` + GitHub release | — |
 | X1 dev tooling (CI checks, build-app, lease) | `nitro-ui-worktrees/X1` · `task/X1-dev-tooling` | `9e0122a` (round 1) | Review: FIX ROUND (lease TTL wipes others; stamp not bound to artifact; tree hashed after build; HEAD in hash). Fix round 1 running (`nitroui-X1-fix1`) on `nitroui_t03` | Re-review → merge → `gh workflow enable CI`. |
-| R6 Changesets release | `nitro-ui-worktrees/R6` · `task/R6-changesets-release` | `a59e527` (round 1) | Review: FIX ROUND (guard test blocks first release; tags would be `name@ver`; staged-only publisher). Fix round 1 running (`nitroui-R6-fix1`): stage publish + split jobs + `v` tag catch-up | Re-review → merge → owner setup → enable workflows. |
+| R6 Changesets release | — | merged (`26def95`) | Release + Release tag + Changeset status workflows enabled; first run (version mode) in progress | Owner merges the Version Packages PR → run stages 0.1.1 → owner approves on npmjs.com → run `Release tag`. Deadline: trusted-publisher validation before 2026-10-28. |
 | R5b post-publish smoke | — | merged | Done: all 6 rows green from the npm tarball | — |
-| H2a Host: Slider/Progress/Button | `nitro-ui-worktrees/H2a` · `task/H2a-host-more-controls` | `f69db4f` (round 1) | Opus review running | Fix round must also merge main (D1/R5 rewrote README/host.md) and re-run the bench on a quiet machine or label it. |
+| H2a Host: Slider/Progress/Button | `nitro-ui-worktrees/H2a` · `task/H2a-host-more-controls` | `f69db4f` (round 1) | Review: MERGE WITH FIXES (noisy-cell verdicts in README; F8 not really tested; report overstates). Fix round 1 running (`nitroui-H2a-fix1`) incl. merge main, on iPhone Air + `nitroui_t01` | Merge (docs/tests only → no re-review unless native changes). |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
 | T17 iOS Host spike | branch only (`871c579`, pushed) | report merged | Done: iOS Host not better (D23); H3 dropped | — |
@@ -43,7 +43,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 ## Devices (D13)
 
 - Free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
-- Free: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` + AVD `nitroui_t01` (5570 / adb 5041 / Metro 8293); iPhone 17 + `nitroui_t03` (5574 / adb 5043 / Metro 8295). Device config for `scripts/lease.mjs` (X1) is machine-local in `~/.nitro-ui/devices.json`.
+- H2a fix: iPhone Air + `nitroui_t01`. X1 fix: `nitroui_t03`. Free: iPhone 17. Device config for `scripts/lease.mjs` (X1) is machine-local in `~/.nitro-ui/devices.json`.
 - Never touch `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
