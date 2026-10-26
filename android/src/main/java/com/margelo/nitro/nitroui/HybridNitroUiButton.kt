@@ -352,6 +352,20 @@ private class ButtonHost(
   activity: Activity?,
   model: ButtonModel,
 ) : NitroComposeHost<ButtonModel>(context, activity, model) {
+
+  /**
+   * A `<Host>` composes this control (H2a). Same line as the Switch's, same JS row.
+   *
+   * The press is the thing to check here, and it checks out for a reason worth
+   * naming: the tap is taken by the *Host's* `AndroidComposeView`, which routes it to
+   * the node under the finger - this Button's M3 `clickable` - so `onClick`, the
+   * ripple and `model.onPress` all run in the shared composition. What a hosted
+   * Button does *not* get is RN's own press handling, because RN never sees the touch
+   * (D24: the child's view is laid out at nothing).
+   */
+  override val isHostable: Boolean
+    get() = true
+
   @Composable
   override fun Component(model: ButtonModel) {
     val variant = model.variant

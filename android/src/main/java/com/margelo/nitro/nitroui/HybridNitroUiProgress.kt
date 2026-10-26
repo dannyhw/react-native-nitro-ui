@@ -194,6 +194,18 @@ private class ProgressHost(
   model: ProgressModel,
 ) : NitroComposeHost<ProgressModel>(context, activity, model) {
 
+  /**
+   * A `<Host>` composes this control (H2a). Same line as the Switch's, same JS row.
+   *
+   * The one thing that needed checking is the animation gate: [ProgressModel.inWindow]
+   * is written by the attach of *this* view, and a hosted child is attached (the Host
+   * `addView`s it), so an indeterminate indicator keeps animating inside the shared
+   * composition and stops when the Host leaves the window - which detaches every child
+   * through this same view.
+   */
+  override val isHostable: Boolean
+    get() = true
+
   @Composable
   override fun Component(model: ProgressModel) {
     ProgressContent(model)

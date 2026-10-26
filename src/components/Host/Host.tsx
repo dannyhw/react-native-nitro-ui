@@ -36,15 +36,16 @@ export interface HostProps extends ViewProps {
  * an RN node *plus* a child of somebody else's composition: **1.18x** the shared host
  * on mount JS CPU per op. Opt-in for that reason, not a default.
  *
- * Only `Switch` is hosted today, and the rule is held on both sides of the bridge.
- * A direct child that JS can prove is not one (a text node, an RN view, one of our
- * other controls, another `<Host>`) throws in development rather than rendering half
- * a screen. React flattens components away, so JS cannot see through a `memo`: what
- * arrives as an unknown child is decided by the native allowlist
- * (`NitroComposeHost.isHostable`), which says yes only to `Switch` and - in a
- * debuggable build - reports what it refused to JavaScript as a `console.error`, not
- * only to logcat. Hosting another control means a row in `HostChildren.ts`, an
- * `isHostable` override, and a bench arm for it.
+ * Four controls are hosted today - `Switch`, `Slider`, `Progress` and `Button`
+ * (H1 and H2a) - and the rule is held on both sides of the bridge. A direct child
+ * that JS can prove is not one (a text node, an RN view, one of our other controls,
+ * another `<Host>`) throws in development rather than rendering half a screen. React
+ * flattens components away, so JS cannot see through a `memo`: what arrives as an
+ * unknown child is decided by the native allowlist (`NitroComposeHost.isHostable`),
+ * which says yes to those four and - in a debuggable build - reports what it refused
+ * to JavaScript as a `console.error`, not only to logcat. Hosting another control
+ * means a row in `HostChildren.ts`, an `isHostable` override, and a bench arm for it;
+ * `SegmentedControl`, `Picker` and `DatePicker` stay refused until that is done (H2b).
  *
  * ## What a Host cannot contain
  *
@@ -52,7 +53,8 @@ export interface HostProps extends ViewProps {
  *
  * - **Anything that is not a hosted control.** No RN views (`View`, `Text`,
  *   `ScrollView`, `Image`), no third-party native views, no plain text, and no
- *   nitro-ui control that is not `Switch`. A direct child is composed by
+ *   nitro-ui control outside `Switch`, `Slider`, `Progress` and `Button`. A direct
+ *   child is composed by
  *   the Host or drawn by nobody, so an unsupported one throws in dev (see
  *   `HostChildren.ts`) instead of rendering invisibly on Android and normally on
  *   iOS.
@@ -69,9 +71,11 @@ export interface HostProps extends ViewProps {
  *   row of the outer one's column, measuring nothing, drawing a composition of its
  *   own and answering to no box. Put Hosts side by side, each with its own height.
  * - **No per-child size** - see the sizing rule below.
- * - **Only some of its own styles reach the drawing.** `width`, `height`, `flex` and
- *   `padding` do; `gap`, `flexDirection`, `alignItems`, `justifyContent`,
- *   `borderWidth` and `pointerEvents` do not, because Compose arranges the rows and
+ * - **Only some of its own styles reach the drawing.** `width`, `height`, `flex`,
+ *   `padding` and `alignSelf` do, and `borderWidth` insets the drawing the way
+ *   `padding` does (Fabric sends border + padding as one `contentInsets`) without
+ *   drawing a border. `gap`, `rowGap`, `columnGap`, `alignItems`, `alignContent`,
+ *   `justifyContent` and `pointerEvents` do not, because Compose arranges the rows and
  *   Compose takes the touches - while Yoga still honours each of them in the *box*.
  *   Dev builds warn once per instance about each of them.
  *
@@ -100,6 +104,15 @@ export interface HostProps extends ViewProps {
  *
  * The Host places its children itself: one Compose `Column`, in mount order, at
  * the Host's own width, from the top-leading edge of its box, clipped to the box.
+ *
+ * Inside that column a control's sizing policy says what its box *means*, and the
+ * answer is per control (H2a): a `fillWidth` control - `Slider`, and `Progress` with
+ * `variant: 'linear'` - fills the **Host's inner width** (its `width` minus padding),
+ * not the width RN's frame gave the child; an `intrinsic` control - `Button`,
+ * `Switch`, and `Progress` with `variant: 'circular'` - draws at its own size at the
+ * column's leading edge and is not stretched by a wide Host. So a Host's `width` is
+ * the width of every hosted Slider in it, and a `width` on the Slider itself changes
+ * only its decorative frame.
  *
  * The Host measures nothing either. Its box is Yoga's: its own `style`, plus its
  * children's decorative boxes. Give it a `height` or `flex: 1` and that is the box;
@@ -199,6 +212,21 @@ export function Host({ children, ...props }: HostProps) {
  * column starts inside it. What does not is listed here, because Yoga *does* honour
  * each of them when it computes the Host's height - the props buy a box and no
  * arrangement, which is the shape of a layout bug nobody debugs.
+ *
+ * Two styles that look like they belong here are deliberately **not** listed, because
+ * warning about them would be a false claim (H1 review F5/F6):
+ *
+ * - `alignSelf` positions the Host inside *its* parent, which moves the box, and the
+ *   drawing is inside the box. `<Host style={{ alignSelf: 'stretch' }}>` does exactly
+ *   what it looks like.
+ * - `borderWidth` insets the drawing. Fabric's padding mount item sends
+ *   `layoutMetrics.contentInsets`, which is border *plus* padding, and the Host's view
+ *   manager forwards `setPadding` - so a `borderWidth: 2` moves the column in by 2 dp.
+ *   What it does not do is draw a border, which is a different sentence and not worth
+ *   a warning about a prop that mostly works.
+ *
+ * `alignContent` stays: it arranges *lines* of a wrapping container, and Compose draws
+ * one column with no lines to arrange.
  */
 const INERT_HOST_STYLES: readonly (keyof ViewStyle)[] = [
   'gap',
@@ -206,9 +234,7 @@ const INERT_HOST_STYLES: readonly (keyof ViewStyle)[] = [
   'columnGap',
   'alignItems',
   'alignContent',
-  'alignSelf',
   'justifyContent',
-  'borderWidth',
 ];
 
 /**
@@ -245,10 +271,10 @@ function warnAboutInertStyles(
   console.warn(
     'react-native-nitro-ui: a <Host> was given ' +
       `${named.join(', ')}, which sizes its box but does not reach what it draws - ` +
-      'Compose arranges the children (one column, no gaps), the Host draws no border, ' +
-      "and touches go to Compose rather than RN's hit testing. Lay the rows out with " +
-      "`padding` and the children's own heights, and space them inside each row " +
-      '(docs/components/host.md).'
+      'Compose arranges the children (one column, no gaps), and touches go to Compose ' +
+      "rather than RN's hit testing. Lay the rows out with `padding` (or a " +
+      '`borderWidth`, which insets the same way) and the children\'s own heights, and ' +
+      'space them inside each row (docs/components/host.md).'
   );
 }
 

@@ -51,6 +51,7 @@ export interface SwitchProps extends ViewProps {
         readonly tintColor: number | null;
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
+        nuiTestArmedGuards(): string;
       }) => void)
     | undefined;
   /**
