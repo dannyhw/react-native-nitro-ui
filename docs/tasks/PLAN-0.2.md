@@ -12,8 +12,8 @@ first, then the rest), iOS mount profiling, and (D23) an iOS `<Host>` spike — 
 | 2 | **G5** DatePicker (brief refreshed 2026-10-25) | both | C1 |
 | 3 | **H1** Android `<Host>` productionised for Switch, D17 rule for hosted controls (brief: `H1-android-host.md`) | Android | C1 |
 | 3 | **H2** Host support for Slider, Progress, Button, SegmentedControl, Picker, DatePicker | Android | H1, G5, G6 |
-| 3 | **T17** iOS `<Host>` spike, Switch + Slider (one round; D23 reinstated it) | iOS | A1c |
-| 3 | **H3** iOS `<Host>` productionised, same API as Android — only if T17 shows it is better | iOS | T17, H1 |
+| 3 | **T17** iOS `<Host>` spike — done, report merged | iOS | A1c |
+| 3 | ~~**H3** iOS `<Host>`~~ — not built: T17 failed D23 (memory better, mount/unmount UI CPU worse) | iOS | — |
 | 4 | **R3** 0.2 readiness: docs, stories, smoke, baselines refresh, changelog | both | all |
 
 Device pairs: nitro-ui owns iPhone 17 + `nitroui_t01`; iPhone Air + `nitroui_t02` are lent to the

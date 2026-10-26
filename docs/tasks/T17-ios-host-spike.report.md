@@ -419,3 +419,14 @@ only if (a) turns out not to move `mounted`.
    round built (D19).
 3. `Host` remains a documented no-op on iOS in the public API. That is a trap for a reader who knows
    Expo, and it should be named in the docs until either it works or it is Android-only in the types.
+
+## Orchestrator note (on merge)
+
+Report merged; code kept on branch `task/T17-ios-host-spike` (`871c579`, pushed). Ratios spot-checked
+against `bench/results/a4f84ca-ios-20261026T055450Z.json` with `arm-ratios --arm=nitro-ui-host`: they
+match. **D23 verdict: the iOS Host is not better** — memory improves (0.92x / 0.75x) but mount UI CPU
+gets worse with a verdict (Switch 1.40x) and unmount UI CPU 6.27x / 4.90x, so H3 does not ship and
+`<Host>` stays an iOS passthrough. Caveat: one run on a busy machine (runner label `quiet NO`, p90
+load 10.08, partly H1 running alongside); paired ratios only. P1's `UIHostingView` lever is void (no
+public type in the iOS 27 SDK), so the iOS memory miss (Slider / Progress / Button) has no known fix —
+documented, not chased (D19).

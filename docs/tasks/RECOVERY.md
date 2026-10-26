@@ -31,12 +31,12 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | H1 Android Host | `nitro-ui-worktrees/H1` · `task/H1-android-host` | brief on main | Running (Apex, `nitroui-H1`) | Opus review, then fix rounds (D19). |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
-| T17 iOS Host spike | `nitro-ui-worktrees/T17` · `task/T17-ios-host-spike` | brief on main | Running (Apex, `nitroui-T17`) | One round; report decides H3 (D23). |
+| T17 iOS Host spike | branch only (`871c579`, pushed) | report merged | Done: iOS Host not better (D23); H3 dropped | — |
 | ~~R1 gate hygiene~~ (merged) | `nitro-ui-worktrees/R1` · `task/R1-gate-hygiene` | `4c2da00` (7 commits, tree clean) | Apex round in progress: D21 timing gate implemented; Android harness 72/72 green; iOS harness run + the two timing-gate proofs were in progress | If the session is gone: re-delegate "resume R1": finish iOS harness, the red proof under `HARNESS_TIMING=1`, items 2–3 (real-input Metro bug, Node 26 check), report. |
 
 ## Devices (D13)
 
-- T17 iOS Host spike: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
+- Free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
 - H1: iPhone Air `331EF109-21DD-422B-AEF8-DFFFC6998DC3` + AVD `nitroui_t01` port 5570, adb 5041, Metro 8293.
 - Never touch `PR1505_Pixel` / `emulator-5560` (the human's). Max 2 device tasks.
 
