@@ -752,3 +752,123 @@ The re-review's non-blocking items are one line each in the Follow-ups list abov
 
 1. Still ready for main on your go; the merge-plan gate note from round 1 stands (the merge, not either branch, is what needs the harness on both platforms).
 2. `PickerModelTest` runs only under `test:native:android`, which `check` does not call, so this round's red was a Kotlin *compile* failure in a script the gate never runs. If that is worth closing, it is a one-line `check` addition — but it also puts a Gradle JVM task inside every `check`, which is a repo-wide call, not a G6 one.
+
+## Merge-main pass (2026-10-26)
+
+G6 branched before G5 landed, so `main` has since taken **DatePicker** — a sibling that registers in
+every place Picker registers — plus **A1c**'s iOS bench baseline and a round of docs. `git merge main`
+(`0c961b4`, merge base `d21f0ce`) conflicted in **29 files**; all are resolved keeping both controls.
+The merge is `fbe34ab`; the one behavioural consequence of having both controls in the example is
+`1ea3814`.
+
+Where both sides appended to the same slot, `date-picker`/`DatePicker` is placed before
+`picker`/`Picker`; entries that already existed were not reordered, and sorted lists stay sorted.
+
+### Conflicts, by kind
+
+- **Registration** — `android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt`,
+  `android/.../core/NitroUiDeclaredFallbacks.kt`, `ios/core/NitroUiDeclaredFallbacks.swift`,
+  `nitro-ui.sizing.json`, `etc/package-files.txt`.
+- **Generated — regenerated, not hand-merged** (`bun run nitrogen`) —
+  `nitrogen/generated/android/nitroui+autolinking.cmake`, `nitrogen/generated/android/nitrouiOnLoad.cpp`,
+  `nitrogen/generated/ios/NitroUi-Swift-Cxx-Bridge.{cpp,hpp}`,
+  `nitrogen/generated/ios/NitroUi-Swift-Cxx-Umbrella.hpp`. A hand-merged first pass over these is
+  exactly what `nitrogen:check` then rejects; regenerating is the resolution.
+- **Bench** — `bench/baselines/renders.json`, `bench/src/types.ts`, `bench/src/plan.ts`,
+  `bench/src/implementations/{shared,nitroUi,rnCore,expoUi.ios,expoUi.android}.tsx`,
+  `scripts/bench/lib.mjs`, `scripts/__tests__/bench-gate.test.js`.
+- **Example, gates and suites** — `example/src/App.tsx`,
+  `example/ios/NitroUiExampleUITests/RealInputTests.swift`, `scripts/smoke/{App.tsx,lib.mjs}`,
+  `scripts/__tests__/smoke-ready-line.test.js`, `scripts/real-input/{android.mjs,controls.mjs,uiautomator.mjs}`,
+  `src/__tests__/viewConfigs.test.ts`.
+
+Auto-merged but checked rather than trusted: `src/index.ts`, `nitro.json`,
+`etc/react-native-nitro-ui.api.md` and the `NitroUiAutolinking` pair all carry both components.
+
+### Resolutions that were not a plain union
+
+1. **`scripts/__tests__/bench-gate.test.js`** — main restructured this file around its own DatePicker
+   `describe`, ours added a Picker `describe`. Both bodies are kept as written, and the shared
+   "every component" assertion now names seven components and asserts
+   `all.length === button.length * 7`.
+2. **`scripts/__tests__/smoke-ready-line.test.js`** — the fixtures now carry a `date-picker` and a
+   `picker` box each. The "does not count a mention" fixture also gained `date-picker=138x34`: with
+   both controls present it would otherwise have gone green for the wrong reason, since the case is
+   about exactly one control being missing.
+3. **`scripts/real-input/uiautomator.mjs`** — both sides added a `selected` reading, for different
+   reasons (the selected day, the selected row). There is now one `selected` property and one typedef
+   line for it; ours' additions (`focusable`, `checkable`, `checked`, `findAllByDescription`) sit beside
+   it, and main's `findAllByText` is unchanged.
+4. **`scripts/real-input/android.mjs`** — git interleaved the two `CHECKS` bodies, so that region was
+   rebuilt from main's whole `'date-picker'` entry and ours' whole `'picker'` entry, keeping both sides'
+   new helpers (`dump`, `nodeByTestId`, `requireControlOnScreen`). A stray `},` survived the splice and
+   `node --check` caught it before anything reached a device.
+5. **`bench/src/implementations/shared.ts`** — `isSizedByContent` and `ROW_HEIGHTS` name both
+   components, and both helper blocks (dates, picker options) are kept.
+6. **`example/src/App.tsx`** — concatenating both sides broke the `Screen` union; it is now a
+   seven-member union with the two new screens and tabs.
+7. **`example/ios/Podfile.lock` is not part of this merge.** A `pod install` run under the bundler in
+   `example/` rewrites the `COCOAPODS:` stamp 1.17.0 → 1.15.2 (the toolchain wart already in
+   FOLLOWUPS); a plain `pod install` restores the committed content, so the only diff was that stamp.
+   Its `example/Gemfile.lock` byproduct is left out too.
+
+### The one real semantic conflict: seven tabs
+
+Nothing about the two controls disagrees. The example's tab bar does. Each task appended a tab to an
+intrinsic-width row, and with both of them the row is wider than the window — the iOS real-input check
+measured it: on a 420 pt window `tab-picker` drew at `x 434.3`, wholly outside the screen, so
+`goToTab` tapped nothing and `real-input-picker-index` never appeared. (G5's `Dates` tab already
+reached x 430; only its centre was still inside, which is why its own check passed.)
+
+The obvious fix — let the row wrap — made the Picker tab tappable and moved the failure: the tab bar
+grew 32 pt, and `testRealInputDatePicker` then failed at `RealInputTests.swift:968`, the field ending
+at y 447 with the popover opening at y 73. Nothing misbehaved: the popover is 336 × 337, and with 32 pt
+more room above the field UIKit legitimately anchors it above instead of below, which is the direction
+G5's assertion assumes. That change was reverted. `1ea3814` gives every tab `flex: 1` with the label
+shrinking to fit, which keeps all seven tappable **and** the row one line tall, so the DatePicker screen
+keeps the geometry G5 measured.
+
+### Two stale-build traps that went red first
+
+- **`bun run build:ios` writes to DerivedData, not `example/ios/build`.** CONTRIBUTING builds the
+  harness app with an explicit `xcodebuild -derivedDataPath build`, and `example/ios/build` still held a
+  pre-merge `.app`. Installing that gave 13 red DatePicker cases ("never reported a measured size");
+  `strings` on its binary found `HybridNitroUiPicker` and no `HybridNitroUiDatePicker` at all. Pointing
+  `HARNESS_APP_PATH` at the DerivedData product (or building with CONTRIBUTING's command) is the fix —
+  worth saying in CONTRIBUTING next to the recipe.
+- **Gradle kept `:app:packageDebug` UP-TO-DATE** although `mergeLibDexDebug` had contained the
+  DatePicker classes for an hour, so the arm64 APK also carried Picker without DatePicker (0 dex
+  references). `./gradlew :app:assembleDebug --rerun -PreactNativeArchitectures=arm64-v8a` re-packaged
+  it. Both binaries were then verified by counting the two class names inside them before any device
+  ran, which is the cheap check this pass wanted and did not have.
+
+### Gates, merge-main pass
+
+| Gate | Result |
+| - | - |
+| `fnm exec --using 24 -- bun run check` | **pass, exit 0** — jest **197/197** (12 suites), `perf:renders` **7/7** (Picker 6, DatePicker 8, each `mount + 0 redundant`), nitrogen **no drift** (181 files, 28 views), autolinking / api-extractor / publint clean, `package-files.txt` matches (418 files), README 5 blocks (`/tmp/g6merge-check3.log`, on the final tree) |
+| `react-native-harness --harnessRunner ios` | **pass** — 9 of 10 suites run, **140 passed, 1 skipped** (the skipped suite is the cold-sizing one, run by `harness:cold:ios`), iPhone Air / Metro 8293 (`/tmp/g6merge-harness-ios3.log`) |
+| `react-native-harness --harnessRunner android` | **pass** — 10 suites, **142 passed**, `nitroui_t01` / Metro 8293 (`/tmp/g6merge-harness-android2.log`) |
+| `bun run test:real-input:ios` | **pass, 6/6 controls** — switch 15.7 s, slider 36.2 s, button 19.1 s, segmented-control 34.6 s, date-picker 53.7 s, picker 121.4 s (`/tmp/g6merge-realinput-ios4.log`) |
+| `bun run test:real-input:android` | **pass, 6/6 controls** — all six, including the `uiautomator` dump assertions, the disabled refusal, the refused snap-back and the unmount-while-open cycles (`/tmp/g6merge-realinput-android.log`) |
+
+Every suite ran, not just Picker's: this pass is the first tree in which the two controls coexist, so
+it is the first honest run of both. Devices were this brief's iPhone Air (`331EF109-…` — the earlier G6
+rounds used iPhone 17) and AVD `nitroui_t01` / `emulator-5570` on a private adb server, Metro 8293. The
+iOS real-input run builds its own app under `.real-input/ios/build`, so the tree was exercised by three
+independent builds: the harness `.app`, the UI-test build, and the arm64 APK.
+
+### Follow-ups this pass adds
+
+- **G5's popover-anchor assertion is direction-dependent.** `RealInputTests.swift:968` asserts
+  `popover.minY >= field.maxY - 8`, i.e. that the popover sits *below* the field. That holds while the
+  body is too short for the popover to fit above and breaks when it fits, and both placements are
+  correct. The claim worth making is that the arrow points at the field, on whichever side it landed.
+  It is G5's check, so it is left untouched here.
+- **CONTRIBUTING should say which build produces `HARNESS_APP_PATH` on iOS**, since `bun run build:ios`
+  and the documented `xcodebuild -derivedDataPath build` put the `.app` in different places and a stale
+  copy is invisible from the harness's side.
+- **Verify the packaged Android APK after a merge that adds a component** (`unzip -p app-debug.apk
+  classes*.dex | …`) — Gradle's `packageDebug` up-to-date check missed the new library classes once here.
+- `docs/tasks/STATUS.md` still records G6 as "merge-main pass running"; that row is the orchestrator's
+  to flip when this is taken.
