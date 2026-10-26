@@ -24,7 +24,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.onGloballyPositioned
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.semantics.Role
@@ -172,11 +173,27 @@ internal class PickerModel : NitroUiModel() {
   // child that opened it is. Same shape as `DatePickerModel`'s report: a few plain
   // integers written from layout, formatted only when someone asks.
 
-  /** Screen rect the anchor's own layout last reported, in px; -1 before the first. */
-  @Volatile private var anchorLeft = -1
-  @Volatile private var anchorTop = -1
-  @Volatile private var anchorRight = -1
-  @Volatile private var anchorBottom = -1
+  /**
+   * The anchor's box *inside the composition's own view*, px; -1 before the first
+   * layout. `LayoutCoordinates.boundsInRoot()` reports this space, which is also the
+   * space a popup is positioned in.
+   */
+  @Volatile private var anchorLeft = -1f
+  @Volatile private var anchorTop = -1f
+  @Volatile private var anchorRight = -1f
+  @Volatile private var anchorBottom = -1f
+
+  /**
+   * Where the composition's own view sits on screen, px; -1 before the first read.
+   *
+   * Kept apart from [anchorLeft] because it is not a layout callback away. When a
+   * `<Host>` moves, the React Native view owning the Compose view moves; the Compose
+   * view keeps its `0,0`-inside-parent frame, so no `onGloballyPositioned` fires and the
+   * anchor would freeze at wherever the first measure happened. The two parts together
+   * are the screen box a popup has to agree with.
+   */
+  @Volatile private var compositionLeft = -1
+  @Volatile private var compositionTop = -1
 
   /** Screen rect of the open menu's content view, px; -1 while no menu is composed. */
   @Volatile private var menuLeft = -1
@@ -187,20 +204,89 @@ internal class PickerModel : NitroUiModel() {
   /** Rows the composed menu listed at its last recomposition. */
   @Volatile private var menuRowCount = 0
 
+  /**
+   * The open menu's own view, held so that a layout pass somewhere else in the app can
+   * ask it where its window ended up. UI-thread only, set and cleared by [MenuWitness],
+   * and never read from [readMenuReport] - the seam answers on the JS thread, so the
+   * report reads published numbers and nothing reaches for a view here.
+   */
+  private var menuView: View? = null
+
   /** Guards the read that formats [readMenuReport] from the JS thread. */
   private val reportLock = Any()
 
-  /** Record where the anchor is on screen - px, in the screen's own coordinates. */
-  fun noteAnchorFrame(
-    left: Int,
-    top: Int,
-    right: Int,
-    bottom: Int,
+  /**
+   * Record the anchor's box inside the composition's own view - px.
+   *
+   * UI-thread only (it is a layout callback), which is also what lets it act on what it
+   * sees; see [dropOpenMenu].
+   */
+  fun noteAnchorBox(
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
   ) {
+    val moved = anchorMoved(anchorLeft, anchorTop, left, top)
     anchorLeft = left
     anchorTop = top
     anchorRight = right
     anchorBottom = bottom
+    if (moved) {
+      dropOpenMenu()
+    }
+  }
+
+  /** Record where the composition's own view is on screen - px. UI-thread only. */
+  fun noteCompositionOrigin(
+    left: Int,
+    top: Int,
+  ) {
+    val moved =
+      anchorMoved(
+        compositionLeft.toFloat(),
+        compositionTop.toFloat(),
+        left.toFloat(),
+        top.toFloat(),
+      )
+    compositionLeft = left
+    compositionTop = top
+    if (moved) {
+      dropOpenMenu()
+    }
+  }
+
+  /**
+   * A box that *moved*, as opposed to one being read for the first time (-1) or changing
+   * size in place. A menu is anchored under a box; its width or height is not what the
+   * menu is anchored to.
+   */
+  private fun anchorMoved(
+    wasLeft: Float,
+    wasTop: Float,
+    left: Float,
+    top: Float,
+  ): Boolean = wasLeft >= 0f && (wasLeft != left || wasTop != top)
+
+  /**
+   * The box this control's window is anchored to has moved, so the window goes away.
+   *
+   * Compose is not told. A `Popup` positions itself once, against the anchor's box in its
+   * own composition; the pass that moves the box here is React Native moving the view
+   * under the composition, which Compose never hears about (measured: with a `<Host>`
+   * moved 120 dp while its menu was open, the anchor's box went from top 126 to top 441
+   * and the menu's window stayed at 294). A window left up would then be pointing at
+   * where the row used to be - worse than no window. So this is the same response the
+   * menu already gives when a scrolling ancestor carries its anchor away: it dismisses,
+   * and the next press opens one that is anchored where the row now is.
+   *
+   * Only a window that is actually composed answers; a closed control has nothing to
+   * take down, and the write is the same one `onExpandedChange` makes.
+   */
+  private fun dropOpenMenu() {
+    if (menuView != null && expanded) {
+      expanded = false
+    }
   }
 
   /** Record where the open menu's window is on screen. */
@@ -230,8 +316,30 @@ internal class PickerModel : NitroUiModel() {
     menuRowCount = rows
   }
 
+  /** The open menu's view, for as long as its composition group is composed. */
+  fun noteMenuView(view: View?) {
+    menuView = view
+  }
+
+  /**
+   * Re-read the open menu's window. UI-thread only, and only from a pass with a reason
+   * to ask: a popup window moved by the window manager does not re-run its view's
+   * `layout()` (same frame, new place), so the view's own layout listener stays quiet
+   * and the published rect would otherwise be where the menu was last laid out rather
+   * than where its window now is.
+   */
+  fun refreshMenuFrame(where: IntArray) {
+    val view = menuView ?: return
+    view.getLocationOnScreen(where)
+    noteMenuFrame(where[0], where[1], where[0] + view.width, where[1] + view.height)
+  }
+
   /**
    * `expanded=<0|1>;live=<n>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n>`.
+   *
+   * The anchor half is the composition-relative box plus the composition's own place on
+   * screen, summed here rather than stored: either half may arrive first, and either may
+   * go stale on its own, so `-1` means one of them was never read.
    *
    * Read by `nuiTestMenuReport`. Formatted under a lock because the seam may be called
    * from the JS thread while the UI thread writes the fields (`DatePickerModel`'s
@@ -243,9 +351,22 @@ internal class PickerModel : NitroUiModel() {
   fun readMenuReport(): String {
     val open = expanded
     val live = liveMenus.get()
+    val boxLeft = anchorLeft
+    val boxTop = anchorTop
+    val boxRight = anchorRight
+    val boxBottom = anchorBottom
+    val originLeft = compositionLeft
+    val originTop = compositionTop
+    val anchored = boxLeft >= 0f && originLeft >= 0
     return synchronized(reportLock) {
       "expanded=${if (open) 1 else 0};live=$live" +
-        ";anchor=$anchorLeft,$anchorTop,$anchorRight,$anchorBottom" +
+        ";anchor=" +
+        if (anchored) {
+          "${(boxLeft + originLeft).toInt()},${(boxTop + originTop).toInt()}," +
+            "${(boxRight + originLeft).toInt()},${(boxBottom + originTop).toInt()}"
+        } else {
+          "-1,-1,-1,-1"
+        } +
         ";menu=$menuLeft,$menuTop,$menuRight,$menuBottom;rows=$menuRowCount"
     }
   }
@@ -577,6 +698,34 @@ private class PickerHost(
     // because a popup positions itself against the composition it was opened from.
     val compositionView = LocalView.current
     val screenPoint = remember(compositionView) { IntArray(2) }
+    // Where the composition's own view is on screen, refreshed whenever the view React
+    // Native actually places moves. `compositionView` cannot be the one listened to: a
+    // Compose view is laid out at `0,0` inside its parent and stays there however far the
+    // parent travels, so the pass that relocates a `<Host>` never calls its `layout()`
+    // with different coordinates. Walking up past the Compose views lands on the view
+    // Fabric does move - the control's own React Native view when it is mounted alone,
+    // the Host's when it is hosted - which is the view whose frame the popup has to
+    // agree with.
+    val placedView = remember(compositionView) { placedViewOf(compositionView) }
+    DisposableEffect(placedView) {
+      val listener =
+        View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+          // Read the composition's own view, not the one that moved: it is the box
+          // `boundsInRoot` is drawn in, and this is the pass that changed where it is.
+          compositionView.getLocationOnScreen(screenPoint)
+          model.noteCompositionOrigin(screenPoint[0], screenPoint[1])
+          // And read the window in the same pass, if one is open: this is the moment
+          // the box under it moved, so it is the moment worth knowing where it is.
+          model.refreshMenuFrame(screenPoint)
+        }
+      // Read once now: the mount's own layout pass happens while the composition is
+      // being built, before this effect can subscribe to it, and a control that is never
+      // moved again would otherwise never have a box at all.
+      compositionView.getLocationOnScreen(screenPoint)
+      model.noteCompositionOrigin(screenPoint[0], screenPoint[1])
+      placedView.addOnLayoutChangeListener(listener)
+      onDispose { placedView.removeOnLayoutChangeListener(listener) }
+    }
     ExposedDropdownMenuBox(
       expanded = expanded,
       // The box reports the reason (`MenuAnchorType` + `enabled`), so a disabled
@@ -602,13 +751,7 @@ private class PickerHost(
           // same coordinate space a popup is positioned in.
           .onGloballyPositioned { coordinates ->
             val box = coordinates.boundsInRoot()
-            compositionView.getLocationOnScreen(screenPoint)
-            model.noteAnchorFrame(
-              screenPoint[0] + box.left.toInt(),
-              screenPoint[1] + box.top.toInt(),
-              screenPoint[0] + box.right.toInt(),
-              screenPoint[1] + box.bottom.toInt(),
-            )
+            model.noteAnchorBox(box.left, box.top, box.right, box.bottom)
           }
           // One accessibility node for the control, carrying its name, its value,
           // its role and its state.
@@ -745,6 +888,7 @@ private class PickerHost(
       val live = PickerModel.liveMenus
       live.incrementAndGet()
       val where = IntArray(2)
+      model.noteMenuView(menuView)
       val listener =
         View.OnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
           view.getLocationOnScreen(where)
@@ -758,6 +902,7 @@ private class PickerHost(
       menuView.addOnLayoutChangeListener(listener)
       onDispose {
         menuView.removeOnLayoutChangeListener(listener)
+        model.noteMenuView(null)
         model.clearMenuFrame()
         live.decrementAndGet()
         model.expanded = false
@@ -765,6 +910,34 @@ private class PickerHost(
     }
   }
 }
+
+/**
+ * The first ancestor of [start] that React Native places, as opposed to Compose.
+ *
+ * The Compose views of a mount (`AndroidComposeView`, then the host's own
+ * `AbstractComposeView`) are laid out by Compose at `0,0` inside their parent, so their
+ * own frames never change and a layout listener on them would never fire. Above them is
+ * the view Fabric moves when the control or its `<Host>` moves, and that is the frame
+ * the anchor's screen box has to follow.
+ */
+private fun placedViewOf(start: View): View {
+  var view = start
+  while (view.parent is View && isComposeView(view)) {
+    view = view.parent as View
+  }
+  return view
+}
+
+/**
+ * Whether [view] is one of Compose's own views rather than a React Native one.
+ *
+ * `AndroidComposeView` is internal to the library, so the package prefix is the check
+ * that survives a refactor of the class hierarchy - and it is the prefix every view in
+ * that chain carries, including the `AbstractComposeView` above it.
+ */
+private fun isComposeView(view: View): Boolean =
+  view is AbstractComposeView ||
+    view.javaClass.name.startsWith("androidx.compose.")
 
 /** The Hybrid View React renders as `NitroUiPicker`. */
 class HybridNitroUiPicker(
