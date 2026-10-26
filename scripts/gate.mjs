@@ -4,7 +4,10 @@
  * questions that used to cost hours per task.
  *
  *   node scripts/gate.mjs check
+ *   node scripts/gate.mjs harness:android
  *   node scripts/gate.mjs harness:android -- ColdSizing
+ *     ^ records `harness:android:ColdSizing`, which satisfies nothing: a filtered
+ *       run is not the platform gate
  *   node scripts/gate.mjs status
  *   node scripts/gate.mjs need --for review
  *   node scripts/gate.mjs need --for merge
@@ -17,6 +20,13 @@
  * what removes the re-runs: a docs commit leaves the digest alone, so a green
  * gate is still green, and the process review's "re-ran on the final tree" pass
  * (11 reports) becomes a lookup. See `scripts/gate-core.mjs` for the rules.
+ *
+ * Each line also carries `trees: {ios, android}` - that same digest restricted to
+ * the files belonging to each platform. At `review` a device gate is accepted on
+ * its own platform's tree, so a fix round that edits only `android/` does not
+ * re-owe an iOS run; at `merge` everything is matched on the whole tree. A run
+ * that starts a device gate on one tree and ends on another records `treeAfter`
+ * and never reads green.
  *
  * A device gate reads its device from the lease (X1), so source the lease first
  * and this file never needs to know a UDID:
@@ -36,10 +46,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { finished } from 'node:stream/promises';
 
 import {
   LEDGER_DIR,
   MERGE_GATES,
+  PLATFORMS,
+  changedPathsGitArgs,
   decideNeed,
   deviceFromEnv,
   explainNeedRow,
@@ -47,24 +60,32 @@ import {
   ledgerRelativePath,
   parseLedger,
   parseTestCounts,
+  parseTestSummaries,
+  platformTreesFromEntries,
+  platformsOwningFile,
   platformsTouchedByPaths,
   renderGateTable,
   resolveGate,
   summarizeGates,
   summarizeLoad,
 } from './gate-core.mjs';
+import { contentHash, isCodeFile } from './app-stamp-core.mjs';
 import { currentCodeTree, repoRootOf } from './app-stamp.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
 const USAGE =
   'usage: node scripts/gate.mjs <gate> [-- <args>]\n' +
-  '       node scripts/gate.mjs status\n' +
+  '       node scripts/gate.mjs status [--for review|merge]\n' +
   '       node scripts/gate.mjs need --for review|merge [--base <ref>]\n' +
-  '       node scripts/gate.mjs table [--full]\n' +
+  '       node scripts/gate.mjs table [--for review|merge] [--full]\n' +
   '       node scripts/gate.mjs export --task <ID> [--out <file>]\n' +
   '\n' +
   'gates: check | harness:<ios|android>[:suite] | real-input:<ios|android> |\n' +
   '       smoke:<pack|expo|rn-cli> | bench\n' +
+  '       (a filtered run is recorded under its own name, eg\n' +
+  '        `harness:android -- ColdSizing` -> `harness:android:ColdSizing`, and\n' +
+  '        does not satisfy the full gate; `status` and `table` default to the\n' +
+  '        stricter review view, `--for merge` shows the merge bar)\n' +
   '       (a device gate reads its device from `node scripts/lease.mjs acquire`;\n' +
   '        a harness/real-input gate needs app.stamp from scripts/build-app.mjs)\n';
 
@@ -75,6 +96,14 @@ const USAGE =
  * what lets a reader discount a red row that happened under a Gradle storm.
  */
 const LOAD_SAMPLE_INTERVAL_MS = 15_000;
+
+/**
+ * Signals to forward to the child. A timeout or a task runner that stops
+ * `gate.mjs` by PID used to leave a harness holding the leased device while the
+ * ledger recorded nothing; forwarding gives the child its own cleanup, and the
+ * signal is re-raised on self afterwards so the exit status is still the signal.
+ */
+const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'];
 
 const repoRoot = repoRootOf();
 
@@ -114,6 +143,55 @@ function appendLedgerLine(branch, line) {
 }
 
 /**
+ * The three digests a decision needs: the full code tree and the two platform
+ * halves of it.
+ *
+ * The halves are built here rather than in `app-stamp.mjs` so the stamp stays
+ * what it is (one digest for one binary, X1) and `build-app.mjs` - which task X6
+ * is editing right now - is untouched. The file listing and the hashing rules
+ * mirror `currentCodeTree()` exactly, including the skip-what-is-deleted and
+ * hash-the-link-target cases, so a platform digest is the same hash function over
+ * a subset of the same file set and nothing else.
+ *
+ * @returns {{tree: string, head: string, files: number, trees: Record<string, string>}}
+ */
+function readTrees() {
+  const full = currentCodeTree({ repoRoot });
+  const listing = git(
+    [
+      '-c',
+      'core.quotepath=false',
+      'ls-files',
+      '-z',
+      '--cached',
+      '--others',
+      '--exclude-standard',
+    ],
+    ''
+  );
+  const entries = {};
+  for (const file of String(listing).split('\0')) {
+    if (file === '' || !isCodeFile(file)) continue;
+    // Tooling and docs are in no platform's half; this is what keeps a fix round
+    // that edits `scripts/gate.mjs` from re-owing two device runs.
+    if (platformsOwningFile(file).length === 0) continue;
+    const absolute = path.join(repoRoot, file);
+    let stats;
+    try {
+      stats = fs.lstatSync(absolute);
+    } catch {
+      continue;
+    }
+    if (stats.isSymbolicLink()) {
+      entries[file] = contentHash(`link:${fs.readlinkSync(absolute)}`);
+    } else if (stats.isFile()) {
+      entries[file] = contentHash(fs.readFileSync(absolute));
+    }
+  }
+  return { ...full, trees: platformTreesFromEntries(entries) };
+}
+
+/**
  * The code paths this branch changed, against the review base (default `main`).
  *
  * Three sources, because a round is usually part-committed: committed diff,
@@ -132,11 +210,7 @@ function changedCodePaths({ base }) {
     return { paths: [], base: null, unknown: true };
   }
   const paths = new Set();
-  for (const args of [
-    ['diff', '--name-only', `${mergeBase}...HEAD`],
-    ['diff', '--name-only', mergeBase],
-    ['ls-files', '--others', '--exclude-standard'],
-  ]) {
+  for (const args of changedPathsGitArgs(mergeBase)) {
     const out = git(args, '');
     for (const line of out.split('\n')) {
       if (line.trim() !== '') paths.add(line.trim());
@@ -149,14 +223,15 @@ function changedCodePaths({ base }) {
  * Run one gate: tee its output to a log, sample the load while it goes, and
  * record the result against the tree the command actually saw.
  *
- * The tree is read *before* the spawn. Reading it afterwards would let an edit
- * that happened during a five-minute run be recorded as if the run had seen it -
- * the same mistake `build-app.mjs` fixed by hashing before and after (X1 review
- * M3), and the reason `status` is honest about a concurrent edit.
+ * The tree is read *before* the spawn and again after it. Reading it only before
+ * would let an edit that happened during a five-minute run be recorded as if the
+ * run had seen it; recording only the starting tree would let a run that started
+ * on one tree and finished on another be read as evidence about either. Both are
+ * recorded, and a line where they differ is never green (N1).
  */
 async function runGate(name, resolved) {
   const branch = currentBranch();
-  const before = currentCodeTree({ repoRoot });
+  const before = readTrees();
   const device = deviceFromEnv(process.env, resolved.platform);
   const startedAt = Date.now();
   const startedLoad = os.loadavg()[0] ?? null;
@@ -192,33 +267,66 @@ async function runGate(name, resolved) {
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    let forwarded = null;
+    const handlers = FORWARDED_SIGNALS.map((signal) => {
+      const handler = () => {
+        // Only the direct child gets it: a signal sent to this PID alone used to
+        // orphan a harness that still held the leased device (N4). A Ctrl-C from a
+        // terminal reaches the child as well, via the process group.
+        forwarded = signal;
+        try {
+          child.kill(signal);
+        } catch {
+          /* already gone */
+        }
+      };
+      process.on(signal, handler);
+      return [signal, handler];
+    });
+    const stopListening = () => {
+      for (const [signal, handler] of handlers)
+        process.removeListener(signal, handler);
+    };
     child.stdout.on('data', (chunk) => tee(chunk, process.stdout));
     child.stderr.on('data', (chunk) => tee(chunk, process.stderr));
     child.on('error', (error) => {
       process.stderr.write(
         `gate: could not start ${resolved.argv[0]}: ${error.message}\n`
       );
-      resolvePromise({ code: 1, signal: null, failedToStart: true });
+      stopListening();
+      resolvePromise({
+        code: 1,
+        signal: null,
+        failedToStart: true,
+        forwarded: null,
+      });
     });
-    child.on('close', (code, signal) =>
-      resolvePromise({ code, signal, failedToStart: false })
-    );
+    child.on('close', (code, signal) => {
+      stopListening();
+      resolvePromise({ code, signal, failedToStart: false, forwarded });
+    });
   });
 
   clearInterval(sampler);
   samples.push(os.loadavg()[0] ?? Number.NaN);
   const durationMs = Date.now() - startedAt;
-  const after = currentCodeTree({ repoRoot });
+  const after = readTrees();
   logStream.end();
+  // Wait for the log to reach the disk before any re-raise below can kill the
+  // process: a ledger line pointing at a truncated log is half the evidence.
+  await finished(logStream).catch(() => {});
 
   const result = exit.code === 0 && exit.signal == null ? 'pass' : 'fail';
+  const summaries = parseTestSummaries(logText);
   const line = ledgerLineFromRun({
+    // The canonical name from `resolveGate`, never `argv[0]`: one harness suite
+    // run with `-- ColdSizing` used to be recorded as the full `harness:android`
+    // and then satisfied `need` (M1).
     gate: name,
     command: resolved.argv.join(' '),
-    // Record the tree the run *started* on, and say so when the tree moved under
-    // it: that line is still evidence about the code it read, and the reader has
-    // to be told it may not be the code in front of them now.
     tree: before.tree,
+    trees: before.trees,
+    treeAfter: after.tree,
     head: before.head,
     branch,
     platform: device.platform,
@@ -227,10 +335,15 @@ async function runGate(name, resolved) {
     load: summarizeLoad({ start: startedLoad, samples }),
     durationMs,
     result,
-    counts: parseTestCounts(logText),
+    // `counts` is the first summary (the unit-test step) and `summaries` all of
+    // them, so `check`'s row can report 391 jest tests rather than the 7-test
+    // perf step that happened to print last (M3).
+    counts: parseTestCounts(logText) ?? summaries[0] ?? null,
+    summaries,
     logPath,
     startedAt,
     exitCode: exit.code ?? (exit.signal != null ? null : 1),
+    signal: exit.signal,
   });
   const file = appendLedgerLine(branch, line);
 
@@ -248,40 +361,56 @@ async function runGate(name, resolved) {
       'gate: a bench never blocks `need` - benches go to the bench host (D15).\n'
     );
   }
+  if (exit.forwarded != null) {
+    // The line is written and the log is flushed, so the signal can now do its
+    // default work and the caller's exit status still says "interrupted".
+    process.stderr.write(`gate: re-raising ${exit.forwarded}\n`);
+    process.kill(process.pid, exit.forwarded);
+    return 1;
+  }
   return exit.signal != null ? 1 : (exit.code ?? 1);
 }
 
-function printCodeTree(tree) {
+function printCodeTree({ tree, trees, head, files }) {
   process.stderr.write(
-    `ledger: code tree ${tree.tree.slice(0, 12)} at HEAD ${git(['rev-parse', '--short', 'HEAD'], '?')} (branch ${currentBranch()}, ${String(tree.files)} files)\n`
+    `ledger: code tree ${tree.slice(0, 12)} at HEAD ${String(head ?? '?').slice(0, 7)} (branch ${currentBranch()}, ${String(files)} files)\n`
+  );
+  process.stderr.write(
+    `ledger: platform trees ${PLATFORMS.map((platform) => `${platform} ${String(trees?.[platform] ?? '?').slice(0, 12)}`).join(' ')}\n`
   );
 }
 
-function commandStatus() {
+function commandStatus({ stage }) {
   const branch = currentBranch();
-  const tree = currentCodeTree({ repoRoot });
+  const read = readTrees();
   const { entries, file, exists } = readLedger(branch);
-  printCodeTree(tree);
+  printCodeTree(read);
   process.stderr.write(
     `ledger: ${exists ? path.relative(repoRoot, file) : `${path.relative(repoRoot, file)} (nothing recorded yet)`}\n`
   );
+  process.stderr.write(`ledger: showing the ${stage} view\n`);
   if (entries.some((entry) => entry.corrupt)) {
     process.stderr.write(
       `ledger: ${String(entries.filter((entry) => entry.corrupt).length)} unreadable line(s) - treated as not run\n`
     );
   }
-  const rows = summarizeGates({ entries, codeTree: tree.tree });
+  const rows = summarizeGates({
+    entries,
+    tree: read.tree,
+    trees: read.trees,
+    stage,
+  });
   for (const row of rows) {
     const entry = row.entry;
     const detail =
       entry == null
         ? ''
-        : ` [${String(entry.tree).slice(0, 12)}${entry.tree === tree.tree ? '' : ' not this tree'} ${formatMaybe(entry.durationMs)}${entry.lease != null ? ` lease ${entry.lease}` : ''}]`;
+        : ` [${String(entry.tree).slice(0, 12)}${row.matched == null ? ' not this tree' : row.matched === 'full' ? '' : ` ${row.matched} tree`}${formatMaybe(entry.durationMs)}${entry.lease != null ? ` lease ${entry.lease}` : ''}${row.why === 'moved' ? ' tree moved mid-run' : ''}]`;
     process.stdout.write(`${row.state.padEnd(7)} ${row.gate}${detail}\n`);
   }
   const green = rows.filter((row) => row.state === 'green').length;
   process.stdout.write(
-    `\n${String(green)} green, ${String(rows.filter((r) => r.state === 'red').length)} red, ${String(rows.filter((r) => r.state === 'stale').length)} stale, ${String(rows.filter((r) => r.state === 'missing').length)} missing for this code tree\n`
+    `\n${String(green)} green, ${String(rows.filter((r) => r.state === 'red').length)} red, ${String(rows.filter((r) => r.state === 'stale').length)} stale, ${String(rows.filter((r) => r.state === 'missing').length)} missing for this code tree (${stage})\n`
   );
   return 0;
 }
@@ -292,23 +421,25 @@ function formatMaybe(ms) {
 
 function commandNeed({ stage, base }) {
   const branch = currentBranch();
-  const tree = currentCodeTree({ repoRoot });
+  const read = readTrees();
   const { entries, exists } = readLedger(branch);
   const diff = changedCodePaths({ base });
   const touched = diff.unknown
-    ? { platforms: ['ios', 'android'], unmapped: [] }
+    ? { platforms: [...PLATFORMS], unmapped: [], tooling: [] }
     : platformsTouchedByPaths(diff.paths);
 
   const decision = decideNeed({
     entries,
-    codeTree: tree.tree,
+    tree: read.tree,
+    trees: read.trees,
     stage,
     touchedPlatforms: touched.platforms,
     unmappedPaths: touched.unmapped,
+    toolingPaths: touched.tooling,
     diffUnknown: diff.unknown,
   });
 
-  printCodeTree(tree);
+  printCodeTree(read);
   process.stderr.write(
     `need: ${stage} against ${exists ? `.gates/${branch}.jsonl` : 'an empty ledger'}; ` +
       `code diff base ${diff.base == null ? 'unknown' : diff.base.slice(0, 7)}` +
@@ -316,7 +447,7 @@ function commandNeed({ stage, base }) {
   );
   for (const row of decision.required) {
     process.stdout.write(
-      `  ${row.state === 'green' ? '✓' : '✗'} ${explainNeedRow(row, tree.tree)}\n`
+      `  ${row.state === 'green' ? '✓' : '✗'} ${explainNeedRow(row, read.tree)}\n`
     );
   }
   for (const note of decision.notes) {
@@ -332,11 +463,11 @@ function commandNeed({ stage, base }) {
   return 1;
 }
 
-function commandTable({ full }) {
+function commandTable({ stage, full }) {
   const branch = currentBranch();
-  const tree = currentCodeTree({ repoRoot });
+  const read = readTrees();
   const { entries, exists } = readLedger(branch);
-  printCodeTree(tree);
+  printCodeTree(read);
   if (!exists) {
     process.stderr.write('table: nothing recorded yet - run a gate first.\n');
     return 1;
@@ -344,7 +475,9 @@ function commandTable({ full }) {
   process.stdout.write(
     `${renderGateTable({
       entries,
-      codeTree: tree.tree,
+      tree: read.tree,
+      trees: read.trees,
+      stage,
       required: MERGE_GATES,
       evidence:
         full === true
@@ -384,15 +517,52 @@ function commandExport({ task, out }) {
   return 0;
 }
 
+/**
+ * `--for review|merge` for the read-only commands, defaulting to `review`.
+ *
+ * Review is the stricter question about *this* round, and it is the one a report
+ * pastes, so it is the default; `--for merge` shows the bar the branch has to
+ * clear as a whole. A stale row is never a FAIL and never a PASS in either view.
+ */
+function parseStageOption({ rest, command }) {
+  let stage = 'review';
+  for (let index = 0; index < rest.length; index += 1) {
+    const argument = rest[index];
+    if (argument === '--for' || argument === '--stage') {
+      stage = rest[index + 1] ?? null;
+      index += 1;
+    } else if (argument.startsWith('--for=')) {
+      stage = argument.slice('--for='.length);
+    } else if (argument === '--full' && command === 'table') {
+      continue; // read by the caller
+    } else {
+      process.stderr.write(
+        `${command}: unknown argument ${argument}\n${USAGE}`
+      );
+      return { stage: null };
+    }
+  }
+  if (stage !== 'review' && stage !== 'merge') {
+    process.stderr.write(
+      `${command}: --for review or --for merge (got ${String(stage)})\n${USAGE}`
+    );
+    return { stage: null };
+  }
+  return { stage };
+}
+
 async function main(argv) {
   const [command, ...rest] = argv;
   if (command == null || command === '--help' || command === '-h') {
     process.stdout.write(USAGE);
     return 0;
   }
-  if (command === 'status') return commandStatus();
-  if (command === 'table') {
-    return commandTable({ full: rest.includes('--full') });
+  if (command === 'status' || command === 'table') {
+    const { stage } = parseStageOption({ rest, command });
+    if (stage == null) return 2;
+    return command === 'status'
+      ? commandStatus({ stage })
+      : commandTable({ stage, full: rest.includes('--full') });
   }
   if (command === 'need') {
     let stage = null;
@@ -458,7 +628,7 @@ async function main(argv) {
     process.stderr.write(`gate: ${String(error?.message ?? error)}\n${USAGE}`);
     return 2;
   }
-  return await runGate(command, resolved);
+  return await runGate(resolved.gate, resolved);
 }
 
 assertSupportedNodeOrReexec({
