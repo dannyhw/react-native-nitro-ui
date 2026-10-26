@@ -488,16 +488,13 @@ describe('Host · hosted controls are still controls', () => {
     // have at mount, in the order the app asked for.
     log.setIds?.(['list-c', 'list-a', 'list-d']);
     await settle(500);
-    // `list-d` is a child Fabric laid out *after* the Host mounted, so this is F8 from
-    // the other side: a child added later rather than one re-framed. Its box is nothing
-    // on Android — the `testID` caveat in docs/components/host.md holds for children the
-    // Host did not have at mount, not only for the ones it drew from the start.
     const addedBox = frame(await boxOf('list-d'));
-    // A child added after the Host's first layout is F8 from the other side, and it
-    // behaves the same way as one re-framed later: on Android the frame Yoga computed
-    // reaches its `View` (measured `[52, 48, 0, 96]` — the engine box, third row), while
-    // children mounted with the Host stay at `[0, 0, 0, 0]`. Either way it is the
-    // engine's frame and not the drawn one, which is the caveat in host.md.
+    // A child Fabric laid out *after* the Host mounted is F8 from the other side, and it
+    // behaves as one re-framed later does: on Android the frame Yoga computed reaches its
+    // `View` (measured `[52, 48, 0, 96]` — the engine box, third row), while a child the
+    // Host drew from the start keeps the `[0, 0, 0, 0]` it mounted with. Which of the two
+    // it is does not matter to the reader: the box is the engine's frame, never the drawn
+    // rect, which is the `testID` caveat in docs/components/host.md.
     expect(addedBox[0]).toBeGreaterThan(0);
     expect(addedBox[1]).toBeGreaterThan(0);
     const listBox = await boxOf('list-host');
@@ -602,18 +599,6 @@ describe('Host · hosted controls are still controls', () => {
   });
 
   /**
-   * F8: the box of a hosted child after a later Fabric layout pass *over that child*.
-   *
-   * The first version of this case grew a sibling's height, which lays the screen out
-   * again and changes nothing about the hosted child, so it passed whether or not a
-   * second pass would hand back a frame (review M2). Here the child's own `style` goes
-   * from 120 x 44 to 160 x 60, which changes its metrics and therefore emits a layout
-   * update for it, and the Host's own box growing by the same 16 is the witness that the
-   * pass really happened. What the child reports afterwards is what an E2E tool reads for
-   * the rest of the session, which is why the `testID` caveat has to hold after the
-   * first pass and not only during it.
-   */
-  /**
    * F8: a hosted child's box after a later Fabric layout pass *over that child*.
    *
    * The first version of this case grew a sibling's height and read the child again. That
@@ -633,6 +618,11 @@ describe('Host · hosted controls are still controls', () => {
    *  - what did not move is the drawing: the same x offsets down the column answered
    *    before the re-frame and after it, and the drawing still stops at the control —
    *    60 dp inside a box 160 wide.
+   *    That reading is Android's, because the probe reads the composition's row band:
+   *    on iOS the passthrough draws every child into its own view, so a child's box is
+   *    its drawing and the probe would compare a rectangle with itself. The iOS branch
+   *    reads the other half of the same case — the child is laid out at its Yoga frame
+   *    before the re-frame and at the new one after it.
    *
    * So the caveat is not "a hosted child's box is nothing", it is "a hosted child's box
    * is the engine's frame, not the drawn one" — sometimes zero, sometimes a plausible
@@ -667,18 +657,21 @@ describe('Host · hosted controls are still controls', () => {
       return hit;
     };
     const sizedBefore = frame(await boxOf('f8-sized'));
-    const drawnBefore = await drawnColumns();
-    expect(drawnBefore.length).toBeGreaterThan(0);
+    // The column probe reads the composition's row band inside the Host box, which is
+    // only where the Host draws; on iOS the box and the drawing are the same rectangle.
+    const drawnBefore = Platform.OS === 'android' ? await drawnColumns() : [];
+    if (Platform.OS === 'android') {
+      expect(drawnBefore.length).toBeGreaterThan(0);
+    }
 
     log.setSized?.(true);
     await settle(600);
 
     const sizedAfter = frame(await boxOf('f8-sized'));
-    const drawnAfter = await drawnColumns();
-    // The re-frame moved the frame and not the drawing, on both platforms.
-    expect(drawnAfter).toEqual(drawnBefore);
 
     if (Platform.OS === 'android') {
+      // The re-frame moved the frame and not the drawing.
+      expect(await drawnColumns()).toEqual(drawnBefore);
       expect(sizedBefore).toEqual([0, 0, 0, 0]);
       // F8: the child's own engine box, in the row Yoga put it in.
       expect(sizedAfter).toEqual([160, 60, 0, 48]);
