@@ -1,6 +1,6 @@
 # Recovery snapshot
 
-> **Resume after the 2026-10-26 T3 update:** re-delegate X6 and X2 from their briefs (worktrees exist, clean), then write the H2b brief. Version Packages PR for 0.2.0 is open and should wait for H2b.
+> **2026-10-26 20:50:** X6 (`nitroui-X6b`), X2 (`nitroui-X2b`) and H2b (`nitroui-H2b`) delegated to Apex; each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). Version Packages PR for 0.2.0 is open and waits for H2b. If sessions are gone, re-delegate each from its brief.
  — 2026-10-23 23:50 local
 
 Written because the machine may restart (at 23:41:02 CoreSimulatorService got SIGTERM and shut down
@@ -36,10 +36,11 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | R5 publish 0.1.0 | — | merged | **Published** `react-native-nitro-ui@0.1.0` (registry tarball sha256 = tested `fa1b7b96…`), tag `v0.1.0` + GitHub release | — |
 | X1 dev tooling (CI checks, build-app, lease) | — | merged | Done; CI enabled (checks / native-tests / build-android) | Next: X2 gate ledger + short reports, X3 registry codegen (after H2a), X4 conformance, X5 bench queue / second Mac. |
 | R6 Changesets release | — | merged | **Validated end to end:** 0.1.1 staged by CI via OIDC with provenance, approved by the owner, `v0.1.1` tagged at `152e059` by Release tag | — |
-| X6 build speed | `nitro-ui-worktrees/X6` · `task/X6-build-speed` (clean, no commits) | brief on main | **Paused 2026-10-26 20:25 for the owner's T3/agent update** — cancelled before any change | Re-delegate from the brief (`nitroui-X6b`). |
-| X2 gate ledger + short reports | `nitro-ui-worktrees/X2` · `task/X2-gate-ledger` (clean, no commits) | brief on main | **Paused 2026-10-26 20:25** — cancelled before any change | Re-delegate from the brief (`nitroui-X2b`). |
+| X6 build speed | `nitro-ui-worktrees/X6` · `task/X6-build-speed` (clean, no commits) | brief on main | Apex round in progress (`nitroui-X6b`) | Opus review, merge. |
+| X2 gate ledger + short reports | `nitro-ui-worktrees/X2` · `task/X2-gate-ledger` (clean, no commits) | brief on main | Apex round in progress (`nitroui-X2b`) | Opus review, merge. |
 | R5b post-publish smoke | — | merged | Done: all 6 rows green from the npm tarball | — |
-| H2a Host: Slider/Progress/Button | — | merged | Done; ships in the next minor via `.changeset/host-composes-more-controls.md` | Quiet bench re-run pending (bench machine). Then H2b. |
+| H2a Host: Slider/Progress/Button | — | merged | Done; ships in the next minor via `.changeset/host-composes-more-controls.md` | Quiet bench re-run pending (bench machine). |
+| H2b Host: SegmentedControl/Picker/DatePicker | `nitro-ui-worktrees/H2b` · `task/H2b-host-popups` | brief on main | Apex round in progress (`nitroui-H2b`) | Opus review, merge, then merge Version Packages PR #2 (0.2.0). |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
 | T17 iOS Host spike | branch only (`871c579`, pushed) | report merged | Done: iOS Host not better (D23); H3 dropped | — |
@@ -47,8 +48,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 
 ## Devices (D13)
 
-- Free: iPhone 17 `F08675D3-A32B-4F88-BC81-02D7E0CB797E`.
-- All nitro-ui devices shut down for the update (iPhone 17, iPhone Air, `nitroui_t01`). The `RNSB …` simulators belong to the Storybook thread and were left running. Device config for `scripts/lease.mjs` is machine-local in `~/.nitro-ui/devices.json`.
+- Leased through `scripts/lease.mjs`: pair-a (iPhone 17 + `nitroui_t03`), pair-b (iPhone Air + `nitroui_t01`). The `RNSB …` simulators belong to the Storybook thread and were left running. Device config for `scripts/lease.mjs` is machine-local in `~/.nitro-ui/devices.json`.
 - Never touch `emulator-5560` (the human's). Max 2 device tasks.
 
 ## After these
