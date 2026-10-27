@@ -1,8 +1,8 @@
 /**
  * Keep a committed JSON file prettier-clean.
  *
- * `bench/baselines/*.json` is committed, so `bun run format` (`prettier --check
- * .`) judges it - and `bun bench --update-baseline` writes it with
+ * `bench/baselines/<machine>/*.json` is committed, so `bun run format`
+ * (`prettier --check .`) judges it - and `bun bench --update-baseline` writes it with
  * `JSON.stringify(..., 2)`, which is *nearly* prettier's JSON style but not
  * prettier: an object or array that prettier would keep on one line, or a long
  * string it would not wrap, differs. A1b left that as a follow-up: mint a

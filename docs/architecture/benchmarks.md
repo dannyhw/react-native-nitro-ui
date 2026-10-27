@@ -19,7 +19,7 @@ bench/                       Expo app, release builds only (CNG: bench/ios and
 bench/src/                   plan parsing, scenarios, implementations registry, NDJSON emit
 bench/modules/bench-probe/   private Nitro module (Swift/ObjC++ + Kotlin + C++)
 bench/results/               <sha>[-dirty]-<platform>-<stamp>.{json,md} (gitignored)
-bench/baselines/             committed ratio baselines + renders.json (see its README)
+bench/baselines/             committed baselines by machine, + renders.json (README)
 scripts/bench/               build.mjs run.mjs report.mjs render.mjs devices.mjs lib.mjs
 scripts/perf/renders.mjs     Reassure render-count gate
 ```
@@ -78,6 +78,11 @@ Useful flags:
 The runner restores Android animation scales it reset, and `--shutdown` covers
 the "I booted it, I clean it up" case; a device that was already up is left
 alone.
+
+`--check` and `--update-baseline` need `NITRO_UI_MACHINE_LABEL`: baselines are keyed
+by machine as well as device, so without a usable label both refuse before the run
+starts (see "Baselines and gating"). A plain run, which gates nothing, does not
+need one.
 
 `bun run bench:report <results.json> [--compare <ref>] [--check]
 [--update-baseline]` re-renders an existing results file without touching a
@@ -234,22 +239,34 @@ matrix to that arm rather than burning launches that report nothing.
 
 ## Baselines and gating
 
-`bench/baselines/<deviceKey>.json` is the trend record, with
-`deviceKey = platform + OS runtime + device class` (D9): `ios27-sim-iphone17`,
-`android35-emu-pixel9`. A runtime change is a comparability break, so it gets a
-new file, and anything that is not the canonical device for its platform uses
-same-run ratio tables and `--compare`, never `--check`. Baselines are
-**ratio-only** - see `bench/baselines/README.md`.
+`bench/baselines/<machine-label>/<deviceKey>.json` is the trend record. `deviceKey`
+is `platform + OS runtime + device class` (D9): `ios27-sim-iphone17`,
+`android35-emu-pixel9`. The class is the device's **hardware type**, never what it was
+named: a simulator's key comes from `simctl`'s `deviceTypeIdentifier`
+(`…SimDeviceType.iPhone-17` -> `iphone17`) and an emulator's from its AVD hardware
+profile, because the lease pool names its devices `nitro-ui A`/`nitro-ui B` and a
+committed path cannot be keyed on a local nickname. A runtime change is a
+comparability break, so it gets a new
+file. The directory above it is the machine that measured it, because the launch-paired
+ratio to `rn-core` cancels drift inside one machine and explains nothing between two:
+simulators and emulators run on their host's CPU and GPU, so core count, GPU and
+memory pressure move the UI-CPU cells (`docs/tasks/PROCESS-review-2026-10-26.md` §5).
+So a machine gates only against its own directory, and anything that is not the
+canonical device for its platform, or a machine without its own baseline, uses same-run
+ratio tables and `--compare`, never `--check`. Baselines are **ratio-only** - see
+`bench/baselines/README.md`.
 
-**Both canonical devices have a committed baseline**:
-`bench/baselines/ios27-sim-iphone17.json` (an iPhone 17 simulator on iOS 27) and
-`bench/baselines/android35-emu-pixel9.json` (an API 35 Pixel 9 emulator, ART
-`speed-profile`), each from one clean `--plan full --launches 8` run, so
-`--check` gates on both platforms. On iOS more of the cells are noise-suppressed
-(their own within-run spread is over 10 %) than on Android, so the iOS gate is
-real but narrower. Neither baseline records a leak slope — no arm climbed
+**`maintainer-mac-1` has both committed baselines**:
+`bench/baselines/maintainer-mac-1/ios27-sim-iphone17.json` (an iPhone 17 simulator on
+iOS 27) and `bench/baselines/maintainer-mac-1/android35-emu-pixel9.json` (an API 35
+Pixel 9 emulator, ART `speed-profile`), each from one clean `--plan full --launches 8`
+run, so `--check` gates on that machine, on both platforms. On iOS more of the cells
+are noise-suppressed (their own within-run spread is over 10 %) than on Android, so the
+iOS gate is real but narrower. Neither baseline records a leak slope — no arm climbed
 monotonically in either run — so the leak cells read `new arm` under `--check`.
-The `renders.json` gate is separate, live, and committed.
+`maintainer-mac-2` has none yet, so there `--check` refuses until that machine mints
+its own. The `renders.json` gate is separate, live, and committed - it counts JS
+renders, so it needs no machine directory.
 
 The gate exists once (`gate()` in `scripts/bench/lib.mjs`) and is used identically
 by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:
@@ -278,11 +295,15 @@ by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:
    cannot create one.
 
 Exit codes: `0` ok, `1` conclusive regression, `2` the run could not be judged
-(incomplete launches, incompatible baseline, refusal).
+(incomplete launches, incompatible baseline, refusal). The one exception is
+`report.mjs --check` on a machine that has no baseline yet: it exits 1, as it always
+has, meaning "nothing was judged" rather than "a regression"; `run.mjs --check` exits 2
+there. `bench/baselines/README.md` tabulates it per refusal.
 
 Refresh baselines in a dedicated commit with `--plan full --launches 8` on a
-clean tree and an idle machine; `--update-baseline` refuses otherwise and prints
-why (dirty tree, `problems`, a busy run, missing load average).
+clean tree and an idle machine, on the machine that owns the directory being
+written; `--update-baseline` refuses otherwise and prints why (dirty tree,
+`problems`, a busy run, missing load average, no machine label).
 
 "Busy" is judged over the run, not at the moment it happens to end (R4): the
 runner samples `os.loadavg()[0]` every `LOAD_SAMPLE_INTERVAL_MS` (30 s) and at
@@ -294,6 +315,13 @@ already over the ceiling. The reason is an earlier iOS baseline attempt: 154
 quiet minutes, `load5` 4.06 against a 7.0 ceiling, and a single final sample of
 7.60 threw the run away. Results files from before the sampler have only the instant they
 recorded, so they keep the single-sample rule.
+
+An unusable `NITRO_UI_MACHINE_LABEL` is refused in that same pre-flight, for the same
+reason: a three-hour run that discovers at the end that it has no directory to write
+its baseline to has wasted three hours. `--check` refuses one up front too, because
+there is no other machine's file to fall back to. `--force` does not bypass that
+refusal: what it overrides are the load, cleanliness and plan guards, which judge a
+measurement, and this one is the absence of a path to write to.
 
 Every run also records what machine produced it - hostname, core count, CPU
 model (`os.cpus()[0].model`), load averages, RAM, Xcode version or Android image
@@ -476,7 +504,8 @@ Raw results are uploaded as artifacts instead of going into git.
 | `presented` missing on most samples (`missingPresented` high) | A metric over 10 % missing prints `n/a` and is ungated, so this row means "go look", not "read the survivors". Until T02 round 4 the dominant cause was the Android probe itself: its vsync filter rejected the very frame that presents a Fabric mount, and only cells whose screen invalidated *again* (the Switch's thumb animation on `update`) ever produced a sample - static `mount` cells timed out at ~80/80 on every arm, which is deterministic, not selective. Check the build predates that fix before chasing machine causes: the listener needs a focused window, and both platforms give up after 2 s (`FRAME_TIMEOUT_MS`) and answer `-1`, so confirm the app was in the foreground and re-run. |
 | Android launch ~5-10x slower than usual, frame signals missing | The AVD may be booting without a host GPU (`hw.gpu.enabled=no` in `~/.android/avd/<name>.avd/config.ini` - `avdmanager create` can leave it, and the runner does not boot Android devices, so nothing corrects it). Boot it yourself with `emulator -avd <name> -port <port> -gpu host`. |
 | `--update-baseline` refused | The tree was dirty, the run had `problems`, or the machine was busy: more than 10 % of the run's load samples over 0.5 x the core count (R4). The refusal prints the median, the count and the share, so you can tell a busy run from one noisy minute. When it refuses *before* the run starts, the machine was already over the ceiling - wait for it to settle; `--force` is for experiments only. |
-| `--check` says no baseline | Baselines are per canonical device (`bench/baselines/README.md`). Use `--compare <ref>` on other hardware. |
+| `--check` says no baseline | Baselines are per machine *and* canonical device (`bench/baselines/README.md`). A machine that has not minted one yet has nothing to gate against: use `--compare <ref>`, or mint it with `--update-baseline`. |
+| `--check`/`--update-baseline` refuse with "no machine label" | `NITRO_UI_MACHINE_LABEL` is unset or `unlabelled`, so there is no `bench/baselines/<label>/` to read or write. Export it (`maintainer-mac-<n>`) and measure again; a results file from before it was set cannot be gated either, because nothing says whose hardware produced it. |
 | Stale native code despite editing sources | `build.mjs` rebuilds when any source is newer than the artifact; `--prebuild` forces a full CNG regen. |
 | Emulator vanished mid-run (`device not found`) | qemu aborts occasionally on macOS. Re-run the same command: each cell is independent and results are per-file. |
 | `no end sentinel within 180s`, cells report 0 iterations | The device was starved by other work on the machine (another emulator, a concurrent gradle/Xcode build) and did not finish a launch inside its budget. Re-run when the machine is quieter, or pass `BENCH_LAUNCH_TIMEOUT_S=600`. |

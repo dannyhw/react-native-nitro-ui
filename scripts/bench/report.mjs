@@ -29,12 +29,18 @@
  * This file is the single implementation of the gate: `run.mjs` calls
  * `comparisonSections()` with the same arguments it prints, so the standalone
  * reporter cannot drift from the runner again.
+ *
+ * Both flags that read or write a baseline work the same way here as in a live run:
+ * the file is `bench/baselines/<machine.hostname>/<deviceKey>.json`, keyed by the
+ * label the run itself recorded, and there is no fallback to another machine's file
+ * (`scripts/bench/baseline.mjs`).
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { mintBaselineFileFor, openBaselineForCheck } from './baseline.mjs';
 import { formatCommittedJsonFile } from './format.mjs';
 
 import {
@@ -55,15 +61,6 @@ const REPO_ROOT = path.resolve(
 );
 export const RESULTS_DIR = path.join(REPO_ROOT, 'bench', 'results');
 export const BASELINES_DIR = path.join(REPO_ROOT, 'bench', 'baselines');
-
-/**
- * `deviceKey` already carries the platform and the OS runtime (D9:
- * `ios27-sim-iphoneair`, `android35-emu-pixel9`), so the file is named after the
- * device key alone. A baseline is only comparable to runs on that device.
- */
-export function baselinePath(deviceKey) {
-  return path.join(BASELINES_DIR, `${deviceKey}.json`);
-}
 
 export function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -196,50 +193,59 @@ if (
   }
 
   if (argv.includes('--update-baseline')) {
-    const file = baselinePath(run.deviceKey);
-    const outcome = writeBaseline(file, run, {
-      force: argv.includes('--force'),
-    });
-    if (outcome.written) {
-      process.stdout.write(
-        `\nWrote baseline ${path.relative(REPO_ROOT, file)}\n` +
-          (outcome.note == null ? '' : `  ${outcome.note}\n`)
-      );
-    } else {
-      process.stderr.write(
-        `\n--update-baseline refused (pass --force to override):\n${outcome.blockers
-          .map((reason) => `  - ${reason}`)
-          .join('\n')}\n`
-      );
+    const mint = mintBaselineFileFor({ baselinesDir: BASELINES_DIR, run });
+    if (mint.refusal != null) {
+      process.stderr.write(`\n${mint.refusal}\n`);
       exitCode = Math.max(exitCode, 2);
+    } else {
+      const outcome = writeBaseline(mint.file, run, {
+        force: argv.includes('--force'),
+      });
+      if (outcome.written) {
+        process.stdout.write(
+          `\nWrote baseline ${path.relative(REPO_ROOT, mint.file)}\n` +
+            (outcome.note == null ? '' : `  ${outcome.note}\n`)
+        );
+      } else {
+        process.stderr.write(
+          `\n--update-baseline refused (pass --force to override):\n${outcome.blockers
+            .map((reason) => `  - ${reason}`)
+            .join('\n')}\n`
+        );
+        exitCode = Math.max(exitCode, 2);
+      }
     }
   }
 
   if (argv.includes('--check')) {
-    const file = baselinePath(run.deviceKey);
-    if (!fs.existsSync(file)) {
-      process.stderr.write(
-        `\n--check: no baseline at ${path.relative(REPO_ROOT, file)}. Create it with --update-baseline.\n`
-      );
-      process.exit(1);
-    }
-    const baseline = readJson(file);
-    if (!isCompatibleBaseline(baseline)) {
-      process.stderr.write(
-        `\n--check: ${path.relative(REPO_ROOT, file)} is not a v${SCHEMA_VERSION} ratio baseline (found v${String(baseline?.schemaVersion)}). Re-record it on a clean commit with --update-baseline.\n`
-      );
-      process.exit(2);
-    }
-    const section = comparisonSections({
+    const opened = openBaselineForCheck({
+      baselinesDir: BASELINES_DIR,
       run,
-      base: { cells: {} },
-      mode: 'check',
-      label: path.relative(REPO_ROOT, file),
-      baseTable: baselineTable(baseline),
-      baseNoise: baselineNoise(baseline),
+      display: (file) => path.relative(REPO_ROOT, file),
+      readJson,
+      isCompatibleBaseline,
+      schemaVersion: SCHEMA_VERSION,
     });
-    process.stdout.write(`\n${section.markdown}\n`);
-    exitCode = Math.max(exitCode, section.exitCode);
+    if (opened.refusal != null) {
+      process.stderr.write(`\n${opened.refusal.message}\n`);
+      // A missing baseline has always been a 1 here and a 2 in `run.mjs`; the new
+      // refusals are a 2 on both, because the run could not be judged at all.
+      exitCode =
+        opened.refusal.kind === 'missing'
+          ? Math.max(exitCode, 1)
+          : Math.max(exitCode, 2);
+    } else {
+      const section = comparisonSections({
+        run,
+        base: { cells: {} },
+        mode: 'check',
+        label: opened.display,
+        baseTable: baselineTable(opened.baseline),
+        baseNoise: baselineNoise(opened.baseline),
+      });
+      process.stdout.write(`\n${section.markdown}\n`);
+      exitCode = Math.max(exitCode, section.exitCode);
+    }
   }
   process.exit(exitCode);
 }

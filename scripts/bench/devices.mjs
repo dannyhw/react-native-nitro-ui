@@ -81,7 +81,6 @@ export function resolveIosDevice() {
     simctl(['boot', udid]);
     simctl(['bootstatus', udid, '-d']);
   }
-  const major = runtime == null ? 'unknown' : runtime.split('.')[0];
   return {
     platform: 'ios',
     udid,
@@ -89,7 +88,7 @@ export function resolveIosDevice() {
     runtime,
     /** True when this invocation booted it, so `--shutdown` may power it off. */
     bootedByUs: !booted,
-    deviceKey: `ios${major}-sim-${deviceClassName(device.name)}`,
+    deviceKey: iosDeviceKey(runtime, device),
   };
 }
 
@@ -101,6 +100,56 @@ export function deviceClassName(value) {
   return String(value)
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
+}
+
+/** What `simctl` puts in front of every `deviceTypeIdentifier`. */
+const SIM_DEVICE_TYPE_PREFIX = 'com.apple.CoreSimulator.SimDeviceType.';
+
+/**
+ * The device class of a simulator: its hardware type, never its name.
+ *
+ * A device key is half of a committed baseline's path, so it has to say *which class
+ * of device* was measured - and a name says what whoever created the simulator felt
+ * like calling it. The lease pool's own simulators are the case in point: pair-a is
+ * an iPhone 17 simulator named `nitro-ui A`, which keyed by name would mint into
+ * `…/ios27-sim-nitrouia.json`, a baseline nothing else can gate against.
+ * `deviceTypeIdentifier` (`…SimDeviceType.iPhone-17`) is what `simctl create` was
+ * actually given, so it is the source and the name is only the fallback for an entry
+ * that carries no identifier.
+ *
+ * Android does the same thing for the same reason: `describeAndroidDevice` prefers
+ * the AVD's `hw.device.name` over `ro.product.model`.
+ *
+ * @param {{ deviceTypeIdentifier?: string | null, name?: string | null }} device a `simctl list devices` entry
+ * @returns {string} e.g. `iphone17`
+ */
+export function iosDeviceClassName(device) {
+  const identifier = device?.deviceTypeIdentifier;
+  if (typeof identifier === 'string' && identifier.length > 0) {
+    const type = identifier.startsWith(SIM_DEVICE_TYPE_PREFIX)
+      ? identifier.slice(SIM_DEVICE_TYPE_PREFIX.length)
+      : identifier;
+    const fromType = deviceClassName(type);
+    if (fromType.length > 0) {
+      return fromType;
+    }
+  }
+  return deviceClassName(device?.name);
+}
+
+/**
+ * The D9 device key for a simulator: platform + OS runtime + device class.
+ *
+ * Pure, so `scripts/__tests__/bench-device-key.test.js` can pin the pair that a
+ * leased simulator's *name* would get wrong.
+ *
+ * @param {string | null} runtime e.g. `27.0`
+ * @param {{ deviceTypeIdentifier?: string | null, name?: string | null }} device
+ * @returns {string} e.g. `ios27-sim-iphone17`
+ */
+export function iosDeviceKey(runtime, device) {
+  const major = runtime == null ? 'unknown' : runtime.split('.')[0];
+  return `ios${major}-sim-${iosDeviceClassName(device)}`;
 }
 
 /** Serials adb currently sees, in `adb devices` order. */
