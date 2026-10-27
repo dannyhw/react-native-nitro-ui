@@ -370,9 +370,9 @@ three arms in the same run, on the same device, in Release builds:
   for all of them. This is the arm worth being measured against, and the target
   is ≤ 1.0× on mount latency, UI CPU and memory.
 
-The numbers below are from the runs that produced the committed baselines in
-`bench/baselines/`: one `--plan full --launches 8` run per platform, on a clean
-tree and an idle machine — an iPhone 17 simulator (iOS 27) at `c9548f6` and an
+The numbers below are from the runs that produced `maintainer-mac-1`'s committed
+baselines in `bench/baselines/`: one `--plan full --launches 8` run per platform, on a
+clean tree and an idle machine — an iPhone 17 simulator (iOS 27) at `c9548f6` and an
 API 35 Pixel 9 emulator with ART primed to `speed-profile` at `3533d64`. Each
 cell is the launch-paired median ratio of nitro-ui to `expo-ui-shared-host`;
 mount is at N=50, memory at N=200. `✓` meets the ≤ 1.0× target, `✗` misses it,
@@ -510,12 +510,16 @@ it readable.
 
 ### Baselines and gating
 
-Both canonical devices have a committed ratio baseline
-(`bench/baselines/ios27-sim-iphone17.json`, `bench/baselines/android35-emu-pixel9.json`),
-so `bun bench --check` gates on both platforms. Each one stores ratios to
-`rn-core`, not absolute times; see `bench/baselines/README.md` for the rules a
-baseline run has to meet. Measurement details — absolutes, per-launch spreads,
-noise flags and the update cells — are in the reports for the
+Baselines are committed per machine as well as per device —
+`bench/baselines/<machine-label>/<deviceKey>.json` — because a ratio to `rn-core`
+only cancels drift inside the machine that measured it. `maintainer-mac-1` has both
+(`bench/baselines/maintainer-mac-1/ios27-sim-iphone17.json`,
+`bench/baselines/maintainer-mac-1/android35-emu-pixel9.json`), so `bun bench --check`
+gates on both platforms there; a machine without its own directory refuses rather than
+reading another's. Each baseline stores ratios to `rn-core`, not absolute times; see
+`bench/baselines/README.md` for the rules a baseline run has to meet. Measurement
+details — absolutes, per-launch spreads, noise flags and the update cells — are in the
+reports for the
 [iOS baseline](docs/tasks/A1c-baselines.report.md),
 [Android baseline](docs/tasks/A1b-baselines.report.md) and
 [`<Host>`](docs/tasks/H1-android-host.report.md) runs and its

@@ -669,13 +669,14 @@ tables (absolute and ratio-to-`rn-core`) in its pull request. It takes a few
 minutes per platform. `--shutdown` powers off a simulator or emulator the runner
 booted itself.
 
-| Variable                 | Default     | Meaning                                                        |
-| ------------------------ | ----------- | -------------------------------------------------------------- |
-| `IOS_SIM_UDID`           | unset       | Simulator UDID to boot and measure on                          |
-| `ANDROID_AVD`            | unset       | AVD name — the runner finds its serial among attached ones     |
-| `ANDROID_SERIAL`         | unset       | Used only when there is no AVD name (physical device)          |
-| `BENCH_ABIS`             | `arm64-v8a` | Android ABIs to build (`x86_64` on an Intel host)              |
-| `BENCH_LAUNCH_TIMEOUT_S` | `180`/`300` | Per-launch wall-clock budget (s); raise it on a loaded machine |
+| Variable                 | Default      | Meaning                                                              |
+| ------------------------ | ------------ | -------------------------------------------------------------------- |
+| `IOS_SIM_UDID`           | unset        | Simulator UDID to boot and measure on                                |
+| `ANDROID_AVD`            | unset        | AVD name — the runner finds its serial among attached ones           |
+| `ANDROID_SERIAL`         | unset        | Used only when there is no AVD name (physical device)                |
+| `NITRO_UI_MACHINE_LABEL` | `unlabelled` | This machine's label — required by `--check` and `--update-baseline` |
+| `BENCH_ABIS`             | `arm64-v8a`  | Android ABIs to build (`x86_64` on an Intel host)                    |
+| `BENCH_LAUNCH_TIMEOUT_S` | `180`/`300`  | Per-launch wall-clock budget (s); raise it on a loaded machine       |
 
 Prefer `ANDROID_AVD` over `ANDROID_SERIAL`: console ports are allocated by
 availability, so a serial goes stale the moment another emulator boots or dies,
@@ -691,9 +692,12 @@ Both `--compare <ref>` and `--check` gate the `nitro-ui` arms on launch-paired
 ratios to `rn-core`, and a verdict needs the ratio over 1.20 with a 95 % CI that
 excludes 1.05 on a cell that was quiet inside its own run; the `rn-core` control
 and the `expo-ui-*` reference arms can never fail your pull request. `--check`
-compares against the committed baselines in `bench/baselines/`, which exist for
-both canonical devices (an iPhone 17 simulator on iOS 27 and an API 35 Pixel 9
-emulator); on any other device use `--compare <ref>`. `.github/workflows/bench.yml`
+compares against the committed baselines, which live per machine —
+`bench/baselines/<NITRO_UI_MACHINE_LABEL>/<deviceKey>.json` — so a machine gates only
+against baselines it measured itself. `maintainer-mac-1` has both canonical devices
+(an iPhone 17 simulator on iOS 27 and an API 35 Pixel 9 emulator); a machine without
+its own directory, or any other device, uses `--compare <ref>` instead.
+`.github/workflows/bench.yml`
 would post these tables on a pull request, but it is disabled. The gate that always blocks is the Reassure render count, below, because it is
 deterministic.
 
