@@ -48,9 +48,7 @@ The 2026-10-27 run on the second machine:
    time and the log's last line), and exits with the gate's code, or with a distinct "still running"
    code at the timeout. The ledger records a backgrounded gate exactly as a foreground one.
    Document it in AGENTS.md "Quality bar" as the way to wait.
-6. **`check` per-step timing:** record each step's duration in the ledger's `check` line, and print
-   it in `gate.mjs table --full`. Don't change which steps `check` runs.
-7. **Unowned devices:** `lease.mjs list` and doctor report a pool simulator or emulator that is
+6. **Unowned devices:** `lease.mjs list` and doctor report a pool simulator or emulator that is
    booted while no lease holds it (a warning, never an action).
 
 Each new behaviour gets unit tests in `scripts/__tests__/`, each shown red. Fixtures must not
@@ -58,7 +56,7 @@ coincide with the right answer.
 
 ## Out of scope
 
-Changing which steps `check` runs, any bench measurement, the conformance suite (X4), and CI harness
+Per-step `check` timing and a parallel `check` (X10), warm device pools and emulator GPU mode (X11). Changing which steps `check` runs, any bench measurement, the conformance suite (X4), and CI harness
 jobs.
 
 ## Gates
