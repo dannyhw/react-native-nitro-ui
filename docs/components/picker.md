@@ -117,6 +117,16 @@ on the activity, window or a `ViewTreeObserver` may outlive the view.
 - **Back dismisses it** on Android (`onDismissRequest` fires for the back gesture,
   for an outside tap and for the composition going away); tapping outside dismisses
   on both platforms.
+- **Moving the view dismisses it too** on Android. When the picker's own React Native
+  view is moved by layout — a sibling above it resizes, content is inserted, a hosted
+  `<Host>`'s column reflows — the open menu closes rather than stay where it opened:
+  the anchor is no longer over the row the menu belongs to, and a menu floating on the
+  wrong control is the worse answer. This is a behaviour change for an **unhosted**
+  `Picker`, made in the same release that made Pickers hostable, because the anchor's
+  screen box now has one source for both cases (`docs/components/host.md`, "Popups and
+  dialogs"). It costs nothing to mount, update or leak memory — those bench cells hold —
+  and it does not fire on a scroll: scrolling changes neither layout nor the anchor's
+  box, and a menu open across a scroll stays open.
 - **Unmounting while open** is a tested case on both platforms — but no harness
   test can be that case. The harness can press an anchor open, yet it only observes
   its own view tree, so a popup that outlived its view would pass anything it could

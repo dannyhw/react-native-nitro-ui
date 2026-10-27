@@ -53,8 +53,11 @@ import {
 import { userEvent } from '@react-native-harness/ui';
 import {
   Button,
+  DatePicker,
   Host,
+  Picker,
   Progress,
+  SegmentedControl,
   Slider,
   Switch,
   nitroUiCore,
@@ -97,6 +100,26 @@ type SwitchHandle = {
   readonly value: boolean | null;
   nuiTestArmedGuards(): string;
 };
+/**
+ * The three H2b controls, as far as these mixed cases need them: enough to say each one
+ * is *live* inside a Host of seven, and — for the two that open windows — enough to read
+ * the process-wide count that says nothing was left behind.
+ */
+type SegmentHandle = {
+  readonly options: readonly string[];
+  readonly selectedIndex: number | null;
+};
+type PickerHandle = {
+  readonly options: readonly string[];
+  readonly selectedIndex: number | null;
+  nuiTestSelect(index: number): void;
+  nuiTestMenuReport(): string;
+};
+type DateHandle = {
+  readonly mode: string;
+  nuiTestPresent(): void;
+  nuiTestStateReport(): string;
+};
 
 /** One entry in a Slider's event log, with the value that came with it. */
 type SlideEvent = {
@@ -122,6 +145,22 @@ type Log = {
   bars: Record<string, ProgressHandle>;
   buttons: Record<string, ButtonHandle>;
   switches: Record<string, SwitchHandle>;
+  segments: Record<string, SegmentHandle>;
+  pickers: Record<string, PickerHandle>;
+  dates: Record<string, DateHandle>;
+  /** The accepted index of a hosted SegmentedControl / Picker, by id. */
+  acceptedSegments: Record<string, number>;
+  acceptedPickers: Record<string, number>;
+  /**
+   * Disable one date row by id.
+   *
+   * The only lever an app has for taking a dialog it opened back off the screen:
+   * `nuiTestPresent()` presents, like the field's press does, and a harness press cannot
+   * reach the dialog's own window. A disabled control does not keep a window open
+   * (`HybridNitroUiDatePicker.afterUpdate`), which is the rule this suite relies on to
+   * leave the process-wide count clean for the next case.
+   */
+  disableDate: Record<string, (disabled: boolean) => void>;
   /** JS-side writes, so a test can move a control with no touch at all. */
   writeSlider: Record<string, (next: number) => void>;
   writeProgress: Record<string, (next: number | null) => void>;
@@ -143,6 +182,12 @@ const newLog = (): Log => ({
   bars: {},
   buttons: {},
   switches: {},
+  segments: {},
+  pickers: {},
+  dates: {},
+  acceptedSegments: {},
+  acceptedPickers: {},
+  disableDate: {},
   writeSlider: {},
   writeProgress: {},
   writeSwitch: {},
@@ -291,6 +336,38 @@ async function waitForDisplayed(
  * is a real refusal. `accept: false` is the snap-back fixture: the event reaches JS, the
  * state does not move, and native has to put the thumb back.
  */
+/**
+ * Poll a hosted DatePicker's report until `ready` is happy, and hand back what it saw.
+ *
+ * Field 1 of the report is `presented` and field 4 is `livePresentations`. Both, not the
+ * first: `presented` is model state and lands with the props batch, while the dialog's
+ * window goes when Compose disposes it, a frame or two later. Reading the count the
+ * moment the flag lands measures a window that is already on its way out - measured in
+ * `HostPopups.harness.tsx`, where the same pair is waited on the same way.
+ */
+async function waitDate(
+  handle: DateHandle,
+  ready: (report: { presented: boolean; live: number }) => boolean,
+  what: string,
+  timeoutMs = 12000
+): Promise<{ presented: boolean; live: number }> {
+  const deadline = nitroUiCore.now() + timeoutMs;
+  for (;;) {
+    const line = handle.nuiTestStateReport();
+    const parts = line.split('|');
+    const report = { presented: parts[1] === '1', live: Number(parts[4]) };
+    if (ready(report)) {
+      return report;
+    }
+    if (nitroUiCore.now() > deadline) {
+      throw new Error(
+        `Date report never showed ${what} within ${String(timeoutMs)}ms; last read "${line}".`
+      );
+    }
+    await settle(50);
+  }
+}
+
 function Slide({
   id,
   log,
@@ -524,13 +601,76 @@ function Toggle({
   );
 }
 
+/** A SegmentedControl whose press is recorded in the shared taps log. */
+function Segment({ id, log }: { id: string; log: Log }) {
+  const [index, setIndex] = useState(0);
+  return (
+    <SegmentedControl
+      testID={id}
+      options={['One', 'Two', 'Three']}
+      selectedIndex={index}
+      accessibilityLabel={`Mixed segmented ${id.slice(-1)}`}
+      hybridRef={(view: SegmentHandle) => {
+        log.segments[id] = view;
+      }}
+      onChange={(event) => {
+        log.taps.push(id);
+        log.acceptedSegments[id] = event.index;
+        setIndex(event.index);
+      }}
+    />
+  );
+}
+
+/** A Picker whose choice is recorded, and whose popup can be read. */
+function Pick({ id, log }: { id: string; log: Log }) {
+  const [index, setIndex] = useState(0);
+  return (
+    <Picker
+      testID={id}
+      options={['Alpha', 'Beta', 'Gamma']}
+      selectedIndex={index}
+      label={`Pick ${id.slice(-1)}`}
+      accessibilityLabel={`Mixed picker ${id.slice(-1)}`}
+      hybridRef={(view: PickerHandle) => {
+        log.pickers[id] = view;
+      }}
+      onChange={(event) => {
+        log.taps.push(id);
+        log.acceptedPickers[id] = event.index;
+        setIndex(event.index);
+      }}
+    />
+  );
+}
+
+/** A DatePicker, compact, so it is the one that presents a dialog. */
+function Dates({ id, log }: { id: string; log: Log }) {
+  const [date, setDate] = useState(() => new Date(2026, 4, 17));
+  const [off, setOff] = useState(false);
+  log.disableDate[id] = setOff;
+  return (
+    <DatePicker
+      testID={id}
+      disabled={off}
+      value={date}
+      accessibilityLabel={`Mixed date picker ${id.slice(-1)}`}
+      hybridRef={(view: DateHandle) => {
+        log.dates[id] = view;
+      }}
+      onChange={setDate}
+    />
+  );
+}
+
 /**
  * One Host whose children are named by `ids`, each id's *suffix* choosing the control.
  *
  * An id is `mix-<kind>-<n>`: `sw` a Switch, `btn` a Button, `sl` a Slider, `pr` a
- * Progress. Naming the control in the id is what lets an order assertion say what the app
- * asked for rather than what a fixture happened to build, and lets a reordering test move
- * children without moving kinds.
+ * Progress, and — since H2b — `seg` a SegmentedControl, `pk` a Picker, `dp` a DatePicker.
+ * Naming the control in the id is what lets an order assertion say what the app asked for
+ * rather than what a fixture happened to build, and lets a reordering test move children
+ * without moving kinds.
  *
  * Only the Switch and the Button answer a *press* on both platforms (a Progress has no
  * press target, and a Slider needs a tap that lands on its track), so the order sweeps
@@ -546,6 +686,15 @@ function controlFor(id: string, log: Log) {
   }
   if (kind === 'sl') {
     return <Slide key={id} id={id} log={log} />;
+  }
+  if (kind === 'seg') {
+    return <Segment id={id} log={log} />;
+  }
+  if (kind === 'pk') {
+    return <Pick id={id} log={log} />;
+  }
+  if (kind === 'dp') {
+    return <Dates id={id} log={log} />;
   }
   return <Bar key={id} id={id} log={log} />;
 }
@@ -1136,6 +1285,130 @@ describe('Host · four kinds of control, one composition', () => {
       expect(plainDelta.reports).toBeGreaterThan(0);
     });
   }
+});
+
+/**
+ * Every control the library ships, in one Host (H2b).
+ *
+ * H2a's mixed cases above sweep presses down a four-control column, which is the right
+ * instrument for press *order* and the wrong one for the two controls that open a window:
+ * a menu opened mid-sweep puts a second window in front of the rows the sweep is aiming
+ * at. So this case asks each of the seven what its own suite asks it — a drag, a drawn
+ * value, a press, a choice, an open window — and the popup rows contribute that they
+ * recompose with the rest and leave nothing behind. The popup geometry itself, and the
+ * remove/reorder/drop-the-Host-while-a-window-is-open cases, are
+ * `HostPopups.harness.tsx`'s.
+ *
+ * Runs on both platforms: on iOS a Host is the passthrough, so this is also the
+ * regression that says adding three controls to the allowlist changed nothing there.
+ */
+describe('Host \u00b7 all seven kinds of control, one composition', () => {
+  let log: Log;
+  beforeEach(() => {
+    log = newLog();
+  });
+
+  const SEVEN = [
+    'mix-sw-0',
+    'mix-sl-1',
+    'mix-pr-2',
+    'mix-btn-3',
+    'mix-seg-4',
+    'mix-pk-5',
+    'mix-dp-6',
+  ];
+
+  it('keeps every kind of control live in one Host', async () => {
+    await mount(
+      <View testID="seven-host" style={HUG}>
+        <MixedList
+          log={log}
+          ids={SEVEN}
+          hostStyle={{ width: 300, height: 420 }}
+        />
+      </View>
+    );
+    // All seven are mounted, and on Android all seven are *hosted*: a hosted child
+    // declines to measure, so its own view is `0 x 0`. One left out of the allowlist
+    // draws nothing but keeps a real React Native frame, which is what this catches.
+    for (const id of SEVEN) {
+      const own = await boxOf(id, 25000);
+      if (Platform.OS === 'android') {
+        expect(own.width * own.height).toBe(0);
+      }
+    }
+
+    const host = await boxOf('seven-host');
+    // Switch and Button: a real press, answered, through the composition.
+    expect(await pressRow(host, 'mix-sw-0', log)).toBe('mix-sw-0');
+    expect(log.acceptedSwitches['mix-sw-0']).toBe(true);
+
+    // Slider: a drag through the interaction pipeline.
+    log.sliders['mix-sl-1']?.nuiTestDrag(0.6, 4, 0);
+    await settle(700);
+    expect(log.acceptedSliders['mix-sl-1']).toBeCloseTo(0.6, 2);
+
+    // Progress: the drawing reports the value JS set (0.25 is this Bar's own seed).
+    await waitForDisplayed(log.bars['mix-pr-2']!, 'displayed=0.25');
+
+    // Button: its props are on the control the Host is drawing.
+    expect(log.buttons['mix-btn-3']?.title).toBe('Go 3');
+
+    // SegmentedControl: the value React holds is on the hosted control.
+    expect(log.segments['mix-seg-4']?.selectedIndex).toBe(0);
+    expect(log.segments['mix-seg-4']?.options.length).toBe(3);
+  });
+
+  it('keeps the two window-opening controls live in the same Host', async () => {
+    await mount(
+      <MixedList
+        log={log}
+        ids={SEVEN}
+        hostStyle={{ width: 300, height: 420 }}
+      />
+    );
+    // Props land on both controls on either platform.
+    expect(log.pickers['mix-pk-5']?.options.length).toBe(3);
+    expect(log.dates['mix-dp-6']?.mode).toBe('date');
+    if (Platform.OS !== 'android') {
+      // A SwiftUI `Picker` keeps its menu in the system's own presentation and reports
+      // nothing about it, and the dialog below is Material 3's, so there is no window to
+      // read on the platform where a Host is a passthrough anyway (D23).
+      return;
+    }
+    // Picker: a choice reaches JS from inside somebody else's composition, and the
+    // process-wide menu count is back at 0 because no window of this mount is open.
+    const picker = log.pickers['mix-pk-5'];
+    expect(picker).toBeDefined();
+    picker?.nuiTestSelect(2);
+    await settle(500);
+    expect(log.acceptedPickers['mix-pk-5']).toBe(2);
+    expect(picker?.nuiTestMenuReport()).toContain('live=0');
+
+    // DatePicker: it presents a dialog from the Host's composition, and an app-side
+    // write takes it down again. Pressing the field is an open and never a close - the
+    // harness hook goes through the same entry, so it cannot dismiss the dialog either -
+    // which leaves disabling the control as the way to prove the window is the Host's to
+    // lose. Read as a pair (`presented` and `livePresentations`) for the reason on
+    // `waitDate`, and left at zero so the next case does not read this one as a leak.
+    const date = log.dates['mix-dp-6'];
+    expect(date).toBeDefined();
+    date!.nuiTestPresent();
+    const shown = await waitDate(
+      date!,
+      (r) => r.presented && r.live === 1,
+      "the dialog composed by the Host's composition"
+    );
+    expect(shown.presented).toBe(true);
+    log.disableDate['mix-dp-6']?.(true);
+    const hidden = await waitDate(
+      date!,
+      (r) => !r.presented && r.live === 0,
+      'the dialog taken down by disabling the control'
+    );
+    expect(hidden.presented).toBe(false);
+    log.disableDate['mix-dp-6']?.(false);
+  });
 });
 
 // MARK: - Android: what hosting costs, and what D24 means per control

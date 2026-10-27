@@ -85,6 +85,13 @@ const ECHO = {
   hostSliderValue: 'host-slider-value',
   hostButtonPresses: 'host-button-presses',
   hostMixedState: 'host-mixed-state',
+  hostSegmentedIndex: 'host-segmented-index',
+  hostPickerIndex: 'host-picker-index',
+  hostDateValue: 'host-datepicker-value',
+  hostDateDropArmed: 'host-datepicker-drop-armed',
+  hostDateDropButton: 'host-datepicker-drop',
+  hostDateGone: 'host-datepicker-drop-gone',
+  hostDateRemount: 'host-datepicker-drop-remount',
 };
 
 /** The system Back key, which is how a person dismisses an open popup. */
@@ -94,6 +101,15 @@ const KEY_BACK = 4;
 const REACT_TIMEOUT = Number(process.env.REAL_INPUT_TIMEOUT ?? 8000);
 /** How long the first render may take (a cold Metro bundle is slow). */
 const READY_TIMEOUT = Number(process.env.REAL_INPUT_READY_TIMEOUT ?? 180000);
+
+/**
+ * How tall a node's box has to be for `requireControlOnScreen` to treat it as
+ * arrived. Below this the box is what a scroll left of a row rather than the row:
+ * a Host clips its own children, and a hosted row sitting on the screen's fold is
+ * reported with a box one or two pixels tall whose centre a tap can only miss.
+ * Nothing this suite presses is shorter than a touch target.
+ */
+const MIN_PRESSABLE_PX = 16;
 
 /**
  * ## Adding a control
@@ -388,10 +404,14 @@ const CHECKS = {
     );
 
     await t.dragControl(control, 0.4, 0.9, 800);
-    const up = t.waitForValueToRise(
+    t.waitForValueToRise(
       ECHO.hostSliderValue,
       before,
       'a real drag on a hosted Slider to reach React'
+    );
+    const up = t.waitForValueToSettle(
+      ECHO.hostSliderValue,
+      'the drag on the hosted Slider to finish'
     );
     t.log.check(
       `a real drag moves a hosted Slider and React renders it (${String(
@@ -404,16 +424,20 @@ const CHECKS = {
     // where that is, because the echo is what a person sees. A control that only ever
     // reported one direction would fail here rather than look fine.
     await t.dragControl(control, 0.9, 0.1, 800);
-    const down = t.waitForEchoToChange(
+    // Wait for the gesture to be over, then read. `waitForEchoToChange` answers the
+    // first value that differs, which is a sample from mid-drag; the assertion wants
+    // where the thumb ended, and only a settled echo can say that.
+    t.waitForEchoToChange(
       ECHO.hostSliderValue,
       up,
       'a second drag to move the hosted Slider back'
     );
-    const landed = t.value(ECHO.hostSliderValue);
+    const landed = t.waitForValueToSettle(
+      ECHO.hostSliderValue,
+      'the second drag on the hosted Slider to finish'
+    );
     t.log.check(
-      `dragging back moves a hosted Slider the other way (${up} -> ${down}; ${String(
-        landed
-      )})`,
+      `dragging back moves a hosted Slider the other way (${up} -> ${String(landed)})`,
       landed != null && landed < up - 0.3
     );
   },
@@ -553,6 +577,371 @@ const CHECKS = {
       ),
       'on 0.50 1'
     );
+  },
+
+  /**
+   * A real tap must select a segment of a `SegmentedControl` that lives inside a
+   * `<Host>`.
+   *
+   * H2b's three popup-era controls are the first ones a Host has ever held that are
+   * not `fillWidth`, so the question this answers is the plainest one: does a control
+   * drawn by somebody else's composition still take a finger? The `SegmentedControl`
+   * owns no window, which is what makes it the clean case of the three - a hit that
+   * lands on the wrong row would show up here as the wrong index rather than as a
+   * popup in the wrong place.
+   *
+   * The echo is React's own render (`HostScreen`'s `popSegmented`), so it moves only
+   * if the touch reached the Host's Compose column, Compose told Nitro, Nitro told JS,
+   * and JS rendered. A second, different segment is owed because a control that echoed
+   * once and then froze would satisfy the first line alone.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-segmented': async (t) => {
+    const control = await t.requireControlOnScreen('Hosted segmented');
+    const startedAt = t.boundsText(control);
+    t.log.checkEquals(
+      'the hosted SegmentedControl shows the index JS gave it',
+      t.requireEcho(ECHO.hostSegmentedIndex),
+      '0'
+    );
+    t.log.checkEquals(
+      'no window belongs to the app before a touch',
+      t.popupWindowCount(),
+      0
+    );
+
+    await t.tapControlAt(control, 0.5);
+    t.log.checkEquals(
+      'a real tap on the middle segment of a hosted SegmentedControl reaches JS as index 1',
+      t.waitForEcho(
+        ECHO.hostSegmentedIndex,
+        '1',
+        'a real tap on a hosted segment to register'
+      ),
+      '1'
+    );
+
+    const moved = await t.requireControl('Hosted segmented');
+    t.log.checkEquals(
+      'the drawing did not move out from under the finger',
+      t.boundsText(moved),
+      startedAt
+    );
+
+    await t.tapControlAt(moved, 0.9);
+    t.log.checkEquals(
+      'a real tap on the last segment reaches JS as index 2',
+      t.waitForEcho(
+        ECHO.hostSegmentedIndex,
+        '2',
+        'a second real tap to register'
+      ),
+      '2'
+    );
+    t.log.checkEquals(
+      'and a SegmentedControl opens no window of its own, hosted or not',
+      t.waitForPopupCount(
+        0,
+        'the hosted SegmentedControl to own no window of its own'
+      ),
+      0
+    );
+  },
+
+  /**
+   * A real tap must open a hosted `Picker`'s menu, and a real tap on one of its rows
+   * must reach JS.
+   *
+   * This is the claim H2b exists to make: a Compose popup opened from a Host's shared
+   * composition is a window that belongs to that composition, so it opens under the row
+   * the Host drew - not under the decorative React Native frame, and not at the top of
+   * the screen - and closes to the same outside tap, back gesture or row it always had.
+   *
+   * Three things are read, in the order a person would meet them:
+   *
+   * 1. Opening costs a window (`popupWindowCount` 0 -> 1) and the menu's first row sits
+   *    below the top of the anchor the Host drew. The Host screen is scrolled before
+   *    this check runs, so the anchor is nowhere near the top of the screen: a menu
+   *    anchored to the RN frame instead of the drawing would land elsewhere, and this
+   *    is where that shows up.
+   * 2. A row is a choice - it closes the menu and reports its index, and the row already
+   *    chosen is marked selected to TalkBack.
+   * 3. Back closes it and reports nothing, and no window is left behind.
+   *
+   * While the menu is open the app's own `Text` is a different window's business, so no
+   * echo is read until the popup is down - the same rule `CHECKS['picker']` follows.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-picker': async (t) => {
+    // The three choices of the popup Host, spelled as `HostScreen` spells them. `Beta`
+    // is the index JS starts the control at (1), `Gamma` is the one this check picks.
+    // None of the three appears anywhere else on the screen, which is what lets a text
+    // match name a popup row.
+    const CHOSEN = 'Beta';
+    const PICK = 'Gamma';
+
+    const anchor = await t.requireControlOnScreen('Hosted picker');
+    t.log.checkEquals(
+      'the hosted Picker shows the index JS gave it',
+      t.requireEcho(ECHO.hostPickerIndex),
+      '1'
+    );
+    t.log.checkEquals(
+      'no popup window belongs to the app before a touch',
+      t.popupWindowCount(),
+      0
+    );
+
+    // 1. Open. The rows exist only while the menu is open, which is also the witness
+    //    that the hosted anchor answered a touch at all.
+    await t.tapNode(anchor);
+    t.log.checkEquals(
+      'a real tap on the hosted anchor opens the menu as a popup window',
+      t.waitForPopupCount(
+        1,
+        'a real tap on the hosted anchor to open a popup window'
+      ),
+      1
+    );
+    const row = t.waitForOption(PICK, 'the hosted menu to open');
+    t.log.note(
+      `menu row "${PICK}" at ${String(row.bounds.x1)},${String(
+        row.bounds.y1
+      )} -> ${String(row.bounds.x2)},${String(
+        row.bounds.y2
+      )}; hosted anchor at ${String(anchor.bounds.x1)},${String(
+        anchor.bounds.y1
+      )} -> ${String(anchor.bounds.x2)},${String(anchor.bounds.y2)}`
+    );
+    t.log.check(
+      'the menu opens below the top of the box the Host drew, not at the top of the screen',
+      row.bounds.y1 >= anchor.bounds.y1
+    );
+    t.log.check(
+      `the hosted menu marks the current choice ("${CHOSEN}") selected to TalkBack`,
+      t.optionIsSelected(CHOSEN)
+    );
+
+    // 2. A row is a choice.
+    await t.tapNode(row);
+    t.log.checkEquals(
+      'a real tap on a hosted menu row closes the popup',
+      t.waitForPopupCount(
+        0,
+        'a pick from the hosted menu to take its window down'
+      ),
+      0
+    );
+    t.log.checkEquals(
+      'and the row reaches JS as index 2',
+      t.waitForEcho(
+        ECHO.hostPickerIndex,
+        '2',
+        'a pick from a hosted menu to reach JS'
+      ),
+      '2'
+    );
+
+    // 3. The way out that changes nothing. Aim again: choosing a row widens the title
+    //    the anchor paints, so the box this check has may be stale.
+    await t.tapNode(await t.requireControlAt('Hosted picker', anchor));
+    t.waitForOption(PICK, 'the hosted menu to reopen');
+    await t.pressBack();
+    t.log.checkEquals(
+      'Back shuts the hosted popup (no window left behind)',
+      t.waitForPopupCount(0, 'the back gesture to take the hosted popup down'),
+      0
+    );
+    t.log.checkEquals(
+      'opening and dismissing reported no selection - a menu is not a choice',
+      t.requireEcho(ECHO.hostPickerIndex),
+      '2'
+    );
+  },
+
+  /**
+   * A real tap must open a hosted `DatePicker`'s dialog, and every way out of that
+   * dialog has to work there too.
+   *
+   * Why this case exists (`HostPopups.harness.tsx` cannot cover it): the dialog is a
+   * window of its own, and the harness's touch injector reaches the React Native window.
+   * So every hosted-dialog gate in the harness opens it with a test seam and closes it by
+   * disabling the control — nothing there has ever pressed the field, a day cell, OK,
+   * Cancel or Back. `adb shell input` goes through the window manager, which is where
+   * those presses can land, and the unhosted `date-picker` case has driven this same
+   * Material dialog that way on every gate run. A regression in how the Host's
+   * composition routes a press to the hosted field, or the dialog's OK click back to
+   * `applyUserSelection`, passes every harness gate and dies here.
+   *
+   * Four things are read:
+   *
+   * 1. **The press.** A real tap on the field the Host drew opens a month grid — and the
+   *    grid's presence in the accessibility tree *is* the a11y witness: the day cells are
+   *    clickable, square and named with their date, which is what TalkBack reads, and the
+   *    app's own echoes are absent from the same dump while it is up. The dialog opens on
+   *    the day JS gave the field, which is a fact about the Host's drawing rather than a
+   *    default.
+   * 2. **The dismissals**, which come before the pick because a dialog is another window:
+   *    while it is up, the app's own echoes are not in the dump and no echo can be read.
+   *    Back closes it and reports nothing; Cancel closes it and reports nothing. That is the
+   *    witness and not an inconvenience — `waitForDialogGone` waits for the month grid to
+   *    leave the tree and the app's text to come back into it.
+   * 3. **The pick.** A day cell plus OK reaches JS as a new day (a pick of the day already
+   *    showing is a correct no-op, so the day is aimed at by offset and retried — exactly the
+   *    unhosted case's reasoning), and OK is what makes the pick checkable at all: "the app
+   *    text came back" and "OK closed the dialog" are the same event from out here.
+   * 4. **The teardown.** Removing *only* that child from the Host while the dialog is up
+   *    leaves no window behind, with the app unmounting it on a timer because a second
+   *    real tap would only have dismissed the dialog (`PickerScreen`'s drop picker uses
+   *    the same shape for a menu).
+   *
+   * What closes a dialog is witnessed by the month grid leaving the accessibility tree
+   * plus the app's own text becoming readable again, not by `popupWindowCount()`: that
+   * counts `Pop-Up Window`s, which is what a `Picker` menu is and what a `Dialog` is not.
+   *
+   * iOS has no counterpart because there is nothing hosted to drive — `<Host>` is the
+   * passthrough there (D23), so the case for this control is `date-picker`.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-date-picker': async (t) => {
+    // `HostScreen` seeds the popup Host's DatePicker at 2026-05-17 and echoes what JS
+    // holds. Written by hand rather than formatted, so no locale moves the assertion.
+    const SEEDED = '2026-05-17';
+    const field = await t.requireControlOnScreen('Hosted date picker');
+    t.log.checkEquals(
+      'the hosted DatePicker shows the day JS gave it',
+      t.requireEcho(ECHO.hostDateValue),
+      SEEDED
+    );
+
+    // 1. A real press on the field the Host drew. The month grid is both the witness
+    //    that the press arrived and the accessibility tree this case has to cover: 14+
+    //    clickable, square, date-named cells is a calendar a screen reader can use.
+    await t.tapNode(field);
+    const cells = dayGrid(t, 'the hosted DatePicker');
+    t.log.check(
+      `the hosted dialog's day cells are in the accessibility tree (${String(
+        cells.length
+      )} of them, clickable and named with a year)`,
+      cells.length >= 14
+    );
+    t.log.check(
+      'the dialog opens on the month the Host is drawing, not on a default',
+      t
+        .dump()
+        .some((node) => /May 2026/.test(`${node.text} ${node.contentDesc}`))
+    );
+    t.log.check(
+      "while the hosted dialog is up it is a window of its own - the app's own echo is " +
+        'not in the same dump',
+      t.nodeByTestId(ECHO.hostDateValue) == null
+    );
+
+    // 3a. Back, first, because it is the dismissal that has to happen before anything can
+    // be read again: while the dialog is up its window owns the screen, so the app's own
+    // text is not in the dump - which the check just above asserted. A case that asks for
+    // an echo here fails on the app doing its job, and the first version of this case did
+    // exactly that. Back is also the dismissal the harness cannot reach: it comes from the
+    // window manager, not from the React Native window.
+    await t.pressBack();
+    await waitForDialogGone(
+      t,
+      'the back gesture to take the hosted dialog down'
+    );
+    t.log.checkEquals(
+      'Back closes the hosted dialog and reports no day',
+      t.requireEcho(ECHO.hostDateValue),
+      SEEDED
+    );
+    t.log.check(
+      'and the app text is readable again once the dialog is gone',
+      t.nodeByTestId(ECHO.hostDateValue) != null
+    );
+
+    // 3b. Cancel: closes it and reports nothing.
+    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
+    dayGrid(t, 'the hosted DatePicker');
+    await t.tapNode(
+      t.waitForNodes(isCancelLabel, "the dialog's Cancel button", 1)[0]
+    );
+    await waitForDialogGone(t, 'Cancel to take the hosted dialog down');
+    t.log.checkEquals(
+      'Cancel closes the hosted dialog and reports no day',
+      t.requireEcho(ECHO.hostDateValue),
+      SEEDED
+    );
+
+    // 2. A day, then OK - last, because OK is what makes a pick readable at all: the new
+    // day is app text, and app text is another window's business while the dialog is up.
+    // The day is aimed at by offset because a pick of the day the field already shows is a
+    // correct no-op, indistinguishable from a broken touch path from out here.
+    let reported = SEEDED;
+    let picked = null;
+    for (const offset of [0, 7, -7]) {
+      const day = await openAndPick(t, 'Hosted date picker', offset);
+      const now = t.requireEcho(ECHO.hostDateValue);
+      if (now !== reported) {
+        picked = day;
+        reported = now;
+        break;
+      }
+    }
+    t.log.check(
+      `a real tap on a dialog day ("${picked ?? 'no pick reported'}") reaches JS through ` +
+        'the Host as a new day',
+      /^\d{4}-\d{2}-\d{2}$/.test(reported) && reported !== SEEDED
+    );
+    t.log.check(
+      'and OK closed it: the app text is readable again',
+      t.nodeByTestId(ECHO.hostDateValue) != null
+    );
+    t.log.checkEquals(
+      'and no popup window of any kind is left owned by the app',
+      t.popupWindowCount(),
+      0
+    );
+
+    // 4. Remove only this child, while its dialog is up. The unmount is armed by a real
+    // tap and lands on a timer inside the app for the reason `PickerScreen` states: a
+    // second tap while a dialog is open is an outside tap, which dismisses the dialog
+    // instead of pressing anything.
+    await t.tapNode(
+      t.waitForNode(ECHO.hostDateDropButton, 'the unmount-the-field button')
+    );
+    t.waitForNode(ECHO.hostDateDropArmed, 'the unmount to be armed');
+    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
+    dayGrid(t, 'the hosted DatePicker');
+    // The app's own echo is the witness that the unmount happened, so wait for it rather
+    // than for a guessed delay: the timer is the app's, not this loop's, and a settle that
+    // comes up short reads a dialog that was still open as one that outlived its child.
+    // Only then is it meaningful to ask whether the window came down with it.
+    t.waitForNode(ECHO.hostDateGone, 'the field to be unmounted');
+    await waitForDialogGone(
+      t,
+      'the removed child to take its open dialog down with it'
+    );
+    t.log.check(
+      'removing only the hosted DatePicker child leaves no dialog window behind',
+      t.dump().filter(isDayCell).length === 0
+    );
+    t.log.checkEquals(
+      'a teardown is not a choice - the day JS holds is the one it was given',
+      t.requireEcho(ECHO.hostDateValue),
+      reported
+    );
+
+    // Leave the screen as this check found it: the next control reads the same Host.
+    await t.tapNode(
+      t.waitForNode(ECHO.hostDateRemount, 'the remount-the-field button')
+    );
+    // The witness is the label, not the testID. A hosted control's React Native view is
+    // the `0 x 0` decorative one (D24) and uiautomator drops a node with no box, so the
+    // only thing this screen offers of a hosted field is the box the Host drew and named.
+    // Every other press in this case is aimed the same way.
+    await t.requireControlOnScreen('Hosted date picker');
   },
 
   /**
@@ -968,7 +1357,7 @@ const CHECKS = {
     await t.tapNode(control);
     t.log.checkEquals(
       'a real tap on the anchor opens the menu as a popup window',
-      t.popupWindowCount(),
+      t.waitForPopupCount(1, 'a real tap on the anchor to open a popup window'),
       1
     );
     // Wait for the dump to carry the menu's rows before asking it about
@@ -983,7 +1372,7 @@ const CHECKS = {
     await t.pressBack();
     t.log.checkEquals(
       'Back shuts the popup (no window left behind)',
-      t.popupWindowCount(),
+      t.waitForPopupCount(0, 'the back gesture to take the popup down'),
       0
     );
     t.log.checkEquals(
@@ -1007,7 +1396,10 @@ const CHECKS = {
     );
     t.log.checkEquals(
       'tapping the row that is already chosen closes the menu',
-      t.popupWindowCount(),
+      t.waitForPopupCount(
+        0,
+        'a pick of the row already chosen to take the menu down'
+      ),
       0
     );
     t.log.checkEquals(
@@ -1030,7 +1422,11 @@ const CHECKS = {
       t.requireEcho(ECHO.pickerEvents),
       '1'
     );
-    t.log.checkEquals('choosing closes its own popup', t.popupWindowCount(), 0);
+    t.log.checkEquals(
+      'choosing closes its own popup',
+      t.waitForPopupCount(0, 'the pick to take that popup down'),
+      0
+    );
 
     // 4. The box follows a title that moved with no React render: this picker is
     //    uncontrolled, so nothing told React the title changed, and `nuiSizingKey`
@@ -1088,7 +1484,11 @@ const CHECKS = {
       t.waitForEcho(ECHO.rejectEvents, '2', 'the repeated tap to register'),
       '2'
     );
-    t.log.checkEquals('choosing shut that popup too', t.popupWindowCount(), 0);
+    t.log.checkEquals(
+      'choosing shut that popup too',
+      t.waitForPopupCount(0, 'the second pick to take its popup down'),
+      0
+    );
 
     // 6. The leak case (B1's shape, for popups): open a menu, then have React take
     //    the view away underneath it, three times. Each cycle ends with no popup
@@ -1108,7 +1508,10 @@ const CHECKS = {
       // app's is on screen. Steps 1-3 already proved such a popup carries rows.
       t.log.checkEquals(
         `cycle ${String(cycle)}: the drop picker's menu is open as a popup window`,
-        t.popupWindowCount(),
+        t.waitForPopupCount(
+          1,
+          `cycle ${String(cycle)}'s menu to open as a popup window`
+        ),
         1
       );
       // The unmount is on a timer inside the app (2.5 s), so the menu is definitely
@@ -1119,7 +1522,10 @@ const CHECKS = {
       );
       t.log.checkEquals(
         `cycle ${String(cycle)}: unmounting with the menu open leaves no popup window`,
-        t.popupWindowCount(),
+        t.waitForPopupCount(
+          0,
+          `cycle ${String(cycle)}: the unmount to take the open popup down`
+        ),
         0
       );
       if (cycle < 3) {
@@ -1155,7 +1561,7 @@ const CHECKS = {
     await t.tapNode(locked);
     t.log.checkEquals(
       'a real tap on the disabled picker opens no menu',
-      t.popupWindowCount(),
+      t.waitForPopupCount(0, 'a tap on the disabled picker to open nothing'),
       0
     );
     const unlocked = await t.requireControlOnScreen(
@@ -1164,11 +1570,15 @@ const CHECKS = {
     await t.tapNode(unlocked);
     t.log.checkEquals(
       'the ordinary picker, tapped the same way, opens one - so the line above measured a refusal',
-      t.popupWindowCount(),
+      t.waitForPopupCount(1, 'a tap on the enabled picker to open its menu'),
       1
     );
     await t.pressBack();
-    t.log.checkEquals('and that menu goes away again', t.popupWindowCount(), 0);
+    t.log.checkEquals(
+      'and that menu goes away again',
+      t.waitForPopupCount(0, 'the back gesture to take that menu down'),
+      0
+    );
 
     // 8. What a screen reader is offered (M3). The dump is the only witness for
     //    this: the accessibility tree is what TalkBack reads, and a name sitting on
@@ -1477,6 +1887,42 @@ function isDayCell(node) {
  */
 function isConfirmLabel(node) {
   return /^(OK|Done|Set|Confirm)$/.test(node.text.trim());
+}
+
+/**
+ * The dialog's Cancel affordance, labelled the way `android.R.string.cancel` labels it.
+ *
+ * The alternatives are what other Android builds say for the same button, so the check
+ * does not hinge on one locale — the same reason `isConfirmLabel` lists four words.
+ *
+ * @param {import('./uiautomator.mjs').UiautomatorNode} node
+ */
+function isCancelLabel(node) {
+  return /^(Cancel|Close|Dismiss|Back)$/.test(node.text.trim());
+}
+
+/**
+ * Wait for a dialog's month grid to leave the accessibility tree.
+ *
+ * This is what "the dialog is closed" means on Android for this control: a `Dialog` is
+ * not a `Pop-Up Window`, so `popupWindowCount()` stays 0 whether the dialog leaked or
+ * not, and the app's own text is unreadable while it is up. The grid going away is the
+ * reading that survives both.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} description what to name in the failure line
+ */
+async function waitForDialogGone(t, description) {
+  const deadline = Date.now() + REACT_TIMEOUT;
+  for (;;) {
+    if (t.dump().filter(isDayCell).length === 0) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      t.log.abort(`timed out waiting for ${description}`);
+    }
+    await t.settle(250);
+  }
 }
 
 async function main() {
@@ -1807,6 +2253,10 @@ class DeviceHarness {
       picker: ECHO.pickerIndex,
       host: ECHO.hostValue,
     }[screen];
+    // Asked from wherever the last control left the scroll, an echo that is scrolled
+    // out of sight is simply not in the tree, and this would go looking for a tab to
+    // tap while standing on it. So ask from the top.
+    await this.scrollToTop();
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
     }
@@ -1945,6 +2395,46 @@ class DeviceHarness {
     );
   }
 
+  /**
+   * Bring the current screen back to the top of its scroll.
+   *
+   * A React Native ScrollView keeps its offset when the app leaves the tab and comes
+   * back to it, and a node scrolled far enough out of one is not in the accessibility
+   * tree at all. "That node is not in the tree" therefore cannot mean "we are not on
+   * that screen" - which is exactly the question [goToScreen] asks, and the reason one
+   * run spent its whole timeout tapping a tab it was already standing on. The same
+   * thing is how another run measured a Progress bar 0 px wide: a node outside the
+   * visible area answers with nothing to measure.
+   *
+   * Navigation is the one place a known offset is worth paying for, so each control
+   * starts at the top of its screen. The swipe is aimed at the empty strip at the right
+   * edge for the reason given on `scrollPage`, and the loop stops when the content
+   * stops moving, so a screen already at its top costs one swipe.
+   */
+  async scrollToTop(maxSwipes = 8) {
+    const width = this.displayWidth();
+    const height = this.displayHeight();
+    const x = width - 8;
+    const from = Math.round(height * 0.25);
+    const to = from + Math.round(height * 0.5);
+    const signature = () =>
+      this.hierarchy()
+        .filter((node) => node.bounds.y1 > this.tabBandY + 8)
+        .slice(0, 4)
+        .map((node) => `${String(node.bounds.x1)},${String(node.bounds.y1)}`)
+        .join(';');
+    let previous = signature();
+    for (let attempt = 0; attempt < maxSwipes; attempt += 1) {
+      this.swipe(x, from, x, to, 400);
+      await sleep(400);
+      const now = signature();
+      if (now === previous) {
+        return;
+      }
+      previous = now;
+    }
+  }
+
   teardown() {
     this.shell(`am force-stop ${this.bundleId}`);
     this.adb(['reverse', '--remove', `tcp:${String(this.metroPort)}`]);
@@ -2025,6 +2515,13 @@ function makeContext(harness, log) {
             'could be aimed at'
         );
       }
+      if (node.bounds.width === 0 || node.bounds.height === 0) {
+        log.abort(
+          `accessibilityLabel "${description}" is named in the tree with no box - ` +
+            'it is composed outside the scroll clip, so no real tap can be aimed ' +
+            'at it. Scroll it into view first (`requireControlOnScreen`).'
+        );
+      }
       log.note(
         `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
           `${node.bounds.x2},${node.bounds.y2}`
@@ -2054,32 +2551,83 @@ function makeContext(harness, log) {
     /**
      * Scroll the screen until this control is on it, then look it up.
      *
-     * `uiautomator dump` lists no off-screen nodes, so a row below the fold is not
-     * merely unhittable - it is absent from the tree. Evidence that lives at the
-     * bottom of a screen therefore has to be scrolled to, exactly as a person
-     * scrolls to it, and this says so instead of failing with "not in the tree".
+     * Evidence that lives at the bottom of a screen has to be scrolled to, exactly
+     * as a person scrolls to it, and this says so instead of failing with "not in
+     * the tree". "On the screen" is answered by the **box**, not by the name:
+     * React Native drops a view that has been scrolled out of the window, so an RN
+     * control is simply absent until it comes back, but a `<Host>` is one Compose
+     * tree and Compose keeps naming children it has composed even when the scroll
+     * has them outside its clip - measured on `nitroui_t03`, a hosted Picker below
+     * the fold is in the dump with `bounds=[0,0][0,0]`. A check that stops at the
+     * name taps the top-left corner of the window and then reports that a real
+     * touch opens nothing, which is a story about the check, not about the control.
+     *
+     * The box has to be a *pressable* one, not merely a drawn one. Compose clips a
+     * Host row to whatever the scroll leaves of it, so a row sitting on the fold is
+     * named with a box a pixel tall: `hosted-date-picker` measured
+     * `42,2423 → 386,2424` on a 1080x2424 window, the tap landed on the middle of
+     * that sliver, and the field never opened - which reads as "a real press does
+     * not open a hosted dialog", the exact opposite of what this case exists to
+     * find. So the centre has to be inside the window and the box tall enough to
+     * hold a finger, and a row that never comes round is said out loud rather than
+     * handed back as if it were tappable.
      *
      * @param {string} description the control's `accessibilityLabel`
      */
     async requireControlOnScreen(description) {
+      let namedOffScreen = 0;
+      let clipped = 0;
+      /** @type {import('./uiautomator.mjs').UiautomatorNode | null} */
+      let lastClipped = null;
       for (let attempt = 0; attempt < 6; attempt += 1) {
         const node = findByDescription(harness.hierarchy(), description);
-        if (node != null) {
-          if (attempt > 0) {
-            log.note(
-              `"${description}" needed ${String(attempt)} scroll` +
-                `${attempt === 1 ? '' : 's'} to come on screen`
-            );
-          }
-          log.note(
-            `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
-              `${node.bounds.x2},${node.bounds.y2}`
-          );
-          return node;
-        }
         const { width, height } = harness.screenSize();
+        if (node != null && node.bounds.width > 0 && node.bounds.height > 0) {
+          const centreX = (node.bounds.x1 + node.bounds.x2) / 2;
+          const centreY = (node.bounds.y1 + node.bounds.y2) / 2;
+          const pressable =
+            node.bounds.height >= MIN_PRESSABLE_PX &&
+            centreX > 0 &&
+            centreX < width &&
+            centreY > 0 &&
+            centreY < height;
+          if (pressable) {
+            if (attempt > 0) {
+              log.note(
+                `"${description}" needed ${String(attempt)} scroll` +
+                  `${attempt === 1 ? '' : 's'} to come on screen` +
+                  (namedOffScreen > 0
+                    ? ` - after ${String(namedOffScreen)} naming` +
+                      `${namedOffScreen === 1 ? '' : 's'} with no box (composed ` +
+                      'outside the clip)'
+                    : '') +
+                  (clipped > 0
+                    ? `, and ${String(clipped)} with a box clipped to ` +
+                      `${String(MIN_PRESSABLE_PX)} px or less`
+                    : '')
+              );
+            }
+            log.note(
+              `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
+                `${node.bounds.x2},${node.bounds.y2}`
+            );
+            return node;
+          }
+          clipped += 1;
+          lastClipped = node;
+        } else if (node != null) {
+          namedOffScreen += 1;
+        }
         harness.swipe(width / 2, height * 0.7, width / 2, height * 0.32, 400);
         await sleep(400);
+      }
+      if (lastClipped != null) {
+        log.abort(
+          `"${description}" is named with a box ${String(
+            lastClipped.bounds.height
+          )} px tall on the window edge (${String(clipped)} scrolls, still ` +
+            'clipped) - the row never came far enough on screen to press'
+        );
       }
       return this.requireControl(description);
     },
@@ -2349,6 +2897,45 @@ function makeContext(harness, log) {
     },
 
     /**
+     * Wait for the app's popup windows to become `expected`, and say how long the
+     * device took to get there.
+     *
+     * A popup comes down on the app's next frame and then on WindowManager's own
+     * schedule, so reading the count in the moment after a touch races both. Measured
+     * on the first run of the hosted-Picker check: the pick had reached JS - index 2
+     * was echoed - while `dumpsys window` still listed the window that pick had
+     * closed, and the check read a correct close as a leak.
+     *
+     * This waits for a number, not for a hope: a window the app never gives up still
+     * ends this check, and says what it counted. The absence reads that follow no
+     * touch stay immediate - nothing is in flight at those.
+     *
+     * @param {number} expected
+     * @param {string} description what should have happened
+     */
+    waitForPopupCount(expected, description) {
+      const startedAt = Date.now();
+      let count = harness.popupWindowCount();
+      while (count !== expected) {
+        if (Date.now() - startedAt > REACT_TIMEOUT) {
+          log.abort(
+            `timed out after ${String(REACT_TIMEOUT)}ms waiting for ${description} - ` +
+              `popup windows ${String(count)}, expected ${String(expected)}`
+          );
+        }
+        blockMs(100);
+        count = harness.popupWindowCount();
+      }
+      const waitedMs = Date.now() - startedAt;
+      if (waitedMs > 250) {
+        log.note(
+          `popup windows reached ${String(expected)} after ${String(waitedMs)}ms`
+        );
+      }
+      return count;
+    },
+
+    /**
      * Press Back.
      */
     async pressBack() {
@@ -2475,6 +3062,47 @@ function makeContext(harness, log) {
         `${description} (${testID} above ${String(previous)})`
       );
       return value(testID);
+    },
+
+    /**
+     * Read a numeric echo until it holds still, and return what it settled on.
+     *
+     * A drag is a stream of `onValueChange` events and React renders each one, so the
+     * first echo that differs from the previous value is a reading taken *inside* the
+     * gesture rather than the result of it. Measured on `nitroui_t03`: a real drag
+     * that ended at `0.13` first read `0.83`, and a check that believed the first
+     * change saw a Slider that had barely moved. The fix is the wait, not the
+     * assertion - the value has to stop moving before anything is read off it.
+     *
+     * "Holds still" is `quietMs` of reads that agree, which cannot settle early on a
+     * control that never answered: it returns the unchanged value, and whatever is
+     * being asserted about the move goes red on it.
+     *
+     * @param {string} testID
+     * @param {string} description what is being waited for
+     * @param {number} [quietMs] how long the value must hold still
+     */
+    waitForValueToSettle(testID, description, quietMs = 1200) {
+      const deadline = Date.now() + REACT_TIMEOUT;
+      /** @type {number | null} */
+      let last = value(testID);
+      let quietSince = Date.now();
+      for (;;) {
+        blockMs(300);
+        const shown = value(testID);
+        if (shown !== last) {
+          last = shown;
+          quietSince = Date.now();
+        } else if (shown != null && Date.now() - quietSince >= quietMs) {
+          return shown;
+        }
+        if (Date.now() > deadline) {
+          log.abort(
+            `timed out after ${String(REACT_TIMEOUT)}ms waiting for ` +
+              `${description} - ${testID}="${String(last)}" was still moving`
+          );
+        }
+      }
     },
   };
 }

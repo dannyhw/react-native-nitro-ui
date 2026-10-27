@@ -16,10 +16,17 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.AbstractComposeView
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -42,6 +49,7 @@ import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /*
  * The Picker component: Material 3's `ExposedDropdownMenuBox` (a text-field anchor
@@ -155,12 +163,221 @@ internal class PickerModel : NitroUiModel() {
    */
   var onChange: ((Double, Double) -> Unit)? = null
 
+  // MARK: - The popup's own facts (H2b)
+  //
+  // Everything the model can see about a hosted control is *its* state, and a popup
+  // is not state: it is a window Compose puts where the anchor's box is. What these
+  // fields record is what the composition measured about that window, so a test can
+  // ask the hosted case the questions only a popup can answer - is it anchored under
+  // the box the Host drew, does it move when the Host scrolls, and is it gone when the
+  // child that opened it is. Same shape as `DatePickerModel`'s report: a few plain
+  // integers written from layout, formatted only when someone asks.
+
+  /**
+   * The anchor's box *inside the composition's own view*, px; -1 before the first
+   * layout. `LayoutCoordinates.boundsInRoot()` reports this space, which is also the
+   * space a popup is positioned in.
+   */
+  @Volatile private var anchorLeft = -1f
+  @Volatile private var anchorTop = -1f
+  @Volatile private var anchorRight = -1f
+  @Volatile private var anchorBottom = -1f
+
+  /**
+   * Where the composition's own view sits on screen, px; -1 before the first read.
+   *
+   * Kept apart from [anchorLeft] because it is not a layout callback away. When a
+   * `<Host>` moves, the React Native view owning the Compose view moves; the Compose
+   * view keeps its `0,0`-inside-parent frame, so no `onGloballyPositioned` fires and the
+   * anchor would freeze at wherever the first measure happened. The two parts together
+   * are the screen box a popup has to agree with.
+   */
+  @Volatile private var compositionLeft = -1
+  @Volatile private var compositionTop = -1
+
+  /** Screen rect of the open menu's content view, px; -1 while no menu is composed. */
+  @Volatile private var menuLeft = -1
+  @Volatile private var menuTop = -1
+  @Volatile private var menuRight = -1
+  @Volatile private var menuBottom = -1
+
+  /** Rows the composed menu listed at its last recomposition. */
+  @Volatile private var menuRowCount = 0
+
+  /**
+   * The open menu's own view, held so that a layout pass somewhere else in the app can
+   * ask it where its window ended up. UI-thread only, set and cleared by [MenuWitness],
+   * and never read from [readMenuReport] - the seam answers on the JS thread, so the
+   * report reads published numbers and nothing reaches for a view here.
+   */
+  private var menuView: View? = null
+
+  /** Guards the read that formats [readMenuReport] from the JS thread. */
+  private val reportLock = Any()
+
+  /**
+   * Record the anchor's box inside the composition's own view - px.
+   *
+   * UI-thread only (it is a layout callback), which is also what lets it act on what it
+   * sees; see [dropOpenMenu].
+   */
+  fun noteAnchorBox(
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+  ) {
+    val moved = anchorMoved(anchorLeft, anchorTop, left, top)
+    anchorLeft = left
+    anchorTop = top
+    anchorRight = right
+    anchorBottom = bottom
+    if (moved) {
+      dropOpenMenu()
+    }
+  }
+
+  /** Record where the composition's own view is on screen - px. UI-thread only. */
+  fun noteCompositionOrigin(
+    left: Int,
+    top: Int,
+  ) {
+    val moved =
+      anchorMoved(
+        compositionLeft.toFloat(),
+        compositionTop.toFloat(),
+        left.toFloat(),
+        top.toFloat(),
+      )
+    compositionLeft = left
+    compositionTop = top
+    if (moved) {
+      dropOpenMenu()
+    }
+  }
+
+  /**
+   * A box that *moved*, as opposed to one being read for the first time (-1) or changing
+   * size in place. A menu is anchored under a box; its width or height is not what the
+   * menu is anchored to.
+   */
+  private fun anchorMoved(
+    wasLeft: Float,
+    wasTop: Float,
+    left: Float,
+    top: Float,
+  ): Boolean = wasLeft >= 0f && (wasLeft != left || wasTop != top)
+
+  /**
+   * The box this control's window is anchored to has moved, so the window goes away.
+   *
+   * Compose is not told. A `Popup` positions itself once, against the anchor's box in its
+   * own composition; the pass that moves the box here is React Native moving the view
+   * under the composition, which Compose never hears about (measured: with a `<Host>`
+   * moved 120 dp while its menu was open, the anchor's box went from top 126 to top 441
+   * and the menu's window stayed at 294). A window left up would then be pointing at
+   * where the row used to be - worse than no window. So this is the same response the
+   * menu already gives when a scrolling ancestor carries its anchor away: it dismisses,
+   * and the next press opens one that is anchored where the row now is.
+   *
+   * Only a window that is actually composed answers; a closed control has nothing to
+   * take down, and the write is the same one `onExpandedChange` makes.
+   */
+  private fun dropOpenMenu() {
+    if (menuView != null && expanded) {
+      expanded = false
+    }
+  }
+
+  /** Record where the open menu's window is on screen. */
+  fun noteMenuFrame(
+    left: Int,
+    top: Int,
+    right: Int,
+    bottom: Int,
+  ) {
+    menuLeft = left
+    menuTop = top
+    menuRight = right
+    menuBottom = bottom
+  }
+
+  /** Forget the menu's rect: no popup of this mount is composed any more. */
+  fun clearMenuFrame() {
+    menuLeft = -1
+    menuTop = -1
+    menuRight = -1
+    menuBottom = -1
+    menuRowCount = 0
+  }
+
+  /** How many rows the menu listed at its last recomposition. */
+  fun noteMenuRows(rows: Int) {
+    menuRowCount = rows
+  }
+
+  /** The open menu's view, for as long as its composition group is composed. */
+  fun noteMenuView(view: View?) {
+    menuView = view
+  }
+
+  /**
+   * Re-read the open menu's window. UI-thread only, and only from a pass with a reason
+   * to ask: a popup window moved by the window manager does not re-run its view's
+   * `layout()` (same frame, new place), so the view's own layout listener stays quiet
+   * and the published rect would otherwise be where the menu was last laid out rather
+   * than where its window now is.
+   */
+  fun refreshMenuFrame(where: IntArray) {
+    val view = menuView ?: return
+    view.getLocationOnScreen(where)
+    noteMenuFrame(where[0], where[1], where[0] + view.width, where[1] + view.height)
+  }
+
+  /**
+   * `expanded=<0|1>;live=<n>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n>`.
+   *
+   * The anchor half is the composition-relative box plus the composition's own place on
+   * screen, summed here rather than stored: either half may arrive first, and either may
+   * go stale on its own, so `-1` means one of them was never read.
+   *
+   * Read by `nuiTestMenuReport`. Formatted under a lock because the seam may be called
+   * from the JS thread while the UI thread writes the fields (`DatePickerModel`'s
+   * report does the same for the same reason): the UI thread is never blocked for JS,
+   * and JS never waits for it. The `live` half is process-wide on purpose - a mount
+   * that was dropped while its menu was open has nothing left to ask, and the question
+   * "did a popup outlive its mount?" then belongs to the *next* mount.
+   */
+  fun readMenuReport(): String {
+    val open = expanded
+    val live = liveMenus.get()
+    val boxLeft = anchorLeft
+    val boxTop = anchorTop
+    val boxRight = anchorRight
+    val boxBottom = anchorBottom
+    val originLeft = compositionLeft
+    val originTop = compositionTop
+    val anchored = boxLeft >= 0f && originLeft >= 0
+    return synchronized(reportLock) {
+      "expanded=${if (open) 1 else 0};live=$live" +
+        ";anchor=" +
+        if (anchored) {
+          "${(boxLeft + originLeft).toInt()},${(boxTop + originTop).toInt()}," +
+            "${(boxRight + originLeft).toInt()},${(boxBottom + originTop).toInt()}"
+        } else {
+          "-1,-1,-1,-1"
+        } +
+        ";menu=$menuLeft,$menuTop,$menuRight,$menuBottom;rows=$menuRowCount"
+    }
+  }
+
   override fun reset() {
     options = emptyArray()
     displayed = 0
     // A popup that stayed open across a recycle would hang over the next row's
     // content, so it goes back to closed like everything else.
     expanded = false
+    clearMenuFrame()
     variant = "menu"
     label = null
     enabled = true
@@ -176,6 +393,21 @@ internal class PickerModel : NitroUiModel() {
     defaultSelectedIndex = 0.0
     didApplyDefault = false
     onChange = null
+  }
+
+  companion object {
+    /**
+     * How many menus this process has open right now.
+     *
+     * Process-wide rather than per mount for the same reason
+     * `DatePickerModel.livePresentations` is: the property under test is "no popup
+     * outlives the composition that opened it", and a mount dropped mid-menu cannot
+     * report its own leak. [PickerHost.MenuWitness] counts itself in a
+     * `DisposableEffect`, so the number returns to zero only when the *composition*
+     * that opened the popup went away - closed by a tap, by the row, by Back, by
+     * leaving the Host's child list, or by the Host itself being dropped.
+     */
+    val liveMenus = AtomicInteger(0)
   }
 
   /**
@@ -392,6 +624,22 @@ private class PickerHost(
   model: PickerModel,
 ) : NitroComposeHost<PickerModel>(context, activity, model) {
   /**
+   * A `<Host>` composes this control, popup and all (H2b).
+   *
+   * The allowlist line the other controls have, with the matching JS row in
+   * `src/components/Host/HostChildren.ts`. What makes this one a different question is
+   * the menu: a Compose `Popup` is a window of its own, and a Host owns a rectangle
+   * inside somebody else's window. The answer is that a popup opened from inside a
+   * composition belongs to that composition's view - which is what a hosted child does
+   * here, exactly as it does in a single-control composition, and what Expo's Host does
+   * too. The claim is measured, not asserted: `example/__tests__/HostPopups.harness.tsx`
+   * reads the anchor's box and the menu's window out of the shared composition, and
+   * `docs/components/host.md` states what was found.
+   */
+  override val isHostable: Boolean
+    get() = true
+
+  /**
    * The user chose [index] - apply the choice, and hold the size report its paint is
    * about to cause.
    *
@@ -443,6 +691,41 @@ private class PickerHost(
     // field, and `fillMaxWidth()` there would be ignored by the constraints anyway.
     val widthModifier =
       if (model.variant == "wheel") Modifier.fillMaxWidth() else Modifier
+    // The view that owns *this composition*: the control's own when it is mounted
+    // alone, the `<Host>`'s `AndroidComposeView` when it is hosted. The anchor's
+    // on-screen box is its box inside that view plus that view's place on screen, so
+    // one reading serves both cases - and it is the reading a popup has to agree with,
+    // because a popup positions itself against the composition it was opened from.
+    val compositionView = LocalView.current
+    val screenPoint = remember(compositionView) { IntArray(2) }
+    // Where the composition's own view is on screen, refreshed whenever the view React
+    // Native actually places moves. `compositionView` cannot be the one listened to: a
+    // Compose view is laid out at `0,0` inside its parent and stays there however far the
+    // parent travels, so the pass that relocates a `<Host>` never calls its `layout()`
+    // with different coordinates. Walking up past the Compose views lands on the view
+    // Fabric does move - the control's own React Native view when it is mounted alone,
+    // the Host's when it is hosted - which is the view whose frame the popup has to
+    // agree with.
+    val placedView = remember(compositionView) { placedViewOf(compositionView) }
+    DisposableEffect(placedView) {
+      val listener =
+        View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+          // Read the composition's own view, not the one that moved: it is the box
+          // `boundsInRoot` is drawn in, and this is the pass that changed where it is.
+          compositionView.getLocationOnScreen(screenPoint)
+          model.noteCompositionOrigin(screenPoint[0], screenPoint[1])
+          // And read the window in the same pass, if one is open: this is the moment
+          // the box under it moved, so it is the moment worth knowing where it is.
+          model.refreshMenuFrame(screenPoint)
+        }
+      // Read once now: the mount's own layout pass happens while the composition is
+      // being built, before this effect can subscribe to it, and a control that is never
+      // moved again would otherwise never have a box at all.
+      compositionView.getLocationOnScreen(screenPoint)
+      model.noteCompositionOrigin(screenPoint[0], screenPoint[1])
+      placedView.addOnLayoutChangeListener(listener)
+      onDispose { placedView.removeOnLayoutChangeListener(listener) }
+    }
     ExposedDropdownMenuBox(
       expanded = expanded,
       // The box reports the reason (`MenuAnchorType` + `enabled`), so a disabled
@@ -461,6 +744,15 @@ private class PickerHost(
             ExposedDropdownMenuAnchorType.PrimaryNotEditable,
             enabled = enabled,
           )
+          // Where the anchor ended up, in the screen's own pixels (H2b). A layout
+          // callback, so it costs no recomposition and writes no observed state; the
+          // numbers are for [PickerModel.readMenuReport] and nothing renders from them.
+          // `boundsInRoot` is the box inside the composition's own view, which is the
+          // same coordinate space a popup is positioned in.
+          .onGloballyPositioned { coordinates ->
+            val box = coordinates.boundsInRoot()
+            model.noteAnchorBox(box.left, box.top, box.right, box.bottom)
+          }
           // One accessibility node for the control, carrying its name, its value,
           // its role and its state.
           //
@@ -537,7 +829,13 @@ private class PickerHost(
         },
         modifier = Modifier.exposedDropdownSize(),
       ) {
+        // Everything this popup is, recorded for the tests that can only be answered
+        // from inside it (H2b). Must be the first thing in the content: it reads
+        // `LocalView`, which inside this lambda is the *popup's* view.
+        MenuWitness(model)
+        var listedRows = 0
         options.forEachIndexed { index, text ->
+          listedRows += 1
           val isSelected = index == selectedIndex
           DropdownMenuItem(
             text = { Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -553,10 +851,93 @@ private class PickerHost(
               },
           )
         }
+        // How many rows *this* menu composed, published after the composition rather
+        // than written during it. It is the witness for a list that changed while the
+        // menu was open: the rows recompose from `options`, and a Host that had frozen
+        // the child's content would keep listing the old count.
+        SideEffect { model.noteMenuRows(listedRows) }
+      }
+    }
+  }
+
+  /**
+   * The popup's own witness, composed only while the menu is open.
+   *
+   * Three jobs, all of them things only the popup can report:
+   *
+   * - **There is a menu.** [PickerModel.liveMenus] counts composed menus for the whole
+   *   process, in a `DisposableEffect`, so the number falls back to zero exactly when
+   *   the composition group that opened the window is gone - closed, removed from the
+   *   Host's children, reordered, or dropped with the Host. A popup window that
+   *   outlived its mount would leave the count up for the *next* mount to read.
+   * - **Where it is.** The popup's view is its own window's root, so its on-screen
+   *   location and size are the window's. A layout listener on that view is the
+   *   cheapest honest reading of "the menu sits under the anchor", including after the
+   *   Host has been scrolled.
+   * - **It does not come back.** The menu the user was looking at has gone when this
+   *   leaves the composition, so the control stops claiming one is open. Without that
+   *   write, a hosted child that left and re-entered the Host's child list - a
+   *   reorder, a removal and re-add - would find `expanded` still true and open a
+   *   window nobody asked for again. For a menu closed any other way this is the same
+   *   value it already has, which is why it is free.
+   */
+  @Composable
+  private fun MenuWitness(model: PickerModel) {
+    val menuView = LocalView.current
+    DisposableEffect(menuView) {
+      val live = PickerModel.liveMenus
+      live.incrementAndGet()
+      val where = IntArray(2)
+      model.noteMenuView(menuView)
+      val listener =
+        View.OnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+          view.getLocationOnScreen(where)
+          model.noteMenuFrame(
+            where[0],
+            where[1],
+            where[0] + view.width,
+            where[1] + view.height,
+          )
+        }
+      menuView.addOnLayoutChangeListener(listener)
+      onDispose {
+        menuView.removeOnLayoutChangeListener(listener)
+        model.noteMenuView(null)
+        model.clearMenuFrame()
+        live.decrementAndGet()
+        model.expanded = false
       }
     }
   }
 }
+
+/**
+ * The first ancestor of [start] that React Native places, as opposed to Compose.
+ *
+ * The Compose views of a mount (`AndroidComposeView`, then the host's own
+ * `AbstractComposeView`) are laid out by Compose at `0,0` inside their parent, so their
+ * own frames never change and a layout listener on them would never fire. Above them is
+ * the view Fabric moves when the control or its `<Host>` moves, and that is the frame
+ * the anchor's screen box has to follow.
+ */
+private fun placedViewOf(start: View): View {
+  var view = start
+  while (view.parent is View && isComposeView(view)) {
+    view = view.parent as View
+  }
+  return view
+}
+
+/**
+ * Whether [view] is one of Compose's own views rather than a React Native one.
+ *
+ * `AndroidComposeView` is internal to the library, so the package prefix is the check
+ * that survives a refactor of the class hierarchy - and it is the prefix every view in
+ * that chain carries, including the `AbstractComposeView` above it.
+ */
+private fun isComposeView(view: View): Boolean =
+  view is AbstractComposeView ||
+    view.javaClass.name.startsWith("androidx.compose.")
 
 /** The Hybrid View React renders as `NitroUiPicker`. */
 class HybridNitroUiPicker(
@@ -733,6 +1114,16 @@ class HybridNitroUiPicker(
         // otherwise leave a live list of choices on screen that nothing can close -
         // `onExpandedChange` stops firing for a disabled anchor, so the popup would
         // ignore the very taps that should dismiss it.
+        //
+        // Material 3 dismisses it too: `ExposedDropdownMenuBox` stops composing a menu
+        // whose `menuAnchor(enabled = …)` went false, which is what the harness sees
+        // happen, and that is what the harness sees. Measuring this line as the sole
+        // route is H2b round 2's job: round 1 measured it while `afterUpdate` still held
+        // a duplicate write, so mutating either line left that gate green. Either way
+        // the gate is an outcome gate - "a disabled control is not showing a list of
+        // choices" - and the write is still the point: it is what makes the outcome the
+        // control's rule rather than the widget library's, whatever Material decides to
+        // do with a disabled anchor.
         model.expanded = false
       }
       // Repaints only: a disabled control is the same size.
@@ -863,6 +1254,16 @@ class HybridNitroUiPicker(
     // already showed. It does not close itself here (the user did not ask it to),
     // but an index that no longer exists can leave it pointing at nothing, and the
     // rows recompose from `options` anyway.
+    //
+    // A control that has been disabled *does* close it (H2b), and this pass used to
+    // carry a second copy of that write. It was dead code, and is gone: the `disabled`
+    // setter above already clears `expanded`, `expanded` is only ever set true by a
+    // press on an anchor that is enabled, and the comment here justified keeping it with
+    // a batch that writes an open flag - a JS prop for `expanded` that neither this
+    // control nor the DatePicker has. The DatePicker keeps its copy in this pass
+    // (`HybridNitroUiDatePicker.afterUpdate`) because that control's setter does not
+    // clear `presented`, and that difference is what the harness sees: mutating the
+    // DatePicker's line turns its gate red, where mutating this one could not.
     // The batch a held size report was waiting for has landed. Whether it is the
     // batch that report belongs to is what the stamp is for: the index the batch
     // settled on, the choices, the variant and the label all have to be the ones the
@@ -930,4 +1331,14 @@ class HybridNitroUiPicker(
       host.post { run() }
     }
   }
+
+  /**
+   * What the popup and its anchor are, as the composition measured them.
+   *
+   * Test-only; see `NitroUiPickerMethods.nuiTestMenuReport` for the format and for why
+   * a hosted popup needs a witness of its own. Reads a lock-protected snapshot of a
+   * few integers, so it is safe on the JS thread and never waits for the UI thread
+   * (core.md section 5).
+   */
+  override fun nuiTestMenuReport(): String = model.readMenuReport()
 }

@@ -132,6 +132,36 @@ export interface NitroUiPickerMethods extends HybridViewMethods {
    * popup row.
    */
   nuiTestSelect(index: number): void;
+
+  /**
+   * TEMPORARY, test-only (task H2b): what this Picker's *popup* and its anchor are, as
+   * the composition that renders them measured them. One line:
+   *
+   * ```
+   * expanded=<0|1>;live=<n>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n>
+   * ```
+   *
+   * `expanded` is the model's own flag. `live` is how many menus this **process** has
+   * composed right now — process-wide on purpose, because the question the number
+   * answers is "did a popup outlive the composition that opened it?", and a mount
+   * dropped mid-menu has nothing left to ask: the next mount reads the leak.
+   * `anchor`/`menu` are screen pixel rects as the composition measured them (the
+   * anchor's box inside its own composition's view plus that view's place on screen,
+   * the menu's content view's own on-screen rect), and `rows` is how many rows the
+   * open menu composed. `-1` in a rect means "not measured yet".
+   *
+   * This exists because a popup is the one thing about a control that a model cannot
+   * describe, and a `<Host>` moves the composition: the claim under test is that a
+   * hosted Picker's menu opens under the box the *Host* drew and follows it, which no
+   * read of `expanded`, `selectedIndex` or a hit test can show.
+   *
+   * Android answers; iOS reports no popup of its own — a SwiftUI `Picker` keeps its
+   * menu inside the system's own presentation, so there is no window here to measure
+   * and nothing here to follow. The `<Host>` is Android-only anyway (D23).
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestMenuReport(): string;
 }
 
 /**

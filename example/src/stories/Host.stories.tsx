@@ -1,14 +1,27 @@
 /**
- * Host stories (H1, H2a). What it is and what it refuses: `docs/components/host.md`.
+ * Host stories (H1, H2a, H2b). What it is and what it refuses:
+ * `docs/components/host.md`.
  *
  * The story is the comparison, because that is the only thing a Host changes: the
  * same controls, drawn by one composition or by N of them. `style.height` on the
  * Host is not decoration — a hosted control reports no size, so the box is the
  * height the app gives it (D24).
+ *
+ * `Popups` is the H2b story: all seven controls in one Host, including the three
+ * that open a window of their own.
  */
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button, Host, Progress, Slider, Switch } from 'react-native-nitro-ui';
+import {
+  Button,
+  DatePicker,
+  Host,
+  Picker,
+  Progress,
+  SegmentedControl,
+  Slider,
+  Switch,
+} from 'react-native-nitro-ui';
 
 import type { Meta, StoryObj } from '@storybook/react-native';
 
@@ -169,6 +182,75 @@ export const Mixed: Story = {
   },
 };
 
+/**
+ * All seven controls, one composition (H2b).
+ *
+ * The three popup/dialog controls join the four from H1 and H2a: the `SegmentedControl`
+ * draws in the column like any other row, while the `Picker`'s menu and the
+ * `DatePicker`'s dialog are windows that belong to *this* composition. Open either one
+ * and it sits under the row the Host drew; close it with the outside tap, the back
+ * gesture or the row itself, and the Host keeps drawing the rest.
+ */
+export const Popups: Story = {
+  render: function PopupsStory() {
+    const [segmented, setSegmented] = useState(1);
+    const [choice, setChoice] = useState(1);
+    const [date, setDate] = useState(() => new Date(2026, 4, 17));
+    const [presses, setPresses] = useState(0);
+    return (
+      <Showcase>
+        <View style={styles.card}>
+          <Host style={styles.popupHost}>
+            <Switch
+              defaultValue
+              onValueChange={() => setPresses((c) => c + 1)}
+              accessibilityLabel="Popup switch"
+            />
+            <Slider defaultValue={0.3} accessibilityLabel="Popup slider" />
+            <Progress value={0.4} accessibilityLabel="Popup linear progress" />
+            <Button
+              title="Popup action"
+              onPress={() => setPresses((c) => c + 1)}
+              accessibilityLabel="Popup button"
+            />
+            <SegmentedControl
+              options={['One', 'Two', 'Three']}
+              selectedIndex={segmented}
+              onChange={(event) => setSegmented(event.index)}
+              accessibilityLabel="Popup segmented"
+            />
+            <Picker
+              options={['Alpha', 'Beta', 'Gamma', 'Delta']}
+              selectedIndex={choice}
+              onChange={(event) => setChoice(event.index)}
+              label="Popup picker"
+              accessibilityLabel="Popup picker"
+            />
+            <DatePicker
+              value={date}
+              onChange={setDate}
+              accessibilityLabel="Popup date picker"
+            />
+          </Host>
+        </View>
+        <Note>
+          {`segment ${segmented} · choice ${choice} · ${String(
+            date.getDate()
+          )}/${String(date.getMonth() + 1)}/${String(date.getFullYear())} — seven controls, one composition, ${presses} change${
+            presses === 1 ? '' : 's'
+          } reported.`}
+        </Note>
+        <Note>
+          The menu and the dialog are windows of their own, owned by the
+          Host&apos;s composition: they open under the row that opened them, and
+          they close with it. A React Native `Modal` as a child is still refused
+          — that is a window RN owns, not one Compose does.
+        </Note>
+      </Showcase>
+    );
+  },
+};
+
 const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
@@ -178,5 +260,8 @@ const styles = StyleSheet.create({
   // Four kinds of control draw their own heights, and RN is not told any of them, so
   // this is room rather than a measurement (D24). A Host that is too short clips.
   mixedHost: { width: '100%', height: 280 },
+  // Seven rows, none of which told RN how tall it draws (D24): room, not a
+  // measurement. A Host that is too short clips its last rows.
+  popupHost: { width: '100%', height: 420 },
   link: { color: '#3b82f6', paddingVertical: 6 },
 });

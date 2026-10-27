@@ -28,6 +28,11 @@ type HybridRefHandler = (view: NitroUiPickerHandle) => void;
  * reported it would answer confidently and wrongly. Whether the popup is open is
  * evidence for the real-input suite (`scripts/real-input/`), not for JS.
  *
+ * H2b added the one method that does report an open state - `nuiTestMenuReport()`,
+ * which reads it off the Android model as one field of a popup witness. It is not a
+ * `setExpanded()`: nothing may drive a popup from JS, and on iOS the method answers
+ * `-1` for exactly the reason above.
+ *
  * @internal v0.1 does not publish Hybrid View types; this alias exists so
  * `hybridRef` can be typed for this repo's harness and benchmarks.
  */
@@ -56,6 +61,16 @@ export interface NitroUiPickerHandle {
    * in a popup; apps must not.
    */
   nuiTestSelect(index: number): void;
+  /**
+   * Test-only: what the popup and its anchor are, as the composition that renders
+   * them measured them - `expanded=...;live=...;anchor=...;menu=...;rows=...`.
+   * `@internal` (D14).
+   *
+   * Android answers; iOS reports `-1` in every field, because a SwiftUI `Picker`
+   * keeps its menu inside the system's own presentation and there is no window of
+   * its own here to read.
+   */
+  nuiTestMenuReport(): string;
 }
 
 /**

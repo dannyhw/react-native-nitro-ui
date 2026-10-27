@@ -38,38 +38,49 @@ import { Switch } from '../Switch/Switch';
  * the error comes from the same table as the permission - hosting one more
  * control means adding one row here, and nothing else decides.
  *
- * Four rows: `Switch` from H1, and `Slider`, `Progress`, `Button` from H2a, each
- * with a bench arm and a device suite behind it (T16's condition 1 - "one arm per
- * component before it is claimed"). A row here is one half of the rule; the other
- * is the `isHostable` override on the control's own Android host, and the two are
- * the same decision seen from the two sides that have to agree.
+ * Seven rows: `Switch` from H1, `Slider`, `Progress`, `Button` from H2a, and
+ * `SegmentedControl`, `Picker`, `DatePicker` from H2b - each with a bench arm and a
+ * device suite behind it (T16's condition 1 - "one arm per component before it is
+ * claimed"). A row here is one half of the rule; the other is the `isHostable`
+ * override on the control's own Android host, and the two are the same decision seen
+ * from the two sides that have to agree.
+ *
+ * The last three are the ones a `<Host>` was said not to be able to hold, because
+ * each of them presents a popup or a dialog: a window of its own. The answer H2b
+ * measured is that a Compose popup or dialog opened from inside the Host's
+ * composition is *that composition's* window - which is what closes it when the Host
+ * goes away, and what anchors it to the box the Host drew
+ * (`docs/components/host.md`, "Popups and dialogs"). A control is refused only if
+ * hosting it is shown to be broken, and none of these three is.
  */
-const HOSTABLE_CONTROLS = new Map<unknown, string>([
+export const HOSTABLE_CONTROLS = new Map<unknown, string>([
   [Button, 'Button'],
+  [DatePicker, 'DatePicker'],
+  [Picker, 'Picker'],
   [Progress, 'Progress'],
+  [SegmentedControl, 'SegmentedControl'],
   [Slider, 'Slider'],
   [Switch, 'Switch'],
 ]);
 
 /**
- * This library's other controls, by the same identity rule.
+ * This library's controls that a Host refuses, by the same identity rule.
  *
- * They are named rather than left to fall through because of what an unhostable
- * nitro-ui child does on Android: the Host skips it and it draws nothing.
+ * It names them rather than leaving them to fall through because of what an
+ * unhostable nitro-ui child does on Android: the Host skips it and it draws nothing.
  * `src/__tests__/host.test.tsx` walks `src/components` and fails if a control is
  * added without a row in one of the two tables, so this list cannot quietly fall
  * behind the library.
  *
- * The three left here are H2b's: a `SegmentedControl`, `Picker` or `DatePicker` is
- * refused, not because a shared composition cannot draw one but because nobody has
- * measured or tested one inside a Host - and the popup/dialog controls reach outside
- * the Host's box for a window, which is a different question.
+ * **Empty since H2b**: all seven controls the library ships are hosted, so there is
+ * nothing left to refuse here for being what it is. The table and the check that
+ * reads it stay, because they are the row the *next* control goes on - a Menu, a
+ * TextField, anything added before it has been measured inside a Host starts here,
+ * refused, until a round measures it. `host.test.tsx` proves the sentence still
+ * works by putting a stand-in in this table, because nothing in the library does any
+ * more.
  */
-const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
-  [DatePicker, 'DatePicker'],
-  [Picker, 'Picker'],
-  [SegmentedControl, 'SegmentedControl'],
-]);
+export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([]);
 
 /**
  * The RN views an app reaches for, so that "no RN views in a Host" is checked

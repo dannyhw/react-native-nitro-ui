@@ -327,8 +327,9 @@ internal class DatePickerModel : NitroUiModel() {
    * Open or close the `compact` field's dialog.
    *
    * Every write goes through here - the press, `onDismissRequest` (outside tap and
-   * the platform back gesture), `reset()` and `onDropView()` - because the flag has
-   * to describe reality for [readReport] to be worth testing with.
+   * the platform back gesture), `reset()`, `onDropView()`, the `disabled` write in
+   * [afterUpdate] and the dialog subtree's `onDispose` - because the flag has to
+   * describe reality for [readReport] to be worth testing with.
    */
   fun setPresented(next: Boolean) {
     if (next == presented) {
@@ -903,6 +904,21 @@ private class DatePickerHost(
   model: DatePickerModel,
 ) : NitroComposeHost<DatePickerModel>(context, activity, model) {
   /**
+   * A `<Host>` composes this control, dialog and all (H2b).
+   *
+   * The allowlist line the other controls have, with the matching JS row in
+   * `src/components/Host/HostChildren.ts`. A Material 3 dialog is a window, and a
+   * window is what a Host was said not to be able to own. What decides it is *which
+   * composition* composes the `Dialog`, because that composition is what closes the
+   * window: composed by the Host, the dialog goes away with the Host's disposal - the
+   * same rule that keeps an unhosted dialog from outliving its mount (`onDropView`),
+   * with the Host's composition standing in for the control's own.
+   * `example/__tests__/HostPopups.harness.tsx` measures it rather than reasoning it.
+   */
+  override val isHostable: Boolean
+    get() = true
+
+  /**
    * Whether this device shows clocks in 24-hour time.
    *
    * Read once from the context this host belongs to: it is a device setting rather
@@ -1104,7 +1120,36 @@ private class DatePickerHost(
     // mount that opened it is gone` reads it through a fresh instance instead.
     DisposableEffect(Unit) {
       DatePickerModel.livePresentations.incrementAndGet()
-      onDispose { DatePickerModel.livePresentations.decrementAndGet() }
+      onDispose {
+        DatePickerModel.livePresentations.decrementAndGet()
+        // Take the open flag down with the window (`MenuWitness` in
+        // `HybridNitroUiPicker` writes `model.expanded` for the same reason, and says so).
+        // Disposal is not only what a close does. Three teardowns reach here with no
+        // dismissal in them: the child leaves the Host's list, `display: 'none'` on it
+        // (`isHiddenByReact`, which composes no child at all), and the child's row being
+        // *moved by layout* - which takes its group out and recomposes it somewhere else.
+        // Nothing else clears the flag on those paths: `setVisibility` only tells the
+        // Host its drawn content moved. Without the write, the flag outlives the window,
+        // and the case that shows the child again composes a dialog over the screen with
+        // nobody having asked for it - with no provisional selection left, because
+        // `rememberDatePickerState` lives inside the subtree that died.
+        //
+        // The third of them is what this line *changes* rather than reports, and it was
+        // measured both ways: without the write, a hosted dialog whose row moved read
+        // `presented=1` with `live=1`, a dialog still open for a row that had moved -
+        // the stale-window bug this release fixed for menus. With it, the dialog follows
+        // its row, so `docs/components/host.md` can state one rule for both popup
+        // controls. The harness reads the flag and the count, never the dialog's rect,
+        // so "over the wrong place" is argued from the menu case and not measured here.
+        // A change that moves nothing - a sibling's own identity, say - leaves
+        // this group alone, so the dialog is not closed by it either (both halves gated
+        // in `example/__tests__/HostPopups.harness.tsx`).
+        //
+        // A no-op on every path that already closed the dialog: dismiss, OK, `disable`,
+        // `onDropView` and `reset` all call `setPresented(false)` first, and it returns
+        // early when the flag already says `false`.
+        model.setPresented(false)
+      }
     }
 
     if (step == Step.Date) {
@@ -1128,6 +1173,12 @@ private class DatePickerHost(
       // back into the model; what it does publish is the page and whether a day is lit,
       // so `nuiTestStateReport` can see a dialog opened on the wrong month.
       publishCalendarFacts(model, state)
+      // ...and the model's value reaches the dialog in one direction only. The
+      // provisional pick belongs to the user, so an open dialog never *emits*; a value
+      // React sends while it is up is a different thing, and it moves the dialog's page
+      // and lit day with it (the G5 follow-up, fixed here because H2b made the hosted
+      // case observable - `docs/tasks/FOLLOWUPS.md`).
+      followValueInDialog(model, state)
       DatePickerDialog(
         // Outside tap, the platform back gesture and the back *button* all land here:
         // `DialogProperties` defaults dismiss on both, which is the brief's "the app's
@@ -1169,6 +1220,8 @@ private class DatePickerHost(
         initialMinute = fields.get(Calendar.MINUTE),
         is24Hour = twentyFourHour,
       )
+      // [followValueInDialog] for the dial: the same one-directional rule.
+      followTimeValueInDialog(model, state)
       TimePickerDialog(
         onDismissRequest = { model.setPresented(false) },
         title = { Text(stringResource(androidx.compose.material3.R.string.m3c_time_picker_dialog_title)) },
@@ -1328,6 +1381,59 @@ private fun syncTimePicker(
     if (state.hour != wanted.first || state.minute != wanted.second) {
       state.hour = wanted.first
       state.minute = wanted.second
+    }
+  }
+}
+
+/**
+ * [syncDatePicker]'s model -> dialog half, for a dialog whose selection is provisional.
+ *
+ * The half, not the whole: an open Material 3 dialog does not emit while the user turns
+ * its calendar, so the second effect of [syncDatePicker] - the one that reads a changed
+ * state back as a pick - would turn every provisional tap into an event and break the
+ * confirm-button contract the dialog exists for. What stays is the direction that was
+ * missing: a value React writes *while the dialog is open* now moves the dialog's day
+ * and page, instead of the dialog sitting on a date the control no longer has until it
+ * is closed.
+ *
+ * A user's provisional pick does not move `model.displayed` - only OK does - so the two
+ * writers cannot race: this fires when React changes the value, and a provisional tap
+ * is not such a change. `DatePickerState` keeps what it was handed
+ * (`rememberDatePickerState` does not re-read its arguments), which is exactly why the
+ * write has to be made here rather than at construction.
+ */
+@Composable
+private fun followValueInDialog(
+  model: DatePickerModel,
+  state: DatePickerState,
+) {
+  val shown = model.displayed
+  LaunchedEffect(shown) {
+    val wanted = model.toUtcMidnightOfLocalDay(shown)
+    if (state.selectedDateMillis != wanted) {
+      state.selectedDateMillis = wanted
+    }
+    val wantedMonth = model.toUtcMonthStartOfLocalDay(shown)
+    if (state.displayedMonthMillis != wantedMonth) {
+      state.displayedMonthMillis = wantedMonth
+    }
+  }
+}
+
+/** [followValueInDialog] for Material 3's clock dialog, which stores hour and minute. */
+@Composable
+private fun followTimeValueInDialog(
+  model: DatePickerModel,
+  state: TimePickerState,
+) {
+  val shown = model.displayed
+  LaunchedEffect(shown) {
+    val fields = model.localFields(shown)
+    val hour = fields.get(Calendar.HOUR_OF_DAY)
+    val minute = fields.get(Calendar.MINUTE)
+    if (state.hour != hour || state.minute != minute) {
+      state.hour = hour
+      state.minute = minute
     }
   }
 }
@@ -1679,6 +1785,22 @@ class HybridNitroUiDatePicker(
       model.state.displayed = shown
       model.displayed = shown
       host.markDirty()
+    }
+    // A control that has been disabled does not keep a dialog on screen (H2b; the G5
+    // review's recommendation for this exact path). Its picks were already refused -
+    // `applyUserSelection` is inert while disabled - but a window that offers a list
+    // which answers nothing is the half-open state that report named.
+    //
+    // It lives here because this is the only route to it: [disabled] moves
+    // `model.enabled` and nothing else, and there is no JS prop for the open flag -
+    // `presented` is written by a press, a dismissal or a teardown, never by a props
+    // batch - so this line cannot be replaced by an ordering between two writes. The
+    // Picker keeps the same rule in its `disabled` setter
+    // (`HybridNitroUiPicker.disabled`); this control cannot, and the difference is
+    // visible at the harness: stubbing this line out turns "closes when the control is
+    // disabled while the dialog is open" red, where the Picker's copy of it does not.
+    if (!model.enabled && model.presented) {
+      model.setPresented(false)
     }
     // A batch can move the displayed instant without any rendered change (React
     // confirming what native already picked), and the report must not go stale; the call

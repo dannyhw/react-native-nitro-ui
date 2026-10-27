@@ -276,6 +276,19 @@ private class SegmentedControlHost(
   activity: Activity?,
   model: SegmentedControlModel,
 ) : NitroComposeHost<SegmentedControlModel>(context, activity, model) {
+  /**
+   * A `<Host>` composes this control (H2b).
+   *
+   * The same allowlist line the controls before it have (`HybridNitroUiSwitch.kt`,
+   * `HybridNitroUiSlider.kt`), with the matching JS row in
+   * `src/components/Host/HostChildren.ts`. This control has no popup and no dialog -
+   * one row of `SegmentedButton`s and nothing else - so it joins the Host on the
+   * mechanism H1 built and nothing more. The measurement behind the claim is
+   * `docs/components/host.md`.
+   */
+  override val isHostable: Boolean
+    get() = true
+
   @Composable
   override fun Component(model: SegmentedControlModel) {
     val options = model.options

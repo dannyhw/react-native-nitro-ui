@@ -145,7 +145,15 @@ export const ARMS_WITHOUT_COMPONENT = [
  */
 export const ARM_SCOPES = {
   'nitro-ui-host': {
-    components: ['switch', 'slider', 'progress', 'button'],
+    components: [
+      'switch',
+      'slider',
+      'progress',
+      'button',
+      'segmented-control',
+      'picker',
+      'date-picker',
+    ],
     platform: 'android',
   },
 };

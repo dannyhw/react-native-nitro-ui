@@ -32,6 +32,7 @@ import {
   cellKey,
   ARM_SCOPES,
   armScopeCovers,
+  ARMS_WITHOUT_COMPONENT,
   comparableMetrics,
   componentOf,
   createLoadSampler,
@@ -66,16 +67,27 @@ const ITERATIONS = 20;
  * The arms a component's cells must carry.
  *
  * `IMPLEMENTATIONS` is every arm the runner knows about; `ARM_SCOPES` narrows the
- * ones that render only some controls (`nitro-ui-host`, the four hostable controls on
+ * ones that render only some controls (`nitro-ui-host`, the seven hostable controls on
  * Android). Naming the arms a cell must have, rather than "all of them", is what keeps
  * these assertions true when an arm exists that cannot serve the component - a missing
  * arm is only acceptable when it is a scoped one.
+ *
+ * `ARMS_WITHOUT_COMPONENT` narrows the same way the scheduler does: an arm with no
+ * mountable cell on the named platform is not a missing arm. It only narrows when a
+ * platform is named, because a platform-less schedule asks for every arm that mounts
+ * the control somewhere.
  */
 function armsFor(component, platform = null) {
   return new Set(
     IMPLEMENTATIONS.filter((name) => {
       const scope = ARM_SCOPES[name];
       if (!armScopeCovers(name, component)) {
+        return false;
+      }
+      if (
+        platform != null &&
+        ARMS_WITHOUT_COMPONENT.includes(`${platform}:${name}:${component}`)
+      ) {
         return false;
       }
       if (scope == null) {
@@ -1296,12 +1308,23 @@ describe('the Button cells (--component button)', () => {
      * unscoped arms, plus one scoped arm's cells for each component it renders. Both
      * halves are measured rather than folded into a product: a component losing a cell
      * moves the first number, and an arm escaping (or losing) its scope moves the second.
-     * `date-picker` is the unscoped probe because a `<Host>` refuses it, so its schedule
-     * is exactly what every other component's would be without the Host arm.
+     * Since H2b every bench control is hostable, so no component's schedule is naturally
+     * free of the Host arm any more: the baseline is that same schedule with the scoped
+     * arms taken out, which measures the quantity instead of assuming a probe. The half
+     * that rode on the probe is asserted in its own right below — the Host arm is scoped
+     * to Android, so an iOS schedule must not carry one.
      */
-    const unscoped = buildSchedule({ plan: 'quick', component: 'date-picker' });
+    const unscoped = buildSchedule({
+      plan: 'quick',
+      component: 'date-picker',
+    }).filter((entry) => ARM_SCOPES[entry.implementation] == null);
+    const iosSwitch = buildSchedule({
+      plan: 'quick',
+      component: 'switch',
+      platform: 'ios',
+    });
     expect(
-      unscoped.some((entry) => entry.implementation === 'nitro-ui-host')
+      iosSwitch.some((entry) => entry.implementation === 'nitro-ui-host')
     ).toBe(false);
     const hostCells = buildSchedule({
       plan: 'quick',
@@ -1613,6 +1636,10 @@ describe('the DatePicker cells (--component date-picker)', () => {
    * ~2.45 s per mount iteration, past the runner's per-launch budget. So those
    * cells do not exist on Android, and the schedule says so instead of burning
    * 180 s timeouts per launch.
+   *
+   * `nitro-ui-host` is on this list's other side: a hosted date field is a Compose
+   * `Dialog` opened from the Host's composition, which mounts on Android (H2b), so its
+   * cells are here. The two names this test is about stay out either way.
    */
   it('omits the Android arms that cannot mount a DatePicker', () => {
     const android = buildSchedule({
@@ -1622,8 +1649,8 @@ describe('the DatePicker cells (--component date-picker)', () => {
     });
     expect(
       [...new Set(android.map((entry) => entry.implementation))].sort()
-    ).toEqual(['nitro-ui', 'rn-core']);
-    expect(android.length).toBe(3 * 2 * 4);
+    ).toEqual(['nitro-ui', 'nitro-ui-host', 'rn-core']);
+    expect(android.length).toBe(3 * 3 * 4);
   });
 
   /** The exclusion is a property of the platform, not of the arm or the cell. */
@@ -1801,11 +1828,11 @@ describe('the Picker cells (--component picker)', () => {
 });
 
 /**
- * The shared-`<Host>` arm's scope (H1, widened to four controls by H2a).
+ * The shared-`<Host>` arm's scope (H1, widened to four controls by H2a and to seven by H2b).
  *
- * The arm composes what a `<Host>` can draw - Switch, Slider, linear Progress, Button -
- * and refuses the three a Host refuses (SegmentedControl, Picker, DatePicker, H2b's
- * scope); on iOS `<Host>` is a passthrough rather than a shared composition. Either way a
+ * The arm composes what a `<Host>` can draw - Switch, Slider, linear Progress, Button,
+ * SegmentedControl, Picker, DatePicker - and refuses what a Host refuses (an RN view, a
+ * nested Host); on iOS `<Host>` is a passthrough rather than a shared composition. Either way a
  * cell outside that scope is a launch that measures nothing under a name that promises
  * something, so the claim these tests hold is that such cells are never scheduled - and
  * that the arm is still measured where it *does* apply, or the D15 ratio against
@@ -1841,7 +1868,10 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     const scoped = ARM_SCOPES[HOST].components;
     expect([...scoped].sort()).toEqual([
       'button',
+      'date-picker',
+      'picker',
       'progress',
+      'segmented-control',
       'slider',
       'switch',
     ]);
@@ -1863,7 +1893,7 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
   });
 
   /**
-   * The four hostable controls each get their cells, per launch, like every other
+   * Every hostable control gets its cells, per launch, like every other
    * arm. A component quietly dropping out of the arm is how a ratio table loses a
    * head row without any test going red.
    */
@@ -1890,10 +1920,19 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     }
   });
 
+  /**
+   * Since H2b the arm covers every planned control, so the loop below walks an empty
+   * list. That is asserted out loud rather than left to pass silently: an empty loop is
+   * exactly how a scope grows without any test noticing, and the rule the loop guards -
+   * never schedule a cell for an arm that would render nothing - still has to hold for
+   * whatever a future plan adds that a Host cannot draw.
+   */
   it('schedules no cell of a control a Host refuses', () => {
-    for (const component of EVERY_COMPONENT.filter(
+    const refused = EVERY_COMPONENT.filter(
       (name) => !ARM_SCOPES[HOST].components.includes(name)
-    )) {
+    );
+    expect(refused).toEqual([]);
+    for (const component of refused) {
       expect(ARM_SCOPES[HOST].components.includes(component)).toBe(false);
       for (const platform of ['android', 'ios']) {
         const schedule = buildSchedule({
