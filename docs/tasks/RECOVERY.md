@@ -12,8 +12,7 @@
 > now (`bench/baselines/maintainer-mac-1/…`; this machine mints into `maintainer-mac-2/`), and
 > the iOS key comes from the simulator's device type (this machine's sims are named `nitro-ui A/B`).
 > Apex effort policy: `EFFORT-eval-2026-10-27.md`. Step 1 is brief A3, delegated as soon as X3 and X9 have released their leases (this machine is a
-> dedicated spare: benches need an idle machine, not a time of day). Step 3 (X3) is in flight in
-> `nitro-ui-worktrees/X3` · `task/X3-component-registry`.
+> dedicated spare: benches need an idle machine, not a time of day). Step 3 (X3) is merged, and so is X9.
 >
 > **Components:** 0.4 is a button-anchored Menu (G7a/G7b) plus a TextField spike (T18), starting
 > after X3 and X4 merge; see `PLAN-0.4.md`.

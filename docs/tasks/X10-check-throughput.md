@@ -34,7 +34,12 @@ passed.
    to the merge result's code tree (the branch tip, when `main` gained nothing since the branch
    point). Device gates already follow the tree rules, so leave them. Document it in
    `ORCHESTRATOR.md` "The loop" step 5.
-4. **CI:** `.github/workflows/ci.yml` runs `check` the same way, so CI and local agree. Keep the
+4. **Tooling list:** add the dev-only scripts that `gate-core.mjs` still counts as touching both
+   platforms (`scripts/gen-registry.mjs`, `scripts/registry-core.mjs`, `scripts/build-slot-core.mjs`,
+   `scripts/sync-example-lock.mjs`, `scripts/devices.example.json`, the new `scripts/check.mjs`) to
+   `TOOLING_FILES`, so a one-line change to them stops owing four device gates. Name each file and
+   say why it can't reach the app binary.
+5. **CI:** `.github/workflows/ci.yml` runs `check` the same way, so CI and local agree. Keep the
    job's name and its required status.
 
 Unit tests in `scripts/__tests__/` for the graph (ordering, fail-fast, no interleaving, step list

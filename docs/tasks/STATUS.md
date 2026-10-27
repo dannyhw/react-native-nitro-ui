@@ -43,5 +43,6 @@
 | D2 | Docs pass for 0.3.0 (README, component/architecture docs, CONTRIBUTING, AGENTS, plans) | Opus | orchestrator | merged (patch changeset → 0.3.1) |
 | T17 | iOS `<Host>` spike | Apex | — | report merged; not better (D23) — iOS `<Host>` is a passthrough |
 | X8 | Bench baselines per machine (`bench/baselines/<label>/<deviceKey>.json`, label refusals, iOS key from the simulator's device type) | Apex (xhigh; low/medium arms in `EFFORT-eval-2026-10-27.md`) | Opus | merged (1 impl + 1 fix round; review MERGE; tooling-only, check 496) |
-| X3 | Component registry + codegen | Apex | Opus | in progress |
+| X3 | Component registry + codegen (`component.json` per control, `bun run registry`/`regen`, `registry:check`, `merge=union` on nitrogen output) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE WITH FIXES, text fixes by orchestrator; all five merge gates green; merge test: 19 conflicted files vs 22, 0/104 entries lost after the recipe) |
 | A3 | Second machine's bench baselines (overnight, `--exclusive`) | Apex | orchestrator | scheduled 01:00 |
+| X9 | Tooling: `bench --dry-run`, lockfile follows releases (macOS `version` job), `doctor --prime`, one build at a time, `gate.mjs --background`/`wait`, unowned-device warnings | Apex | Opus | merged (1 impl + 1 fix round; review MERGE WITH FIXES; tooling-only merge exception, round-1 harnesses green) |
