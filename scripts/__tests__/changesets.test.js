@@ -242,8 +242,13 @@ describe('release-it is gone', () => {
     // script also refreshes `example/ios/Podfile.lock` — the action commits the tree
     // straight after this script, so that is the only moment the Version Packages
     // commit can be made internally consistent. `bun run check` then guards it.
+    //
+    // The `--preflight` first is the part to keep: `changeset version` writes, so a
+    // refusal after it leaves a half-versioned tree on a machine that only wanted a
+    // preview. `example-lock.test.js` proves the refusal itself writes nothing.
     expect(pkg.scripts['release:version']).toBe(
-      'changeset version && node scripts/sync-example-lock.mjs --fix'
+      'node scripts/sync-example-lock.mjs --preflight && changeset version && ' +
+        'node scripts/sync-example-lock.mjs --fix'
     );
     // Publishing is not a thing a checkout can do: CI stages, and a person
     // approves on npmjs.com. `changeset publish` would try `npm publish`, which

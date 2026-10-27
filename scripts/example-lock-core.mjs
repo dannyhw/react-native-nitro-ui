@@ -332,15 +332,16 @@ export function lockChurnProblem({
 }
 
 /**
- * Is CocoaPods actually usable here? The reason `--fix` refuses *before* touching
- * anything.
+ * Is CocoaPods actually usable here? The one answer to that question.
  *
- * `release:version` is `changeset version && sync-example-lock.mjs --fix`, and the
- * second half needs CocoaPods while the first half does not. On a laptop without
- * it - a Linux contributor following CONTRIBUTING to preview the next version - the
- * old order rewrote `package.json`, `CHANGELOG.md` and `.changeset/`, *then* failed,
- * leaving a half-applied version the doc never mentioned. The probe is the cheapest
- * thing that answers the question: `pod --version` costs a moment and writes nothing.
+ * `release:version` is `--preflight && changeset version && --fix`, and only the first
+ * and last stages need CocoaPods while the middle one does not. On a laptop without it
+ * - a Linux contributor following CONTRIBUTING to preview the next version - a refusal
+ * after the middle stage rewrites `package.json`, `CHANGELOG.md` and `.changeset/` and
+ * leaves a half-applied version, so the question is asked *before* that. Both stages
+ * call this one function, so the stage that asks and the stage that acts cannot
+ * disagree. The probe is the cheapest thing that answers it: `pod --version` costs a
+ * moment and writes nothing.
  *
  * @param {(cmd: string[]) => { ok: boolean, version?: string }} probe
  * @param {string | undefined} override `COCOAPODS_BIN`, honoured the way
