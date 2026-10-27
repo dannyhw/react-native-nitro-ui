@@ -30,7 +30,7 @@
 #
 # The rule for applying it: a file that `bun run regen` rewrites *completely*, so
 # whatever union produces is overwritten before it can survive, and a gate
-# compares the result (`nitrogen:check` for the one file below).
+# compares the result (`nitrogen:check` covers everything below).
 #
 # Everything else is excluded, on measurement rather than taste:
 #
