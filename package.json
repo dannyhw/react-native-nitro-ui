@@ -48,7 +48,7 @@
     "nitrogen:check": "node scripts/nitrogen-check.mjs",
     "registry": "node scripts/gen-registry.mjs --write",
     "registry:check": "node scripts/gen-registry.mjs --check",
-    "regen": "bun run nitrogen && bun run registry",
+    "regen": "bun run registry && bun run nitrogen && bun run registry",
     "autolinking:check": "node scripts/check-autolinking.mjs",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,mjs,ts,tsx}\"",

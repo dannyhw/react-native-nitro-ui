@@ -25,6 +25,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import {
   MANIFEST_BASENAME,
+  NON_CONTROL_AUTOLINKING,
   SIZING_TABLE_FILE,
   checkAutolinking,
   checkExampleScreens,
@@ -34,6 +35,7 @@ import {
   manifestsFromEntries,
   planRegistry,
   regionsFor,
+  replaceRegion,
   validateManifest,
 } from '../registry-core.mjs';
 
@@ -335,14 +337,20 @@ describe('registry:check drift detection', () => {
       ['ios/core/NitroUiDeclaredFallbacks.swift', /HybridNitroUiGauge/],
       ['src/components/Host/HostChildren.ts', /\[Gauge, 'Gauge'\]/],
       [SIZING_TABLE_FILE, /"HybridNitroUiGauge": "fillWidth"/],
+      // The entry nitrogen needs, written by the registry rather than hand-added:
+      // nitrogen reads `nitro.json` and throws for a view missing from it, so this has
+      // to exist before `regen`'s nitrogen half runs.
+      ['nitro.json', /"NitroUiGauge": \{/],
     ]) {
       expect(files[path] ?? `MISSING ${path}`).toMatch(pattern);
     }
+    expect(files['nitro.json']).toMatch(
+      /"NitroUiGauge": \{\n {6}"ios": \{\n {8}"language": "swift",\n {8}"implementationClassName": "HybridNitroUiGauge"/
+    );
     // A component with `realInput: false` must not gain a real-input row.
     expect(files['scripts/real-input/controls.mjs']).toBeUndefined();
-    // And the checks notice the parts a manifest cannot write on its own.
+    // And the checks notice the two parts a manifest cannot write on its own.
     const message = problems.join('\n');
-    expect(message).toMatch(/no autolinking entry for NitroUiGauge/);
     expect(message).toMatch(/src\/index\.ts: Gauge is in the registry/);
     // The tab and its row in the switch are generated; the screen behind them is not,
     // so the run refuses rather than writing an App.tsx that does not compile.
@@ -451,6 +459,150 @@ describe('the generated tables cover what they claim', () => {
         HybridNitroUiHost: 'intrinsic',
       }).join('\n')
     ).toMatch(/HybridNitroUiHost is not a self-sizing component/);
+  });
+
+  it('names an autolinking entry no manifest declares, and keeps it in the file', () => {
+    // The registry writes this section, so a leftover from a deleted component would
+    // otherwise vanish with no trace: nitrogen would keep generating glue for a view
+    // nothing in the registry knows about. Half of that is a report (this), half is
+    // that `--write` must not silently eat someone's config (the `keep` rule, and the
+    // `--check` test below) - but an entry that is neither a manifest's nor one of the
+    // two named non-controls is drift, and `--write` drops it.
+    const disk = JSON.parse(readRepo('nitro.json'));
+    disk.autolinking.NitroUiDeleted = disk.autolinking.NitroUiSwitch;
+    expect(checkAutolinking(manifests, disk, disk).join('\n')).toMatch(
+      /autolinking has NitroUiDeleted and no manifest declares it/
+    );
+    // The named non-controls are the two that are allowed to be there without one.
+    for (const name of NON_CONTROL_AUTOLINKING) {
+      expect(readRepo('nitro.json')).toContain(`"${name}": {`);
+    }
+    expect(checkAutolinking(manifests, disk).join('\n')).not.toMatch(
+      /NitroUiDeleted/
+    );
+  });
+
+  it('a sizing table that no longer parses is refused, not re-sorted from nothing', () => {
+    // A merge conflict left in the file parses as nothing, and "nothing" plus the
+    // manifests is a valid-looking table in manifest order. `--write` on its way to
+    // fixing something else would then quietly re-order a shipped file, and the later
+    // `registry:check` would call the result clean, because order is accepted.
+    const conflicted = readRepo(SIZING_TABLE_FILE).replace(
+      /^ {2}"HybridNitroUiButton.*$/m,
+      (line) => `<<<<<<< HEAD\n${line}\n=======\n>>>>>>> theirs`
+    );
+    const { problems, files } = runPlan(null, {
+      [SIZING_TABLE_FILE]: conflicted,
+    });
+    expect(problems.join('\n')).toMatch(
+      /is not valid JSON, so its key order cannot be preserved/
+    );
+    // and it writes nothing for that file, so the table on disk cannot be re-ordered
+    expect(files[SIZING_TABLE_FILE]).toBeUndefined();
+  });
+
+  it('a control that stops being hostable keeps its import', () => {
+    // `UNHOSTABLE_CONTROLS` in HostChildren.ts names the controls a Host refuses, and
+    // a row there needs the import as much as a hostable row does - the file's own
+    // comment says the next control "starts here, refused". An imports region that
+    // wanted only the hostable ones would therefore delete the import of a control
+    // that flips the flag, and `tsc` would not find the name (review M2).
+    const host = (text) =>
+      text.slice(
+        text.indexOf('export const HOSTABLE_CONTROLS'),
+        text.indexOf(']);', text.indexOf('export const HOSTABLE_CONTROLS'))
+      );
+    const imports = (text) =>
+      [
+        ...text.matchAll(/^import \{ ([A-Z]\w*) \} from '\.\.\/\1\/\1';$/gm),
+      ].map((m) => m[1]);
+    const rows = (text) =>
+      [...host(text).matchAll(/^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/gm)].map(
+        (m) => m[1]
+      );
+    const before = readRepo('src/components/Host/HostChildren.ts');
+    expect(imports(before)).toEqual(rows(before));
+
+    const flipped = repoManifests().map((m) =>
+      m.name === 'Switch' ? { ...m, hostable: false } : m
+    );
+    const flippedRun = runPlan(flipped);
+    expect(flippedRun.drift).toContain('src/components/Host/HostChildren.ts');
+    const after = flippedRun.files['src/components/Host/HostChildren.ts'];
+    // the row leaves HOSTABLE_CONTROLS...
+    expect(rows(after)).not.toContain('Switch');
+    // ...and the import stays, because UNHOSTABLE_CONTROLS is where it goes
+    expect(imports(after)).toContain('Switch');
+    // and what is left still resolves: every control the library has is imported
+    expect(imports(after).sort()).toEqual(
+      COMPONENT_DIRS.filter((name) => name !== 'Host')
+    );
+  });
+
+  it('an entry already in a shipped region is copied, not re-rendered', () => {
+    // The published-bytes rule, and the one shipped region where it is not a no-op:
+    // `nitro.json` accepts two spellings of an entry (`checkAutolinking` reads either
+    // a per-platform pair or a shared `all` entry, because that is what nitrogen
+    // itself emits), so an entry can be correct, ship in the published bytes, and not
+    // be what `render` would produce. Copying is what keeps the artifact still.
+    const spec = regionsFor(repoManifests()).find(
+      (region) => region.path === 'nitro.json'
+    );
+    const allShape = readRepo('nitro.json').replace(
+      [
+        '    "NitroUiSwitch": {',
+        '      "ios": {',
+        '        "language": "swift",',
+        '        "implementationClassName": "HybridNitroUiSwitch"',
+        '      },',
+        '      "android": {',
+        '        "language": "kotlin",',
+        '        "implementationClassName": "HybridNitroUiSwitch"',
+        '      }',
+        '    },',
+      ].join('\n'),
+      [
+        '    "NitroUiSwitch": {',
+        '      "all": {',
+        '        "language": "kotlin",',
+        '        "iosLanguage": "swift",',
+        '        "implementationClassName": "HybridNitroUiSwitch"',
+        '      }',
+        '    },',
+      ].join('\n')
+    );
+    expect(allShape).not.toBe(readRepo('nitro.json'));
+    // valid as far as the check is concerned, and different from the render
+    const manifests = repoManifests();
+    expect(checkAutolinking(manifests, JSON.parse(allShape))).toEqual([]);
+    const result = replaceRegion(allShape, spec);
+    expect(result.changed).toBe(false);
+    expect(result.content).toBe(allShape);
+    // The same file with the rule off in spirit: render does produce the other shape,
+    // which is why the copy is load-bearing rather than a no-op.
+    expect(
+      spec.render(manifests.find((m) => m.id === 'switch')).join('\n')
+    ).not.toContain('"iosLanguage"');
+  });
+
+  it('an autolinking entry the registry does not own keeps its bytes and its place', () => {
+    // `NitroUiCore` and `NitroUiHost` are autolinked but are not controls, and their
+    // entries are hand-written config (`NitroUiCore` is a plain HybridObject: a
+    // shared `all` entry, `language: "c++"`, which no manifest could render). A region
+    // that dropped everything it has no manifest for would delete them.
+    const spec = regionsFor(repoManifests()).find(
+      (region) => region.path === 'nitro.json'
+    );
+    const result = replaceRegion(readRepo('nitro.json'), spec);
+    expect(result.changed).toBe(false);
+    const kept = readRepo('nitro.json')
+      .split('\n')
+      .findIndex((line) => line === '    "NitroUiCore": {');
+    expect(kept).toBeGreaterThan(-1);
+    // still exactly where it was, and still the `all` shape nitrogen reads
+    expect(readRepo('nitro.json')).toMatch(
+      /"NitroUiCore": \{\n {6}"all": \{\n {8}"language": "c\+\+",/
+    );
   });
 
   it('accepts either shape nitrogen emits for an autolinking entry', () => {

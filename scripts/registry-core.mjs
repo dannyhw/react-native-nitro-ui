@@ -26,12 +26,18 @@
  *   conflict, run `bun run regen`, and both components' rows come back (CONTRIBUTING
  *   "Adding a component"). A *shipped* file gets no marker - see the anchored rule
  *   below.
- * - **A cross-check**: something else owns the file, and the check proves the
- *   manifest agrees. `nitro.json`'s `autolinking` is nitrogen's output (it rewrites
- *   the file on every run and `nitrogen:check` already gates it, so a second writer
- *   would only make the two checks fail in the other's order), and `src/index.ts`
- *   stays hand-written because its export names cannot be derived without special
- *   cases - both are checked, in `checkAutolinking` and `checkIndexExports`.
+ * - **A whole JSON file**, when a JSON object has nowhere to put a marker and prose
+ *   to sit beside: `nitro-ui.sizing.json` and `nitro.json`. Of the latter the registry
+ *   owns `autolinking` only - the namespaces, the module name and `ignorePaths` stay
+ *   as written. This is what makes `regen` work for a control that does not exist yet:
+ *   nitrogen *reads* `nitro.json` (`--config`) and throws for a Hybrid View missing
+ *   from it, so the entry has to be there before nitrogen runs.
+ *
+ * Everything else is a **cross-check**: something else owns the file and the check
+ * proves the manifest agrees with it - `src/index.ts`, which stays hand-written
+ * because its export names cannot be derived without special cases
+ * (`checkIndexExports`), and the example app's screens, which are behaviour
+ * (`checkExampleScreens`).
  *
  * ## Byte-identity, which is the reason shipped files are anchored
  *
@@ -92,13 +98,13 @@ export const MANIFEST_SCHEMA = {
     type: 'string',
     pattern: /^NitroUi[A-Z][A-Za-z0-9]*$/,
     readBy:
-      'the NitroUi<Name>Config.json key in viewConfigs.test.ts, and the autolinking key in nitro.json (cross-checked)',
+      'the NitroUi<Name>Config.json key in viewConfigs.test.ts, and the autolinking key this writes into nitro.json',
   },
   implementation: {
     type: 'string',
     pattern: /^HybridNitroUi[A-Z][A-Za-z0-9]*$/,
     readBy:
-      'the Android view-manager class, and the implementationClassName autolinking claims (cross-checked)',
+      'the Android view-manager class, and the implementationClassName this writes into nitro.json',
   },
   id: {
     type: 'string',
@@ -379,9 +385,11 @@ function isPreamble(line) {
  * lines. The run *ends* at the first line that is not an entry, and that is what
  * keeps a hand-written neighbour out of it: the commented `NitroUiHostViewManager()`
  * in `NitroUiPackage.kt`'s `listOf`, the `'host'` entry at the end of
- * `SMOKE_CONTROLS`, the `return true` at the end of a Swift closure. Both rules
- * therefore mean the same thing - the generator owns a contiguous block of entries
- * and nothing else - which is the property a merge relies on.
+ * `SMOKE_CONTROLS`, the `return true` at the end of a Swift closure. Where a region
+ * declares `entryEnds`, the run is measured in *blocks* instead of lines, so a
+ * multi-line entry (`nitro.json`'s autolinking) keeps its shape. Both rules therefore
+ * mean the same thing - the generator owns a contiguous block of entries and nothing
+ * else - which is the property a merge relies on.
  *
  * @returns {{from: number, to: number} | null} a half-open line range
  */
@@ -395,6 +403,14 @@ export function findRegionBounds(lines, region) {
       const line = lines[index];
       if (region.entryStart.test(line)) {
         if (from === -1) from = index;
+        if (region.entryEnds != null) {
+          // Walk to the end of this entry's block: it is the block, not the line,
+          // that is the entry (see `replaceRegion`).
+          while (index < lines.length && !region.entryEnds(lines[index])) {
+            index += 1;
+          }
+          if (index >= lines.length) return null;
+        }
         to = index + 1;
         continue;
       }
@@ -478,36 +494,66 @@ export function replaceRegion(content, region) {
   const wantedByKey = new Map(
     region.entries.map((manifest) => [region.keyOf(manifest), manifest])
   );
+  // Something in the file the region has no manifest for, and which the region is
+  // told to leave alone (`keep`): `nitro.json`'s `NitroUiCore` and `NitroUiHost`,
+  // which are autolinked but are not controls. Dropping them would be the generator
+  // deleting a file's own config because it has no opinion on it, and `checkAutolinking`
+  // is where a name nobody declares belongs - as a report, not a silent edit.
+  const kept = existing
+    .map((entry) => entry.key)
+    .filter(
+      (key) =>
+        !wantedByKey.has(key) && region.keep?.(key, region.manifests) === true
+    );
   const ordered = orderRegionEntries(
     existing.map((entry) => entry.key),
-    [...wantedByKey.keys()]
+    [...wantedByKey.keys(), ...kept]
   );
-  const body = ordered.flatMap((key) => {
+  const blocks = ordered.map((key) => {
+    const current = byKey.get(key);
+    const manifest = wantedByKey.get(key);
+    // A kept key (`nitro.json`'s NitroUiCore / NitroUiHost) has no manifest, so its
+    // bytes are all it has - and they are not the registry's to rewrite anyway.
+    if (manifest == null) return current.lines;
     // In a *shipped* file an entry already there is copied rather than re-rendered:
     // byte-identity is the published artifact's requirement (see the header). In an
     // unshipped one the region is re-rendered from the manifest, which is what makes
     // the manifest authoritative there - a row whose text no longer matches its
     // manifest is drift, not something the generator papers over by keeping it.
-    const current = byKey.get(key);
     if (current != null && region.shipped === true) return current.lines;
-    const rendered = region.render(wantedByKey.get(key));
-    return Array.isArray(rendered) ? rendered : [rendered];
+    const rendered = region.render(manifest);
+    return Array.isArray(rendered) ? [...rendered] : [rendered];
   });
 
   // A region whose last entry ends a statement (`… | 'picker';`) owns that `;`,
   // because prettier insists it sits on the member's own line and the end marker has
   // to come after it. So appending or dropping a member has to move the terminator.
-  if (region.terminator != null && body.length > 0) {
-    const strip = (line) =>
-      line.endsWith(region.terminator)
-        ? line.slice(0, -region.terminator.length)
-        : line;
-    for (let position = 0; position < body.length; position += 1) {
-      body[position] = strip(body[position]);
-    }
-    body[body.length - 1] += region.terminator;
+  if (region.terminator != null) {
+    const strip = (block) => {
+      const last = block.length - 1;
+      if (block[last].endsWith(region.terminator)) {
+        block[last] = block[last].slice(0, -region.terminator.length);
+      }
+    };
+    blocks.forEach(strip);
+    const last = blocks.at(-1);
+    if (last != null) last[last.length - 1] += region.terminator;
   }
 
+  // The mirror case, for a JSON object: every member but the last is followed by a
+  // comma, so appending or dropping an entry has to move the separator too.
+  if (region.jsonSeparator === true) {
+    for (const block of blocks) {
+      const last = block.length - 1;
+      if (block[last].endsWith(',')) block[last] = block[last].slice(0, -1);
+    }
+    for (const block of blocks.slice(0, -1)) {
+      const last = block.length - 1;
+      block[last] += ',';
+    }
+  }
+
+  const body = blocks.flat();
   const nextText = [
     ...lines.slice(0, bounds.from),
     ...body,
@@ -558,12 +604,52 @@ export function regionsFor(manifests) {
 
   return [
     // ── Shipped: anchored, no marker, byte-identical output ───────────────────
+    //
+    // `nitro.json` before anything else: nitrogen reads it (`--config`) and throws
+    // for a Hybrid View it cannot find in `autolinking`, so the entry has to exist
+    // before `regen`'s nitrogen half runs. That is the whole reason this is generated
+    // rather than checked - not a second writer fighting nitrogen over the file, since
+    // nitrogen never writes it.
+    withManifests({
+      path: 'nitro.json',
+      anchor: '  "autolinking": {',
+      describe: 'the autolinking entries',
+      shipped: true,
+      entries: manifests,
+      keyOf: (manifest) => manifest.hybridView,
+      // An entry is its key's whole object. JSON has no comment to mark one, so the
+      // shape is the marker: it opens at `"Key": {` and ends where the nesting does,
+      // at the `}` that closes it - and the section's last entry has no comma, so the
+      // boundary has to be the section's own closing line rather than an entry shape.
+      entryStart: /^ {4}"([A-Za-z][A-Za-z0-9]*)": \{$/,
+      entryEnds: (line) => /^ {4}\},?$/.test(line),
+      entryKey: (block) =>
+        /^ {4}"([A-Za-z][A-Za-z0-9]*)": \{$/.exec(block[0])?.[1] ?? null,
+      jsonSeparator: true,
+      keep: (key) => NON_CONTROL_AUTOLINKING.includes(key),
+      render: (m) => [
+        `    "${m.hybridView}": {`,
+        '      "ios": {',
+        '        "language": "swift",',
+        `        "implementationClassName": "${m.implementation}"`,
+        '      },',
+        '      "android": {',
+        '        "language": "kotlin",',
+        `        "implementationClassName": "${m.implementation}"`,
+        '      }',
+        '    }',
+      ],
+    }),
     withManifests({
       path: 'src/components/Host/HostChildren.ts',
       anchor: "} from 'react-native';",
-      describe: 'the hostable control imports',
+      describe: 'the control imports',
       shipped: true,
-      entries: where('hostable'),
+      // Every control, hostable or not: `UNHOSTABLE_CONTROLS` below names the ones a
+      // Host refuses, and a row there needs the import too. Wanting only the hostable
+      // ones would delete the import of a control that flips to `hostable: false`, and
+      // `tsc` would then not find the name.
+      entries: manifests,
       keyOf: NAME,
       entryStart: /^import \{ ([A-Z]\w*) \} from '\.\.\/\1\/\1';$/,
       render: (m) => `import { ${m.name} } from '../${m.name}/${m.name}';`,
@@ -811,9 +897,19 @@ export function realInputRow(manifest) {
  *
  * @param {any[]} manifests
  * @param {Record<string, string> | null} current the file as it is now, or null
+ * @param {string} [currentText] the raw text, so a file that does not parse can be
+ *   refused rather than silently re-ordered from nothing (`planRegistry`).
  * @returns {string} the file's text, with a trailing newline
  */
-export function sizingTableContent(manifests, current) {
+export function sizingTableContent(manifests, current, currentText) {
+  if (current == null && currentText != null) {
+    // Not a conflict, exactly - but the same failure: with nothing parsed, the key
+    // order would come from the manifests alone, and `--write` would quietly re-sort
+    // a shipped file on its way to fixing something else.
+    throw new Error(
+      `${SIZING_TABLE_FILE}: is not valid JSON, so its key order cannot be preserved - resolve it (a merge conflict?) and run bun run registry`
+    );
+  }
   const wanted = new Map(
     manifests
       .filter((m) => m.sizing != null)
@@ -852,40 +948,51 @@ export const NON_CONTROL_AUTOLINKING = ['NitroUiCore', 'NitroUiHost'];
 export const NON_COMPONENT_EXPORTS = ['Host'];
 
 /**
- * The autolinking entries nitrogen writes, checked against the manifests.
+ * The autolinking entries of `nitro.json`, checked against the manifests.
  *
- * Cross-checked rather than generated: nitrogen owns `nitro.json`, rewrites it on
- * every run, and orders its entries by spec-discovery order rather than by name - so
- * a second writer would make `nitrogen:check` and `registry:check` fail in whichever
- * order they ran last. What the registry *can* do is prove the manifest still
- * describes the same control, and name an autolinked view no manifest declares (a
- * component added the old way, or one deleted and left behind).
+ * The registry writes these entries (see `regionsFor`: the region runs first, so the
+ * entry exists before nitrogen reads the file). What this checks is the half a
+ * generator cannot do by writing: that an entry a human hand-wrote into this file
+ * still describes the same control (a wrong `implementationClassName`, or a language
+ * this library does not build for, nitrogen accepts quietly and generates wrong glue
+ * for), and that nothing in here belongs to a component no manifest declares.
+ *
+ * The two halves read different text, on purpose (`planRegistry`): the "manifest has
+ * no entry" half reads what the generator just produced, because a new component's
+ * entry is exactly what its own `--write` is adding; the "nobody declares this entry"
+ * half reads the bytes on disk, because that stray entry has to survive the generator
+ * for the check to mean anything, and it is a file edit - reporting drift the write
+ * would fix would tell you to run the command that deleted your evidence.
+ *
+ * @param {any[]} manifests
+ * @param {any} nitro the parsed `nitro.json` the generator produced
+ * @param {any} [onDisk] the parsed file as checked out, for the stray-entry half
  */
-export function checkAutolinking(manifests, nitro) {
+export function checkAutolinking(manifests, nitro, onDisk) {
   const problems = [];
   const autolinking = nitro?.autolinking;
   if (autolinking == null || typeof autolinking !== 'object') {
-    return ['nitro.json has no autolinking section - run bun run nitrogen'];
+    return ['nitro.json has no autolinking section - run bun run registry'];
   }
   for (const manifest of manifests) {
     const entry = autolinking[manifest.hybridView];
     if (entry == null) {
       problems.push(
-        `nitro.json: no autolinking entry for ${manifest.hybridView} (${manifest.name}) - its .nitro.ts spec is missing, or run bun run nitrogen`
+        `nitro.json: no autolinking entry for ${manifest.hybridView} (${manifest.name}) - run bun run registry`
       );
       continue;
     }
     for (const platform of ['ios', 'android']) {
       const language = platform === 'ios' ? 'swift' : 'kotlin';
-      // nitrogen writes one entry per platform, or one `all` entry whose fields are
-      // shared - where `language` is the primary (Android, for this library) and
+      // A hand-written entry may be one per platform, or one `all` entry whose fields
+      // are shared - where `language` is the primary (Android, for this library) and
       // `iosLanguage` overrides it for iOS. So the claimed language depends on which
       // shape the entry has, and guessing across both makes a correct spec look wrong.
       const perPlatform = entry[platform];
       const claim = perPlatform ?? entry.all;
       if (claim == null) {
         problems.push(
-          `nitro.json: ${manifest.hybridView} has no ${platform} autolinking entry - run bun run nitrogen`
+          `nitro.json: ${manifest.hybridView} has no ${platform} autolinking entry`
         );
         continue;
       }
@@ -911,7 +1018,7 @@ export function checkAutolinking(manifests, nitro) {
     ...manifests.map((m) => m.hybridView),
     ...NON_CONTROL_AUTOLINKING,
   ]);
-  for (const key of Object.keys(autolinking)) {
+  for (const key of Object.keys(onDisk?.autolinking ?? {})) {
     if (!known.has(key)) {
       problems.push(
         `nitro.json: autolinking has ${key} and no manifest declares it - delete the component, or add its src/components/<Name>/${MANIFEST_BASENAME}`
@@ -1168,20 +1275,32 @@ export function planRegistry(manifests, readFile) {
     );
   } else {
     checked.add(SIZING_TABLE_FILE);
-    const sizing = sizingTableContent(manifests, parseJson(sizingText));
-    if (sizingText !== sizing) files[SIZING_TABLE_FILE] = sizing;
+    try {
+      const sizing = sizingTableContent(
+        manifests,
+        parseJson(sizingText),
+        sizingText
+      );
+      if (sizingText !== sizing) files[SIZING_TABLE_FILE] = sizing;
+    } catch (error) {
+      problems.push(error instanceof Error ? error.message : String(error));
+    }
   }
   // The cross-checks - files something else owns, which a manifest has to agree with.
-  // These are what turn a manifest from a note into a claim, and they are the ones the
-  // generator *cannot* fix, so `bun run registry` reports them instead of pretending a
-  // `--write` finished the job.
+  // These are what turn a manifest from a note into a claim.
   //
-  // `nitro.json` and `src/index.ts` are checked against the bytes on disk, because
-  // nothing here writes them. The example check runs on the text this plan produces:
-  // the tab bar and the switch are generated, so checking the bytes on disk would
-  // report the tab a new component's own `--write` is about to add as a blank body.
+  // Three of them run on the text this plan *produces*, for one reason each: `nitro.json`
+  // and `example/src/App.tsx` because the generator writes them, and checking the bytes
+  // on disk would report the entry/tab a new component's own `--write` is about to add
+  // as missing - which would make `bun run registry` refuse to do the very job it is for.
+  // `src/index.ts` is hand-written and nothing here writes it, so that one reads disk.
   problems.push(
-    ...checkAutolinking(manifests, parseJson(readFile('nitro.json')))
+    ...checkAutolinking(
+      manifests,
+      parseJson(working.get('nitro.json') ?? readFile('nitro.json')),
+      // The stray-entry half reads the file as checked out: see checkAutolinking.
+      parseJson(readFile('nitro.json'))
+    )
   );
   problems.push(
     ...checkIndexExports(
