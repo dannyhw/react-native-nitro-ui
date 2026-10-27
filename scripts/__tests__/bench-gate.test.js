@@ -1104,7 +1104,7 @@ describe('sample completeness (round 4)', () => {
 });
 
 describe('--check against a committed baseline', () => {
-  // `--check` reads `bench/baselines/<deviceKey>.json` through
+  // `--check` reads `bench/baselines/<machine-label>/<deviceKey>.json` through
   // `baselineTable()`/`baselineNoise()` rather than a run, and until round 4 no
   // test went down that path - the reviewer had to script it by hand to prove
   // the gate fires there at all.
