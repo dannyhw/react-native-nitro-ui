@@ -1183,18 +1183,36 @@ if (Platform.OS === 'android') {
       ).toBe(0);
     });
 
-    it('leaves no dialog behind when the Host is dropped while one is open', async () => {
+    it('comes down with its row, and leaves nothing when the Host is dropped', async () => {
       await mount(<PopupHost log={log} />);
       const first = need(log.dates.date, 'hosted date picker');
       first.nuiTestPresent();
       await waitForDate(first, (r) => r.presented && r.livePresentations === 1);
-      // A sibling leaving the Host's column must not strand the window ...
+      // ... a row *above* it leaves, and its row is re-framed: the dialog comes down with
+      // the row, which is the rule `docs/components/host.md` states for both popup
+      // controls. Measured, both halves (H2b fix round, `HostPopups` probe):
+      // a hosted menu whose row moved reads `expanded=0;live=0`, and so does a hosted
+      // dialog - and the dialog used to read `presented=1;live=1` here, a window still
+      // hanging over a row that was no longer there. That was the bug, not the contract.
       log.setPickerPresent?.(false);
+      const moved = await waitForDate(first, (r) => !r.presented);
+      expect(moved.livePresentations).toBe(0);
+      // A change that leaves the row where it is must not close it either: this is the
+      // guard against "tear the window down whenever the Host recomposes". A sibling's
+      // key changing takes *that sibling's* group out and moves nothing else, and the
+      // dialog above it is still up - measured as `presented=1`, `livePresentations=1`.
+      log.setPickerPresent?.(true);
+      await settle(500);
+      first.nuiTestPresent();
+      await waitForDate(first, (r) => r.presented && r.livePresentations === 1);
+      log.setPickerKey?.('picker-b');
       await settle(500);
       expect(parseDateReport(first.nuiTestStateReport()).presented).toBe(true);
       expect(
         parseDateReport(first.nuiTestStateReport()).livePresentations
       ).toBe(1);
+      log.setPickerKey?.('picker-a');
+      await settle(300);
       // ... and dropping the Host while a dialog is up must take the window with it. Read
       // on a fresh mount, because the dropped one cannot report its own leak.
       const { unmount } = await mount(<PopupHost log={log} />);
