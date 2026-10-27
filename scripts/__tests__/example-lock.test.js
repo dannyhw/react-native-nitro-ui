@@ -249,19 +249,30 @@ describe('undoing what a lock refresh also wrote', () => {
     tracked: [],
     untracked: [],
   };
+  // The names are the real by-products: `project.pbxproj` is modified on every
+  // install (the Podfile's `post_install` strips the machine-local ccache keys out of
+  // it), and a developer's breakpoint list is untracked and *not* ignored, which is
+  // what makes it a leak - the changesets action commits every untracked non-ignored
+  // file it finds. `.xcode.env.local`, by contrast, is gitignored, so it can never
+  // reach this list at all (proved over a real git above).
   const after = {
     tracked: [
       'example/ios/Podfile.lock',
       'example/ios/NitroUiExample.xcodeproj/project.pbxproj',
       'src/index.ts',
     ],
-    untracked: ['example/ios/.xcode.env.local', 'notes.md'],
+    untracked: [
+      'example/ios/NitroUiExample.xcodeproj/xcdebugger/Breakpoints_v2.xcbkptlist',
+      'notes.md',
+    ],
   };
 
   it('keeps the lock and restores everything else it touched', () => {
     expect(sideEffectsToUndo({ before, after })).toEqual({
       restore: ['example/ios/NitroUiExample.xcodeproj/project.pbxproj'],
-      remove: ['example/ios/.xcode.env.local'],
+      remove: [
+        'example/ios/NitroUiExample.xcodeproj/xcdebugger/Breakpoints_v2.xcbkptlist',
+      ],
       leaveAlone: [],
       unknown: false,
     });
