@@ -103,9 +103,10 @@ red `check`: I was mutating `scripts/gate-core.mjs` while it ran, and it recorde
 - `says the check could not run rather than reporting an idle machine` -> `unownedCheckProblem({xcrunOk: true, adbOk: true})` -> red
 - `warns about a booted pool simulator…` (+1) -> simulator listing never read -> red
 
-Not run: mutating `decideWait`'s `exitCode: 0` inside a `'running'` decision stayed green — an
-equivalent mutant, since `gate.mjs` only reads `exitCode` when `kind === 'exit'`. Noted rather than
-papered over.
+That is 41 mutations that went red and one that did not: mutating `decideWait`'s `exitCode: 0` inside
+a `'running'` decision stayed green, an equivalent mutant, since `gate.mjs` only reads `exitCode` when
+`kind === 'exit'`. Noted rather than papered over. (463 unit tests, 19 suites, all green; `check`
+reports 595 tests across all 31 suites.)
 
 ## Files changed
 
