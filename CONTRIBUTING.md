@@ -513,10 +513,9 @@ unbuilt change cannot pass here either. Both install, point the debug build at y
 `METRO_PORT`, and read the screen afterwards - `accessibilityIdentifier` on iOS,
 `uiautomator dump` on Android - which is what a person and a screen reader have.
 Neither script boots or shuts down a device, and neither accepts a device it was
-not told about: `IOS_UDID` and `ANDROID_AVD`/`ANDROID_SERIAL` are required, and
-an emulator running another AVD is refused. A lease exports the simulator as
-`IOS_SIM_UDID`, which the iOS runner does not read yet, so from a leased shell
-pass `IOS_UDID=$IOS_SIM_UDID` (a recorded follow-up).
+not told about: a simulator UDID (`IOS_UDID`, or the `IOS_SIM_UDID` a lease
+exports) and `ANDROID_AVD`/`ANDROID_SERIAL` are required, and an emulator running
+another AVD is refused.
 
 They are **not** part of `bun run check`: they need a booted device, a simulator
 build and several minutes. Run them when you change how a control receives
