@@ -1,6 +1,6 @@
 # Recovery snapshot
 
-> **2026-10-27:** **0.2.0 published** (H2a Host controls; owner merged Version Packages #2 and approved; registry shasum = CI `51b609ff…`, tag `v0.2.0`). H2b ships as 0.3.0. X2, X6, X7 and H2b merged; **nothing in flight** (clean point to move the orchestrator, see below). 0.3.0 Version Packages PR pending; each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). If sessions are gone, re-delegate each from its brief.
+> **2026-10-27:** **0.3.0 published** (all seven controls hostable on Android; registry shasum = CI `b57a4fae…`, tag `v0.3.0`); docs pass D2 merged, ships as 0.3.1 via the Version Packages PR. Earlier: **0.2.0 published** (H2a Host controls; owner merged Version Packages #2 and approved; registry shasum = CI `51b609ff…`, tag `v0.2.0`). H2b ships as 0.3.0. X2, X6, X7 and H2b merged; **nothing in flight** (clean point to move the orchestrator, see below).  each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). If sessions are gone, re-delegate each from its brief.
  — 2026-10-23 23:50 local
 
 Written because the machine may restart (at 23:41:02 CoreSimulatorService got SIGTERM and shut down
