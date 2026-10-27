@@ -48,8 +48,20 @@ import {
   pickIosRuntime,
   renderDevicesConfig,
   simulatorsByUdid,
+  simulatorsByUdidWithState,
+  emulatorsFromAdbDevices,
+  unownedBootedDevices,
+  unownedCheckProblem,
+  coldCacheWarning,
+  mainCheckoutPath,
 } from './doctor-core.mjs';
-import { normalizeDevices, stateHome, statePaths } from './lease-core.mjs';
+import {
+  activeLeases,
+  normalizeDevices,
+  readJson,
+  stateHome,
+  statePaths,
+} from './lease-core.mjs';
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -479,24 +491,38 @@ function checkGitAndAgents() {
         : `not on PATH (${why})`,
     });
   }
-  const ccache = run('ccache', ['--version']);
+  const ccacheVersion = run('ccache', ['--version']);
   results.push({
     area: 'build',
     name: 'ccache',
-    status: ccache.ok ? 'ok' : 'warn',
-    detail: ccache.ok
-      ? ccache.stdout.split('\n')[0]
+    status: ccacheVersion.ok ? 'ok' : 'warn',
+    detail: ccacheVersion.ok
+      ? ccacheVersion.stdout.split('\n')[0]
       : 'not installed (optional; faster native rebuilds)',
-    fix: ccache.ok ? undefined : 'brew install ccache',
+    fix: ccacheVersion.ok ? undefined : 'brew install ccache',
+  });
+  // Whether the *caches* are warm, which is a different question from whether
+  // ccache is installed: the first native build on a fresh machine cost 9.5 min
+  // on iOS and 4 m 43 s on Android against 138 s and 17 s warm.
+  const stats = ccacheVersion.ok
+    ? run('ccache', ['--show-stats'], { timeout: 20_000 }).stdout
+    : null;
+  const cache = coldCacheWarning(stats);
+  results.push({
+    area: 'build',
+    name: 'build caches',
+    status: cache.status === 'ok' ? 'ok' : 'warn',
+    detail: cache.detail,
+    fix: cache.fix,
   });
   return results;
 }
 
 /**
- * @param {{ runtime: { identifier: string, version: string } | null, emulator: string }} context
+ * @param {{ runtime: { identifier: string, version: string } | null, emulator: string, adb: string | null }} context
  * @returns {Result[]}
  */
-function checkDevices({ runtime, emulator }) {
+function checkDevices({ runtime, emulator, adb }) {
   const { devices: file } = statePaths(stateHome());
   if (!existsSync(file)) {
     return [
@@ -523,9 +549,8 @@ function checkDevices({ runtime, emulator }) {
       },
     ];
   }
-  const simulators = simulatorsByUdid(
-    json('xcrun', ['simctl', 'list', 'devices', '-j']) ?? {}
-  );
+  const listingJson = json('xcrun', ['simctl', 'list', 'devices', '-j']);
+  const simulators = simulatorsByUdid(listingJson ?? {});
   const avds = existsSync(emulator)
     ? parseAvdList(run(emulator, ['-list-avds']).stdout)
     : new Set();
@@ -549,6 +574,99 @@ function checkDevices({ runtime, emulator }) {
           ? undefined
           : 'fix the file by hand, or move it away and run --setup',
     },
+    ...checkUnownedDevices(config, listingJson, adb),
+  ];
+}
+
+/**
+ * Pool devices that are booted while no lease holds them (X9 item 6).
+ *
+ * `devices.json` says what *can* be leased; it never said what is running with no
+ * owner, which is the state that makes harness numbers move: a stranger's
+ * simulator competes for the same cores, and the only evidence was that the
+ * machine felt slow. A live lease is a legitimate owner, so those pairs are left
+ * alone, and so is the reserved emulator — nobody may lease it, so telling its
+ * owner to shut it down is not this script's call.
+ *
+ * Warnings only, on purpose: doctor reports on a machine it does not own and
+ * never shuts a device down.
+ *
+ * @param {ReturnType<typeof normalizeDevices>} config
+ * @param {object | null} listingJson raw `simctl list devices -j`, or null when xcrun did not answer
+ * @param {string | null} adb path to adb, or null when the SDK is missing
+ * @returns {Result[]}
+ */
+function checkUnownedDevices(config, listingJson, adb) {
+  const listing = listingJson ?? {};
+  // Null means "adb could not run", which is a different answer from "adb ran and
+  // nothing is attached", so it has to survive to `unownedCheckProblem`.
+  const adbText =
+    adb != null && existsSync(adb)
+      ? run(adb, ['devices']).stdout || null
+      : null;
+  const { leases: leaseFile } = statePaths(stateHome());
+  // Read-only: `activeLeases` drops what has outlived its ttl without rewriting the
+  // file, which is `lease.mjs`'s job, not a report's.
+  let liveLeases = [];
+  try {
+    liveLeases = activeLeases(readJson(leaseFile, { leases: [] }), Date.now());
+  } catch (error) {
+    return [
+      {
+        area: 'devices',
+        name: 'unowned devices',
+        status: 'fail',
+        detail: `leases unreadable, so nothing can be called owned: ${String(error.message ?? error)}`,
+        fix: 'inspect or remove ~/.nitro-ui/leases.json (lease.mjs recreates it)',
+      },
+    ];
+  }
+
+  const attached = emulatorsFromAdbDevices(adbText, config.pairs);
+  const warnings = unownedBootedDevices({
+    pool: config,
+    simulators: simulatorsByUdidWithState(listing),
+    emulators: attached,
+    leases: liveLeases,
+    reservedPorts: config.reservedEmulatorPorts,
+  });
+  const problem = unownedCheckProblem({
+    xcrunOk: listingJson != null,
+    adbOk: adbText != null,
+  });
+  if (warnings.length === 0 && problem == null) {
+    // Nothing is loose: say so, so `warn`-free output is evidence rather than
+    // silence about a check that quietly did not run.
+    return [
+      {
+        area: 'devices',
+        name: 'unowned devices',
+        status: 'ok',
+        detail: 'every booted pool device is held by a lease',
+      },
+    ];
+  }
+  const rows =
+    problem == null
+      ? []
+      : [
+          {
+            area: 'devices',
+            name: 'unowned devices',
+            status: /** @type {'warn'} */ ('warn'),
+            detail: problem,
+            fix: 'install the Android SDK (adb) and Xcode (xcrun), or ignore this row on a machine with neither',
+          },
+        ];
+  return [
+    ...rows,
+    ...warnings.map((warning, index) => ({
+      area: 'devices',
+      name: `unowned device ${String(index + 1)}`,
+      status: /** @type {'warn'} */ ('warn'),
+      detail: warning,
+      fix: 'shut it down, or lease it while you use it: node scripts/lease.mjs acquire --task <ID>',
+    })),
   ];
 }
 
@@ -712,6 +830,91 @@ function setupDevices({ runtime, tools }) {
   return results;
 }
 
+/**
+ * Builds both platforms once, in the main checkout, so the first real build of the
+ * first task is not the cold one (`coldCacheWarning` is what points here).
+ *
+ * Why the main checkout: ccache and Gradle's build cache are shared per user
+ * anyway, but Xcode's derived data and `Pods/` live in the directory that built,
+ * so priming from a task's worktree would warm only the shared half and then be
+ * deleted with the worktree.
+ *
+ * The work is done by `scripts/build-app.mjs` rather than a copy of its two
+ * command lines: that is where the stamp, ccache launcher, arch default and the
+ * machine-wide build slot live, and a prime that skipped the slot would be the
+ * exact load-13 situation it exists to prevent.
+ *
+ * @param {{ log?: (message: string) => void, timeoutMinutes?: number }} [options]
+ * @returns {Result[]}
+ */
+function primeCaches({
+  log = (m) => process.stderr.write(`${m}\n`),
+  timeoutMinutes = 45,
+} = {}) {
+  const checkout = mainCheckoutPath({
+    toplevel: run('git', ['rev-parse', '--show-toplevel']).stdout || null,
+    commonDir: run('git', ['rev-parse', '--git-common-dir']).stdout || null,
+  });
+  if (checkout == null) {
+    return [
+      {
+        area: 'prime',
+        name: 'main checkout',
+        status: 'fail',
+        detail: 'git did not say where this repo lives',
+        fix: 'run `node scripts/build-app.mjs --platform ios|android` in the main checkout',
+      },
+    ];
+  }
+  // The main checkout's *own* script, run from its own directory: it may be on a
+  // different branch than this worktree, and the point is to warm the caches that
+  // checkout's builds use.
+  const script = path.join(checkout, 'scripts/build-app.mjs');
+  const results = [];
+  // The build's own output goes to *this process's stderr*, live: a cold build
+  // takes minutes and a caller watching it wants to see why it is slow. Stdout
+  // stays untouched so `doctor --json --prime` is still parseable JSON.
+  const buildStdio = /** @type {('ignore' | 2)[]} */ (['ignore', 2, 2]);
+  for (const platform of ['ios', 'android']) {
+    log(
+      `doctor: priming ${platform} in ${checkout} (this is the cold build: minutes, not seconds)`
+    );
+    const built = spawnSync(
+      process.execPath,
+      [script, '--platform', platform],
+      {
+        cwd: checkout,
+        stdio: buildStdio,
+        timeout: timeoutMinutes * 60_000,
+        env: process.env,
+      }
+    );
+    results.push({
+      area: 'prime',
+      name: `build ${platform}`,
+      status: built.status === 0 ? 'ok' : 'fail',
+      detail:
+        built.status === 0
+          ? `built in ${checkout}`
+          : `exit ${String(built.status ?? built.signal)} in ${checkout}`,
+      fix:
+        built.status === 0
+          ? undefined
+          : `node scripts/build-app.mjs --platform ${platform} (run from ${checkout})`,
+    });
+  }
+  const stats = run('ccache', ['--show-stats'], { timeout: 20_000 });
+  const cache = coldCacheWarning(stats.ok ? stats.stdout : null);
+  results.push({
+    area: 'prime',
+    name: 'caches after priming',
+    status: cache.status === 'ok' ? 'ok' : 'warn',
+    detail: cache.detail,
+    fix: cache.fix,
+  });
+  return results;
+}
+
 const MARK = { ok: '✔', warn: '!', fail: '✖' };
 
 function print(results) {
@@ -733,9 +936,13 @@ function print(results) {
 }
 
 export function main(argv = process.argv.slice(2)) {
-  const unknown = argv.filter((arg) => !['--setup', '--json'].includes(arg));
+  const unknown = argv.filter(
+    (arg) => !['--setup', '--prime', '--json'].includes(arg)
+  );
   if (unknown.length > 0) {
-    process.stderr.write('usage: node scripts/doctor.mjs [--setup] [--json]\n');
+    process.stderr.write(
+      'usage: node scripts/doctor.mjs [--setup] [--prime] [--json]\n'
+    );
     return 2;
   }
   const results = [...checkMachine(), ...checkJs()];
@@ -748,8 +955,18 @@ export function main(argv = process.argv.slice(2)) {
     );
   }
   results.push(
-    ...checkDevices({ runtime: ios.runtime, emulator: android.tools.emulator })
+    ...checkDevices({
+      runtime: ios.runtime,
+      emulator: android.tools.emulator,
+      adb: android.tools.adb,
+    })
   );
+  // Last, and not part of a plain doctor run: priming is a dozen minutes of
+  // compiling that nobody asked for while reading a report. `--json` still gets
+  // the rows so a machine-mint script can read what it cost.
+  if (argv.includes('--prime')) {
+    results.push(...primeCaches());
+  }
   if (argv.includes('--json')) {
     process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
   } else {
