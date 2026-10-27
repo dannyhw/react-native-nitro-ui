@@ -31,7 +31,6 @@ import {
   checkExampleScreens,
   checkIndexExports,
   checkRealInputRows,
-  checkSizingTable,
   manifestsFromEntries,
   planRegistry,
   regionsFor,
@@ -163,6 +162,26 @@ describe('component manifest schema', () => {
     );
     // A component with no real-input row needs no title.
     expect(check({ realInput: false, realInputTitle: undefined })).toEqual([]);
+  });
+
+  it('rejects a label or title the generated line cannot carry', () => {
+    // Both are rendered inside single quotes (the tab bar, the real-input row), so an
+    // apostrophe would produce a file that does not parse - and the same text also
+    // goes into files the generator does not write, so it cannot be escaped in one
+    // place and left raw in the other.
+    expect(check({ exampleLabel: "Users' Switch" }).join('\n')).toMatch(
+      /exampleLabel.*contains a quote or a line break/
+    );
+    expect(
+      check({ realInputTitle: "a real tap flips the Switch's box" }).join('\n')
+    ).toMatch(/realInputTitle.*contains a quote or a line break/);
+    // Nothing in the tree trips it, which is what makes the rule safe to enforce: a
+    // manifest edit that starts quoting would go red here rather than at `--write`.
+    for (const directory of componentDirs()) {
+      const text = readRepo(`src/components/${directory}/${MANIFEST_BASENAME}`);
+      if (text == null) continue;
+      expect(validateManifest(JSON.parse(text), directory, 'x')).toEqual([]);
+    }
   });
 
   it('rejects two manifests claiming one id or tab', () => {
@@ -435,30 +454,40 @@ describe('the generated tables cover what they claim', () => {
     );
   });
 
-  it('nitro.json and the sizing table agree with the manifests', () => {
+  it('nitro.json agrees with the manifests, and so does the sizing table', () => {
     expect(
       checkAutolinking(manifests, JSON.parse(readRepo('nitro.json')))
-    ).toEqual([]);
-    expect(
-      checkSizingTable(manifests, JSON.parse(readRepo(SIZING_TABLE_FILE)))
     ).toEqual([]);
     const missing = JSON.parse(readRepo('nitro.json'));
     delete missing.autolinking.NitroUiSwitch;
     expect(checkAutolinking(manifests, missing).join('\n')).toMatch(
       /no autolinking entry for NitroUiSwitch/
     );
-    expect(
-      checkSizingTable(manifests, {
-        HybridNitroUiSwitch: 'intrinsic',
-      }).join('\n')
-    ).toMatch(/no entry for HybridNitroUiButton/);
-    // A row for something the registry does not list as self-sizing is the other half.
-    expect(
-      checkSizingTable(manifests, {
-        ...JSON.parse(readRepo(SIZING_TABLE_FILE)),
-        HybridNitroUiHost: 'intrinsic',
-      }).join('\n')
-    ).toMatch(/HybridNitroUiHost is not a self-sizing component/);
+    // The sizing table has no cross-check of its own because it needs none: the whole
+    // file is written from the manifests, so both ways it can be wrong are drift the
+    // plan reports - a row whose policy is not the manifest's, and a row for a
+    // component the registry does not list as self-sizing (that key is not wanted, so
+    // it is dropped). Both go through the writer, on the real file.
+    const table = readRepo(SIZING_TABLE_FILE);
+    const wrong = runPlan(null, {
+      [SIZING_TABLE_FILE]: table.replace(
+        '"HybridNitroUiButton": "intrinsic"',
+        '"HybridNitroUiButton": "fillWidth"'
+      ),
+    });
+    expect(wrong.drift).toEqual([SIZING_TABLE_FILE]);
+    expect(wrong.files[SIZING_TABLE_FILE]).toContain(
+      '"HybridNitroUiButton": "intrinsic"'
+    );
+    const withHost = table.replace(
+      /("intrinsic")\n\}\n$/,
+      '$1,\n  "HybridNitroUiHost": "intrinsic"\n}\n'
+    );
+    expect(withHost).toContain('"HybridNitroUiHost"');
+    expect(() => JSON.parse(withHost)).not.toThrow();
+    const extra = runPlan(null, { [SIZING_TABLE_FILE]: withHost });
+    expect(extra.drift).toEqual([SIZING_TABLE_FILE]);
+    expect(extra.files[SIZING_TABLE_FILE]).not.toMatch(/HybridNitroUiHost/);
   });
 
   it('names an autolinking entry no manifest declares, and keeps it in the file', () => {

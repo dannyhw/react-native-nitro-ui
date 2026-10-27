@@ -135,8 +135,12 @@ export const MANIFEST_SCHEMA = {
     pattern: /^[a-z][a-z0-9]*$/,
     readBy: "the example app's Screen union, TABS entry and screen switch",
   },
+  // Both of these are rendered into a single-quoted JS literal, and JSON has no way
+  // to say "a string that survives that": `quoteSafe` is the rule that keeps the
+  // generator from emitting a line that does not parse.
   exampleLabel: {
     type: 'string',
+    quoteSafe: true,
     readBy:
       'the example tab-bar label (the bar is narrow: "Segments", "Dates")',
   },
@@ -162,6 +166,7 @@ export const MANIFEST_SCHEMA = {
   realInputTitle: {
     type: 'string',
     optional: true,
+    quoteSafe: true,
     readBy:
       "the title of that row when the generator adds it: what the control's check proves, on both platforms",
   },
@@ -219,6 +224,15 @@ export function validateManifest(parsed, directoryName, where) {
     if (rule.pattern != null && !rule.pattern.test(value)) {
       problems.push(
         `${where}: key "${key}" = ${JSON.stringify(value)} does not match ${rule.pattern}`
+      );
+    }
+    if (rule.quoteSafe === true && /['"\\\n\r]/.test(value)) {
+      // The generator renders this into a single-quoted literal in a tab bar, a real-
+      // input row, or a Swift/JS test title. Escaping it there would be possible, but
+      // the value also travels into files the registry does not write, so the honest
+      // rule is one both halves share: an apostrophe is a typo for "a real tap".
+      problems.push(
+        `${where}: key "${key}" = ${JSON.stringify(value)} contains a quote or a line break, which the generated line cannot carry`
       );
     }
   }
@@ -1029,49 +1043,6 @@ export function checkAutolinking(manifests, nitro, onDisk) {
 }
 
 /**
- * The sizing table against the manifests.
- *
- * `scripts/patch-nitrogen.mjs` reads `nitro-ui.sizing.json` to decide which
- * generated views get a `supportsSize` override, so a manifest that drifted from the
- * generated code is a control laid out at the wrong size for its first frame - the
- * D17 bug, back again. The generator writes this file, so what the check really
- * guards is the pair it forms with `nitrogen:check`: `registry:check` proves the
- * table matches the manifests, `nitrogen:check` proves the generated views match
- * nitrogen, and between them there is no way to have a sizing row for a component
- * whose spec does not back it.
- */
-export function checkSizingTable(manifests, sizing) {
-  if (sizing == null || typeof sizing !== 'object') {
-    return [`${SIZING_TABLE_FILE} is not a JSON object - run bun run registry`];
-  }
-  const problems = [];
-  const expected = new Map(
-    manifests
-      .filter((m) => m.sizing != null)
-      .map((m) => [`${HYBRID_PREFIX}${m.hybridView}`, m.sizing])
-  );
-  for (const [key, value] of expected) {
-    if (!(key in sizing)) {
-      problems.push(
-        `${SIZING_TABLE_FILE}: no entry for ${key} - run bun run registry, or the file was edited by hand`
-      );
-    } else if (sizing[key] !== value) {
-      problems.push(
-        `${SIZING_TABLE_FILE}: ${key} is "${sizing[key]}", the manifest says "${value}"`
-      );
-    }
-  }
-  for (const key of Object.keys(sizing)) {
-    if (!expected.has(key)) {
-      problems.push(
-        `${SIZING_TABLE_FILE}: ${key} is not a self-sizing component in the registry - its manifest was deleted, or run bun run registry`
-      );
-    }
-  }
-  return problems;
-}
-
-/**
  * The real-input table against the manifests.
  *
  * The control rows are generated; the *hosted* rows are not. They prove something
@@ -1082,9 +1053,11 @@ export function checkSizingTable(manifests, sizing) {
  * component in the bench and smoke sets with no real-input check is the gap that
  * used to be caught by nobody.
  *
- * It checks coverage rather than text because existing rows are copied, not
- * re-rendered (byte-identity): a row that exists is enough, and rewording a title is
- * a hand edit to the file.
+ * Coverage rather than text, and the two are split cleanly here: this file is not
+ * shipped, so its region *is* re-rendered from the manifests and `registry:check` is
+ * what catches a row whose wording has drifted from its `realInputTitle`. What that
+ * check cannot see is the union - this function's job is only "a manifest claims a
+ * real-input check and the suite has no row for it".
  */
 export function checkRealInputRows(manifests, controlIds) {
   const problems = [];
