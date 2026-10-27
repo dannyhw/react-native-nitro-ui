@@ -306,6 +306,26 @@ describe('the dry-run report and its exit code', () => {
     expect(out.problems).toContain('IOS_SIM_UDID is not set');
   });
 
+  it("carries X8's refusal by calling it, not by copying its dispatch (N7)", () => {
+    // Behaviour cannot prove this: a copy of `labelPreFlightProblem`'s dispatch is
+    // byte-identical until X8 changes, which is exactly why the review called it a
+    // drift risk rather than a bug. So the assertion is on the source, as
+    // `bench-baseline-machine.test.js` does for baseline paths: dry-run may ask X8's
+    // predicate for a *literal* flag (the plain-run note, and the "can this label
+    // name a directory" gate), but it must not build the minting/checking choice
+    // itself — that decision belongs to `labelPreFlightProblem`.
+    const code = readFileSync(
+      path.join(process.cwd(), 'scripts', 'bench', 'dry-run.mjs'),
+      'utf8'
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(code).toContain('labelPreFlightProblem(argv');
+    expect(code).not.toMatch(
+      /machineLabelProblem\([\s\S]{0,80}flag:\s*minting\s*\?/
+    );
+  });
+
   it('refuses to mint or check against a device key it could not resolve', () => {
     // The key is the *filename*, so an unknown key means the run would write or read
     // a file named after nothing. Both flags have to say so, in their own words: a
