@@ -55,6 +55,8 @@ Status of each phase/task lives in `docs/tasks/STATUS.md` (maintained by the orc
 - G5 DatePicker (date/time, inline/compact) — merged (adds `wheel`)
 Later (not in first release): Menu/ContextMenu, Alert/Dialog, BottomSheet, Toast/Snackbar,
 Form/List/Section/stacks (container architecture), TextField. None of these is built yet.
+0.4 scope (owner, 2026-10-27): a button-anchored Menu and a TextField spike, after the registry
+and conformance groundwork. See `docs/tasks/PLAN-0.4.md`.
 The opt-in Android `<Host>` came out of this "containers later" line: see
 `docs/tasks/PLAN-0.2.md` and `docs/components/host.md`.
 
