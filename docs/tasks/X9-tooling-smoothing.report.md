@@ -13,12 +13,11 @@ exists, the load ceiling and current load, and whether `--update-baseline` / `--
 exit 0 or 2 with reasons. Every refusal is the runner's own function on the runner's own inputs
 (`machineLabelProblem`, `baselineFileFor`, `loadBlocker`, `buildSchedule`), so it cannot drift from
 the run it describes, and a flag that was never passed is never a reason to stop — an unlabelled
-machine is a note for a plain run and a refusal for a check. Nothing boots: iOS reads
-`simctl list devices -j` and derives the key from the runtime bucket plus `deviceTypeIdentifier`
-(not the name); Android reads the AVD's `config.ini` and sidecar `.ini`, because the honest case is a
-stopped AVD and `getprop` needs it running. Both refuse a half-known key — `android33-emu-` is
-shaped like a real key, matches no baseline, and reads as resolved. A test records every tool call
-the CLI makes and asserts the list is exactly one `simctl list`.
+machine is a note for a plain run, a refusal for a check. Nothing boots: iOS reads
+`simctl list devices -j`, keying on the runtime bucket plus `deviceTypeIdentifier` (not the name);
+Android reads the AVD's `config.ini` and sidecar `.ini`, because the honest case is a stopped AVD and
+`getprop` needs it running. Both refuse a half-known key — `android33-emu-` is shaped like a real
+key, matches no baseline, and reads as resolved.
 
 **2. The lockfile follows releases** (option B, as answered). `bun run lock:check` compares the
 lock's `PODS:` entry with `package.json` and runs early in `check`. It is version-only on purpose: a
@@ -26,11 +25,11 @@ path-pod's `SPEC CHECKSUMS` entry is the sha1 of CocoaPods' *stored* evaluation 
 (`Pods/Local Podspecs/`, gitignored), so no Node script can write a correct post-bump lock. The
 repair therefore runs real CocoaPods: `version` in `release.yml` moved to `macos-26` and
 `release:version` refreshes the lock inside the same script whose tree the changesets action commits.
-Two findings shaped this: the action commits **every** changed and untracked non-ignored file
+Two findings shaped it: the action commits **every** changed and untracked non-ignored file
 (`@changesets/ghcommit` → `git diff --name-status` + `git ls-files --others`), so `--fix` restores
 everything except the lock and keeps the lock's own `COCOAPODS:` trailer; and the reader must scan
-only the `PODS:` section, because `DEPENDENCIES:` says ``- NitroUi (from `../..`)`` and a regex that
-matches that reports a version which never equals a real one — a guard that can never fire.
+only `PODS:`, because `DEPENDENCIES:` says ``- NitroUi (from `../..`)`` — a regex matching that
+reports a version that never equals a real one, a guard that can never fire.
 
 **3–6.** `doctor --prime` (delegates to `build-app.mjs` in the main checkout) + a `build caches` row
 judged by ccache hit count; a machine-wide build slot in `~/.nitro-ui/`, held by `<task>/<pid>` and
