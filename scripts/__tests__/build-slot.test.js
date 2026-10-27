@@ -41,6 +41,7 @@ import {
   buildLimitFrom,
   buildOwnerFor,
   buildSlotPaths,
+  buildSlotState,
   currentBuildSlots,
   decideBuildSlot,
   formatSlotHolder,
@@ -132,6 +133,42 @@ describe('the limit', () => {
     expect(
       decideBuildSlot({ active: held, max: 2, owner: 'X9/42000' }).ok
     ).toBe(true);
+  });
+
+  it('resolves the state paths and limit from one env, including an absent pool file', () => {
+    // The entry point `build-app.mjs` calls on every build. It lives here because
+    // that file cannot be imported by jest (it uses `import.meta`), and the first
+    // version of this function lived *there* - so the crash it had (a symbol left
+    // unimported by a refactor) only showed up on a real build, with the whole unit
+    // suite green.
+    process.env.NITRO_UI_HOME = home;
+    const state = buildSlotState(process.env);
+    expect(state.builds).toBe(join(home, 'builds.json'));
+    expect(state.lock).toBe(join(home, 'builds.lock'));
+    expect(state.devicesFile).toBe(join(home, 'devices.json'));
+    expect(state.max).toBe(1);
+    expect(state.note).toBeNull();
+
+    writeFileSync(
+      join(home, 'devices.json'),
+      JSON.stringify({ maxConcurrentBuilds: 2, pairs: [] })
+    );
+    expect(buildSlotState(process.env).max).toBe(2);
+
+    // Malformed JSON is not "no limit": a machine that cannot read its pool still
+    // builds one at a time, and says nothing (doctor is what explains the file).
+    writeFileSync(join(home, 'devices.json'), '{not json');
+    expect(buildSlotState(process.env)).toMatchObject({ max: 1, note: null });
+
+    // A typo in the key is worth one sentence.
+    writeFileSync(
+      join(home, 'devices.json'),
+      JSON.stringify({ maxConcurrentBuilds: 'two', pairs: [] })
+    );
+    expect(buildSlotState(process.env).note).toContain(
+      'sets maxConcurrentBuilds to "two"'
+    );
+    delete process.env.NITRO_UI_HOME;
   });
 
   it('names a typo in the pool file, and stays quiet about an absent key', () => {
