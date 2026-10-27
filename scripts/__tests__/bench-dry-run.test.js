@@ -330,6 +330,24 @@ describe('the dry-run report and its exit code', () => {
   it('lists no reasons when everything resolves', () => {
     expect(dryRunReport(base).problems).toEqual([]);
   });
+
+  it('puts every answer in the same column, including the verdict rows', () => {
+    // A reader scans one column to compare machine to machine, so the verdict rows
+    // (`Mint:` / `Check:`) are the ones short enough to slip out of it.
+    const out = dryRunReport({ ...base, argv: ['--update-baseline'] });
+    expect(out.lines.join('\n')).toContain('Mint:      would start');
+    const check = dryRunReport({ ...base, argv: ['--check'] });
+    expect(check.lines.join('\n')).toContain('Check:     would start');
+    for (const line of out.lines) {
+      // The `busy:` row is a continuation of `Load:` and is deliberately indented.
+      if (/^\s/.test(line)) continue;
+      const value = line.indexOf(':');
+      expect(value).toBeGreaterThan(0);
+      // Label, then at least two spaces of padding, out to the shared column.
+      expect(line.slice(0, value + 1).length).toBeLessThanOrEqual(9);
+      expect(/^ {2}/.test(line.slice(value + 1))).toBe(true);
+    }
+  });
 });
 
 /**

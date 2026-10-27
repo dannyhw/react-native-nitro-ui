@@ -330,7 +330,9 @@ export function dryRunReport(input) {
       );
     }
     lines.push(
-      `${minting ? 'Mint' : 'Check'}:    ${problems.length === 0 ? 'would start' : 'would refuse'}`
+      `${(minting ? 'Mint:' : 'Check:').padEnd(11)}${
+        problems.length === 0 ? 'would start' : 'would refuse'
+      }`
     );
   } else if (labelProblem != null) {
     lines.push(

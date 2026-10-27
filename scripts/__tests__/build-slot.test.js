@@ -38,6 +38,7 @@ import {
   BUILD_SLOT_TTL_MINUTES,
   DEFAULT_BUILD_WAIT_MINUTES,
   DEFAULT_MAX_CONCURRENT_BUILDS,
+  buildLimitFrom,
   buildOwnerFor,
   buildSlotPaths,
   currentBuildSlots,
@@ -131,6 +132,32 @@ describe('the limit', () => {
     expect(
       decideBuildSlot({ active: held, max: 2, owner: 'X9/42000' }).ok
     ).toBe(true);
+  });
+
+  it('names a typo in the pool file, and stays quiet about an absent key', () => {
+    // This line prints on every single build, so the two cases have to be told
+    // apart: `maxConcurrentBuilds: 0` is somebody's typo and deserves a sentence,
+    // while a file that simply has no key is the documented default and would make
+    // the warning permanent background noise on every machine in the pool.
+    const file = '/home/me/.nitro-ui/devices.json';
+    expect(buildLimitFrom({ pairs: [] }, file)).toEqual({
+      max: 1,
+      note: null,
+    });
+    expect(buildLimitFrom({ maxConcurrentBuilds: 3 }, file)).toEqual({
+      max: 3,
+      note: null,
+    });
+    for (const value of [0, -3, 1.5, '2', null]) {
+      const limit = buildLimitFrom({ maxConcurrentBuilds: value }, file);
+      expect(limit.max).toBe(1);
+      expect(limit.note).toContain('maxConcurrentBuilds to');
+      expect(limit.note).toContain(JSON.stringify(value));
+      expect(limit.note).toContain(file);
+    }
+    // `null` is a *value* here (the key is present), so it gets the message too -
+    // JSON.stringify renders it as `null`, which is what the reader needs to see.
+    expect(buildLimitFrom(null, file)).toEqual({ max: 1, note: null });
   });
 
   it('lets one process hold two slots so --prime cannot deadlock itself', () => {

@@ -88,6 +88,34 @@ export function maxConcurrentBuildsFrom(config) {
 }
 
 /**
+ * The limit *and* the one sentence worth saying about it.
+ *
+ * A key that is absent is the documented default and gets no comment; a key that is
+ * present and unusable is a typo, and a typo nobody mentions becomes "the machine
+ * ignores what I write". This line prints once per build, so the difference between
+ * those two cases is the difference between a useful warning and permanent noise.
+ *
+ * @param {unknown} config parsed `devices.json`, or null when there is none
+ * @param {string} devicesFile where it was read from, for the message
+ * @returns {{max: number, note: string | null}}
+ */
+export function buildLimitFrom(config, devicesFile) {
+  const max = maxConcurrentBuildsFrom(config);
+  const object = typeof config === 'object' && config !== null;
+  const present = object && 'maxConcurrentBuilds' in config;
+  const value = object ? config.maxConcurrentBuilds : undefined;
+  if (!present || (Number.isInteger(value) && value > 0)) {
+    return { max, note: null };
+  }
+  return {
+    max,
+    note: `${devicesFile} sets maxConcurrentBuilds to ${JSON.stringify(
+      value
+    )}, which is not a positive integer - using the default (${String(max)})`,
+  };
+}
+
+/**
  * Is this slot still being held? Judged by the slot's own ttl, never the
  * asker's (the rule `lease-core.mjs` learned in review M1).
  *
@@ -476,9 +504,7 @@ export function takeBuildSlot({
       });
     } catch (error) {
       if (now() >= deadline) throw error;
-      log(
-        `build-app: waiting for a build slot (state busy: ${String(error.message)})`
-      );
+      log(`waiting for a build slot (state busy: ${String(error.message)})`);
       sleep(pollMs);
       continue;
     }
@@ -522,7 +548,7 @@ export function takeBuildSlot({
     if (key !== lastAnnounced) {
       lastAnnounced = key;
       log(
-        `build-app: waiting for a build slot - ${holders.join(', ')} is building` +
+        `waiting for a build slot - ${holders.join(', ')} is building` +
           ` (limit ${String(max)}, state ${buildsFile}; a holder whose` +
           ' process died is reclaimed on the next poll)'
       );
