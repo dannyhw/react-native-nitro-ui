@@ -10,6 +10,8 @@ any machine. The live state is in `STATUS.md` (task table) and `RECOVERY.md`
 
 - **Implementer:** works one brief in its own worktree, commits, never pushes,
   and ends with a report (`docs/tasks/<ID>.report.md`, per `REPORT-TEMPLATE.md`).
+  Apex at `variant: xhigh` for implementation and fix rounds; `medium` only for
+  fully specified doc or mechanical edits (`EFFORT-eval-2026-10-27.md`).
 - **Reviewer:** a fresh session given the brief, the diff and the report, never
   the orchestrator's opinion. It writes `docs/tasks/<ID>.review.md` with a
   verdict (MERGE / MERGE WITH FIXES / FIX ROUND) and numbered M (must) and N
