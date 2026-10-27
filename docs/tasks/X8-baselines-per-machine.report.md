@@ -46,7 +46,18 @@ for this machine* (it was 1 there, 2 in `run.mjs`); every new refusal is a 2 on 
 
 ## Gates
 
-<!-- `node scripts/gate.mjs table` — pasted below once the round's run is recorded. -->
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 486 tests / 26 suites | `3912ba585abc` | 2 m 49 s | start 1.9 / med 2.6 / max 2.9 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`need --for review`: `need: review is satisfied on this code tree.` — the diff base
+`e5efdf9` "touches no platform-specific code" and the code diff is tooling (check-only)
+only, so no device gate is asked for beyond `check`, exactly as the brief expected. The
+`bench/` moves and the docs are non-code paths, and the published tarball is unchanged.
 
 ## Red proofs
 
