@@ -11,7 +11,8 @@
 > **2026-10-27 progress (maintainer-mac-2).** Doctor green. X8 merged: baselines are per machine
 > now (`bench/baselines/maintainer-mac-1/…`; this machine mints into `maintainer-mac-2/`), and
 > the iOS key comes from the simulator's device type (this machine's sims are named `nitro-ui A/B`).
-> Apex effort policy: `EFFORT-eval-2026-10-27.md`. Step 1 is brief A3, delegated as soon as X3 and X9 have released their leases (this machine is a
+> Apex effort policy: `EFFORT-eval-2026-10-27.md`. Step 1 is brief A3: **in flight since 20:55** in `nitro-ui-worktrees/A3` · `task/A3-baselines-mac2`
+> (exclusive lease; nothing else runs until it ends). It was delegated once X3 and X9 had released their leases (this machine is a
 > dedicated spare: benches need an idle machine, not a time of day). Step 3 (X3) is merged, and so is X9.
 >
 > **Components:** 0.4 is a button-anchored Menu (G7a/G7b) plus a TextField spike (T18), starting
