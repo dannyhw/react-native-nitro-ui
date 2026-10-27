@@ -18,9 +18,8 @@
 > Queue (owner-approved 2026-10-27): after X3 merges, **X9** and **X10** (`X10-check-throughput.md`,
 > no devices) in parallel; **X11** (`X11-device-throughput.md`: emulator GPU, warm device pool, which
 > changes the shut-down-your-devices rule, harness timing) after X9 and after the A3 mint. Nothing
-> device-heavy runs 00:30–07:00. Then **X9** (`X9-tooling-smoothing.md`: bench `--dry-run`, lockfile follows
-> releases, `doctor --prime`, one build at a time, `gate.mjs wait`, `check` step timings, unowned
-> devices). Don't run it during the 01:00 mint. The **X4** brief must also include: `task-ready.mjs`
+> device-heavy runs 00:30–07:00. X9 is `X9-tooling-smoothing.md` (bench `--dry-run`, lockfile follows
+> releases, `doctor --prime`, one build at a time, `gate.mjs wait`, unowned devices). The **X4** brief must also include: `task-ready.mjs`
 > fails when a backticked path in the report doesn't exist at HEAD (unless the diff adds or
 > deletes it). That catches invented files, which X3's first minutes showed. Every brief now gets a
 > context pack (`ORCHESTRATOR.md` step 1b).
