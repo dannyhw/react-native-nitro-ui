@@ -11,14 +11,15 @@
 > **2026-10-27 progress (maintainer-mac-2).** Doctor green. X8 merged: baselines are per machine
 > now (`bench/baselines/maintainer-mac-1/…`; this machine mints into `maintainer-mac-2/`), and
 > the iOS key comes from the simulator's device type (this machine's sims are named `nitro-ui A/B`).
-> Apex effort policy: `EFFORT-eval-2026-10-27.md`. Step 1 is brief A3, which a T3 schedule
-> (`nitroui-overnight-A3-baselines`, 01:00) delegates and then deletes. Step 3 (X3) is in flight in
-> `nitro-ui-worktrees/X3` · `task/X3-component-registry`; it must release its lease by 00:30.
+> Apex effort policy: `EFFORT-eval-2026-10-27.md`. Step 1 is brief A3, delegated as soon as X3 and X9 have released their leases (this machine is a
+> dedicated spare: benches need an idle machine, not a time of day). Step 3 (X3) is in flight in
+> `nitro-ui-worktrees/X3` · `task/X3-component-registry`.
 >
 > Queue (owner-approved 2026-10-27): after X3 merges, **X9** and **X10** (`X10-check-throughput.md`,
 > no devices) in parallel; **X11** (`X11-device-throughput.md`: emulator GPU, warm device pool, which
 > changes the shut-down-your-devices rule, harness timing) after X9 and after the A3 mint. Nothing
-> device-heavy runs 00:30–07:00. X9 is `X9-tooling-smoothing.md` (bench `--dry-run`, lockfile follows
+> else runs while A3 (or any `--exclusive` bench) holds the machine. After X10/X11, the step-2 quiet
+> re-runs go as one more exclusive window. X9 is `X9-tooling-smoothing.md` (bench `--dry-run`, lockfile follows
 > releases, `doctor --prime`, one build at a time, `gate.mjs wait`, unowned devices). The **X4** brief must also include: `task-ready.mjs`
 > fails when a backticked path in the report doesn't exist at HEAD (unless the diff adds or
 > deletes it). That catches invented files, which X3's first minutes showed. Every brief now gets a

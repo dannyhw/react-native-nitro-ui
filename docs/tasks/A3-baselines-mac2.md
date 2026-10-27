@@ -1,4 +1,4 @@
-# A3 — Mint the second machine's bench baselines (overnight)
+# A3 — Mint the second machine's bench baselines
 
 **Worktree / branch:** named in your delegation message (from `main`, after X8).
 **Machine:** the one labelled `maintainer-mac-2` (`NITRO_UI_MACHINE_LABEL`, which your shell must
