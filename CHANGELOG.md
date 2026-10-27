@@ -8,6 +8,12 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.3.1
+
+### Patch Changes
+
+- f8fec10: The README and component docs now describe what 0.3.0 ships: `<Host>` composes all seven controls on Android (it said three of them were coming in the next release), it is a documented passthrough on iOS, and a refused `<Host>` child is reported in development builds only.
+
 ## 0.3.0
 
 ### Minor Changes
