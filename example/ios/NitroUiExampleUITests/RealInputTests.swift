@@ -1534,10 +1534,20 @@ final class RealInputTests: XCTestCase {
   /// helper the "a disabled Picker opens nothing" claim was true of a Picker nobody
   /// had touched. The band leaves the header above and the home indicator below
   /// clear, because a menu is presented from the anchor and needs room to open.
+  ///
+  /// The scroll is stepped rather than `swipeUp`ed. A full swipe moves the content
+  /// about a window's height, which is more than this band is tall, so an element can
+  /// cross the band between two checks and never be inside it; and `swipeUp` travels
+  /// one way only, so an element that starts above the band is pushed further out of
+  /// reach. Measured with the Host screen carrying all seven hosted controls:
+  /// `host-button` finished six `swipeUp`s at midY=-1858, three windows above the band
+  /// it had been scrolled past. Steps are shorter than the band, and run back down when
+  /// they overshoot, which is what lets "could not be reached" mean the screen does not
+  /// scroll rather than mean the helper overshot.
   private func scrollIntoView(
     _ identifier: String,
     as what: String,
-    maxSwipes: Int = 6
+    maxSteps: Int = 40
   ) throws {
     let node = try required(identifier, as: what)
     let window = app.windows.firstMatch.frame
@@ -1549,14 +1559,39 @@ final class RealInputTests: XCTestCase {
       return centre > top && centre < bottom
     }
 
-    var swipes = 0
-    while !isReachable() && swipes < maxSwipes {
-      app.swipeUp()
-      swipes += 1
+    func scroll(by delta: CGFloat) {
+      let anchor = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+      anchor.press(
+        forDuration: 0.05,
+        thenDragTo: anchor.withOffset(CGVector(dx: 0, dy: delta))
+      )
+    }
+
+    // Shorter than the band itself, so one step cannot jump across it.
+    let step = min(240, (bottom - top) / 2)
+    var steps = 0
+    var lastCentre = node.frame.midY
+    var stuck = 0
+    while !isReachable() && steps < maxSteps {
+      scroll(by: node.frame.midY < top ? step : -step)
+      steps += 1
+      let centre = node.frame.midY
+      // A screen that answers nothing would otherwise spend every step scrolling empty
+      // space, and that failure would look like the overshoot this replaces.
+      stuck = abs(centre - lastCentre) < 4 ? stuck + 1 : 0
+      if stuck == 2 {
+        XCTAssertTrue(
+          false,
+          "\(what) (\(identifier)) did not move after \(steps) scroll steps (midY=\(centre) of "
+            + "\(window.height)); the screen holding it does not scroll, so no tap could reach it"
+        )
+        throw RealInputCheckAborted(identifier: identifier)
+      }
+      lastCentre = centre
     }
     XCTAssertTrue(
       isReachable(),
-      "\(what) (\(identifier)) could not be brought into the tappable band after \(swipes) swipes (midY=\(node.frame.midY) of \(window.height)); tapping it anyway would read a scroll problem as a refusal"
+      "\(what) (\(identifier)) could not be brought into the tappable band after \(steps) scroll steps (midY=\(node.frame.midY) of \(window.height)); tapping it anyway would read a scroll problem as a refusal"
     )
   }
 
