@@ -343,8 +343,12 @@ describe('registry:check drift detection', () => {
     // And the checks notice the parts a manifest cannot write on its own.
     const message = problems.join('\n');
     expect(message).toMatch(/no autolinking entry for NitroUiGauge/);
-    expect(message).toMatch(/tab "gauge".*blank body/s);
     expect(message).toMatch(/src\/index\.ts: Gauge is in the registry/);
+    // The tab and its row in the switch are generated; the screen behind them is not,
+    // so the run refuses rather than writing an App.tsx that does not compile.
+    expect(message).toMatch(
+      /example\/src\/GaugeScreen\.tsx.*does not exist.*the generator adds the tab and not the screen/s
+    );
   });
 
   it('generating twice in a row changes nothing', () => {
@@ -383,18 +387,26 @@ describe('the generated tables cover what they claim', () => {
   });
 
   it('every tab the generated tab bar lists has a screen rendering it', () => {
-    const rendered = [
-      ...readRepo('example/src/App.tsx').matchAll(
-        /\{screen === '([a-z0-9]+)' \? <[A-Z]\w*Screen \/>/g
-      ),
-    ].map((m) => m[1]);
-    expect(checkExampleScreens(manifests, rendered)).toEqual([]);
+    const app = readRepo('example/src/App.tsx');
+    expect(checkExampleScreens(manifests, app, readRepo)).toEqual([]);
+    // the tab listed and nothing behind it
     expect(
       checkExampleScreens(
         manifests,
-        rendered.filter((tab) => tab !== 'picker')
+        app.replace(
+          "        {screen === 'picker' ? <PickerScreen /> : null}\n",
+          ''
+        ),
+        readRepo
       ).join('\n')
     ).toMatch(/tab "picker".*blank body/s);
+    // and the screen file itself missing, which is the state a new component is in
+    // before its screen is written
+    expect(
+      checkExampleScreens(manifests, app, (path) =>
+        path === 'example/src/PickerScreen.tsx' ? null : readRepo(path)
+      ).join('\n')
+    ).toMatch(/example\/src\/PickerScreen\.tsx.*does not exist/s);
   });
 
   it('the barrel exports every manifest, and an unmanifested export is named', () => {
@@ -452,6 +464,8 @@ describe('gen-registry on a scratch tree', () => {
       'src/index.ts',
       SIZING_TABLE_FILE,
       ...regionsFor(repoManifests()).map((spec) => spec.path),
+      // the registry reads these too, to prove a tab has a screen behind it
+      ...repoManifests().map((m) => `example/src/${m.name}Screen.tsx`),
     ]);
     for (const path of paths) {
       const text = readRepo(path);
