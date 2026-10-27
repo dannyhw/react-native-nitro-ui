@@ -162,6 +162,7 @@ bun run regen                           the registry, then nitrogen, then the re
 # 3. the behaviour a manifest cannot describe
 src/index.ts                            the export list
 bench/src/implementations/*.tsx         one branch per arm
+bench/src/implementations/shared.ts     its ROW_HEIGHTS entry (benched controls)
 example/.../RealInputTests.swift        func testRealInput<Name>
 scripts/real-input/android.mjs          one CHECKS entry
 docs/components/<name>.md               the component page
@@ -220,14 +221,15 @@ resolution at all: `.gitattributes` says `merge=union` there, which keeps both
 sides' appended lines, and `regen` rewrites the files from scratch anyway (see
 `.gitattributes` for why union stops there).
 
-Four things are inputs, not outputs, and need the two sides' lines kept
-together: `src/index.ts` (one export per component), the bench arm's import and
+These are inputs, not outputs, and need the two sides' lines kept together
+(`bench/src/implementations/shared.ts`'s `ROW_HEIGHTS` too, for benched
+controls; `bench:typecheck` fails if one is lost): `src/index.ts` (one export per component), the bench arm's import and
 branch, `func testRealInput<Name>` in `RealInputTests.swift`, and the `CHECKS`
 entry in `scripts/real-input/android.mjs`. The docs are the same kind of thing.
 `nitro.json` used to be in this list and no longer is: its `autolinking` entry is
 generated now, which matters because a lost entry used to break the recipe —
 nitrogen refuses to generate a Hybrid View that is not in `nitro.json`, so
-without it `regen` could not run at all. These four are the files where the two
+without it `regen` could not run at all. These are the files where the two
 sides genuinely say different things, which is the right place to spend
 attention.
 
@@ -241,8 +243,8 @@ layouts, because a control really does add a line in that many places.
 
 The difference is what happens next. Here it is the four edits above and `bun run
 regen`, and `bun run registry:check` then proves the merge is right in 0.2 s:
-0 entries lost, both orders, with the full test suite showing nothing the merge
-broke. There, it is 19 files re-edited by hand. Pre-X3 was not unprotected —
+0 entries lost, both orders. Run the whole of `bun run check` afterwards; the
+registry check proves the generated lists, not the hand-written edits. There, it is 19 files re-edited by hand. Pre-X3 was not unprotected —
 `tsc`, `nitrogen:check`, `host.test.tsx`, `viewConfigs.test.ts` and the smoke
 ready-line test each catch a few of those rows, and the report attributes each
 list to the gate that sees it — but eight of the thirteen had nothing, notably

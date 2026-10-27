@@ -1,6 +1,6 @@
 # X3 Report — Component registry
 
-**Task:** `X3-component-registry` · **Round:** 1 · **Lease:** `X3-rd5ku`
+**Task:** `X3-component-registry` · **Round:** 1 · **Lease:** `X3-rd5ku` (round 1), `X3-yxfam` (fix round 1)
 
 ## Summary
 
@@ -88,7 +88,7 @@ Round 1: `/tmp/x3-redproofs-final.sh` (log `/tmp/x3-redproofs.log`). Fix round 1
 8. registry.test.js -> the schema ignoring unknown keys -> `rejects a key it knows nothing about, and lists the ones it does` (+1).
 9. registry.test.js -> a duplicate id allowed -> `rejects two manifests claiming one id or tab`.
 10. registry.test.js -> a cross-check not run -> `the tree in front of us is in step with its manifests` (+4).
-11. registry.test.js -> the autolinking language rule reading `all` for iOS -> `accepts either shape nitrogen emits for an autolinking entry`.
+11. registry.test.js -> the autolinking language rule reading `all` for iOS -> `accepts either shape nitrogen reads for an autolinking entry`.
 12. registry.test.js -> two components' regions of one file no longer merged -> `a component added to the manifests is appended to every list it belongs to` (+5).
 13. registry.test.js -> an unmanifested export allowed through -> `the barrel exports every manifest, and an unmanifested export is named` (+5).
 14. package.json -> `registry:check` removed from `check` -> `the check script is wired into \`bun run check\``.
@@ -99,7 +99,7 @@ Round 1: `/tmp/x3-redproofs-final.sh` (log `/tmp/x3-redproofs.log`). Fix round 1
 19. component-coverage.test.js -> a row's screen tab that nothing renders -> `every row names a screen the example app renders`.
 20. component-coverage.test.js -> an example screen renamed -> `the example app defines a screen for each tab`.
 21. component-coverage.test.js -> a new manifest whose arm branch was forgotten -> `…handles every component in the plan` (4 arms) + `the host arm handles exactly the hostable set the plan asks for`.
-22. registry.test.js -> `if (false)` on the shipped-copy rule in `replaceRegion` -> `an entry already in a shipped region is copied, not re-rendered`. The fixture that makes this meaningful is new: the review was right that every shipped row in the tree happens to equal its own render, so the rule was never exercised. `nitro.json` accepts two spellings of an autolinking entry (`checkAutolinking` reads a per-platform pair *or* a shared `all` block, because nitrogen emits either), so a `NitroUiSwitch` entry written in the `all` shape is valid, shipped, and not what `render` would emit — copying is what keeps those bytes still.
+22. registry.test.js -> `if (false)` on the shipped-copy rule in `replaceRegion` -> `an entry already in a shipped region is copied, not re-rendered`. The fixture that makes this meaningful is new: the review was right that every shipped row in the tree happens to equal its own render, so the rule was never exercised. `nitro.json` accepts two spellings of an autolinking entry (`checkAutolinking` reads a per-platform pair *or* a shared `all` block, because nitrogen reads either), so a `NitroUiSwitch` entry written in the `all` shape is valid, shipped, and not what `render` would write — copying is what keeps those bytes still.
 23. registry.test.js -> the "entry no manifest declares" loop in `checkAutolinking` emptied -> `names an autolinking entry no manifest declares, and keeps it in the file`.
 24. registry.test.js -> the `HostChildren.ts` imports region wants `where('hostable')` again -> `a control that stops being hostable keeps its import` (review M2).
 25. registry.test.js -> `sizingTableContent` treats unparseable text as "no current file" -> `a sizing table that no longer parses is refused, not re-sorted from nothing` (review N1).
@@ -120,7 +120,7 @@ branches, merged in both orders. Both are `hostable: true` and `realInput: true`
 run got wrong: those flags are what pull in the `HostChildren.ts` anchored regions, both
 nitro-ui-host arm lists, and the multi-line real-input row.
 
-Two bases, per the brief. **Registry layout** = this branch's tip. **Hand-maintained layout** =
+Two bases, per the brief. **Registry layout** = this branch at `c47f859` (later commits do not change the counts). **Hand-maintained layout** =
 `dc13833`, `main`'s layout — a real pre-X3 checkout, not an approximation. Its branches run nitrogen
 as pre-X3 did (nitrogen was always generated) and type the same lines into the hand-maintained lists;
 the line set is taken from the registry layout's own diff, so the two layouts differ only in whether
@@ -142,17 +142,15 @@ from the list a human has to look at, which is the only thing it can do.
 | entries the losing control adds to shared files | 52 | 54 |
 | after `take either side` | **36 lost**, in 19 files | **36 lost**, in 19 files |
 | after the recipe | **0 of 104 lost** | no recipe: 19 files re-edited by hand, with no gate that can tell whether it was done right |
-| `bun run check` after the recipe | `registry:check: OK`, `typecheck` clean, **zero test failures caused by the merge** (see below) | n/a |
+| `bun run check` after the recipe | `registry:check: OK`, `typecheck` clean; full-suite result not established (see below) | n/a |
 
 Both orders give the same numbers. Per-file losses are identical in both layouts (the only
 difference: the pre-X3 `ComponentName` union carries an id twice, 6 lines rather than 4).
 
-`check`, not just `registry:check`, on the merged tree — the first run's weak point. The full suite
-after taking either side + the recipe + `regen`: 16 failures. The same 16 minus the merged-away
-duplicates are red on the single-control branches too (a fake control with no `expoUi` arm branch and
-a two-line config JSON fails the coverage gate *by design*), and the failure set of the merged tree
-contains **nothing** that was not already red on a parent: the recipe destroys nothing that a gate
-can see. The genuine behaviour edits the recipe puts back are the four the manifest cannot describe:
+`check` on the merged tree: **not established.** The script that ran it (`/tmp/x3-n5b.mjs`) never read
+exit statuses, so its log counts every gate red, `registry:check: OK` included, and no log supports
+a failure count. What is established is `registry:check: OK` and a clean `typecheck` (orchestrator
+correction, from the re-review's M1). The genuine behaviour edits the recipe puts back are the four the manifest cannot describe:
 `src/index.ts`'s export, the bench arm's import and branch, `testRealInput<Name>`, and the `CHECKS`
 entry (`nitro.json` is generated now, so it is no longer one of them).
 
