@@ -29,7 +29,7 @@ RN's Android autolinker matches text, not code (§10).
 
 Each Hybrid View owns exactly one host, created with it and never replaced.
 
-(One exception, on Android only: a `Switch` that is a direct child of `<Host>` still owns its host but builds no
+(One exception, on Android only: a control that is a direct child of `<Host>` still owns its host but builds no
 composition of its own — the `<Host>` composes it, and it is never measured. See `docs/components/host.md` and
 `docs/architecture/sizing.md` §10.)
 

@@ -46,19 +46,27 @@ Status of each phase/task lives in `docs/tasks/STATUS.md` (maintained by the orc
   `Switch` and `@expo/ui`), docs page.
 
 ### Phase 3 — Component groups (parallel, one worktree per task)
-- G1 Slider (+ Stepper on iOS)
-- G2 Button (platform styles; iOS glass where available)
-- G3 Progress (linear/circular, determinate/indeterminate) + ActivityIndicator
-- G4 SegmentedControl + Picker (menu/wheel styles)
-- G5 DatePicker (date/time, inline/compact)
+- G1 Slider (+ Stepper on iOS) — Slider merged; no Stepper was built
+- G2 Button (platform styles; iOS glass where available) — merged; no glass style was built
+- G3 Progress (linear/circular, determinate/indeterminate) + ActivityIndicator — merged as one
+  component; the `ActivityIndicator` look is `variant="circular"` with no value (G3 brief)
+- G4 SegmentedControl + Picker (menu/wheel styles) — SegmentedControl merged in G4; Picker moved
+  to 0.2 (D19) and merged as G6
+- G5 DatePicker (date/time, inline/compact) — merged (adds `wheel`)
 Later (not in first release): Menu/ContextMenu, Alert/Dialog, BottomSheet, Toast/Snackbar,
-Form/List/Section/stacks (container architecture), TextField.
+Form/List/Section/stacks (container architecture), TextField. None of these is built yet.
+The opt-in Android `<Host>` came out of this "containers later" line: see
+`docs/tasks/PLAN-0.2.md` and `docs/components/host.md`.
 
 ### Phase 4 — Release readiness
 - README + per-component docs, example screenshots, benchmark report.
 - Consumer smoke test green on iOS + Android (Expo + bare).
 - License (MIT), changelog, release tooling configured. **Hand back to the human before
   creating a public GitHub repo or publishing to npm.**
+
+Done: the repo is public (D25), 0.1.0 was published by hand on 2026-10-26 (D26), and every
+release since goes through Changesets and staged npm publishing that the owner approves
+(D27, D28; `CONTRIBUTING.md` "Releasing"). 0.2.0 is published; 0.3.0 is versioned on `main`.
 
 ## Task workflow (per task)
 

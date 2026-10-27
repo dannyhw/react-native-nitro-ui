@@ -26,9 +26,11 @@ the layout engine, and React never sees a native node.
 | `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
-one Compose composition on Android instead of one each. Released 0.1.0 holds
-Switches only; `Slider`, `Progress` and `Button` join it on `main`, unreleased.
-See [Performance](#performance) for what it buys and what it costs.
+one Compose composition on Android instead of one each. It held Switches only
+in 0.1.0; `Slider`, `Progress` and `Button` joined it in 0.2.0, and
+`SegmentedControl`, `Picker` and `DatePicker` since 0.3.0, so it holds every
+control the library ships. See [Performance](#performance) for what it buys and
+what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
 monotonic clock, `CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, plus sizing
@@ -104,13 +106,13 @@ git clone https://github.com/dannyhw/react-native-nitro-ui.git
 cd react-native-nitro-ui
 bun install
 bun run prepare                          # builds lib/ with builder-bob
-npm pack                                 # writes react-native-nitro-ui-0.1.0.tgz
+npm pack                                 # writes react-native-nitro-ui-<version>.tgz
 ```
 
 Then, in your app:
 
 ```sh
-npm install /path/to/react-native-nitro-ui-0.1.0.tgz react-native-nitro-modules
+npm install /path/to/react-native-nitro-ui-<version>.tgz react-native-nitro-modules
 ```
 
 and rebuild as above. This is the path the consumer smoke tests take
@@ -285,13 +287,11 @@ export function DueDate() {
 ### Host
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
-iOS it is a plain `View`. Its only children may be hostable nitro-ui controls —
-Switches in 0.1.0, plus `Slider`, `Progress` and `Button` and then
-`SegmentedControl`, `Picker` and `DatePicker` from the next release, which is every
-control the library ships; an RN view, plain text or a nested `<Host>` throws in
-development. A hosted `Picker`'s menu or `DatePicker`'s dialog is the Host
-composition's own window: it opens under the row the Host drew and closes with the
-composition. Give it a height.
+iOS it is a plain `View`. Its only children may be nitro-ui controls — all seven
+since 0.3.0 (0.2.0 hosts `Switch`, `Slider`, `Progress` and `Button`); an RN
+view, plain text or a nested `<Host>` throws in development. A hosted `Picker`'s
+menu or `DatePicker`'s dialog is the Host composition's own window: it opens
+under the row the Host drew and closes with the composition. Give it a height.
 
 ```tsx name=host
 export function NotificationSettings() {
@@ -452,11 +452,11 @@ it loses on is the JS thread — roughly 1.2× the shared host, where the unhost
 control is below it — because a hosted control is still a React Native node
 _and_ a child of somebody else's composition. That is why `Host` is something an
 app opts into for a dense list rather than what every container does. On iOS
-`Host` is a passthrough `View`, and only `Switch` can be hosted in 0.1.0.
+`Host` is a passthrough `View` (DECISIONS D23).
 
-The next release extends the same mechanism to `Slider`, `Progress` and `Button`,
-and with it to `SegmentedControl`, `Picker` and `DatePicker` — so a Host holds all
-seven. Two of those three present something outside their own box: a `Picker` opens
+0.2.0 extends the same mechanism to `Slider`, `Progress` and `Button`, and 0.3.0
+to `SegmentedControl`, `Picker` and `DatePicker` — so a Host holds all seven. Two
+of those last three present something outside their own box: a `Picker` opens
 a menu and a `DatePicker` a dialog, and both belong to the Host's composition once
 hosted. A `SegmentedControl` owns no window at all; it is on the list because it
 draws itself, which is the question a Host asks. The first four were re-priced by
@@ -499,7 +499,7 @@ Against `expo-ui-shared-host`, and against the same control with no Host:
 No Android `@expo/ui` arm has `DatePicker` cells, so that column is hosted-vs-unhosted
 only. How noisy that single run was is measurable: read against the committed
 baseline, `bench:report --check` fails **13 unhosted `nitro-ui` cells** — Switch,
-Slider and Progress mount cost among them — on code this release did not touch, so
+Slider and Progress mount cost among them — on code 0.3.0 did not touch, so
 none of those ratios is a verdict about an untouched control. And **no number here is
 about an open window**: the bench arm mounts the anchor row and never presses it, so
 no menu or dialog is composed while these are read. What
@@ -518,8 +518,9 @@ baseline run has to meet. Measurement details — absolutes, per-launch spreads,
 noise flags and the update cells — are in the reports for the
 [iOS baseline](docs/tasks/A1c-baselines.report.md),
 [Android baseline](docs/tasks/A1b-baselines.report.md) and
-[`<Host>`](docs/tasks/H1-android-host.report.md) and
-[its H2a follow-up](docs/tasks/H2a-host-more-controls.report.md) runs.
+[`<Host>`](docs/tasks/H1-android-host.report.md) runs and its
+[H2a](docs/tasks/H2a-host-more-controls.report.md) and
+[H2b](docs/tasks/H2b-host-popups.report.md) follow-ups.
 
 ## Known limitations
 
@@ -547,15 +548,16 @@ The full list per control is in its doc; these are the ones that bite.
   but Material 3 has no wheel, so Android renders the menu (`Picker`) or the
   inline calendar (`DatePicker`). Android also has no combined date-and-time
   control: `mode="datetime"` opens a date dialog and then a time dialog.
-- **`<Host>` only helps on Android, and holds a limited set of children.**
-  Released 0.1.0 holds Switches only; the next release adds `Slider`, `Progress`
-  and `Button`. Any other child — an RN view, text, another nitro-ui control,
-  another `<Host>` — throws in development. Give a Host a height; per-child
-  sizes, `gap`, `flexDirection` and `alignItems` do not reach what it draws.
+- **`<Host>` only helps on Android, and holds nitro-ui controls only.** All
+  seven since 0.3.0 (Switches only in 0.1.0; `Slider`, `Progress` and `Button`
+  added in 0.2.0). Any other child — an RN view, text, another `<Host>` — throws
+  in development. Give a Host a height; per-child sizes, `gap`, `flexDirection`
+  and `alignItems` do not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules
   needs native code.
-- **RN 0.86 on iOS is not verified** — a fresh 0.86 app hangs on the iOS 27
-  simulator even without this library, and no older runtime has been tried.
+- **RN 0.86 on iOS is not verified** — UIKit terminates a fresh 0.86 app at
+  launch on the iOS 27 simulator even without this library, and no older runtime
+  has been tried.
 - **`testID` lands on the host** on Android (`View.tag`): Compose has no test id,
   which is what `findNodeByName` and the harness read. Inside a `<Host>` the view
   that carries a Switch's `testID` is not where the Switch is drawn — it reads
