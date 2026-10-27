@@ -1,0 +1,15 @@
+{
+  "name": "Picker",
+  "hybridView": "NitroUiPicker",
+  "implementation": "HybridNitroUiPicker",
+  "id": "picker",
+  "sizing": "intrinsic",
+  "hostable": true,
+  "exampleTab": "picker",
+  "exampleLabel": "Picker",
+  "bench": true,
+  "benchUnsuffixed": false,
+  "smoke": true,
+  "realInput": true,
+  "realInputTitle": "real tap opens the menu, a real tap on a row reports it, and an unmount while open leaks no popup"
+}

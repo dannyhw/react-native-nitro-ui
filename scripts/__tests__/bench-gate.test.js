@@ -1886,6 +1886,11 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     expect(listed).not.toBeNull();
     expect(
       listed[1]
+        .split('\n')
+        // the generated region's markers live inside this array (X3); the list itself
+        // is what the assertion is about
+        .filter((line) => !line.trim().startsWith('//'))
+        .join('\n')
         .split(',')
         .map((entry) => entry.trim().replaceAll("'", ''))
         .filter(Boolean)
