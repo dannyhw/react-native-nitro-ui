@@ -377,7 +377,8 @@ function checkAndroid() {
           dir === `android-${wanted.compileSdk}` ||
           dir.startsWith(`android-${wanted.compileSdk}.`)
       ),
-      pkg: `platforms;android-${wanted.compileSdk}`,
+      // From API 37 the SDK names platforms with a minor version (`android-37.0`).
+      pkg: `platforms;android-${wanted.compileSdk}${Number(wanted.compileSdk) >= 37 ? '.0' : ''}`,
     },
     {
       name: `build-tools ${wanted.buildTools}`,
