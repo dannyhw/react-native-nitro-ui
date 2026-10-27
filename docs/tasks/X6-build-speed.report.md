@@ -1,7 +1,8 @@
 # X6 — faster local/agent builds
 
 **Branch:** `task/X6-build-speed` (from `main` at `cdcd6a8`) · **Round:** 1 of up to 3 (D19), fix
-round 1 · **Lease:** `X6-wk682` (pair-b: one iOS simulator + one API 35 AVD, Metro port 8293)
+round 1, then the merge-bar run · **Leases:** `X6-wk682` and `X6-y20xj` (both pair-b: one iOS
+simulator + one API 35 AVD, Metro port 8293)
 
 ## Summary
 
@@ -112,13 +113,14 @@ than rebuilding:
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
 | `check` | **PASS** | 451 tests / 25 suites | `4ee8d95a9bff` | 3 m 08 s | start 3.8 / med 6.6 / max 8.3 |
-| `harness:ios` | **PASS** | 159 tests / 12 suites | `4ee8d95a9bff` (ios tree) | 1 m 55 s | start 4.1 / med 4.7 / max 5.2 |
-| `harness:android` | **PASS** | 187 tests / 12 suites | `4ee8d95a9bff` (android tree) | 5 m 42 s | start 18.0 / med 7.1 / max 18.0 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
+| `harness:ios` | **PASS** | 159 tests / 12 suites | `4ee8d95a9bff` | 1 m 55 s | start 4.1 / med 4.7 / max 5.2 |
+| `harness:android` | **PASS** | 187 tests / 12 suites | `4ee8d95a9bff` | 5 m 42 s | start 18.0 / med 7.1 / max 18.0 |
+| `real-input:ios` | **FAIL** | — | `4ee8d95a9bff` | 19.2 s | start 13.3 / med 13.3 / max 13.4 |
+| `real-input:android` | **PASS** | — | `4ee8d95a9bff` | 8 m 24 s | start 7.7 / med 7.7 / max 15.4 |
 
-`need --for review`: `need: review is satisfied on this code tree.` (the merge bar additionally wants
-`real-input:ios`/`real-input:android`, which the brief did not ask for — see follow-ups.)
+`need --for review`: `need: review is satisfied on this code tree.` ·
+`need --for merge`: `need: 1 gate(s) missing for merge: real-input:ios` — see
+[Merge bar: real-input](#merge-bar-real-input).
 
 - The first attempt at each suite was taken at a load the machine could not carry and each failed on
   one load-bound test, nothing else: `harness:android` 186/187 with the B1 post-GC heap-floor test
@@ -142,6 +144,66 @@ than rebuilding:
   false`. `max_size` is deliberately left at the default — 1.2 of 5.0 GiB is in use — so no
   `CCACHE_MAXSIZE` was added, and no `CCACHE_CONFIGPATH` anywhere (it would displace RN's iOS
   settings). ccache 4.14.2 from Homebrew is the only install.
+
+## Merge bar: real-input
+
+The fixes from round 1 were accepted, and the owner added the last merge condition: X6 changes how
+the app binaries are built, so the real-input suites count too. They ran on `3380e34` with **no code
+changes**, and nothing below is a repair attempt — one of the two is red, so it is reported.
+
+Lease `X6-y20xj` (pair-b: one iOS simulator + one API 35 AVD, Metro 8293). The AVD was not running
+and was booted with the arguments the harness itself uses. Each gate consumes an artifact from
+`build-app.mjs`, and both sides were on the cached path when the gates ran: `✓ android example app
+is fresh, not rebuilt` and `✓ ios example app is fresh, not rebuilt`, each in well under a second
+against stamp tree `4ee8d95a9bff`.
+
+| Gate | Result | Counts | Duration | Load |
+| --- | --- | --- | --- | --- |
+| `real-input:android` | **PASS** | 10/10 controls, 105 assertions | 8 m 24 s | start 7.7 / med 7.7 / max 15.4 |
+| `real-input:ios` | **FAIL** | — (test build failed, exit 65) | 19.2 s | start 13.3 / med 13.3 / max 13.4 |
+
+Android passes end to end on an APK this branch built: the switch, slider, button, segmented
+control, date picker and picker on their own screens, then the hosted switch, button, slider and
+the mixed composition — every check against what the real screen renders and what the accessibility
+tree reports, not against a JS call log.
+
+**What the iOS failure is.** Not a UI-test failure, and not load: the run dies compiling one file,
+at 19 s, with the machine idle enough either way.
+
+```
+ios/core/NitroUiDeclaredFallbacksLoader.m:16:2: fatal error: module 'Foundation' is defined
+in both 'example/ios/Pods/../build/ModuleCache.noindex/2RMXKLR3IP4PI/Foundation-2D6I54GZO0EPV.pcm'
+    and 'example/ios/build/ModuleCache.noindex/2RMXKLR3IP4PI/Foundation-2D6I54GZO0EPV.pcm'
+```
+
+Two spellings of one directory. What was checked, in order:
+
+1. **ccache did not run in that build.** `scripts/real-input/ios.mjs` has no ccache wiring, and RN
+   hands Xcode `CCACHE_BINARY` as a *build setting*, so RN's own wrapper script execs plain clang.
+   ccache's counters are the same on both sides of the gate run: 3919 calls, 2241 hits.
+2. `real-input:ios` builds its own app — it needs the UI-test bundle — with plain `xcodebuild`, and
+   into the same derived data path as `build-app.mjs`, which means the same module cache.
+3. 588 `.pcm` files in this worktree's module cache carry the `Pods/../build/...` spelling. The same
+   layout on a `main` worktree has none.
+4. **Control on main**, same machine, same simulator, same derived-data layout: main's own
+   `build-app.mjs --platform ios` (exit 0, 5 m 13 s), then the same `build-for-testing` command →
+   exit 0 in 56 s.
+5. The failing compile, extracted and run on its own from `example/ios/Pods`: with no ccache in the
+   environment — the shape of the gate's own build — it reproduces verbatim, exit 1; with
+   `CCACHE_BINARY`, `CCACHE_BASEDIR` and `CCACHE_NOHASHDIR` exported it exits 0, and it is a real
+   compile: ccache counted one more call with the hits unchanged, so that is a miss, not a skip.
+
+So the env X6 gives the compiler makes clang record module paths relative to `base_dir` inside a
+module cache shared with every build that does not set it — today `real-input:ios`, and equally any
+contributor who opens the example in Xcode or runs `xcodebuild` by hand instead of through
+`build-app.mjs`. Deleting `example/ios/build/ModuleCache.noindex` clears it until the next ccache
+build writes it back. It is dev-loop only: no packaged path is involved, and the pack identity
+above stands.
+
+Three ways out, none taken here because this round was no-code by instruction: give ccache builds
+their own `MODULE_CACHE_DIR`; wire `ccacheEnv()` into `scripts/real-input/ios.mjs` as well; or keep
+`CCACHE_BASEDIR`/`CCACHE_NOHASHDIR` out of the app-side ObjC and Swift compiles. The first is the
+smallest, and the only one that removes the sharing instead of making every consumer agree to it.
 
 ## Red proofs
 
@@ -201,8 +263,11 @@ Same worktree, same APK, exactly the review's command:
 - `scripts/native-tests-android.sh` deliberately got neither the init script nor the ccache env
   (N8): it configures CMake with its own arguments, and alternating with `build-app.mjs` would
   reconfigure the native build on every switch. The JVM tests are gradle-dominated anyway.
-- `real-input:ios` / `real-input:android` sit on the merge bar and were not run: the brief's gate
-  list is `check` plus one harness suite per platform. Same machine, same lease, ~20 minutes.
+- What the merge bar still needs is the module-cache fix: give ccache builds their own
+  `MODULE_CACHE_DIR` and the duplicate-module failure in
+  [Merge bar: real-input](#merge-bar-real-input) loses its route to a plain `xcodebuild`.
+  `rm -rf example/ios/build/ModuleCache.noindex` unblocks a build in the meantime, once per
+  occurrence.
 - Nothing here measures the first-ever build (no ccache, no build cache). One such cell would close
   the M2 question; it costs ~10 minutes and a scratch `GRADLE_USER_HOME`.
 
