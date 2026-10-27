@@ -38,8 +38,13 @@ Behaviour stayed hand-written, as required — bench arm branches, `CHECKS` in
 `scripts/__tests__/component-coverage.test.js` is the gate that says so when one is missing.
 
 Two decisions worth reviewing: `package.json` excludes `**/component.json` from the tarball (the default
-`src/**` plus bob's `lib/**` copy would have published 14 extra files), and `.gitattributes` marks the
-registry outputs `linguist-generated`.
+`src/**` plus bob's `lib/**` copy would have published 14 extra files); and `.gitattributes` collapses
+the registry's and nitrogen's output in a GitHub diff, with `merge=union` on exactly one path —
+`nitrogen/generated/**` — because that is the only generated file `regen` rewrites completely. Union on
+a JSON object concatenates instead of merging, so it loses the comma an appended member adds and leaves
+`nitro.json` / `nitro-ui.sizing.json` unparseable (measured with `git merge-file --union` on both
+shapes), and a region inside a hand-written shell has no boundary union would respect. Those stay on
+take-either-side + `regen`. See "Merging two components" in CONTRIBUTING.
 
 ## Gate table
 
