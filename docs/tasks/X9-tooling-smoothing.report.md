@@ -136,3 +136,53 @@ options and wrote "I have implemented the sync script and its unit tests already
 the script did not exist; I had a verified finding about the checksum and no code. You answered
 against a claim I had overstated. The work is now actually done (option B), so nothing you decided
 is invalidated, but the answer was given on a bad premise and you should know that.
+
+## Fix round 1
+
+M1, M2, N1, N2, N3, N4, N7 fixed; N5, N6, N8 were small enough to fix too. Red proofs: appendix.
+
+M1 was two changes, not one doc fix: the release section now describes the lock refresh, the macOS
+`version` job and what a laptop needs, and `release:version` became `--preflight && changeset version
+&& --fix`. The refusal had to precede the bump, so it became a stage: after it, all a refusal can say
+is `git checkout -- .`.
+
+N3's rule, in one place (`BUILD_SLOT_TTL_MINUTES`'s block, `slotShouldBeRetained`): a running build
+keeps its slot; the ttl decides only where the holder cannot be inspected. Cost, accepted: a wedged
+build blocks the queue until the pid the waiter names is killed. N4's prime budget is that wait plus
+the ttl (105 min), overridable.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 603 tests / 31 suites | `4adc4da575d0` | 2 m 54 s | start 1.6 / med 2.1 / max 2.4 |
+
+`need --for review` is **not** satisfied: it also wants `harness:ios` and `harness:android`, because
+`package.json`, `build-slot-core.mjs` and `devices.example.json` are unmapped → both platforms (the
+round-2 follow-up above). This round took no lease and touched no device, as instructed, and no file
+under `example`/`src`/`ios`/`cpp`/`nitrogen`/`bench` changed in it; I report that rather than claim
+the bar. The harness rows in the table above are round 1's, stale to this tree.
+
+### Appendix — red proofs, one line each (test -> mutation -> what went red)
+
+Reverted after each; `git status` clean.
+
+- `refuses before \`changeset version\` runs at all, on the real release command` -> the guard dropped,
+  moved after the bump, or joined with `;` instead of `&&` -> 2 tests red each time. The fake
+  `changeset` on PATH is the witness, so the order is what fails, not the prose.
+- `puts the lock right and restores everything else it touched` -> `git restore` dropped **and** the
+  trailer-keep disabled (the reviewer's exact mutation) -> red; each half alone also red, so neither is
+  carried by the other.
+- `refuses a lock whose diff is bigger than the release` -> churn guard disabled -> red; also with the
+  allowance emptied, so the test is about the allow-list, not the guard call.
+- `refuses up front when CocoaPods is missing…` -> `if (!pods.ok)` disabled -> red.
+- `writes a background log the reader can read once…` -> `const echo = true` -> red, `Received length:
+  2`; -> `delete childEnv.NITRO_UI_GATE_LOG` removed -> red, `child sees gate-log env [<path>]`.
+- `holds a slot for a live build however long it takes (N3)` -> pruning back to
+  `slotIsLive && !slotHolderIsDead` -> red at 75 min with the holder alive.
+- `gives a prime long enough to outlast the queue it waits behind (N4)` -> the budget set to one TTL ->
+  red.
+- `reports an unlabelled machine as a note… and a refusal for a check` -> the flag prefixed again ->
+  red; -> `labelIsUsable` dropped -> red, `baselineFileFor` throws out of an unlabelled plain run (the
+  latent crash the reuse exposed).
+- `carries X8's refusal by calling it, not by copying its dispatch (N7)` -> dry-run rebuilds the
+  minting/checking choice -> red. Behaviour cannot prove this — a copy is identical until X8 moves — so
+  the assertion is on the source, as `bench-baseline-machine.test.js` does for baseline paths.
