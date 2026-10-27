@@ -1,8 +1,8 @@
 # X6 — faster local/agent builds
 
 **Branch:** `task/X6-build-speed` (from `main` at `cdcd6a8`) · **Round:** 1 of up to 3 (D19), fix
-round 1, then the merge-bar run · **Leases:** `X6-wk682` and `X6-y20xj` (both pair-b: one iOS
-simulator + one API 35 AVD, Metro port 8293)
+round 1, the merge-bar run, then fix round 2 · **Leases:** `X6-wk682`, `X6-y20xj` and `X6-z378l`
+(all pair-b: one iOS simulator + one API 35 AVD, Metro port 8293)
 
 ## Summary
 
@@ -122,6 +122,9 @@ than rebuilding:
 `need --for merge`: `need: 1 gate(s) missing for merge: real-input:ios` — see
 [Merge bar: real-input](#merge-bar-real-input).
 
+This is fix round 1's tree (`4ee8d95a9bff`). [Fix round 2](#fix-round-2-ios-module-caches)
+supersedes it, including the `real-input:ios` row that is red here.
+
 - The first attempt at each suite was taken at a load the machine could not carry and each failed on
   one load-bound test, nothing else: `harness:android` 186/187 with the B1 post-GC heap-floor test
   timing out at 30 s (ledger load start 13.2 / median 218.0 / max 496.5), and `harness:ios` on
@@ -205,6 +208,103 @@ their own `MODULE_CACHE_DIR`; wire `ccacheEnv()` into `scripts/real-input/ios.mj
 `CCACHE_BASEDIR`/`CCACHE_NOHASHDIR` out of the app-side ObjC and Swift compiles. The first is the
 smallest, and the only one that removes the sharing instead of making every consumer agree to it.
 
+The first of those is what fix round 2 did — see
+[Fix round 2: iOS module caches](#fix-round-2-ios-module-caches), which is where this gate is green.
+
+## Fix round 2: iOS module caches
+
+The last red gate is fixed at the cause rather than at the symptom: a build whose
+compiler was told `CCACHE_BASEDIR` now names the module cache it writes, so nothing it
+produces is read back by a build that was not.
+
+- `iosModuleCacheDir()` and `iosModuleCacheArgs()` in `scripts/build-speed-lib.mjs`
+  decide it: the ccache build gets `<derivedData>/ModuleCache-ccache.noindex`, everything
+  else keeps `ModuleCache.noindex`. `xcodebuild -showBuildSettings` on this workspace
+  prints `MODULE_CACHE_DIR = <derivedData>/ModuleCache.noindex` when nothing is passed,
+  and the other directory when it is — so the plain half of the split is Xcode's own
+  default written down, not a guess at it.
+- The two ccache-wired iOS builders (`build-app.mjs`, `bench/build.mjs`) pass it, and
+  `build-app.mjs` prints which cache it chose. `real-input/ios.mjs` passes the plain name
+  explicitly, in the same `settings` array it gives both of its phases.
+- Guard, since a call site that forgets the argument fails in someone else's build: three
+  tests in `scripts/__tests__/build-speed.test.js` — the two directories differ, the
+  plain one is Xcode's default name, and each of the four call sites is read back and
+  checked to name the cache by `ccache: ccache.enabled` / `ccache: false` rather than
+  inherit one.
+- `CONTRIBUTING.md` → Build speed has a third caveat, because the symptom of the old
+  behaviour was a compile error in whichever build came second.
+
+**The poisoned cache went first.** `example/ios/build/ModuleCache.noindex` still held the
+588 `.pcm` files the merge-bar run counted — 588 of 1174 — and it is those a plain build
+chokes on regardless of who wrote them. Deleting it before building is what makes the
+result below a result and not an accident of ordering. (Xcode also recreates the
+directory during any build for its `Session.modulevalidation` file - a timestamp, with no
+module paths in it - which is why the count below is of `.pcm` files, not of directories.)
+
+Where the branch stands after this round, from `node scripts/gate.mjs table`:
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 454 tests / 25 suites | `5711dead5590` | 2 m 17 s | start 27.2 / med 15.2 / max 27.2 |
+| `harness:ios` | **PASS** | 159 tests / 12 suites | `5711dead5590` (ios tree) | 1 m 49 s | start 5.8 / med 5.4 / max 5.8 |
+| `harness:android` | **PASS** | 187 tests / 12 suites | `5711dead5590` (android tree) | 5 m 09 s | start 7.6 / med 7.1 / max 11.0 |
+| `real-input:ios` | **PASS** | — | `5711dead5590` (ios tree) | 6 m 18 s | start 4.1 / med 3.8 / max 5.3 |
+| `real-input:android` | **PASS** | — | `5711dead5590` (android tree) | 7 m 49 s | start 5.4 / med 5.6 / max 14.8 |
+
+`need --for merge`: `need: merge is satisfied on this code tree.` (the exported ledger is
+`docs/tasks/X6/gates.jsonl`, and `real-input:ios` needed four runs to get there — see below).
+
+The three runs the owner asked for, in this worktree:
+
+1. **A ccache build, then a plain one.** The ccache build took 5 m 36 s and left its
+   1174 modules in `ModuleCache-ccache.noindex` - 588 of them carrying the
+   worktree-relative spelling that broke things when they were shared. Then
+   `scripts/real-input/ios.mjs` ran `build-for-testing` with no ccache in its
+   environment, in the same derived data, over the same sources: it compiled, and went on
+   to run on the device. Measured after that build, the shared directory holds 647 pcms
+   and **none** of them carries the `Pods/../build` spelling, while the ccache one holds
+   all 588 that do. Two builds, one derived data path, two module caches - which is the
+   whole fix, stated as a file count.
+2. **`real-input:ios` through `gate.mjs`:** **PASS**, 10/10 controls, 6 m 18 s, start load 4.1 — after three runs that did not pass, below
+3. **`harness:ios` through `gate.mjs`:** 159 tests / 12 suites in 1 m 49 s at start load 5.8 —
+   the iOS tree moved (four scripts, one test), so it is re-run rather than carried over.
+
+**Four runs of `real-input:ios`, and the first three are disclosed rather than hidden.** The
+suite is flaky on its `switch` control, and this round chased it before it was beaten:
+
+| Attempt | Start | Result | What failed |
+| --- | --- | --- | --- |
+| 1 | 01:08:52, load 13.1 | 9/10 | `switch` — `("off") is not equal to ("on") - one real tap should flip the Switch` |
+| 2 | 01:18:59, load 9.0 | 9/10 | `date-picker` — a real tap on the last row's field presented no popover; **`switch` passed** |
+| 3 | 01:34:13, load 12.8 | 9/10 | `switch`, same message, after the simulator was shut down and booted again |
+| 4 | 01:43:06, load 4.1 | **10/10** | nothing, 6 m 18 s |
+
+Between 3 and 4, `--control switch` alone on the same build, at load 3.5-4.7: pass, fail,
+pass. The tap is dropped sometimes whatever the load is, which is what
+`docs/tasks/C1-android-overwide.report.md` ("passed only on a retry (a `switch` HID tap)") and
+`docs/tasks/R1-gate-hygiene.report.md` (the same dropped tap, "passed on retry at load ~13–20")
+already record about main. Two different controls failed across the first three runs and neither
+failed twice; nothing compiled differently between them — the build step was up to date from
+attempt 2 on. So the merge bar was met on the fourth run, and the three failures are listed
+because a green gate that took four tries is not the same information as a green gate.
+
+The simulator used here (a leased pair-b device) was shut down and booted between attempts 2 and
+3, which is device housekeeping, not a code change, and did not change the outcome by itself.
+
+**Android moved too, so Android re-ran.** `scripts/` is not inside a platform prefix, so
+`gate.mjs` counts a change there against both halves of the tree: the Android digest went from
+`ac2861a3c5b4` to `664579b46061`, and `need --for merge` asked for `harness:android` and
+`real-input:android` back. Both were re-run on the lease. `harness:android` re-ran green (187 tests / 12 suites, 5 m 09 s, start load 7.6) and
+`real-input:android` re-ran green (10/10 controls, 7 m 49 s, start load 5.4). The Android build
+itself took 4 s and changed no object: gradle's own inputs had not moved, only this repo's code-tree
+digest had — which is exactly what the stamp is for, and why the gates still had to run.
+
+Nothing packaged moved: `npm pack` here and in the control worktree checked out at the merged
+`main` (`8aeaca7`) — 465 files each, `LIST IDENTICAL`, `ALL BYTES IDENTICAL`, and the same
+tarball bytes on both sides (`6957a219dc73f34cf0aa68b5bff50fb4689864c81ac9b5625142702f78ffa408`).
+`origin/main` had moved by one docs-only commit (`docs/tasks/RECOVERY.md`) and was merged in
+before the gates ran, so the ledger is on the tree that merges.
+
 ## Red proofs
 
 - `decideSkipBuild > will not serve an artifact built for different ABIs` -> `abisMatch` returns
@@ -263,11 +363,19 @@ Same worktree, same APK, exactly the review's command:
 - `scripts/native-tests-android.sh` deliberately got neither the init script nor the ccache env
   (N8): it configures CMake with its own arguments, and alternating with `build-app.mjs` would
   reconfigure the native build on every switch. The JVM tests are gradle-dominated anyway.
-- What the merge bar still needs is the module-cache fix: give ccache builds their own
-  `MODULE_CACHE_DIR` and the duplicate-module failure in
-  [Merge bar: real-input](#merge-bar-real-input) loses its route to a plain `xcodebuild`.
-  `rm -rf example/ios/build/ModuleCache.noindex` unblocks a build in the meantime, once per
-  occurrence.
+- Done in fix round 2, so it is kept here as the history of the entry rather than as an open item:
+  ccache builds now get their own `MODULE_CACHE_DIR`, which removes the duplicate-module failure
+  in [Merge bar: real-input](#merge-bar-real-input) at its cause.
+- The iOS `real-input` `switch` control drops its HID tap often enough to be seen at any load
+  (this round: twice in four full runs and once in three single-control runs at load 3.5-4.7, on
+  a tree that also passed 10/10). Three reports now record the same dropped tap needing a retry
+  (C1, R1, and this one). It belongs to the suite, not to X6, but it is worth someone fixing: the
+  tap should be confirmed as delivered before the value assertion, the way every other real-input
+  control checks its element first.
+- `scripts/` counts as both platforms to `gate.mjs`, so any change there re-runs the Android
+  device gates even when only iOS behaviour changed. Correct but expensive: fix round 2 cost two
+  extra device runs. A prefix for `scripts/real-input/ios.mjs` and friends would let `need` be
+  honest about it; that is a `gate.mjs` conversation, not an X6 one.
 - Nothing here measures the first-ever build (no ccache, no build cache). One such cell would close
   the M2 question; it costs ~10 minutes and a scratch `GRADLE_USER_HOME`.
 
