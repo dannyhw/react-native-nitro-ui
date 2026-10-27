@@ -1,25 +1,31 @@
 # Recovery snapshot
 
-> **2026-10-27:** **0.3.0 published** (all seven controls hostable on Android; registry shasum = CI `b57a4fae…`, tag `v0.3.0`); docs pass D2 merged, ships as 0.3.1 via the Version Packages PR. Earlier: **0.2.0 published** (H2a Host controls; owner merged Version Packages #2 and approved; registry shasum = CI `51b609ff…`, tag `v0.2.0`). H2b ships as 0.3.0. X2, X6, X7 and H2b merged; **nothing in flight** (clean point to move the orchestrator, see below).  each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). If sessions are gone, re-delegate each from its brief.
- — 2026-10-23 23:50 local
+> **2026-10-27 — handoff point.** Published: 0.3.0 (all seven controls hostable on Android) and 0.3.1
+> (docs), each registry shasum = CI, tags `v0.3.0` / `v0.3.1`. **Nothing in flight**: no task
+> worktrees, no leases, no open PRs. The orchestrator moves to the second Mac
+> (`NITRO_UI_MACHINE_LABEL=maintainer-mac-2`, set up with `scripts/doctor.mjs --setup`, doctor green).
+> The first machine (`maintainer-mac-1`) stops running nitro-ui tasks.
 
-Written because the machine may restart (at 23:41:02 CoreSimulatorService got SIGTERM and shut down
-all simulators; the human's `emulator-5560` emulator exited the same minute; cause unconfirmed —
-`softwareupdate --list` shows no pending update). Everything below is on disk; uncommitted work in
-worktrees survives a restart. Agent sessions do **not** survive — re-delegate with this context.
+## Next, on maintainer-mac-2 (in this order)
 
-## Moving the orchestrator to another machine
+1. **Mint that machine's bench baselines** (`--exclusive`, idle, overnight, no Screen Sharing):
+   iOS 27.0 `--plan full --launches 8` and the Android equivalent. They are new files under
+   `bench/baselines/` with `machine.hostname = maintainer-mac-2`. Keep `maintainer-mac-1`'s files:
+   they gate only that machine.
+2. **Quiet bench re-runs** on that machine, against its own baselines: H2a, H2b, G5 and G6 (each
+   report and the README Performance section mark their numbers as indicative, pending this).
+   Replace the indicative tables with the quiet ones, keeping the caveat if a run isn't quiet.
+3. **X3, the component registry plus codegen** (`docs/tasks/PROCESS-review-2026-10-26.md` §5): one
+   `component.json` per control, which generates the ~25 registration lists, plus a nitrogen merge
+   rule. It unblocks running components in parallel.
+4. **X4, the conformance suite plus `scripts/task-ready.mjs`** (same doc, §3).
+5. **Follow-ups worth a small task** (`FOLLOWUPS.md`):
+   - real-input tap-delivery check (iOS HID and Android Switch taps drop intermittently);
+   - the H2b review N items;
+   - the CI Harness (Android) failure inside the upstream action.
 
-Planned: the orchestrator moves to a second Mac once nothing is in flight (H2b, X6, X2 merged).
-
-1. On the new machine, `git clone` the repo to `~/Developer/oss/nitro-ui` and run `bun install`,
-   then `node scripts/doctor.mjs` until it shows 0 failing. Then run `node scripts/doctor.mjs --setup`
-   and set `NITRO_UI_MACHINE_LABEL=maintainer-mac-2`.
-2. Start the orchestrator session there with `docs/tasks/ORCHESTRATOR.md`, this file and `STATUS.md`.
-   Worktrees, leases and `devices.json` are per machine. Re-create worktrees from the pushed
-   branches, never by copying them.
-3. First device job there: mint that machine's bench baselines (`--exclusive`, idle, overnight).
-   This machine's baselines don't apply there.
+X5 (a bench queue for a second machine) is moot while one machine both orchestrates and benches.
+Revisit it if a second worker machine is added.
 
 ## main (`~/Developer/oss/nitro-ui`)
 
