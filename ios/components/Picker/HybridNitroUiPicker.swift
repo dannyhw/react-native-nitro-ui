@@ -551,6 +551,19 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
     }
   }
 
+  /// What the popup and its anchor are, as the composition measured them.
+  ///
+  /// Test-only; see the spec for the format. iOS reports no popup of its own: a
+  /// SwiftUI `Picker` hands its menu to the system's own presentation, so there is no
+  /// window here whose rect could be read and no composition whose disposal could close
+  /// one. Every field answers `-1` — "not measurable here" — rather than a `0` that
+  /// would read as "checked, and none left behind". The same reason `Picker.harness`
+  /// has no `expanded` to read about a SwiftUI menu at all. The `<Host>` that made this
+  /// worth measuring is Android-only (D23), so no iOS test reads more than the shape.
+  func nuiTestMenuReport() throws -> String {
+    return "expanded=-1;live=-1;anchor=-1,-1,-1,-1;menu=-1,-1,-1,-1;rows=-1"
+  }
+
   private var model: PickerModel {
     return host.model
   }

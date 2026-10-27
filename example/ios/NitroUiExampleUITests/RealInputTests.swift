@@ -75,6 +75,9 @@ final class RealInputTests: XCTestCase {
     static let hostSliderValue = "host-slider-value"
     static let hostButtonPresses = "host-button-presses"
     static let hostMixedState = "host-mixed-state"
+    static let hostSegmentedIndex = "host-segmented-index"
+    static let hostPickerIndex = "host-picker-index"
+    static let hostDateValue = "host-datepicker-value"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -390,6 +393,47 @@ final class RealInputTests: XCTestCase {
     )
   }
 
+  /// A real tap must open the `DatePicker` inside a Host's presentation, and a real tap
+  /// on a day inside it must reach JS as a new instant.
+  ///
+  /// The Android case for this control is where the substance lives: a Compose dialog is
+  /// a window of the Host's own composition, and its OK, Cancel and Back presses cannot be
+  /// reached from the harness. On iOS a `<Host>` is the documented passthrough (D23), so
+  /// there is no separate window to inherit and this is the regression the passthrough has
+  /// to keep — the same JSX presenting the same calendar whether or not a `<Host>` is
+  /// wrapped around it, and the same two hops working: the field's button, then a day cell
+  /// inside the presentation, all the way back to React's controlled value.
+  ///
+  /// The day is chosen by the helper rather than named, for the reason `testRealInputDatePicker`
+  /// gives: picking the day the field already shows reports nothing by design.
+  func testRealInputHostedDatePicker() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    try scrollIntoView("host-datepicker", as: "the DatePicker inside the Host")
+    let field = try required("host-datepicker", as: "the DatePicker inside the Host")
+    let seeded = try read(Echo.hostDateValue)
+    XCTAssertEqual(
+      seeded,
+      "2026-05-17",
+      "the hosted DatePicker should show the day JS gave it"
+    )
+
+    field.centre.tap()
+    let opened = try openPresentation(from: field, watching: Echo.hostDateValue)
+    try pickSomeDay(in: opened, from: field, watching: Echo.hostDateValue) { $0 != seeded }
+
+    let moved = try read(Echo.hostDateValue)
+    XCTAssertNotEqual(
+      moved,
+      seeded,
+      "a real pick inside the presentation should reach JS through the Host"
+    )
+    XCTAssertEqual(
+      moved.split(separator: "-").count,
+      3,
+      "\(Echo.hostDateValue) should render the day React holds as Y-M-D, got \"\(moved)\""
+    )
+  }
+
   /// A real drag must move the thumb and report every phase.
   ///
   /// The phases Slider is uncontrolled and counts each callback separately, so a
@@ -397,6 +441,125 @@ final class RealInputTests: XCTestCase {
   /// worked. The controlled Slider is dragged too: there the echo is React's own
   /// state, so it proves the whole loop - touch → SwiftUI → Nitro → JS →
   /// re-render → value back down to native - with nothing but a finger in it.
+  /// A real tap must select a segment of the `SegmentedControl` inside a Host.
+  ///
+  /// H2b's three popup-era controls are the first a Host has ever held that are not
+  /// `fillWidth`. On iOS a Host is the documented passthrough (D23), so this is the
+  /// same claim the `segmented` check makes one tab away - which is the point: the JSX
+  /// a Host asks for has to render and answer there too, or the passthrough is a story.
+  /// Android reads the identical claim out of a shared Compose composition.
+  ///
+  /// The echo is React's own render (`HostScreen`'s `popSegmented`), so it moves only if
+  /// the touch reached the control and JS accepted the new index. A second, different
+  /// segment is owed: a control that echoed once and froze would satisfy the first line.
+  func testRealInputHostedSegmented() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    try scrollIntoView("host-segmented", as: "the SegmentedControl inside the Host")
+    let control = try required("host-segmented", as: "the SegmentedControl inside the Host")
+    let whereItStarted = control.frame
+    XCTAssertEqual(
+      try read(Echo.hostSegmentedIndex),
+      "0",
+      "the hosted SegmentedControl should show the index JS gave it"
+    )
+
+    control.atFraction(0.5).tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostSegmentedIndex) { $0 == "1" },
+      "1",
+      "a real tap on the middle segment of a SegmentedControl inside a Host should reach JS as index 1"
+    )
+
+    try assertStillInPlace("host-segmented", startedAt: whereItStarted, after: "the first real tap")
+
+    try required("host-segmented", as: "the SegmentedControl inside the Host")
+      .atFraction(0.9)
+      .tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostSegmentedIndex) { $0 == "2" },
+      "2",
+      "a real tap on the last segment of the hosted SegmentedControl should reach JS as index 2"
+    )
+  }
+
+  /// A real tap must open the `Picker` inside a Host, and a real tap on one of its rows
+  /// must reach JS.
+  ///
+  /// On Android this is the claim H2b exists to make (a Compose popup is a window of the
+  /// Host's own composition, opening under the row the Host drew). On iOS a Host is a
+  /// passthrough, so the menu is the one `testRealInputPicker` drives on its own tab -
+  /// and it has to be that here too: a `Picker` that loses its menu when the same JSX is
+  /// wrapped in a `<Host>` would be a passthrough that does not pass through.
+  ///
+  /// The three choices are `HostScreen`'s popup set. None of them appears anywhere else
+  /// on the screen, which is what lets a label match name a menu row.
+  func testRealInputHostedPicker() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    try scrollIntoView("host-picker", as: "the Picker inside the Host")
+    let control = try required("host-picker", as: "the Picker inside the Host")
+    XCTAssertEqual(
+      try read(Echo.hostPickerIndex),
+      "1",
+      "the hosted Picker should show the index JS gave it"
+    )
+
+    // 1. Opening. The rows exist only while the menu is open, which is also the witness
+    //    that the hosted anchor answered a real touch.
+    control.centre.tap()
+    _ = try waitForOption("Gamma", "the hosted Picker's menu to open")
+    XCTAssertEqual(
+      try read(Echo.hostPickerIndex),
+      "1",
+      "opening a menu is not a choice - nothing may be reported until a row is tapped"
+    )
+
+    // 2. The menu says which row it is showing: the mark is SwiftUI's own, so this is
+    //    what VoiceOver reads.
+    XCTAssertTrue(
+      optionRow("Beta").images.count > 0,
+      "the current choice (\"Beta\") should carry the hosted menu's selection mark"
+    )
+
+    // 3. Choosing something else.
+    try waitForOption("Gamma", "the hosted menu to be tappable").tap()
+    XCTAssertEqual(
+      readUntil(Echo.hostPickerIndex) { $0 == "2" },
+      "2",
+      "a real tap on a hosted menu row should reach JS as index 2"
+    )
+    // The rows that are *not* the new choice can only exist while the menu is open. The
+    // chosen title stays after the pick, as the anchor's own text: measured, exactly one
+    // "Gamma" survives, and it is the anchor. Asking a closed menu for the title it is
+    // showing would read every closed menu as an open one.
+    waitUntilOptionGone("Beta", "the hosted menu closing")
+    XCTAssertEqual(
+      optionLabels(containing: "Beta"),
+      0,
+      "the rows that are not the new choice should be gone once the pick closes the menu"
+    )
+    XCTAssertEqual(
+      optionLabels(containing: "Gamma"),
+      1,
+      "the hosted anchor should show the choice that was just made"
+    )
+
+    // 4. The way out that changes nothing: the row already chosen, which since the pick
+    //    above is Gamma rather than the row the menu first opened on. The menu closes
+    //    and no change is reported - the binding's own rule (G6), read here through a
+    //    Host. The witness that the menu reopened is a different row from the one being
+    //    tapped: while it is open both exist, and only one of them survives closing.
+    try required("host-picker", as: "the Picker inside the Host").centre.tap()
+    _ = try waitForOption("Beta", "the hosted menu to reopen")
+    try waitForOption("Gamma", "the reopened hosted menu to list its current choice").tap()
+    _ = waitUntilOptionGone("Beta", "the hosted menu to close")
+    XCTAssertEqual(
+      try read(Echo.hostPickerIndex),
+      "2",
+      "choosing the row that was already chosen should report nothing, and the hosted anchor "
+        + "should still show what it started with"
+    )
+  }
+
   func testRealInputSlider() throws {
     try goToTab(Tab.sliderTab, showing: Echo.sliderStart)
     let phases = try required("slider-phases", as: "the phases Slider")
@@ -1203,13 +1366,25 @@ final class RealInputTests: XCTestCase {
         + "than the calendar inside it - the bottom rows of the month are cut off"
     )
     // And it has to be *the field's* popover: a presentation that resolves its anchor
-    // somewhere else on the screen points at nothing. `+ 8` of tolerance for the
-    // arrow's own height, which the accessibility frame may or may not include.
-    XCTAssertGreaterThanOrEqual(
-      popover.frame.minY,
-      fieldFrame.maxY - 8,
-      "the popover opened at y \(popover.frame.minY) while the field ends at "
-        + "\(fieldFrame.maxY) - it is not anchored to the control that presented it"
+    // somewhere else on the screen points at nothing. Which side it lands on is UIKit's
+    // choice and not the library's — the bubble goes where the screen has room, so a field
+    // near the bottom of a scroll gets its calendar above it. Asserting the side below was
+    // therefore wrong, and it went red that way on the leased iPhone 17: "the popover
+    // opened at y 213.67 while the field ends at 587.00", a bubble presented above the
+    // control that opened it. Adjacency to one of the field's two edges is the property,
+    // then, not the side. The band is a tolerance, not a measurement: `-8` of overlap is
+    // the arrow's own height, which the accessibility frame may or may not include, and 32
+    // is slack over that. What it must catch is an anchor resolved elsewhere — an anchor
+    // 220 pt off its field is 220 pt clear of both halves, so it fails by the arithmetic.
+    // That displacement was never built, so read it as arithmetic rather than a red proof;
+    // what was measured is this gate red at the wrong geometry and green at this one.
+    let gapBelow = popover.frame.minY - fieldFrame.maxY
+    let gapAbove = fieldFrame.minY - popover.frame.maxY
+    XCTAssert(
+      (gapBelow >= -8 && gapBelow <= 32) || (gapAbove >= -8 && gapAbove <= 32),
+      "the popover opened at \(popover.frame) against a field at \(fieldFrame): "
+        + "\(gapBelow)pt clear of its bottom edge and \(gapAbove)pt clear of its top "
+        + "edge, so it is not anchored to the control that presented it"
     )
     return popover
   }
@@ -1427,10 +1602,20 @@ final class RealInputTests: XCTestCase {
   /// helper the "a disabled Picker opens nothing" claim was true of a Picker nobody
   /// had touched. The band leaves the header above and the home indicator below
   /// clear, because a menu is presented from the anchor and needs room to open.
+  ///
+  /// The scroll is stepped rather than `swipeUp`ed. A full swipe moves the content
+  /// about a window's height, which is more than this band is tall, so an element can
+  /// cross the band between two checks and never be inside it; and `swipeUp` travels
+  /// one way only, so an element that starts above the band is pushed further out of
+  /// reach. Measured with the Host screen carrying all seven hosted controls:
+  /// `host-button` finished six `swipeUp`s at midY=-1858, three windows above the band
+  /// it had been scrolled past. Steps are shorter than the band, and run back down when
+  /// they overshoot, which is what lets "could not be reached" mean the screen does not
+  /// scroll rather than mean the helper overshot.
   private func scrollIntoView(
     _ identifier: String,
     as what: String,
-    maxSwipes: Int = 6
+    maxSteps: Int = 40
   ) throws {
     let node = try required(identifier, as: what)
     let window = app.windows.firstMatch.frame
@@ -1442,14 +1627,39 @@ final class RealInputTests: XCTestCase {
       return centre > top && centre < bottom
     }
 
-    var swipes = 0
-    while !isReachable() && swipes < maxSwipes {
-      app.swipeUp()
-      swipes += 1
+    func scroll(by delta: CGFloat) {
+      let anchor = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+      anchor.press(
+        forDuration: 0.05,
+        thenDragTo: anchor.withOffset(CGVector(dx: 0, dy: delta))
+      )
+    }
+
+    // Shorter than the band itself, so one step cannot jump across it.
+    let step = min(240, (bottom - top) / 2)
+    var steps = 0
+    var lastCentre = node.frame.midY
+    var stuck = 0
+    while !isReachable() && steps < maxSteps {
+      scroll(by: node.frame.midY < top ? step : -step)
+      steps += 1
+      let centre = node.frame.midY
+      // A screen that answers nothing would otherwise spend every step scrolling empty
+      // space, and that failure would look like the overshoot this replaces.
+      stuck = abs(centre - lastCentre) < 4 ? stuck + 1 : 0
+      if stuck == 2 {
+        XCTAssertTrue(
+          false,
+          "\(what) (\(identifier)) did not move after \(steps) scroll steps (midY=\(centre) of "
+            + "\(window.height)); the screen holding it does not scroll, so no tap could reach it"
+        )
+        throw RealInputCheckAborted(identifier: identifier)
+      }
+      lastCentre = centre
     }
     XCTAssertTrue(
       isReachable(),
-      "\(what) (\(identifier)) could not be brought into the tappable band after \(swipes) swipes (midY=\(node.frame.midY) of \(window.height)); tapping it anyway would read a scroll problem as a refusal"
+      "\(what) (\(identifier)) could not be brought into the tappable band after \(steps) scroll steps (midY=\(node.frame.midY) of \(window.height)); tapping it anyway would read a scroll problem as a refusal"
     )
   }
 

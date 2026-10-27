@@ -96,6 +96,25 @@ export const REAL_INPUT_CONTROLS = Object.freeze([
       'one <Host> composes four kinds of control, and each keeps its own node, order and geometry',
     screen: 'host',
   },
+  {
+    id: 'hosted-segmented',
+    title:
+      'real tap selects a segment of a SegmentedControl inside a <Host>, which owns no window',
+    screen: 'host',
+  },
+  {
+    id: 'hosted-picker',
+    title:
+      "real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS",
+    screen: 'host',
+  },
+  {
+    id: 'hosted-date-picker',
+    title:
+      "real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, " +
+      'and OK, Cancel, Back and removing the child each close it',
+    screen: 'host',
+  },
 ]);
 
 /**

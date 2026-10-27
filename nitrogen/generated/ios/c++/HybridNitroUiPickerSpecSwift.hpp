@@ -180,6 +180,14 @@ namespace margelo::nitro::nitroui {
         std::rethrow_exception(__result.error());
       }
     }
+    inline std::string nuiTestMenuReport() override {
+      auto __result = _swiftPart.nuiTestMenuReport();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
 
   private:
     NitroUi::HybridNitroUiPickerSpec_cxx _swiftPart;
