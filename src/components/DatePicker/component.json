@@ -1,0 +1,15 @@
+{
+  "name": "DatePicker",
+  "hybridView": "NitroUiDatePicker",
+  "implementation": "HybridNitroUiDatePicker",
+  "id": "date-picker",
+  "sizing": "intrinsic",
+  "hostable": true,
+  "exampleTab": "datepicker",
+  "exampleLabel": "Dates",
+  "bench": true,
+  "benchUnsuffixed": false,
+  "smoke": true,
+  "realInput": true,
+  "realInputTitle": "real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back"
+}

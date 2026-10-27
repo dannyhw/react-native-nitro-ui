@@ -1,0 +1,15 @@
+{
+  "name": "Button",
+  "hybridView": "NitroUiButton",
+  "implementation": "HybridNitroUiButton",
+  "id": "button",
+  "sizing": "intrinsic",
+  "hostable": true,
+  "exampleTab": "button",
+  "exampleLabel": "Button",
+  "bench": true,
+  "benchUnsuffixed": false,
+  "smoke": true,
+  "realInput": true,
+  "realInputTitle": "real tap presses the Button, and a disabled one stays pressed-out"
+}

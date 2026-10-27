@@ -1,0 +1,14 @@
+{
+  "name": "Progress",
+  "hybridView": "NitroUiProgress",
+  "implementation": "HybridNitroUiProgress",
+  "id": "progress",
+  "sizing": "fillWidth",
+  "hostable": true,
+  "exampleTab": "progress",
+  "exampleLabel": "Progress",
+  "bench": true,
+  "benchUnsuffixed": false,
+  "smoke": true,
+  "realInput": false
+}
