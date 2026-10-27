@@ -2012,6 +2012,10 @@ class DeviceHarness {
       picker: ECHO.pickerIndex,
       host: ECHO.hostValue,
     }[screen];
+    // Asked from wherever the last control left the scroll, an echo that is scrolled
+    // out of sight is simply not in the tree, and this would go looking for a tab to
+    // tap while standing on it. So ask from the top.
+    await this.scrollToTop();
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
     }
@@ -2148,6 +2152,46 @@ class DeviceHarness {
       `input swipe ${String(Math.round(x1))} ${String(Math.round(y1))} ` +
         `${String(Math.round(x2))} ${String(Math.round(y2))} ${String(durationMs)}`
     );
+  }
+
+  /**
+   * Bring the current screen back to the top of its scroll.
+   *
+   * A React Native ScrollView keeps its offset when the app leaves the tab and comes
+   * back to it, and a node scrolled far enough out of one is not in the accessibility
+   * tree at all. "That node is not in the tree" therefore cannot mean "we are not on
+   * that screen" - which is exactly the question [goToScreen] asks, and the reason one
+   * run spent its whole timeout tapping a tab it was already standing on. The same
+   * thing is how another run measured a Progress bar 0 px wide: a node outside the
+   * visible area answers with nothing to measure.
+   *
+   * Navigation is the one place a known offset is worth paying for, so each control
+   * starts at the top of its screen. The swipe is aimed at the empty strip at the right
+   * edge for the reason given on `scrollPage`, and the loop stops when the content
+   * stops moving, so a screen already at its top costs one swipe.
+   */
+  async scrollToTop(maxSwipes = 8) {
+    const width = this.displayWidth();
+    const height = this.displayHeight();
+    const x = width - 8;
+    const from = Math.round(height * 0.25);
+    const to = from + Math.round(height * 0.5);
+    const signature = () =>
+      this.hierarchy()
+        .filter((node) => node.bounds.y1 > this.tabBandY + 8)
+        .slice(0, 4)
+        .map((node) => `${String(node.bounds.x1)},${String(node.bounds.y1)}`)
+        .join(';');
+    let previous = signature();
+    for (let attempt = 0; attempt < maxSwipes; attempt += 1) {
+      this.swipe(x, from, x, to, 400);
+      await sleep(400);
+      const now = signature();
+      if (now === previous) {
+        return;
+      }
+      previous = now;
+    }
   }
 
   teardown() {
