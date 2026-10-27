@@ -1,12 +1,25 @@
 # Recovery snapshot
 
-> **2026-10-26 20:50:** X6 (`nitroui-X6b`), X2 (`nitroui-X2b`) and H2b (`nitroui-H2b`) delegated to Apex; each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). Version Packages PR for 0.2.0 is open and waits for H2b. If sessions are gone, re-delegate each from its brief.
+> **2026-10-27:** **0.2.0 published** (H2a Host controls; owner merged Version Packages #2 and approved; registry shasum = CI `51b609ff…`, tag `v0.2.0`). H2b ships as 0.3.0. X2, X6 and X7 merged. H2b (`nitroui-H2b`) in flight with Apex; each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). If sessions are gone, re-delegate each from its brief.
  — 2026-10-23 23:50 local
 
 Written because the machine may restart (at 23:41:02 CoreSimulatorService got SIGTERM and shut down
 all simulators; the human's `emulator-5560` emulator exited the same minute; cause unconfirmed —
 `softwareupdate --list` shows no pending update). Everything below is on disk; uncommitted work in
 worktrees survives a restart. Agent sessions do **not** survive — re-delegate with this context.
+
+## Moving the orchestrator to another machine
+
+Planned: the orchestrator moves to a second Mac once nothing is in flight (H2b, X6, X2 merged).
+
+1. On the new machine, `git clone` the repo to `~/Developer/oss/nitro-ui` and run `bun install`,
+   then `node scripts/doctor.mjs` until it shows 0 failing. Then run `node scripts/doctor.mjs --setup`
+   and set `NITRO_UI_MACHINE_LABEL=maintainer-mac-2`.
+2. Start the orchestrator session there with `docs/tasks/ORCHESTRATOR.md`, this file and `STATUS.md`.
+   Worktrees, leases and `devices.json` are per machine. Re-create worktrees from the pushed
+   branches, never by copying them.
+3. First device job there: mint that machine's bench baselines (`--exclusive`, idle, overnight).
+   This machine's baselines don't apply there.
 
 ## main (`~/Developer/oss/nitro-ui`)
 
@@ -36,11 +49,11 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | R5 publish 0.1.0 | — | merged | **Published** `react-native-nitro-ui@0.1.0` (registry tarball sha256 = tested `fa1b7b96…`), tag `v0.1.0` + GitHub release | — |
 | X1 dev tooling (CI checks, build-app, lease) | — | merged | Done; CI enabled (checks / native-tests / build-android) | Next: X2 gate ledger + short reports, X3 registry codegen (after H2a), X4 conformance, X5 bench queue / second Mac. |
 | R6 Changesets release | — | merged | **Validated end to end:** 0.1.1 staged by CI via OIDC with provenance, approved by the owner, `v0.1.1` tagged at `152e059` by Release tag | — |
-| X6 build speed | `nitro-ui-worktrees/X6` · `task/X6-build-speed` (clean, no commits) | brief on main | Apex round in progress (`nitroui-X6b`) | Opus review, merge. |
-| X2 gate ledger + short reports | `nitro-ui-worktrees/X2` · `task/X2-gate-ledger` (clean, no commits) | brief on main | Apex round in progress (`nitroui-X2b`) | Opus review, merge. |
+| X6 build speed | `nitro-ui-worktrees/X6` · `task/X6-build-speed` (clean, no commits) | brief on main | **Merged** (1 impl + 2 fix rounds; review MERGE WITH FIXES; all five merge gates green; package byte-identical) | — |
+| X2 gate ledger + short reports | `nitro-ui-worktrees/X2` · `task/X2-gate-ledger` (clean, no commits) | brief on main | **Merged** (1 impl + 1 fix round; review FIX ROUND → fixed; merge exception: no iOS/real-input, diff reaches no app binary) | — |
 | R5b post-publish smoke | — | merged | Done: all 6 rows green from the npm tarball | — |
 | H2a Host: Slider/Progress/Button | — | merged | Done; ships in the next minor via `.changeset/host-composes-more-controls.md` | Quiet bench re-run pending (bench machine). |
-| H2b Host: SegmentedControl/Picker/DatePicker | `nitro-ui-worktrees/H2b` · `task/H2b-host-popups` | brief on main | Apex round in progress (`nitroui-H2b`) | Opus review, merge, then merge Version Packages PR #2 (0.2.0). |
+| H2b Host: SegmentedControl/Picker/DatePicker | `nitro-ui-worktrees/H2b` · `task/H2b-host-popups` | brief on main | Apex round in progress (`nitroui-H2b`) | Opus review, merge; its minor changeset ships as 0.3.0 via the next Version Packages PR. |
 | G5 DatePicker | — | merged | Done | — |
 | P1 iOS profiling | — | report merged | Done | — |
 | T17 iOS Host spike | branch only (`871c579`, pushed) | report merged | Done: iOS Host not better (D23); H3 dropped | — |
