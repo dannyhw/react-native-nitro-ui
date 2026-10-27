@@ -106,7 +106,12 @@ Round 1: `/tmp/x3-redproofs-final.sh` (log `/tmp/x3-redproofs.log`). Fix round 1
 26. registry.test.js -> the autolinking cross-check reads the file on disk instead of the planned text -> `--write completes for a component that has no entry in nitro.json yet` (review M1: this is the check that would have refused the very run that adds a component).
 27. registry.test.js -> the `keep` rule for non-control autolinking entries (`NitroUiCore`, `NitroUiHost`) removed -> eight tests red, starting with `the tree in front of us is in step with its manifests` and `an autolinking entry the registry does not own keeps its bytes and its place`.
 28. registry.test.js -> a label or title containing an apostrophe allowed through -> `rejects a label or title the generated line cannot carry` (review N8: it renders inside single quotes).
-29. Two of this round's own tests (`a component added to the manifests…`, `the barrel exports every manifest…`, `has a manifest for every component directory…`, `a control that stops being hostable…`) went red **on their own**, before any mutation, when run on a tree that had a second control in it — the step-6 experiment's branches. They hardcoded a component named `Gauge`. Fixed in `6697f1f`; that is the red proof for "tests must not pin the roster", and it is the same class of bug as proof 5.
+29. Four of this round's own tests (`a component added to the manifests…`, `the barrel exports every
+manifest…`, `has a manifest for every component directory…`, `a control that stops being hostable…`)
+went red **on their own**, before any mutation, when run on a tree that had a second control in it —
+the step-6 experiment's branches. They hardcoded a component named `Gauge`. Fixed in `6697f1f`, and
+re-checked on those branches: only the fake control's genuine gaps remain. That is the red proof for
+"tests must not pin the roster", and it is the same class of bug as proof 5.
 
 ## Step 6 — two components, and the merge
 
