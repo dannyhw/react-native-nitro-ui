@@ -134,7 +134,13 @@ and `nitrogen/generated/**`, which both layouts regenerate) are excluded.
 
 | | registry layout | hand-maintained layout (`dc13833`) |
 | --- | --- | --- |
-| conflicted files | **19** | **22** (19 + 3 in `nitrogen/generated/**`, which `.gitattributes` now merges with `union` and `regen` rewrites) |
+| conflicted files | **19** | **22** |
+
+The 3-file gap is N4 measured: the extra three are in `nitrogen/generated/**`, which merge cleanly on
+this branch because `.gitattributes` says `merge=union` (both sides' appended lines survive), and
+conflict on `dc13833` because it predates that rule. Nitrogen rewrites those files from `nitro.json`
+in both layouts, so the *cost* of the three is the same either way; the union attribute removes them
+from the list a human has to look at, which is the only thing it can do.
 | entries the losing control adds to shared files | 52 | 54 |
 | after `take either side` | **36 lost**, in 19 files | **36 lost**, in 19 files |
 | after the recipe | **0 of 104 lost** | no recipe: 19 files re-edited by hand, with no gate that can tell whether it was done right |
@@ -187,14 +193,22 @@ Scripts: `/tmp/x3-n5.mjs` (both layouts), `/tmp/x3-n5b.mjs` (gates red after a m
   nitrogen rewrites the file, which is why the fix round's first commit message had to be corrected too.
 - X4: the doc table (`docs/components/*.md`, and whatever nav is built from it) is the next such list;
   the manifest has no field for it yet.
-- X4: a manifest that says `hostable: true` for a control the native Host cannot yet draw is a
-  *runtime* refusal, not a compile error: `HostChildren.ts`'s `UNHOSTABLE_CONTROLS` is the table, and
-  `host.test.tsx` exercises the refusal sentence with a stand-in row. Round 1 claimed a C++ header
-  (`HybridNitroUiHostChildren.g.h`) had to exist first; no such file exists in this repo, and the log
-  it cited shows test failures, not a compile error. Worth a manifest-level guard only if a real
-  control needs it.
-- `build-app.mjs` rewrites `example/ios/Podfile.lock` (NitroUi 0.2.0 -> 0.3.1) on every iOS build; it is
-  committed so the tree stays clean. Pre-existing, not caused by this task.
+- X4, or the next control that needs it: what happens when a manifest says `hostable: true` for a
+  control the native Host has no case for. Round 1 claimed `check` fails to compile until nitrogen
+  emits a C++ header (`HybridNitroUiHostChildren.g.h`) — that file does not exist in this repo, and
+  the log it cited (`/tmp/x3-redproofs.log:459-466`) shows test failures, not a compile error, so the
+  claim was wrong twice over. What is verified: `registry` writes the row regardless of native
+  support, so the failure surfaces downstream, and `HostChildren.ts`'s `UNHOSTABLE_CONTROLS` plus
+  `host.test.tsx`'s stand-in row is where a refusal sentence lives. Whether that path is a red test,
+  a runtime refusal or a blank box was not measured this round and needs a real control to answer.
+- N4's second half is not done: moving each unshipped list into its own wholly generated file, so
+  `merge=union` could cover it too and only the shipped anchored files and the behaviour files would
+  ever conflict. It restructures nine files, and the measurement above says union cannot apply to a
+  JSON object or to a region inside a hand-written shell, so it is a real design change rather than a
+  line in `.gitattributes`. Left for X4 with the doc-table item, which wants the same shape.
+- `example/__tests__/Picker.harness.tsx` "asks a wheel the box question after a variant change" fails
+  in the full iOS harness run (three runs, same test, `wheel=0.00x0.00`) and passes standalone. It
+  needs a sizing owner; see the round's gate note.
 - `registry:check` is in `bun run check` and nowhere else: `prepare` is `bob build`, whose custom target
   runs `nitrogen`, and a package installed from the registry does not run its own `prepare`. So the
   check costs CI ~0.2 s and consumers nothing. (Round 1 claimed it fired on a consumer install; it
