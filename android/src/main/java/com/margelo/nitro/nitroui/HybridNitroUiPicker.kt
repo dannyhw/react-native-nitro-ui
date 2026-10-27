@@ -1117,10 +1117,9 @@ class HybridNitroUiPicker(
         //
         // Material 3 dismisses it too: `ExposedDropdownMenuBox` stops composing a menu
         // whose `menuAnchor(enabled = …)` went false, which is what the harness sees
-        // happen, and that is what the harness sees. Measuring this line as the sole
-        // route is H2b round 2's job: round 1 measured it while `afterUpdate` still held
-        // a duplicate write, so mutating either line left that gate green. Either way
-        // the gate is an outcome gate - "a disabled control is not showing a list of
+        // happen. This line has not been measured as the sole route: H2b measured it
+        // while `afterUpdate` still held a duplicate write, so mutating either line left
+        // that gate green. Either way the gate is an outcome gate - "a disabled control is not showing a list of
         // choices" - and the write is still the point: it is what makes the outcome the
         // control's rule rather than the widget library's, whatever Material decides to
         // do with a disabled anchor.
