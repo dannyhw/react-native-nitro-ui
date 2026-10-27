@@ -15,4 +15,16 @@ if [ -z "${ANDROID_HOME:-}" ] && [ ! -f "${ROOT}/example/android/local.propertie
 fi
 
 cd "${ROOT}/example/android"
-./gradlew :react-native-nitro-ui:testDebugUnitTest --console=plain -PreactNativeArchitectures=arm64-v8a "$@"
+
+# The JVM tests do not run native code, so one ABI is all the library's CMake
+# needs to configure - this machine's own (X6-build-speed). CI and other hosts
+# override it with NITRO_UI_ANDROID_ARCH.
+ARCH="${NITRO_UI_ANDROID_ARCH:-}"
+if [ -z "${ARCH}" ]; then
+  case "$(uname -m)" in
+    x86_64) ARCH=x86_64 ;;
+    *) ARCH=arm64-v8a ;;
+  esac
+fi
+
+./gradlew :react-native-nitro-ui:testDebugUnitTest --console=plain "-PreactNativeArchitectures=${ARCH}" "$@"

@@ -40,6 +40,7 @@ import { fileURLToPath } from 'node:url';
 import {
   StaleAppError,
   artifactPath,
+  checkFreshApp,
   colorize,
   currentCodeTree,
   inspectArtifact,
@@ -48,15 +49,39 @@ import {
   repoRootOf,
   stampPath,
 } from './app-stamp.mjs';
+import {
+  ccacheEnv,
+  ccacheRequested,
+  ccacheEffectiveForWorktrees,
+  decideSkipBuild,
+  gradleArchArgs,
+  gradleCcacheArgs,
+  iosModuleCacheArgs,
+  resolveAndroidAbis,
+} from './build-speed-lib.mjs';
 import { installPods } from './pod-install.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
 /** This checkout, wherever the worktree happens to be. */
 const REPO_ROOT = repoRootOf(path.dirname(fileURLToPath(import.meta.url)));
 
+/** Resolved once: ccache is either on this machine or it is not. */
+const ccache = ccacheSetup();
+
 const USAGE =
   'usage: node scripts/build-app.mjs --platform ios|android\n' +
-  '                                  [--arch <abi>] [--clean] [--no-stamp]';
+  '                                  [--arch <abi[,abi]>] [--clean] [--force] [--no-stamp]\n' +
+  '\n' +
+  "  --arch   Android ABIs to build. Defaults to this machine's own ABI\n" +
+  '           (arm64-v8a on Apple Silicon, x86_64 on Intel), which is what the\n' +
+  '           simulator/emulator here runs. NITRO_UI_ANDROID_ARCH does the same\n' +
+  '           thing for a whole shell; CI passes x86_64 for its emulators.\n' +
+  '  --force  build even when app.stamp already says this tree is built.\n' +
+  '  --clean  delete the build directory first (never skips).\n' +
+  '\n' +
+  '  Nothing changed since the last build? The build is skipped and says so.\n' +
+  '  ccache, when it is installed, speeds up the C/C++/Objective-C++ compiles\n' +
+  '  and shares its cache between worktrees (CONTRIBUTING.md: Build speed).';
 
 assertSupportedNodeOrReexec({
   command: 'node scripts/build-app.mjs',
@@ -68,9 +93,83 @@ function parseArg(argv, name) {
   return index === -1 || index + 1 >= argv.length ? null : argv[index + 1];
 }
 
-/** The ABI a simulator/emulator on this machine actually runs. */
-function defaultArch() {
-  return os.arch() === 'x64' ? 'x86_64' : 'arm64-v8a';
+/**
+ * Where ccache is, or null. A scan of `PATH` rather than `command -v` in a shell:
+ * this decides whether a build gets a launcher at all, and it must not depend on
+ * which shell happens to be configured.
+ *
+ * @returns {string | null}
+ */
+function findCcache() {
+  const named =
+    process.env.CCACHE_PATH ?? process.env.CCACHE_BINARY_PATH ?? null;
+  const candidates =
+    named != null && named !== ''
+      ? [named]
+      : (process.env.PATH ?? '')
+          .split(path.delimiter)
+          .filter((dir) => dir !== '')
+          .map((dir) => path.join(dir, 'ccache'));
+  for (const candidate of candidates) {
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // Not here; try the next PATH entry.
+    }
+  }
+  return null;
+}
+
+/**
+ * ccache, if this machine has it. Everything ccache-related is conditional on
+ * this one lookup, so a machine without it - a CI runner, a new contributor -
+ * builds exactly the way it did before (the no-op the brief asks for).
+ */
+function ccacheSetup() {
+  const binary = ccacheRequested(process.env) ? findCcache() : null;
+  if (binary == null) {
+    return { enabled: false, binary: null, env: {}, gradleArgs: [] };
+  }
+  const env = {
+    ...ccacheEnv({ enabled: true, repoRoot: REPO_ROOT, binary }),
+    // Read by scripts/gradle-ccache.init.gradle: the file is passed with -I
+    // only when ccache exists, and it needs the path, not a guess.
+    CCACHE_GRADLE_LAUNCHER: binary,
+  };
+  // ccache ignores an environment variable it does not recognise, so the two
+  // settings that make a second worktree a hit are worth reading back once:
+  // a wrong name costs every build a cache and says nothing about it.
+  const effective = spawnSync(binary, ['--show-config'], {
+    env: { ...process.env, ...env },
+    encoding: 'utf8',
+  });
+  if (
+    effective.status === 0 &&
+    !ccacheEffectiveForWorktrees(effective.stdout ?? '')
+  ) {
+    console.warn(
+      'build-app: ccache is missing base_dir/hash_dir - expect a miss in every ' +
+        'new worktree (see ccacheEnv in scripts/build-speed-lib.mjs)'
+    );
+  }
+  return {
+    enabled: true,
+    binary,
+    env,
+    // The NDK's CMake projects live in `android/` of the published package and
+    // in nitro-modules, neither of which this repo may edit for packaging
+    // reasons, so the launcher goes in through an init script instead.
+    gradleArgs: gradleCcacheArgs({
+      enabled: true,
+      initScript: path.join(REPO_ROOT, 'scripts', 'gradle-ccache.init.gradle'),
+    }),
+  };
+}
+
+/** The environment every compile in this run sees. */
+function buildEnv(extra = {}) {
+  return { ...process.env, ...ccache.env, ...extra };
 }
 
 function run(command, args, options = {}) {
@@ -185,6 +284,11 @@ function iosInputFingerprint() {
     }
   };
   for (const root of roots) walk(root, 0);
+  // The Pods project records whether it was told to use ccache, which is a
+  // property of *this machine* as much as of these sources: installing ccache
+  // after a `pod install` has to re-run it, or the CC build settings would keep
+  // naming plain clang and the cache would stay cold forever.
+  lines.push(`ccache:${ccache.binary ?? 'none'}`);
   return createHash('sha256').update(lines.sort().join('\n')).digest('hex');
 }
 
@@ -232,6 +336,18 @@ function buildIos({ clean, log }) {
     writeMarker(inputs, iosInputFingerprint());
   }
 
+  // The module cache this build writes is the one a ccache build owns: the
+  // compiler here has CCACHE_BASEDIR, and clang records what it resolves into
+  // the .pcm files, so sharing that directory with a plain xcodebuild hands it
+  // two spellings of one module and a fatal error. See iosModuleCacheDir.
+  const moduleCacheArgs = iosModuleCacheArgs({
+    derivedData,
+    ccache: ccache.enabled,
+  });
+  if (ccache.enabled) {
+    log(`module cache ${moduleCacheArgs[0].split('=')[1]}`);
+  }
+
   // M3: this is the "before" tree. It is taken *after* pod install, because pod
   // install legitimately rewrites the tracked Podfile.lock (the CocoaPods stamp)
   // - hashing before it would report the tooling's own bookkeeping as the tree
@@ -256,14 +372,15 @@ function buildIos({ clean, log }) {
       '-derivedDataPath',
       derivedData,
       'CODE_SIGNING_ALLOWED=NO',
+      ...moduleCacheArgs,
       'build',
     ],
-    { cwd: iosDir, env: { ...process.env, CI: '1' } }
+    { cwd: iosDir, env: buildEnv({ CI: '1' }) }
   );
   return { artifact: artifactPath({ platform: 'ios' }), treeBefore };
 }
 
-function buildAndroid({ arch, clean, log }) {
+function buildAndroid({ abis, abisFrom, clean, log }) {
   // M3: nothing in this build is expected to write to tracked files (gradle,
   // codegen and the RN autolinker all write under ignored build directories),
   // so the tree at entry is the tree the compiler reads. Verified on the run
@@ -277,8 +394,12 @@ function buildAndroid({ arch, clean, log }) {
     androidDir,
     process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'
   );
-  const architectures = `-PreactNativeArchitectures=${arch}`;
-  run(gradlew, [':app:assembleDebug', architectures], { cwd: androidDir });
+  const architectures = gradleArchArgs(abis);
+  log(`android ABIs: ${abis}${abisFrom === 'host' ? ' (this machine)' : ''}`);
+  run(gradlew, [':app:assembleDebug', ...architectures, ...ccache.gradleArgs], {
+    cwd: androidDir,
+    env: buildEnv(),
+  });
 
   const apk = artifactPath({ platform: 'android' });
   const components = registeredComponents({ platform: 'android' });
@@ -294,10 +415,20 @@ function buildAndroid({ arch, clean, log }) {
         'output, re-running packageDebug'
     );
     // `--rerun` skips the up-to-date checks for every task in this graph, which
-    // is the documented fix for a generated hybrid that never got dexed.
-    run(gradlew, [':app:packageDebug', '--rerun', architectures], {
-      cwd: androidDir,
-    });
+    // is the documented fix for a generated hybrid that never got dexed. The
+    // gradle arguments have to match the build above exactly, init script
+    // included: without it the rerun is a different configuration-cache key and
+    // a CMake reconfigure with no launcher, so the slowest possible path becomes
+    // the one the safety net takes - and it forces the same reconfigure again on
+    // the next normal build.
+    run(
+      gradlew,
+      [':app:packageDebug', '--rerun', ...architectures, ...ccache.gradleArgs],
+      {
+        cwd: androidDir,
+        env: buildEnv(),
+      }
+    );
     const second = inspectArtifact({
       platform: 'android',
       artifact: apk,
@@ -330,18 +461,64 @@ function main(argv) {
     return 2;
   }
   const log = (message) => process.stderr.write(`build-app: ${message}\n`);
-  const arch = parseArg(argv, '--arch') ?? defaultArch();
   const clean = argv.includes('--clean');
+  const force = argv.includes('--force');
+  const noStamp = argv.includes('--no-stamp');
+
+  // Resolved before the skip decision, not after it: the ABIs are part of what
+  // the caller asked for, and an artifact that does not contain them is not the
+  // build that was requested even when the code tree matches (review M1).
+  const { abis, source: abisFrom } = resolveAndroidAbis({
+    flag: parseArg(argv, '--arch'),
+    env: process.env,
+    hostArch: os.arch(),
+  });
+
+  // Nothing changed since the last build, and the artifact still proves it? Then
+  // there is nothing to build. The check is the same one the device gates run,
+  // so "fresh" cannot mean one thing here and another thing there; anything it
+  // cannot confirm, it builds.
+  if (!force && !clean && !noStamp) {
+    const decision = checkFreshApp({ platform, warn: () => {} });
+    const skip = decideSkipBuild({
+      force,
+      clean,
+      noStamp,
+      fresh: decision.ok,
+      freshReason: decision.ok ? null : decision.problems[0],
+      platform,
+      abis,
+      stampedAbis: decision.stamp?.abis ?? null,
+    });
+    if (skip.skip) {
+      process.stdout.write(
+        `${colorize(`\u2713 ${platform} example app is fresh, not rebuilt`, 'green')}\n` +
+          `  artifact  ${decision.artifact}\n` +
+          `  stamp     ${stampPath({ platform })}\n` +
+          `  tree      ${currentCodeTree().tree.slice(0, 12)}\n\n` +
+          'Nothing in the code tree or the binary moved since it was built.\n' +
+          'Rebuild anyway with --force, or --clean.\n'
+      );
+      return 0;
+    }
+    log(`building: ${skip.reason}`);
+  }
 
   const startedAt = Date.now();
   const { artifact, treeBefore } =
     platform === 'ios'
       ? buildIos({ clean, log })
-      : buildAndroid({ arch, clean, log });
+      : buildAndroid({ abis, abisFrom, clean, log });
 
-  const stamp = argv.includes('--no-stamp')
+  const stamp = noStamp
     ? null
-    : recordBuild({ platform, artifact, treeBefore, log });
+    : recordBuild({
+        platform,
+        artifact,
+        treeBefore,
+        abis: platform === 'android' ? abis : null,
+        log,
+      });
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(0);
   const tree = currentCodeTree();
   process.stdout.write(

@@ -19,6 +19,10 @@ that brings it.
   in `package.json`). Do not add `yarn`/`npm` lockfiles.
 - Xcode 26 or 27 (Xcode 27 if you want the iOS 27 simulator runtime), CocoaPods
 - JDK 17, Android SDK (`ANDROID_HOME`) with an emulator image for API 35
+- [ccache](https://ccache.dev) — optional, and only for the example/bench apps:
+  `brew install ccache` (this repo was verified on 4.14.2). Everything that uses
+  it checks for the binary first, so CI and a machine without it build exactly
+  what they built before. See [Build speed](#build-speed).
 - Node 22.11 - 24 — `.nvmrc` pins one, and the device gates refuse to start on
   anything else (bun runs the scripts, but Node transforms the tests). Node 25
   and 26 die later inside `react-native-harness`'s Jest transform with
@@ -292,6 +296,78 @@ A hand-built artifact has no stamp, so a gate asked to use one says so and names
 point: it runs the version a `Podfile.lock` already records, so a machine on
 another CocoaPods does not leave a `COCOAPODS:`-trailer-only diff in a tracked
 lock file (four tasks each lost time restoring that line by hand).
+
+### Build speed
+
+Nothing in this section changes what a library user gets. It is all in
+`scripts/`, the example app and the bench app; `android/build.gradle`,
+`NitroUi.podspec`, `src/`, `ios/`, `cpp/` and `nitrogen/` are untouched, and
+`bun run manifest:check` plus `npm pack` keep that honest.
+
+Four things make a local or agent build faster:
+
+- **One ABI.** `scripts/build-app.mjs` builds the ABI this machine runs
+  (`arm64-v8a` on Apple Silicon, `x86_64` on Intel) instead of the four in
+  `example/android/gradle.properties`. `--arch arm64-v8a,x86_64` or
+  `NITRO_UI_ANDROID_ARCH` overrides it; the gradle default stays the full list,
+  so a hand-run `./gradlew` and the release CI job still build everything a user
+  can install, and the Android CI jobs pass `x86_64` because that is all their
+  emulator runs.
+- **Gradle caches.** The example app sets `org.gradle.caching` and
+  `org.gradle.configuration-cache` in its `gradle.properties`, and the bench
+  script applies the same two to its generated `android/` tree after every
+  `expo prebuild`. The build cache is per user, so a fresh worktree starts with
+  the tasks every other worktree already ran.
+- **ccache.** The example Podfile passes `:ccache_enabled => true`, the bench
+  app sets `USE_CCACHE=1` for the Podfile `expo prebuild` owns, and
+  `scripts/gradle-ccache.init.gradle` (passed with `-I`, only when ccache
+  exists) puts `CMAKE_<LANG>_COMPILER_LAUNCHER` in front of the NDK builds. The
+  scripts also export `CCACHE_BASEDIR` (this worktree) and `CCACHE_NOHASHDIR`
+  (`1` - no underscore; ccache ignores `CCACHE_HASH_DIR` and keeps hashing the
+  compile directory, which is the silent miss-per-worktree this avoids), which is
+  what makes the _same file in another worktree_ a hit
+  instead of a miss; environment is deliberate, because React Native points
+  `CCACHE_CONFIGPATH` at its own config file for iOS builds and the environment
+  outranks every config file. `NITRO_UI_CCACHE=0` keeps it out of one build.
+- **No build when nothing moved.** `build-app.mjs` asks the same question the
+  device gates ask (`checkFreshApp`), and when the answer is yes it prints
+  `<platform> example app is fresh, not rebuilt` and exits. `--force`, `--clean`
+  and `--no-stamp` all build.
+
+Three things it buys that are worth knowing before you go looking for a bug:
+
+- **Debug info names the worktree that first compiled the object.**
+  `CCACHE_NOHASHDIR` is what makes a second worktree a hit, and it also means a
+  cached object keeps the `DW_AT_comp_dir` of the directory that built it. So in
+  worktree B, lldb/Xcode/Android Studio resolve a C++ frame back to worktree A -
+  or to nothing, once A is deleted. Gates are unaffected (they read the binary,
+  not the paths in its debug info). For a native-debugging session, build that
+  worktree's objects itself: `NITRO_UI_CCACHE=0`, or `--force` with the cache
+  cleared.
+- **iOS inherits React Native's ccache `sloppiness`.** Its config file sets
+  `modules`, `pch_defines`, `file_stat_matches` and `system_headers`, which is
+  upstream's choice, not this repo's. It trades a little correctness for hits:
+  the risk is a change reached through `@import` rather than `#include`. Nothing
+  under `ios/` uses `@import` today; if that changes and a rebuild looks ignored,
+  `NITRO_UI_CCACHE=0` is the answer to all three.
+- **A ccache build and a plain build do not share an iOS module cache.**
+  `CCACHE_BASEDIR` changes what clang _records_, not only what ccache hashes: a
+  `.pcm` compiled under it holds worktree-relative paths. So a build that sets
+  it is passed `MODULE_CACHE_DIR=<derivedData>/ModuleCache-ccache.noindex`, and
+  everything that compiles without ccache - `real-input:ios`, the smoke builds,
+  Xcode itself - keeps Xcode's own `ModuleCache.noindex`. Sharing one directory
+  is not slower, it is fatal: the next build reads those `.pcm` files and stops
+  with `module 'Foundation' is defined in both …` — the same directory written
+  two ways, one of them relative to the worktree. Deleting that
+  `ModuleCache.noindex` clears a stale one; a `pod install` does not.
+
+```sh
+node scripts/build-app.mjs --platform ios          # fresh? skipped, in half a second
+node scripts/build-app.mjs --platform android --force
+ccache --show-stats                                # what the cache has been doing
+```
+
+The measurements are in `docs/tasks/X6-build-speed.report.md`.
 
 ### Devices and ports
 
