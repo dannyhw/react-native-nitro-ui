@@ -42,7 +42,7 @@ second component to add:
 
 `Progress` is a `View`, so any other `ViewProps` work as usual.
 
-`hybridRef` and `nuiPerfId` are not app API (DECISIONS D14): v0.1 publishes no
+`hybridRef` and `nuiPerfId` are not app API (DECISIONS D14): the package publishes no
 Hybrid View types and no way to write a prop from outside React. The handle is
 read-only (plus `measureContent()`, and the test-only `nuiTestDisplayedValue` /
 `nuiTestIsAnimating`), it is invoked once when the view mounts, and a new function

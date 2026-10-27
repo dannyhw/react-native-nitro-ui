@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 /** Major versions the device gates are known to run on. */
 const SUPPORTED_MAJORS = new Set([22, 23, 24]);
 
-/** The floor `package.json`'s `engines.node` promises. */
+/** The Node 22 floor (22.11) the device gates are known to run on. */
 const MIN_MINOR_FOR_22 = 11;
 
 /**

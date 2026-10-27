@@ -96,11 +96,13 @@ function checkCoverage(swiftSource, controls) {
  * @returns {Promise<{ udid: string, name: string }>}
  */
 async function resolveDevice(env) {
-  const udid = env.IOS_UDID;
+  // `IOS_SIM_UDID` is what `scripts/lease.mjs` exports; `IOS_UDID` wins when both are set.
+  const udid = env.IOS_UDID || env.IOS_SIM_UDID;
   if (udid == null || udid === '') {
     throw new Error(
-      'real-input: IOS_UDID is not set. Point it at the simulator your brief ' +
-        'assigns, e.g. IOS_UDID=$(xcrun simctl list devices available | ' +
+      'real-input: neither IOS_UDID nor IOS_SIM_UDID is set. Lease a device ' +
+        '(node scripts/lease.mjs acquire --task <id>) or point IOS_UDID at a ' +
+        'simulator, e.g. IOS_UDID=$(xcrun simctl list devices available | ' +
         "grep -m1 iPhone | tr -dc 'A-F0-9-')"
     );
   }
