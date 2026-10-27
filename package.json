@@ -35,6 +35,7 @@
     "!android/src/test",
     "!**/__fixtures__",
     "!**/__mocks__",
+    "!**/component.json",
     "!**/.*"
   ],
   "scripts": {
