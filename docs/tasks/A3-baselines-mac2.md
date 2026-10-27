@@ -13,6 +13,13 @@ X8 keys baselines by machine: this run writes `bench/baselines/maintainer-mac-2/
 2. Take an **exclusive** lease for both platforms: `node scripts/lease.mjs acquire --task A3
    --exclusive`, sourced as CONTRIBUTING shows. It waits until every other lease has ended. Renew it
    if a run outlives the ttl. Release it at the end, even if a run fails.
+2b. **Settle first.** On this machine every iOS 27 simulator boot drives load1 to ~100–165, and it
+   takes 4–6 min to fall below 5. Boot the leased device yourself (`xcrun simctl boot <udid>`;
+   don't open Simulator/DeviceHub, which auto-boots another device). Wait until load1 has stayed
+   under 4 for 5 minutes, then start the run. Do the same with the emulator before Android, after
+   shutting the simulator down. Before each run, check `xcrun simctl list devices booted` and `ps`
+   for other `gate.mjs`/build processes, and record anything you find. Don't stop processes you
+   didn't start.
 3. **iOS:** `bun bench --platform ios --plan full --launches 8 --update-baseline` on the leased
    iPhone 17 (iOS 27.0). Its key must be `ios27-sim-iphone17`. If the runner prints another key,
    stop and report it; don't mint under that key.
