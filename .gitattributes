@@ -1,3 +1,38 @@
 *.pbxproj -text
 # specific for windows script files
 *.bat text eol=crlf
+
+# Nitrogen's output and the component registry's output (`scripts/gen-registry.mjs`,
+# from `src/components/<Name>/component.json`). GitHub collapses them in a diff, which
+# is the point: adding a component changes a dozen per-component lists, and the thing
+# worth reviewing is the manifest that caused it.
+#
+# Not marked: the files the generator writes *inside* the published package
+# (`etc/package-files.txt`) - the Android manager list and both declared-fallback
+# tables, `HostChildren.ts`. Those are shipped bytes, so their diff is a change to the
+# artifact and review has to see it. They are also the least conflict-prone: an
+# anchored region only ever gains or loses a line, never reorders.
+#
+# Conflicts in these files are cheap by design: take either side, then run
+# `bun run regen` (CONTRIBUTING "Adding a component").
+#
+# Collapsing them in a diff is safe because `registry:check` (in `bun run check`)
+# compares every line of their generated regions against the manifests: a hand edit
+# inside a region cannot pass CI, so nothing depends on a reviewer noticing it. The
+# hand-written prose around the regions is still readable - GitHub shows it once the
+# file is expanded.
+#
+# Not marked: the files the generator writes *inside* the published package
+# (`etc/package-files.txt`) - the Android manager list and both declared-fallback
+# tables, `HostChildren.ts`. Their diff is a change to the shipped artifact, and review
+# has to see it.
+nitro-ui.sizing.json linguist-generated=true
+bench/src/plan.ts linguist-generated=true
+bench/src/types.ts linguist-generated=true
+bench/src/implementations/index.ts linguist-generated=true
+scripts/bench/lib.mjs linguist-generated=true
+scripts/smoke/lib.mjs linguist-generated=true
+scripts/smoke/App.tsx linguist-generated=true
+scripts/real-input/controls.mjs linguist-generated=true
+src/__tests__/viewConfigs.test.ts linguist-generated=true
+example/src/App.tsx linguist-generated=true
