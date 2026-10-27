@@ -241,11 +241,16 @@ matrix to that arm rather than burning launches that report nothing.
 
 `bench/baselines/<machine-label>/<deviceKey>.json` is the trend record. `deviceKey`
 is `platform + OS runtime + device class` (D9): `ios27-sim-iphone17`,
-`android35-emu-pixel9`. A runtime change is a comparability break, so it gets a new
+`android35-emu-pixel9`. The class is the device's **hardware type**, never what it was
+named: a simulator's key comes from `simctl`'s `deviceTypeIdentifier`
+(`…SimDeviceType.iPhone-17` -> `iphone17`) and an emulator's from its AVD hardware
+profile, because the lease pool names its devices `nitro-ui A`/`nitro-ui B` and a
+committed path cannot be keyed on a local nickname. A runtime change is a
+comparability break, so it gets a new
 file. The directory above it is the machine that measured it, because the launch-paired
 ratio to `rn-core` cancels drift inside one machine and explains nothing between two:
 simulators and emulators run on their host's CPU and GPU, so core count, GPU and
-memory pressure move the UI-CPU cells (`docs/tasks/PROCESS-review-2026-10-26.md` SS5).
+memory pressure move the UI-CPU cells (`docs/tasks/PROCESS-review-2026-10-26.md` §5).
 So a machine gates only against its own directory, and anything that is not the
 canonical device for its platform, or a machine without its own baseline, uses same-run
 ratio tables and `--compare`, never `--check`. Baselines are **ratio-only** - see
@@ -290,7 +295,10 @@ by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:
    cannot create one.
 
 Exit codes: `0` ok, `1` conclusive regression, `2` the run could not be judged
-(incomplete launches, incompatible baseline, refusal).
+(incomplete launches, incompatible baseline, refusal). The one exception is
+`report.mjs --check` on a machine that has no baseline yet: it exits 1, as it always
+has, meaning "nothing was judged" rather than "a regression"; `run.mjs --check` exits 2
+there. `bench/baselines/README.md` tabulates it per refusal.
 
 Refresh baselines in a dedicated commit with `--plan full --launches 8` on a
 clean tree and an idle machine, on the machine that owns the directory being
@@ -311,7 +319,9 @@ recorded, so they keep the single-sample rule.
 An unusable `NITRO_UI_MACHINE_LABEL` is refused in that same pre-flight, for the same
 reason: a three-hour run that discovers at the end that it has no directory to write
 its baseline to has wasted three hours. `--check` refuses one up front too, because
-there is no other machine's file to fall back to.
+there is no other machine's file to fall back to. `--force` does not bypass that
+refusal: what it overrides are the load, cleanliness and plan guards, which judge a
+measurement, and this one is the absence of a path to write to.
 
 Every run also records what machine produced it - hostname, core count, CPU
 model (`os.cpus()[0].model`), load averages, RAM, Xcode version or Android image
