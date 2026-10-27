@@ -542,7 +542,7 @@ describe('the generated tables cover what they claim', () => {
     // nothing in the registry knows about. Half of that is a report (this), half is
     // that `--write` must not silently eat someone's config (the `keep` rule, and the
     // `--check` test below) - but an entry that is neither a manifest's nor one of the
-    // two named non-controls is drift, and `--write` drops it.
+    // two named non-controls is drift: `--write` refuses it and keeps the entry.
     const disk = JSON.parse(readRepo('nitro.json'));
     disk.autolinking.NitroUiDeleted = disk.autolinking.NitroUiSwitch;
     expect(checkAutolinking(manifests, disk, disk).join('\n')).toMatch(
@@ -680,7 +680,7 @@ describe('the generated tables cover what they claim', () => {
     );
   });
 
-  it('accepts either shape nitrogen emits for an autolinking entry', () => {
+  it('accepts either shape nitrogen reads for an autolinking entry', () => {
     // Per-platform entries and a shared `all` entry state their languages differently
     // (`all` uses `language` for the primary platform and `iosLanguage` for iOS), and
     // which shape appears is nitrogen's business, not the manifests'. Getting this

@@ -1035,7 +1035,7 @@ export function checkAutolinking(manifests, nitro, onDisk) {
   for (const key of Object.keys(onDisk?.autolinking ?? {})) {
     if (!known.has(key)) {
       problems.push(
-        `nitro.json: autolinking has ${key} and no manifest declares it - delete the component, or add its src/components/<Name>/${MANIFEST_BASENAME}`
+        `nitro.json: autolinking has ${key} and no manifest declares it - remove its entry from nitro.json, or add its src/components/<Name>/${MANIFEST_BASENAME}`
       );
     }
   }
