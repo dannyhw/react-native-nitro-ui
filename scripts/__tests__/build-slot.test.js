@@ -46,6 +46,8 @@ import {
   decideBuildSlot,
   formatSlotHolder,
   maxConcurrentBuildsFrom,
+  PRIME_BUILD_TIMEOUT_MINUTES,
+  primeBuildTimeoutMinutes,
   pruneBuildSlots,
   processPidIsAlive,
   releaseBuildSlot,
@@ -261,39 +263,87 @@ describe('staleness', () => {
     ).toHaveLength(1);
   });
 
-  it("expires a slot by its own ttl, not the asker's", () => {
-    const fresh = slot();
+  it('gives a prime long enough to outlast the queue it waits behind (N4)', () => {
+    // A prime waits *behind* whoever is building, so its budget has to cover the wait
+    // *and* the build. It used to be 45 minutes against a 60-minute queue:
+    // `spawnSync`'s SIGTERM could then reach a `build-app.mjs` that had not started
+    // compiling yet, and a signal-killed build never runs its exit handler - which is
+    // how xcodebuild and Gradle children get orphaned mid-compile.
+    expect(PRIME_BUILD_TIMEOUT_MINUTES).toBe(
+      BUILD_SLOT_TTL_MINUTES + DEFAULT_BUILD_WAIT_MINUTES
+    );
+    expect(PRIME_BUILD_TIMEOUT_MINUTES).toBeGreaterThan(
+      DEFAULT_BUILD_WAIT_MINUTES
+    );
+    expect(primeBuildTimeoutMinutes({})).toBe(PRIME_BUILD_TIMEOUT_MINUTES);
+    // Overridable, because no fixed number can be safe for a build that holds its
+    // slot for as long as it runs (N3).
+    expect(
+      primeBuildTimeoutMinutes({ NITRO_UI_PRIME_TIMEOUT_MINUTES: '30' })
+    ).toBe(30);
+    for (const bad of ['', '0', '-2', 'soon']) {
+      expect(
+        primeBuildTimeoutMinutes({ NITRO_UI_PRIME_TIMEOUT_MINUTES: bad })
+      ).toBe(PRIME_BUILD_TIMEOUT_MINUTES);
+    }
+  });
+
+  it('holds a slot for a live build however long it takes (N3)', () => {
+    // The rule: a build that is still running keeps its slot. The old code applied
+    // the ttl to this case, and its own test asserted the expiry below - which is
+    // the bug, not the spec: a `--clean` iOS rebuild past 45 minutes had its slot
+    // dropped and a second build was admitted beside it, the load spike this module
+    // exists to prevent.
+    const building = slot();
+    const longAfter = 1_000_000 + (BUILD_SLOT_TTL_MINUTES + 30) * 60_000;
     expect(
       pruneBuildSlots(
-        { builds: [fresh] },
-        {
-          now: 1_000_000 + (BUILD_SLOT_TTL_MINUTES - 1) * 60_000,
-          isAlive: ALIVE,
-          host: HOST,
-        }
+        { builds: [building] },
+        { now: longAfter, isAlive: ALIVE, host: HOST }
       ).builds
     ).toHaveLength(1);
-    expect(
-      pruneBuildSlots(
-        { builds: [fresh] },
-        {
-          now: 1_000_000 + (BUILD_SLOT_TTL_MINUTES + 1) * 60_000,
-          isAlive: ALIVE,
-          host: HOST,
-        }
-      ).builds
-    ).toHaveLength(0);
-    // A slot that carries no ttl still expires by the default, never forever.
+    // And a slot that carries no ttl at all is still a live build's slot.
     expect(
       pruneBuildSlots(
         { builds: [{ ...slot(), ttlMinutes: undefined }] },
-        {
-          now: 1_000_000 + (BUILD_SLOT_TTL_MINUTES + 1) * 60_000,
-          isAlive: ALIVE,
-          host: HOST,
-        }
+        { now: longAfter, isAlive: ALIVE, host: HOST }
       ).builds
-    ).toHaveLength(0);
+    ).toHaveLength(1);
+  });
+
+  it('expires a slot by its ttl only where the holder cannot be inspected', () => {
+    // Two cases, and they are the only two the ttl is for: a slot written by another
+    // host (its pid means nothing here) and one with no pid at all. Both fall back to
+    // the clock, judged by the slot's own ttl and never the asker's.
+    const foreign = slot({ host: 'other-mac' });
+    const noPid = slot({ pid: null });
+    for (const [label, held] of [
+      ['foreign host', foreign],
+      ['no readable pid', noPid],
+    ]) {
+      expect([
+        label,
+        pruneBuildSlots(
+          { builds: [held] },
+          {
+            now: 1_000_000 + (BUILD_SLOT_TTL_MINUTES - 1) * 60_000,
+            isAlive: ALIVE,
+            host: HOST,
+          }
+        ).builds,
+      ]).toEqual([label, expect.arrayContaining([held])]);
+      expect([
+        label,
+        pruneBuildSlots(
+          { builds: [held] },
+          {
+            now: 1_000_000 + (BUILD_SLOT_TTL_MINUTES + 1) * 60_000,
+            isAlive: ALIVE,
+            host: HOST,
+          }
+        ).builds,
+      ]).toEqual([label, []]);
+    }
   });
 
   it('names a holder in one readable line', () => {
@@ -333,8 +383,24 @@ describe('takeBuildSlot against a real filesystem', () => {
     expect(first.slot.task).toBe('G7');
     expect(clock.polls).toHaveLength(0);
 
+    // The first build releases on the second build's third poll, from inside the
+    // `sleep` hook: with N3 the waiter now blocks until the holder really goes away,
+    // so this test used to pass *because* the 45-minute ttl dropped a live holder's
+    // slot out from under it. Interleaving through the sleep is what lets a
+    // synchronous test show a queue draining for the right reason.
+    let released = false;
+    const sleep = (ms) => {
+      clock.polls.push(ms);
+      clock.advance(ms);
+      if (!released && clock.polls.length === 3) {
+        released = true;
+        first.release();
+      }
+    };
+
     const second = takeBuildSlot({
       ...common,
+      sleep,
       task: 'X9',
       platform: 'android',
       pid: 42_000,
@@ -345,6 +411,10 @@ describe('takeBuildSlot against a real filesystem', () => {
     expect(waits).toHaveLength(1);
     expect(waits[0]).toContain('G7');
     expect(second.waitedMs).toBeGreaterThan(0);
+    // ...and it waited *for the release*, not for the clock: the holder was alive the
+    // whole time, so under N3 nothing but `first.release()` could have freed the slot.
+    expect(released).toBe(true);
+    expect(second.waitedMs).toBeLessThan(BUILD_SLOT_TTL_MINUTES * 60_000);
 
     const live = () =>
       currentBuildSlots({

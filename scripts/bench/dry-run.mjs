@@ -29,6 +29,7 @@ import path from 'node:path';
 
 import {
   baselineFileFor,
+  labelPreFlightProblem,
   machineLabelFromEnv,
   machineLabelProblem,
 } from './baseline.mjs';
@@ -290,12 +291,17 @@ export function dryRunReport(input) {
 
   // The baseline path, through the same resolver the runner uses: it is the one
   // place that refuses a bad label by throwing, and a dry run that rebuilt the path
-  // itself would print a file the run would never open.
+  // itself would print a file the run would never open. Because that resolver
+  // *throws*, the two reasons it would refuse are asked first: X8's own pre-flight
+  // (N7 - `run.mjs` refuses with this same function, so a dry run cannot print a
+  // refusal the run would not produce, nor prefix a flag twice) for a run that
+  // gates a baseline, and X8's predicate for one that does not. The second is what
+  // an unlabelled *plain* run needs: it asks for no baseline, so the pre-flight
+  // says nothing, and calling the resolver anyway threw out of `--dry-run`.
   let baselinePath = null;
-  const labelProblem = machineLabelProblem(label, {
-    flag: minting ? '--update-baseline' : '--check',
-  });
-  if (labelProblem == null && deviceKey != null) {
+  const labelProblem = labelPreFlightProblem(argv, env);
+  const labelIsUsable = machineLabelProblem(label, { flag: 'dry-run' }) == null;
+  if (labelProblem == null && labelIsUsable && deviceKey != null) {
     baselinePath = baselineFileFor({
       baselinesDir,
       deviceKey,
@@ -314,7 +320,11 @@ export function dryRunReport(input) {
   if (minting || checking) {
     const flag = minting ? '--update-baseline' : '--check';
     if (labelProblem != null) {
-      problems.push(`${flag}: ${labelProblem.split('\n')[0]}`);
+      // Pushed whole, and un-prefixed: X8's function already names the flag, and its
+      // second line is the fix (`export NITRO_UI_MACHINE_LABEL=…`), already indented
+      // to line up under this column. Truncating to the first line, and prefixing it
+      // again, printed `--check: --check:` and dropped the thing to do about it.
+      problems.push(labelProblem);
     }
     if (deviceKey == null) {
       problems.push(
@@ -334,7 +344,10 @@ export function dryRunReport(input) {
         problems.length === 0 ? 'would start' : 'would refuse'
       }`
     );
-  } else if (labelProblem != null) {
+  } else if (machineLabelProblem(label, { flag: '--dry-run' }) != null) {
+    // The note for a run that gates nothing: `labelPreFlightProblem` returns null
+    // here by design (no flag to refuse), so this asks X8's predicate directly
+    // rather than re-deriving which flag would have asked.
     lines.push(
       'Note:      no machine label - fine for a plain run, needed by --check and --update-baseline'
     );

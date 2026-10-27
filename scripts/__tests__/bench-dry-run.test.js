@@ -30,6 +30,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { labelPreFlightProblem } from '../bench/baseline.mjs';
 import {
   androidDryRunDevice,
   dryRunReport,
@@ -278,9 +279,19 @@ describe('the dry-run report and its exit code', () => {
     expect(plain.lines.join('\n')).toContain('no machine label');
     expect(plain.lines.join('\n')).toContain('Baseline:  unknown');
 
-    const check = dryRunReport({ ...unlabelled, argv: ['--check'] });
+    const argv = ['--check'];
+    const check = dryRunReport({ ...unlabelled, argv });
     expect(check.exitCode).toBe(2);
-    expect(check.problems.join('\n')).toContain('no machine label');
+    // The refusal is X8's own string, whole (N7). Comparing against the function
+    // rather than against a copy of its text is the point: a dry run that rebuilt
+    // the message - or prefixed the flag a second time, which it used to print as
+    // `--check: --check:` - goes red here even if its own text still reads well.
+    expect(check.problems).toContain(labelPreFlightProblem(argv, {}));
+    // And the reader gets the fix, which is on the message's second line: dropping
+    // to the first line left "no machine label" with nothing to do about it.
+    const reason = check.lines.filter((line) => line.startsWith('Reason:'))[0];
+    expect(reason).toContain('NITRO_UI_MACHINE_LABEL');
+    expect(reason.match(/--check:/g)).toHaveLength(1);
   });
 
   it('carries an unresolvable device into the answer', () => {
