@@ -26,7 +26,8 @@ path-pod's `SPEC CHECKSUMS` entry is the sha1 of CocoaPods' *stored* evaluation 
 repair therefore runs real CocoaPods: `version` in `release.yml` moved to `macos-26` and
 `release:version` refreshes the lock inside the same script whose tree the changesets action commits.
 Two findings shaped it: the action commits **every** changed and untracked non-ignored file
-(`@changesets/ghcommit` → `git diff --name-status` + `git ls-files --others`), so `--fix` restores
+(its commit step — `git diff --name-status` + `git ls-files --others`, which the pinned action
+does in one of those two ways; the tree is committed the same either way), so `--fix` restores
 everything except the lock and keeps the lock's own `COCOAPODS:` trailer; and the reader must scan
 only `PODS:`, because `DEPENDENCIES:` says ``- NitroUi (from `../..`)`` — a regex matching that
 reports a version that never equals a real one, a guard that can never fire.

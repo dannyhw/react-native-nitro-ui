@@ -21,6 +21,8 @@
 import { describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import {
+  chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -41,6 +43,9 @@ import {
 } from '../example-lock-core.mjs';
 
 const root = resolve(process.cwd());
+
+/** The CLI under test, shared by the scratch-repo cases and the real-tree ones. */
+const SCRIPT = resolve(root, 'scripts', 'sync-example-lock.mjs');
 
 /**
  * A lock with the four places a real one names this pod.
@@ -79,6 +84,26 @@ COCOAPODS: 1.17.0
 /** The same lock with one version changed, the way `pod install` writes it. */
 const lockAt = (version) =>
   LOCK.replace('- NitroUi (0.4.1):', `- NitroUi (${version}):`);
+
+/**
+ * What a *clean* release refresh writes: NitroUi's version, NitroUi's checksum, and
+ * the trailer of the machine that ran it. Nothing else.
+ *
+ * Derived from `LOCK` rather than retyped, so the churn guard's allowance is tested
+ * against a file that differs from the original in exactly the lines it claims to.
+ */
+const CLEAN_REFRESHED_LOCK = lockAt('0.5.0')
+  .replace(
+    'NitroUi: 4a89200d3c9d62b351064b022a54cbb9a8bfaf1e',
+    'NitroUi: af31cfb40ed1503db3c5214526082909d5374acf'
+  )
+  .replace('COCOAPODS: 1.17.0', 'COCOAPODS: 1.19.0');
+
+/** The same, plus one checksum this pod's release does not explain. */
+const CHURNED_REFRESHED_LOCK = CLEAN_REFRESHED_LOCK.replace(
+  '  boost: 8502bfdc46e2804408af2e163049ece181009af4',
+  '  boost: 8502bfdc46e2804408af2e163049ece181009af4\n  React-Core: 9999999999999999999999999999999999999999'
+);
 
 describe('reading the locked version', () => {
   it('reads the PODS: entry, and nothing else', () => {
@@ -351,6 +376,165 @@ describe('keeping the CocoaPods trailer out of a release commit', () => {
   });
 });
 
+describe('the two things a refresh must never do', () => {
+  /**
+   * A scratch checkout, driven by the real git and a fake CocoaPods.
+   *
+   * The `--fix` glue (restore, trailer-keep, churn guard) had no automated test:
+   * removing the `git restore` *and* the trailer-keep together left all 23 tests
+   * green, and the bug that started this whole item - a `git` flag that does not
+   * exist - lived in exactly this layer. So the fake pod is a shell script that
+   * rewrites the lock the way a real install does (version, checksum, trailer, and
+   * some churn), and everything else is real: a git repo, a working tree, files.
+   */
+  function scratchCheckout({ version = '0.4.1' } = {}) {
+    const dir = mkdtempSync(join(tmpdir(), 'nitro-ui-lock-sync-'));
+    const at = (args) => {
+      const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+      if (r.status !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr}`);
+      return r.stdout;
+    };
+    at(['init', '-q']);
+    at(['config', 'user.email', 'test@example.com']);
+    at(['config', 'user.name', 'Test']);
+    at(['config', 'commit.gpgsign', 'false']);
+    mkdirSync(join(dir, 'example/ios'), { recursive: true });
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'react-native-nitro-ui', version: '0.5.0' })
+    );
+    writeFileSync(join(dir, 'example/ios/Podfile'), '# podfile\n');
+    writeFileSync(join(dir, 'example/ios/Podfile.lock'), LOCK);
+    // Tracked, and something a real `pod install` does rewrite on this repo (the
+    // Podfile's own post_install strips ccache keys out of it).
+    writeFileSync(join(dir, 'example/ios/project.pbxproj'), 'PROJECT\n');
+    // A developer's breakpoint list: untracked, NOT ignored, so `pod install`
+    // leaving it behind means the changesets action commits it.
+    writeFileSync(
+      join(dir, 'example/ios/Breakpoints_v2.xcbkptlist'),
+      'BREAKS\n'
+    );
+    // Ignored, so it must survive untouched and never be listed as a stray.
+    writeFileSync(join(dir, '.gitignore'), 'example/ios/Pods/\n');
+    mkdirSync(join(dir, 'example/ios/Pods'), { recursive: true });
+    writeFileSync(join(dir, 'example/ios/Pods/something'), 'IGNORED\n');
+    at(['add', '.']);
+    at(['commit', '-qm', 'seed']);
+
+    // The fake pod: `--version` answers with the pinned version, `install` copies in
+    // a lock that bumps NitroUi's version *and* its checksum, moves the trailer,
+    // rewrites the project file, and leaves a new stray behind. The two candidate
+    // locks are written here so the shell script itself stays a fixture and not a
+    // test: `FAKE_POD_EXTRA_CHURN` picks the one that also rewrites React-Core.
+    writeFileSync(join(dir, 'pod-writes-clean.lock'), CLEAN_REFRESHED_LOCK);
+    writeFileSync(join(dir, 'pod-writes-churn.lock'), CHURNED_REFRESHED_LOCK);
+    const fakePod = join(dir, 'fake-pod.sh');
+    writeFileSync(
+      fakePod,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "1.17.0"; exit 0; fi
+if [ -n "$FAKE_POD_EXTRA_CHURN" ]; then
+  src="${dir}/pod-writes-churn.lock"
+else
+  src="${dir}/pod-writes-clean.lock"
+fi
+cp "$src" "${dir}/example/ios/Podfile.lock"
+echo "REWRITTEN" > "${dir}/example/ios/project.pbxproj"
+echo "NEW" > "${dir}/example/ios/new-by-product.txt"
+exit 0
+`
+    );
+    chmodSync(fakePod, 0o755);
+    return {
+      dir,
+      at,
+      read: (rel) => readFileSync(join(dir, rel), 'utf8'),
+      exists: (rel) => existsSync(join(dir, rel)),
+      /**
+       * What the script left dirty, restricted to the tree it was asked to fix.
+       *
+       * The scratch repo also holds this test's own fixtures - the fake pod and its
+       * two candidate locks - which are untracked by design. Listing them would say
+       * nothing about the script's hygiene and would bury the one line that does.
+       */
+      dirty: () =>
+        at([
+          'status',
+          '--porcelain',
+          '--',
+          'example/ios',
+          'package.json',
+        ]).trim(),
+      status: (args = ['--fix'], env = {}) =>
+        spawnSync(process.execPath, [SCRIPT, ...args], {
+          cwd: dir,
+          encoding: 'utf8',
+          timeout: 120_000,
+          env: {
+            ...process.env,
+            NITRO_UI_LOCK_SYNC_ROOT: dir,
+            COCOAPODS_BIN: fakePod,
+            ...env,
+          },
+        }),
+    };
+  }
+
+  it('puts the lock right and restores everything else it touched', () => {
+    const repo = scratchCheckout();
+    const out = repo.status();
+    expect(out.status).toBe(0);
+    expect(out.stdout).toContain('restored example/ios/project.pbxproj');
+    // The trailer the lock recorded, not the one this machine ran.
+    expect(repo.read('example/ios/Podfile.lock')).toContain(
+      'COCOAPODS: 1.17.0'
+    );
+    expect(repo.read('example/ios/Podfile.lock')).toContain(
+      '- NitroUi (0.5.0):'
+    );
+    expect(repo.read('example/ios/project.pbxproj')).toBe('PROJECT\n');
+    // Both kinds of leftover the changesets action would otherwise commit.
+    expect(out.stdout).toContain(
+      'removed untracked example/ios/new-by-product'
+    );
+    expect(repo.exists('example/ios/new-by-product.txt')).toBe(false);
+    // ...and nothing outside what this command wrote is touched: the pre-existing
+    // breakpoint list and the ignored Pods/ tree both survive.
+    expect(repo.read('example/ios/Breakpoints_v2.xcbkptlist')).toBe('BREAKS\n');
+    expect(repo.read('example/ios/Pods/something')).toBe('IGNORED\n');
+    // The one tracked file left modified is the lock, which is the whole point.
+    expect(repo.dirty()).toBe('M example/ios/Podfile.lock');
+  });
+
+  it('refuses a lock whose diff is bigger than the release', () => {
+    // The same fake pod, but it also rewrote React-Core's checksum: a runner on a
+    // different gem set or Xcode. That lock would pass the version check and be
+    // committed green, then the next maintainer's `pod install` would write it back -
+    // item 2's own bug, back quietly.
+    const repo = scratchCheckout();
+    const out = repo.status(['--fix'], { FAKE_POD_EXTRA_CHURN: 'churn' });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toContain('changed beyond NitroUi');
+    expect(out.stderr).toContain(
+      'React-Core: 9999999999999999999999999999999999999999'
+    );
+  });
+
+  it('refuses up front when CocoaPods is missing, without touching the tree', () => {
+    // The M1 failure: a Linux contributor runs `bun run release:version`. `changeset
+    // version` has already bumped package.json, so the only exit that leaves a tree
+    // they can keep is one taken before this script writes anything.
+    const repo = scratchCheckout();
+    const out = repo.status(['--fix'], { COCOAPODS_BIN: '/nonexistent/pod' });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toContain('refusing to refresh');
+    expect(out.stderr).toContain('git checkout -- .');
+    expect(repo.read('example/ios/Podfile.lock')).toBe(LOCK);
+    expect(repo.dirty()).toBe('');
+  });
+});
+
 /**
  * The CLI, run against this repository.
  *
@@ -360,10 +544,8 @@ describe('keeping the CocoaPods trailer out of a release commit', () => {
  * uses the real tree rather than a copy.
  */
 describe('node scripts/sync-example-lock.mjs', () => {
-  const script = resolve(root, 'scripts', 'sync-example-lock.mjs');
-
   const cli = (args = [], env = {}) =>
-    spawnSync(process.execPath, [script, ...args], {
+    spawnSync(process.execPath, [SCRIPT, ...args], {
       encoding: 'utf8',
       cwd: root,
       timeout: 120_000,

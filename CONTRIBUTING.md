@@ -46,10 +46,27 @@ the lease script reads (see "Leasing a device or port"). It only adds: it never
 touches an existing device or `devices.json`, never installs SDK packages or
 accepts licenses (it prints the command), and never boots anything.
 
+What that file can say is in `scripts/devices.example.json`, so copy it rather than
+typing it. Besides the pool it carries the machine's two limits: `maxDeviceLeases`
+(how many device tasks run at once) and `maxConcurrentBuilds` (how many heavy native
+builds compile at once, whatever else is running — leave it at `1` unless your machine
+has cores to spare, and see "One build at a time"). A value that is not a positive
+integer is read as the default and named in the build's output rather than obeyed.
+
 ```sh
 node scripts/doctor.mjs           # exit 1 if anything required is missing
 node scripts/doctor.mjs --setup   # then create the device pairs
+node scripts/doctor.mjs --prime   # and warm the build caches (see below)
 ```
+
+`--prime` builds both platforms once, in the **main** checkout, so the first real build
+of your first task is not a cold one — a cold iOS build took 9½ minutes on a machine
+whose warm one took 138 seconds. It delegates to `build-app.mjs`, so it takes a build
+slot like any other build and will queue behind one rather than joining it; its budget is
+the queue wait plus a build, which is why it can sit quietly for a while before it
+prints anything. `doctor` reports the cache state either way, as a `build caches` row
+judged by ccache's hit count: a machine with no hits says `warn` and points at
+`--prime`, and `unknown` (not "cold") when ccache is not installed at all.
 
 ## Repository layout
 
@@ -216,6 +233,7 @@ cp scripts/devices.example.json ~/.nitro-ui/devices.json   # then put your real 
 ```json
 {
   "maxDeviceLeases": 2,
+  "maxConcurrentBuilds": 1,
   "reservedEmulatorPorts": [5560],
   "reservedIdentifiers": [],
   "pairs": [
@@ -397,6 +415,35 @@ ccache --show-stats                                # what the cache has been doi
 ```
 
 The measurements are in `docs/tasks/X6-build-speed.report.md`.
+
+### One build at a time
+
+A build needs no device, so the lease pool does not limit builds: on a 10-core machine,
+one task's iOS build and another's Android build plus a `check` reached load average 13,
+which is what makes _every other_ task's load guard fire. So `build-app.mjs` takes a
+machine-wide **build slot** before it compiles and releases it after, and at most
+`maxConcurrentBuilds` native builds (default 1) run at once. Waiting is the normal case:
+the waiter prints one line naming the holder, its pid, how long it has been in and the
+state file, and then polls.
+
+The rule, stated once in `scripts/build-slot-core.mjs`: **a build that is still running
+holds its slot for as long as it runs.** The `ttlMinutes` on a slot is not a deadline for
+a build — it is how long a slot survives when its holder cannot be inspected (written by
+another host, or no readable pid). Expired a slow build's slot and you get a second build
+beside it, the exact spike this exists to prevent, so a `--clean` iOS rebuild that beats
+the ttl keeps its slot. The cost is deliberate: a wedged-but-alive build blocks the queue
+until somebody stops the pid the message names, and the waiter ends on its own budget
+(`NITRO_UI_BUILD_WAIT_MINUTES`, default 60) rather than hanging forever.
+
+`node scripts/doctor.mjs --prime` is a build like any other, so it queues; its budget is
+the whole wait _plus_ a build (`NITRO_UI_PRIME_TIMEOUT_MINUTES`), because a timer shorter
+than the queue would `SIGTERM` a build that had not started — and a signalled build never
+runs its cleanup, which is how `xcodebuild` and Gradle children get orphaned mid-compile.
+
+```sh
+cat ~/.nitro-ui/builds.json                  # who is building now
+node scripts/lease.mjs list                  # held device leases, and devices nobody owns
+```
 
 ### Devices and ports
 
@@ -772,9 +819,21 @@ every release is a person approving it on npmjs.com. 0.1.0 was published by hand
 2. **Merge pull requests to `main`.** The `Release` workflow runs `bun run check`
    in a job with read-only rights. When it is green, a second job runs
    `bun run release:version` and opens or updates a pull request called **Version
-   Packages**: it bumps `package.json`, prepends the notes to `CHANGELOG.md` and
-   deletes the changeset files. Everything merged before it lands folds into that
-   one pull request — you review the version and the changelog there.
+   Packages**: it bumps `package.json`, prepends the notes to `CHANGELOG.md`, deletes
+   the changeset files, and refreshes `example/ios/Podfile.lock` so the example builds
+   against the version it just shipped. Everything merged before it lands folds into
+   that one pull request — you review the version, the changelog and that lock there.
+
+   That lock is why this job runs on a macOS runner and not on the Ubuntu one the rest
+   of the pipeline uses: the only way to write a correct post-bump `Podfile.lock` is to
+   run CocoaPods (a path-pod's `SPEC CHECKSUMS` entry is the sha1 of CocoaPods' own
+   evaluation of the podspec), so the job installs the CocoaPods the lock's own
+   `COCOAPODS:` trailer names and runs `pod install` inside `release:version`. It is
+   also why `bun run check` carries `lock:check`: the guard is a string comparison that
+   runs anywhere, and the repair needs the tool. If the refresh ever fails, the job
+   fails before the action commits, so a release cannot go out with the lock left
+   behind — which is the bug this exists to prevent, and it cost every iOS build after
+   it a dirty tree and a stale `app.stamp`.
 
    That pull request arrives with no checks, which is expected rather than a gap:
    a pull request opened with `GITHUB_TOKEN` starts no workflows. The same commit
@@ -824,6 +883,12 @@ do while a token that can reach npm is in the environment, so the rights are spl
 | `pack`    | `contents: read`                          | install, `bun run check`, the committed-codegen and clean-tree checks, `npm pack`, and the tarball's sha256 |
 | `stage`   | `id-token: write`, and nothing else       | download the artifact, verify that sha256, ask the registry, `npm stage publish`                            |
 | `version` | `contents: write`, `pull-requests: write` | the Version Packages pull request, through the Changesets action                                            |
+
+`version` is the one job that runs on `macos-26` rather than `ubuntu-latest`, and it
+installs the CocoaPods that `Podfile.lock` records before it runs the action: the lock
+refresh inside `release:version` needs the real tool, and the commit it produces is the
+action's, so there is no later step that could add the lock to it. The rights column is
+unchanged by that — a macOS runner is about the toolchain, not the token.
 
 `stage` checks out nothing, installs nothing and runs no script from the tree, so
 no code from the repository is ever running while it holds the OIDC token — and
@@ -902,7 +967,12 @@ Two more things that are as designed:
   staging a version is only worth what the run that staged it actually checked.
 - `bun run release:version` on a laptop writes the same files as the Version
   Packages pull request, without pushing them. It is for checking what the next
-  version would look like, not for cutting one.
+  version would look like, not for cutting one. It needs CocoaPods, though, because
+  it refreshes `example/ios/Podfile.lock` in the same breath: on a machine without
+  it, `sync-example-lock.mjs` refuses _before_ writing anything and tells you to
+  `git checkout -- .`, so a preview on Linux either works fully or does not start.
+  (`node scripts/sync-example-lock.mjs` on its own is the check-only half, and needs
+  nothing but the two files it compares.)
 
 ### Owner setup, once
 

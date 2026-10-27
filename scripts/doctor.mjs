@@ -63,6 +63,9 @@ import {
   stateHome,
   statePaths,
 } from './lease-core.mjs';
+// The prime's per-build budget belongs to the module that owns the queue it waits
+// behind, not to this file (N4).
+import { primeBuildTimeoutMinutes } from './build-slot-core.mjs';
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -845,12 +848,17 @@ function setupDevices({ runtime, tools }) {
  * machine-wide build slot live, and a prime that skipped the slot would be the
  * exact load-13 situation it exists to prevent.
  *
- * @param {{ log?: (message: string) => void, timeoutMinutes?: number }} [options]
+ * The per-build budget comes from the build-slot module (`primeBuildTimeoutMinutes`)
+ * rather than a number written here: a prime waits *behind* whoever is building, so a
+ * timer shorter than that queue kills a build that had not started (N4).
+ *
+ * @param {{ log?: (message: string) => void, env?: Record<string, string | undefined>, timeoutMinutes?: number }} [options]
  * @returns {Result[]}
  */
 function primeCaches({
   log = (m) => process.stderr.write(`${m}\n`),
-  timeoutMinutes = 45,
+  env = process.env,
+  timeoutMinutes = primeBuildTimeoutMinutes(env),
 } = {}) {
   const checkout = mainCheckoutPath({
     toplevel: run('git', ['rev-parse', '--show-toplevel']).stdout || null,

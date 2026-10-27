@@ -547,9 +547,10 @@ async function runGate(name, resolved, options = {}) {
   });
   let logText = '';
   // A backgrounded run's stdout *is* the log file, so echoing there as well as
-  // writing the stream would put every line in the log twice - and the ledger's
-  // test counts come from this same text, so a doubled summary would be parsed
-  // twice. Foreground runs still echo to the terminal.
+  // writing the stream would put every line in the log twice. The ledger parses
+  // `logText` rather than the file, so a doubled run would still record correct
+  // counts - the damage is to the reader who follows the `gate: log …` line and
+  // finds a transcript with every line in it twice. Foreground runs still echo.
   const echo = options.logPath == null;
   const tee = (chunk, output) => {
     logText += String(chunk);
@@ -569,7 +570,16 @@ async function runGate(name, resolved, options = {}) {
   const exit = await new Promise((resolvePromise) => {
     const child = spawn(resolved.argv[0], resolved.argv.slice(1), {
       cwd,
-      env: process.env,
+      // `NITRO_UI_GATE_LOG` is this runner's own instruction and must not go further:
+      // a `gate.mjs` nested inside a gate (a check that shells out to one, say) would
+      // otherwise append to *this* run's log and mark *this* run's record done with
+      // its own exit code. Deleting it here is what makes that variable mean "the log
+      // of the background run I am the launcher of", one level, not inherited.
+      env: (() => {
+        const childEnv = { ...process.env };
+        delete childEnv.NITRO_UI_GATE_LOG;
+        return childEnv;
+      })(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let forwarded = null;

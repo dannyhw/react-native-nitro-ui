@@ -1326,6 +1326,10 @@ function writeFakeRunner(dir) {
     // fails with a code that is not 1, so "exits with the gate\'s code" is a claim
     // a test can actually falsify.
     'if [ -n "$FAKE_PROGRESS" ]; then echo "$FAKE_PROGRESS"; fi\n' +
+    // For the `NITRO_UI_GATE_LOG` leak case (N6): a gate's own child processes must
+    // not inherit the launcher's log path, so a nested `gate.mjs` cannot write into
+    // its parent's log and mark its parent's record done.
+    'if [ -n "$FAKE_SHOW_GATE_LOG_ENV" ]; then echo "child sees gate-log env [${NITRO_UI_GATE_LOG-unset}]"; fi\n' +
     'if [ -n "$FAKE_SLEEP" ]; then sleep "$FAKE_SLEEP"; fi\n' +
     'if [ -n "$FAKE_PROGRESS_AFTER" ]; then echo "$FAKE_PROGRESS_AFTER"; fi\n' +
     'exit ${FAKE_EXIT:-0}\n';
@@ -1866,6 +1870,29 @@ describe('gate.mjs --background and wait', () => {
     expect(bad.status).toBe(2);
     expect(bad.stderr).toContain('positive number');
   }, 60_000);
+
+  it('writes a background log the reader can read once, and keeps its log path out of the gate', async () => {
+    const dir = checkout(iosOnly);
+    const started = runCli(dir, ['check', '--background'], {
+      FAKE_SHOW_GATE_LOG_ENV: '1',
+    });
+    expect(started.status).toBe(0);
+    expect(runCli(dir, ['wait', '--gate', 'check']).status).toBe(0);
+    const [record] = ledgerLines(dir);
+    const log = fs.readFileSync(path.join(dir, record.logPath), 'utf8');
+    // N5: a backgrounded run's stdout *is* this file, so echoing there as well as
+    // writing the stream duplicates every line for the person who opens it.
+    const summaries = log
+      .split('\n')
+      .filter((entry) => entry.includes('Tests: 391 passed'));
+    expect(summaries).toHaveLength(1);
+    expect(
+      log.split('\n').filter((e) => e.startsWith('fake runner:'))
+    ).toHaveLength(1);
+    // N6: the gate's own command must not inherit the launcher's log path, or a
+    // nested `gate.mjs` would append here and mark this run done with its own code.
+    expect(log).toContain('child sees gate-log env [unset]');
+  }, 90_000);
 
   it('passes a filtered run through to the gate, recorded under its own name', async () => {
     const dir = checkout(iosOnly);

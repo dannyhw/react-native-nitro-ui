@@ -17,14 +17,23 @@
  *   node scripts/sync-example-lock.mjs          # check only (what `check` runs)
  *   node scripts/sync-example-lock.mjs --fix    # run pod install, keep the lock only
  *
- * `--fix` is the release path's step (`bun run release:version:lock`, on a macOS
- * runner). It treats the lock as the only output that matters: whatever else `pod
- * install` regenerates - the workspace data, the app project, a machine-local
- * `.xcode.env.local` - is put back, because the changesets action commits *everything*
- * in the working tree, and a release commit is not where a pod user's local Xcode
- * state belongs. It also keeps the lock's own `COCOAPODS:` trailer, so a runner on a
- * newer CocoaPods contributes one changed line rather than a toolchain bump nobody
- * reviewed.
+ * `--fix` is the release path's refresh: `bun run release:version` is
+ * `changeset version && node scripts/sync-example-lock.mjs --fix`, and the job that
+ * runs it in `.github/workflows/release.yml` is the one on a macOS runner, because
+ * `--fix` runs real CocoaPods. It refuses *up front* when CocoaPods is not there:
+ * `changeset version` has already rewritten the tree by the time this script is
+ * called, so on a laptop without CocoaPods the only kind exit that leaves a tree a
+ * person can keep is the one before anything is touched - which is why it is checked
+ * here rather than leaving `pod install` to fail.
+ *
+ * It treats the lock as the only output that matters. Whatever else `pod install`
+ * regenerates - the app project, a developer's breakpoint list - is put back, because
+ * the changesets action commits every changed and untracked non-ignored file in the
+ * tree, and a release commit is not where a pod user's local Xcode state belongs. It
+ * keeps the lock's own `COCOAPODS:` trailer, and refuses a lock whose diff is bigger
+ * than this pod's version and checksum lines, so a runner that resolved something
+ * other than the release fails the job instead of committing churn the next `pod
+ * install` quietly reverts.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -34,7 +43,9 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
 import {
+  cocoaPodsAvailability,
   keepCocoapodsStamp,
+  lockChurnProblem,
   lockSyncProblem,
   readTreeState,
   sideEffectsToUndo,
@@ -46,57 +57,72 @@ const REPO_ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
   '..'
 );
-const IOS_DIR = path.join(REPO_ROOT, 'example', 'ios');
-const LOCK_PATH = path.join(IOS_DIR, 'Podfile.lock');
-const LOCK_REL = 'example/ios/Podfile.lock';
 const IOS_SCOPE = 'example/ios';
+const LOCK_REL = `${IOS_SCOPE}/Podfile.lock`;
 
-/** @param {string} message */
-function say(message) {
-  process.stdout.write(`example-lock: ${message}\n`);
+/**
+ * The checkout to work on.
+ *
+ * `NITRO_UI_LOCK_SYNC_ROOT` exists for one reason: the `--fix` glue (the restore,
+ * the trailer-keep, the churn guard) is otherwise provable only by running a real
+ * `pod install` on a Mac, and the bug that started this lived in exactly that glue -
+ * a `git` flag that does not exist, which every test stayed green through. With a
+ * root override plus `COCOAPODS_BIN`, a test can drive the whole thing in a throwaway
+ * git repo. Nothing in the release path sets it.
+ *
+ * @param {Record<string, string | undefined>} env
+ */
+function rootFrom(env = process.env) {
+  const fromEnv = env.NITRO_UI_LOCK_SYNC_ROOT;
+  return fromEnv != null && fromEnv.trim() !== ''
+    ? path.resolve(fromEnv.trim())
+    : REPO_ROOT;
+}
+
+/** @param {(message: string) => void} log */
+function makeSay(log) {
+  return (/** @type {string} */ message) => log(`example-lock: ${message}`);
 }
 
 /**
- * Run one git command in the repo and return its stdout.
+ * A git runner for one checkout: returns stdout, or null when git failed.
  *
  * Failures come back null rather than throwing: `--fix` can be asked for in a tree
  * where git is unhappy, and the *point* of these calls is hygiene. A hygiene step that
  * cannot see the tree says so and leaves the files alone rather than pretending it
  * cleaned them.
  *
- * @param {string[]} args
- * @returns {string[] | null}
+ * @param {string} cwd
  */
-function git(args) {
-  const result = spawnSync('git', args, {
-    cwd: REPO_ROOT,
-    encoding: 'utf8',
-  });
-  if (result.status !== 0) return null;
-  return result.stdout.split('\n').filter((line) => line !== '');
-}
-
-/** What git says is dirty right now, or null when git did not answer. */
-function treeState() {
-  return readTreeState((args) => {
-    const result = spawnSync('git', args, {
-      cwd: REPO_ROOT,
-      encoding: 'utf8',
-    });
+function gitRunner(cwd) {
+  return (/** @type {string[]} */ args) => {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
     return result.status === 0 ? result.stdout : null;
-  });
+  };
 }
 
 /**
- * @param {{fix?: boolean}} options
+ * @param {{fix?: boolean, env?: Record<string, string | undefined>, log?: (message: string) => void, error?: (message: string) => void}} options
  * @returns {number} process exit code
  */
-export function run({ fix = false } = {}) {
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')
-  );
+export function run({
+  fix = false,
+  env = process.env,
+  log = (message) => process.stdout.write(`${message}\n`),
+  error = (message) => process.stderr.write(`${message}\n`),
+} = {}) {
+  const root = rootFrom(env);
+  const iosDir = path.join(root, IOS_SCOPE);
+  const lockPath = path.join(iosDir, 'Podfile.lock');
+  const say = makeSay(log);
+  const runGit = gitRunner(root);
+  const treeState = () => readTreeState(runGit);
   const readLock = () =>
-    fs.existsSync(LOCK_PATH) ? fs.readFileSync(LOCK_PATH, 'utf8') : null;
+    fs.existsSync(lockPath) ? fs.readFileSync(lockPath, 'utf8') : null;
+
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(root, 'package.json'), 'utf8')
+  );
   const lockText = readLock();
   const problem = lockSyncProblem({
     manifestVersion: manifest.version,
@@ -111,33 +137,62 @@ export function run({ fix = false } = {}) {
     return 0;
   }
 
-  process.stdout.write(`${problem}\n`);
+  log(problem);
   if (!fix) {
-    say('checking only; pass --fix to run pod install (needs CocoaPods).');
+    // Deliberately no CocoaPods detail in the default mode's output: the CLI test
+    // below asserts the check mode never reaches for the tool, and a line naming
+    // `pod` is exactly what would make that assertion vacuous.
+    say('checking only; pass --fix to refresh the lock.');
+    return 1;
+  }
+
+  // Refuse before touching a thing. `changeset version` has already run by the time
+  // the release path calls this, so anything this script changes is on top of an
+  // already-versioned tree - and on a machine with no CocoaPods, letting `pod install`
+  // discover that leaves the contributor with a half-applied version and no lock.
+  const pods = cocoaPodsAvailability((cmd) => {
+    const result = spawnSync(cmd[0], cmd.slice(1), {
+      encoding: 'utf8',
+      env,
+    });
+    const version = (result.stdout ?? '').trim().split('\n').pop() ?? '';
+    return {
+      ok: result.status === 0 && /^\d+\.\d+/.test(version),
+      version: version.replace(/^v/, ''),
+    };
+  }, env.COCOAPODS_BIN);
+  if (!pods.ok) {
+    error(
+      `example-lock: refusing to refresh ${LOCK_REL}: ${pods.why}. The version in ` +
+        'this tree has already been bumped by `changeset version`; the lock has not.\n' +
+        `  Restore it with:  git checkout -- .\n` +
+        '  Or install CocoaPods at the version the lock records (its COCOAPODS: ' +
+        'trailer) and run this again. The release job does that on a macOS runner.'
+    );
     return 1;
   }
 
   const before = treeState();
   const stampBefore = cocoapodsStamp(lockText);
 
-  const { status } = installPods({ dir: IOS_DIR });
+  const status = installPods({ dir: iosDir, log }).status;
   if (status !== 0) {
-    process.stderr.write(
+    error(
       `example-lock: pod install exited ${status}, so ${LOCK_REL} was not ` +
-        'refreshed. Is CocoaPods installed? (the pinned version is in that file’s ' +
-        'COCOAPODS: trailer)\n'
+        'refreshed.\n' +
+        '  Restore the tree with:  git checkout -- .'
     );
     return 1;
   }
 
   const afterText = readLock();
   if (afterText == null) {
-    process.stderr.write(`example-lock: pod install removed ${LOCK_REL}.\n`);
+    error(`example-lock: pod install removed ${LOCK_REL}.`);
     return 1;
   }
   const kept = keepCocoapodsStamp(afterText, stampBefore);
   if (kept.restored) {
-    fs.writeFileSync(LOCK_PATH, kept.text);
+    fs.writeFileSync(lockPath, kept.text);
     say(
       `kept COCOAPODS: ${kept.from} (this machine ran ${kept.to}) - a release ` +
         'refresh changes the version line, not the toolchain.'
@@ -159,13 +214,13 @@ export function run({ fix = false } = {}) {
   } else {
     if (
       undo.restore.length > 0 &&
-      git(['restore', '--', ...undo.restore]) === null
+      runGit(['restore', '--', ...undo.restore]) === null
     ) {
       say(`could not restore ${undo.restore.join(', ')} - read the diff.`);
     }
     for (const file of undo.restore) say(`restored ${file}`);
     for (const file of undo.remove) {
-      fs.rmSync(path.join(REPO_ROOT, file), { force: true });
+      fs.rmSync(path.join(root, file), { force: true });
       say(`removed untracked ${file} (written by pod install)`);
     }
     for (const file of undo.leaveAlone) {
@@ -176,15 +231,26 @@ export function run({ fix = false } = {}) {
     }
   }
 
+  // The refresh is only allowed to move this pod's version and checksum. Anything
+  // else in the diff means the runner resolved something other than the release, and
+  // committing it green is how item 2's own bug comes back.
+  const churn = lockChurnProblem({
+    beforeText: lockText,
+    afterText: fs.readFileSync(lockPath, 'utf8'),
+    lockPath: LOCK_REL,
+  });
+  if (churn != null) {
+    error(`example-lock: ${churn}`);
+    return 1;
+  }
+
   const recheck = lockSyncProblem({
     manifestVersion: manifest.version,
     lockText: readLock(),
     lockPath: LOCK_REL,
   });
   if (recheck != null) {
-    process.stderr.write(
-      `example-lock: still out of step after pod install:\n${recheck}\n`
-    );
+    error(`example-lock: still out of step after pod install:\n${recheck}`);
     return 1;
   }
   say(`${LOCK_REL} now matches package.json (${manifest.version}).`);

@@ -236,6 +236,139 @@ export function sideEffectsToUndo({
 }
 
 /**
+ * The lines two versions of a lock disagree about, as a multiset difference.
+ *
+ * Not a positional diff: `pod install` regenerates the file, so a real change can
+ * shift lines around, and a diff that reported every shift as churn would be noise
+ * nobody reads. Two files with the same lines in a different order are, for this
+ * purpose, the same lock.
+ *
+ * @param {string | null} beforeText
+ * @param {string | null} afterText
+ * @returns {{kind: 'removed'|'added', line: string, times: number}[]}
+ */
+export function changedLockLines(beforeText, afterText) {
+  const tally = (text) => {
+    const counts = new Map();
+    for (const line of (text ?? '').split('\n')) {
+      if (line === '') continue;
+      counts.set(line, (counts.get(line) ?? 0) + 1);
+    }
+    return counts;
+  };
+  const before = tally(beforeText);
+  const after = tally(afterText);
+  const changes = [];
+  /** @type {('removed' | 'added')[]} */
+  const kinds = ['removed', 'added'];
+  for (const kind of kinds) {
+    const from = kind === 'removed' ? before : after;
+    const other = kind === 'removed' ? after : before;
+    for (const [line, count] of from) {
+      const times = count - (other.get(line) ?? 0);
+      if (times > 0) changes.push({ kind, line, times });
+    }
+  }
+  return changes;
+}
+
+/**
+ * Why a refreshed lock is more than a version bump, or null when it is only one.
+ *
+ * A release refresh wants to change exactly two lines: this pod's `PODS:` entry and
+ * its `SPEC CHECKSUMS` line. Anything else in the diff means the runner that ran
+ * `pod install` resolved something other than the release - a different gem set, a
+ * different Xcode, a changed `PODFILE CHECKSUM` - and that lock would be committed
+ * *green*, only for the next maintainer's `pod install` to rewrite it back. That is
+ * item 2's own bug arriving again quietly, dirtying a tracked file and invalidating
+ * `app.stamp`, so the refresh refuses it loudly instead.
+ *
+ * The `COCOAPODS:` trailer is deliberately *not* allowed through: `keepCocoapodsStamp`
+ * has already put the recorded one back, so a difference here means the lock had no
+ * trailer to keep, which is worth a conversation of its own.
+ *
+ * @param {{
+ *   beforeText: string | null,
+ *   afterText: string | null,
+ *   podName?: string,
+ *   lockPath?: string,
+ * }} options
+ * @returns {string | null} the failure, naming every unexpected line
+ */
+export function lockChurnProblem({
+  beforeText,
+  afterText,
+  podName = POD_NAME,
+  lockPath = 'example/ios/Podfile.lock',
+}) {
+  const allowed = [
+    // The PODS: entry (with or without dependencies underneath) and the checksum.
+    // Both match at any version, because both sides of a version change appear
+    // here: the old line as removed, the new one as added.
+    new RegExp(`^ {2}- ${podName} \\(.+\\):?$`),
+    new RegExp(`^ {2}${podName}: [0-9a-f]+$`),
+  ];
+  const unexpected = changedLockLines(beforeText, afterText).filter(
+    (change) => !allowed.some((pattern) => pattern.test(change.line))
+  );
+  if (unexpected.length === 0) return null;
+  const listed = unexpected
+    .map(
+      (change) =>
+        `    ${change.kind === 'removed' ? '-' : '+'} ${
+          change.times > 1 ? `${String(change.times)}x ` : ''
+        }${change.line.trim()}`
+    )
+    .join('\n');
+  return (
+    `${lockPath} changed beyond ${podName}'s version line, so this refresh is not ` +
+    'the release alone:\n' +
+    `${listed}\n` +
+    '  Fix: do not commit that. Compare `pod --version`, the Xcode and the Podfile ' +
+    'on the machine that ran it with the ones that produced the file at HEAD; a ' +
+    '`PODFILE CHECKSUM` line here means the Podfile itself changed in the same ' +
+    'commit as the release, which belongs in its own pull request.'
+  );
+}
+
+/**
+ * Is CocoaPods actually usable here? The reason `--fix` refuses *before* touching
+ * anything.
+ *
+ * `release:version` is `changeset version && sync-example-lock.mjs --fix`, and the
+ * second half needs CocoaPods while the first half does not. On a laptop without
+ * it - a Linux contributor following CONTRIBUTING to preview the next version - the
+ * old order rewrote `package.json`, `CHANGELOG.md` and `.changeset/`, *then* failed,
+ * leaving a half-applied version the doc never mentioned. The probe is the cheapest
+ * thing that answers the question: `pod --version` costs a moment and writes nothing.
+ *
+ * @param {(cmd: string[]) => { ok: boolean, version?: string }} probe
+ * @param {string | undefined} override `COCOAPODS_BIN`, honoured the way
+ *   `pod-install-lib.mjs` honours it, so a caller with its own `bundle exec pod`
+ *   is not refused for the absence of a gem it does not use.
+ * @returns {{ ok: boolean, why: string }}
+ */
+export function cocoaPodsAvailability(probe, override) {
+  if (override != null && override.trim() !== '') {
+    const cmd = override.trim().split(/\s+/);
+    const probed = probe([...cmd, '--version']);
+    return {
+      ok: probed.ok,
+      why: probed.ok
+        ? `COCOAPODS_BIN (${cmd.join(' ')}) answered ${probed.version ?? 'ok'}`
+        : `COCOAPODS_BIN is set to "${cmd.join(' ')}" and it does not run`,
+    };
+  }
+  const probed = probe(['pod', '--version']);
+  return {
+    ok: probed.ok,
+    why: probed.ok
+      ? `pod on PATH (${probed.version ?? 'version unknown'})`
+      : 'no `pod` on PATH',
+  };
+}
+
+/**
  * Re-apply a recorded `COCOAPODS:` trailer to a lock that really did change.
  *
  * `scripts/pod-install-lib.mjs` restores the trailer only when the trailer is *all*

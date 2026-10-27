@@ -46,10 +46,24 @@ import {
 export const DEFAULT_MAX_CONCURRENT_BUILDS = 1;
 
 /**
- * How long a build slot may sit without its owner finishing. A cold iOS build on
- * the second machine took 9.5 minutes; 45 covers the worst real build so far
- * (X6) while still expiring a slot whose process was killed hard enough to skip
- * its cleanup. Dead-pid reclaim is the fast path; this is the backstop.
+ * How long a build slot may sit without its owner finishing.
+ *
+ * THE RULE, stated once (N3, N4): a build that is still running holds its slot for
+ * as long as it runs; the ttl is the answer to "is this slot's holder still around?"
+ * only when that question cannot be asked - a slot written by another host, or one
+ * whose pid cannot be read. It is never a deadline for a live build, because a build
+ * that takes longer than the ttl would admit a second build beside it, which is the
+ * exact load spike this module exists to prevent.
+ *
+ * So the number is not "the longest build we have seen" (a 9.5-minute cold iOS build
+ * against a 45-minute ttl is not a near miss, and a `--clean` rebuild can beat it
+ * anyway); it is how long a slot whose owner is unreachable - another machine, or a
+ * pid that has been recycled by something we cannot tell from the dead one - stays
+ * in the file before it is dropped. The trade it buys: a wedged-but-alive build
+ * blocks the queue until somebody stops it, and the waiter's message names the holder
+ * and the state file so that somebody has something to act on. `--prime`'s budget is
+ * derived from this number rather than guessed (`primeBuildTimeoutMinutes`), because
+ * a timer shorter than a queue is how a queued build gets SIGTERM'd mid-compile.
  */
 export const BUILD_SLOT_TTL_MINUTES = 45;
 
@@ -62,6 +76,44 @@ export const BUILD_SLOT_POLL_MS = 5_000;
  * failing loudly for rather than adding a third build to the queue.
  */
 export const DEFAULT_BUILD_WAIT_MINUTES = 60;
+
+/**
+ * How long `doctor --prime` may spend on one platform's build (N4).
+ *
+ * A prime's budget has to outlast the thing it is waiting for, and a build's worst
+ * case is *both* numbers: it may queue for the whole wait before it starts compiling,
+ * and then compile. The old budget was 45 minutes - shorter than the 60-minute queue
+ * alone - so `spawnSync`'s SIGTERM could land on a `build-app.mjs` that had not even
+ * started, and a killed-by-signal build never runs its exit handler, which is how
+ * `xcodebuild` or Gradle children get orphaned mid-compile.
+ *
+ * It is a sum of the two budgets rather than a guess: the wait, plus one TTL of build
+ * time (the longest build this module claims to know about). A build that outlasts
+ * that is still killed - N3 means a live holder keeps its slot for as long as it
+ * runs, so no fixed number can be safe for every build - which is why it is
+ * overridable with `NITRO_UI_PRIME_TIMEOUT_MINUTES` rather than fixed in prose.
+ *
+ * Exported, and read through `primeBuildTimeoutMinutes`, because the number is the
+ * rule and `doctor.mjs` cannot be imported by jest: a timeout written inline there is
+ * one no test can read.
+ */
+export const PRIME_BUILD_TIMEOUT_MINUTES =
+  BUILD_SLOT_TTL_MINUTES + DEFAULT_BUILD_WAIT_MINUTES;
+
+/**
+ * The prime budget for one build, honouring `NITRO_UI_PRIME_TIMEOUT_MINUTES`.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {number} minutes
+ */
+export function primeBuildTimeoutMinutes(env = {}) {
+  const raw = env.NITRO_UI_PRIME_TIMEOUT_MINUTES;
+  if (raw == null || raw === '') return PRIME_BUILD_TIMEOUT_MINUTES;
+  const minutes = Number(raw);
+  return Number.isFinite(minutes) && minutes > 0
+    ? minutes
+    : PRIME_BUILD_TIMEOUT_MINUTES;
+}
 
 /** @param {string} home the same home `lease-core.mjs`'s `stateHome()` returns */
 export function buildSlotPaths(home) {
@@ -149,8 +201,13 @@ export function buildSlotState(env = {}) {
 }
 
 /**
- * Is this slot still being held? Judged by the slot's own ttl, never the
+ * Is this slot's ttl still unexpired? Judged by the slot's own ttl, never the
  * asker's (the rule `lease-core.mjs` learned in review M1).
+ *
+ * This is one half of the rule and not the whole decision: it is the answer for a
+ * slot whose holder cannot be inspected (another host, or no readable pid). For a
+ * slot on this host with a live pid, use `slotShouldBeRetained` - applying *this*
+ * there is N3, and it admits a second build beside a slow one.
  *
  * @param {{acquiredAt: number, ttlMinutes?: number}} slot
  * @param {number} now
@@ -158,6 +215,49 @@ export function buildSlotState(env = {}) {
 export function slotIsLive(slot, now) {
   const ttlMinutes = Number(slot?.ttlMinutes) || BUILD_SLOT_TTL_MINUTES;
   return now - slot.acquiredAt < ttlMinutes * 60_000;
+}
+
+/** Does this slot claim to belong to the machine asking? */
+function slotHostIsThisOne(slot, host) {
+  return typeof slot?.host === 'string' && slot.host === host;
+}
+
+/** Is there a pid we could actually ask the OS about? */
+function slotPidIsReadable(slot) {
+  const pid = Number(slot?.pid);
+  return Number.isInteger(pid) && pid > 0;
+}
+
+/**
+ * THE RULE for whether a slot stays in `builds.json` (N3).
+ *
+ * Keep a slot while its holder can be shown to be running. The ttl decides only when
+ * the holder *cannot* be shown - a slot from another host, or one with no readable
+ * pid - because those are the only cases where "is it still building?" has no answer
+ * except the clock.
+ *
+ * The old order (ttl AND not-dead, either one dropping the slot) meant the ttl could
+ * usefully fire only on a holder that was still alive: a same-host dead pid was
+ * already reclaimed, so the one thing a ttl could uniquely reach was a *slow* build -
+ * and expiring it admitted a second build beside it, the load spike this module
+ * exists to prevent. A `--clean` iOS rebuild from a cold cache can pass 45 minutes;
+ * it now keeps its slot.
+ *
+ * The cost, deliberately: a wedged-but-alive build blocks the queue until somebody
+ * stops it. That is the better failure - it is loud (the waiter names the holder, its
+ * pid and the state file), it ends on its own when the waiter's own budget runs out
+ * rather than hanging, and the named pid is exactly what to kill. Pid reuse is the
+ * other cost: a recycled pid looks like a live holder, which needs ~100k processes to
+ * turn over after a build skipped its cleanup, and again the waiter says so.
+ *
+ * @param {object} slot
+ * @param {{now: number, isAlive: (pid: number) => boolean, host: string}} options
+ * @returns {boolean}
+ */
+export function slotShouldBeRetained(slot, { now, isAlive, host }) {
+  if (slotHolderIsDead(slot, { isAlive, host })) return false;
+  if (slotHostIsThisOne(slot, host) && slotPidIsReadable(slot)) return true;
+  return slotIsLive(slot, now);
 }
 
 /**
@@ -224,8 +324,7 @@ function resolveNow(now) {
 export function pruneBuildSlots(state, { now, isAlive, host }) {
   const moment = resolveNow(now);
   const builds = (Array.isArray(state?.builds) ? state.builds : []).filter(
-    (slot) =>
-      slotIsLive(slot, moment) && !slotHolderIsDead(slot, { isAlive, host })
+    (slot) => slotShouldBeRetained(slot, { now: moment, isAlive, host })
   );
   return { ...state, builds };
 }
@@ -480,7 +579,8 @@ export function currentBuildSlots({ buildsFile, now, isAlive, host }) {
  * @param {number} [options.waitMinutes]
  * @param {number} [options.pollMs]
  * @param {number} [options.pid]
- * @param {{ deadline?: () => number, fsImpl?: object }} [options.deps]
+ * @param {object} [options.fsImpl] a filesystem to run against, as `withLock` takes
+ *   one; the tests hand it a temp directory rather than the machine's `~/.nitro-ui`
  * @returns {{slot: object, release: () => void, waitedMs: number}}
  */
 export function takeBuildSlot({
