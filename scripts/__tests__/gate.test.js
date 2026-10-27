@@ -1884,5 +1884,12 @@ describe('gate.mjs --background and wait', () => {
     const lines = ledgerLines(dir);
     expect(lines).toHaveLength(1);
     expect(lines[0].gate).toBe('harness:android:ColdSizing');
+    // And the *gate process* never saw the flag: the fake runner echoes its own
+    // argv into the log, so a leaked `--background` is visible there even though the
+    // run still succeeds - which is exactly why the exit code above is not evidence.
+    const log = fs.readFileSync(path.join(dir, lines[0].logPath), 'utf8');
+    expect(log).toContain('fake runner:');
+    expect(log).not.toContain('--background');
+    expect(log).toContain('ColdSizing');
   }, 90_000);
 });

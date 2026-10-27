@@ -54,6 +54,7 @@ import {
   unownedCheckProblem,
   coldCacheWarning,
   mainCheckoutPath,
+  primeCommands,
 } from './doctor-core.mjs';
 import {
   activeLeases,
@@ -869,29 +870,24 @@ function primeCaches({
   // The main checkout's *own* script, run from its own directory: it may be on a
   // different branch than this worktree, and the point is to warm the caches that
   // checkout's builds use.
-  const script = path.join(checkout, 'scripts/build-app.mjs');
   const results = [];
   // The build's own output goes to *this process's stderr*, live: a cold build
   // takes minutes and a caller watching it wants to see why it is slow. Stdout
   // stays untouched so `doctor --json --prime` is still parseable JSON.
   const buildStdio = /** @type {('ignore' | 2)[]} */ (['ignore', 2, 2]);
-  for (const platform of ['ios', 'android']) {
+  for (const command of primeCommands(checkout)) {
     log(
-      `doctor: priming ${platform} in ${checkout} (this is the cold build: minutes, not seconds)`
+      `doctor: priming ${command.platform} in ${checkout} (this is the cold build: minutes, not seconds)`
     );
-    const built = spawnSync(
-      process.execPath,
-      [script, '--platform', platform],
-      {
-        cwd: checkout,
-        stdio: buildStdio,
-        timeout: timeoutMinutes * 60_000,
-        env: process.env,
-      }
-    );
+    const built = spawnSync(process.execPath, [command.file, ...command.args], {
+      cwd: command.cwd,
+      stdio: buildStdio,
+      timeout: timeoutMinutes * 60_000,
+      env: process.env,
+    });
     results.push({
       area: 'prime',
-      name: `build ${platform}`,
+      name: `build ${command.platform}`,
       status: built.status === 0 ? 'ok' : 'fail',
       detail:
         built.status === 0
@@ -900,7 +896,7 @@ function primeCaches({
       fix:
         built.status === 0
           ? undefined
-          : `node scripts/build-app.mjs --platform ${platform} (run from ${checkout})`,
+          : `node scripts/build-app.mjs --platform ${command.platform} (run from ${checkout})`,
     });
   }
   const stats = run('ccache', ['--show-stats'], { timeout: 20_000 });
