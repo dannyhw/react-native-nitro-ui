@@ -10,7 +10,11 @@
  *
  * ## Adding a control
  *
- * Add one entry here, then one check per platform:
+ * A library component's row is generated: set `realInput: true` and a
+ * `realInputTitle` in its `component.json` and run `bun run registry`. The
+ * `hosted-*` rows stay hand-written below the generated region - they are about
+ * `<Host>`, which is a container rather than a control, and their ids are scenario
+ * names this suite owns. Either way, add one check per platform:
  *
  * - iOS: `func testRealInput<Id>` in
  *   `example/ios/NitroUiExampleUITests/RealInputTests.swift`;

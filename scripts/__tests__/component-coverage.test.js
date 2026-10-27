@@ -20,6 +20,7 @@ import {
   MANIFEST_BASENAME,
   checkRealInputRows,
   manifestsFromEntries,
+  renderedTabs,
 } from '../registry-core.mjs';
 
 const repoRoot = resolve(process.cwd());
@@ -171,67 +172,69 @@ describe('every bench component is implemented by every arm', () => {
 });
 
 describe('every real-input control has a check on both platforms', () => {
-  const realInputManifests = () =>
-    manifests.filter((m) => m.realInput === true);
+  const controls = () => {
+    const text = readRepo('scripts/real-input/controls.mjs') ?? '';
+    // Row blocks, parsed rather than pattern-matched on the whole row: a long title is
+    // wrapped by prettier onto its own line, and the check must not depend on where.
+    const rows = [];
+    let current = null;
+    for (const line of text.split('\n')) {
+      if (line === '  {') current = {};
+      else if (line === '  },' && current) {
+        if (current.id) rows.push(current);
+        current = null;
+      } else if (current) {
+        const id = /^ {4}id: '([a-z0-9-]+)',$/.exec(line);
+        const screen = /^ {4}screen: '([a-z0-9]+)',$/.exec(line);
+        if (id) current.id = id[1];
+        if (screen) current.screen = screen[1];
+      }
+    }
+    return rows;
+  };
 
-  it('the shared table lists them', () => {
-    const ids = [
-      ...(readRepo('scripts/real-input/controls.mjs') ?? '').matchAll(
-        /^ {4}id: '([a-z0-9-]+)',$/gm
-      ),
-    ].map((match) => match[1]);
-    expect(checkRealInputRows(realInputManifests(), ids)).toEqual([]);
-  });
-
-  it('Android has a CHECKS entry for each', () => {
+  it('the shared table lists every control whose manifest asks for one', () => {
     expect(
-      missingFrom(
-        readRepo('scripts/real-input/android.mjs'),
-        (id) => new RegExp(`^ {2}'${id}': async \\(t\\)`, 'm'),
-        realInputManifests()
+      checkRealInputRows(
+        manifests.filter((m) => m.realInput === true),
+        controls().map((control) => control.id)
       )
     ).toEqual([]);
   });
 
-  it('iOS has a test for each', () => {
-    // The Swift check is named after the component (`testRealInputSegmentedControl`),
-    // not after its kebab id, so this one keys off `name`.
+  it('every row names a screen the example app renders', () => {
+    const tabs = new Set(
+      renderedTabs(readRepo('example/src/App.tsx')).map((tab) => tab.tab)
+    );
     expect(
-      missingFrom(
-        readRepo('example/ios/NitroUiExampleUITests/RealInputTests.swift'),
-        (name) => `func testRealInput${name}(`,
-        realInputManifests().map((m) => ({ ...m, id: m.name }))
-      )
+      controls()
+        .filter((control) => !tabs.has(control.screen))
+        .map((control) => `${control.id} -> ${control.screen}`)
     ).toEqual([]);
   });
 
-  it('the hosted scenario rows are covered on both platforms too', () => {
-    // `<Host>` has no manifest, so the manifest-driven checks above cannot see its
-    // rows. `scripts/real-input/android.mjs` already fails at run time if the shared
-    // table and `CHECKS` disagree; this is the same claim from the other side, and it
-    // runs on a machine with no device.
-    const controls = readRepo('scripts/real-input/controls.mjs') ?? '';
-    const hosted = [
-      ...controls.matchAll(/^ {4}id: '(hosted-[a-z0-9-]+)',$/gm),
-    ].map((match) => ({ id: match[1] }));
-    expect(hosted.length).toBeGreaterThan(3);
-    const pascal = (id) =>
-      `${id[0].toUpperCase()}${id.slice(1).replace(/-([a-z0-9])/g, (_, l) => l.toUpperCase())}`;
-    expect(
-      missingFrom(
-        readRepo('scripts/real-input/android.mjs'),
-        (id) => `'${id}': async (t)`,
-        hosted
-      )
-    ).toEqual([]);
-    expect(
-      missingFrom(
-        readRepo('example/ios/NitroUiExampleUITests/RealInputTests.swift'),
-        (id) => `func testRealInput${pascal(id)}(`,
-        hosted
-      )
-    ).toEqual([]);
-  });
+  // One test per row, so a failure names the control whose check vanished rather than
+  // failing on whichever one sorts first.
+  for (const control of controls()) {
+    it(`${control.id} has a check on both platforms`, () => {
+      expect(
+        new RegExp(`^ {2}'${control.id}': async \\(t\\)`, 'm').test(
+          readRepo('scripts/real-input/android.mjs') ?? ''
+        )
+      ).toBe(true);
+      // The Swift check is named for the row id, camel-cased: `segmented-control` ->
+      // `testRealInputSegmentedControl`, `hosted-slider` -> `testRealInputHostedSlider`.
+      const pascal = `${control.id[0].toUpperCase()}${control.id
+        .slice(1)
+        .replace(/-([a-z0-9])/g, (_, letter) => letter.toUpperCase())}`;
+      expect(
+        (
+          readRepo('example/ios/NitroUiExampleUITests/RealInputTests.swift') ??
+          ''
+        ).includes(`func testRealInput${pascal}(`)
+      ).toBe(true);
+    });
+  }
 });
 
 describe('every component has the hand-written files behind its generated rows', () => {
