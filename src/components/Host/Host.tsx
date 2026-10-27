@@ -74,7 +74,7 @@ export interface HostProps extends ViewProps {
  *   control's own popup or dialog is not this: a Compose popup opened from inside the
  *   Host's composition is that composition's window, so it anchors under the row the
  *   Host drew and closes with the composition (`docs/components/host.md`, "Popups and
- *   dialogs`). What is refused is a window owned by React Native beside the Host, whose
+ *   dialogs"). What is refused is a window owned by React Native beside the Host, whose
  *   pixels this container would never own.
  * - **No nesting.** A `<Host>` cannot hold another `<Host>`: the inner one would be a
  *   row of the outer one's column, measuring nothing, drawing a composition of its
