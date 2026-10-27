@@ -12,8 +12,8 @@ import { Button } from 'react-native-nitro-ui';
 <Button title="Save" onPress={save} variant="tonal" size="small" />;
 ```
 
-There are no children: the label is the `title` string. (`Button` cannot be
-placed inside a `<Host>` either; `Switch` is the only hostable control.)
+There are no children: the label is the `title` string. (A `Button` can itself be
+a child of a `<Host>` since 0.2.0 — `docs/components/host.md`.)
 
 ## API
 
@@ -25,7 +25,7 @@ placed inside a `<Host>` either; `Switch` is the only hostable control.)
 | `size`               | `'small' \| 'medium' \| 'large'`              | `medium` | SwiftUI `.controlSize` / content padding + label typography.    |
 | `disabled`           | `boolean \| undefined`                        | `false`  | SwiftUI `.disabled()` / Compose `enabled = false`.              |
 | `tintColor`          | `ColorValue \| undefined`                     | platform | SwiftUI `.tint()` / the variant's container or label colour.    |
-| `systemImage`        | `string \| undefined`                         | —        | iOS `Label` icon. **Ignored on Android in v0.1** (see Limits).  |
+| `systemImage`        | `string \| undefined`                         | —        | iOS `Label` icon. **Ignored on Android** (see Limits).         |
 | `style`              | `ViewStyle`                                   | —        | Overrides the measured box (see Sizing).                        |
 | `testID`             | `string \| undefined`                         | —        | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.    |
 | `accessibilityLabel` | `string \| undefined`                         | —        | Label of the control itself; falls back to `title`.             |
@@ -182,7 +182,7 @@ measurement would never be asked for.
 
 Text size does move this control (unlike the Switch): the label is text, so
 Dynamic Type and `font_scale` change the fitting size. Neither platform is told
-about that from JS in v0.1 — native picks up the new size from the trait or
+about that from JS — native picks up the new size from the trait or
 configuration change, and the epoch invalidation is what drops the now-wrong
 cached sizes (`docs/architecture/sizing.md` §9; the harness drives it through
 `invalidateSizingEnvironment()`).
@@ -230,7 +230,7 @@ semantics node on Android.
 
 ## Limits
 
-- `systemImage` is iOS-only in v0.1: Android ignores it and the label stays the
+- `systemImage` is iOS-only: Android ignores it and the label stays the
   `title` text. It is still in the sizing key on both platforms so the two
   cannot drift apart when it is implemented.
 - `elevated` and `filled` are the same control on iOS, and `outlined` is

@@ -53,8 +53,9 @@ for a dense list, and not what every container does by default.
 
 ### The other three controls (H2a)
 
-`Slider`, `Progress` and `Button` can be hosted on `main`. That is **unreleased**: the
-published 0.1.0 Host holds Switches only, and these three land in the next release.
+`Slider`, `Progress` and `Button` can be hosted since 0.2.0 (the 0.1.0 Host holds
+Switches only). `SegmentedControl`, `Picker` and `DatePicker` follow in 0.3.0 (H2b,
+"Popups and dialogs" below).
 
 H2a re-ran the same plan with them in the host arm, so the four are priced by one run
 (`quick`, ART `speed-profile`, 4 launches, one results file;
@@ -159,10 +160,10 @@ rather than a screen that draws half of itself:
   never see.
 - **No per-child size.** A `width`, `height` or `alignSelf` on a hosted child moves the
   frame React Native computes, not the drawing (Sizing below). What the drawing is
-  comes from the control's own sizing rule and the Host's box: `Slider` and a linear
-  `Progress` take the Host's inner width, and `Button`, `Switch`, a circular `Progress`,
-  `SegmentedControl`, `Picker` and `DatePicker` take their own size at the column's
-  leading edge.
+  comes from the control's own sizing rule and the Host's box: `Slider`, a linear
+  `Progress` and a `wheel` `Picker` take the Host's inner width, and `Button`, `Switch`,
+  a circular `Progress`, `SegmentedControl`, a `menu` `Picker` and `DatePicker` take
+  their own size at the column's leading edge.
 - **Only some of a Host's own styles reach the drawing.** `width`, `height` and `flex`
   size the box, `alignSelf` moves that box inside the Host's parent, and `padding` and
   `borderWidth` inset it. The `Column` starts inside either
@@ -249,8 +250,9 @@ dialog is open (G5)" and "closes when the control is disabled while the dialog i
 What is still refused is a **React Native** `Modal` child, or any other RN view that owns
 a window: that window is a sibling of the Host's, not a child of its composition, so the
 Host would own a rectangle and nothing would own the pixels. If a future control cannot
-be hosted, the refusal stays loud — a throw in development and a `console.error` in a
-release build, never a control that draws half of itself.
+be hosted, the refusal stays loud in development — a throw from the JS check, and a
+`console.error` from the native one in a debuggable build — never a control that draws
+half of itself.
 
 ## Sizing (D24)
 

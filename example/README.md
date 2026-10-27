@@ -75,7 +75,9 @@ scripts set is read by `withStorybook` in `metro.config.js`, and the inline
   component props. Each control has a `Playground` story whose Controls panel
   carries every public prop, plus showcase stories for its variants, sizes,
   states, both appearances and its sizing behaviour. `Host` has no playground:
-  its stories compare hosted and unhosted Switches and churn a hosted batch.
+  its stories compare hosted and unhosted Switches, churn a hosted batch, mix
+  Switch, Slider, both Progress variants and Button in one Host, and host the
+  SegmentedControl, Picker and DatePicker whose menu and dialog open from it.
   Events log to the Actions panel.
 - **`storybook.requires.ts` is generated** (by the `withStorybook` Metro wrapper,
   or `bun run storybook:generate`) and is gitignored, so it is not reviewed.
