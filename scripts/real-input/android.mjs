@@ -87,6 +87,11 @@ const ECHO = {
   hostMixedState: 'host-mixed-state',
   hostSegmentedIndex: 'host-segmented-index',
   hostPickerIndex: 'host-picker-index',
+  hostDateValue: 'host-datepicker-value',
+  hostDateDropArmed: 'host-datepicker-drop-armed',
+  hostDateDropButton: 'host-datepicker-drop',
+  hostDateGone: 'host-datepicker-drop-gone',
+  hostDateRemount: 'host-datepicker-drop-remount',
 };
 
 /** The system Back key, which is how a person dismisses an open popup. */
@@ -745,6 +750,172 @@ const CHECKS = {
       t.requireEcho(ECHO.hostPickerIndex),
       '2'
     );
+  },
+
+  /**
+   * A real tap must open a hosted `DatePicker`'s dialog, and every way out of that
+   * dialog has to work there too.
+   *
+   * Why this case exists (`HostPopups.harness.tsx` cannot cover it): the dialog is a
+   * window of its own, and the harness's touch injector reaches the React Native window.
+   * So every hosted-dialog gate in the harness opens it with a test seam and closes it by
+   * disabling the control — nothing there has ever pressed the field, a day cell, OK,
+   * Cancel or Back. `adb shell input` goes through the window manager, which is where
+   * those presses can land, and the unhosted `date-picker` case has driven this same
+   * Material dialog that way on every gate run. A regression in how the Host's
+   * composition routes a press to the hosted field, or the dialog's OK click back to
+   * `applyUserSelection`, passes every harness gate and dies here.
+   *
+   * Four things are read:
+   *
+   * 1. **The press.** A real tap on the field the Host drew opens a month grid — and the
+   *    grid's presence in the accessibility tree *is* the a11y witness: the day cells are
+   *    clickable, square and named with their date, which is what TalkBack reads, and the
+   *    app's own echoes are absent from the same dump while it is up. The dialog opens on
+   *    the day JS gave the field, which is a fact about the Host's drawing rather than a
+   *    default.
+   * 2. **The pick.** A day cell plus OK reaches JS as a new day (a pick of the day
+   *    already showing is a correct no-op, so the day is aimed at by offset and retried —
+   *    exactly the unhosted case's reasoning).
+   * 3. **The dismissals.** OK closes it and reports; Cancel closes it and reports
+   *    nothing; Back closes it and reports nothing.
+   * 4. **The teardown.** Removing *only* that child from the Host while the dialog is up
+   *    leaves no window behind, with the app unmounting it on a timer because a second
+   *    real tap would only have dismissed the dialog (`PickerScreen`'s drop picker uses
+   *    the same shape for a menu).
+   *
+   * What closes a dialog is witnessed by the month grid leaving the accessibility tree
+   * plus the app's own text becoming readable again, not by `popupWindowCount()`: that
+   * counts `Pop-Up Window`s, which is what a `Picker` menu is and what a `Dialog` is not.
+   *
+   * iOS has no counterpart because there is nothing hosted to drive — `<Host>` is the
+   * passthrough there (D23), so the case for this control is `date-picker`.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'hosted-date-picker': async (t) => {
+    // `HostScreen` seeds the popup Host's DatePicker at 2026-05-17 and echoes what JS
+    // holds. Written by hand rather than formatted, so no locale moves the assertion.
+    const SEEDED = '2026-05-17';
+    const field = await t.requireControlOnScreen('Hosted date picker');
+    t.log.checkEquals(
+      'the hosted DatePicker shows the day JS gave it',
+      t.requireEcho(ECHO.hostDateValue),
+      SEEDED
+    );
+
+    // 1. A real press on the field the Host drew. The month grid is both the witness
+    //    that the press arrived and the accessibility tree this case has to cover: 14+
+    //    clickable, square, date-named cells is a calendar a screen reader can use.
+    await t.tapNode(field);
+    const cells = dayGrid(t, 'the hosted DatePicker');
+    t.log.check(
+      `the hosted dialog's day cells are in the accessibility tree (${String(
+        cells.length
+      )} of them, clickable and named with a year)`,
+      cells.length >= 14
+    );
+    t.log.check(
+      'the dialog opens on the month the Host is drawing, not on a default',
+      t
+        .dump()
+        .some((node) => /May 2026/.test(`${node.text} ${node.contentDesc}`))
+    );
+    t.log.check(
+      "while the hosted dialog is up it is a window of its own - the app's own echo is " +
+        'not in the same dump',
+      t.nodeByTestId(ECHO.hostDateValue) == null
+    );
+
+    // 2+3. A day, then OK. Offsets because a pick of the day the field already shows is
+    // a correct no-op, indistinguishable from a broken touch path from out here.
+    let reported = t.requireEcho(ECHO.hostDateValue);
+    let picked = null;
+    for (const offset of [0, 7, -7]) {
+      const day = await openAndPick(t, 'Hosted date picker', offset);
+      const now = t.requireEcho(ECHO.hostDateValue);
+      if (now !== reported) {
+        picked = day;
+        reported = now;
+        break;
+      }
+    }
+    t.log.check(
+      `a real tap on a dialog day ("${picked ?? 'no pick reported'}") reaches JS through ` +
+        'the Host as a new day',
+      /^\d{4}-\d{2}-\d{2}$/.test(reported) && reported !== SEEDED
+    );
+    t.log.check(
+      'and OK closed it: the app text is readable again',
+      t.nodeByTestId(ECHO.hostDateValue) != null
+    );
+
+    // 3a. Cancel: closes, reports nothing.
+    const beforeCancel = t.requireEcho(ECHO.hostDateValue);
+    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
+    dayGrid(t, 'the hosted DatePicker');
+    await t.tapNode(
+      t.waitForNodes(isCancelLabel, "the dialog's Cancel button", 1)[0]
+    );
+    await waitForDialogGone(t, 'Cancel to take the hosted dialog down');
+    t.log.checkEquals(
+      'Cancel closes the hosted dialog and reports no day',
+      t.requireEcho(ECHO.hostDateValue),
+      beforeCancel
+    );
+
+    // 3b. Back: closes, reports nothing. The gesture a person actually uses.
+    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
+    dayGrid(t, 'the hosted DatePicker');
+    await t.pressBack();
+    await waitForDialogGone(
+      t,
+      'the back gesture to take the hosted dialog down'
+    );
+    t.log.checkEquals(
+      'Back closes the hosted dialog and reports no day',
+      t.requireEcho(ECHO.hostDateValue),
+      beforeCancel
+    );
+    t.log.checkEquals(
+      'and no popup window of any kind is left owned by the app',
+      t.popupWindowCount(),
+      0
+    );
+
+    // 4. Remove only this child, while its dialog is up. The unmount is armed by a real
+    // tap and lands on a timer inside the app for the reason `PickerScreen` states: a
+    // second tap while a dialog is open is an outside tap, which dismisses the dialog
+    // instead of pressing anything.
+    await t.tapNode(
+      t.waitForNode(ECHO.hostDateDropButton, 'the unmount-the-field button')
+    );
+    t.waitForNode(ECHO.hostDateDropArmed, 'the unmount to be armed');
+    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
+    dayGrid(t, 'the hosted DatePicker');
+    // The timer fires inside the window this check has already spent arming and opening;
+    // wait the full delay out, then ask for the window.
+    await t.settle(3000);
+    await waitForDialogGone(
+      t,
+      'the removed child to take its open dialog down with it'
+    );
+    t.waitForNode(ECHO.hostDateGone, 'the field to be unmounted');
+    t.log.check(
+      'removing only the hosted DatePicker child leaves no dialog window behind',
+      t.dump().filter(isDayCell).length === 0
+    );
+    t.log.checkEquals(
+      'a teardown is not a choice - the day JS holds is the one it was given',
+      t.requireEcho(ECHO.hostDateValue),
+      beforeCancel
+    );
+
+    // Leave the screen as this check found it: the next control reads the same Host.
+    await t.tapNode(
+      t.waitForNode(ECHO.hostDateRemount, 'the remount-the-field button')
+    );
+    t.waitForNode('host-datepicker', 'the field to be hosted again');
   },
 
   /**
@@ -1690,6 +1861,42 @@ function isDayCell(node) {
  */
 function isConfirmLabel(node) {
   return /^(OK|Done|Set|Confirm)$/.test(node.text.trim());
+}
+
+/**
+ * The dialog's Cancel affordance, labelled the way `android.R.string.cancel` labels it.
+ *
+ * The alternatives are what other Android builds say for the same button, so the check
+ * does not hinge on one locale — the same reason `isConfirmLabel` lists four words.
+ *
+ * @param {import('./uiautomator.mjs').UiautomatorNode} node
+ */
+function isCancelLabel(node) {
+  return /^(Cancel|Close|Dismiss|Back)$/.test(node.text.trim());
+}
+
+/**
+ * Wait for a dialog's month grid to leave the accessibility tree.
+ *
+ * This is what "the dialog is closed" means on Android for this control: a `Dialog` is
+ * not a `Pop-Up Window`, so `popupWindowCount()` stays 0 whether the dialog leaked or
+ * not, and the app's own text is unreadable while it is up. The grid going away is the
+ * reading that survives both.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} description what to name in the failure line
+ */
+async function waitForDialogGone(t, description) {
+  const deadline = Date.now() + REACT_TIMEOUT;
+  for (;;) {
+    if (t.dump().filter(isDayCell).length === 0) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      t.log.abort(`timed out waiting for ${description}`);
+    }
+    await t.settle(250);
+  }
 }
 
 async function main() {
