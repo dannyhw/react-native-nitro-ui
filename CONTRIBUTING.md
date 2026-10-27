@@ -239,10 +239,10 @@ regen`, and `bun run registry:check` then proves the merge is right in 0.2 s:
 0 entries lost, both orders, with the full test suite showing nothing the merge
 broke. There, it is 19 files re-edited by hand. Pre-X3 was not unprotected —
 `tsc`, `nitrogen:check`, `host.test.tsx`, `viewConfigs.test.ts` and the smoke
-ready-line test each catch several of those rows (the report's table attributes
-each list to the gate that sees it) — but six of the thirteen had nothing,
-notably `example/src/App.tsx`'s tab bar, where a lost row is a control with no
-tab and no failure until you look at a device.
+ready-line test each catch a few of those rows, and the report attributes each
+list to the gate that sees it — but eight of the thirteen had nothing, notably
+`example/src/App.tsx`'s tab bar, where a lost row is a control with no tab and no
+failure until you look at a device.
 
 `bun run registry` refuses rather than half-writing: a new control has no
 `example/src/<Name>Screen.tsx` until someone writes it, and the check says so

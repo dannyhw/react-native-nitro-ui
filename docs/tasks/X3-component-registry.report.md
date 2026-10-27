@@ -147,23 +147,31 @@ can see. The genuine behaviour edits the recipe puts back are the four the manif
 `src/index.ts`'s export, the bench arm's import and branch, `testRealInput<Name>`, and the `CHECKS`
 entry (`nitro.json` is generated now, so it is no longer one of them).
 
-**What says so when a row goes missing** — measured separately, because "no gate" is the claim N6
-says is overstated. `Picker`'s rows deleted from the generated lists only, on each base, running the
-gates `check` runs:
+**What says so when a row goes missing** — measured one row at a time, because "nothing" is the claim
+N6 says is overstated and "everything" would be too. `Picker`'s row deleted from one generated list,
+the gates run, the file restored. One list per row; the aggregate run cannot attribute a red gate to a
+row, so it is not the evidence:
 
-| | pre-X3 (`dc13833`) | registry layout |
+| the list `Picker` has a row in | pre-X3 (`dc13833`) | registry layout |
 | --- | --- | --- |
-| gates red | 9 | 24 |
-| pre-existing gates that notice | `typecheck` (an orphaned import), `bench:typecheck`, `nitrogen:check` (`nitro.json`), `viewConfigs.test.ts` (config copies), `host.test.tsx` (hostable set), `smoke-ready-line.test.js`, the shared-Host arm scope | same 9, plus `registry:check` and the bench plan/arm, real-input-table, manifest-parity tests |
-| still unguarded pre-X3 | `bench/src/plan.ts`, `bench/src/types.ts` and the arm component lists, `scripts/bench/lib.mjs`, `nitro-ui.sizing.json`, `example/src/App.tsx`'s tab bar, the real-input table | — (all caught) |
+| `nitro.json` | `nitrogen:check` | + `registry:check` |
+| `nitro-ui.sizing.json` | `nitrogen:check` | + `registry:check` |
+| `HostChildren.ts` (hostable set) | `tsc`, `bench:typecheck`, `host.test.tsx` | + `registry:check` |
+| `viewConfigs.test.ts` (copies) | `tsc`, `viewConfigs.test.ts` | + `registry:check` |
+| `scripts/smoke/lib.mjs` | `smoke-ready-line.test.js` | + `registry:check` |
+| `NitroUiPackage.kt`, both `NitroUiDeclaredFallbacks`, `bench/src/plan.ts`, `bench/src/implementations/index.ts`, `scripts/bench/lib.mjs`, `example/src/App.tsx` (the tab bar), `scripts/real-input/controls.mjs` | **nothing red** | `registry:check`, and the real-input table also has `component-coverage.test.js` |
 
-So N6 is right that pre-X3 was not unguarded: 7 of 13 generated lists had some gate. X3's gain is the
-other 6, plus a check that names the file and line rather than inferring a missing row from a
-type error or a red SwiftUI snapshot assertion.
+So five of thirteen had a gate before X3, and eight had none — including `example/src/App.tsx`, where
+a lost tab is a control you cannot reach, discovered on a device or not at all. In the registry layout
+all thirteen are caught, and `registry:check` names the file and the line rather than leaving it to be
+inferred from a type error or a snapshot. (`bench/src/types.ts`'s `ComponentName` union is not in the
+table: its entries carry a `;` terminator, so deleting one is not a whole-row delete — it is the same
+shape as `plan.ts` plus that terminator, which proof 7 covers.)
 
-Scripts: `/tmp/x3-n5.mjs` (both layouts), `/tmp/x3-n5b.mjs` (which gate goes red), `/tmp/x3-n6.mjs`
-(the row-deletion table). Logs `/tmp/x3-n5-generated.log`, `/tmp/x3-n5-hand.log`,
-`/tmp/x3-n5b-gen.log`.
+Scripts: `/tmp/x3-n5.mjs` (both layouts), `/tmp/x3-n5b.mjs` (gates red after a merge),
+`/tmp/x3-n6.mjs` (all rows gone at once), `/tmp/x3-n6-per-file.mjs` (the table above). Logs
+`/tmp/x3-n5-generated.log`, `/tmp/x3-n5-hand.log`, `/tmp/x3-n5b-gen.log`, `/tmp/x3-n6p-hand.log`,
+`/tmp/x3-n6p-gen.log`.
 
 ## Follow-ups
 
