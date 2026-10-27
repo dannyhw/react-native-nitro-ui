@@ -238,10 +238,18 @@ describe('release-it is gone', () => {
   it('has changesets commands instead, and no way to publish from here', () => {
     expect(pkg.devDependencies['@changesets/cli']).toBeDefined();
     expect(pkg.scripts.changeset).toBe('changeset');
-    // Nothing left to refresh: `changeset version` touches package.json and
-    // CHANGELOG.md only, and a `bun install --no-frozen-lockfile` afterwards
-    // reached the registry from inside a write-token job for no change at all.
-    expect(pkg.scripts['release:version']).toBe('changeset version');
+    // `changeset version` touches package.json and CHANGELOG.md only, so the same
+    // script also refreshes `example/ios/Podfile.lock` — the action commits the tree
+    // straight after this script, so that is the only moment the Version Packages
+    // commit can be made internally consistent. `bun run check` then guards it.
+    //
+    // The `--preflight` first is the part to keep: `changeset version` writes, so a
+    // refusal after it leaves a half-versioned tree on a machine that only wanted a
+    // preview. `example-lock.test.js` proves the refusal itself writes nothing.
+    expect(pkg.scripts['release:version']).toBe(
+      'node scripts/sync-example-lock.mjs --preflight && changeset version && ' +
+        'node scripts/sync-example-lock.mjs --fix'
+    );
     // Publishing is not a thing a checkout can do: CI stages, and a person
     // approves on npmjs.com. `changeset publish` would try `npm publish`, which
     // the trusted publisher rejects, and `npm stage publish` needs an

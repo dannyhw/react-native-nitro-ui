@@ -75,6 +75,7 @@ import {
   mintBaselineFileFor,
   openBaselineForCheck,
 } from './baseline.mjs';
+import { dryRun } from './dry-run.mjs';
 import { collectMachine, tryExec } from './machine.mjs';
 import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
 import {
@@ -538,7 +539,10 @@ export async function main(argv) {
       'usage: bun bench --platform ios|android [--plan quick|full] [--compare <ref|file>]\n' +
         '           [--check] [--update-baseline] [--force] [--skip-build] [--only <impl,impl>]\n' +
         '           [--launches N] [--prebuild] [--shutdown] [--perf-marks]\n' +
-        '           [--component <name>]'
+        '           [--component <name>] [--dry-run]\n' +
+        '\n' +
+        '  --dry-run  print what this run would resolve and whether it would be\n' +
+        '             refused, then stop: no boot, no build, no measurement.'
     );
     process.exitCode = 2;
     return;
@@ -555,6 +559,22 @@ export async function main(argv) {
   if (!Number.isInteger(launches) || launches < 1) {
     log('--launches must be a positive integer');
     process.exitCode = 2;
+    return;
+  }
+
+  // Print what this run would resolve and whether it would be refused, then stop:
+  // no boot, no build, no measurement (`scripts/bench/dry-run.mjs`). Placed before
+  // the label and load refusals below because answering those questions *is* the
+  // job here, so a dry run has to get past them rather than exit on them.
+  if (argv.includes('--dry-run')) {
+    process.exitCode = dryRun({
+      argv,
+      platform,
+      plan,
+      launches,
+      component: flag(argv, '--component'),
+      baselinesDir: BASELINES_DIR,
+    });
     return;
   }
 

@@ -59,6 +59,12 @@ import {
   iosModuleCacheArgs,
   resolveAndroidAbis,
 } from './build-speed-lib.mjs';
+import {
+  DEFAULT_BUILD_WAIT_MINUTES,
+  buildSlotState,
+  buildTaskName,
+  takeBuildSlot,
+} from './build-slot-core.mjs';
 import { installPods } from './pod-install.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
@@ -81,7 +87,11 @@ const USAGE =
   '\n' +
   '  Nothing changed since the last build? The build is skipped and says so.\n' +
   '  ccache, when it is installed, speeds up the C/C++/Objective-C++ compiles\n' +
-  '  and shares its cache between worktrees (CONTRIBUTING.md: Build speed).';
+  '  and shares its cache between worktrees (CONTRIBUTING.md: Build speed).\n' +
+  '\n' +
+  '  One heavy native build runs at a time per machine: a build waits for its\n' +
+  '  slot and prints who is building. The limit is `maxConcurrentBuilds` in\n' +
+  '  ~/.nitro-ui/devices.json (default 1); a skipped build takes no slot.';
 
 assertSupportedNodeOrReexec({
   command: 'node scripts/build-app.mjs',
@@ -446,6 +456,23 @@ function buildAndroid({ abis, abisFrom, clean, log }) {
   return { artifact: apk, treeBefore };
 }
 
+/**
+ * How long a build may queue for its slot. Overridable for one shell the same
+ * way the lease poll interval is, so a test or a machine with a slow queue can
+ * name a different number without a code change (X9).
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {number}
+ */
+function buildSlotWaitMinutes(env = {}) {
+  const raw = env.NITRO_UI_BUILD_WAIT_MINUTES;
+  if (raw == null || raw === '') return DEFAULT_BUILD_WAIT_MINUTES;
+  const minutes = Number(raw);
+  return Number.isFinite(minutes) && minutes > 0
+    ? minutes
+    : DEFAULT_BUILD_WAIT_MINUTES;
+}
+
 function main(argv) {
   if (argv.includes('--help')) {
     process.stdout.write(`${USAGE}\n`);
@@ -504,34 +531,68 @@ function main(argv) {
     log(`building: ${skip.reason}`);
   }
 
+  // One heavy native build at a time, machine-wide (X9): two app builds plus
+  // `check` pushed a 10-core machine to load 13, and the lease pool only limits
+  // *device* tasks, because a build needs no device.
+  //
+  // Taken *after* the stamp-fresh skip above, so a build that has nothing to do
+  // takes no slot - the skip is a file read, and a queue of tasks waiting behind
+  // a machine that is not compiling would be worse than no queue at all.
+  //
+  // `--clean` and `--force` still queue: they are slower than a normal build, not
+  // exempt from what they do to the machine.
+  const slot = buildSlotState(process.env);
+  if (slot.note != null) log(slot.note);
+  const held = takeBuildSlot({
+    task: buildTaskName(process.env),
+    platform,
+    buildsFile: slot.builds,
+    lockFile: slot.lock,
+    max: slot.max,
+    host: os.hostname(),
+    log,
+    waitMinutes: buildSlotWaitMinutes(process.env),
+  });
+  // Timed from here, not from process entry: the wait belongs in its own number,
+  // and a 9-minute build that queued for 20 should not read as a 29-minute build.
   const startedAt = Date.now();
-  const { artifact, treeBefore } =
-    platform === 'ios'
-      ? buildIos({ clean, log })
-      : buildAndroid({ abis, abisFrom, clean, log });
+  // Release on every exit path, including the throw out of `run()`: a slot that
+  // outlives its build would hold the machine until the ttl, and the next task
+  // would wait for a compile that already finished.
+  process.once('exit', held.release);
+  try {
+    const { artifact, treeBefore } =
+      platform === 'ios'
+        ? buildIos({ clean, log })
+        : buildAndroid({ abis, abisFrom, clean, log });
+    held.release();
 
-  const stamp = noStamp
-    ? null
-    : recordBuild({
-        platform,
-        artifact,
-        treeBefore,
-        abis: platform === 'android' ? abis : null,
-        log,
-      });
-  const seconds = ((Date.now() - startedAt) / 1000).toFixed(0);
-  const tree = currentCodeTree();
-  process.stdout.write(
-    `${colorize(`\u2713 ${platform} example app built from this tree`, 'green')}\n` +
-      `  artifact  ${artifact}\n` +
-      `  stamp     ${stampPath({ platform })}\n` +
-      `  tree      ${tree.tree.slice(0, 12)} (${String(tree.files)} code files)` +
-      `${stamp == null ? ' (not stamped: --no-stamp)' : ''}\n` +
-      `  ${seconds}s\n\n` +
-      'Point the harness at it:\n' +
-      `  export HARNESS_APP_PATH="${artifact}"\n`
-  );
-  return 0;
+    const stamp = noStamp
+      ? null
+      : recordBuild({
+          platform,
+          artifact,
+          treeBefore,
+          abis: platform === 'android' ? abis : null,
+          log,
+        });
+    const seconds = ((Date.now() - startedAt) / 1000).toFixed(0);
+    const tree = currentCodeTree();
+    process.stdout.write(
+      `${colorize(`\u2713 ${platform} example app built from this tree`, 'green')}\n` +
+        `  artifact  ${artifact}\n` +
+        `  stamp     ${stampPath({ platform })}\n` +
+        `  tree      ${tree.tree.slice(0, 12)} (${String(tree.files)} code files)` +
+        `${stamp == null ? ' (not stamped: --no-stamp)' : ''}\n` +
+        `  ${seconds}s` +
+        `${held.waitedMs > 1000 ? ` (waited ${String(Math.round(held.waitedMs / 1000))}s for the build slot)` : ''}\n\n` +
+        'Point the harness at it:\n' +
+        `  export HARNESS_APP_PATH="${artifact}"\n`
+    );
+    return 0;
+  } finally {
+    held.release();
+  }
 }
 
 try {
