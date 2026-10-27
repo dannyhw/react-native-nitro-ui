@@ -1117,10 +1117,13 @@ class HybridNitroUiPicker(
         //
         // Material 3 dismisses it too: `ExposedDropdownMenuBox` stops composing a menu
         // whose `menuAnchor(enabled = …)` went false, which is what the harness sees
-        // happen (measured - deleting this line leaves the gate green, and a
-        // `menuAnchor(enabled = true)` mutation turns it red). This write keeps the
-        // rule ours rather than the widget library's, so the gate stays true whatever
-        // Material does with a disabled anchor.
+        // happen. Measured on this task's tree, neither deleting this line nor deleting
+        // it with `menuAnchor(enabled = true)` forced turns that gate red: the Material
+        // scope has more than one path to closing a menu whose anchor went disabled, so
+        // the gate is an outcome gate - "a disabled control is not showing a list of
+        // choices" - rather than a witness for this line. The write is still the point:
+        // it is what makes the outcome the control's rule rather than the widget
+        // library's, whatever Material decides to do with a disabled anchor.
         model.expanded = false
       }
       // Repaints only: a disabled control is the same size.
