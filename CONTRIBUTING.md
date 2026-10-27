@@ -334,7 +334,7 @@ Four things make a local or agent build faster:
   `<platform> example app is fresh, not rebuilt` and exits. `--force`, `--clean`
   and `--no-stamp` all build.
 
-Two things it buys that are worth knowing before you go looking for a bug:
+Three things it buys that are worth knowing before you go looking for a bug:
 
 - **Debug info names the worktree that first compiled the object.**
   `CCACHE_NOHASHDIR` is what makes a second worktree a hit, and it also means a
@@ -349,7 +349,17 @@ Two things it buys that are worth knowing before you go looking for a bug:
   upstream's choice, not this repo's. It trades a little correctness for hits:
   the risk is a change reached through `@import` rather than `#include`. Nothing
   under `ios/` uses `@import` today; if that changes and a rebuild looks ignored,
-  `NITRO_UI_CCACHE=0` is the answer to both bullets.
+  `NITRO_UI_CCACHE=0` is the answer to all three.
+- **A ccache build and a plain build do not share an iOS module cache.**
+  `CCACHE_BASEDIR` changes what clang _records_, not only what ccache hashes: a
+  `.pcm` compiled under it holds worktree-relative paths. So a build that sets
+  it is passed `MODULE_CACHE_DIR=<derivedData>/ModuleCache-ccache.noindex`, and
+  everything that compiles without ccache - `real-input:ios`, the smoke builds,
+  Xcode itself - keeps Xcode's own `ModuleCache.noindex`. Sharing one directory
+  is not slower, it is fatal: the next build reads those `.pcm` files and stops
+  with `module 'Foundation' is defined in both …` — the same directory written
+  two ways, one of them relative to the worktree. Deleting that
+  `ModuleCache.noindex` clears a stale one; a `pod install` does not.
 
 ```sh
 node scripts/build-app.mjs --platform ios          # fresh? skipped, in half a second

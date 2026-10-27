@@ -10,6 +10,8 @@
  * `nitrogen/`, all of which ship in the npm package.
  */
 
+import path from 'node:path';
+
 /** ABIs this repo knows how to build, so a typo fails here rather than in CMake. */
 export const KNOWN_ABIS = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'];
 
@@ -167,6 +169,53 @@ export function ccacheEffectiveForWorktrees(showConfigOutput) {
 export function gradleCcacheArgs({ enabled, initScript }) {
   if (!enabled || initScript == null) return [];
   return [`--init-script=${String(initScript)}`];
+}
+
+/** What Xcode names its compiled-module cache when nothing overrides it. */
+export const PLAIN_MODULE_CACHE_NAME = 'ModuleCache.noindex';
+
+/** The same cache for a build whose compiler was told `CCACHE_BASEDIR`. */
+export const CCACHE_MODULE_CACHE_NAME = 'ModuleCache-ccache.noindex';
+
+/**
+ * Where an iOS build's compiled modules go, and why a ccache build needs its
+ * own copy of that directory.
+ *
+ * `CCACHE_BASEDIR` does not only shorten what ccache hashes: clang writes the
+ * paths it recorded into the `.pcm` files it produces, so a ccache build puts
+ * module paths relative to the worktree into the module cache. Xcode's default
+ * is one directory per derived data path, and every build that shares that
+ * derived data shares it - including a plain `xcodebuild` with no ccache in its
+ * environment, which reads those same `.pcm` files and finds `Foundation`
+ * defined in both spellings of one path. That is not a cache miss; the compile
+ * stops with a fatal error, in a directory the next `pod install` does not
+ * clear.
+ *
+ * So the rule is: whoever sets `CCACHE_BASEDIR` also names its module cache.
+ * A plain build is passed the default explicitly rather than inheriting it, so
+ * the two are compared as two values instead of one value and an assumption
+ * about what Xcode would have chosen.
+ *
+ * @param {object} options
+ * @param {string} options.derivedData the `-derivedDataPath` of that build
+ * @param {boolean} options.ccache this build set the ccache environment
+ * @returns {string}
+ */
+export function iosModuleCacheDir({ derivedData, ccache }) {
+  return path.join(
+    String(derivedData),
+    ccache ? CCACHE_MODULE_CACHE_NAME : PLAIN_MODULE_CACHE_NAME
+  );
+}
+
+/**
+ * The `xcodebuild` build-setting assignment that pins it.
+ *
+ * @param {object} options same as `iosModuleCacheDir`
+ * @returns {string[]} one entry, to spread into the xcodebuild arguments
+ */
+export function iosModuleCacheArgs({ derivedData, ccache }) {
+  return [`MODULE_CACHE_DIR=${iosModuleCacheDir({ derivedData, ccache })}`];
 }
 
 /**
