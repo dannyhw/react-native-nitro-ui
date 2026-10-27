@@ -455,9 +455,12 @@ app opts into for a dense list rather than what every container does. On iOS
 `Host` is a passthrough `View`, and only `Switch` can be hosted in 0.1.0.
 
 The next release extends the same mechanism to `Slider`, `Progress` and `Button`,
-and with it to the three controls that each own a window — `SegmentedControl`,
-`Picker` and `DatePicker` — so a Host holds all seven. The first four were re-priced
-by one further run on the same emulator, and that machine
+and with it to `SegmentedControl`, `Picker` and `DatePicker` — so a Host holds all
+seven. Two of those three present something outside their own box: a `Picker` opens
+a menu and a `DatePicker` a dialog, and both belong to the Host's composition once
+hosted. A `SegmentedControl` owns no window at all; it is on the list because it
+draws itself, which is the question a Host asks. The first four were re-priced by
+one further run on the same emulator, and that machine
 was **busy — 37 % of its load samples over the ceiling — so those numbers are
 indicative and a quiet re-run is pending**. Cells with a launch spread over 10 %
 are `n/v` and carry no verdict. Against `expo-ui-shared-host`:
@@ -476,11 +479,13 @@ on all four controls, `Progress` most of all; the JS cost is a measured 1.23× o
 1.2×) and was not measured on `Slider` or `Button`; and the unmount cells are spread
 too wide for any claim at all.
 
-The other three were priced by a further run on the same emulator: `--plan quick`,
-4 launches, ART `speed-profile`, no problems, and **8.2 %
-of its load samples over the ceiling — under the 10 % bar, so that run reads as
-quiet** (it still mints no baseline at 4 launches). Against `expo-ui-shared-host`,
-and against the same control with no Host:
+The other three were priced by **one further `--plan quick` run** on the same
+emulator — 4 launches, ART `speed-profile`, no problems flagged. It is one run on a
+machine shared with other tasks: its load peaked at 27.8 against a ceiling of 7, and
+only 8.2 % of its samples went over, which is under the bar the harness calls
+_quiet_ but is not a claim this table wants to make. **Read these as indicative; a
+quiet re-run is pending** (and at 4 launches the plan mints no baseline either).
+Against `expo-ui-shared-host`, and against the same control with no Host:
 
 |                                         | `SegmentedControl` | `Picker`  | `DatePicker`    |
 | --------------------------------------- | ------------------ | --------- | --------------- |
@@ -492,8 +497,12 @@ and against the same control with no Host:
 | Mount JS CPU vs no Host                 | 1.01×              | 1.00×     | 1.02×           |
 
 No Android `@expo/ui` arm has `DatePicker` cells, so that column is hosted-vs-unhosted
-only. And **no number here is about an open window**: the bench arm mounts the anchor
-row and never presses it, so no menu or dialog is composed while these are read. What
+only. How noisy that single run was is measurable: read against the committed
+baseline, `bench:report --check` fails **13 unhosted `nitro-ui` cells** — Switch,
+Slider and Progress mount cost among them — on code this release did not touch, so
+none of those ratios is a verdict about an untouched control. And **no number here is
+about an open window**: the bench arm mounts the anchor row and never presses it, so
+no menu or dialog is composed while these are read. What
 the run does show is that a control which can own a window hosts like the others —
 memory about halved, UI thread down, and JS CPU per op unchanged. That run's `Switch`
 cell reads 0.85× where the published figure is 0.86×, which is what makes the rest of

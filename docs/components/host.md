@@ -193,20 +193,31 @@ is the direct child, and a `View` is what the check refuses.
 
 ## Popups and dialogs
 
-Three of the seven hosted controls present something outside their own box: a
-`SegmentedControl` presents nothing (it is here because it is a control like the others),
-a `Picker` opens an `ExposedDropdownMenu`, and a `DatePicker` on Android opens a dialog in
-each of its `compact` modes. Those windows are **the Host composition's own**: a Compose
-popup opened from inside an `AndroidComposeView` is attached to that view, which is the
-same thing that happens when the same control opens a menu in a composition of its own,
-and the same thing Expo UI's shared host does. That is a fact about Compose, not a
-workaround added for Hosts, and it is what makes each of the following fall out rather
-than need engineering:
+**Two** of the seven hosted controls present something outside their own box: a
+`Picker` opens an `ExposedDropdownMenu`, and a `DatePicker` on Android opens a dialog in
+each of its `compact` modes. A `SegmentedControl` presents nothing and owns no window of
+any kind — it is hostable because it draws itself, which is the question a Host asks, and
+a real tap on one is gated as though it were not (`example/__tests__/HostPopups.harness.tsx`
+and the `hosted-segmented` real-input case both check that it opens no window).
+
+Those two windows are **the Host composition's own**: a Compose popup opened from inside
+an `AndroidComposeView` is attached to that view, which is the same thing that happens
+when the same control opens a menu in a composition of its own, and the same thing Expo
+UI's shared host does. That is a fact about Compose, not a workaround added for Hosts —
+and it is what makes *disposal* the thing that takes a window down. What the shared
+anchor does not give you for free is where the anchor is: React Native's frame for a
+hosted child is `0 × 0`, so an open menu's anchor is read out of the drawing
+(`noteCompositionOrigin`) and its box watched from the nearest React-Native-placed
+ancestor (`placedViewOf` and its `OnLayoutChangeListener`), and an open menu is taken
+down by `dropOpenMenu` when that box moves out from under it. That much is engineered,
+for hosted and unhosted controls alike — and the row about a layout move below is what it
+does to a user:
 
 | Situation | What a hosted popup does |
 | --------- | ------------------------ |
-| The Host is scrolled, or sits nowhere near the top of the screen | The menu opens under the box the **Host drew**, because that is the anchor node's position. React Native's frame for the child is never consulted — it is decorative (Sizing below), and anchoring to it would put the menu over the wrong row. Measured: `example/__tests__/HostPopups.harness.tsx`, "anchors under the box the Host drew, and follows it when it moves". |
-| Outside tap, the back gesture, or a row | Each closes it, exactly as unhosted, and the controlled handshake still decides whether the row is accepted. A refused choice still closes the menu and leaves the value where React kept it. |
+| The Host is scrolled, or sits nowhere near the top of the screen | The menu opens under the box the **Host drew**, wherever on the screen that is, because that is the anchor node's position. React Native's frame for the child is never consulted — it is decorative (Sizing below), and anchoring to it would put the menu over the wrong row. Measured on a real scroll by `hosted-picker` in `scripts/real-input` (both platforms, which opens the menu after scrolling the Host's screen); the geometry of it is `example/__tests__/HostPopups.harness.tsx`, "anchors under the box the Host drew, and follows it when it moves". |
+| The Host, or the row, is **moved by layout** while a menu is open | The menu closes. The window cannot follow a row that is no longer where it opened — a stale window over the wrong control is the bug — so a layout move is dismissal, the same answer the control gives when a scrolling ancestor carries an anchor away. Note this is not a scroll: scrolling changes neither the layout nor the anchor's box, and an open menu stays open across one. The same rule now applies to an **unhosted** `Picker` whose React Native view is moved (`docs/components/picker.md`). Measured: the same harness file, "anchors under the box the Host drew, and follows it when it moves" — the gate that witnesses `dropOpenMenu`. |
+| Outside tap, the back gesture, or a row | Each closes it, exactly as unhosted, and the controlled handshake still decides whether the row is accepted. A refused choice still closes the menu and leaves the value where React kept it — measured for the control itself in `docs/components/picker.md`; the hosted gates show a pick closing the menu and the handshake holding, and the refusal path is the same code with a different answer from the app. |
 | The options change while it is open | The open menu relays the new rows; the chosen index is whatever the list now says. |
 | The control is disabled while its window is up | The window closes. A control that answers nothing cannot own a live dialog. |
 | The child is removed, reordered, or the Host is dropped (`onDropView`) while a window is open | Nothing is left behind. The window belongs to the composition that opened it, so when that composition goes — including `onDropView`, which disposes it — the window goes with it. Measured, including the case where a reorder moves the row under an open menu: the menu comes down rather than floating over the wrong control. |
@@ -216,7 +227,13 @@ than need engineering:
 The `DatePicker`'s dialog is the same rule in a different widget: the dialog is composed
 from the model's own `presented` state inside the host composition (`docs/components/date-picker.md`),
 so a hosted field opens a dialog that follows a value React writes while it is up, closes
-when the field is disabled, and leaves nothing when the Host is dropped mid-dialog. The
+when the field is disabled, and leaves nothing when the Host is dropped mid-dialog. Its
+own OK, Cancel and Back buttons close it the same way there as anywhere else — those
+presses land in another window, so they are gated with real taps in `hosted-date-picker`
+(`scripts/real-input`), not from the harness. Two teardowns the flag has to follow rather
+than survive: taking the child out of the Host's list, and `display: 'none'` on it —
+which composes no child at all and so disposes the dialog's subtree, and the open flag
+goes with it or showing the field again would open a dialog nobody asked for. The
 `time` and `datetime` modes present dialogs too, and are gated as well as `date`.
 
 Two G5 follow-ups live on that path and were fixed here rather than recorded: a dialog
