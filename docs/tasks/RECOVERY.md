@@ -15,6 +15,9 @@
 > dedicated spare: benches need an idle machine, not a time of day). Step 3 (X3) is in flight in
 > `nitro-ui-worktrees/X3` · `task/X3-component-registry`.
 >
+> **Components:** 0.4 is a button-anchored Menu (G7a/G7b) plus a TextField spike (T18), starting
+> after X3 and X4 merge; see `PLAN-0.4.md`.
+>
 > Queue (owner-approved 2026-10-27): after X3 merges, **X9** and **X10** (`X10-check-throughput.md`,
 > no devices) in parallel; **X11** (`X11-device-throughput.md`: emulator GPU, warm device pool, which
 > changes the shut-down-your-devices rule, harness timing) after X9 and after the A3 mint. Nothing
