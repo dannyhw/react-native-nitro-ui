@@ -390,10 +390,14 @@ const CHECKS = {
     );
 
     await t.dragControl(control, 0.4, 0.9, 800);
-    const up = t.waitForValueToRise(
+    t.waitForValueToRise(
       ECHO.hostSliderValue,
       before,
       'a real drag on a hosted Slider to reach React'
+    );
+    const up = t.waitForValueToSettle(
+      ECHO.hostSliderValue,
+      'the drag on the hosted Slider to finish'
     );
     t.log.check(
       `a real drag moves a hosted Slider and React renders it (${String(
@@ -406,16 +410,20 @@ const CHECKS = {
     // where that is, because the echo is what a person sees. A control that only ever
     // reported one direction would fail here rather than look fine.
     await t.dragControl(control, 0.9, 0.1, 800);
-    const down = t.waitForEchoToChange(
+    // Wait for the gesture to be over, then read. `waitForEchoToChange` answers the
+    // first value that differs, which is a sample from mid-drag; the assertion wants
+    // where the thumb ended, and only a settled echo can say that.
+    t.waitForEchoToChange(
       ECHO.hostSliderValue,
       up,
       'a second drag to move the hosted Slider back'
     );
-    const landed = t.value(ECHO.hostSliderValue);
+    const landed = t.waitForValueToSettle(
+      ECHO.hostSliderValue,
+      'the second drag on the hosted Slider to finish'
+    );
     t.log.check(
-      `dragging back moves a hosted Slider the other way (${up} -> ${down}; ${String(
-        landed
-      )})`,
+      `dragging back moves a hosted Slider the other way (${up} -> ${String(landed)})`,
       landed != null && landed < up - 0.3
     );
   },
@@ -2785,6 +2793,47 @@ function makeContext(harness, log) {
         `${description} (${testID} above ${String(previous)})`
       );
       return value(testID);
+    },
+
+    /**
+     * Read a numeric echo until it holds still, and return what it settled on.
+     *
+     * A drag is a stream of `onValueChange` events and React renders each one, so the
+     * first echo that differs from the previous value is a reading taken *inside* the
+     * gesture rather than the result of it. Measured on `nitroui_t03`: a real drag
+     * that ended at `0.13` first read `0.83`, and a check that believed the first
+     * change saw a Slider that had barely moved. The fix is the wait, not the
+     * assertion - the value has to stop moving before anything is read off it.
+     *
+     * "Holds still" is `quietMs` of reads that agree, which cannot settle early on a
+     * control that never answered: it returns the unchanged value, and whatever is
+     * being asserted about the move goes red on it.
+     *
+     * @param {string} testID
+     * @param {string} description what is being waited for
+     * @param {number} [quietMs] how long the value must hold still
+     */
+    waitForValueToSettle(testID, description, quietMs = 1200) {
+      const deadline = Date.now() + REACT_TIMEOUT;
+      /** @type {number | null} */
+      let last = value(testID);
+      let quietSince = Date.now();
+      for (;;) {
+        blockMs(300);
+        const shown = value(testID);
+        if (shown !== last) {
+          last = shown;
+          quietSince = Date.now();
+        } else if (shown != null && Date.now() - quietSince >= quietMs) {
+          return shown;
+        }
+        if (Date.now() > deadline) {
+          log.abort(
+            `timed out after ${String(REACT_TIMEOUT)}ms waiting for ` +
+              `${description} - ${testID}="${String(last)}" was still moving`
+          );
+        }
+      }
     },
   };
 }
