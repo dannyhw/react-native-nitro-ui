@@ -22,6 +22,7 @@ import { describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -400,6 +401,17 @@ describe('the two things a refresh must never do', () => {
     at(['config', 'commit.gpgsign', 'false']);
     mkdirSync(join(dir, 'example/ios'), { recursive: true });
     mkdirSync(join(dir, 'scripts'), { recursive: true });
+    // The CLI under test, copied rather than symlinked so it computes its own repo
+    // root as this scratch tree. A stub here would make a failed import look like a
+    // refusal, which is the exact confusion this fixture must not allow.
+    for (const name of [
+      'sync-example-lock.mjs',
+      'example-lock-core.mjs',
+      'pod-install.mjs',
+      'pod-install-lib.mjs',
+    ]) {
+      copyFileSync(join(root, 'scripts', name), join(dir, 'scripts', name));
+    }
     writeFileSync(
       join(dir, 'package.json'),
       JSON.stringify({ name: 'react-native-nitro-ui', version: '0.5.0' })
@@ -446,6 +458,14 @@ exit 0
 `
     );
     chmodSync(fakePod, 0o755);
+    // The witness for "did the version bump happen?", used by the release-order test.
+    mkdirSync(join(dir, 'bin'), { recursive: true });
+    const fakeChangeset = join(dir, 'bin', 'changeset');
+    writeFileSync(
+      fakeChangeset,
+      `#!/bin/sh\nprintf 'changeset %s\\n' "$*" > "${dir}/changeset-ran"\nexit 0\n`
+    );
+    chmodSync(fakeChangeset, 0o755);
     return {
       dir,
       at,
@@ -478,6 +498,32 @@ exit 0
             ...env,
           },
         }),
+      /**
+       * Runs a whole `&&` chain - a real `package.json` script - in this checkout.
+       *
+       * `node` is spelled out to `process.execPath` so the chain does not depend on
+       * jest's own PATH; the structure of the command is otherwise byte-for-byte,
+       * which is the thing under test. A fake `changeset` on PATH is the witness: it
+       * records only that it was invoked, because what is asserted here is *when* the
+       * release path stops, not what changeset does to a manifest.
+       */
+      runRelease: (command, env = {}) =>
+        spawnSync(
+          'sh',
+          ['-c', command.replaceAll('node ', `"${process.execPath}" `)],
+          {
+            cwd: dir,
+            encoding: 'utf8',
+            timeout: 180_000,
+            env: {
+              ...process.env,
+              NITRO_UI_LOCK_SYNC_ROOT: dir,
+              COCOAPODS_BIN: fakePod,
+              PATH: `${join(dir, 'bin')}:${process.env.PATH}`,
+              ...env,
+            },
+          }
+        ),
     };
   }
 
@@ -522,9 +568,8 @@ exit 0
   });
 
   it('refuses up front when CocoaPods is missing, without touching the tree', () => {
-    // The M1 failure: a Linux contributor runs `bun run release:version`. `changeset
-    // version` has already bumped package.json, so the only exit that leaves a tree
-    // they can keep is one taken before this script writes anything.
+    // The second-best refusal: `--fix` called on its own, after something already
+    // bumped the version. It cannot undo that, so it names the way out.
     const repo = scratchCheckout();
     const out = repo.status(['--fix'], { COCOAPODS_BIN: '/nonexistent/pod' });
     expect(out.status).toBe(1);
@@ -532,6 +577,38 @@ exit 0
     expect(out.stderr).toContain('git checkout -- .');
     expect(repo.read('example/ios/Podfile.lock')).toBe(LOCK);
     expect(repo.dirty()).toBe('');
+  });
+
+  it('refuses before `changeset version` runs at all, on the real release command', () => {
+    // M1, end to end. The tests above can show that each stage refuses; only running
+    // the actual `release:version` string can show that the refusal comes *first*. The
+    // fake `changeset` on PATH is the witness: if it is ever invoked it leaves a
+    // marker, so this fails if the guard is moved after the bump, removed, or made to
+    // exit 0. `--fix`'s refusal is the same shape, one stage later.
+    const releaseCommand = JSON.parse(
+      readFileSync(resolve(root, 'package.json'), 'utf8')
+    ).scripts['release:version'];
+
+    const withoutPods = scratchCheckout({ witness: true });
+    const refused = withoutPods.runRelease(releaseCommand, {
+      COCOAPODS_BIN: '/nonexistent/pod',
+    });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain('refusing to start a version bump');
+    expect(withoutPods.exists('changeset-ran')).toBe(false);
+    expect(withoutPods.read('example/ios/Podfile.lock')).toBe(LOCK);
+    expect(withoutPods.dirty()).toBe('');
+
+    // The control: the same command, with a CocoaPods that works, gets all the way
+    // through. Without this, "the witness never ran" would be indistinguishable from a
+    // broken fixture, and the refusal above would prove nothing.
+    const withPods = scratchCheckout({ witness: true });
+    const ran = withPods.runRelease(releaseCommand);
+    expect(ran.status).toBe(0);
+    expect(withPods.exists('changeset-ran')).toBe(true);
+    expect(withPods.read('example/ios/Podfile.lock')).toContain(
+      '- NitroUi (0.5.0):'
+    );
   });
 });
 

@@ -828,7 +828,11 @@ every release is a person approving it on npmjs.com. 0.1.0 was published by hand
    of the pipeline uses: the only way to write a correct post-bump `Podfile.lock` is to
    run CocoaPods (a path-pod's `SPEC CHECKSUMS` entry is the sha1 of CocoaPods' own
    evaluation of the podspec), so the job installs the CocoaPods the lock's own
-   `COCOAPODS:` trailer names and runs `pod install` inside `release:version`. It is
+   `COCOAPODS:` trailer names and runs `pod install` inside `release:version`. That script
+   is `--preflight && changeset version && --fix`, in that order on purpose: the preflight
+   asks only whether CocoaPods is there, and refuses before `changeset version` writes a
+   file, so a preview of a release on a machine without the tool does not leave a
+   half-versioned tree behind. It is
    also why `bun run check` carries `lock:check`: the guard is a string comparison that
    runs anywhere, and the repair needs the tool. If the refresh ever fails, the job
    fails before the action commits, so a release cannot go out with the lock left
@@ -967,12 +971,14 @@ Two more things that are as designed:
   staging a version is only worth what the run that staged it actually checked.
 - `bun run release:version` on a laptop writes the same files as the Version
   Packages pull request, without pushing them. It is for checking what the next
-  version would look like, not for cutting one. It needs CocoaPods, though, because
-  it refreshes `example/ios/Podfile.lock` in the same breath: on a machine without
-  it, `sync-example-lock.mjs` refuses _before_ writing anything and tells you to
-  `git checkout -- .`, so a preview on Linux either works fully or does not start.
-  (`node scripts/sync-example-lock.mjs` on its own is the check-only half, and needs
-  nothing but the two files it compares.)
+  version would look like, not for cutting one. It needs CocoaPods, though, because it
+  refreshes `example/ios/Podfile.lock` in the same breath, so it is three stages:
+  `--preflight`, `changeset version`, then `--fix`. The first stage asks only "is
+  CocoaPods here?" and refuses _before anything is written_ — on a machine without it, a
+  preview either works fully or does not start, rather than leaving you a half-versioned
+  tree to clean up. (`node scripts/sync-example-lock.mjs` on its own is the check-only
+  half and needs nothing but the two files it compares; `--preflight` and `--fix` are the
+  two halves that reach for the tool.)
 
 ### Owner setup, once
 

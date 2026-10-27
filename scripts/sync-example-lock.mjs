@@ -15,25 +15,26 @@
  * Usage:
  *
  *   node scripts/sync-example-lock.mjs          # check only (what `check` runs)
+ *   node scripts/sync-example-lock.mjs --preflight   # is CocoaPods usable here?
  *   node scripts/sync-example-lock.mjs --fix    # run pod install, keep the lock only
  *
- * `--fix` is the release path's refresh: `bun run release:version` is
- * `changeset version && node scripts/sync-example-lock.mjs --fix`, and the job that
- * runs it in `.github/workflows/release.yml` is the one on a macOS runner, because
- * `--fix` runs real CocoaPods. It refuses *up front* when CocoaPods is not there:
- * `changeset version` has already rewritten the tree by the time this script is
- * called, so on a laptop without CocoaPods the only kind exit that leaves a tree a
- * person can keep is the one before anything is touched - which is why it is checked
- * here rather than leaving `pod install` to fail.
+ * `release:version` is `--preflight && changeset version && --fix`, and the first
+ * stage is the whole reason `--preflight` is separate. `changeset version` rewrites
+ * `package.json`, `CHANGELOG.md` and `.changeset/`, so a refusal *after* it - even a
+ * correct one that says `git checkout -- .` - leaves a half-versioned tree on a machine
+ * that only wanted to preview a release. Asking the tool question before anything is
+ * touched is the only exit that leaves a tree a person can keep. `--fix` asks again
+ * anyway, because it can also be called on its own.
  *
- * It treats the lock as the only output that matters. Whatever else `pod install`
- * regenerates - the app project, a developer's breakpoint list - is put back, because
- * the changesets action commits every changed and untracked non-ignored file in the
- * tree, and a release commit is not where a pod user's local Xcode state belongs. It
- * keeps the lock's own `COCOAPODS:` trailer, and refuses a lock whose diff is bigger
- * than this pod's version and checksum lines, so a runner that resolved something
- * other than the release fails the job instead of committing churn the next `pod
- * install` quietly reverts.
+ * The refresh itself runs on the job in `.github/workflows/release.yml` that is on a
+ * macOS runner, because it runs real CocoaPods. It treats the lock as the only output
+ * that matters: whatever else `pod install` regenerates - the app project, a
+ * developer's breakpoint list - is put back, because the changesets action commits every
+ * changed and untracked non-ignored file in the tree, and a release commit is not where
+ * a pod user's local Xcode state belongs. It keeps the lock's own `COCOAPODS:` trailer,
+ * and refuses a lock whose diff is bigger than this pod's version and checksum lines, so
+ * a runner that resolved something other than the release fails the job instead of
+ * committing churn the next `pod install` quietly reverts.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -99,6 +100,61 @@ function gitRunner(cwd) {
     const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
     return result.status === 0 ? result.stdout : null;
   };
+}
+
+/**
+ * Asks the tool, not the tree: is CocoaPods usable here?
+ *
+ * One implementation, two callers - `--preflight` (before `changeset version` touches
+ * anything) and `--fix` (which can also be called on its own). Both have to give the
+ * same answer, or the stage that asks and the stage that acts disagree.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {{ok: boolean, why: string}}
+ */
+function cocoaPodsHere(env) {
+  return cocoaPodsAvailability((cmd) => {
+    const result = spawnSync(cmd[0], cmd.slice(1), { encoding: 'utf8', env });
+    const version = (result.stdout ?? '').trim().split('\n').pop() ?? '';
+    return {
+      ok: result.status === 0 && /^\d+\.\d+/.test(version),
+      version: version.replace(/^v/, ''),
+    };
+  }, env.COCOAPODS_BIN);
+}
+
+/**
+ * `--preflight`: the release path's first stage, and the only one that runs before
+ * `changeset version` has written anything.
+ *
+ * Deliberately blind to whether the two files agree: asking that would make this stage
+ * refuse for a reason unrelated to the question, at a point where the tree it would be
+ * complaining about is the one at HEAD.
+ *
+ * @param {{env?: Record<string, string | undefined>, log?: (message: string) => void, error?: (message: string) => void}} [options]
+ * @returns {number} process exit code
+ */
+export function preflight({
+  env = process.env,
+  log = (message) => process.stdout.write(`${message}\n`),
+  error = (message) => process.stderr.write(`${message}\n`),
+} = {}) {
+  const pods = cocoaPodsHere(env);
+  if (pods.ok) {
+    makeSay(log)(`CocoaPods is here - ${pods.why}.`);
+    return 0;
+  }
+  error(
+    `example-lock: refusing to start a version bump: ${pods.why}.\n` +
+      '  Nothing has been changed. `bun run release:version` refreshes ' +
+      `${LOCK_REL} in the same breath as bumping the version, and only CocoaPods ` +
+      'can write that lock - so it answers first, rather than leave a half-versioned ' +
+      'tree behind.\n' +
+      '  Install the CocoaPods the lock records (its COCOAPODS: trailer, or `gem ' +
+      'install cocoapods -v <that>`) and run it again. The release job does exactly ' +
+      'that, on a macOS runner.'
+  );
+  return 1;
 }
 
 /**
@@ -263,13 +319,17 @@ const isMain =
 
 if (isMain) {
   const argv = process.argv.slice(2);
-  const unknown = argv.filter((arg) => arg !== '--fix' && arg !== '--check');
+  const KNOWN = ['--fix', '--check', '--preflight'];
+  const unknown = argv.filter((arg) => !KNOWN.includes(arg));
   if (unknown.length > 0) {
     process.stderr.write(
       `example-lock: unknown argument(s): ${unknown.join(' ')}\n` +
-        'usage: node scripts/sync-example-lock.mjs [--check|--fix]\n'
+        'usage: node scripts/sync-example-lock.mjs [--check|--preflight|--fix]\n'
     );
     process.exit(2);
   }
-  process.exit(run({ fix: argv.includes('--fix') }));
+  if (argv.includes('--preflight')) {
+    process.exit(preflight({ env: process.env }));
+  }
+  process.exit(run({ fix: argv.includes('--fix'), env: process.env }));
 }
