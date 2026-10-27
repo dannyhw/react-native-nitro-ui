@@ -1048,13 +1048,16 @@ if (Platform.OS === 'android') {
       );
       expect(closed.presented).toBe(false);
       log.setDateDisabled?.(false);
-      // What the harness cannot press: the dialog's own OK and Cancel, and the tap
-      // outside its window, are in another window (`parseDateReport`'s note). They are
-      // gated where a tap can reach a window — `hosted-date-picker` in
-      // `scripts/real-input/android.mjs`, which opens this dialog with a real tap, picks
-      // a day, and closes it with OK, with Cancel and with Back. iOS has no such case
-      // because there is nothing hosted to drive: `<Host>` is the passthrough (D23), so
-      // the dialog is the one `date-picker` already covers on that platform.
+      // What the harness cannot press: the dialog's own OK and Cancel live in another
+      // window (`parseDateReport`'s note), so they are gated where a real tap can reach a
+      // window. On Android that is `hosted-date-picker` in `scripts/real-input`: a real
+      // tap opens this dialog, a real tap on a day reaches JS, and OK, Cancel and Back
+      // each take it down. On iOS `<Host>` is the passthrough (D23) and there is no
+      // second window to press into, so `testRealInputHostedDatePicker` drives the same
+      // JSX: the field's button, a day inside the presentation, and the tap outside that
+      // presentation which dismisses it. The one dismissal neither case presses is a tap
+      // outside the *Android* dialog's window — the H2b report lists it as the follow-up
+      // it is, not as coverage.
     });
 
     it('follows a value React writes while the dialog is open (G5)', async () => {
