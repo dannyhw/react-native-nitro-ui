@@ -31,19 +31,35 @@ nothing, since a simulator or emulator runs on its host's CPU and GPU
 - **The label is `NITRO_UI_MACHINE_LABEL`, never `os.hostname()`** (D25 — these files
   are committed to a public repo). It has to be one safe path segment:
   `^[a-z0-9][a-z0-9-]{0,62}$`, e.g. `maintainer-mac-1`.
+- **The device key is the hardware class, never the local name.** iOS takes it from
+  `simctl`'s `deviceTypeIdentifier` (`…SimDeviceType.iPhone-17` -> `iphone17`) and
+  Android from the AVD's hardware profile, because the lease pool's simulators are
+  named `nitro-ui A` and `nitro-ui B`; keying on a name would mint
+  `ios27-sim-nitrouia.json`, a file no canonical run gates against. The name stays in
+  the results file as `deviceName`, where it is only descriptive.
 - A file whose `machine.hostname` disagrees with the directory it sits in was copied
   or moved, and `--check` refuses it.
 
 Resolution and every refusal live in `scripts/bench/baseline.mjs`, which `run.mjs`
 and `report.mjs` both call, so the live run and a re-report of its results file agree
-on the file. The refusals, each exit 2 with a message that names the fix:
+on the file. Each message names the fix; the exit code is per row:
 
-| Situation                                        | What happens                                                                                                                                                  |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| no label, or `unlabelled`                        | Refused. `--update-baseline` refuses **before the run starts**, next to the R4 load check, so an unlabelled machine does not spend three hours and then fail. |
-| label is not one safe path segment               | Refused, both flags, before the run starts.                                                                                                                   |
-| `--check` on a file that records another machine | Refused — use `--compare <ref>`, or mint this machine's own.                                                                                                  |
-| no baseline for this machine                     | `--check` says so and names the per-machine path to create.                                                                                                   |
+| Situation                                        | What happens                                                                                                                                                  | Exit                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| no label, or `unlabelled`                        | Refused. `--update-baseline` refuses **before the run starts**, next to the R4 load check, so an unlabelled machine does not spend three hours and then fail. | 2                                     |
+| label is not one safe path segment               | Refused, both flags, before the run starts.                                                                                                                   | 2                                     |
+| `--check` on a file that records another machine | Refused — use `--compare <ref>`, or mint this machine's own.                                                                                                  | 2                                     |
+| no baseline for this machine                     | `--check` says so and names the per-machine path to create.                                                                                                   | 2 in `run.mjs`, **1** in `report.mjs` |
+
+That last row is the one asymmetry: `report.mjs` has always exited 1 when it had
+nothing to check against, and `run.mjs` has always exited 2, so both keep their
+history — the code did not change it here. Read against `docs/architecture/benchmarks.md`
+("Exit codes"), a 1 from `report.mjs --check` on a machine with no baseline means
+"nothing was judged", not "a regression was found"; the message says which.
+
+`--force` overrides the load, cleanliness and plan guards in the list below. It does
+**not** override a label refusal: those guards judge the quality of a measurement, and
+a missing or unusable label means there is no path to write the result to.
 
 Gating another machine's numbers is still possible, just not as a baseline: run the
 same SHA on both and compare with `--compare <ref>`.
@@ -115,7 +131,8 @@ overFraction }`. A run is refused when its **median** sample is over the ceiling
   ratio noise on a shared development machine.
 - **`--plan full` with 8 launches**, no `problems`, on the canonical device.
   `--plan quick` numbers are local feedback, not baseline material.
-- **Machine + device key** — the label rules are above. A runtime change is a
+- **Machine + device key** — the label rules are above, and `--force` does not get
+  around them. A runtime change is a
   comparability break, so it gets a new file. Anything that is not the canonical
   device on its own machine uses same-run ratio tables and `--compare <ref>`, never
   `--check`.

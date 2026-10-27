@@ -697,8 +697,8 @@ compares against the committed baselines, which live per machine —
 against baselines it measured itself. `maintainer-mac-1` has both canonical devices
 (an iPhone 17 simulator on iOS 27 and an API 35 Pixel 9 emulator); a machine without
 its own directory, or any other device, uses `--compare <ref>` instead.
-`.github/workflows/bench.yml`
-would post these tables on a pull request, but it is disabled. The gate that always blocks is the Reassure render count, below, because it is
+`.github/workflows/bench.yml` would post these tables on a pull request, but it is
+disabled. The gate that always blocks is the Reassure render count, below, because it is
 deterministic.
 
 ## Perf contract
