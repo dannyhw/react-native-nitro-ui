@@ -19,7 +19,7 @@ const [index, setIndex] = useState(0);
 
 The value of the control is an **index** into `options`, never the label: two
 options may carry the same text, and an index is what both platforms' controls
-store. Options are plain strings in v0.1 — no icons, no per-option colours.
+store. Options are plain strings — no icons, no per-option colours.
 
 ## API
 
@@ -233,7 +233,7 @@ drops the now-wrong cached sizes.
 
 ## Limits
 
-- No icons, no per-segment colours, no sublabels — `options` is `string[]` in v0.1.
+- No icons, no per-segment colours, no sublabels — `options` is `string[]`.
 - `tintColor` is **Android-only**: it replaces the selected segment's container
   **and** border and leaves every other colour to the scheme. On iOS it has **no
   visible effect** — a SwiftUI segmented `Picker` ignores `.tint()` (and
@@ -268,6 +268,6 @@ drops the now-wrong cached sizes.
   `View.tag`, which is what the harness reads.
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated.
 - A menu or wheel picker is **not** this component: that is `Picker`
-  (`docs/components/picker.md`, shipping in 0.1.0), because a `.menu` Picker
+  (`docs/components/picker.md`), because a `.menu` Picker
   needs view-controller containment and an open-popup lifecycle that this control
   does not have.

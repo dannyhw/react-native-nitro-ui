@@ -520,9 +520,10 @@ same way, and the shipped container reproduced it). The cost is the JS thread �
 against **1.18x** hosted — and that the hosted control stops being a Yoga leaf whose box
 anybody draws.
 
-H1 shipped that for `Switch`. H2a adds `Slider`, `Progress` and `Button` to the same
-mechanism — unreleased, so 0.1.0 ships `Switch` only — and re-measured the batch with all four
-in it. One figure per control: mount memory (the `memory` cell, N=200) / mount UI-thread CPU /
+H1 shipped that for `Switch` (0.1.0). H2a added `Slider`, `Progress` and `Button` to the same
+mechanism (0.2.0) and re-measured the batch with all four in it; H2b added `SegmentedControl`,
+`Picker` and `DatePicker` (0.3.0), priced in `docs/tasks/H2b-host-popups.report.md` by one more
+run that is likewise indicative, with a quiet re-run pending. One figure per control: mount memory (the `memory` cell, N=200) / mount UI-thread CPU /
 mount JS-thread CPU / unmount UI-thread CPU (the `mount` cell, N=50), each one the runner's own
 launch-paired ratio to `expo-ui-shared-host` from one run (`quick` plan, ART `speed-profile`,
 4 launches, `bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`, read with

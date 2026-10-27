@@ -8,8 +8,8 @@ Background (read the sections your brief points to):
 
 ## Workspace
 
-- Work ONLY in the git worktree and branch named in your brief. Never edit the main checkout at
-  `~/Developer/oss/nitro-ui` unless your brief says so. Commit your work on your branch
+- Work ONLY in the git worktree and branch named in your brief. Never edit the main checkout
+  unless your brief says so. Commit your work on your branch
   (conventional commits, e.g. `feat(switch): ...`). Never mention AI/agents in commits.
 - Do NOT: add git remotes, `git push`, `npm publish`, `gh repo create`, or anything outward-facing.
 - Do NOT modify `docs/research/*` or other tasks' briefs. You may append to `docs/tasks/<ID>.report.md`.
@@ -17,22 +17,28 @@ Background (read the sections your brief points to):
   Use a local reference clone of the upstream repos (read-only), if you have one
   (margelo_nitro, mrousavy_react-native-nitro-image, ronickg_react-native-nitro-input,
   rive-app_rive-nitro-react-native, mgcrea_react-native-swiftui, expo_expo, react-native, ...).
-  The setup spike (a working scaffold) is at `/tmp/nitro-ui-setup-spike/` (read/copy only).
+  The setup spike (a working scaffold) may still be at `/tmp/nitro-ui-setup-spike/` on the
+  machine that made it (read/copy only).
 
 ## Environment
 
 - macOS, Xcode 27, bun 1.4 (package manager for this repo), Node 24 (`.nvmrc`; use `fnm exec --using 24 --`), Java 17, CocoaPods 1.17.
 - `export ANDROID_HOME=$HOME/Library/Android/sdk; export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH`
-- Devices: use ONLY the simulator UDID / AVD assigned in your brief. Never shut down, wipe or
-  kill devices you did not start. **Never touch the `emulator-5560` emulator —
+- Check the machine first: `node scripts/doctor.mjs` (exit 1 names what is missing; `--setup`
+  creates the device pairs the lease pool hands out — CONTRIBUTING "Prerequisites").
+- Devices: use ONLY the devices and ports your lease hands you (`node scripts/lease.mjs acquire
+  --task <ID>`, CONTRIBUTING "Leasing a device or port"), or those your brief assigns. Never
+  shut down, wipe or kill devices you did not start. **Never touch the `emulator-5560` emulator —
   it belongs to the human.** Shut down simulators/emulators you started when you finish.
 - Use unique Metro ports if your brief assigns one (`--port`), and kill Metro/Gradle daemons you
   started when done.
 
 ## Quality bar (definition of done — see docs/PLAN.md "Guardrails")
 
-- `bun run check` (typecheck + lint + format + unit tests + nitrogen drift) passes, once T01 adds it.
-- iOS and Android example builds succeed; harness tests pass on your assigned devices.
+- `bun run check` passes (typecheck, lint, format, unit and native C++/Swift tests, render counts,
+  nitrogen drift and the package checks — its definition is in `package.json`).
+- iOS and Android example builds succeed (`node scripts/build-app.mjs --platform <p>`, which
+  stamps the build and skips it when the stamp is fresh); harness tests pass on your leased devices.
 - Perf contract for native views:
   - prop setters only store + mark dirty; apply once in `afterUpdate()`;
   - never recreate hosting views per update (`rootView =` / `setContent` only at init);
@@ -42,13 +48,13 @@ Background (read the sections your brief points to):
   - never block the JS thread on main (`DispatchQueue.main.sync`) or main on JS; no redundant
     `main.async` hops when already on main;
   - controlled values use the event-count handshake (core-architecture §4).
-- Benchmarks for components (once the bench infra exists): include numbers in your report.
+- Benchmarks for components: include numbers in your report.
 - **Every new test or gate must be shown to fail.** Before you rely on it, break the thing it guards
   (wrong size, dropped event, regressed ratio, freed memory) and confirm it goes red; say in your
   report how you proved it. Test fixtures must not coincide with the right answer (e.g. a sizing
   fallback equal to the real size makes a failed correction invisible). Fakes that change timing
   (synchronous stand-ins for async native calls) need a variant that keeps the real timing.
-- Native C++ unit tests run under ASan in `test:native` once T11 adds it.
+- Native C++ unit tests run under ASan in `test:native`.
 
 ## Asking for help
 
