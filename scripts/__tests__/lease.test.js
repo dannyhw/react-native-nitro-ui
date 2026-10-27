@@ -20,6 +20,7 @@
 import { describe, expect, it, beforeEach } from '@jest/globals';
 import { spawn, spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdtempSync,
@@ -1290,5 +1291,153 @@ describe('the console port a lease owns', () => {
     // No lease, no opinion: a CI runner boots its own emulator on the default
     // console port, exactly as it did before this patch.
     expect(withoutPort.stdout).not.toContain('-port');
+  });
+});
+
+/**
+ * `list` also says which pool devices are running with no lease (X9 item 6).
+ *
+ * The rule itself is tested in `doctor.test.js`; this is the wiring, which is where
+ * the failure mode actually lived: `list` is what a task reads to find out who owns
+ * what, and it said nothing about a simulator left booted by the last task - the
+ * state that quietly moved harness numbers for a week. Two things are checked here:
+ * the warning appears, and it goes to *stderr* so `list --json`'s stdout stays the
+ * lease state a script can parse.
+ *
+ * The two tools are faked by env var (see `scanUnownedDevices`), so the case is the
+ * same on a Mac, a Linux runner and a machine with no Android SDK.
+ */
+describe('`list` names devices nobody leased', () => {
+  let home;
+  let config;
+  let bins;
+
+  const cliWithTools = (args, extraEnv = {}) =>
+    spawnSync(process.execPath, [CLI, ...args], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NITRO_UI_HOME: home,
+        NITRO_UI_LEASE_POLL_MS: '50',
+        NITRO_UI_SIMCTL_BIN: join(bins, 'simctl'),
+        NITRO_UI_ADB_BIN: join(bins, 'adb'),
+        ...extraEnv,
+      },
+    });
+
+  /** Writes the fake tools, with the listing and serials a test asks for. */
+  const tools = ({ simState, adbLines }) => {
+    const listing = {
+      devices: {
+        'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [
+          {
+            udid: '00000000-0000-4000-8000-00000000000A',
+            name: 'iPhone 17',
+            state: simState,
+          },
+        ],
+      },
+    };
+    writeFileSync(
+      join(bins, 'simctl'),
+      [
+        '#!/bin/sh',
+        `printf '%s' ${JSON.stringify(JSON.stringify(listing))}`,
+        '',
+      ].join('\n')
+    );
+    // The format string, not `%s` arguments: `adb devices` separates a serial from
+    // its state with a real tab, and `printf '%s'` hands back a literal `\t`, which
+    // would make the fixture a device list nothing parses.
+    const format = adbLines
+      .join('\n')
+      .replace(/\\/g, '\\\\')
+      .replace(/\t/g, '\\t')
+      .replace(/'/g, "'\\''");
+    writeFileSync(
+      join(bins, 'adb'),
+      ['#!/bin/sh', `printf '${format}\\n'`, ''].join('\n')
+    );
+    for (const name of ['simctl', 'adb']) {
+      chmodSync(join(bins, name), 0o755);
+    }
+  };
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), 'nitro-ui-unowned-'));
+    bins = mkdtempSync(join(tmpdir(), 'nitro-ui-unowned-bin-'));
+    config = join(home, 'devices.json');
+    copyFileSync(EXAMPLE_CONFIG, config);
+  });
+
+  it('warns about a booted pool simulator with no lease, on stderr', () => {
+    tools({ simState: 'Booted', adbLines: ['List of devices attached', ''] });
+    const listed = cliWithTools(['list']);
+    expect(listed.status).toBe(0);
+    expect(listed.stderr).toContain('pair-a');
+    expect(listed.stderr).toContain('is Booted and no lease holds it');
+    // stdout stays the human's lease table (empty here), with no host noise mixed in.
+    expect(listed.stdout).toContain('no leases in');
+  });
+
+  it('keeps `--json` parseable with the warning on stderr', () => {
+    tools({ simState: 'Booted', adbLines: ['List of devices attached', ''] });
+    const listed = cliWithTools(['list', '--json']);
+    expect(() => JSON.parse(listed.stdout)).not.toThrow();
+    expect(JSON.parse(listed.stdout).leases).toEqual([]);
+    expect(listed.stderr).toContain('no lease holds it');
+  });
+
+  it('goes quiet once the same device is leased', () => {
+    tools({ simState: 'Booted', adbLines: ['List of devices attached', ''] });
+    expect(
+      cliWithTools([
+        'acquire',
+        '--task',
+        'G6',
+        '--platform',
+        'ios',
+        '--config',
+        config,
+      ]).status
+    ).toBe(0);
+    const listed = cliWithTools(['list', '--config', config]);
+    expect(listed.stderr).not.toContain('no lease holds it');
+    expect(listed.stdout).toContain('G6');
+  });
+
+  it('names a running pool emulator too, and leaves another task’s emulator alone', () => {
+    tools({
+      simState: 'Shutdown',
+      adbLines: [
+        'List of devices attached',
+        'emulator-5574\tdevice',
+        'emulator-5588\tdevice',
+        '',
+      ],
+    });
+    const listed = cliWithTools(['list']);
+    expect(listed.stderr).toContain('emulator-5574');
+    // Not a pool port: somebody else's device, and no verdict is the right answer.
+    expect(listed.stderr).not.toContain('emulator-5588');
+  });
+
+  it('says the check could not run rather than reporting an idle machine', () => {
+    // Both tools exit non-zero: "I could not tell" must not read as "all clear".
+    writeFileSync(join(bins, 'simctl'), '#!/bin/sh\nexit 1\n');
+    writeFileSync(join(bins, 'adb'), '#!/bin/sh\nexit 1\n');
+    chmodSync(join(bins, 'simctl'), 0o755);
+    chmodSync(join(bins, 'adb'), 0o755);
+    const listed = cliWithTools(['list']);
+    expect(listed.stderr).toContain('cannot check for unowned devices');
+    expect(listed.stderr).toContain('xcrun simctl and adb');
+  });
+
+  it('still lists leases when there is no device pool at all', () => {
+    // `list` used to work without a pool, and a device report must not break it.
+    unlinkSync(config);
+    const listed = cliWithTools(['list']);
+    expect(listed.status).toBe(0);
+    expect(listed.stdout).toContain('no leases in');
   });
 });
