@@ -114,6 +114,10 @@ export const TOOLING_FILES = [
   'scripts/check-autolinking.mjs',
   'scripts/doctor.mjs',
   'scripts/doctor-core.mjs',
+  // Runs the checks, and only writes the file the release path writes; a device run
+  // consumes `example/ios/Podfile.lock` itself, which is mapped as iOS.
+  'scripts/sync-example-lock.mjs',
+  'scripts/example-lock-core.mjs',
   '.gitignore',
   '.prettierignore',
 ];
