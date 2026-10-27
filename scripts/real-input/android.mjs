@@ -774,11 +774,15 @@ const CHECKS = {
    *    app's own echoes are absent from the same dump while it is up. The dialog opens on
    *    the day JS gave the field, which is a fact about the Host's drawing rather than a
    *    default.
-   * 2. **The pick.** A day cell plus OK reaches JS as a new day (a pick of the day
-   *    already showing is a correct no-op, so the day is aimed at by offset and retried —
-   *    exactly the unhosted case's reasoning).
-   * 3. **The dismissals.** OK closes it and reports; Cancel closes it and reports
-   *    nothing; Back closes it and reports nothing.
+   * 2. **The dismissals**, which come before the pick because a dialog is another window:
+   *    while it is up, the app's own echoes are not in the dump and no echo can be read.
+   *    Back closes it and reports nothing; Cancel closes it and reports nothing. That is the
+   *    witness and not an inconvenience — `waitForDialogGone` waits for the month grid to
+   *    leave the tree and the app's text to come back into it.
+   * 3. **The pick.** A day cell plus OK reaches JS as a new day (a pick of the day already
+   *    showing is a correct no-op, so the day is aimed at by offset and retried — exactly the
+   *    unhosted case's reasoning), and OK is what makes the pick checkable at all: "the app
+   *    text came back" and "OK closed the dialog" are the same event from out here.
    * 4. **The teardown.** Removing *only* that child from the Host while the dialog is up
    *    leaves no window behind, with the app unmounting it on a timer because a second
    *    real tap would only have dismissed the dialog (`PickerScreen`'s drop picker uses
@@ -827,9 +831,45 @@ const CHECKS = {
       t.nodeByTestId(ECHO.hostDateValue) == null
     );
 
-    // 2+3. A day, then OK. Offsets because a pick of the day the field already shows is
-    // a correct no-op, indistinguishable from a broken touch path from out here.
-    let reported = t.requireEcho(ECHO.hostDateValue);
+    // 3a. Back, first, because it is the dismissal that has to happen before anything can
+    // be read again: while the dialog is up its window owns the screen, so the app's own
+    // text is not in the dump - which the check just above asserted. A case that asks for
+    // an echo here fails on the app doing its job, and the first version of this case did
+    // exactly that. Back is also the dismissal the harness cannot reach: it comes from the
+    // window manager, not from the React Native window.
+    await t.pressBack();
+    await waitForDialogGone(
+      t,
+      'the back gesture to take the hosted dialog down'
+    );
+    t.log.checkEquals(
+      'Back closes the hosted dialog and reports no day',
+      t.requireEcho(ECHO.hostDateValue),
+      SEEDED
+    );
+    t.log.check(
+      'and the app text is readable again once the dialog is gone',
+      t.nodeByTestId(ECHO.hostDateValue) != null
+    );
+
+    // 3b. Cancel: closes it and reports nothing.
+    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
+    dayGrid(t, 'the hosted DatePicker');
+    await t.tapNode(
+      t.waitForNodes(isCancelLabel, "the dialog's Cancel button", 1)[0]
+    );
+    await waitForDialogGone(t, 'Cancel to take the hosted dialog down');
+    t.log.checkEquals(
+      'Cancel closes the hosted dialog and reports no day',
+      t.requireEcho(ECHO.hostDateValue),
+      SEEDED
+    );
+
+    // 2. A day, then OK - last, because OK is what makes a pick readable at all: the new
+    // day is app text, and app text is another window's business while the dialog is up.
+    // The day is aimed at by offset because a pick of the day the field already shows is a
+    // correct no-op, indistinguishable from a broken touch path from out here.
+    let reported = SEEDED;
     let picked = null;
     for (const offset of [0, 7, -7]) {
       const day = await openAndPick(t, 'Hosted date picker', offset);
@@ -849,34 +889,6 @@ const CHECKS = {
       'and OK closed it: the app text is readable again',
       t.nodeByTestId(ECHO.hostDateValue) != null
     );
-
-    // 3a. Cancel: closes, reports nothing.
-    const beforeCancel = t.requireEcho(ECHO.hostDateValue);
-    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
-    dayGrid(t, 'the hosted DatePicker');
-    await t.tapNode(
-      t.waitForNodes(isCancelLabel, "the dialog's Cancel button", 1)[0]
-    );
-    await waitForDialogGone(t, 'Cancel to take the hosted dialog down');
-    t.log.checkEquals(
-      'Cancel closes the hosted dialog and reports no day',
-      t.requireEcho(ECHO.hostDateValue),
-      beforeCancel
-    );
-
-    // 3b. Back: closes, reports nothing. The gesture a person actually uses.
-    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
-    dayGrid(t, 'the hosted DatePicker');
-    await t.pressBack();
-    await waitForDialogGone(
-      t,
-      'the back gesture to take the hosted dialog down'
-    );
-    t.log.checkEquals(
-      'Back closes the hosted dialog and reports no day',
-      t.requireEcho(ECHO.hostDateValue),
-      beforeCancel
-    );
     t.log.checkEquals(
       'and no popup window of any kind is left owned by the app',
       t.popupWindowCount(),
@@ -893,14 +905,15 @@ const CHECKS = {
     t.waitForNode(ECHO.hostDateDropArmed, 'the unmount to be armed');
     await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
     dayGrid(t, 'the hosted DatePicker');
-    // The timer fires inside the window this check has already spent arming and opening;
-    // wait the full delay out, then ask for the window.
-    await t.settle(3000);
+    // The app's own echo is the witness that the unmount happened, so wait for it rather
+    // than for a guessed delay: the timer is the app's, not this loop's, and a settle that
+    // comes up short reads a dialog that was still open as one that outlived its child.
+    // Only then is it meaningful to ask whether the window came down with it.
+    t.waitForNode(ECHO.hostDateGone, 'the field to be unmounted');
     await waitForDialogGone(
       t,
       'the removed child to take its open dialog down with it'
     );
-    t.waitForNode(ECHO.hostDateGone, 'the field to be unmounted');
     t.log.check(
       'removing only the hosted DatePicker child leaves no dialog window behind',
       t.dump().filter(isDayCell).length === 0
@@ -908,14 +921,18 @@ const CHECKS = {
     t.log.checkEquals(
       'a teardown is not a choice - the day JS holds is the one it was given',
       t.requireEcho(ECHO.hostDateValue),
-      beforeCancel
+      reported
     );
 
     // Leave the screen as this check found it: the next control reads the same Host.
     await t.tapNode(
       t.waitForNode(ECHO.hostDateRemount, 'the remount-the-field button')
     );
-    t.waitForNode('host-datepicker', 'the field to be hosted again');
+    // The witness is the label, not the testID. A hosted control's React Native view is
+    // the `0 x 0` decorative one (D24) and uiautomator drops a node with no box, so the
+    // only thing this screen offers of a hosted field is the box the Host drew and named.
+    // Every other press in this case is aimed the same way.
+    await t.requireControlOnScreen('Hosted date picker');
   },
 
   /**
