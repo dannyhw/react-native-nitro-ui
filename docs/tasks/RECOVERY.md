@@ -18,9 +18,11 @@
 > **Components:** 0.4 is a button-anchored Menu (G7a/G7b) plus a TextField spike (T18), starting
 > after X3 and X4 merge; see `PLAN-0.4.md`.
 >
-> Queue (owner-approved 2026-10-27): after X3 merges, **X9** and **X10** (`X10-check-throughput.md`,
-> no devices) in parallel; **X11** (`X11-device-throughput.md`: emulator GPU, warm device pool, which
-> changes the shut-down-your-devices rule, harness timing) after X9 and after the A3 mint. Nothing
+> Queue (owner-approved 2026-10-27; X3 and X9 merged): after the A3 mint, **X11**
+> (`X11-device-throughput.md`: emulator `-gpu host`, warm device pool, harness timing) and **X10**
+> (`X10-check-throughput.md`, no devices) in parallel; then **X4** (`X4-conformance.md`) and the 0.4
+> components. X11 goes first because software rendering plus repeated device boots are what make two
+> device tasks flake on this 10-core machine; until it lands, no two device tasks overlap. Nothing
 > else runs while A3 (or any `--exclusive` bench) holds the machine. After X10/X11, the step-2 quiet
 > re-runs go as one more exclusive window. X9 is `X9-tooling-smoothing.md` (bench `--dry-run`, lockfile follows
 > releases, `doctor --prime`, one build at a time, `gate.mjs wait`, unowned devices). The **X4** brief must also include: `task-ready.mjs`

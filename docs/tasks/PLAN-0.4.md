@@ -17,8 +17,8 @@ menu that wraps arbitrary RN children.
 | 0 | **A3** this machine's bench baselines (exclusive) | both | X8, X3/X9 off the devices |
 | 1 | **X10** `check` throughput | tooling | X3 |
 | 1 | **X11** device throughput (emulator GPU, warm device pool) | both | X9, A3 |
-| 1 | **X4** conformance suite and `task-ready.mjs` (adds the report-path check) | both | X3 |
-| 2 | **G7a** Menu: API, iOS SwiftUI `Menu`, Android Compose `DropdownMenu` anchored to a button, harness, sizing, a11y, Host support (Android), conformance | both | X4 |
+| 1b | **X4** conformance suite and `task-ready.mjs` (adds the report-path check), after X11 so two device tasks can overlap again | both | X3, X11 |
+| 2 | **G7a** Menu: API, iOS SwiftUI `Menu`, Android Compose `DropdownMenu` anchored to a button, harness, sizing, a11y, Host support (Android), conformance | both | X4, X11 |
 | 2 | **T18** TextField spike: keyboard, focus, IME, controlled text with the event-count handshake, sizing, multiline. One round, report plus a go/no-go for 0.4 | both | X4 |
 | 3 | **G7b** Menu: bench arm, real-input case, Storybook story, smoke | both | G7a |
 | 3 | **G8** TextField, only if T18 says go *and* it fits 0.4; otherwise 0.5 | both | T18 |
