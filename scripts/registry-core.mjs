@@ -877,11 +877,12 @@ export function checkAutolinking(manifests, nitro) {
     }
     for (const platform of ['ios', 'android']) {
       const language = platform === 'ios' ? 'swift' : 'kotlin';
-      // nitrogen writes one entry per platform, or a single `all` entry when both
-      // share the rest of the claim. `language` only means something per platform
-      // (an `all` entry uses `iosLanguage` for the other one), so it is asserted where
-      // nitrogen states it for that platform rather than inferred across both.
-      const claim = entry[platform] ?? entry.all;
+      // nitrogen writes one entry per platform, or one `all` entry whose fields are
+      // shared - where `language` is the primary (Android, for this library) and
+      // `iosLanguage` overrides it for iOS. So the claimed language depends on which
+      // shape the entry has, and guessing across both makes a correct spec look wrong.
+      const perPlatform = entry[platform];
+      const claim = perPlatform ?? entry.all;
       if (claim == null) {
         problems.push(
           `nitro.json: ${manifest.hybridView} has no ${platform} autolinking entry - run bun run nitrogen`
@@ -894,7 +895,11 @@ export function checkAutolinking(manifests, nitro) {
         );
       }
       const claimed =
-        claim.language ?? (platform === 'ios' ? claim.iosLanguage : undefined);
+        perPlatform != null
+          ? perPlatform.language
+          : platform === 'ios'
+            ? (claim.iosLanguage ?? claim.language)
+            : claim.language;
       if (claimed != null && claimed !== language) {
         problems.push(
           `nitro.json: ${manifest.hybridView}.${platform} claims language "${claimed}", this library is ${language} there`
