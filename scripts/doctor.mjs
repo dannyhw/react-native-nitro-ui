@@ -290,13 +290,15 @@ function checkIos() {
     });
   }
   const runtimes = json('xcrun', ['simctl', 'list', 'runtimes', '-j']) ?? {};
-  const runtime = pickIosRuntime(runtimes, REQUIREMENTS.iosRuntimeMajor);
+  const runtime = pickIosRuntime(runtimes, REQUIREMENTS.iosRuntime);
   results.push({
     area: 'ios',
-    name: `iOS ${REQUIREMENTS.iosRuntimeMajor} simulator runtime`,
+    name: `iOS ${REQUIREMENTS.iosRuntime} simulator runtime`,
     status: runtime ? 'ok' : 'fail',
     detail: runtime ? runtime.version : 'not installed',
-    fix: runtime ? undefined : 'xcodebuild -downloadPlatform iOS',
+    fix: runtime
+      ? undefined
+      : `xcodebuild -downloadPlatform iOS -buildVersion ${REQUIREMENTS.iosRuntime}`,
   });
   const pod = run('pod', ['--version']);
   const problem = cocoapodsProblem(pod.ok ? pod.stdout : null);
