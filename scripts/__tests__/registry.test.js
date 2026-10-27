@@ -452,6 +452,76 @@ describe('the generated tables cover what they claim', () => {
       }).join('\n')
     ).toMatch(/HybridNitroUiHost is not a self-sizing component/);
   });
+
+  it('accepts either shape nitrogen emits for an autolinking entry', () => {
+    // Per-platform entries and a shared `all` entry state their languages differently
+    // (`all` uses `language` for the primary platform and `iosLanguage` for iOS), and
+    // which shape appears is nitrogen's business, not the manifests'. Getting this
+    // wrong reads as "your spec is wrong" about a spec that is fine.
+    const one = (entry) => ({
+      autolinking: {
+        NitroUiButton: entry,
+        NitroUiCore: {},
+        NitroUiHost: {},
+      },
+    });
+    const only = (entry) =>
+      checkAutolinking(
+        manifests.filter((m) => m.name === 'Button'),
+        one(entry)
+      ).join('\n');
+    expect(
+      only({
+        ios: {
+          language: 'swift',
+          implementationClassName: 'HybridNitroUiButton',
+        },
+        android: {
+          language: 'kotlin',
+          implementationClassName: 'HybridNitroUiButton',
+        },
+      })
+    ).toBe('');
+    expect(
+      only({
+        all: {
+          language: 'kotlin',
+          iosLanguage: 'swift',
+          implementationClassName: 'HybridNitroUiButton',
+        },
+      })
+    ).toBe('');
+    // and it still catches a real language mistake
+    expect(
+      only({
+        all: {
+          language: 'kotlin',
+          implementationClassName: 'HybridNitroUiButton',
+        },
+      })
+    ).toMatch(/NitroUiButton.ios claims language "kotlin"/);
+    expect(
+      only({
+        ios: {
+          language: 'kotlin',
+          implementationClassName: 'HybridNitroUiButton',
+        },
+        android: {
+          language: 'kotlin',
+          implementationClassName: 'HybridNitroUiButton',
+        },
+      })
+    ).toMatch(/NitroUiButton.ios claims language "kotlin"/);
+    expect(
+      only({
+        all: {
+          language: 'kotlin',
+          iosLanguage: 'swift',
+          implementationClassName: 'HybridNitroUiBtn',
+        },
+      })
+    ).toMatch(/implementationClassName is "HybridNitroUiBtn"/);
+  });
 });
 
 describe('gen-registry on a scratch tree', () => {
