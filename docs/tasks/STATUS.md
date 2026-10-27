@@ -42,3 +42,6 @@
 | X7 | Machine doctor (`scripts/doctor.mjs`, `--setup`) + orchestrator playbook (`ORCHESTRATOR.md`) | orchestrator | — | merged (14 unit tests; setup proven against a scratch state dir) |
 | D2 | Docs pass for 0.3.0 (README, component/architecture docs, CONTRIBUTING, AGENTS, plans) | Opus | orchestrator | merged (patch changeset → 0.3.1) |
 | T17 | iOS `<Host>` spike | Apex | — | report merged; not better (D23) — iOS `<Host>` is a passthrough |
+| X8 | Bench baselines per machine (`bench/baselines/<label>/<deviceKey>.json`, label refusals, iOS key from the simulator's device type) | Apex (xhigh; low/medium arms in `EFFORT-eval-2026-10-27.md`) | Opus | merged (1 impl + 1 fix round; review MERGE; tooling-only, check 496) |
+| X3 | Component registry + codegen | Apex | Opus | in progress |
+| A3 | Second machine's bench baselines (overnight, `--exclusive`) | Apex | orchestrator | scheduled 01:00 |

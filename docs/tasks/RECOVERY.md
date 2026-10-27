@@ -8,6 +8,13 @@
 
 ## Next, on maintainer-mac-2 (in this order)
 
+> **2026-10-27 progress (maintainer-mac-2).** Doctor green. X8 merged: baselines are per machine
+> now (`bench/baselines/maintainer-mac-1/…`; this machine mints into `maintainer-mac-2/`), and
+> the iOS key comes from the simulator's device type (this machine's sims are named `nitro-ui A/B`).
+> Apex effort policy: `EFFORT-eval-2026-10-27.md`. Step 1 is brief A3, which a T3 schedule
+> (`nitroui-overnight-A3-baselines`, 01:00) delegates and then deletes. Step 3 (X3) is in flight in
+> `nitro-ui-worktrees/X3` · `task/X3-component-registry`; it must release its lease by 00:30.
+
 1. **Mint that machine's bench baselines** (`--exclusive`, idle, overnight, no Screen Sharing):
    iOS 27.0 `--plan full --launches 8` and the Android equivalent. They are new files under
    `bench/baselines/` with `machine.hostname = maintainer-mac-2`. Keep `maintainer-mac-1`'s files:
