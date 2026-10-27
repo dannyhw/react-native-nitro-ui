@@ -36,7 +36,7 @@ registry outputs `linguist-generated`.
 
 ## Gate table
 
-`gate.mjs export --task X3-component-registry` → `docs/tasks/X3-component-registry/gates.jsonl`.
+`gate.mjs export --task X3` → `docs/tasks/X3/gates.jsonl`.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
