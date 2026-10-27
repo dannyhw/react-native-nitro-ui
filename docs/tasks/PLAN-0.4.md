@@ -12,9 +12,9 @@ menu that wraps arbitrary RN children.
 
 | Wave | Task | Platform | Depends on |
 | --- | --- | --- | --- |
-| 0 | **X3** component registry and codegen (in review) | both | — |
-| 0 | **X9** tooling: dry runs, warm caches, build slot, gate wait | both | — |
-| 0 | **A3** this machine's bench baselines (exclusive) | both | X8, X3/X9 off the devices |
+| 0 | **X3** component registry and codegen — merged | both | — |
+| 0 | **X9** tooling: dry runs, warm caches, build slot, gate wait — merged | both | — |
+| 0 | **A3** this machine's bench baselines (exclusive) — running | both | X8, X3/X9 off the devices |
 | 1 | **X10** `check` throughput | tooling | X3 |
 | 1 | **X11** device throughput (emulator GPU, warm device pool) | both | X9, A3 |
 | 1b | **X4** conformance suite and `task-ready.mjs` (adds the report-path check), after X11 so two device tasks can overlap again | both | X3, X11 |
