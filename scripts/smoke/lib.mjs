@@ -36,8 +36,11 @@
 // is the command both platform paths call).
 //
 // `App.tsx` is copied into a generated consumer app, so it cannot import this
-// file; the control list there is a deliberate copy. Keep the two in sync (and
-// the test, which asserts the shape both sides agree on).
+// file; the control list there is a deliberate copy. Both copies are generated
+// from the same manifests by one `bun run registry` run, so they agree as sets by
+// construction - and the ready line is keyed by control name, so the order the two
+// lists happen to be in is not part of the contract. What the test below asserts is
+// the shape both sides agree on.
 
 /** Every control the library exports, in the order the app renders them. */
 export const SMOKE_CONTROLS = Object.freeze([
