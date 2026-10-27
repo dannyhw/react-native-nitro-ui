@@ -108,6 +108,13 @@ export const REAL_INPUT_CONTROLS = Object.freeze([
       "real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS",
     screen: 'host',
   },
+  {
+    id: 'hosted-date-picker',
+    title:
+      "real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, " +
+      'and OK, Cancel, Back and removing the child each close it',
+    screen: 'host',
+  },
 ]);
 
 /**

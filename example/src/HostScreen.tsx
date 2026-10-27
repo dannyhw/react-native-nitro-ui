@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -42,6 +42,17 @@ import {
 
 /** Switches in the batch. Enough to see a composition's cost, few enough to scroll. */
 const BATCH = 24;
+
+/**
+ * How long the popup Host waits to unmount its `DatePicker` once asked (H2b review M2).
+ *
+ * A real tap cannot reach the button while the dialog is up: an outside tap dismisses the
+ * dialog rather than pressing what is behind it. So the removal has to be the app's own
+ * doing, on a delay long enough for `scripts/real-input` to open the dialog first - the
+ * same shape `PickerScreen`'s drop picker uses for a menu. Only the Android check arms
+ * this, which is why the delay is Android's number.
+ */
+const POP_DATE_DROP_MS = 2500;
 
 /**
  * The row pitch a hosted `Switch` occupies, in dp.
@@ -129,6 +140,11 @@ export default function HostScreen() {
   );
   const [popPickerDisabled, setPopPickerDisabled] = useState(false);
   const [popDateDisabled, setPopDateDisabled] = useState(false);
+  // The child-removal case: one hosted child leaving while its window is up, the others
+  // staying where they are. `popDateDropArmed` is what a check waits for before it
+  // trusts the timer - a tap that missed would otherwise read as a leaked dialog.
+  const [popDateMounted, setPopDateMounted] = useState(true);
+  const [popDateDropArmed, setPopDateDropArmed] = useState(false);
   const POP_CHOICE_SETS: string[][] = [
     ['Alpha', 'Beta', 'Gamma'],
     ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'],
@@ -142,6 +158,19 @@ export default function HostScreen() {
   const notePicker = useCallback((event: { index: number }) => {
     setPopPicker(event.index);
   }, []);
+
+  useEffect(() => {
+    if (!popDateDropArmed) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setPopDateMounted(false);
+      setPopDateDropArmed(false);
+    }, POP_DATE_DROP_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [popDateDropArmed]);
 
   // Both halves of the comparison mount the same number of controls, at the same
   // pitch, in the same box - the only difference is who composes them.
@@ -388,6 +417,46 @@ export default function HostScreen() {
               {popDateDisabled ? 'enable the field' : 'disable the field'}
             </Text>
           </Pressable>
+          <Pressable
+            onPress={() => setPopDateDropArmed(true)}
+            testID="host-datepicker-drop"
+            hitSlop={4}
+          >
+            <Text style={[styles.link, { color: ink.link }]}>
+              {`Unmount the field in ${String(POP_DATE_DROP_MS / 1000)}s`}
+            </Text>
+          </Pressable>
+          {/* The echo that says the press landed, and the one that says the child is
+              gone. Same reasoning as `PickerScreen`'s drop picker: a check that armed a
+              timer by pressing blind would read a missed tap as a dialog that outlived
+              its own child. */}
+          {popDateDropArmed ? (
+            <Text
+              testID="host-datepicker-drop-armed"
+              style={[styles.note, { color: ink.muted }]}
+            >
+              unmount armed
+            </Text>
+          ) : null}
+          {!popDateMounted ? (
+            <>
+              <Text
+                testID="host-datepicker-drop-gone"
+                style={[styles.note, { color: ink.muted }]}
+              >
+                field unmounted
+              </Text>
+              <Pressable
+                onPress={() => setPopDateMounted(true)}
+                testID="host-datepicker-drop-remount"
+                hitSlop={4}
+              >
+                <Text style={[styles.link, { color: ink.link }]}>
+                  Mount it again
+                </Text>
+              </Pressable>
+            </>
+          ) : null}
         </View>
         <View style={[styles.hostBox, { backgroundColor: ink.box }]}>
           <Host style={styles.popupRows}>
@@ -414,12 +483,14 @@ export default function HostScreen() {
               accessibilityLabel="Hosted disabled picker"
               testID="host-picker-disabled"
             />
-            <DatePicker
-              value={popDate}
-              onChange={setPopDate}
-              accessibilityLabel="Hosted date picker"
-              testID="host-datepicker"
-            />
+            {popDateMounted ? (
+              <DatePicker
+                value={popDate}
+                onChange={setPopDate}
+                accessibilityLabel="Hosted date picker"
+                testID="host-datepicker"
+              />
+            ) : null}
             <DatePicker
               defaultValue={popDate}
               disabled

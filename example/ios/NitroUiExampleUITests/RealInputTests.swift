@@ -77,6 +77,7 @@ final class RealInputTests: XCTestCase {
     static let hostMixedState = "host-mixed-state"
     static let hostSegmentedIndex = "host-segmented-index"
     static let hostPickerIndex = "host-picker-index"
+    static let hostDateValue = "host-datepicker-value"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -389,6 +390,47 @@ final class RealInputTests: XCTestCase {
       readUntil(Echo.hostMixedState) { $0 == "on 0.50 1" },
       "on 0.50 1",
       "the Switch in the same Host should answer too, with the press count left where the Button put it"
+    )
+  }
+
+  /// A real tap must open the `DatePicker` inside a Host's presentation, and a real tap
+  /// on a day inside it must reach JS as a new instant.
+  ///
+  /// The Android case for this control is where the substance lives: a Compose dialog is
+  /// a window of the Host's own composition, and its OK, Cancel and Back presses cannot be
+  /// reached from the harness. On iOS a `<Host>` is the documented passthrough (D23), so
+  /// there is no separate window to inherit and this is the regression the passthrough has
+  /// to keep — the same JSX presenting the same calendar whether or not a `<Host>` is
+  /// wrapped around it, and the same two hops working: the field's button, then a day cell
+  /// inside the presentation, all the way back to React's controlled value.
+  ///
+  /// The day is chosen by the helper rather than named, for the reason `testRealInputDatePicker`
+  /// gives: picking the day the field already shows reports nothing by design.
+  func testRealInputHostedDatePicker() throws {
+    try goToTab(Tab.hostTab, showing: Echo.hostValue)
+    try scrollIntoView("host-datepicker", as: "the DatePicker inside the Host")
+    let field = try required("host-datepicker", as: "the DatePicker inside the Host")
+    let seeded = try read(Echo.hostDateValue)
+    XCTAssertEqual(
+      seeded,
+      "2026-05-17",
+      "the hosted DatePicker should show the day JS gave it"
+    )
+
+    field.centre.tap()
+    let opened = try openPresentation(from: field, watching: Echo.hostDateValue)
+    try pickSomeDay(in: opened, from: field, watching: Echo.hostDateValue) { $0 != seeded }
+
+    let moved = try read(Echo.hostDateValue)
+    XCTAssertNotEqual(
+      moved,
+      seeded,
+      "a real pick inside the presentation should reach JS through the Host"
+    )
+    XCTAssertEqual(
+      moved.split(separator: "-").count,
+      3,
+      "\(Echo.hostDateValue) should render the day React holds as Y-M-D, got \"\(moved)\""
     )
   }
 
