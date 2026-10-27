@@ -485,17 +485,31 @@ final class RealInputTests: XCTestCase {
       "2",
       "a real tap on a hosted menu row should reach JS as index 2"
     )
+    // The rows that are *not* the new choice can only exist while the menu is open. The
+    // chosen title stays after the pick, as the anchor's own text: measured, exactly one
+    // "Gamma" survives, and it is the anchor. Asking a closed menu for the title it is
+    // showing would read every closed menu as an open one.
+    waitUntilOptionGone("Beta", "the hosted menu closing")
+    XCTAssertEqual(
+      optionLabels(containing: "Beta"),
+      0,
+      "the rows that are not the new choice should be gone once the pick closes the menu"
+    )
     XCTAssertEqual(
       optionLabels(containing: "Gamma"),
-      0,
-      "choosing a row should close the hosted menu"
+      1,
+      "the hosted anchor should show the choice that was just made"
     )
 
-    // 4. The way out that changes nothing: the row already chosen. The menu closes and
-    //    no change is reported - the binding's own rule (G6), read here through a Host.
+    // 4. The way out that changes nothing: the row already chosen, which since the pick
+    //    above is Gamma rather than the row the menu first opened on. The menu closes
+    //    and no change is reported - the binding's own rule (G6), read here through a
+    //    Host. The witness that the menu reopened is a different row from the one being
+    //    tapped: while it is open both exist, and only one of them survives closing.
     try required("host-picker", as: "the Picker inside the Host").centre.tap()
-    try waitForOption("Beta", "the hosted menu to reopen").tap()
-    _ = waitUntilOptionGone("Gamma", "the hosted menu to close")
+    _ = try waitForOption("Beta", "the hosted menu to reopen")
+    try waitForOption("Gamma", "the reopened hosted menu to list its current choice").tap()
+    _ = waitUntilOptionGone("Beta", "the hosted menu to close")
     XCTAssertEqual(
       try read(Echo.hostPickerIndex),
       "2",
