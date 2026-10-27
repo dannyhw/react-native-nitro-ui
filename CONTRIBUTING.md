@@ -86,6 +86,9 @@ Run from the repo root.
 | `bun run test:native:android` | JVM unit tests of the Kotlin core (needs the Android SDK; not in `check`)   |
 | `bun run nitrogen`            | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`              |
 | `bun run nitrogen:check`      | Regenerate into a temp dir and fail on drift against `nitrogen/`            |
+| `bun run registry`            | Write the per-component lists from `src/components/*/component.json`        |
+| `bun run registry:check`      | Fail when those lists are not what the manifests say (see "Adding a comp…") |
+| `bun run regen`               | `nitrogen` + `registry` — what to run after a merge or a new component      |
 | `bun run autolinking:check`   | RN CLI + Expo autolinkers must both resolve `NitroUiPackage`                |
 | `bun run prepare`             | Build `lib/` with builder-bob (also runs `nitrogen`)                        |
 | `bun run api-extractor`       | Regenerate the public API report in `etc/` (`:check` compares)              |
@@ -115,7 +118,7 @@ Run from the repo root.
 | `bun run clean`               | Delete build outputs (`lib/`, native build dirs)                            |
 
 `bun run check` = typecheck → bench:typecheck → lint → format → test →
-test:native → perf:renders → nitrogen:check → autolinking:check → prepare →
+test:native → perf:renders → nitrogen:check → registry:check → autolinking:check → prepare →
 api-extractor:check → publint → manifest:check → readme:check. `perf:renders` is part of `check` on purpose: render
 counts are deterministic, so they can block, unlike anything measured on a device.
 
@@ -135,6 +138,122 @@ and the matching block in the README.
 directory to `files` in `package.json` changes it; run `bun run manifest:update`
 and review the diff so codegen or native sources can never silently disappear
 from the tarball.
+
+## Adding a component
+
+A control used to mean a row in about fifteen hand-maintained lists, so two
+components in flight conflicted on every one of them. Each control now declares
+its facts once, in `src/components/<Name>/component.json`, and `bun run
+registry` writes the lists. The rules — the schema, which lists are generated,
+which are only checked, and why — are documented in
+`scripts/registry-core.mjs`.
+
+```sh
+# 1. the per-component files, as before
+src/components/<Name>/<Name>.nitro.ts   the Nitro spec
+src/components/<Name>/<Name>.tsx        the JS wrapper
+src/components/<Name>/NitroUi<Name>Config.ts
+example/src/<Name>Screen.tsx            the tab's screen (behaviour: hand-written)
+
+# 2. say what the control is, and let the lists follow
+src/components/<Name>/component.json    copy one and edit it
+bun run regen                           the registry, then nitrogen, then the registry
+
+# 3. the behaviour a manifest cannot describe
+src/index.ts                            the export list
+bench/src/implementations/*.tsx         one branch per arm
+bench/src/implementations/shared.ts     its ROW_HEIGHTS entry (benched controls)
+example/.../RealInputTests.swift        func testRealInput<Name>
+scripts/real-input/android.mjs          one CHECKS entry
+docs/components/<name>.md               the component page
+bun run changeset
+```
+
+`bun run registry:check` (in `bun run check`) fails when those lists are not what
+the manifests say, naming the file and the first line that moved — so a generated
+region is never edited by hand, and `bun run registry` is what changes it.
+
+The manifest holds **identity**, not prose: which sets the control belongs to
+(`bench`, `smoke`, `realInput`, `hostable`), its kebab `id`, its `sizing` policy
+(`intrinsic`, `fillWidth`, or `null` for something that sizes from its style),
+and its example tab. What a row _says_ stays in the file, which is how the
+published bytes stay put: in a shipped file (`etc/package-files.txt`) a row that
+is already there is copied rather than re-rendered, and existing rows keep their
+positions. `scripts/__tests__/registry.test.js` asserts that running `--write`
+over a copy of the tree leaves every shipped file byte-identical.
+
+One file the brief might have expected the generator to own is deliberately only
+**checked**:
+
+- `src/index.ts` exports `<Host>`, which has no manifest (a container, not a
+  control), and its export lists name per-component types that vary by rule no
+  manifest carries (`SegmentedControlChange`, `DatePickerVariant`). Its header
+  prose is also the statement of what is public.
+
+The check on it catches the mistake a hand-written file actually makes: a
+component exists and something downstream cannot see it.
+
+`nitro.json` is not in that list: the registry generates its `autolinking`
+section, because the alternative is a per-component edit a merge throws away
+(see "Merging two components"). Nitrogen only _reads_ the file — `nitrogen src
+--config nitro.json` — and writes it nowhere in this repo's scripts, so the
+registry is the only writer and nothing contends for it. `regen` runs the
+registry before nitrogen for exactly that reason: nitrogen refuses to generate a
+Hybrid View with no entry, so the entry has to exist first.
+
+The behaviour tables stay hand-written, and a test says so when one is missing:
+`scripts/__tests__/component-coverage.test.js` fails if a bench arm has no branch
+for a benched control (an arm falls through to rendering the `Switch`, so the cell
+would measure the wrong control and still print a number), or if the real-input
+suite has a control with no check on either platform.
+
+### Merging two components
+
+`bun run regen` is the merge recipe, and `bun run check` passing afterwards is the
+definition of a finished merge — not `registry:check` on its own, which sees the
+generated regions and nothing else. When two branches both add a control, the
+lists they both touch conflict; take **either side** of every conflicted
+generated file and run `regen`, and both controls' rows come back — the generator
+adds any manifest it finds that a list is missing, so whichever side won the
+conflict, the loser's rows return. `nitro-ui.sizing.json` is generated by the
+registry and takes either side as well. `nitrogen/generated/**` needs no hand
+resolution at all: `.gitattributes` says `merge=union` there, which keeps both
+sides' appended lines, and `regen` rewrites the files from scratch anyway (see
+`.gitattributes` for why union stops there).
+
+These are inputs, not outputs, and need the two sides' lines kept together
+(`bench/src/implementations/shared.ts`'s `ROW_HEIGHTS` too, for benched
+controls; `bench:typecheck` fails if one is lost): `src/index.ts` (one export per component), the bench arm's import and
+branch, `func testRealInput<Name>` in `RealInputTests.swift`, and the `CHECKS`
+entry in `scripts/real-input/android.mjs`. The docs are the same kind of thing.
+`nitro.json` used to be in this list and no longer is: its `autolinking` entry is
+generated now, which matters because a lost entry used to break the recipe —
+nitrogen refuses to generate a Hybrid View that is not in `nitro.json`, so
+without it `regen` could not run at all. These are the files where the two
+sides genuinely say different things, which is the right place to spend
+attention.
+
+Measured on two controls, both merge orders, against this layout and against
+`main`'s pre-registry layout (`dc13833`, with the same lines typed by hand):
+19 conflicted files here, 22 there (the extra three are
+`nitrogen/generated/**`, where `.gitattributes` now says `merge=union` and
+`regen` rewrites the file anyway). Taking either side of all of them loses 36 of
+the merged control's 52 shared-list entries, in 19 files — the same in both
+layouts, because a control really does add a line in that many places.
+
+The difference is what happens next. Here it is the four edits above and `bun run
+regen`, and `bun run registry:check` then proves the merge is right in 0.2 s:
+0 entries lost, both orders. Run the whole of `bun run check` afterwards; the
+registry check proves the generated lists, not the hand-written edits. There, it is 19 files re-edited by hand. Pre-X3 was not unprotected —
+`tsc`, `nitrogen:check`, `host.test.tsx`, `viewConfigs.test.ts` and the smoke
+ready-line test each catch a few of those rows, and the report attributes each
+list to the gate that sees it — but eight of the thirteen had nothing, notably
+`example/src/App.tsx`'s tab bar, where a lost row is a control with no tab and no
+failure until you look at a device.
+
+`bun run registry` refuses rather than half-writing: a new control has no
+`example/src/<Name>Screen.tsx` until someone writes it, and the check says so
+instead of generating an `App.tsx` that does not compile.
 
 ## Nitrogen and the ViewProps patch
 
@@ -533,12 +652,18 @@ directory to read.
 
 ### Adding a control to the suite
 
-One entry in `scripts/real-input/controls.mjs`, then one check per platform:
+One row in `scripts/real-input/controls.mjs` — for a library component, the row a
+manifest with `realInput: true` and a `realInputTitle` generates (`bun run
+registry`), not a hand edit — then one check per platform:
 `func testRealInput<Id>` in
 `example/ios/NitroUiExampleUITests/RealInputTests.swift`, and one key in `CHECKS`
 in `scripts/real-input/android.mjs`. Both runners compare their checks against
 the shared table and fail - never skip - if a control has no check, or a check
-has no control, so a control cannot leave the suite unnoticed.
+has no control, so a control cannot leave the suite unnoticed. The `hosted-*`
+rows stay hand-written: they prove things about `<Host>`, which is a container
+rather than a component, and their ids are scenario names this suite owns.
+`scripts/__tests__/component-coverage.test.js` checks the same coverage on a
+machine with no device, one test per row.
 
 ## Consumer smoke tests
 

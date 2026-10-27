@@ -1,0 +1,15 @@
+{
+  "name": "Switch",
+  "hybridView": "NitroUiSwitch",
+  "implementation": "HybridNitroUiSwitch",
+  "id": "switch",
+  "sizing": "intrinsic",
+  "hostable": true,
+  "exampleTab": "switch",
+  "exampleLabel": "Switch",
+  "bench": true,
+  "benchUnsuffixed": true,
+  "smoke": true,
+  "realInput": true,
+  "realInputTitle": "real tap flips the Switch and JS sees the new value"
+}

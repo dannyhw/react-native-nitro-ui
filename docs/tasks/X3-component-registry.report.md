@@ -1,0 +1,299 @@
+# X3 Report — Component registry
+
+**Task:** `X3-component-registry` · **Round:** 1 · **Lease:** `X3-rd5ku` (round 1), `X3-yxfam` (fix round 1)
+
+## Summary
+
+A component used to be recorded in about fifteen hand-maintained lists, so two components in flight
+conflicted on every one of them and a wrong merge was invisible. Each control now declares its facts
+once, in `src/components/<Name>/component.json`, and `scripts/gen-registry.mjs` writes those lists;
+`registry:check` — now part of `bun run check` — fails when they are not what the manifests say. The
+schema, the region table and the reasons live in `scripts/registry-core.mjs`; the CLI is the
+filesystem half, so the rules are unit-testable against fixtures. It owns **22 regions in 14 files**
+plus `nitro-ui.sizing.json`: `nitro.json`'s autolinking section, the Host's control imports and
+hostable set (`HostChildren.ts`), the Kotlin package and both declared-fallback tables, the bench
+plans and `ComponentName`, `viewConfigs.test.ts`, the smoke and real-input control lists, and the
+example's tabs/screens.
+
+Six of the fifteen files are **shipped** (`etc/package-files.txt`): `nitro-ui.sizing.json`, written
+whole, and five whose regions are *anchored* inside a hand-written body — an anchor line plus an entry
+shape, entries copied rather than re-rendered and kept where they are, since a marker comment in a
+shipped file would itself change the artifact. That anchoring plus the copy rule is what keeps the
+published bytes unchanged (verified by SHA against the base, and by the tarball below). The other nine
+are unshipped and use `@generated` markers. New entries append at the end, so two controls never touch
+one line.
+
+`src/index.ts` is **cross-checked, not regenerated**: it exports `<Host>`, which has no manifest, plus
+per-component types no manifest names, and its header prose states what is public. `nitro.json` *is*
+generated — nitrogen only reads that file, so nothing contends for it, and a lost entry used to break
+the merge recipe outright (nitrogen refuses to generate a view absent from it).
+
+Behaviour stayed hand-written, as required — bench arm branches, `CHECKS`, `RealInputTests.swift`, the
+example screens, docs prose — and `component-coverage.test.js` is the gate that says so when one is
+missing.
+
+Two decisions to review: `package.json` excludes `**/component.json` from the tarball (otherwise 14
+manifests ship); and `.gitattributes` adds `merge=union` for exactly one path, `nitrogen/generated/**`
+— the only generated output `regen` rewrites completely. Measured first: union on a JSON object
+concatenates, so it loses the comma an appended member adds and leaves `nitro.json` unparseable
+(`git merge-file --union`), and a region inside a hand-written shell has no boundary union respects.
+Those stay take-either-side + `regen`. See "Merging two components" in CONTRIBUTING.
+
+## Gate table
+
+`gate.mjs export --task X3` → `docs/tasks/X3/gates.jsonl`.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 516 tests / 27 suites | `b3a9b03569f7` | 2 m 52 s | start 3.9 / med 2.2 / max 3.9 |
+| `harness:ios` | **PASS** | 165 tests / 13 suites | `b3a9b03569f7` (ios tree) | 2 m 29 s | start 6.8 / med 51.1 / max 97.3 |
+| `harness:android` | **PASS** | 214 tests / 13 suites | `b3a9b03569f7` (android tree) | 7 m 35 s | start 2.1 / med 4.9 / max 8.9 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`node scripts/gate.mjs need --for review` → **review is satisfied on this code tree.**
+`real-input:*` is the merge-stage gate: AGENTS.md runs the full harness plus real-input once, at merge,
+and this task changes no control's behaviour — the generated rows are the rows that were already there.
+
+## The published package is unchanged
+
+- File list: `package-files: tarball matches etc/package-files.txt (465 files)`, and both tarballs
+  contain the same 465 paths.
+- Content: 465 paths, 465 identical, the only difference `package/./package.json` — the three new
+  scripts and the `!**/component.json` exclusion. Compared against `dc13833`, which is this branch's
+  merge-base with `main`; the brief names no SHA, and `main`'s tip has moved with unrelated commits,
+  so the merge-base is the honest comparator.
+
+```
+git worktree add -f --detach /tmp/x3-pack/wt <head>      # and again for <base>
+(cd /tmp/x3-pack/wt && bun install --frozen-lockfile && bun x react-native-builder-bob build && rm -rf lib/common)
+(cd /tmp/x3-pack/wt && bun pm pack --destination /tmp/x3-pack/out --compression gzip)
+tar -xzf /tmp/x3-pack/out/<pkg>.tgz -C /tmp/x3-pack/<name>
+(cd /tmp/x3-pack/<name>/package && find . -type f | sort | shasum -a 256 -c - --quiet)
+```
+
+## Red proofs
+
+`test -> mutation -> the line that went red`. One mutation at a time, reverted between runs.
+Round 1: `/tmp/x3-redproofs-final.sh` (log `/tmp/x3-redproofs.log`). Fix round 1: `/tmp/x3-fix-reds.mjs`
+(log `/tmp/x3-fix-reds.log`); proofs 22–27 are single-mutation, each going red in exactly one test.
+
+1. `registry:check` -> a generated row edited by hand -> exits 1, `scripts/smoke/lib.mjs line 45: "'switchy'," -> "'slider',"`.
+2. `registry:check` -> a manifest edited without regenerating -> exits 1, `example/src/App.tsx line 72`.
+3. registry.test.js -> a row deleted from a generated list -> `the tree in front of us is in step with its manifests` (+4).
+4. registry.test.js -> shipped files allowed a marker -> `the anchored regions in shipped files are byte-identical to what was there`.
+5. registry.test.js -> shipped entries re-rendered instead of copied -> *the round-1 proof was not honest*: its script bundled a second mutation (it also changed the render template) and ran `registry:check` rather than `registry.test.js`, so the red it showed did not isolate the copy rule. Re-proved on its own as 22.
+6. registry.test.js -> entries re-sorted instead of kept in place -> `NitroUiPackage.kt:13`, `NitroUiDeclaredFallbacks.kt:7`, `bench/src/implementations/index.ts:72`.
+7. registry.test.js -> a region's terminator handling removed -> drift at `bench/src/types.ts:26`.
+8. registry.test.js -> the schema ignoring unknown keys -> `rejects a key it knows nothing about, and lists the ones it does` (+1).
+9. registry.test.js -> a duplicate id allowed -> `rejects two manifests claiming one id or tab`.
+10. registry.test.js -> a cross-check not run -> `the tree in front of us is in step with its manifests` (+4).
+11. registry.test.js -> the autolinking language rule reading `all` for iOS -> `accepts either shape nitrogen reads for an autolinking entry`.
+12. registry.test.js -> two components' regions of one file no longer merged -> `a component added to the manifests is appended to every list it belongs to` (+5).
+13. registry.test.js -> an unmanifested export allowed through -> `the barrel exports every manifest, and an unmanifested export is named` (+5).
+14. package.json -> `registry:check` removed from `check` -> `the check script is wired into \`bun run check\``.
+15. package.json -> the manifests allowed into the tarball -> `package-files: +lib/module/components/Button/component.json would be published`.
+16. component-coverage.test.js -> a bench arm branch renamed -> `bench/src/implementations/nitroUi.tsx handles every component in each of its render paths`.
+17. component-coverage.test.js -> an Android `CHECKS` entry renamed -> `picker has a check on both platforms`.
+18. component-coverage.test.js -> an iOS check renamed -> `slider has a check on both platforms`.
+19. component-coverage.test.js -> a row's screen tab that nothing renders -> `every row names a screen the example app renders`.
+20. component-coverage.test.js -> an example screen renamed -> `the example app defines a screen for each tab`.
+21. component-coverage.test.js -> a new manifest whose arm branch was forgotten -> `…handles every component in the plan` (4 arms) + `the host arm handles exactly the hostable set the plan asks for`.
+22. registry.test.js -> `if (false)` on the shipped-copy rule in `replaceRegion` -> `an entry already in a shipped region is copied, not re-rendered`. The fixture that makes this meaningful is new: the review was right that every shipped row in the tree happens to equal its own render, so the rule was never exercised. `nitro.json` accepts two spellings of an autolinking entry (`checkAutolinking` reads a per-platform pair *or* a shared `all` block, because nitrogen reads either), so a `NitroUiSwitch` entry written in the `all` shape is valid, shipped, and not what `render` would write — copying is what keeps those bytes still.
+23. registry.test.js -> the "entry no manifest declares" loop in `checkAutolinking` emptied -> `names an autolinking entry no manifest declares, and keeps it in the file`.
+24. registry.test.js -> the `HostChildren.ts` imports region wants `where('hostable')` again -> `a control that stops being hostable keeps its import` (review M2).
+25. registry.test.js -> `sizingTableContent` treats unparseable text as "no current file" -> `a sizing table that no longer parses is refused, not re-sorted from nothing` (review N1).
+26. registry.test.js -> the autolinking cross-check reads the file on disk instead of the planned text -> `--write completes for a component that has no entry in nitro.json yet` (review M1: this is the check that would have refused the very run that adds a component).
+27. registry.test.js -> the `keep` rule for non-control autolinking entries (`NitroUiCore`, `NitroUiHost`) removed -> eight tests red, starting with `the tree in front of us is in step with its manifests` and `an autolinking entry the registry does not own keeps its bytes and its place`.
+28. registry.test.js -> a label or title containing an apostrophe allowed through -> `rejects a label or title the generated line cannot carry` (review N8: it renders inside single quotes).
+29. Four of this round's own tests (`a component added to the manifests…`, `the barrel exports every
+manifest…`, `has a manifest for every component directory…`, `a control that stops being hostable…`)
+went red **on their own**, before any mutation, when run on a tree that had a second control in it —
+the step-6 experiment's branches. They hardcoded a component named `Gauge`. Fixed in `6697f1f`, and
+re-checked on those branches: only the fake control's genuine gaps remain. That is the red proof for
+"tests must not pin the roster", and it is the same class of bug as proof 5.
+
+## Step 6 — two components, and the merge
+
+Two controls, `Gauge` and `Toggle`, each added the way its own layout says to add one, on two
+branches, merged in both orders. Both are `hostable: true` and `realInput: true`, which the first
+run got wrong: those flags are what pull in the `HostChildren.ts` anchored regions, both
+nitro-ui-host arm lists, and the multi-line real-input row.
+
+Two bases, per the brief. **Registry layout** = this branch at `c47f859` (later commits do not change the counts). **Hand-maintained layout** =
+`dc13833`, `main`'s layout — a real pre-X3 checkout, not an approximation. Its branches run nitrogen
+as pre-X3 did (nitrogen was always generated) and type the same lines into the hand-maintained lists;
+the line set is taken from the registry layout's own diff, so the two layouts differ only in whether
+a list is generated or typed.
+
+"Lost" = per control per shared file, the lines its branch added that are absent from the merged
+tree, tolerating only a moved `,` / `;`. Files git can merge without help (a control's own new files,
+and `nitrogen/generated/**`, which both layouts regenerate) are excluded.
+
+| | registry layout | hand-maintained layout (`dc13833`) |
+| --- | --- | --- |
+| conflicted files | **19** | **22** |
+
+The 3-file gap is N4 measured: the extra three are in `nitrogen/generated/**`, which merge cleanly on
+this branch because `.gitattributes` says `merge=union` (both sides' appended lines survive), and
+conflict on `dc13833` because it predates that rule. Nitrogen rewrites those files from `nitro.json`
+in both layouts, so the *cost* of the three is the same either way; the union attribute removes them
+from the list a human has to look at, which is the only thing it can do.
+| entries the losing control adds to shared files | 52 | 54 |
+| after `take either side` | **36 lost**, in 19 files | **36 lost**, in 19 files |
+| after the recipe | **0 of 104 lost** | no recipe: 19 files re-edited by hand, with no gate that can tell whether it was done right |
+| `bun run check` after the recipe | `registry:check: OK`, `typecheck` clean; full-suite result not established (see below) | n/a |
+
+Both orders give the same numbers. Per-file losses are identical in both layouts (the only
+difference: the pre-X3 `ComponentName` union carries an id twice, 6 lines rather than 4).
+
+`check` on the merged tree: **not established.** The script that ran it (`/tmp/x3-n5b.mjs`) never read
+exit statuses, so its log counts every gate red, `registry:check: OK` included, and no log supports
+a failure count. What is established is `registry:check: OK` and a clean `typecheck` (orchestrator
+correction, from the re-review's M1). The genuine behaviour edits the recipe puts back are the four the manifest cannot describe:
+`src/index.ts`'s export, the bench arm's import and branch, `testRealInput<Name>`, and the `CHECKS`
+entry (`nitro.json` is generated now, so it is no longer one of them).
+
+**What says so when a row goes missing** — measured one row at a time, because "nothing" is the claim
+N6 says is overstated and "everything" would be too. `Picker`'s row deleted from one generated list,
+the gates run, the file restored. One list per row; the aggregate run cannot attribute a red gate to a
+row, so it is not the evidence:
+
+| the list `Picker` has a row in | pre-X3 (`dc13833`) | registry layout |
+| --- | --- | --- |
+| `nitro.json` | `nitrogen:check` | + `registry:check` |
+| `nitro-ui.sizing.json` | `nitrogen:check` | + `registry:check` |
+| `HostChildren.ts` (hostable set) | `tsc`, `bench:typecheck`, `host.test.tsx` | + `registry:check` |
+| `viewConfigs.test.ts` (copies) | `tsc`, `viewConfigs.test.ts` | + `registry:check` |
+| `scripts/smoke/lib.mjs` | `smoke-ready-line.test.js` | + `registry:check` |
+| `NitroUiPackage.kt`, both `NitroUiDeclaredFallbacks`, `bench/src/plan.ts`, `bench/src/implementations/index.ts`, `scripts/bench/lib.mjs`, `example/src/App.tsx` (the tab bar), `scripts/real-input/controls.mjs` | **nothing red** | `registry:check`, and the real-input table also has `component-coverage.test.js` |
+
+So five of thirteen had a gate before X3, and eight had none — including `example/src/App.tsx`, where
+a lost tab is a control you cannot reach, discovered on a device or not at all. In the registry layout
+all thirteen are caught, and `registry:check` names the file and the line rather than leaving it to be
+inferred from a type error or a snapshot. (`bench/src/types.ts`'s `ComponentName` union is not in the
+table: its entries carry a `;` terminator, so deleting one is not a whole-row delete — it is the same
+shape as `plan.ts` plus that terminator, which proof 7 covers.)
+
+Scripts: `/tmp/x3-n5.mjs` (both layouts), `/tmp/x3-n5b.mjs` (gates red after a merge),
+`/tmp/x3-n6.mjs` (all rows gone at once), `/tmp/x3-n6-per-file.mjs` (the table above). Logs
+`/tmp/x3-n5-generated.log`, `/tmp/x3-n5-hand.log`, `/tmp/x3-n5b-gen.log`, `/tmp/x3-n6p-hand.log`,
+`/tmp/x3-n6p-gen.log`.
+
+## Follow-ups
+
+- CONTRIBUTING's step-1 checklist used to list the `nitro.json` autolinking entry as a hand edit, which
+  made `nitro.json` the one file the merge recipe could not recover: taking either side lost the entry,
+  nitrogen then refused to run, and `regen` could not put it back. It is generated now (proof 26), so
+  the recipe has no hole left. Round-1's write-up of this was wrong in the other direction — it said
+  nitrogen rewrites the file, which is why the fix round's first commit message had to be corrected too.
+- X4: the doc table (`docs/components/*.md`, and whatever nav is built from it) is the next such list;
+  the manifest has no field for it yet.
+- X4, or the next control that needs it: what happens when a manifest says `hostable: true` for a
+  control the native Host has no case for. Round 1 claimed `check` fails to compile until nitrogen
+  emits a C++ header (`HybridNitroUiHostChildren.g.h`) — that file does not exist in this repo, and
+  the log it cited (`/tmp/x3-redproofs.log:459-466`) shows test failures, not a compile error, so the
+  claim was wrong twice over. What is verified: `registry` writes the row regardless of native
+  support, so the failure surfaces downstream, and `HostChildren.ts`'s `UNHOSTABLE_CONTROLS` plus
+  `host.test.tsx`'s stand-in row is where a refusal sentence lives. Whether that path is a red test,
+  a runtime refusal or a blank box was not measured this round and needs a real control to answer.
+- N4's second half is not done: moving each unshipped list into its own wholly generated file, so
+  `merge=union` could cover it too and only the shipped anchored files and the behaviour files would
+  ever conflict. It restructures nine files, and the measurement above says union cannot apply to a
+  JSON object or to a region inside a hand-written shell, so it is a real design change rather than a
+  line in `.gitattributes`. Left for X4 with the doc-table item, which wants the same shape.
+- `example/__tests__/Picker.harness.tsx` "asks a wheel the box question after a variant change" failed
+  three full iOS runs at load1 18–43 (`wheel=0.00x0.00` — a box that never arrived) and passed standalone
+  and on the final full run at load ≈ 2. A sizing-report test whose timing tolerance is load-sensitive;
+  see the round's gate note.
+- `HostPopups` "comes down with its row" reads `DatePickerModel.livePresentations`, which is
+  process-wide, so it asserts a zero that only holds if no earlier suite in the same app process still
+  presents anything. Snapshotting the counter before presenting would make it order-independent.
+- The harness starts an Android emulator even when KVM/HVF is unavailable and prints that it will use
+  "very slow software emulation"; 30 s tests then time out. Worth a hard failure, or an auto-raised
+  timeout.
+- `registry:check` is in `bun run check` and nowhere else: `prepare` is `bob build`, whose custom target
+  runs `nitrogen`, and a package installed from the registry does not run its own `prepare`. So the
+  check costs CI ~0.2 s and consumers nothing. (Round 1 claimed it fired on a consumer install; it
+  does not.)
+
+---
+
+## Fix round 1
+
+**M1** was a behaviour change, not a comment fix: `nitro.json`'s `autolinking` is generated now — an
+anchored region that copies an existing entry's bytes, leaves `NitroUiCore`/`NitroUiHost` alone and
+refuses an entry no manifest declares. Nitrogen only _reads_ that file, so round 1's "nitrogen rewrites
+it" was false, as was `.prettierignore`'s.
+
+**M2** — the `HostChildren.ts` imports region wants every control, so one that flips to
+`hostable: false` keeps the import `UNHOSTABLE_CONTROLS` needs. **M3** — false claims removed (C++
+region, `prepare`, the SHA, the coverage story, proof 5), every named path grepped; re-running turned up
+four of my own tests hardcoding a component name, red the moment a second control existed
+(`6697f1f`). **M4** — proofs 22–28, one mutation each, red in one test. **N4** — `merge=union` on
+`nitrogen/generated/**` only (on a JSON object, union drops a comma: measured). **N5** — remeasured on
+`main`'s layout with `hostable`/`realInput` controls: 36 of 52 entries lost by taking either side, both
+layouts; 0 of 104 after the recipe. N1–N3, N6–N8 fixed; N9 not this task.
+
+**`need --for review` is satisfied.** Nine device runs failed before the green rows below; the
+appendix records each one's load, my two mistakes among them, and two intermittent Follow-ups.
+
+## Fix round 1 — gate table
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 523 tests / 27 suites | `40c26c7535df` | 2 m 51 s | start 1.3 / med 1.6 / max 2.0 |
+| `harness:ios` | **PASS** | 165 tests / 13 suites | `40c26c7535df` (ios tree) | 1 m 59 s | start 1.5 / med 3.3 / max 3.9 |
+| `harness:android` | **PASS** | 214 tests / 13 suites | `40c26c7535df` (android tree) | 6 m 38 s | start 2.6 / med 6.1 / max 8.0 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:ios:Picker` | **PASS** | 37 tests / 2 suites | `40c26c7535df` (ios tree) | 33.6 s | start 2.2 / med 4.1 / max 4.4 |
+| `harness:android:HostPopups` | **PASS** | 24 tests / 1 suite | `40c26c7535df` (android tree) | 1 m 14 s | start 5.5 / med 5.5 / max 6.1 |
+| `harness:android:DatePicker:HostPopups` | **PASS** | 37 tests / 2 suites | `40c26c7535df` (android tree) | 1 m 26 s | start 3.5 / med 5.6 / max 7.1 |
+| `harness:android:HostControls:HostPopups` | **PASS** | 48 tests / 2 suites | `40c26c7535df` (android tree) | 2 m 44 s | start 7.0 / med 6.8 / max 8.5 |
+
+`node scripts/gate.mjs need --for review` → **review is satisfied on this code tree.**
+
+
+`node scripts/gate.mjs need --for review` → **review is satisfied on this code tree.**
+
+## Fix round 1 appendix — the device runs that failed first
+
+Load is the ledger's own column (median over the run), not a guess from `sysctl` afterwards — my
+concurrent runs were themselves much of the load, and that turns out to matter for what can be blamed
+on it.
+
+| time | run | median / max load | what failed |
+| --- | --- | --- | --- |
+| 17:38 | ios | 39.9 / 80.7 | `Picker` "asks a wheel the box question…" — `wheel=0.00x0.00` |
+| 17:43 | ios | 57.2 / 118.0 | same |
+| 17:55 | ios | 35.6 / 75.1 | same |
+| 18:02 | ios | — | ×2: the stamp guard refusing a stale app — correct behaviour, not a test failure |
+| 18:03 | ios | 42.1 / 82.6 | same |
+| 18:29 | ios | **3.3** / 3.9 | **164/165 PASS** |
+| 17:47 | android | 5.3 / 7.4 | `HostPopups` "comes down with its row…" — `expected 1 to be 0` |
+| 18:32 | android | 5.9 / **129.3** | `HostControls` "follows mixed children…" — **timed out** at 30 s |
+| 18:56 | android | 6.7 / 9.0 | `HostPopups` again |
+| 19:12 | android | 6.1 / 8.0 | **214/214 PASS** |
+
+17:38–17:55 is mostly me: I had a second device suite running against the same simulator.
+
+**`Picker` (iOS): load-correlated, not load-caused.** Four failures at median 35.6–57.2, one pass at
+3.3, and it passes alone (37/37) — but round 1's green run had median 51, so load raises the odds
+rather than deciding it. It is a race: the log's own line reads `wheel=0.00x0.00`, so the remeasure
+came back with no size at all and the assertion compared that against the box. Pre-existing
+(`bbc5e0d`).
+
+**`HostPopups` (Android): not load at all** — failed at median 5.3 and 6.7, passed at 6.1. The
+assertion reads `DatePickerModel.livePresentations`, which is **process-wide by design**
+(`HybridNitroUiDatePicker.kt:263`: "the dropped mount has nothing left to report, so [the test] reads it
+through a fresh instance"). Asserting exactly 0 is therefore only sound when no earlier suite in the
+same app process still holds a presentation — it passed alone (24/24), with `DatePicker` (37/37), with
+`HostControls` (48/48) and in the full suite on the next try. Pre-existing (`6ac3bf2`, `d598e47`).
+
+Neither suite, file or assertion is in this diff, and no platform input changed since round 1's green
+run: `git diff 2402c0a..HEAD` over `example/ ios/ android/ src/ cpp/ nitrogen/ nitro.json` and the
+sizing table is empty, so the app under test is byte-identical. The `HostControls` timeout is the third
+kind: that run hit max load 129 (X9 on the other pair plus my own runs) and its log carries
+`Hardware acceleration (KVM/HVF) appears unavailable… very slow software emulation`. One line each in
+Follow-ups; none is X3's to fix.

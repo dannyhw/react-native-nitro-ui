@@ -35,6 +35,7 @@
     "!android/src/test",
     "!**/__fixtures__",
     "!**/__mocks__",
+    "!**/component.json",
     "!**/.*"
   ],
   "scripts": {
@@ -45,6 +46,9 @@
     "prepare": "bob build",
     "nitrogen": "nitrogen src && node scripts/patch-nitrogen.mjs",
     "nitrogen:check": "node scripts/nitrogen-check.mjs",
+    "registry": "node scripts/gen-registry.mjs --write",
+    "registry:check": "node scripts/gen-registry.mjs --check",
+    "regen": "bun run registry && bun run nitrogen && bun run registry",
     "autolinking:check": "node scripts/check-autolinking.mjs",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,mjs,ts,tsx}\"",
@@ -60,7 +64,7 @@
     "publint": "publint --strict",
     "manifest:check": "node scripts/package-files.mjs",
     "manifest:update": "node scripts/package-files.mjs --update",
-    "check": "bun run typecheck && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders && bun run nitrogen:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check && bun run readme:check",
+    "check": "bun run typecheck && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders && bun run nitrogen:check && bun run registry:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check && bun run readme:check",
     "storybook": "bun --cwd example storybook",
     "storybook:ios": "bun --cwd example storybook:ios",
     "storybook:android": "bun --cwd example storybook:android",

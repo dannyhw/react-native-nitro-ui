@@ -30,7 +30,8 @@ example/vendor
 # api-extractor writes this report itself; prettier would restyle its tables.
 etc/*.api.md
 
-# nitrogen rewrites nitro.json; formatting it would make `nitrogen:check` see drift.
+# The registry writes nitro.json's autolinking section with the same bytes prettier
+# would produce; ignoring it keeps `registry` and `format` from trading edits.
 nitro.json
 
 # Storybook's generated requires file (S1) - see .gitignore.

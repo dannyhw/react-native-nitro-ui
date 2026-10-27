@@ -1,3 +1,61 @@
 *.pbxproj -text
 # specific for windows script files
 *.bat text eol=crlf
+
+# Generated output: collapsed in a GitHub diff.
+#
+# The component registry (`scripts/gen-registry.mjs`, from
+# `src/components/<Name>/component.json`) writes these files' generated regions, so
+# the thing worth reviewing is the manifest that caused them. Collapsing them is
+# safe because `registry:check` (in `bun run check`) compares every generated line
+# against the manifests: a hand edit inside a region cannot pass CI, so nothing
+# depends on a reviewer noticing it.
+#
+# Marked: the *unshipped* files with a generated region - the bench plans and
+# types, the smoke and real-input control lists, the example app, the view-config
+# parity test. Nitrogen's own output is marked by `nitrogen/generated/.gitattributes`
+# (nitrogen writes that file); it is not repeated here.
+#
+# Not marked: anything in the published package (`etc/package-files.txt`). That is
+# both the files whose region is *anchored* inside a hand-written body
+# (`HostChildren.ts`, the Android manager list, both declared-fallback tables) and
+# the two generated JSON files (`nitro.json`, `nitro-ui.sizing.json`): their diff is
+# a change to the shipped artifact, and review has to see it.
+
+# `merge=union`: only where the whole file is rewritten.
+#
+# Two components in flight both append a row, and both append it at the end, so
+# they collide on one line in every list they share. `merge=union` keeps both
+# sides' lines instead of stopping, which is the cheapest resolution there is.
+#
+# The rule for applying it: a file that `bun run regen` rewrites *completely*, so
+# whatever union produces is overwritten before it can survive, and a gate
+# compares the result (`nitrogen:check` covers everything below).
+#
+# Everything else is excluded, on measurement rather than taste:
+#
+# - A region inside a hand-written shell (`example/src/App.tsx`, `bench/src/*`,
+#   `scripts/smoke/*`, `src/__tests__/viewConfigs.test.ts`,
+#   `scripts/real-input/controls.mjs`): union does not know where a region ends, so
+#   it keeps both sides' lines anywhere in the file, prose included. These stay
+#   take-either-side + `regen`, which is enough for a contiguous region the
+#   generator re-fills from the manifests.
+# - `nitro.json` and `nitro-ui.sizing.json`, which are shipped and so are not
+#   union-able in any case: appending a JSON member adds a comma to the line before
+#   it, and union concatenates rather than merges, which leaves a missing comma -
+#   invalid JSON. Measured with `git merge-file --union` on both shapes. A file
+#   union cannot leave parseable is a file `regen` cannot be trusted to recover.
+#
+# After any merge, run `bun run regen`; `bun run check` must pass (CONTRIBUTING,
+# "Merging two components").
+nitrogen/generated/** merge=union
+
+bench/src/plan.ts linguist-generated=true
+bench/src/types.ts linguist-generated=true
+bench/src/implementations/index.ts linguist-generated=true
+scripts/bench/lib.mjs linguist-generated=true
+scripts/smoke/lib.mjs linguist-generated=true
+scripts/smoke/App.tsx linguist-generated=true
+scripts/real-input/controls.mjs linguist-generated=true
+src/__tests__/viewConfigs.test.ts linguist-generated=true
+example/src/App.tsx linguist-generated=true
