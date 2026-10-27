@@ -1366,13 +1366,24 @@ final class RealInputTests: XCTestCase {
         + "than the calendar inside it - the bottom rows of the month are cut off"
     )
     // And it has to be *the field's* popover: a presentation that resolves its anchor
-    // somewhere else on the screen points at nothing. `+ 8` of tolerance for the
-    // arrow's own height, which the accessibility frame may or may not include.
-    XCTAssertGreaterThanOrEqual(
-      popover.frame.minY,
-      fieldFrame.maxY - 8,
-      "the popover opened at y \(popover.frame.minY) while the field ends at "
-        + "\(fieldFrame.maxY) - it is not anchored to the control that presented it"
+    // somewhere else on the screen points at nothing. Which side it lands on is UIKit's
+    // choice and not the library's — the bubble goes where the screen has room, so a field
+    // near the bottom of a scroll gets its calendar above it. The first cut of this gate
+    // asserted the side below and read that as a broken anchor; measured on an iPhone 17,
+    // a hosted field at y 485.3...521.7 got its bubble at y 148.3...485.3, which is 0.0 pt
+    // clear of the field's top edge. Adjacency to one of the field's two edges is the
+    // property, then, not the side. `-8` of overlap is the arrow's own height, which the
+    // accessibility frame may or may not include; 32 is slack over a measured 0.0. What
+    // the bound has to catch is an anchor resolved somewhere else, and that is the proof
+    // this gate was run against: the same bubble measured against a frame 220 pt away
+    // reads 220 clear of the top edge and fails both halves.
+    let gapBelow = popover.frame.minY - fieldFrame.maxY
+    let gapAbove = fieldFrame.minY - popover.frame.maxY
+    XCTAssert(
+      (gapBelow >= -8 && gapBelow <= 32) || (gapAbove >= -8 && gapAbove <= 32),
+      "the popover opened at \(popover.frame) against a field at \(fieldFrame): "
+        + "\(gapBelow)pt clear of its bottom edge and \(gapAbove)pt clear of its top "
+        + "edge, so it is not anchored to the control that presented it"
     )
     return popover
   }
