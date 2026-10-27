@@ -815,6 +815,68 @@ describe('gen-registry on a scratch tree', () => {
     }
   });
 
+  it('--write completes for a component that has no entry in nitro.json yet', () => {
+    // The operation the registry exists for, and the reason the autolinking check runs
+    // on the text the generator produces rather than on the file: nitrogen reads
+    // `nitro.json` and throws for a view missing from it, so `--write` is what puts the
+    // entry there. Checking the bytes on disk would refuse the run that adds it.
+    const dir = scratchTree();
+    try {
+      const gauge = jsonCopy(
+        JSON.parse(
+          readFileSync(
+            join(dir, `src/components/Button/${MANIFEST_BASENAME}`),
+            'utf8'
+          )
+        )
+      );
+      Object.assign(gauge, {
+        name: 'Gauge',
+        hybridView: 'NitroUiGauge',
+        implementation: 'HybridNitroUiGauge',
+        id: 'gauge',
+        exampleTab: 'gauge',
+        exampleLabel: 'Gauge',
+        realInput: false,
+      });
+      delete gauge.realInputTitle;
+      mkdirSync(join(dir, 'src/components/Gauge'), { recursive: true });
+      writeFileSync(
+        join(dir, `src/components/Gauge/${MANIFEST_BASENAME}`),
+        JSON.stringify(gauge, null, 2) + '\n'
+      );
+      // the screen and the export are behaviour, so they are the two things this run
+      // cannot write for you - it refuses rather than half-writing
+      const missing = run(dir, '--write');
+      expect(missing.stderr).toMatch(/GaugeScreen\.tsx.*does not exist/);
+      expect(missing.stderr).toMatch(
+        /src\/index\.ts: Gauge is in the registry/
+      );
+
+      writeFileSync(
+        join(dir, 'example/src/GaugeScreen.tsx'),
+        'export default function GaugeScreen() {\n  return null\n}\n'
+      );
+      writeFileSync(
+        join(dir, 'src/index.ts'),
+        readFileSync(join(dir, 'src/index.ts'), 'utf8') +
+          "\nexport { Gauge } from './components/Gauge/Gauge';\n"
+      );
+      const written = run(dir, '--write');
+      expect(written.stderr).toBe('');
+      const nitro = JSON.parse(readFileSync(join(dir, 'nitro.json'), 'utf8'));
+      expect(Object.keys(nitro.autolinking)).toContain('NitroUiGauge');
+      expect(written.stdout).toMatch(/wrote nitro\.json/);
+      // and nitrogen now has what it needs: an entry naming the implementation class
+      expect(nitro.autolinking.NitroUiGauge.ios.implementationClassName).toBe(
+        'HybridNitroUiGauge'
+      );
+      expect(run(dir, '--check').stdout).toMatch(/OK/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('the anchored regions in shipped files are byte-identical to what was there', () => {
     // `etc/package-files.txt` says these files ship, so a marker comment in one of
     // them would be a change to the published artifact. Running --write over a fresh
