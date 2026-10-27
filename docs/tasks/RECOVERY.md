@@ -14,6 +14,13 @@
 > Apex effort policy: `EFFORT-eval-2026-10-27.md`. Step 1 is brief A3, which a T3 schedule
 > (`nitroui-overnight-A3-baselines`, 01:00) delegates and then deletes. Step 3 (X3) is in flight in
 > `nitro-ui-worktrees/X3` · `task/X3-component-registry`; it must release its lease by 00:30.
+>
+> Queued after X3: **X9** (`X9-tooling-smoothing.md`: bench `--dry-run`, lockfile follows
+> releases, `doctor --prime`, one build at a time, `gate.mjs wait`, `check` step timings, unowned
+> devices). Don't run it during the 01:00 mint. The **X4** brief must also include: `task-ready.mjs`
+> fails when a backticked path in the report doesn't exist at HEAD (unless the diff adds or
+> deletes it). That catches invented files, which X3's first minutes showed. Every brief now gets a
+> context pack (`ORCHESTRATOR.md` step 1b).
 
 1. **Mint that machine's bench baselines** (`--exclusive`, idle, overnight, no Screen Sharing):
    iOS 27.0 `--plan full --launches 8` and the Android equivalent. They are new files under
