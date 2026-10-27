@@ -30,6 +30,7 @@ import {
   unownedCheckProblem,
   coldCacheWarning,
   mainCheckoutPath,
+  primeCommands,
 } from '../doctor-core.mjs';
 import { normalizeDevices } from '../lease-core.mjs';
 
@@ -447,5 +448,23 @@ describe('where --prime must build', () => {
 
   it('gives up when git cannot answer, rather than building in the wrong place', () => {
     expect(mainCheckoutPath({ toplevel: null, commonDir: '.git' })).toBeNull();
+  });
+
+  it('lists the two builds a prime runs, through the build script', () => {
+    // The claim under test is that `--prime` delegates: `build-app.mjs` is where the
+    // stamp, the ccache launcher, the arch default and the machine-wide build slot
+    // live, so a prime that invented its own command line would warm the caches while
+    // skipping the slot the feature exists to protect.
+    const commands = primeCommands('/Users/me/nitro-ui');
+    expect(commands.map((command) => command.platform)).toEqual([
+      'ios',
+      'android',
+    ]);
+    for (const command of commands) {
+      expect(command.file).toBe('scripts/build-app.mjs');
+      expect(command.args).toEqual(['--platform', command.platform]);
+      // The main checkout's own tree, not the worktree `--prime` was called from.
+      expect(command.cwd).toBe('/Users/me/nitro-ui');
+    }
   });
 });

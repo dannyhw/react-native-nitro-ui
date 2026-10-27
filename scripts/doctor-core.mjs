@@ -556,6 +556,30 @@ export function coldCacheWarning(statsText, thresholds = {}) {
 }
 
 /**
+ * The commands `--prime` runs, in order, for a given checkout.
+ *
+ * Pulled out of `doctor.mjs` (which cannot be imported by jest) because the whole
+ * point of `--prime` is that it does *not* invent its own build command: it calls
+ * `build-app.mjs`, which is where the stamp, the ccache launcher, the arch default
+ * and the machine-wide build slot live. A prime that re-implemented the build would
+ * skip the slot and be the exact load-13 situation it exists to prevent, and that
+ * claim is only a claim until something checks the argv.
+ *
+ * @param {string} checkout the main checkout's path
+ * @returns {{platform: 'ios'|'android', file: string, args: string[], cwd: string}[]}
+ */
+export function primeCommands(checkout) {
+  return ['ios', 'android'].map((platform) => ({
+    platform: /** @type {'ios' | 'android'} */ (platform),
+    // The checkout's *own* script: it may be on a different branch than the worktree
+    // `--prime` was called from, and the caches worth warming are that tree's.
+    file: 'scripts/build-app.mjs',
+    args: ['--platform', platform],
+    cwd: checkout,
+  }));
+}
+
+/**
  * Where the shared caches of this repo actually live, given git's own answers.
  *
  * `--prime` must build in the *main* checkout, not the worktree it happens to be
