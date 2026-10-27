@@ -8,43 +8,36 @@ A component used to be recorded in about fifteen hand-maintained lists, so two c
 conflicted on every one of them and a wrong merge was invisible. Each control now declares its facts
 once, in `src/components/<Name>/component.json`, and `scripts/gen-registry.mjs` writes those lists;
 `registry:check` — now part of `bun run check` — fails when they are not what the manifests say. The
-schema, the region table and the reasons live in `scripts/registry-core.mjs`; the CLI
-(`scripts/gen-registry.mjs`) is the filesystem half, so the rules are unit-testable against fixtures
-rather than against the working tree. It owns **22 regions in 14 files** plus `nitro-ui.sizing.json`:
-`nitro.json`'s autolinking section, the Host's control imports and hostable set
-(`HostChildren.ts`), the Kotlin package and declared fallbacks, the Swift fallbacks, the bench plans
-and `ComponentName`, `viewConfigs.test.ts`, the smoke and real-input control lists, and the example's
-tabs/screens.
+schema, the region table and the reasons live in `scripts/registry-core.mjs`; the CLI is the
+filesystem half, so the rules are unit-testable against fixtures. It owns **22 regions in 14 files**
+plus `nitro-ui.sizing.json`: `nitro.json`'s autolinking section, the Host's control imports and
+hostable set (`HostChildren.ts`), the Kotlin package and both declared-fallback tables, the bench
+plans and `ComponentName`, `viewConfigs.test.ts`, the smoke and real-input control lists, and the
+example's tabs/screens.
 
-Six of the fifteen files it writes are **shipped** (`etc/package-files.txt`): `nitro-ui.sizing.json`,
-which it writes whole, and five whose regions are *anchored* inside a hand-written body — an anchor
-line plus an entry shape, entries copied rather than re-rendered and kept where they are, because a
-marker comment in a shipped file would itself be a change to the artifact. The anchoring plus the copy
-rule are what keep the published bytes unchanged: the registry test runs `--write` over a scratch copy
-of the real tree and asserts every shipped file is still byte-identical, and the tarball says the same
-end to end (below). The other nine are unshipped and use `@generated` markers. Every new entry is
-appended at the end of its list, so two controls never touch the same line.
+Six of the fifteen files are **shipped** (`etc/package-files.txt`): `nitro-ui.sizing.json`, written
+whole, and five whose regions are *anchored* inside a hand-written body — an anchor line plus an entry
+shape, entries copied rather than re-rendered and kept where they are, since a marker comment in a
+shipped file would itself change the artifact. That anchoring plus the copy rule is what keeps the
+published bytes unchanged (verified by SHA against the base, and by the tarball below). The other nine
+are unshipped and use `@generated` markers. New entries append at the end, so two controls never touch
+one line.
 
-`src/index.ts` is **cross-checked, not regenerated** — the brief allows this: it exports `<Host>`,
-which has no manifest, plus per-component types no manifest names (`SegmentedControlChange`,
-`DatePickerVariant`), and its header prose is the statement of what is public. The check catches the
-mistake a hand-written file actually makes: a control that exists and cannot be seen downstream.
-`nitro.json`, by contrast, *is* generated (its `autolinking` section): nitrogen only reads that file,
-so there is no second writer to contend with, and a per-component entry a merge throws away is the
-per-item cost the task exists to remove.
+`src/index.ts` is **cross-checked, not regenerated**: it exports `<Host>`, which has no manifest, plus
+per-component types no manifest names, and its header prose states what is public. `nitro.json` *is*
+generated — nitrogen only reads that file, so nothing contends for it, and a lost entry used to break
+the merge recipe outright (nitrogen refuses to generate a view absent from it).
 
-Behaviour stayed hand-written, as required — bench arm branches, `CHECKS` in
-`scripts/real-input/android.mjs`, `RealInputTests.swift`, the example screens, docs prose — and
-`scripts/__tests__/component-coverage.test.js` is the gate that says so when one is missing.
+Behaviour stayed hand-written, as required — bench arm branches, `CHECKS`, `RealInputTests.swift`, the
+example screens, docs prose — and `component-coverage.test.js` is the gate that says so when one is
+missing.
 
-Two decisions worth reviewing: `package.json` excludes `**/component.json` from the tarball (the default
-`src/**` plus bob's `lib/**` copy would have published 14 extra files); and `.gitattributes` collapses
-the registry's and nitrogen's output in a GitHub diff, with `merge=union` on exactly one path —
-`nitrogen/generated/**` — because that is the only generated file `regen` rewrites completely. Union on
-a JSON object concatenates instead of merging, so it loses the comma an appended member adds and leaves
-`nitro.json` / `nitro-ui.sizing.json` unparseable (measured with `git merge-file --union` on both
-shapes), and a region inside a hand-written shell has no boundary union would respect. Those stay on
-take-either-side + `regen`. See "Merging two components" in CONTRIBUTING.
+Two decisions to review: `package.json` excludes `**/component.json` from the tarball (otherwise 14
+manifests ship); and `.gitattributes` adds `merge=union` for exactly one path, `nitrogen/generated/**`
+— the only generated output `regen` rewrites completely. Measured first: union on a JSON object
+concatenates, so it loses the comma an appended member adds and leaves `nitro.json` unparseable
+(`git merge-file --union`), and a region inside a hand-written shell has no boundary union respects.
+Those stay take-either-side + `regen`. See "Merging two components" in CONTRIBUTING.
 
 ## Gate table
 
