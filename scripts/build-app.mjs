@@ -56,6 +56,7 @@ import {
   decideSkipBuild,
   gradleArchArgs,
   gradleCcacheArgs,
+  iosModuleCacheArgs,
   resolveAndroidAbis,
 } from './build-speed-lib.mjs';
 import { installPods } from './pod-install.mjs';
@@ -335,6 +336,18 @@ function buildIos({ clean, log }) {
     writeMarker(inputs, iosInputFingerprint());
   }
 
+  // The module cache this build writes is the one a ccache build owns: the
+  // compiler here has CCACHE_BASEDIR, and clang records what it resolves into
+  // the .pcm files, so sharing that directory with a plain xcodebuild hands it
+  // two spellings of one module and a fatal error. See iosModuleCacheDir.
+  const moduleCacheArgs = iosModuleCacheArgs({
+    derivedData,
+    ccache: ccache.enabled,
+  });
+  if (ccache.enabled) {
+    log(`module cache ${moduleCacheArgs[0].split('=')[1]}`);
+  }
+
   // M3: this is the "before" tree. It is taken *after* pod install, because pod
   // install legitimately rewrites the tracked Podfile.lock (the CocoaPods stamp)
   // - hashing before it would report the tooling's own bookkeeping as the tree
@@ -359,6 +372,7 @@ function buildIos({ clean, log }) {
       '-derivedDataPath',
       derivedData,
       'CODE_SIGNING_ALLOWED=NO',
+      ...moduleCacheArgs,
       'build',
     ],
     { cwd: iosDir, env: buildEnv({ CI: '1' }) }

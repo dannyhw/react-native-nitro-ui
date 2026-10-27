@@ -30,6 +30,7 @@ import { installPods } from '../pod-install.mjs';
 import {
   ccacheEnv,
   ccacheRequested,
+  iosModuleCacheArgs,
   gradleArchArgs,
   gradleCcacheArgs,
   resolveAndroidAbis,
@@ -354,6 +355,10 @@ export function buildIos({ rebuild = false, prebuildFirst = false } = {}) {
       'ARCHS=arm64',
       'ONLY_ACTIVE_ARCH=NO',
       'CODE_SIGNING_ALLOWED=NO',
+      // This build sets CCACHE_BASEDIR, so it compiles into a module cache of
+      // its own: the .pcm files it writes hold worktree-relative paths, and a
+      // build without that environment reading them fails on duplicate modules.
+      ...iosModuleCacheArgs({ derivedData, ccache: ccache.enabled }),
       'build',
     ],
     { cwd: iosDir, stdio: 'inherit', env: buildEnv({ CI: '1' }) }

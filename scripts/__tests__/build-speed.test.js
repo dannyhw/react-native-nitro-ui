@@ -17,6 +17,9 @@
 
 import { describe, expect, it } from '@jest/globals';
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 import {
   ccacheEnv,
   ccacheEffectiveForWorktrees,
@@ -25,7 +28,11 @@ import {
   abisMatch,
   gradleArchArgs,
   gradleCcacheArgs,
+  iosModuleCacheArgs,
+  iosModuleCacheDir,
   hostAbi,
+  PLAIN_MODULE_CACHE_NAME,
+  CCACHE_MODULE_CACHE_NAME,
   resolveAndroidAbis,
   withGradleProperties,
 } from '../build-speed-lib.mjs';
@@ -141,6 +148,62 @@ describe('ccache', () => {
     expect(ccacheRequested({})).toBe(true);
     expect(ccacheRequested({ NITRO_UI_CCACHE: '1' })).toBe(true);
     expect(ccacheRequested({ NITRO_UI_CCACHE: '0' })).toBe(false);
+  });
+});
+
+describe('iosModuleCacheDir', () => {
+  const derived = '/w/X6/example/ios/build';
+
+  it('gives the two kinds of build different module caches', () => {
+    const plain = iosModuleCacheDir({ derivedData: derived, ccache: false });
+    const cached = iosModuleCacheDir({ derivedData: derived, ccache: true });
+    // The whole point: one derived data path, two module caches. A `.pcm`
+    // written under CCACHE_BASEDIR holds worktree-relative paths, and a plain
+    // xcodebuild that then reads it fails with "module 'Foundation' is defined
+    // in both ..." - an error no amount of cleaning the derived data fixes.
+    expect(cached).not.toBe(plain);
+    // Each build still keeps its own directory: the fix is not one shared cache
+    // under a new name, which would clash all over again.
+    expect(plain).toBe(path.join(derived, PLAIN_MODULE_CACHE_NAME));
+    expect(cached).toBe(path.join(derived, CCACHE_MODULE_CACHE_NAME));
+    expect(PLAIN_MODULE_CACHE_NAME).toBe('ModuleCache.noindex');
+  });
+
+  it('passes the plain build the name Xcode would have used anyway', () => {
+    // The plain consumers (real-input, smoke, Xcode itself) are the ones that
+    // must not move: they keep the default, so a build by hand in the same
+    // derived data reads the same cache this suite writes.
+    expect(iosModuleCacheArgs({ derivedData: derived, ccache: false })).toEqual(
+      [`MODULE_CACHE_DIR=${derived}/ModuleCache.noindex`]
+    );
+    expect(iosModuleCacheArgs({ derivedData: derived, ccache: true })).toEqual([
+      `MODULE_CACHE_DIR=${derived}/ModuleCache-ccache.noindex`,
+    ]);
+  });
+
+  it('is decided by whether the build set the ccache env, at each call site', () => {
+    // A builder that forgot the argument would compile into the default cache
+    // with CCACHE_BASEDIR set, and the failure would surface in someone else's
+    // build. So the call sites are checked, not just the helper.
+    // Same repo-root convention the other source-reading tests use: jest runs
+    // from the checkout, and these are the checked-in scripts, not fixtures.
+    const read = (file) =>
+      fs.readFileSync(path.resolve(process.cwd(), 'scripts', file), 'utf8');
+    const ccacheBuilders = ['build-app.mjs', 'bench/build.mjs'];
+    for (const file of ccacheBuilders) {
+      expect(read(file)).toContain('iosModuleCacheArgs(');
+      expect(read(file)).toContain('ccache: ccache.enabled');
+    }
+    // Every one of these compiles without ccache, so each keeps the default
+    // name - naming the ccache directory here would only move the clash.
+    for (const file of ['real-input/ios.mjs', 'smoke/common.sh']) {
+      const text = read(file);
+      expect(text).not.toContain(CCACHE_MODULE_CACHE_NAME);
+      expect(text).not.toContain('ccache: true');
+    }
+    expect(read('real-input/ios.mjs')).toContain(
+      'iosModuleCacheArgs({ derivedData: derived, ccache: false })'
+    );
   });
 });
 
