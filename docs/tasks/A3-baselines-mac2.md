@@ -20,6 +20,10 @@ X8 keys baselines by machine: this run writes `bench/baselines/maintainer-mac-2/
    shutting the simulator down. Before each run, check `xcrun simctl list devices booted` and `ps`
    for other `gate.mjs`/build processes, and record anything you find. Don't stop processes you
    didn't start.
+2c. **Preflight** each platform with `bun bench --platform <p> --plan full --launches 8
+   --update-baseline --dry-run` (X9). It must print the expected key, `maintainer-mac-2` and a
+   baseline path under `bench/baselines/maintainer-mac-2/`, and exit 0 once the machine has settled.
+   Paste its output in the report.
 3. **iOS:** `bun bench --platform ios --plan full --launches 8 --update-baseline` on the leased
    iPhone 17 (iOS 27.0). Its key must be `ios27-sim-iphone17`. If the runner prints another key,
    stop and report it; don't mint under that key.
