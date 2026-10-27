@@ -38,5 +38,6 @@
 | H2a | Android `<Host>` for Slider, Progress, Button (+ N4) | Apex | Opus | merged (1 impl + 1 fix round; review MERGE WITH FIXES; bench indicative, busy machine) |
 | H2b | Android `<Host>` for SegmentedControl, Picker, DatePicker (popups/dialogs) | Apex | Opus | in progress |
 | X2 | Gate ledger (`scripts/gate.mjs`, per-platform code trees) + short report template | Apex | Opus | merged (1 impl + 1 fix round; review FIX ROUND, M1-M4 fixed; check 415 tests, Android harness 187/187) |
+| X6 | Build speed: stamp-fresh skip (ABI-aware), arm64-only local Android, Gradle build + configuration cache, ccache (own iOS module cache) | Apex | Opus | merged (1 impl + 2 fix rounds; 2nd-worktree Android 180→17 s, iOS 540→138 s; no-change rebuild <1 s; check 451, harness iOS 159 / Android 187, real-input 10/10 both) |
 | X7 | Machine doctor (`scripts/doctor.mjs`, `--setup`) + orchestrator playbook (`ORCHESTRATOR.md`) | orchestrator | — | merged (14 unit tests; setup proven against a scratch state dir) |
 | T17 | iOS `<Host>` spike | Apex | — | report merged; not better (D23) — iOS `<Host>` is a passthrough |

@@ -1,6 +1,6 @@
 # Recovery snapshot
 
-> **2026-10-27:** **0.2.0 published** (H2a Host controls; owner merged Version Packages #2 and approved; registry shasum = CI `51b609ff…`, tag `v0.2.0`). H2b ships as 0.3.0. X2 merged; X7 doctor merged. X6 (`nitroui-X6b`) and H2b (`nitroui-H2b`) in flight with Apex; each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). If sessions are gone, re-delegate each from its brief.
+> **2026-10-27:** **0.2.0 published** (H2a Host controls; owner merged Version Packages #2 and approved; registry shasum = CI `51b609ff…`, tag `v0.2.0`). H2b ships as 0.3.0. X2, X6 and X7 merged. H2b (`nitroui-H2b`) in flight with Apex; each takes devices through `scripts/lease.mjs` (pool: pair-a, pair-b). If sessions are gone, re-delegate each from its brief.
  — 2026-10-23 23:50 local
 
 Written because the machine may restart (at 23:41:02 CoreSimulatorService got SIGTERM and shut down
@@ -49,7 +49,7 @@ Decisions D1–D21 in `docs/DECISIONS.md`; follow-ups in `docs/tasks/FOLLOWUPS.m
 | R5 publish 0.1.0 | — | merged | **Published** `react-native-nitro-ui@0.1.0` (registry tarball sha256 = tested `fa1b7b96…`), tag `v0.1.0` + GitHub release | — |
 | X1 dev tooling (CI checks, build-app, lease) | — | merged | Done; CI enabled (checks / native-tests / build-android) | Next: X2 gate ledger + short reports, X3 registry codegen (after H2a), X4 conformance, X5 bench queue / second Mac. |
 | R6 Changesets release | — | merged | **Validated end to end:** 0.1.1 staged by CI via OIDC with provenance, approved by the owner, `v0.1.1` tagged at `152e059` by Release tag | — |
-| X6 build speed | `nitro-ui-worktrees/X6` · `task/X6-build-speed` (clean, no commits) | brief on main | Apex round in progress (`nitroui-X6b`) | Opus review, merge. |
+| X6 build speed | `nitro-ui-worktrees/X6` · `task/X6-build-speed` (clean, no commits) | brief on main | **Merged** (1 impl + 2 fix rounds; review MERGE WITH FIXES; all five merge gates green; package byte-identical) | — |
 | X2 gate ledger + short reports | `nitro-ui-worktrees/X2` · `task/X2-gate-ledger` (clean, no commits) | brief on main | **Merged** (1 impl + 1 fix round; review FIX ROUND → fixed; merge exception: no iOS/real-input, diff reaches no app binary) | — |
 | R5b post-publish smoke | — | merged | Done: all 6 rows green from the npm tarball | — |
 | H2a Host: Slider/Progress/Button | — | merged | Done; ships in the next minor via `.changeset/host-composes-more-controls.md` | Quiet bench re-run pending (bench machine). |
