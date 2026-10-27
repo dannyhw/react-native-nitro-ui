@@ -51,6 +51,13 @@ gates**, not witnesses for a particular line — said where it matters, in Red p
 `need --for merge`: `need: merge is satisfied on this code tree.`
 
 
+The exported ledger has one row this table does not show: an earlier `harness:ios` run
+**failed** (5 tests). It was this task's own two device runs overlapping in one worktree —
+`real-input:android` was in flight, and both shared `harness-timing/state.json` and a Metro
+port, so the harness read a machine-state file `published for Metro port 8295, not this
+run's 8296` and refused to judge four duration gates. Nothing pointed at the code: the same
+tree, run alone, is the green row above. Recorded here because the ledger keeps both rows.
+
 Real input (`12 / 12` on both platforms) adds the two cases the brief names: a real tap on a
 hosted `SegmentedControl` segment, and a real tap that opens a hosted `Picker`'s menu and picks a
 row. **A hosted `DatePicker`'s dialog has no real-input case on either platform** — it was not
