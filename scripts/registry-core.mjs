@@ -877,7 +877,11 @@ export function checkAutolinking(manifests, nitro) {
     }
     for (const platform of ['ios', 'android']) {
       const language = platform === 'ios' ? 'swift' : 'kotlin';
-      const claim = entry.all ?? entry[platform];
+      // nitrogen writes one entry per platform, or a single `all` entry when both
+      // share the rest of the claim. `language` only means something per platform
+      // (an `all` entry uses `iosLanguage` for the other one), so it is asserted where
+      // nitrogen states it for that platform rather than inferred across both.
+      const claim = entry[platform] ?? entry.all;
       if (claim == null) {
         problems.push(
           `nitro.json: ${manifest.hybridView} has no ${platform} autolinking entry - run bun run nitrogen`
@@ -889,9 +893,11 @@ export function checkAutolinking(manifests, nitro) {
           `nitro.json: ${manifest.hybridView}.${platform}.implementationClassName is "${claim.implementationClassName}", the manifest says "${manifest.implementation}"`
         );
       }
-      if (claim.language != null && claim.language !== language) {
+      const claimed =
+        claim.language ?? (platform === 'ios' ? claim.iosLanguage : undefined);
+      if (claimed != null && claimed !== language) {
         problems.push(
-          `nitro.json: ${manifest.hybridView}.${platform} claims language "${claim.language}", this library is ${language} there`
+          `nitro.json: ${manifest.hybridView}.${platform} claims language "${claimed}", this library is ${language} there`
         );
       }
     }
@@ -983,19 +989,42 @@ export function checkRealInputRows(manifests, controlIds) {
 }
 
 /**
- * The example app renders a screen for every tab the generated tab bar lists.
+ * The example app can actually render every tab the generated tab bar lists.
  *
- * The screens themselves are behaviour (they are how a harness test drives a
- * control), so this checks rather than generates: a tab that lands on a blank body is
- * a bug nobody sees until an unrelated test fails somewhere else.
+ * The screens are behaviour (they are how a harness test drives a control), so this
+ * checks rather than generates. It runs on the text the generator is *producing*, in
+ * two parts, because the two ways of getting it wrong are different:
+ *
+ * - the tab is listed and no branch of the screen switch renders it, or renders one
+ *   named for a different component. That is the `screens-body` region failing to
+ *   apply, or a hand edit inside it, and the symptom is a tab that lands on a blank
+ *   body;
+ * - the branch names `<XScreen />` and `example/src/XScreen.tsx` does not exist. Only
+ *   ever for a new control, since the file is hand-written: `bun run registry` refuses
+ *   rather than writing an App.tsx that does not compile.
  */
-export function checkExampleScreens(manifests, tabs) {
+export function checkExampleScreens(manifests, appText, readFile) {
   const problems = [];
-  const rendered = new Set(tabs);
+  const rendered = new Map([
+    ...renderedTabs(appText).map((match) => [match.tab, match.screen]),
+  ]);
   for (const manifest of manifests) {
-    if (!rendered.has(manifest.exampleTab)) {
+    const screen = rendered.get(manifest.exampleTab);
+    if (screen == null) {
       problems.push(
-        `example/src/App.tsx: tab "${manifest.exampleTab}" lists ${manifest.name} and no screen renders it, so the tab lands on a blank body`
+        `example/src/App.tsx: tab "${manifest.exampleTab}" lists ${manifest.name} and no branch of the screen switch renders it, so the tab lands on a blank body`
+      );
+      continue;
+    }
+    if (screen !== `${manifest.name}Screen`) {
+      problems.push(
+        `example/src/App.tsx: tab "${manifest.exampleTab}" renders <${screen} /> and the manifest's component is ${manifest.name}`
+      );
+    }
+    const path = `example/src/${screen}.tsx`;
+    if (readFile(path) == null) {
+      problems.push(
+        `${path}: ${manifest.name}'s tab renders this screen and the file does not exist - write it, the generator adds the tab and not the screen`
       );
     }
   }
@@ -1056,13 +1085,18 @@ function parseJson(text) {
   }
 }
 
-/** The tabs `example/src/App.tsx` renders a screen for. */
+/**
+ * The tabs `example/src/App.tsx` renders, with the screen each one renders.
+ *
+ * Read from the same switch region the generator writes, which is what lets the check
+ * notice that a tab and the component behind it have come apart.
+ */
 export function renderedTabs(appText) {
   return [
     ...(appText ?? '').matchAll(
-      /\{screen === '([a-z0-9]+)' \? <[A-Z]\w*Screen \/>/g
+      /\{screen === '([a-z0-9]+)' \? <([A-Z]\w*)Screen \/>/g
     ),
-  ].map((match) => match[1]);
+  ].map((match) => ({ tab: match[1], screen: `${match[2]}Screen` }));
 }
 
 /** The control ids `scripts/real-input/controls.mjs` publishes. */
@@ -1135,13 +1169,12 @@ export function planRegistry(manifests, readFile) {
   // The cross-checks - files something else owns, which a manifest has to agree with.
   // These are what turn a manifest from a note into a claim, and they are the ones the
   // generator *cannot* fix, so `bun run registry` reports them instead of pretending a
-  // `--write` finished the job. `nitro.json` is nitrogen's output, `src/index.ts` is
-  // hand-written, and an example screen is behaviour.
+  // `--write` finished the job.
   //
-  // The tables the generator does own (the sizing rows, the real-input rows) are not
-  // checked here: `--write` would be refusing to write the fix it is holding. They are
-  // asserted in `scripts/__tests__/registry.test.js`, where the assertion is not
-  // circular, together with the hand-written per-platform check tables.
+  // `nitro.json` and `src/index.ts` are checked against the bytes on disk, because
+  // nothing here writes them. The example check runs on the text this plan produces:
+  // the tab bar and the switch are generated, so checking the bytes on disk would
+  // report the tab a new component's own `--write` is about to add as a blank body.
   problems.push(
     ...checkAutolinking(manifests, parseJson(readFile('nitro.json')))
   );
@@ -1154,7 +1187,8 @@ export function planRegistry(manifests, readFile) {
   problems.push(
     ...checkExampleScreens(
       manifests,
-      renderedTabs(readFile('example/src/App.tsx'))
+      working.get('example/src/App.tsx') ?? readFile('example/src/App.tsx'),
+      readFile
     )
   );
   return { files, problems, checked: [...checked] };

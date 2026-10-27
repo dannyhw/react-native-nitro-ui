@@ -26,6 +26,7 @@
 # (`etc/package-files.txt`) - the Android manager list and both declared-fallback
 # tables, `HostChildren.ts`. Their diff is a change to the shipped artifact, and review
 # has to see it.
+nitro.json linguist-generated=true
 nitro-ui.sizing.json linguist-generated=true
 bench/src/plan.ts linguist-generated=true
 bench/src/types.ts linguist-generated=true
