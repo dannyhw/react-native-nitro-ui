@@ -674,7 +674,10 @@ const CHECKS = {
     await t.tapNode(anchor);
     t.log.checkEquals(
       'a real tap on the hosted anchor opens the menu as a popup window',
-      t.popupWindowCount(),
+      t.waitForPopupCount(
+        1,
+        'a real tap on the hosted anchor to open a popup window'
+      ),
       1
     );
     const row = t.waitForOption(PICK, 'the hosted menu to open');
@@ -700,7 +703,10 @@ const CHECKS = {
     await t.tapNode(row);
     t.log.checkEquals(
       'a real tap on a hosted menu row closes the popup',
-      t.popupWindowCount(),
+      t.waitForPopupCount(
+        0,
+        'a pick from the hosted menu to take its window down'
+      ),
       0
     );
     t.log.checkEquals(
@@ -720,7 +726,7 @@ const CHECKS = {
     await t.pressBack();
     t.log.checkEquals(
       'Back shuts the hosted popup (no window left behind)',
-      t.popupWindowCount(),
+      t.waitForPopupCount(0, 'the back gesture to take the hosted popup down'),
       0
     );
     t.log.checkEquals(
@@ -2521,6 +2527,45 @@ function makeContext(harness, log) {
      */
     popupWindowCount() {
       return harness.popupWindowCount();
+    },
+
+    /**
+     * Wait for the app's popup windows to become `expected`, and say how long the
+     * device took to get there.
+     *
+     * A popup comes down on the app's next frame and then on WindowManager's own
+     * schedule, so reading the count in the moment after a touch races both. Measured
+     * on the first run of the hosted-Picker check: the pick had reached JS - index 2
+     * was echoed - while `dumpsys window` still listed the window that pick had
+     * closed, and the check read a correct close as a leak.
+     *
+     * This waits for a number, not for a hope: a window the app never gives up still
+     * ends this check, and says what it counted. The absence reads that follow no
+     * touch stay immediate - nothing is in flight at those.
+     *
+     * @param {number} expected
+     * @param {string} description what should have happened
+     */
+    waitForPopupCount(expected, description) {
+      const startedAt = Date.now();
+      let count = harness.popupWindowCount();
+      while (count !== expected) {
+        if (Date.now() - startedAt > REACT_TIMEOUT) {
+          log.abort(
+            `timed out after ${String(REACT_TIMEOUT)}ms waiting for ${description} - ` +
+              `popup windows ${String(count)}, expected ${String(expected)}`
+          );
+        }
+        blockMs(100);
+        count = harness.popupWindowCount();
+      }
+      const waitedMs = Date.now() - startedAt;
+      if (waitedMs > 250) {
+        log.note(
+          `popup windows reached ${String(expected)} after ${String(waitedMs)}ms`
+        );
+      }
+      return count;
     },
 
     /**
