@@ -61,12 +61,10 @@ import {
 } from './build-speed-lib.mjs';
 import {
   DEFAULT_BUILD_WAIT_MINUTES,
-  buildLimitFrom,
-  buildSlotPaths,
+  buildSlotState,
   buildTaskName,
   takeBuildSlot,
 } from './build-slot-core.mjs';
-import { readJson, stateHome, statePaths } from './lease-core.mjs';
 import { installPods } from './pod-install.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
@@ -456,21 +454,6 @@ function buildAndroid({ abis, abisFrom, clean, log }) {
     }
   }
   return { artifact: apk, treeBefore };
-}
-
-/** Where this machine keeps its lease and build-slot state (X1, X9). */
-function buildSlotState(env = process.env) {
-  const home = stateHome(env);
-  const paths = buildSlotPaths(home);
-  const devicesFile = env.NITRO_UI_DEVICES ?? statePaths(home).devices;
-  let limit = { max: DEFAULT_MAX_CONCURRENT_BUILDS, note: null };
-  try {
-    limit = buildLimitFrom(readJson(devicesFile, null), devicesFile);
-  } catch {
-    // No readable pool file: the default (one build at a time) still applies,
-    // and doctor is the place that explains a missing devices.json.
-  }
-  return { ...paths, max: limit.max, devicesFile, note: limit.note };
 }
 
 /**

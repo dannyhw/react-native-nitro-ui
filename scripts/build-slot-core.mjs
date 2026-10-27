@@ -34,7 +34,13 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 
-import { readJson, withLock, writeJsonAtomic } from './lease-core.mjs';
+import {
+  readJson,
+  stateHome,
+  statePaths,
+  withLock,
+  writeJsonAtomic,
+} from './lease-core.mjs';
 
 /** One build at a time: a native build already uses most of a machine. */
 export const DEFAULT_MAX_CONCURRENT_BUILDS = 1;
@@ -113,6 +119,33 @@ export function buildLimitFrom(config, devicesFile) {
       value
     )}, which is not a positive integer - using the default (${String(max)})`,
   };
+}
+
+/**
+ * Where this machine keeps its build-slot state, and what the limit is.
+ *
+ * Lives here rather than in `build-app.mjs` because this module is importable by
+ * jest and that one is not: the first version of the limit note lived in the CLI,
+ * so no unit test could reach it, and it crashed on the *first line* of the first
+ * real build that ran it (`DEFAULT_MAX_CONCURRENT_BUILDS`, left unimported by a
+ * refactor) while every test stayed green. A function that decides whether a build
+ * may start gets to be one a test can call.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {{builds: string, lock: string, home: string, max: number, devicesFile: string, note: string | null}}
+ */
+export function buildSlotState(env = {}) {
+  const home = stateHome(env);
+  const paths = buildSlotPaths(home);
+  const devicesFile = env.NITRO_UI_DEVICES ?? statePaths(home).devices;
+  let limit = { max: DEFAULT_MAX_CONCURRENT_BUILDS, note: null };
+  try {
+    limit = buildLimitFrom(readJson(devicesFile, null), devicesFile);
+  } catch {
+    // Unreadable pool file: the default (one build at a time) still applies, and
+    // doctor is the place that explains a missing devices.json.
+  }
+  return { ...paths, max: limit.max, devicesFile, note: limit.note };
 }
 
 /**
