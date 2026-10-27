@@ -27,6 +27,13 @@
  * it running, because booting an emulator costs minutes and `quick` plans run
  * back to back; pass `--shutdown` to power off whatever *this* run booted (AGENTS.md:
  * never touch a device you did not start).
+ *
+ * `--check` and `--update-baseline` also need `NITRO_UI_MACHINE_LABEL`: a committed
+ * baseline is keyed by machine as well as by device
+ * (`bench/baselines/<label>/<deviceKey>.json`), and there is no other machine's file
+ * to fall back to, so an unusable label is refused before the run starts rather than
+ * at the end of a three-hour plan (scripts/bench/baseline.mjs). A plain run, which
+ * gates nothing against a baseline, does not need one.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -63,9 +70,16 @@ import {
   componentOf,
   scenarioActionOf,
 } from './lib.mjs';
+import {
+  machineLabelFromEnv,
+  machineLabelOf,
+  machineLabelProblem,
+  openBaselineForCheck,
+} from './baseline.mjs';
 import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
 import {
   baselinePath,
+  BASELINES_DIR,
   readJson,
   resolveCompareTarget,
   writeBaseline,
@@ -151,7 +165,9 @@ function collectMachine(platform, device, load) {
   const cpuCount = os.cpus().length;
   const machine = {
     // A label, not os.hostname(): results and baselines are committed to a public repo (D25).
-    hostname: process.env.NITRO_UI_MACHINE_LABEL ?? 'unlabelled',
+    // It also picks the directory this machine's baselines live in, so `main` refuses an
+    // unusable one before the run starts (see scripts/bench/baseline.mjs).
+    hostname: machineLabelFromEnv(),
     osPlatform: os.platform(),
     osRelease: os.release(),
     osVersion: os.version(),
@@ -606,6 +622,24 @@ export async function main(argv) {
     return;
   }
 
+  // A baseline is keyed by machine as well as by device (bench/baselines/README.md),
+  // so an unlabelled machine has no directory to write one to. Refuse on the same
+  // second as the load check below rather than three hours later, when the run would
+  // have discovered it - and an unusable label is refused for `--check` too, because
+  // there is no other machine's file to fall back to.
+  const minting = argv.includes('--update-baseline');
+  const labelProblem =
+    minting || argv.includes('--check')
+      ? machineLabelProblem(machineLabelFromEnv(), {
+          flag: minting ? '--update-baseline' : '--check',
+        })
+      : null;
+  if (labelProblem != null) {
+    log(`\n${labelProblem}`);
+    process.exitCode = 2;
+    return;
+  }
+
   // Fail fast on the load the run starts with (R4). A `--update-baseline` run has
   // to stay quiet for hours, so a machine that is already over the ceiling when
   // the command starts has no realistic chance of minting: say so in a second
@@ -806,7 +840,7 @@ export async function main(argv) {
   }
 
   if (argv.includes('--update-baseline')) {
-    const file = baselinePath(run.deviceKey);
+    const file = baselinePath(run.deviceKey, machineLabelOf(run));
     const outcome = writeBaseline(file, run, { force });
     if (outcome.written) {
       log(`Baseline written: ${path.relative(process.cwd(), file)}`);
@@ -827,33 +861,29 @@ export async function main(argv) {
   }
 
   if (argv.includes('--check')) {
-    const file = baselinePath(run.deviceKey);
-    if (!fs.existsSync(file)) {
-      log(
-        `\n--check: no baseline at ${file}. Create one with --update-baseline.`
-      );
+    const opened = openBaselineForCheck({
+      baselinesDir: BASELINES_DIR,
+      run,
+      display: (file) => path.relative(process.cwd(), file),
+      readJson,
+      isCompatibleBaseline,
+      schemaVersion: SCHEMA_VERSION,
+    });
+    if (opened.refusal != null) {
+      log(`\n${opened.refusal.message}`);
       exitCode = Math.max(exitCode, 2);
     } else {
-      const baseline = readJson(file);
-      if (!isCompatibleBaseline(baseline)) {
-        log(
-          `\n--check: ${file} is not a v${SCHEMA_VERSION} ratio baseline (found v${String(baseline?.schemaVersion)}).\n` +
-            '        The pre-D9 baseline gated on absolute rn-core drift and could never fire; re-record it with --update-baseline on a clean, quiet commit.'
-        );
-        exitCode = Math.max(exitCode, 2);
-      } else {
-        const section = comparisonSections({
-          run,
-          base: { cells: {} },
-          mode: 'check',
-          label: `${path.relative(process.cwd(), file)} (ratios to rn-core)`,
-          baseTable: baselineTable(baseline),
-          baseNoise: baselineNoise(baseline),
-        });
-        process.stdout.write(`\n${section.markdown}\n`);
-        appendSection(written.md, `\n${section.markdown}\n`);
-        exitCode = Math.max(exitCode, section.exitCode);
-      }
+      const section = comparisonSections({
+        run,
+        base: { cells: {} },
+        mode: 'check',
+        label: `${opened.display} (ratios to rn-core)`,
+        baseTable: baselineTable(opened.baseline),
+        baseNoise: baselineNoise(opened.baseline),
+      });
+      process.stdout.write(`\n${section.markdown}\n`);
+      appendSection(written.md, `\n${section.markdown}\n`);
+      exitCode = Math.max(exitCode, section.exitCode);
     }
   }
 
