@@ -26,6 +26,7 @@ import { afterAll, describe, expect, it } from '@jest/globals';
 import {
   LEDGER_VERSION,
   MERGE_GATES,
+  backgroundRecordPath,
   decideNeed,
   deviceFromEnv,
   countsForDisplay,
@@ -54,6 +55,11 @@ import {
   codeTreeDigest,
   contentHash,
   isCodeFile,
+  STILL_RUNNING_EXIT,
+  decideWait,
+  lastLogLine,
+  pidMayBeRunning,
+  runningBackgroundGates,
 } from '../gate-core.mjs';
 
 /** Tree digest used as "the code this ledger line was about" in these tests. */
@@ -1316,7 +1322,13 @@ function writeFakeRunner(dir) {
     '  echo "Test Suites: 7 passed, 7 total"\n' +
     '  echo "Tests: 7 passed, 7 total"\n' +
     'fi\n' +
-    'exit 0\n';
+    // For the background/`wait` cases: a gate that takes a while, and a gate that
+    // fails with a code that is not 1, so "exits with the gate\'s code" is a claim
+    // a test can actually falsify.
+    'if [ -n "$FAKE_PROGRESS" ]; then echo "$FAKE_PROGRESS"; fi\n' +
+    'if [ -n "$FAKE_SLEEP" ]; then sleep "$FAKE_SLEEP"; fi\n' +
+    'if [ -n "$FAKE_PROGRESS_AFTER" ]; then echo "$FAKE_PROGRESS_AFTER"; fi\n' +
+    'exit ${FAKE_EXIT:-0}\n';
   for (const name of ['node', 'bun']) {
     const shim = path.join(bin, name);
     fs.writeFileSync(shim, script);
@@ -1476,4 +1488,401 @@ describe('gate.mjs (the CLI, in a throwaway checkout)', () => {
     expect(need.stdout).toContain('harness:ios');
     expect(need.stdout).not.toContain('touches no platform-specific code');
   });
+});
+
+/**
+ * `decideWait` and friends, one read of a record at a time.
+ *
+ * The CLI cases below cover the same rules end to end; these exist for the two
+ * outcomes a live run cannot be made to produce on demand: a gate killed by a
+ * signal (its record says `exitCode: null`), and a pid owned by another user. Both
+ * are places where the tempting shortcut — `exitCode ?? 0`, or "we cannot signal
+ * it, so it is dead" — reports a failure as a pass, or a running gate as gone.
+ */
+describe('decideWait / pidMayBeRunning', () => {
+  const running = (overrides = {}) => ({
+    pid: 4242,
+    done: false,
+    gate: 'check',
+    ...overrides,
+  });
+
+  it('keeps waiting while the record is open and the process is alive', () => {
+    const decision = decideWait({
+      record: running(),
+      pidAlive: true,
+      elapsedMs: 30_000,
+      timeoutMs: 600_000,
+      progress: 'Compiling Switch.swift',
+    });
+    expect(decision.kind).toBe('running');
+    expect(decision.message).toContain('Compiling Switch.swift');
+  });
+
+  it('says "still running" at the budget instead of a failure', () => {
+    const decision = decideWait({
+      record: running(),
+      pidAlive: true,
+      elapsedMs: 600_001,
+      timeoutMs: 600_000,
+      progress: null,
+    });
+    expect(decision.kind).toBe('exit');
+    expect(decision.exitCode).toBe(STILL_RUNNING_EXIT);
+    expect(decision.message).toContain('still running');
+  });
+
+  it('reads a signal-killed gate as a failure, not as exit 0', () => {
+    const decision = decideWait({
+      record: running({
+        done: true,
+        exitCode: null,
+        signal: 'SIGKILL',
+        result: 'fail',
+      }),
+      pidAlive: false,
+      elapsedMs: 1_000,
+      timeoutMs: 600_000,
+      progress: null,
+    });
+    expect(decision.exitCode).toBe(1);
+    expect(decision.message).toContain('SIGKILL');
+  });
+
+  it('passes on a record that says it passed', () => {
+    expect(
+      decideWait({
+        record: running({ done: true, exitCode: 0, result: 'pass' }),
+        pidAlive: false,
+        elapsedMs: 0,
+        timeoutMs: 600_000,
+        progress: null,
+      }).exitCode
+    ).toBe(0);
+  });
+
+  it('names the last log line when a runner is gone without a result', () => {
+    const decision = decideWait({
+      record: running(),
+      pidAlive: false,
+      elapsedMs: 1_000,
+      timeoutMs: 600_000,
+      progress: 'Linking nitroui_b',
+      ledgerEntry: null,
+    });
+    expect(decision.exitCode).toBe(STILL_RUNNING_EXIT);
+    expect(decision.message).toContain('Linking nitroui_b');
+  });
+
+  it('answers from the ledger line when the record lies about being open', () => {
+    const failed = decideWait({
+      record: running(),
+      pidAlive: false,
+      elapsedMs: 1_000,
+      timeoutMs: 600_000,
+      progress: null,
+      ledgerEntry: { gate: 'check', result: 'fail', exitCode: 7 },
+    });
+    expect(failed.exitCode).toBe(7);
+    expect(failed.message).toContain('from the ledger line');
+    expect(
+      decideWait({
+        record: running(),
+        pidAlive: false,
+        elapsedMs: 1_000,
+        timeoutMs: 600_000,
+        progress: null,
+        ledgerEntry: { gate: 'check', result: 'pass', exitCode: 0 },
+      }).exitCode
+    ).toBe(0);
+  });
+
+  it('treats a pid it cannot signal as alive', () => {
+    expect(pidMayBeRunning(1, () => true)).toBe(true);
+    expect(
+      pidMayBeRunning(1, () => {
+        throw Object.assign(new Error('no such process'), { code: 'ESRCH' });
+      })
+    ).toBe(false);
+    expect(
+      pidMayBeRunning(1, () => {
+        throw Object.assign(new Error('not ours'), { code: 'EPERM' });
+      })
+    ).toBe(true);
+    // A missing pid is not "alive": `status` must not list a gate that never started.
+    expect(pidMayBeRunning(Number(undefined))).toBe(false);
+  });
+
+  it('lists only open records with a live pid as running', () => {
+    const rows = runningBackgroundGates(
+      [
+        { gate: 'check', pid: 1, done: false, logPath: 'a.log', startedAt: 5 },
+        { gate: 'harness:ios', pid: 2, done: true, logPath: 'b.log' },
+        { gate: 'bench', pid: 3, done: false, logPath: 'c.log' },
+        null,
+      ],
+      (pid) => pid === 1
+    );
+    expect(rows).toEqual([
+      { gate: 'check', pid: 1, startedAt: 5, logPath: 'a.log' },
+    ]);
+  });
+
+  it('takes the last real line of a log as progress, not a blank one', () => {
+    expect(lastLogLine('a\nb\n\n')).toBe('b');
+    expect(lastLogLine('')).toBeNull();
+    expect(lastLogLine(null)).toBeNull();
+    expect(lastLogLine(`x${'y'.repeat(300)}`)).toHaveLength(200);
+  });
+});
+
+/**
+ * `--background` and `wait` (X9 item 5).
+ *
+ * The behaviour being guarded is the one an agent depends on when it stops writing
+ * `sleep 300; tail` loops: starting a gate must return at once, `wait` must block
+ * and then leave with *the gate's* exit code, and the ledger must not be able to
+ * tell a backgrounded run from a foreground one. A backgrounded run that recorded
+ * nothing, or a `wait` that reported a failed gate as passed, is worse than the
+ * polling loop it replaces.
+ */
+describe('gate.mjs --background and wait', () => {
+  const cleanup = [];
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function checkout(files) {
+    const dir = makeCheckout(files);
+    cleanup.push(dir);
+    return dir;
+  }
+
+  afterAll(() => {
+    for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** The one background record in the checkout, throwing when there is not one. */
+  function theRecord(dir) {
+    const logs = path.join(dir, '.gates', 'logs');
+    const names = fs.existsSync(logs)
+      ? fs.readdirSync(logs).filter((name) => name.endsWith('.gate.json'))
+      : [];
+    if (names.length !== 1) {
+      throw new Error(
+        `expected exactly one background record, found ${names.length}`
+      );
+    }
+    return JSON.parse(fs.readFileSync(path.join(logs, names[0]), 'utf8'));
+  }
+
+  /** Polls until the record says the gate is done (or gives up loudly). */
+  async function waitForRecordToClose(dir, timeoutMs = 30_000) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const record = theRecord(dir);
+      if (record.done === true) return record;
+      if (Date.now() > deadline) {
+        throw new Error(
+          `background record never closed: ${JSON.stringify(record)}`
+        );
+      }
+      await sleep(100);
+    }
+  }
+
+  const iosOnly = {
+    'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
+  };
+
+  it('starts detached, records the same line a foreground run would, and wait reports it', async () => {
+    const dir = checkout(iosOnly);
+    const startedAt = Date.now();
+    const started = runCli(dir, ['harness:android', '--background'], {
+      // Longer than any plausible launcher overhead, so "returned early" below is
+      // a measurement and not a coincidence.
+      FAKE_SLEEP: '5',
+      FAKE_PROGRESS: 'Compiling Switch.swift',
+    });
+    expect(started.status).toBe(0);
+    expect(started.stdout).toContain(
+      'harness:android started in the background'
+    );
+    // It returned while the gate was still mid-run, so the elapsed time is far
+    // short of the sleep the gate itself takes.
+    expect(Date.now() - startedAt).toBeLessThan(3_000);
+    // The gate's output went to the log, not into the launcher's terminal. If the
+    // launcher waited and echoed, the summary would be here as well.
+    expect(started.stdout).not.toContain('fake runner');
+
+    const record = theRecord(dir);
+    expect(record.gate).toBe('harness:android');
+    expect(record.done).toBe(false);
+    expect(typeof record.pid).toBe('number');
+    expect(fs.existsSync(path.join(dir, record.logPath))).toBe(true);
+
+    // `status` must not call a run that is happening "missing".
+    const status = runCli(dir, ['status']);
+    expect(status.stdout).toContain('running harness:android');
+    expect(status.stdout).toMatch(/pid \d+/);
+
+    const wait = runCli(dir, ['wait', '--gate', 'harness:android']);
+    expect(wait.status).toBe(0);
+    // Progress comes from the log, which is the whole point of recording the path.
+    expect(wait.stderr).toContain('Compiling Switch.swift');
+    expect(wait.stderr).toContain('passed');
+
+    const lines = ledgerLines(dir);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].gate).toBe('harness:android');
+    expect(lines[0].result).toBe('pass');
+    expect(lines[0].exitCode).toBe(0);
+    // The line points at the same log `wait` read, which is what makes a
+    // backgrounded run auditable after the fact.
+    expect(lines[0].logPath).toBe(record.logPath);
+    // And it is the *same* line shape a foreground run writes, including the test
+    // counts parsed out of the log exactly once. A run that echoed to the log
+    // twice would parse two summaries here.
+    expect(lines[0].summaries).toHaveLength(1);
+    expect(lines[0].counts.tests.total).toBe(391);
+    expect(theRecord(dir).done).toBe(true);
+  }, 90_000);
+
+  it('exits with the gate’s own failing code, not a generic one', async () => {
+    const dir = checkout(iosOnly);
+    const started = runCli(dir, ['check', '--background'], {
+      FAKE_SLEEP: '1',
+      FAKE_EXIT: '7',
+    });
+    expect(started.status).toBe(0);
+    await waitForRecordToClose(dir);
+    const wait = runCli(dir, ['wait', '--gate', 'check']);
+    // 7, not 1 and not 0: a caller branching on the code has to see the gate's.
+    expect(wait.status).toBe(7);
+    expect(wait.stderr).toContain('failed with exit 7');
+    const lines = ledgerLines(dir);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].result).toBe('fail');
+    expect(lines[0].exitCode).toBe(7);
+  }, 90_000);
+
+  it('reports "still running" as its own exit code at the timeout, leaving the gate alone', async () => {
+    const dir = checkout(iosOnly);
+    const started = runCli(dir, ['check', '--background'], { FAKE_SLEEP: '8' });
+    expect(started.status).toBe(0);
+    // ~1.2 s of budget against an 8 s gate: the answer has to be "not finished",
+    // which is a different answer from "failed" and needs its own code.
+    const wait = runCli(dir, [
+      'wait',
+      '--gate',
+      'check',
+      '--timeout-minutes',
+      '0.02',
+    ]);
+    expect(wait.status).toBe(13);
+    expect(wait.stderr).toContain('still running');
+    // It was left running, and that is visible: the record is still open and the
+    // pid still exists, which is what `status` reads.
+    const record = theRecord(dir);
+    expect(record.done).toBe(false);
+    let alive = true;
+    try {
+      process.kill(Number(record.pid), 0);
+    } catch {
+      alive = false;
+    }
+    expect(alive).toBe(true);
+    await waitForRecordToClose(dir);
+  }, 120_000);
+
+  it('reports a gate whose process is gone as "no result", without burning the timeout', async () => {
+    const dir = checkout(iosOnly);
+    // A record left behind by a run that was killed hard: no `done`, and no
+    // process to ask. The wrong answer is to poll for 45 minutes on a corpse, and
+    // the other wrong answer is to call it a pass.
+    const deadPid = spawnSync(process.execPath, ['-e', '']).pid;
+    const logPath = path.join('.gates', 'logs', 'ghost-check.log');
+    fs.mkdirSync(path.dirname(path.join(dir, logPath)), { recursive: true });
+    fs.writeFileSync(path.join(dir, logPath), 'gate: check\nmid-compile\n');
+    fs.writeFileSync(
+      backgroundRecordPath(path.join(dir, logPath)),
+      JSON.stringify({
+        version: 1,
+        gate: 'check',
+        pid: deadPid,
+        startedAt: Date.now(),
+        logPath,
+        done: false,
+      })
+    );
+    const started = Date.now();
+    const wait = runCli(dir, [
+      'wait',
+      '--gate',
+      'check',
+      '--timeout-minutes',
+      '10',
+    ]);
+    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(wait.status).toBe(13);
+    expect(wait.stderr).toContain('gone without recording a result');
+    expect(wait.stderr).toContain('mid-compile');
+    expect(ledgerLines(dir)).toEqual([]);
+  }, 60_000);
+
+  it('trusts the ledger line when a finished run’s record still says running', () => {
+    const dir = checkout(iosOnly);
+    // The resurrection race: a gate finishes so fast that the launcher's "here is
+    // my pid" write lands after the run's "I am done" write. `wait` that believed
+    // the record would report a passed gate as gone (or keep waiting), so the
+    // ledger line is what it reads instead.
+    expect(runCli(dir, ['check']).status).toBe(0);
+    const recorded = ledgerLines(dir)[0];
+    const deadPid = spawnSync(process.execPath, ['-e', '']).pid;
+    const recordPath = backgroundRecordPath(path.join(dir, recorded.logPath));
+    fs.writeFileSync(
+      recordPath,
+      JSON.stringify({
+        version: 1,
+        gate: 'check',
+        pid: deadPid,
+        startedAt: Date.now(),
+        logPath: recorded.logPath,
+        done: false,
+      })
+    );
+    const wait = runCli(dir, ['wait', '--gate', 'check']);
+    expect(wait.status).toBe(0);
+    expect(wait.stderr).toContain('from the ledger line');
+  }, 60_000);
+
+  it('refuses to wait for a gate that was never started', () => {
+    const dir = checkout(iosOnly);
+    const wait = runCli(dir, ['wait']);
+    expect(wait.status).toBe(2);
+    expect(wait.stderr).toContain('no background gate');
+    expect(runCli(dir, ['wait', '--gate', 'bench']).stderr).toContain(
+      'named bench'
+    );
+    const bad = runCli(dir, ['wait', '--timeout-minutes', '0']);
+    expect(bad.status).toBe(2);
+    expect(bad.stderr).toContain('positive number');
+  }, 60_000);
+
+  it('passes a filtered run through to the gate, recorded under its own name', async () => {
+    const dir = checkout(iosOnly);
+    // `--background` sits before the separator and must not reach the gate's own
+    // command line: `harness:android --background -- ColdSizing` used to hand the
+    // flag to the runner as an argument of its own.
+    const started = runCli(dir, [
+      'harness:android',
+      '--background',
+      '--',
+      'ColdSizing',
+    ]);
+    expect(started.status).toBe(0);
+    const wait = runCli(dir, ['wait', '--gate', 'harness:android:ColdSizing']);
+    expect(wait.status).toBe(0);
+    const lines = ledgerLines(dir);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].gate).toBe('harness:android:ColdSizing');
+  }, 90_000);
 });

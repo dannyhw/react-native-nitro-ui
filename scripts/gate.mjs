@@ -49,32 +49,42 @@ import process from 'node:process';
 import { finished } from 'node:stream/promises';
 
 import {
+  DEFAULT_WAIT_MINUTES,
   LEDGER_DIR,
   MERGE_GATES,
   PLATFORMS,
+  STILL_RUNNING_EXIT,
+  WAIT_PROGRESS_INTERVAL_MS,
+  backgroundRecordPath,
   changedPathsGitArgs,
   decideNeed,
+  decideWait,
   deviceFromEnv,
   explainNeedRow,
+  lastLogLine,
   ledgerLineFromRun,
   ledgerRelativePath,
   parseLedger,
   parseTestCounts,
   parseTestSummaries,
+  pidMayBeRunning,
   platformTreesFromEntries,
   platformsOwningFile,
   platformsTouchedByPaths,
   renderGateTable,
   resolveGate,
+  runningBackgroundGates,
   summarizeGates,
   summarizeLoad,
 } from './gate-core.mjs';
 import { contentHash, isCodeFile } from './app-stamp-core.mjs';
+import { writeJsonAtomic } from './lease-core.mjs';
 import { currentCodeTree, repoRootOf } from './app-stamp.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
 const USAGE =
-  'usage: node scripts/gate.mjs <gate> [-- <args>]\n' +
+  'usage: node scripts/gate.mjs <gate> [-- <args>] [--background]\n' +
+  '       node scripts/gate.mjs wait [--gate <name>] [--timeout-minutes N]\n' +
   '       node scripts/gate.mjs status [--for review|merge]\n' +
   '       node scripts/gate.mjs need --for review|merge [--base <ref>]\n' +
   '       node scripts/gate.mjs table [--for review|merge] [--full]\n' +
@@ -87,7 +97,15 @@ const USAGE =
   '        does not satisfy the full gate; `status` and `table` default to the\n' +
   '        stricter review view, `--for merge` shows the merge bar)\n' +
   '       (a device gate reads its device from `node scripts/lease.mjs acquire`;\n' +
-  '        a harness/real-input gate needs app.stamp from scripts/build-app.mjs)\n';
+  '        a harness/real-input gate needs app.stamp from scripts/build-app.mjs)\n' +
+  '\n' +
+  '       (--background starts a gate detached and returns at once, so waiting\n' +
+  '        costs no polling; `wait` then blocks until it ends, prints a progress\n' +
+  "        line a minute, and exits with the gate's own code. Exit 13 means\n" +
+  '        "still running" - at the --timeout-minutes budget, or on a runner that\n' +
+  '        died without recording a result. The ledger line is written by the same\n' +
+  '        code either way, so a backgrounded gate is evidence exactly as a\n' +
+  '        foreground one is)\n';
 
 /**
  * How often a running gate samples the load average. R4's lesson is that one
@@ -104,6 +122,13 @@ const LOAD_SAMPLE_INTERVAL_MS = 15_000;
  * signal is re-raised on self afterwards so the exit status is still the signal.
  */
 const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'];
+
+/**
+ * The flags `gate.mjs` itself owns on a gate run, which must never reach the
+ * gate's command line. `--background=true` is accepted because `--for=review`
+ * style spelling is how the rest of this CLI's flags are written.
+ */
+const BACKGROUND_FLAGS = ['--background', '--background=true'];
 
 const repoRoot = repoRootOf();
 
@@ -140,6 +165,273 @@ function appendLedgerLine(branch, line) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
   return file;
+}
+
+/* ---------------------------- backgrounded gates --------------------------- */
+
+/**
+ * Reads a background gate's record, or null when it is missing or unreadable.
+ *
+ * Unreadable is null rather than a throw: `wait` polls this file while another
+ * process is writing it, and `writeJsonAtomic` makes a torn read rare but not
+ * impossible (a rename is atomic, a reader can still land between the old file
+ * leaving and the new one arriving on some filesystems). Treating that as "no
+ * record yet" makes `wait` poll again; treating it as an error would turn a
+ * 1-in-a-million race into a red gate.
+ *
+ * @param {string} file
+ * @returns {object | null}
+ */
+function readBackgroundRecord(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Starts a gate detached, and returns straight away.
+ *
+ * Why (X9): implementers polled background gates with `sleep N; tail` loops, which
+ * is both the wrong shape (it cannot see the exit code, so it re-reads the ledger
+ * by hand and can misread it) and a waste of a turn per poll. `--background`
+ * re-runs *this same command* without the flag, in its own session, with stdout
+ * and stderr pointed at the log the ledger will name - so:
+ *
+ *   - the ledger line is written by the identical code path a foreground run uses
+ *     (one implementation of "what a gate run records", not two);
+ *   - `wait` has a pid, a log and a record to read, and can therefore report the
+ *     gate's real exit code.
+ *
+ * `detached` plus `unref` is what survives the caller's shell: the gate must not
+ * die when the agent's command finishes, and it must not hold the launcher open.
+ *
+ * @param {string} name
+ * @param {object} resolved
+ * @returns {number} 0 once the child is confirmed running
+ */
+async function startBackgroundGate(name, resolved) {
+  const startedAt = Date.now();
+  const logsDir = path.join(repoRoot, LEDGER_DIR, 'logs');
+  fs.mkdirSync(logsDir, { recursive: true });
+  const logName = `${name.replaceAll(/[^\w.-]+/g, '+')}-${new Date(startedAt).toISOString().replaceAll(':', '-')}.log`;
+  const logPath = path.join(LEDGER_DIR, 'logs', logName);
+  const absoluteLog = path.join(repoRoot, logPath);
+  const recordPath = backgroundRecordPath(absoluteLog);
+  const logHandle = fs.openSync(absoluteLog, 'a');
+
+  // Written *before* the child starts: a `wait` that runs one second later must
+  // find a pid, not an empty directory and a mystery. `done: false` is explicit so
+  // a reader never has to guess whether a missing field means "running" or "old
+  // format".
+  writeJsonAtomic(recordPath, {
+    version: 1,
+    gate: name,
+    command: resolved.argv.join(' '),
+    pid: null,
+    startedAt,
+    logPath,
+    recordPath,
+    done: false,
+    branch: currentBranch(),
+  });
+
+  // Re-run *this same command* minus --background, spelled from argv[1] rather
+  // than from the caller's own argv: assuming the flag was the last argument would
+  // silently drop whatever else happened to sit there.
+  const childArgs = [
+    process.argv[1],
+    ...process.argv.slice(2).filter((arg) => !BACKGROUND_FLAGS.includes(arg)),
+  ];
+  const child = spawn(process.execPath, childArgs, {
+    cwd: repoRoot,
+    env: { ...process.env, NITRO_UI_GATE_LOG: absoluteLog },
+    // 'ignore' rather than an fd we open ourselves: Node owns and closes it.
+    stdio: ['ignore', logHandle, logHandle],
+    detached: true,
+  });
+  fs.closeSync(logHandle);
+
+  if (child.pid == null) {
+    writeJsonAtomic(recordPath, {
+      ...readBackgroundRecord(recordPath),
+      done: true,
+      finishedAt: Date.now(),
+      exitCode: 1,
+      error: 'could not start the gate process',
+    });
+    process.stderr.write(`gate: could not start ${name} in the background\n`);
+    return 1;
+  }
+
+  // The record is rewritten with the real pid the moment it is known, and the
+  // launcher then waits briefly for the child to either start cleanly or fail
+  // immediately: a mistyped gate name should be reported now, not discovered by
+  // `wait` five minutes later as a corpse.
+  //
+  // Only while the record still says "not done". A gate that finishes inside the
+  // few milliseconds between spawn and this write would otherwise have its own
+  // `done: true` record overwritten back to a running one by the parent - a race
+  // that turns a passed gate into a phantom. `wait` also cross-checks the ledger,
+  // so a resurrected record cannot lie about the result; not creating one is the
+  // difference between a guarded race and an unguarded one.
+  const before = readBackgroundRecord(recordPath);
+  if (before?.done !== true) {
+    writeJsonAtomic(recordPath, { ...before, pid: child.pid });
+  }
+  const earlyExit = await new Promise((resolvePromise) => {
+    // Deliberately *not* unref'd, and `child.unref()` happens after this await:
+    // unref'd both the timer and the child while still awaiting the child's `exit`
+    // event left the event loop empty, so the launcher exited with an unsettled
+    // top-level await (Node's own exit code 13) and no answer at all. The handle
+    // has to stay live for the window, then go, or the launcher would never return
+    // while its detached child runs.
+    const timer = setTimeout(() => resolvePromise(null), 750);
+    child.once('exit', (code, signal) => {
+      clearTimeout(timer);
+      resolvePromise({ code, signal });
+    });
+  });
+  child.unref();
+  if (earlyExit != null) {
+    // Two different things can end this early: a gate that could not start at all,
+    // and a gate that *finished* inside the launcher's own observation window (a
+    // stamp-fresh `check`, or a fixture that exits instantly). The record tells them
+    // apart, because only the finished one wrote it. Collapsing the two would report
+    // a passed gate as "exited immediately" with a failure code - and, worse, hand
+    // back a code that contradicts the ledger line sitting on disk.
+    const after = readBackgroundRecord(recordPath);
+    if (after?.done === true) {
+      const code =
+        after.exitCode == null
+          ? after.result === 'pass'
+            ? 0
+            : 1
+          : Number(after.exitCode);
+      process.stderr.write(
+        `gate: ${name} finished before this launcher handed off (exit ${String(code)}) - see ${logPath}\n`
+      );
+      return code;
+    }
+    process.stderr.write(
+      `gate: ${name} exited immediately with ${String(earlyExit.code ?? earlyExit.signal)} - see ${logPath}\n`
+    );
+    writeJsonAtomic(recordPath, {
+      ...after,
+      done: true,
+      finishedAt: Date.now(),
+      exitCode: earlyExit.code ?? 1,
+      signal: earlyExit.signal,
+      error: 'exited immediately',
+    });
+    return 1;
+  }
+
+  process.stdout.write(
+    `gate: ${name} started in the background (pid ${String(child.pid)})\n` +
+      `gate: log    ${logPath}\n` +
+      `gate: wait   node scripts/gate.mjs wait --gate ${name}\n`
+  );
+  return 0;
+}
+
+/**
+ * Blocks until a backgrounded gate finishes, then exits with *its* code.
+ *
+ * One progress line a minute (elapsed plus the log's last line) rather than a
+ * `sleep; tail` loop the caller has to write: the point is that waiting for a
+ * twenty-minute gate costs one blocked command and a predictable exit code.
+ *
+ * Exit codes: the gate's own, or `STILL_RUNNING_EXIT` for "not finished yet"
+ * (timeout, or a runner that died without recording). A caller can branch on that
+ * difference, which is the whole reason for the distinct code.
+ *
+ * @param {object} options
+ * @param {string | null} options.gate which gate to wait for (default: the newest)
+ * @param {number} options.timeoutMinutes
+ */
+async function commandWait({ gate, timeoutMinutes }) {
+  const timeoutMs = timeoutMinutes * 60_000;
+  const startedWaiting = Date.now();
+  const logsDir = path.join(repoRoot, LEDGER_DIR, 'logs');
+  const records = listBackgroundRecords(logsDir).filter(
+    (record) => gate == null || record.gate === gate
+  );
+  if (records.length === 0) {
+    process.stderr.write(
+      `wait: no background gate${gate == null ? '' : ` named ${gate}`} in ${path.relative(repoRoot, logsDir) || '.'}\n` +
+        'wait: start one with `node scripts/gate.mjs <gate> --background`\n'
+    );
+    return 2;
+  }
+  // Newest first: `wait` with no `--gate` means "the thing I just started", and
+  // several runs of the same gate name in one branch is normal (a re-run after a
+  // fix), so "latest" has to be the tie-break.
+  records.sort((a, b) => Number(b.startedAt ?? 0) - Number(a.startedAt ?? 0));
+  const target = records[0];
+  const absoluteLog = path.join(repoRoot, target.logPath ?? 'dev/null');
+  process.stderr.write(
+    `wait: ${target.gate} (pid ${String(target.pid ?? '?')}) - budget ${String(timeoutMinutes)} min\n`
+  );
+
+  let printedAt = 0;
+  for (;;) {
+    const elapsedMs = Date.now() - startedWaiting;
+    const record = readBackgroundRecord(target.recordPath) ?? target;
+    // The ledger line for *this* run, matched on its log path - the one field that
+    // is unique per run (a gate name repeats across re-runs on the same tree). It
+    // is both the fallback answer when a runner dies and the proof that a
+    // backgrounded gate recorded exactly what a foreground one would.
+    const ledgerEntry = readLedger(currentBranch()).entries.find(
+      (entry) => entry.logPath === target.logPath
+    );
+    const decision = decideWait({
+      record,
+      pidAlive:
+        record.done === true || pidMayBeRunning(Number(record.pid ?? -1)),
+      elapsedMs,
+      timeoutMs,
+      progress: lastLogLine(
+        fs.existsSync(absoluteLog) ? fs.readFileSync(absoluteLog, 'utf8') : ''
+      ),
+      ledgerEntry: ledgerEntry ?? null,
+    });
+    const firstOfMinute = elapsedMs - printedAt >= WAIT_PROGRESS_INTERVAL_MS;
+    if (decision.kind === 'running') {
+      if (printedAt === 0 || firstOfMinute) {
+        printedAt = elapsedMs;
+        process.stderr.write(`gate: ${decision.message}\n`);
+      }
+      await new Promise((resolvePromise) =>
+        setTimeout(resolvePromise, Math.min(2_000, WAIT_PROGRESS_INTERVAL_MS))
+      );
+      continue;
+    }
+    process.stderr.write(
+      `gate: ${decision.message}${decision.kind === 'exit' && decision.exitCode === STILL_RUNNING_EXIT ? '' : ` (${String(Math.round(elapsedMs / 1000))}s)`}\n`
+    );
+    return decision.exitCode;
+  }
+}
+
+/**
+ * Every background record in the logs directory, newest files first.
+ *
+ * @param {string} logsDir
+ * @returns {object[]}
+ */
+function listBackgroundRecords(logsDir) {
+  let names = [];
+  try {
+    names = fs.readdirSync(logsDir);
+  } catch {
+    return [];
+  }
+  return names
+    .filter((name) => name.endsWith('.gate.json'))
+    .map((name) => readBackgroundRecord(path.join(logsDir, name)))
+    .filter((record) => record != null);
 }
 
 /**
@@ -229,7 +521,7 @@ function changedCodePaths({ base }) {
  * on one tree and finished on another be read as evidence about either. Both are
  * recorded, and a line where they differ is never green (N1).
  */
-async function runGate(name, resolved) {
+async function runGate(name, resolved, options = {}) {
   const branch = currentBranch();
   const before = readTrees();
   const device = deviceFromEnv(process.env, resolved.platform);
@@ -242,14 +534,27 @@ async function runGate(name, resolved) {
 
   const logsDir = path.join(repoRoot, LEDGER_DIR, 'logs');
   fs.mkdirSync(logsDir, { recursive: true });
+  // A backgrounded run's log path comes from the record the launcher wrote, so
+  // `wait` knows where to read progress from before this process has printed a
+  // thing. Foreground runs still name their own log.
   const logName = `${name.replaceAll(/[^\w.-]+/g, '+')}-${new Date(startedAt).toISOString().replaceAll(':', '-')}.log`;
-  const logPath = path.join(LEDGER_DIR, 'logs', logName);
-  const logStream = fs.createWriteStream(path.join(repoRoot, logPath));
+  const logPath = options.logPath ?? path.join(LEDGER_DIR, 'logs', logName);
+  // Appending for a backgrounded run: the launcher already has that file open in
+  // append mode for this process's own stdout/stderr, and truncating it here would
+  // erase the lines that explain a crash.
+  const logStream = fs.createWriteStream(path.join(repoRoot, logPath), {
+    flags: options.logPath == null ? 'w' : 'a',
+  });
   let logText = '';
+  // A backgrounded run's stdout *is* the log file, so echoing there as well as
+  // writing the stream would put every line in the log twice - and the ledger's
+  // test counts come from this same text, so a doubled summary would be parsed
+  // twice. Foreground runs still echo to the terminal.
+  const echo = options.logPath == null;
   const tee = (chunk, output) => {
     logText += String(chunk);
     logStream.write(chunk);
-    output.write(chunk);
+    if (echo) output.write(chunk);
   };
 
   const cwd =
@@ -346,6 +651,21 @@ async function runGate(name, resolved) {
     signal: exit.signal,
   });
   const file = appendLedgerLine(branch, line);
+  // A backgrounded run's record says "done" only now: the ledger line is on disk,
+  // so a `wait` that returns on this signal can read the row back and `need` can
+  // act on it. Marking it done earlier would report a gate whose evidence is not
+  // there yet.
+  if (options.recordPath != null) {
+    writeJsonAtomic(options.recordPath, {
+      ...readBackgroundRecord(options.recordPath),
+      done: true,
+      finishedAt: Date.now(),
+      exitCode: exit.code ?? (exit.signal != null ? null : 1),
+      signal: exit.signal,
+      result,
+      ledgerLine: line,
+    });
+  }
 
   const suffix =
     after.tree === before.tree
@@ -412,6 +732,20 @@ function commandStatus({ stage }) {
   process.stdout.write(
     `\n${String(green)} green, ${String(rows.filter((r) => r.state === 'red').length)} red, ${String(rows.filter((r) => r.state === 'stale').length)} stale, ${String(rows.filter((r) => r.state === 'missing').length)} missing for this code tree (${stage})\n`
   );
+  // A gate started with `--background` is *happening right now*, and a row that
+  // says "missing" for it is the most misleading thing this command could print
+  // while someone decides whether to start the gate they are already running.
+  for (const entry of runningBackgroundGates(
+    listBackgroundRecords(path.join(repoRoot, LEDGER_DIR, 'logs'))
+  )) {
+    const seconds =
+      entry.startedAt == null
+        ? '?'
+        : String(Math.round((Date.now() - entry.startedAt) / 1000));
+    process.stdout.write(
+      `running ${entry.gate} (pid ${String(entry.pid)}, ${seconds}s so far) - node scripts/gate.mjs wait --gate ${entry.gate}\n`
+    );
+  }
   return 0;
 }
 
@@ -592,6 +926,43 @@ async function main(argv) {
     }
     return commandNeed({ stage, base });
   }
+  if (command === 'wait') {
+    let gate = null;
+    let timeoutMinutes = DEFAULT_WAIT_MINUTES;
+    for (let index = 0; index < rest.length; index += 1) {
+      const argument = rest[index];
+      if (argument === '--gate') {
+        gate = rest[index + 1] ?? null;
+        if (gate == null) {
+          process.stderr.write(`wait: --gate needs a gate name\n${USAGE}`);
+          return 2;
+        }
+        index += 1;
+      } else if (argument === '--timeout-minutes') {
+        const raw = rest[index + 1] ?? null;
+        timeoutMinutes = Number(raw);
+        if (!Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) {
+          process.stderr.write(
+            `wait: --timeout-minutes needs a positive number of minutes (got ${String(raw)})\n${USAGE}`
+          );
+          return 2;
+        }
+        index += 1;
+      } else if (argument.startsWith('--timeout-minutes=')) {
+        timeoutMinutes = Number(argument.slice('--timeout-minutes='.length));
+        if (!Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) {
+          process.stderr.write(
+            `wait: --timeout-minutes needs a positive number\n${USAGE}`
+          );
+          return 2;
+        }
+      } else {
+        process.stderr.write(`wait: unknown argument ${argument}\n${USAGE}`);
+        return 2;
+      }
+    }
+    return await commandWait({ gate, timeoutMinutes });
+  }
   if (command === 'export') {
     let task = process.env.NITRO_UI_TASK ?? null;
     let out = null;
@@ -613,14 +984,34 @@ async function main(argv) {
 
   // A gate is a name in this table, not a shell command: passing through whatever
   // arrived would make `gate.mjs rm -rf` a thing that works.
+  //
+  // `--background` is pulled out before the separator check, so both
+  // `harness:android --background -- ColdSizing` and its position after the gate
+  // name work; anything *after* `--` is left alone, because past the separator the
+  // arguments belong to the gate's own command line and are not ours to eat.
   const separator = rest.indexOf('--');
-  const extraArgs = separator === -1 ? rest : rest.slice(separator + 1);
-  if (separator !== -1 && rest.slice(0, separator).length > 0) {
+  const ownArgs = separator === -1 ? rest : rest.slice(0, separator);
+  const background =
+    ownArgs.includes('--background') || ownArgs.includes('--background=true');
+  if (
+    separator !== -1 &&
+    ownArgs.filter((arg) => !BACKGROUND_FLAGS.includes(arg)).length > 0
+  ) {
     process.stderr.write(
-      `gate: arguments before -- are not supported: ${rest.slice(0, separator).join(' ')}\n${USAGE}`
+      `gate: arguments before -- are not supported: ${ownArgs
+        .filter((arg) => !BACKGROUND_FLAGS.includes(arg))
+        .join(' ')}\n${USAGE}`
     );
     return 2;
   }
+  // Past the separator the arguments belong to the gate's own command line, so they
+  // are passed through untouched; before it, the flags this script owns are taken
+  // out - leaving `--background` in would reach `check` as an argument of its own,
+  // which it rightly refuses.
+  const extraArgs =
+    separator === -1
+      ? ownArgs.filter((arg) => !BACKGROUND_FLAGS.includes(arg))
+      : rest.slice(separator + 1);
   let resolved;
   try {
     resolved = resolveGate(command, extraArgs);
@@ -628,7 +1019,38 @@ async function main(argv) {
     process.stderr.write(`gate: ${String(error?.message ?? error)}\n${USAGE}`);
     return 2;
   }
-  return await runGate(resolved.gate, resolved);
+  if (background) return await startBackgroundGate(resolved.gate, resolved);
+  return await runGate(resolved.gate, resolved, backgroundOptions());
+}
+
+/**
+ * Where a detached run must put its log, read from the variable the launcher set.
+ *
+ * Validated rather than trusted: an inherited `NITRO_UI_GATE_LOG` from somebody's
+ * shell profile would otherwise send a gate's log - which `wait` reads and the
+ * ledger names - to a path of its choosing, and `bun run check` inherits the
+ * environment of whatever started it. It has to be an absolute path inside this
+ * checkout's own `.gates/logs/`, or it is ignored and the run behaves exactly like
+ * a foreground one.
+ */
+function backgroundOptions(env = process.env) {
+  const fromEnv = env.NITRO_UI_GATE_LOG;
+  if (fromEnv == null || fromEnv === '') return {};
+  const absolute = path.resolve(fromEnv);
+  const logsDir = path.join(repoRoot, LEDGER_DIR, 'logs');
+  if (
+    !absolute.startsWith(`${logsDir}${path.sep}`) ||
+    !absolute.endsWith('.log')
+  ) {
+    process.stderr.write(
+      `gate: ignoring NITRO_UI_GATE_LOG=${fromEnv} - a background gate's log has to be inside ${path.relative(repoRoot, logsDir)}\n`
+    );
+    return {};
+  }
+  return {
+    logPath: path.relative(repoRoot, absolute),
+    recordPath: backgroundRecordPath(absolute),
+  };
 }
 
 assertSupportedNodeOrReexec({
