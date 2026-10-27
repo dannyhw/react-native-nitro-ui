@@ -61,9 +61,9 @@ import {
 } from './build-speed-lib.mjs';
 import {
   DEFAULT_BUILD_WAIT_MINUTES,
+  buildLimitFrom,
   buildSlotPaths,
   buildTaskName,
-  maxConcurrentBuildsFrom,
   takeBuildSlot,
 } from './build-slot-core.mjs';
 import { readJson, stateHome, statePaths } from './lease-core.mjs';
@@ -463,25 +463,14 @@ function buildSlotState(env = process.env) {
   const home = stateHome(env);
   const paths = buildSlotPaths(home);
   const devicesFile = env.NITRO_UI_DEVICES ?? statePaths(home).devices;
-  let max = 1;
-  let note = null;
+  let limit = { max: DEFAULT_MAX_CONCURRENT_BUILDS, note: null };
   try {
-    const config = readJson(devicesFile, null);
-    max = maxConcurrentBuildsFrom(config);
-    if (
-      config != null &&
-      !(
-        Number.isInteger(config.maxConcurrentBuilds) &&
-        config.maxConcurrentBuilds > 0
-      )
-    ) {
-      note = `${devicesFile} sets no usable maxConcurrentBuilds, so the default (${max}) applies`;
-    }
+    limit = buildLimitFrom(readJson(devicesFile, null), devicesFile);
   } catch {
     // No readable pool file: the default (one build at a time) still applies,
     // and doctor is the place that explains a missing devices.json.
   }
-  return { ...paths, max, devicesFile, note };
+  return { ...paths, max: limit.max, devicesFile, note: limit.note };
 }
 
 /**
