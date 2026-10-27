@@ -397,6 +397,10 @@ type Log = {
   /** The `Picker` child's identity, so a test can reorder or drop it. */
   setPickerKey?: (key: string) => void;
   setPickerPresent?: (present: boolean) => void;
+  /** Take the `DatePicker` child out of the Host's list, leaving the others. */
+  setDatePresent?: (present: boolean) => void;
+  /** `display: 'none'` on the `DatePicker` child — hidden, not unmounted. */
+  setDateHidden?: (hidden: boolean) => void;
   /** Height of the spacer above the Host — how a test moves the Host. */
   setSpacer?: (height: number) => void;
 };
@@ -421,12 +425,14 @@ const SEED = new Date(2026, 4, 17, 0, 0, 0, 0).getTime();
 /**
  * One Host holding a SegmentedControl, a Picker and a DatePicker.
  *
- * The spacer above it is the scroll stand-in that is honest on both platforms: RN
- * cannot scroll *inside* a Host (`host.md`: a `ScrollView` moves the whole rectangle),
- * and moving the rectangle is exactly what a scroll does to a composition's place on
- * screen. Height, not `ScrollView`, because the harness has no scroll gesture — and the
- * anchor witness moving is asserted, not assumed, so a spacer that failed to move the
- * Host would fail the gate that reads it.
+ * The spacer above it moves the Host's rectangle, which is what a scroll does to a
+ * composition's place on screen — and it is *not* a scroll, which the anchor-follow
+ * gate says out loud: a spacer is a layout move, so `dropOpenMenu` runs, while a real
+ * scroll changes neither the layout nor the anchor's box and is a path nothing here
+ * drives. Real input covers the half it can: opening after a scroll, on both platforms.
+ * Height rather than `ScrollView` because the harness has no scroll gesture — and the
+ * witness moving is asserted, not assumed, so a spacer that failed to move the Host
+ * would fail the gate that reads it.
  */
 function PopupHost({
   log,
@@ -446,12 +452,16 @@ function PopupHost({
   const [date, setDate] = useState(() => new Date(SEED));
   const [pickerKey, setPickerKey] = useState('picker-a');
   const [pickerPresent, setPickerPresent] = useState(true);
+  const [datePresent, setDatePresent] = useState(true);
+  const [dateHidden, setDateHidden] = useState(false);
   log.setSpacer = setSpacer;
   log.setOptions = setOptions;
   log.setPickerDisabled = setPickerDisabled;
   log.setDateDisabled = setDateDisabled;
   log.setPickerKey = setPickerKey;
   log.setPickerPresent = setPickerPresent;
+  log.setDatePresent = setDatePresent;
+  log.setDateHidden = setDateHidden;
   log.writePicker = setIndex;
   log.writeDate = setDate;
   return (
@@ -490,20 +500,27 @@ function PopupHost({
             }}
           />
         ) : null}
-        <DatePicker
-          value={date}
-          disabled={dateDisabled}
-          mode={mode}
-          onChange={(next) => {
-            log.acceptedDates.date = next.getTime();
-            setDate(next);
-          }}
-          testID="pop-date"
-          accessibilityLabel="Hosted date picker"
-          hybridRef={(view: DatePickerHandle) => {
-            log.dates.date = view;
-          }}
-        />
+        {datePresent ? (
+          <DatePicker
+            value={date}
+            disabled={dateDisabled}
+            mode={mode}
+            // Hiding is not unmounting: the view stays in the React Native tree and
+            // the handle stays live, and only the Host's composition drops the child
+            // (`NitroComposeHost.isHiddenByReact`). That is the difference the gate
+            // below needs — a teardown with no dismissal in it.
+            {...(dateHidden ? { style: { display: 'none' } } : {})}
+            onChange={(next) => {
+              log.acceptedDates.date = next.getTime();
+              setDate(next);
+            }}
+            testID="pop-date"
+            accessibilityLabel="Hosted date picker"
+            hybridRef={(view: DatePickerHandle) => {
+              log.dates.date = view;
+            }}
+          />
+        ) : null}
       </Host>
       {/* A second, unhosted control of the same kind: after a hosted mount is dropped
           mid-menu, this is what is left to ask. The count is process-wide on purpose. */}
@@ -1031,13 +1048,13 @@ if (Platform.OS === 'android') {
       );
       expect(closed.presented).toBe(false);
       log.setDateDisabled?.(false);
-      // The dialog's Cancel/OK and the tap outside its window are the platform's to
-      // press (note at `parseDateReport`): dismissal is gated again on dropping the
-      // mount below, and on a real Back press in `scripts/real-input`.
-      // Closing is gated twice over, because the dialog's Cancel/OK and the tap outside
-      // its window are the platform's to press (note at `parseDateReport`): disabling the
-      // control while it is up, and dropping the mount, are the two gates below, and a
-      // real back press is in `scripts/real-input`.
+      // What the harness cannot press: the dialog's own OK and Cancel, and the tap
+      // outside its window, are in another window (`parseDateReport`'s note). They are
+      // gated where a tap can reach a window — `hosted-date-picker` in
+      // `scripts/real-input/android.mjs`, which opens this dialog with a real tap, picks
+      // a day, and closes it with OK, with Cancel and with Back. iOS has no such case
+      // because there is nothing hosted to drive: `<Host>` is the passthrough (D23), so
+      // the dialog is the one `date-picker` already covers on that platform.
     });
 
     it('follows a value React writes while the dialog is open (G5)', async () => {
@@ -1087,6 +1104,83 @@ if (Platform.OS === 'android') {
       log.setDateDisabled?.(false);
       await settle(300);
       expect(parseDateReport(date.nuiTestStateReport()).presented).toBe(false);
+    });
+
+    /**
+     * A hosted child React hid (`display: 'none'`) leaves the Host's composition, which
+     * disposes the dialog's subtree without any dismissal in it.
+     *
+     * The model has to learn that. It does not on its own: `setVisibility` only tells the
+     * Host its drawn content moved, and the `DisposableEffect` that counts live
+     * presentations only decrements a number. So the open flag stayed true over a
+     * teardown, and showing the child again composed the dialog back over the screen -
+     * with no provisional selection left, because `rememberDatePickerState` lives in the
+     * subtree that just died. `Picker`'s `MenuWitness` has written `model.expanded` from
+     * `onDispose` for exactly this reason since H2b round 1; this is the same write, and
+     * it is a no-op on every path that already closed the dialog.
+     */
+    it('does not reopen a dialog that a hidden child left behind', async () => {
+      await mount(<PopupHost log={log} />);
+      const date = need(log.dates.date, 'hosted date picker');
+      date.nuiTestPresent();
+      await waitForDate(date, (r) => r.presented && r.livePresentations === 1);
+      // Hide it. The window goes because the composition dropped the child; `presented`
+      // going with it is the fix, and the half this gate exists to watch.
+      log.setDateHidden?.(true);
+      const hidden = await waitForDate(date, (r) => r.livePresentations === 0);
+      expect(hidden.presented).toBe(false);
+      // Show it again. A dialog nobody asked for would compose itself here and take a
+      // frame to appear, so give it more than a frame before reading the answer.
+      log.setDateHidden?.(false);
+      await settle(600);
+      const shown = parseDateReport(date.nuiTestStateReport());
+      expect(shown.presented).toBe(false);
+      expect(shown.livePresentations).toBe(0);
+    });
+
+    /**
+     * The removal the file was missing: only the `DatePicker` child leaves the Host while
+     * its dialog is up, the SegmentedControl and the Picker stay where they are.
+     *
+     * The Host-drop gate below proves the composition can be taken down as a whole, and
+     * the gate above proves a single child's hiding; a parent removing one row is the
+     * third teardown an app actually performs. Two halves are asserted, because "no
+     * window left" alone would also be true if the Host gave up composing everything:
+     * the window is gone, *and* the composition that kept it is still answering.
+     */
+    it('takes a hosted dialog down when only its child leaves the Host', async () => {
+      const { unmount } = await mount(<PopupHost log={log} />);
+      const date = need(log.dates.date, 'hosted date picker');
+      date.nuiTestPresent();
+      await waitForDate(date, (r) => r.presented && r.livePresentations === 1);
+      log.setDatePresent?.(false);
+      const gone = await waitForDate(date, (r) => r.livePresentations === 0);
+      expect(gone.presented).toBe(false);
+      // And the rest of the Host is alive: the hosted Picker still opens its menu on a
+      // press aimed by its own witness, in the same composition the dialog just left.
+      const picker = need(log.pickers.picker, 'hosted picker');
+      await pressWitnessedAndOpen(picker);
+      expect(parseDateReport(date.nuiTestStateReport()).livePresentations).toBe(
+        0
+      );
+      // Take that menu down before leaving, the way the disable gate does.
+      log.setPickerDisabled?.(true);
+      await waitForMenu(picker, (r) => !r.expanded && r.live === 0);
+      log.setPickerDisabled?.(false);
+      unmount();
+      await settle(400);
+      // Read the process-wide count on a fresh mount: the removed child's own handle is
+      // the one thing that cannot be trusted to report about itself.
+      const after = newLog();
+      await mount(<PopupHost log={after} />);
+      expect(
+        parseDateReport(
+          need(
+            after.dates.date,
+            'fresh hosted date picker'
+          ).nuiTestStateReport()
+        ).livePresentations
+      ).toBe(0);
     });
 
     it('leaves no dialog behind when the Host is dropped while one is open', async () => {
@@ -1478,9 +1572,15 @@ if (Platform.OS === 'android') {
 
     it('takes a hosted menu down when a reorder moves the row under it', async () => {
       // The same child, at a different index: `key` is unchanged, so React Native keeps
-      // both views and only the column's order moves under the open window. The popup
-      // has one signal available - its anchor's box - and the answer it gives is the one
-      // the control already gives when a scrolling ancestor carries an anchor away.
+      // both views and only the column's order moves under the open window.
+      //
+      // Not through the anchor's box, though - that is what the red proof of this gate
+      // measured. Stubbing `anchorMoved` out left *this* gate green and turned the
+      // anchor-follow gate above it red: a reorder takes the group out of the
+      // composition, and a popup goes with the composition that composed it. So this is
+      // an outcome gate - "a row that moved does not keep a stale list on screen" - and
+      // the case named `anchors under the box the Host drew` is the witness for
+      // `dropOpenMenu` itself.
       await mount(<SevenList log={log} ids={SEVEN} />);
       const picker = need(log.pickers['mix-pk-5'], 'seven picker');
       await pressWitnessedAndOpen(picker);

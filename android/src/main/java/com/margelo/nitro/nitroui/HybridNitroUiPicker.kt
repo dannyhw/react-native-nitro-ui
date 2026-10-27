@@ -632,7 +632,7 @@ private class PickerHost(
    * inside somebody else's window. The answer is that a popup opened from inside a
    * composition belongs to that composition's view - which is what a hosted child does
    * here, exactly as it does in a single-control composition, and what Expo's Host does
-   * too. The claim is measured, not asserted: `example/__tests__/HostControls.harness.tsx`
+   * too. The claim is measured, not asserted: `example/__tests__/HostPopups.harness.tsx`
    * reads the anchor's box and the menu's window out of the shared composition, and
    * `docs/components/host.md` states what was found.
    */
@@ -1117,13 +1117,13 @@ class HybridNitroUiPicker(
         //
         // Material 3 dismisses it too: `ExposedDropdownMenuBox` stops composing a menu
         // whose `menuAnchor(enabled = …)` went false, which is what the harness sees
-        // happen. Measured on this task's tree, neither deleting this line nor deleting
-        // it with `menuAnchor(enabled = true)` forced turns that gate red: the Material
-        // scope has more than one path to closing a menu whose anchor went disabled, so
+        // happen, and that is what the harness sees. Measuring this line as the sole
+        // route is H2b round 2's job: round 1 measured it while `afterUpdate` still held
+        // a duplicate write, so mutating either line left that gate green. Either way
         // the gate is an outcome gate - "a disabled control is not showing a list of
-        // choices" - rather than a witness for this line. The write is still the point:
-        // it is what makes the outcome the control's rule rather than the widget
-        // library's, whatever Material decides to do with a disabled anchor.
+        // choices" - and the write is still the point: it is what makes the outcome the
+        // control's rule rather than the widget library's, whatever Material decides to
+        // do with a disabled anchor.
         model.expanded = false
       }
       // Repaints only: a disabled control is the same size.
@@ -1255,16 +1255,15 @@ class HybridNitroUiPicker(
     // but an index that no longer exists can leave it pointing at nothing, and the
     // rows recompose from `options` anyway.
     //
-    // A control that has been disabled *does* close it (H2b). The rows would refuse
-    // every press anyway - `applyUserSelection` is inert while disabled - but leaving
-    // a window open on a control that can no longer answer is the half-open state the
-    // G5 review called out for the same path: the user is offered a list that answers
-    // nothing. `enabled` and the open flag can arrive in one batch, which is why this
-    // is here rather than in the `disabled` setter, and it is the same rule the
-    // DatePicker applies to an open dialog (`HybridNitroUiDatePicker.afterUpdate`).
-    if (!model.enabled && model.expanded) {
-      model.expanded = false
-    }
+    // A control that has been disabled *does* close it (H2b), and this pass used to
+    // carry a second copy of that write. It was dead code, and is gone: the `disabled`
+    // setter above already clears `expanded`, `expanded` is only ever set true by a
+    // press on an anchor that is enabled, and the comment here justified keeping it with
+    // a batch that writes an open flag - a JS prop for `expanded` that neither this
+    // control nor the DatePicker has. The DatePicker keeps its copy in this pass
+    // (`HybridNitroUiDatePicker.afterUpdate`) because that control's setter does not
+    // clear `presented`, and that difference is what the harness sees: mutating the
+    // DatePicker's line turns its gate red, where mutating this one could not.
     // The batch a held size report was waiting for has landed. Whether it is the
     // batch that report belongs to is what the stamp is for: the index the batch
     // settled on, the choices, the variant and the label all have to be the ones the
