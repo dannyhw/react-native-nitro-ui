@@ -103,6 +103,15 @@ const REACT_TIMEOUT = Number(process.env.REAL_INPUT_TIMEOUT ?? 8000);
 const READY_TIMEOUT = Number(process.env.REAL_INPUT_READY_TIMEOUT ?? 180000);
 
 /**
+ * How tall a node's box has to be for `requireControlOnScreen` to treat it as
+ * arrived. Below this the box is what a scroll left of a row rather than the row:
+ * a Host clips its own children, and a hosted row sitting on the screen's fold is
+ * reported with a box one or two pixels tall whose centre a tap can only miss.
+ * Nothing this suite presses is shorter than a touch target.
+ */
+const MIN_PRESSABLE_PX = 16;
+
+/**
  * ## Adding a control
  *
  * Add one entry here, one in `scripts/real-input/controls.mjs`, and one iOS
@@ -2553,36 +2562,72 @@ function makeContext(harness, log) {
      * name taps the top-left corner of the window and then reports that a real
      * touch opens nothing, which is a story about the check, not about the control.
      *
+     * The box has to be a *pressable* one, not merely a drawn one. Compose clips a
+     * Host row to whatever the scroll leaves of it, so a row sitting on the fold is
+     * named with a box a pixel tall: `hosted-date-picker` measured
+     * `42,2423 → 386,2424` on a 1080x2424 window, the tap landed on the middle of
+     * that sliver, and the field never opened - which reads as "a real press does
+     * not open a hosted dialog", the exact opposite of what this case exists to
+     * find. So the centre has to be inside the window and the box tall enough to
+     * hold a finger, and a row that never comes round is said out loud rather than
+     * handed back as if it were tappable.
+     *
      * @param {string} description the control's `accessibilityLabel`
      */
     async requireControlOnScreen(description) {
       let namedOffScreen = 0;
+      let clipped = 0;
+      /** @type {import('./uiautomator.mjs').UiautomatorNode | null} */
+      let lastClipped = null;
       for (let attempt = 0; attempt < 6; attempt += 1) {
         const node = findByDescription(harness.hierarchy(), description);
+        const { width, height } = harness.screenSize();
         if (node != null && node.bounds.width > 0 && node.bounds.height > 0) {
-          if (attempt > 0) {
+          const centreX = (node.bounds.x1 + node.bounds.x2) / 2;
+          const centreY = (node.bounds.y1 + node.bounds.y2) / 2;
+          const pressable =
+            node.bounds.height >= MIN_PRESSABLE_PX &&
+            centreX > 0 &&
+            centreX < width &&
+            centreY > 0 &&
+            centreY < height;
+          if (pressable) {
+            if (attempt > 0) {
+              log.note(
+                `"${description}" needed ${String(attempt)} scroll` +
+                  `${attempt === 1 ? '' : 's'} to come on screen` +
+                  (namedOffScreen > 0
+                    ? ` - after ${String(namedOffScreen)} naming` +
+                      `${namedOffScreen === 1 ? '' : 's'} with no box (composed ` +
+                      'outside the clip)'
+                    : '') +
+                  (clipped > 0
+                    ? `, and ${String(clipped)} with a box clipped to ` +
+                      `${String(MIN_PRESSABLE_PX)} px or less`
+                    : '')
+              );
+            }
             log.note(
-              `"${description}" needed ${String(attempt)} scroll` +
-                `${attempt === 1 ? '' : 's'} to come on screen` +
-                (namedOffScreen > 0
-                  ? ` - after ${String(namedOffScreen)} naming` +
-                    `${namedOffScreen === 1 ? '' : 's'} with no box (composed ` +
-                    'outside the clip)'
-                  : '')
+              `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
+                `${node.bounds.x2},${node.bounds.y2}`
             );
+            return node;
           }
-          log.note(
-            `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
-              `${node.bounds.x2},${node.bounds.y2}`
-          );
-          return node;
-        }
-        if (node != null) {
+          clipped += 1;
+          lastClipped = node;
+        } else if (node != null) {
           namedOffScreen += 1;
         }
-        const { width, height } = harness.screenSize();
         harness.swipe(width / 2, height * 0.7, width / 2, height * 0.32, 400);
         await sleep(400);
+      }
+      if (lastClipped != null) {
+        log.abort(
+          `"${description}" is named with a box ${String(
+            lastClipped.bounds.height
+          )} px tall on the window edge (${String(clipped)} scrolls, still ` +
+            'clipped) - the row never came far enough on screen to press'
+        );
       }
       return this.requireControl(description);
     },
