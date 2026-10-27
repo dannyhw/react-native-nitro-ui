@@ -2274,6 +2274,13 @@ function makeContext(harness, log) {
             'could be aimed at'
         );
       }
+      if (node.bounds.width === 0 || node.bounds.height === 0) {
+        log.abort(
+          `accessibilityLabel "${description}" is named in the tree with no box - ` +
+            'it is composed outside the scroll clip, so no real tap can be aimed ' +
+            'at it. Scroll it into view first (`requireControlOnScreen`).'
+        );
+      }
       log.note(
         `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
           `${node.bounds.x2},${node.bounds.y2}`
@@ -2303,21 +2310,33 @@ function makeContext(harness, log) {
     /**
      * Scroll the screen until this control is on it, then look it up.
      *
-     * `uiautomator dump` lists no off-screen nodes, so a row below the fold is not
-     * merely unhittable - it is absent from the tree. Evidence that lives at the
-     * bottom of a screen therefore has to be scrolled to, exactly as a person
-     * scrolls to it, and this says so instead of failing with "not in the tree".
+     * Evidence that lives at the bottom of a screen has to be scrolled to, exactly
+     * as a person scrolls to it, and this says so instead of failing with "not in
+     * the tree". "On the screen" is answered by the **box**, not by the name:
+     * React Native drops a view that has been scrolled out of the window, so an RN
+     * control is simply absent until it comes back, but a `<Host>` is one Compose
+     * tree and Compose keeps naming children it has composed even when the scroll
+     * has them outside its clip - measured on `nitroui_t03`, a hosted Picker below
+     * the fold is in the dump with `bounds=[0,0][0,0]`. A check that stops at the
+     * name taps the top-left corner of the window and then reports that a real
+     * touch opens nothing, which is a story about the check, not about the control.
      *
      * @param {string} description the control's `accessibilityLabel`
      */
     async requireControlOnScreen(description) {
+      let namedOffScreen = 0;
       for (let attempt = 0; attempt < 6; attempt += 1) {
         const node = findByDescription(harness.hierarchy(), description);
-        if (node != null) {
+        if (node != null && node.bounds.width > 0 && node.bounds.height > 0) {
           if (attempt > 0) {
             log.note(
               `"${description}" needed ${String(attempt)} scroll` +
-                `${attempt === 1 ? '' : 's'} to come on screen`
+                `${attempt === 1 ? '' : 's'} to come on screen` +
+                (namedOffScreen > 0
+                  ? ` - after ${String(namedOffScreen)} naming` +
+                    `${namedOffScreen === 1 ? '' : 's'} with no box (composed ` +
+                    'outside the clip)'
+                  : '')
             );
           }
           log.note(
@@ -2325,6 +2344,9 @@ function makeContext(harness, log) {
               `${node.bounds.x2},${node.bounds.y2}`
           );
           return node;
+        }
+        if (node != null) {
+          namedOffScreen += 1;
         }
         const { width, height } = harness.screenSize();
         harness.swipe(width / 2, height * 0.7, width / 2, height * 0.32, 400);
