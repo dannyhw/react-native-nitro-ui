@@ -221,6 +221,7 @@ does to a user:
 | The options change while it is open | The open menu relays the new rows; the chosen index is whatever the list now says. |
 | The control is disabled while its window is up | The window closes. A control that answers nothing cannot own a live dialog. |
 | The child is removed, reordered, or the Host is dropped (`onDropView`) while a window is open | Nothing is left behind. The window belongs to the composition that opened it, so when that composition goes — including `onDropView`, which disposes it — the window goes with it. Measured, including the case where a reorder moves the row under an open menu: the menu comes down rather than floating over the wrong control. |
+| A **neighbour** row leaves the Host while a window is open | The row above it is re-framed, which is a layout move, so that popup closes too: a hosted menu whose row moved reads `expanded=0;live=0`, and a hosted dialog reads the same. What does not move does not close anything — a sibling's own identity changing, with every other row where it was, leaves an open dialog open. Measured in `example/__tests__/HostPopups.harness.tsx`, "comes down with its row, and leaves nothing when the Host is dropped". |
 | Two popup owners in one Host | They open one after the other and neither stays stuck: the second one's window does not inherit the first one's state, and after both have been through, no window is left. |
 | TalkBack / VoiceOver | The rows are reachable while the menu is open, and the current choice is marked selected. On iOS a Host is a passthrough, so it is the ordinary `Picker` tree (`docs/components/picker.md`). |
 
@@ -230,10 +231,12 @@ so a hosted field opens a dialog that follows a value React writes while it is u
 when the field is disabled, and leaves nothing when the Host is dropped mid-dialog. Its
 own OK, Cancel and Back buttons close it the same way there as anywhere else — those
 presses land in another window, so they are gated with real taps in `hosted-date-picker`
-(`scripts/real-input`), not from the harness. Two teardowns the flag has to follow rather
-than survive: taking the child out of the Host's list, and `display: 'none'` on it —
-which composes no child at all and so disposes the dialog's subtree, and the open flag
-goes with it or showing the field again would open a dialog nobody asked for. The
+(`scripts/real-input`), not from the harness. Three teardowns the flag has to follow rather
+than survive: taking the child out of the Host's list, `display: 'none'` on it — which
+composes no child at all — and its row being moved by layout, a neighbour row leaving
+among them. The dialog follows its row, exactly as the menu above does; a dialog that
+stayed up over a row that had moved was the alternative, and it is what the first cut of
+this release did. The
 `time` and `datetime` modes present dialogs too, and are gated as well as `date`.
 
 Two G5 follow-ups live on that path and were fixed here rather than recorded: a dialog

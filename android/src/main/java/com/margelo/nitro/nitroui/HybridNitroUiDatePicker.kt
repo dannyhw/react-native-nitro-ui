@@ -1124,13 +1124,26 @@ private class DatePickerHost(
         DatePickerModel.livePresentations.decrementAndGet()
         // Take the open flag down with the window (`MenuWitness` in
         // `HybridNitroUiPicker` writes `model.expanded` for the same reason, and says so).
-        // Disposal is not only what a close does: a *hosted* child that React hides
-        // (`display: 'none'` -> `isHiddenByReact`) leaves the Host's composition, and
-        // nothing else clears this flag - `setVisibility` only tells the Host its drawn
-        // content moved. Without the write, showing the child again composes the dialog
-        // over the screen with nobody having asked for it, and its provisional selection
-        // is gone because `rememberDatePickerState` lives inside the subtree that died.
-        // A no-op on every path that already closed the dialog - dismiss, OK, `disable`,
+        // Disposal is not only what a close does. Three teardowns reach here with no
+        // dismissal in them: the child leaves the Host's list, `display: 'none'` on it
+        // (`isHiddenByReact`, which composes no child at all), and the child's row being
+        // *moved by layout* - which takes its group out and recomposes it somewhere else.
+        // Nothing else clears the flag on those paths: `setVisibility` only tells the
+        // Host its drawn content moved. Without the write, the flag outlives the window,
+        // and the case that shows the child again composes a dialog over the screen with
+        // nobody having asked for it - with no provisional selection left, because
+        // `rememberDatePickerState` lives inside the subtree that died.
+        //
+        // The third of them is what this line *changes* rather than reports, and it was
+        // measured both ways: without the write, a hosted dialog whose row moved read
+        // `presented=1` over a window still hanging where the row used to be, which is
+        // the stale-window bug this release fixed for menus. With it, the dialog follows
+        // its row, so `docs/components/host.md` can state one rule for both popup
+        // controls. A change that moves nothing - a sibling's own identity, say - leaves
+        // this group alone, so the dialog is not closed by it either (both halves gated
+        // in `example/__tests__/HostPopups.harness.tsx`).
+        //
+        // A no-op on every path that already closed the dialog: dismiss, OK, `disable`,
         // `onDropView` and `reset` all call `setPresented(false)` first, and it returns
         // early when the flag already says `false`.
         model.setPresented(false)
