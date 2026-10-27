@@ -327,8 +327,9 @@ internal class DatePickerModel : NitroUiModel() {
    * Open or close the `compact` field's dialog.
    *
    * Every write goes through here - the press, `onDismissRequest` (outside tap and
-   * the platform back gesture), `reset()` and `onDropView()` - because the flag has
-   * to describe reality for [readReport] to be worth testing with.
+   * the platform back gesture), `reset()`, `onDropView()`, the `disabled` write in
+   * [afterUpdate] and the dialog subtree's `onDispose` - because the flag has to
+   * describe reality for [readReport] to be worth testing with.
    */
   fun setPresented(next: Boolean) {
     if (next == presented) {
@@ -912,7 +913,7 @@ private class DatePickerHost(
    * window: composed by the Host, the dialog goes away with the Host's disposal - the
    * same rule that keeps an unhosted dialog from outliving its mount (`onDropView`),
    * with the Host's composition standing in for the control's own.
-   * `example/__tests__/HostControls.harness.tsx` measures it rather than reasoning it.
+   * `example/__tests__/HostPopups.harness.tsx` measures it rather than reasoning it.
    */
   override val isHostable: Boolean
     get() = true
@@ -1119,7 +1120,21 @@ private class DatePickerHost(
     // mount that opened it is gone` reads it through a fresh instance instead.
     DisposableEffect(Unit) {
       DatePickerModel.livePresentations.incrementAndGet()
-      onDispose { DatePickerModel.livePresentations.decrementAndGet() }
+      onDispose {
+        DatePickerModel.livePresentations.decrementAndGet()
+        // Take the open flag down with the window (`MenuWitness` in
+        // `HybridNitroUiPicker` writes `model.expanded` for the same reason, and says so).
+        // Disposal is not only what a close does: a *hosted* child that React hides
+        // (`display: 'none'` -> `isHiddenByReact`) leaves the Host's composition, and
+        // nothing else clears this flag - `setVisibility` only tells the Host its drawn
+        // content moved. Without the write, showing the child again composes the dialog
+        // over the screen with nobody having asked for it, and its provisional selection
+        // is gone because `rememberDatePickerState` lives inside the subtree that died.
+        // A no-op on every path that already closed the dialog - dismiss, OK, `disable`,
+        // `onDropView` and `reset` all call `setPresented(false)` first, and it returns
+        // early when the flag already says `false`.
+        model.setPresented(false)
+      }
     }
 
     if (step == Step.Date) {
@@ -1759,9 +1774,16 @@ class HybridNitroUiDatePicker(
     // A control that has been disabled does not keep a dialog on screen (H2b; the G5
     // review's recommendation for this exact path). Its picks were already refused -
     // `applyUserSelection` is inert while disabled - but a window that offers a list
-    // which answers nothing is the half-open state that report named. `enabled` and the
-    // open flag can land in one batch, which is why this is here and not in the
-    // `disabled` setter, and the Picker closes its menu on the same rule.
+    // which answers nothing is the half-open state that report named.
+    //
+    // It lives here because this is the only route to it: [disabled] moves
+    // `model.enabled` and nothing else, and there is no JS prop for the open flag -
+    // `presented` is written by a press, a dismissal or a teardown, never by a props
+    // batch - so this line cannot be replaced by an ordering between two writes. The
+    // Picker keeps the same rule in its `disabled` setter
+    // (`HybridNitroUiPicker.disabled`); this control cannot, and the difference is
+    // visible at the harness: stubbing this line out turns "closes when the control is
+    // disabled while the dialog is open" red, where the Picker's copy of it does not.
     if (!model.enabled && model.presented) {
       model.setPresented(false)
     }
