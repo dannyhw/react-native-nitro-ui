@@ -194,7 +194,7 @@ component exists and something downstream cannot see it.
 
 `nitro.json` is not in that list: the registry generates its `autolinking`
 section, because the alternative is a per-component edit a merge throws away
-(see "Merging two components"). Nitrogen only *reads* the file — `nitrogen src
+(see "Merging two components"). Nitrogen only _reads_ the file — `nitrogen src
 --config nitro.json` — and writes it nowhere in this repo's scripts, so the
 registry is the only writer and nothing contends for it. `regen` runs the
 registry before nitrogen for exactly that reason: nitrogen refuses to generate a

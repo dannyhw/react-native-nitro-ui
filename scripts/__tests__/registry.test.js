@@ -65,16 +65,36 @@ function componentDirs() {
     .sort();
 }
 
-const COMPONENT_DIRS = [
-  'Button',
-  'DatePicker',
-  'Host',
-  'Picker',
-  'Progress',
-  'SegmentedControl',
-  'Slider',
-  'Switch',
-];
+/**
+ * The component directories the tree ships today, pinned as a set only for the *shape*
+ * of the list: the assertion below wants the container present and the rest manifested.
+ * A test that listed these by name went red the day a new control landed, which is the
+ * operation the registry exists to make cheap, so nothing here hardcodes the roster.
+ */
+const NON_COMPONENT_DIRS = ['Host'];
+
+/**
+ * A control name this tree does not use, for the tests that add one on the fly.
+ *
+ * Derived rather than hardcoded for the same reason: a test that invented `Gauge` failed
+ * as soon as a real Gauge existed, and failed in a way that blamed the registry.
+ */
+function spareControl() {
+  const used = new Set([
+    ...componentDirs(),
+    ...repoManifests().flatMap((m) => [m.name, m.id]),
+    ...NON_COMPONENT_DIRS,
+  ]);
+  for (const name of ['Gauge', 'Toggle', 'Stepper', 'Accordion', 'Rating']) {
+    if (!used.has(name) && !used.has(name.toLowerCase()))
+      return {
+        name,
+        id: name.toLowerCase(),
+        implementation: `HybridNitroUi${name}`,
+      };
+  }
+  throw new Error('every spare component name this test could invent is taken');
+}
 
 function repoManifests() {
   return manifestsFromEntries(
@@ -234,10 +254,15 @@ describe('component manifest schema', () => {
       (directory) =>
         readRepo(`src/components/${directory}/${MANIFEST_BASENAME}`) != null
     );
+    // every directory except the container has one, and the container is the only one
+    // that does not - which is the property, not the size of the roster.
     expect(withManifest.sort()).toEqual(
-      COMPONENT_DIRS.filter((name) => name !== 'Host')
+      componentDirs().filter((name) => !NON_COMPONENT_DIRS.includes(name))
     );
-    expect(componentDirs()).toEqual(COMPONENT_DIRS);
+    for (const container of NON_COMPONENT_DIRS) {
+      expect(componentDirs()).toContain(container);
+      expect(withManifest).not.toContain(container);
+    }
   });
 });
 
@@ -323,58 +348,77 @@ describe('registry:check drift detection', () => {
     // Adding a component is the operation the manifest exists for, so nothing inside a
     // generated region may need hand-editing to make it happen.
     const { manifests } = runPlan();
-    const gauge = jsonCopy(manifests.find((m) => m.name === 'Progress'));
-    Object.assign(gauge, {
-      name: 'Gauge',
-      hybridView: 'NitroUiGauge',
-      implementation: 'HybridNitroUiGauge',
-      id: 'gauge',
-      exampleTab: 'gauge',
-      exampleLabel: 'Gauge',
+    const spare = spareControl();
+    const added = jsonCopy(manifests.find((m) => m.name === 'Progress'));
+    Object.assign(added, {
+      name: spare.name,
+      hybridView: `NitroUi${spare.name}`,
+      implementation: spare.implementation,
+      id: spare.id,
+      exampleTab: spare.id,
+      exampleLabel: spare.name,
       realInput: false,
     });
-    delete gauge.realInputTitle;
-    manifests.push(gauge);
+    delete added.realInputTitle;
+    manifests.push(added);
     const { files, problems } = runPlan(manifests);
     for (const [path, pattern] of [
-      ['bench/src/types.ts', /\| 'gauge'/],
-      ['bench/src/plan.ts', /'gauge'/],
-      ['bench/src/implementations/index.ts', /'gauge'/],
-      ['scripts/bench/lib.mjs', /'gauge'/],
-      ['scripts/smoke/lib.mjs', /'gauge'/],
-      ['scripts/smoke/App.tsx', /'gauge'/],
-      ['example/src/App.tsx', /GaugeScreen/],
-      ['src/__tests__/viewConfigs.test.ts', /NitroUiGaugeConfig/],
+      ['bench/src/types.ts', new RegExp(`\\| '${spare.id}'`)],
+      ['bench/src/plan.ts', new RegExp(`'${spare.id}'`)],
+      ['bench/src/implementations/index.ts', new RegExp(`'${spare.id}'`)],
+      ['scripts/bench/lib.mjs', new RegExp(`'${spare.id}'`)],
+      ['scripts/smoke/lib.mjs', new RegExp(`'${spare.id}'`)],
+      ['scripts/smoke/App.tsx', new RegExp(`'${spare.id}'`)],
+      ['example/src/App.tsx', new RegExp(`${spare.name}Screen`)],
+      [
+        'src/__tests__/viewConfigs.test.ts',
+        new RegExp(`NitroUi${spare.name}Config`),
+      ],
       [
         'android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt',
-        /HybridNitroUiGaugeManager/,
+        new RegExp(`HybridNitroUi${spare.name}Manager`),
       ],
       [
         'android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiDeclaredFallbacks.kt',
-        /HybridNitroUiGauge\b/,
+        new RegExp(`HybridNitroUi${spare.name}\\b`),
       ],
-      ['ios/core/NitroUiDeclaredFallbacks.swift', /HybridNitroUiGauge/],
-      ['src/components/Host/HostChildren.ts', /\[Gauge, 'Gauge'\]/],
-      [SIZING_TABLE_FILE, /"HybridNitroUiGauge": "fillWidth"/],
+      [
+        'ios/core/NitroUiDeclaredFallbacks.swift',
+        new RegExp(`HybridNitroUi${spare.name}`),
+      ],
+      [
+        'src/components/Host/HostChildren.ts',
+        new RegExp(`\\[${spare.name}, '${spare.name}'\\]`),
+      ],
+      [
+        SIZING_TABLE_FILE,
+        new RegExp(`"HybridNitroUi${spare.name}": "fillWidth"`),
+      ],
       // The entry nitrogen needs, written by the registry rather than hand-added:
       // nitrogen reads `nitro.json` and throws for a view missing from it, so this has
       // to exist before `regen`'s nitrogen half runs.
-      ['nitro.json', /"NitroUiGauge": \{/],
+      ['nitro.json', new RegExp(`"NitroUi${spare.name}": \\{`)],
     ]) {
       expect(files[path] ?? `MISSING ${path}`).toMatch(pattern);
     }
     expect(files['nitro.json']).toMatch(
-      /"NitroUiGauge": \{\n {6}"ios": \{\n {8}"language": "swift",\n {8}"implementationClassName": "HybridNitroUiGauge"/
+      new RegExp(
+        `"NitroUi${spare.name}": \\{\\n {6}"ios": \\{\\n {8}"language": "swift",\\n {8}"implementationClassName": "${spare.implementation}"`
+      )
     );
     // A component with `realInput: false` must not gain a real-input row.
     expect(files['scripts/real-input/controls.mjs']).toBeUndefined();
     // And the checks notice the two parts a manifest cannot write on its own.
     const message = problems.join('\n');
-    expect(message).toMatch(/src\/index\.ts: Gauge is in the registry/);
+    expect(message).toMatch(
+      new RegExp(`src/index\\.ts: ${spare.name} is in the registry`)
+    );
     // The tab and its row in the switch are generated; the screen behind them is not,
     // so the run refuses rather than writing an App.tsx that does not compile.
     expect(message).toMatch(
-      /example\/src\/GaugeScreen\.tsx.*does not exist.*the generator adds the tab and not the screen/s
+      new RegExp(
+        `example/src/${spare.name}Screen\\.tsx.*does not exist.*the generator adds the tab and not the screen`
+      )
     );
   });
 
@@ -445,10 +489,12 @@ describe('the generated tables cover what they claim', () => {
     expect(checkIndexExports(manifests, exported)).toEqual([]);
     // `Host` is exported with no manifest, and allowed by name; a control nobody
     // declared is not, which is what makes "add a component, forget the manifest" red.
+    // The name has to be one the tree does not use, or the check is right to stay quiet.
     expect(exported).toContain('Host');
+    const spare = spareControl();
     expect(
-      checkIndexExports(manifests, [...exported, 'Gauge']).join('\n')
-    ).toMatch(/exports Gauge and no manifest declares it/);
+      checkIndexExports(manifests, [...exported, spare.name]).join('\n')
+    ).toMatch(new RegExp(`exports ${spare.name} and no manifest declares it`));
     expect(checkIndexExports(manifests, []).join('\n')).toMatch(
       /Button is in the registry and is not exported/
     );
@@ -562,9 +608,9 @@ describe('the generated tables cover what they claim', () => {
     expect(rows(after)).not.toContain('Switch');
     // ...and the import stays, because UNHOSTABLE_CONTROLS is where it goes
     expect(imports(after)).toContain('Switch');
-    // and what is left still resolves: every control the library has is imported
+    // and every control the library has is imported, hostable or not
     expect(imports(after).sort()).toEqual(
-      COMPONENT_DIRS.filter((name) => name !== 'Host')
+      componentDirs().filter((name) => !NON_COMPONENT_DIRS.includes(name))
     );
   });
 
@@ -850,8 +896,9 @@ describe('gen-registry on a scratch tree', () => {
     // `nitro.json` and throws for a view missing from it, so `--write` is what puts the
     // entry there. Checking the bytes on disk would refuse the run that adds it.
     const dir = scratchTree();
+    const spare = spareControl();
     try {
-      const gauge = jsonCopy(
+      const added = jsonCopy(
         JSON.parse(
           readFileSync(
             join(dir, `src/components/Button/${MANIFEST_BASENAME}`),
@@ -859,47 +906,49 @@ describe('gen-registry on a scratch tree', () => {
           )
         )
       );
-      Object.assign(gauge, {
-        name: 'Gauge',
-        hybridView: 'NitroUiGauge',
-        implementation: 'HybridNitroUiGauge',
-        id: 'gauge',
-        exampleTab: 'gauge',
-        exampleLabel: 'Gauge',
+      Object.assign(added, {
+        name: spare.name,
+        hybridView: `NitroUi${spare.name}`,
+        implementation: spare.implementation,
+        id: spare.id,
+        exampleTab: spare.id,
+        exampleLabel: spare.name,
         realInput: false,
       });
-      delete gauge.realInputTitle;
-      mkdirSync(join(dir, 'src/components/Gauge'), { recursive: true });
+      delete added.realInputTitle;
+      mkdirSync(join(dir, `src/components/${spare.name}`), { recursive: true });
       writeFileSync(
-        join(dir, `src/components/Gauge/${MANIFEST_BASENAME}`),
-        JSON.stringify(gauge, null, 2) + '\n'
+        join(dir, `src/components/${spare.name}/${MANIFEST_BASENAME}`),
+        JSON.stringify(added, null, 2) + '\n'
       );
       // the screen and the export are behaviour, so they are the two things this run
       // cannot write for you - it refuses rather than half-writing
       const missing = run(dir, '--write');
-      expect(missing.stderr).toMatch(/GaugeScreen\.tsx.*does not exist/);
       expect(missing.stderr).toMatch(
-        /src\/index\.ts: Gauge is in the registry/
+        new RegExp(`${spare.name}Screen\\.tsx.*does not exist`)
+      );
+      expect(missing.stderr).toMatch(
+        new RegExp(`src/index\\.ts: ${spare.name} is in the registry`)
       );
 
       writeFileSync(
-        join(dir, 'example/src/GaugeScreen.tsx'),
-        'export default function GaugeScreen() {\n  return null\n}\n'
+        join(dir, `example/src/${spare.name}Screen.tsx`),
+        `export default function ${spare.name}Screen() {\n  return null\n}\n`
       );
       writeFileSync(
         join(dir, 'src/index.ts'),
         readFileSync(join(dir, 'src/index.ts'), 'utf8') +
-          "\nexport { Gauge } from './components/Gauge/Gauge';\n"
+          `\nexport { ${spare.name} } from './components/${spare.name}/${spare.name}';\n`
       );
       const written = run(dir, '--write');
       expect(written.stderr).toBe('');
       const nitro = JSON.parse(readFileSync(join(dir, 'nitro.json'), 'utf8'));
-      expect(Object.keys(nitro.autolinking)).toContain('NitroUiGauge');
+      expect(Object.keys(nitro.autolinking)).toContain(`NitroUi${spare.name}`);
       expect(written.stdout).toMatch(/wrote nitro\.json/);
       // and nitrogen now has what it needs: an entry naming the implementation class
-      expect(nitro.autolinking.NitroUiGauge.ios.implementationClassName).toBe(
-        'HybridNitroUiGauge'
-      );
+      expect(
+        nitro.autolinking[`NitroUi${spare.name}`].ios.implementationClassName
+      ).toBe(spare.implementation);
       expect(run(dir, '--check').stdout).toMatch(/OK/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
