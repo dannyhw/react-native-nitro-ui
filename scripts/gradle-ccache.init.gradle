@@ -1,0 +1,75 @@
+// Put ccache in front of the C/C++ compilers of every native build in this
+// Gradle invocation (docs/tasks/X6-build-speed.md).
+//
+// Why an init script: the CMake projects that need it are `android/build.gradle`
+// of the published package and `react-native-nitro-modules`, and neither may be
+// edited for a build-speed reason - the package a library user installs has to
+// stay byte-identical. `scripts/build-app.mjs` therefore passes this file with
+// `-I`, and only when ccache is installed, so CI and machines without it
+// configure exactly what they configured before.
+//
+// The launcher path comes from the environment (`CCACHE_GRADLE_LAUNCHER`, set by
+// the same script that looked for the binary), so this file never has to guess
+// where a toolchain is. ccache's cross-worktree settings (CCACHE_BASEDIR,
+// CCACHE_NOHASHDIR) are environment too - see ccacheEnv() in
+// scripts/build-speed-lib.mjs, which puts them where they win over every config
+// file, including the one React Native's ccache-clang.sh selects.
+
+def launcher = System.getenv('CCACHE_GRADLE_LAUNCHER')
+if (launcher == null || launcher.trim().isEmpty()) {
+    logger.info('nitro-ui ccache: CCACHE_GRADLE_LAUNCHER unset, building without a launcher')
+    return
+}
+
+def launcherArgs = [
+    "-DCMAKE_C_COMPILER_LAUNCHER=${launcher}",
+    "-DCMAKE_CXX_COMPILER_LAUNCHER=${launcher}"
+]
+
+/**
+ * Append to a module's CMake arguments.
+ *
+ * `defaultConfig` is where AGP keeps the argument list it hands to CMake for
+ * every ABI and variant (the module-level `externalNativeBuild.cmake` is the
+ * `path`/`buildStagingDirectory` block and has no arguments at all, which is the
+ * wrong end of the DSL to reach for). AGP has had this list as a varargs method,
+ * as a plain list and as a `ListProperty`, and the modules in one RN build are
+ * not all on the same one, so the shapes are tried in order. A module none of
+ * them fits is left alone: a cache that skips one library is a slower build, a
+ * failed hook is a broken one.
+ */
+def addTo = { extension, moduleName ->
+    def cmake = extension.defaultConfig.externalNativeBuild.cmake
+    def attempts = [
+        { -> cmake.arguments(launcherArgs as String[]) },
+        { -> cmake.arguments.addAll(launcherArgs) },
+        { -> cmake.setArguments(((cmake.arguments ?: []) + launcherArgs)) }
+    ]
+    def failures = []
+    for (attempt in attempts) {
+        try {
+            attempt()
+            logger.info("nitro-ui ccache: ${launcher} in front of ${moduleName}")
+            return
+        } catch (Throwable error) {
+            failures << error.message
+        }
+    }
+    logger.info(
+        "nitro-ui ccache: left ${moduleName} alone (${failures.first()}) - " +
+            'its C/C++ compiles run without the cache'
+    )
+}
+
+beforeProject { project ->
+    def applied = ['com.android.library', 'com.android.application'].find {
+        project.pluginManager.hasPlugin(it)
+    }
+    if (applied != null) {
+        addTo(project.extensions.getByName('android'), project.path)
+        return
+    }
+    ['com.android.library', 'com.android.application'].each { id ->
+        project.plugins.withId(id) { addTo(project.extensions.getByName('android'), project.path) }
+    }
+}
