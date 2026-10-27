@@ -1,8 +1,8 @@
 /**
  * A baseline mint must not leave a formatting diff behind.
  *
- * `bench/baselines/*.json` is committed, and `bun run format` judges committed
- * files, but `bun bench --update-baseline` wrote them with
+ * `bench/baselines/<machine>/<device key>.json` is committed, and `bun run format`
+ * judges committed files, but `bun bench --update-baseline` wrote them with
  * `JSON.stringify(value, null, 2)` - which is *not* prettier: prettier collapses
  * an array of scalars onto one line (`"launchRatios": [1]`, the shape every
  * committed cell has) and prints numbers without a leading zero in the exponent.
