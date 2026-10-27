@@ -39,6 +39,7 @@ import {
 import { REAL_INPUT_CONTROLS, iosCheckName } from './controls.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { currentCodeTree, recordBuild } from '../app-stamp.mjs';
+import { iosModuleCacheArgs } from '../build-speed-lib.mjs';
 
 // One Node across every device gate: the harness cannot run on Node 25/26 at
 // all, so a real-input run on that runtime is not comparable evidence. When this
@@ -348,7 +349,14 @@ async function main() {
     const destination = `platform=iOS Simulator,id=${device.udid}`;
     // Same arguments for both phases: a different build setting between them
     // would make xcodebuild throw the whole build away.
-    const settings = ['CODE_SIGNING_ALLOWED=NO'];
+    // This suite compiles without ccache, so it names the module cache Xcode
+    // would have picked anyway: a `build-app.mjs` build in the same derived data
+    // has CCACHE_BASEDIR and compiles into its own, and a `.pcm` written by that
+    // environment makes this one report Foundation defined in two places.
+    const settings = [
+      'CODE_SIGNING_ALLOWED=NO',
+      ...iosModuleCacheArgs({ derivedData: derived, ccache: false }),
+    ];
     const built = await xcodebuild(
       [
         'build-for-testing',
