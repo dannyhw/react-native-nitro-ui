@@ -1136,10 +1136,12 @@ private class DatePickerHost(
         //
         // The third of them is what this line *changes* rather than reports, and it was
         // measured both ways: without the write, a hosted dialog whose row moved read
-        // `presented=1` over a window still hanging where the row used to be, which is
+        // `presented=1` with `live=1`, a dialog still open for a row that had moved -
         // the stale-window bug this release fixed for menus. With it, the dialog follows
         // its row, so `docs/components/host.md` can state one rule for both popup
-        // controls. A change that moves nothing - a sibling's own identity, say - leaves
+        // controls. The harness reads the flag and the count, never the dialog's rect,
+        // so "over the wrong place" is argued from the menu case and not measured here.
+        // A change that moves nothing - a sibling's own identity, say - leaves
         // this group alone, so the dialog is not closed by it either (both halves gated
         // in `example/__tests__/HostPopups.harness.tsx`).
         //

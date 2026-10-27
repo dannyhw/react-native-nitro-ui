@@ -1368,15 +1368,16 @@ final class RealInputTests: XCTestCase {
     // And it has to be *the field's* popover: a presentation that resolves its anchor
     // somewhere else on the screen points at nothing. Which side it lands on is UIKit's
     // choice and not the library's — the bubble goes where the screen has room, so a field
-    // near the bottom of a scroll gets its calendar above it. The first cut of this gate
-    // asserted the side below and read that as a broken anchor; measured on an iPhone 17,
-    // a hosted field at y 485.3...521.7 got its bubble at y 148.3...485.3, which is 0.0 pt
-    // clear of the field's top edge. Adjacency to one of the field's two edges is the
-    // property, then, not the side. `-8` of overlap is the arrow's own height, which the
-    // accessibility frame may or may not include; 32 is slack over a measured 0.0. What
-    // the bound has to catch is an anchor resolved somewhere else, and that is the proof
-    // this gate was run against: the same bubble measured against a frame 220 pt away
-    // reads 220 clear of the top edge and fails both halves.
+    // near the bottom of a scroll gets its calendar above it. Asserting the side below was
+    // therefore wrong, and it went red that way on the leased iPhone 17: "the popover
+    // opened at y 213.67 while the field ends at 587.00", a bubble presented above the
+    // control that opened it. Adjacency to one of the field's two edges is the property,
+    // then, not the side. The band is a tolerance, not a measurement: `-8` of overlap is
+    // the arrow's own height, which the accessibility frame may or may not include, and 32
+    // is slack over that. What it must catch is an anchor resolved elsewhere — an anchor
+    // 220 pt off its field is 220 pt clear of both halves, so it fails by the arithmetic.
+    // That displacement was never built, so read it as arithmetic rather than a red proof;
+    // what was measured is this gate red at the wrong geometry and green at this one.
     let gapBelow = popover.frame.minY - fieldFrame.maxY
     let gapAbove = fieldFrame.minY - popover.frame.maxY
     XCTAssert(
