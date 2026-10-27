@@ -1167,3 +1167,226 @@ export function explainNeedRow(row, codeTree) {
 
 /** Re-exported so `gate.mjs` can build the per-platform trees from one listing. */
 export { codeTreeDigest, contentHash, isCodeFile };
+
+/* --------------------------- background gates (X9) ------------------------- */
+
+/**
+ * The exit code `gate.mjs wait` prints when the gate is *still running* at the
+ * timeout.
+ *
+ * Distinct from 1, which is what the gate's own failure produces: the point of
+ * `wait` is that a script or an agent can act on the difference between "the gate
+ * said no" and "the gate has not finished yet, keep waiting" without reading a log
+ * to find out which. 13 rather than a small number because 1..2 are already taken
+ * here by "failed" and "bad arguments".
+ */
+export const STILL_RUNNING_EXIT = 13;
+
+/**
+ * The default `wait` budget: 45 minutes. That is a `check` on a cold machine with
+ * room for one harness run, and short enough that a wrong guess costs a coffee
+ * rather than an hour - `--timeout-minutes` exists for the long ones.
+ */
+export const DEFAULT_WAIT_MINUTES = 45;
+
+/**
+ * How often `wait` prints a progress line: once a minute, which is what makes an
+ * agent's transcript readable instead of a wall of identical lines.
+ */
+export const WAIT_PROGRESS_INTERVAL_MS = 60_000;
+
+/**
+ * Where a backgrounded gate's bookkeeping lives, beside the log it is writing.
+ *
+ * `<gate>-<started-at>.gate.json` next to `<gate>-<started-at>.log`: the pair
+ * belongs together, and `wait` finds both from the ledger rather than by scanning
+ * a directory of loose state files that can outlive their meaning.
+ *
+ * @param {string} logPath the log path already recorded in the ledger line
+ */
+export function backgroundRecordPath(logPath) {
+  return String(logPath).replace(/\.log$/, '.gate.json');
+}
+
+/**
+ * The last non-empty line of a log, which is what `wait` prints as progress.
+ *
+ * Trailing blank lines are skipped because a finished gate always ends with some,
+ * and "the log's last line" as a progress signal means *what is it doing now* - a
+ * blank says nothing. Capped so one assertion diff cannot push a progress line
+ * across a terminal.
+ *
+ * @param {string} text
+ * @returns {string | null}
+ */
+export function lastLogLine(text) {
+  const lines = String(text ?? '')
+    .split('\n')
+    .map((line) => line.replace(/\r$/, ''))
+    .filter((line) => line.trim() !== '');
+  const last = lines[lines.length - 1];
+  if (last == null) return null;
+  const trimmed = last.trim();
+  return trimmed.length > 200 ? `…${trimmed.slice(-199)}` : trimmed;
+}
+
+/**
+ * Whether a pid is a process that could still be *this* gate.
+ *
+ * A backgrounded gate killed by anything other than its own exit leaves its record
+ * behind with no process to read, and `wait` must say "gone" rather than block for
+ * its whole timeout on something that stopped existing. EPERM counts as alive: a
+ * pid owned by another user is running, and declaring someone's gate dead because
+ * we cannot signal it would report a run that has not finished as finished.
+ *
+ * @param {number} pid
+ * @param {(pid: number, signal?: number) => boolean} [kill]
+ * @returns {boolean}
+ */
+export function pidMayBeRunning(pid, kill = process.kill) {
+  try {
+    kill(Number(pid), 0);
+    return true;
+  } catch (error) {
+    return /** @type {{code?: string}} */ (error).code === 'EPERM';
+  }
+}
+
+/**
+ * What `gate.mjs wait` should do next, given one read of the background record.
+ *
+ * All four outcomes in one pure function, because the interesting bugs are exactly
+ * here: reporting a still-running gate as passed, or treating a record whose
+ * process is gone as "still running" and burning the whole timeout on a corpse.
+ *
+ * `record.done` is written by the detached runner only after the ledger line is on
+ * disk, so a record that exists without it means the gate is mid-run - not missing,
+ * not failed.
+ *
+ * @param {object} options
+ * @param {{pid?: number, done?: boolean, exitCode?: number|null, gate?: string} | null} record
+ *   the background record, or null when the file is not there yet
+ * @param {boolean} pidAlive whether the recorded pid still exists
+ * @param {number} elapsedMs how long `wait` has been waiting
+ * @param {number} timeoutMs the caller's budget
+ * @param {string | null} progress the log's last line
+ * @param {{exitCode?: number|null, result?: string, gate?: string} | null} [ledgerEntry]
+ *   the ledger line for this gate, when one exists - the fallback answer when a
+ *   runner is gone but its evidence is not
+ * @returns {{kind: 'running' | 'exit', exitCode: number, message: string}}
+ *   `kind: 'running'` means "print progress and keep going"; `exit` is final.
+ */
+export function decideWait({
+  record,
+  pidAlive,
+  elapsedMs,
+  timeoutMs,
+  progress,
+  ledgerEntry = null,
+}) {
+  const show = progress == null ? '' : ` | ${progress}`;
+  if (record == null) {
+    // The runner writes its record before the gate produces any output, so "no
+    // file" is either a race an instant after launch or a run that never started.
+    if (elapsedMs >= timeoutMs) {
+      return {
+        kind: 'exit',
+        exitCode: STILL_RUNNING_EXIT,
+        message: 'no background gate record to wait for',
+      };
+    }
+    return {
+      kind: 'running',
+      exitCode: 0,
+      message: `no background record yet${show}`,
+    };
+  }
+
+  if (record.done === true) {
+    // A signal-killed gate records `exitCode: null`, which is a failure and must
+    // never collapse into "passed" through `?? 0`.
+    const code =
+      record.exitCode == null
+        ? record.result === 'pass'
+          ? 0
+          : 1
+        : Number(record.exitCode);
+    return {
+      kind: 'exit',
+      exitCode: code,
+      message:
+        code === 0
+          ? `${record.gate ?? 'gate'} passed`
+          : `${record.gate ?? 'gate'} failed with exit ${String(code)}${record.signal == null ? '' : ` (signal ${String(record.signal)})`}`,
+    };
+  }
+
+  if (!pidAlive) {
+    // Killed hard enough never to have written `done` - or, the case that actually
+    // happens, a race where the run finished so fast the launcher's "here is my
+    // pid" write landed *after* the run's "I am done" write and resurrected the
+    // record as running. Either way the **ledger** is the source of truth: if the
+    // line is there, the gate finished and its recorded exit code is the answer.
+    // Inventing a failure or a pass from the record alone would be wrong in one
+    // direction or the other.
+    if (ledgerEntry != null) {
+      const code = Number(
+        ledgerEntry.exitCode ?? (ledgerEntry.result === 'pass' ? 0 : 1)
+      );
+      return {
+        kind: 'exit',
+        exitCode: code,
+        message:
+          code === 0
+            ? `${record.gate ?? ledgerEntry.gate ?? 'gate'} passed (from the ledger line; its runner is gone)`
+            : `${record.gate ?? ledgerEntry.gate ?? 'gate'} failed with exit ${String(code)} (from the ledger line; its runner is gone)`,
+      };
+    }
+    return {
+      kind: 'exit',
+      exitCode: STILL_RUNNING_EXIT,
+      message:
+        `${record.gate ?? 'gate'}: pid ${String(record.pid)} is gone without recording a result or a ledger line` +
+        // Where it stopped, which is the thing a reader acts on: the log may say
+        // "Compiling Switch.swift" or nothing at all.
+        (progress == null ? '' : ` (last log line: ${progress})`) +
+        ' - read the log, then re-run the gate',
+    };
+  }
+
+  if (elapsedMs >= timeoutMs) {
+    return {
+      kind: 'exit',
+      exitCode: STILL_RUNNING_EXIT,
+      message: `${record.gate ?? 'gate'} still running after ${String(Math.round(elapsedMs / 60_000))} min (pid ${String(record.pid)}) - it was left running, keep waiting or read its log`,
+    };
+  }
+
+  return {
+    kind: 'running',
+    exitCode: 0,
+    message: `${record.gate ?? 'gate'}: ${String(Math.round(elapsedMs / 1000))}s${show}`,
+  };
+}
+
+/**
+ * Which backgrounded gates are still running, for `status`.
+ *
+ * A gate started with `--background` returns before it finishes, so without this
+ * `status` would say "missing" for a run that is happening right now - the most
+ * misleading thing it could say while someone decides whether to start it again.
+ *
+ * @param {Array<{pid?: number, done?: boolean, gate?: string, logPath?: string, startedAt?: number}>} records
+ * @param {(pid: number) => boolean} [isAlive]
+ * @returns {Array<{gate: string, pid: number, startedAt: number | null, logPath: string | null}>}
+ */
+export function runningBackgroundGates(records, isAlive = pidMayBeRunning) {
+  return (records ?? [])
+    .filter((record) => record?.done !== true && isAlive(Number(record?.pid)))
+    .map((record) => ({
+      gate: String(record.gate ?? '?'),
+      pid: Number(record.pid),
+      startedAt: Number.isFinite(record.startedAt) ? record.startedAt : null,
+      logPath: record.logPath ?? null,
+    }));
+}
