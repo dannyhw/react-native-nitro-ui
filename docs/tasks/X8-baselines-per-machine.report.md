@@ -31,9 +31,11 @@ Refusals, each exit 2 with a message that names the fix:
   moved file).
 
 A plain `bun bench --plan quick` with neither flag still needs no label: it gates
-nothing against a baseline. `baselinePath(deviceKey, machineLabel)` is the only
-resolver, and a test asserts no bench script joins `BASELINES_DIR` with a device key,
-so a call site cannot silently resurrect the old lookup.
+nothing against a baseline. `baselineFileFor()` in `scripts/bench/baseline.mjs` is the
+only resolver, and after the review round neither CLI reads a label or builds a path at
+all — both hand the run to `mintBaselineFileFor()` / `openBaselineForCheck()` — which a
+test asserts over their source, so a call site has no label left to get wrong. The
+behaviour itself is pinned by CLI runs over a temporary tree.
 
 Verified against the committed data, not only fixtures: through the new resolver
 `maintainer-mac-1` reads both real baselines (168 cells on iOS, 140 on Android) and
@@ -114,3 +116,35 @@ fallback that should be gone shows up as a wrong answer rather than a green test
   re-enabling it will need a label decision (its runner is a third machine).
 - docs: `docs/tasks/RECOVERY.md` step 1 says mac-2 mints "new files under
   `bench/baselines/`" — true, and they now land in `bench/baselines/maintainer-mac-2/`.
+
+## Fix round 1
+
+Review committed; verdict MERGE. Its substantive finding was the mint blocker:
+`resolveIosDevice()` built `deviceKey` from the simulator's **name**, and this machine's
+leased iPhone 17 is named `nitro-ui A`, so mac-2 would mint
+`maintainer-mac-2/ios27-sim-nitrouia.json` — which nothing gates against. The class now
+comes from `simctl`'s `deviceTypeIdentifier`, the name only the fallback; `deviceName`
+still holds the name. `nitro-ui A` keys `ios27-sim-iphone17`, like the baseline.
+`iosDeviceKey()` is pure, with its own suite.
+
+N4 closed structurally: `collectMachine` moved to `machine.mjs`, and neither CLI reads a
+label or builds a path — both hand the **run** to `mintBaselineFileFor()` /
+`openBaselineForCheck()`. N1–N3, N6: exit-code column, doctor claim, `--force` clause,
+`§5`, reflow, stale comment, this report's "cannot".
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 496 tests / 28 suites | `ff0b86185f39` | 2 m 53 s | start 2.2 / med 3.3 / max 4.9 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`need --for review`: satisfied.
+
+Red proofs, each reverted after: name-derived key -> 4 red (`"iphone17"` vs `"nitrouia"`);
+prefix kept -> 3; `collectMachine` back on a raw env read -> 2, a padded export kept its
+padding where the pre-flight trimmed; a hard-coded hostname at either call site -> the
+structural test, plus `refuses to resolve a path at all…` in a child process; `--force`
+skipping the pre-flight -> one red per suite; shape check dropped -> red in 58 ms, failing
+fast not reaching `simctl` (N5).
