@@ -109,6 +109,32 @@ a `'running'` decision stayed green, an equivalent mutant, since `gate.mjs` only
 `kind === 'exit'`. Noted rather than papered over. (463 unit tests, 19 suites, all green; `check`
 reports 595 tests across all 31 suites.)
 
+## Red proofs (fix round 1)
+
+Each line: the test, the mutation, what went red. Reverted after each; `git status` clean.
+
+- `puts the lock right and restores everything else it touched` -> `git restore` dropped **and** the
+  trailer-keep disabled (the reviewer's exact mutation, both halves) -> that test red; each half on
+  its own also red, so neither is carried by the other.
+- `refuses a lock whose diff is bigger than the release` -> churn guard disabled (`if (false)`) -> red;
+  and separately with the allowance emptied (`unexpected = []`) -> red, so the test is about the
+  allow-list, not the guard call.
+- `refuses up front when CocoaPods is missing, without touching the tree` -> `if (!pods.ok)` disabled
+  -> red on `refusing to refresh`.
+- `writes a background log the reader can read once…` -> `const echo = true` (the reviewer's
+  mutation) -> red, `Received length: 2`; -> `delete childEnv.NITRO_UI_GATE_LOG` removed -> red,
+  `child sees gate-log env [<path>]`.
+- `holds a slot for a live build however long it takes (N3)` -> pruning back to the old
+  `slotIsLive && !slotHolderIsDead` -> red at 75 min with the holder alive.
+- `gives a prime long enough to outlast the queue it waits behind (N4)` ->
+  `PRIME_BUILD_TIMEOUT_MINUTES = BUILD_SLOT_TTL_MINUTES` -> red.
+- `reports an unlabelled machine as a note… and a refusal for a check` -> flag prefixed again -> red
+  (`--check:` appears twice); -> `labelIsUsable` guard dropped -> red, `baselineFileFor` throws out of
+  an unlabelled plain run (the latent crash the reuse exposed).
+- `carries X8's refusal by calling it, not by copying its dispatch (N7)` -> dry-run rebuilds the
+  minting/checking choice -> red. Behaviour cannot prove this (a copy is identical until X8 moves), so
+  the assertion is on the source, as `bench-baseline-machine.test.js` does for baseline paths.
+
 ## Files changed
 
 - `scripts/bench/dry-run.mjs` (new), `scripts/bench/run.mjs` — the dry run and its one call site.
@@ -127,6 +153,7 @@ reports 595 tests across all 31 suites.)
 - `doctor --prime` was not run end to end here — the caches were already warm (47%) and a prime would have spent ~14 min re-warming what the builds above warmed. What is proved is its command list (`primeCommands`), the ccache row's warn→ok transition across those builds, and that `--json --prime` keeps stdout parseable (build output goes to stderr).
 - `decideWait` returns `exitCode: 0` on a `'running'` decision, which no caller reads; harmless, but it is the reason the M43 mutation cannot fail.
 - Option B puts every release's `version` job on a macOS runner (≈10× the minutes). If that turns out to cost too much, the fallback is what I originally proposed: keep `version` on Linux and add a `needs: version` macOS refresh job.
+- `release.yml`'s pinned CocoaPods and `sync-example-lock.mjs`'s probe are two answers to "which pod?". The job is a report and the script is the gate (it refuses up front), so they cannot disagree about whether a release ships — but a future bump has to remember both.
 
 ## Questions for orchestrator
 
