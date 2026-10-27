@@ -204,10 +204,98 @@ Scripts: `/tmp/x3-n5.mjs` (both layouts), `/tmp/x3-n5b.mjs` (gates red after a m
   ever conflict. It restructures nine files, and the measurement above says union cannot apply to a
   JSON object or to a region inside a hand-written shell, so it is a real design change rather than a
   line in `.gitattributes`. Left for X4 with the doc-table item, which wants the same shape.
-- `example/__tests__/Picker.harness.tsx` "asks a wheel the box question after a variant change" fails
-  in the full iOS harness run (three runs, same test, `wheel=0.00x0.00`) and passes standalone. It
-  needs a sizing owner; see the round's gate note.
+- `example/__tests__/Picker.harness.tsx` "asks a wheel the box question after a variant change" failed
+  three full iOS runs at load1 18–43 (`wheel=0.00x0.00` — a box that never arrived) and passed standalone
+  and on the final full run at load ≈ 2. A sizing-report test whose timing tolerance is load-sensitive;
+  see the round's gate note.
+- `HostPopups` "comes down with its row" reads `DatePickerModel.livePresentations`, which is
+  process-wide, so it asserts a zero that only holds if no earlier suite in the same app process still
+  presents anything. Snapshotting the counter before presenting would make it order-independent.
+- The harness starts an Android emulator even when KVM/HVF is unavailable and prints that it will use
+  "very slow software emulation"; 30 s tests then time out. Worth a hard failure, or an auto-raised
+  timeout.
 - `registry:check` is in `bun run check` and nowhere else: `prepare` is `bob build`, whose custom target
   runs `nitrogen`, and a package installed from the registry does not run its own `prepare`. So the
   check costs CI ~0.2 s and consumers nothing. (Round 1 claimed it fired on a consumer install; it
   does not.)
+
+---
+
+## Fix round 1
+
+**M1** was a behaviour change, not a comment fix: `nitro.json`'s `autolinking` is generated now — an
+anchored region that copies an existing entry's bytes, leaves `NitroUiCore`/`NitroUiHost` alone and
+refuses an entry no manifest declares. Nitrogen only _reads_ that file, so round 1's "nitrogen rewrites
+it" was false, as was `.prettierignore`'s.
+
+**M2** — the `HostChildren.ts` imports region wants every control, so one that flips to
+`hostable: false` keeps the import `UNHOSTABLE_CONTROLS` needs. **M3** — false claims removed (C++
+region, `prepare`, the SHA, the coverage story, proof 5), every named path grepped; re-running turned up
+four of my own tests hardcoding a component name, red the moment a second control existed
+(`6697f1f`). **M4** — proofs 22–28, one mutation each, red in one test. **N4** — `merge=union` on
+`nitrogen/generated/**` only (on a JSON object, union drops a comma: measured). **N5** — remeasured on
+`main`'s layout with `hostable`/`realInput` controls: 36 of 52 entries lost by taking either side, both
+layouts; 0 of 104 after the recipe. N1–N3, N6–N8 fixed; N9 not this task.
+
+**`need --for review` is satisfied.** Nine device runs failed before the green rows below; the
+appendix records each one's load, my two mistakes among them, and two intermittent Follow-ups.
+
+## Fix round 1 — gate table
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 523 tests / 27 suites | `40c26c7535df` | 2 m 51 s | start 1.3 / med 1.6 / max 2.0 |
+| `harness:ios` | **PASS** | 165 tests / 13 suites | `40c26c7535df` (ios tree) | 1 m 59 s | start 1.5 / med 3.3 / max 3.9 |
+| `harness:android` | **PASS** | 214 tests / 13 suites | `40c26c7535df` (android tree) | 6 m 38 s | start 2.6 / med 6.1 / max 8.0 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:ios:Picker` | **PASS** | 37 tests / 2 suites | `40c26c7535df` (ios tree) | 33.6 s | start 2.2 / med 4.1 / max 4.4 |
+| `harness:android:HostPopups` | **PASS** | 24 tests / 1 suite | `40c26c7535df` (android tree) | 1 m 14 s | start 5.5 / med 5.5 / max 6.1 |
+| `harness:android:DatePicker:HostPopups` | **PASS** | 37 tests / 2 suites | `40c26c7535df` (android tree) | 1 m 26 s | start 3.5 / med 5.6 / max 7.1 |
+| `harness:android:HostControls:HostPopups` | **PASS** | 48 tests / 2 suites | `40c26c7535df` (android tree) | 2 m 44 s | start 7.0 / med 6.8 / max 8.5 |
+
+`node scripts/gate.mjs need --for review` → **review is satisfied on this code tree.**
+
+
+`node scripts/gate.mjs need --for review` → **review is satisfied on this code tree.**
+
+## Fix round 1 appendix — the device runs that failed first
+
+Load is the ledger's own column (median over the run), not a guess from `sysctl` afterwards — my
+concurrent runs were themselves much of the load, and that turns out to matter for what can be blamed
+on it.
+
+| time | run | median / max load | what failed |
+| --- | --- | --- | --- |
+| 17:38 | ios | 39.9 / 80.7 | `Picker` "asks a wheel the box question…" — `wheel=0.00x0.00` |
+| 17:43 | ios | 57.2 / 118.0 | same |
+| 17:55 | ios | 35.6 / 75.1 | same |
+| 18:02 | ios | — | ×2: the stamp guard refusing a stale app — correct behaviour, not a test failure |
+| 18:03 | ios | 42.1 / 82.6 | same |
+| 18:29 | ios | **3.3** / 3.9 | **164/165 PASS** |
+| 17:47 | android | 5.3 / 7.4 | `HostPopups` "comes down with its row…" — `expected 1 to be 0` |
+| 18:32 | android | 5.9 / **129.3** | `HostControls` "follows mixed children…" — **timed out** at 30 s |
+| 18:56 | android | 6.7 / 9.0 | `HostPopups` again |
+| 19:12 | android | 6.1 / 8.0 | **214/214 PASS** |
+
+17:38–17:55 is mostly me: I had a second device suite running against the same simulator.
+
+**`Picker` (iOS): load-correlated, not load-caused.** Four failures at median 35.6–57.2, one pass at
+3.3, and it passes alone (37/37) — but round 1's green run had median 51, so load raises the odds
+rather than deciding it. It is a race: the log's own line reads `wheel=0.00x0.00`, so the remeasure
+came back with no size at all and the assertion compared that against the box. Pre-existing
+(`bbc5e0d`).
+
+**`HostPopups` (Android): not load at all** — failed at median 5.3 and 6.7, passed at 6.1. The
+assertion reads `DatePickerModel.livePresentations`, which is **process-wide by design**
+(`HybridNitroUiDatePicker.kt:263`: "the dropped mount has nothing left to report, so [the test] reads it
+through a fresh instance"). Asserting exactly 0 is therefore only sound when no earlier suite in the
+same app process still holds a presentation — it passed alone (24/24), with `DatePicker` (37/37), with
+`HostControls` (48/48) and in the full suite on the next try. Pre-existing (`6ac3bf2`, `d598e47`).
+
+Neither suite, file or assertion is in this diff, and no platform input changed since round 1's green
+run: `git diff 2402c0a..HEAD` over `example/ ios/ android/ src/ cpp/ nitrogen/ nitro.json` and the
+sizing table is empty, so the app under test is byte-identical. The `HostControls` timeout is the third
+kind: that run hit max load 129 (X9 on the other pair plus my own runs) and its log carries
+`Hardware acceleration (KVM/HVF) appears unavailable… very slow software emulation`. One line each in
+Follow-ups; none is X3's to fix.
