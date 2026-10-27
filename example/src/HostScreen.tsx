@@ -50,9 +50,16 @@ const BATCH = 24;
  * dialog rather than pressing what is behind it. So the removal has to be the app's own
  * doing, on a delay long enough for `scripts/real-input` to open the dialog first - the
  * same shape `PickerScreen`'s drop picker uses for a menu. Only the Android check arms
- * this, which is why the delay is Android's number.
+ * this, which is why the delay is Android's number, and why it is a generous one: between
+ * the arm press and the press that opens the dialog the check has to scroll the field back
+ * on screen and read a dump, and one accessibility dump costs about a second on a loaded
+ * emulator. At 2500 the timer won that race — the field left the tree while the check was
+ * still looking for it, which fails as "no control with accessibilityLabel Hosted date
+ * picker" and reads like a broken Host but is a stopwatch. The check now waits for this
+ * screen's own `field unmounted` echo instead of a guessed delay, so the delay only has to
+ * be long enough never to fire before the dialog is up.
  */
-const POP_DATE_DROP_MS = 2500;
+const POP_DATE_DROP_MS = 9000;
 
 /**
  * The row pitch a hosted `Switch` occupies, in dp.
@@ -621,6 +628,14 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: 16,
+    // Wraps, because the popup section's row does not fit: its four links run past a
+    // 1080-px screen, which clipped `Unmount the field in 2.5s` against the right edge
+    // and laid the `unmount armed` / `field unmounted` echoes entirely outside the
+    // window. A person could not read them either, but the cost is sharper than that:
+    // `scripts/real-input`'s `hosted-date-picker` check waits on that echo to learn its
+    // arm press landed, and a witness that is composed off-screen never appears in the
+    // accessibility tree at all, so a press that worked read as a tap that missed.
+    flexWrap: 'wrap',
     paddingVertical: 6,
   },
   row: {
