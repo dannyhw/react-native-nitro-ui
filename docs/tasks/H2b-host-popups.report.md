@@ -1,7 +1,8 @@
 # H2b — Android `<Host>` for SegmentedControl, Picker, DatePicker
 
 **Branch:** `task/H2b-host-popups` (from `main` at `1944052`, `main` merged in at `94dab9b`) ·
-**Round:** 1 of up to 3 (D19) · **Lease:** `H2b-qd5qe` (pair-a, iOS + Android, Metro `8295`)
+**Round:** 1 of up to 3 (D19), fix round 1 · **Leases:** `H2b-qd5qe` (round 1), `H2b-62piq`
+(fix round; pair-a, iOS + Android, Metro `8295`)
 
 ## Summary
 
@@ -51,16 +52,20 @@ gates**, not witnesses for a particular line — said where it matters, in Red p
 `need --for merge`: `need: merge is satisfied on this code tree.`
 
 
-The exported ledger has one row this table does not show: an earlier `harness:ios` run
-**failed** (5 tests). It was this task's own two device runs overlapping in one worktree —
-`real-input:android` was in flight, and both shared `harness-timing/state.json` and a Metro
-port, so the harness read a machine-state file `published for Metro port 8295, not this
-run's 8296` and refused to judge four duration gates. Nothing pointed at the code: the same
-tree, run alone, is the green row above. Recorded here because the ledger keeps both rows.
+The exported ledger has **two** rows this table does not show. An earlier `harness:ios` run
+**failed** (5 tests): this task's own two device runs overlapped in one worktree —
+`real-input:android` was in flight, both shared `harness-timing/state.json` and a Metro port,
+and the harness read a machine-state file `published for Metro port 8295, not this run's
+8296`, so it refused to judge four duration gates. Nothing pointed at the code: the same tree,
+run alone, is the green row above. The second row is `real-input:ios` ending in 49 ms, before
+it launched anything — `scripts/real-input/ios.mjs` reads `IOS_UDID` while `scripts/lease.mjs`
+exports `IOS_SIM_UDID`, which is the tooling follow-up below. The ledger keeps both, so the
+report says both.
 
 Real input (`12 / 12` on both platforms) adds the two cases the brief names: a real tap on a
 hosted `SegmentedControl` segment, and a real tap that opens a hosted `Picker`'s menu and picks a
-row. **A hosted `DatePicker`'s dialog has no real-input case on either platform** — it was not
+row. **A hosted `DatePicker`'s dialog has no real-input case on either platform** (superseded
+by Fix round 1) — it was not
 attempted, so this report makes no claim about whether `input tap` or XCUITest could drive a
 Material dialog reliably. That path is gated in the harness instead, where the dialog is opened by
 a press aimed at the witnessed rect and its contents are read from the composition.
@@ -109,6 +114,9 @@ Two mutations survived, and both say the same thing about their gate:
 
 - bench: a quiet re-run of the seven-control Host arm — this machine was not quiet, so it mints no baseline.
 - tooling: `scripts/real-input/ios.mjs` reads `IOS_UDID` while `scripts/lease.mjs` exports `IOS_SIM_UDID`, so `gate.mjs real-input:ios` fails from a leased env until the alias is added.
+- example (iOS): `testRealInputSwitch` intermittently misses its real tap — red at `527552116ea6`
+and once at `f6bf3f8ead07`, green at `0b711fba39f3`, `d6851b858aad` and on the retry. An 8 s echo
+window on a case H2b does not touch; it is not the Host's to fix.
 - docs: the README's published `<Host>` performance table is still the 0.1.0 Switch-only one; the next quiet run should replace it rather than this indicative one.
 
 ## Bench
@@ -121,8 +129,21 @@ is this report file, written after the build: no file under `src/`, `ios/`, `and
 this tree's source.
 
 Load, recorded the way R4 does: 500 samples against a ceiling of 7 on 14 cores — median 4.56,
-p90 6.43, max 27.77, **41 over (8.2 %)**, which is under `LOAD_OVER_CEILING_FRACTION`, so
-`machine.quiet` is true. It is still a `quick` plan at 4 launches and mints no baseline.
+p90 6.43, max 27.77, **41 over (8.2 %)**. That is under `LOAD_OVER_CEILING_FRACTION`, so the
+tool writes `machine.quiet: true`. The label is the tool's and not a claim: `loadavg1` at
+launch was already 7.50 on 14 cores, the peak sample was 27.77, and other tasks plus this
+task's own builds shared the machine throughout. `machine.hostname` is `"unlabelled"` — the
+brief asked for a label and this run has none. It is a `quick` plan at 4 launches, and it
+mints no baseline.
+
+It is also not a clean sheet, and the round-1 draft did not say so: `node
+scripts/bench/report.mjs bench/results/72315db-dirty-android-20261027T025136Z.json --check`
+**exits 1**, on 13 `FAIL` cells — `mount`/`update:50` JS commit and JS/UI CPU,
+`mount.slider:50`, `mount.progress:50`, and three `segmented-control` presented/UI cells. All
+13 are on the unhosted `nitro-ui` arm, which H2b does not reprice: the only H2b line in that
+file's own render path is the `val isHostable` the unhosted arm never reads. Whether that is
+the machine or something real is unexplained here; what belongs in this report is that
+`--check` is red.
 
 ### Hosted vs unhosted vs `expo-ui-shared-host`
 
@@ -168,3 +189,62 @@ new popup controls (`Picker` 2.23 ms against its 12.91 ms, `SegmentedControl` 2.
 - **The popup controls are cheaper than the published `Switch` JS figure**, and that is not the
   same measurement: the published 1.18x is a ratio to `rn-core` from the 0.1.0 run, and the number
   above is hosted ÷ unhosted within this one. Do not read one as the other.
+
+## Fix round 1
+
+Review `23e6717` — MERGE WITH FIXES — against `main` at `94dab9b`.
+
+**M1.** The dialog's `onDispose` writes `model.setPresented(false)`
+(`HybridNitroUiDatePicker.kt:1151`), so a field hidden by `display: 'none'` mid-dialog no
+longer reopens a window when shown again. **M2.** Android real input gained
+`hosted-date-picker`: a press opens the dialog, 31 clickable year-named day cells cover its
+a11y tree, a picked day reaches JS, and OK, Cancel, Back and removing only that child each
+leave nothing behind; the harness gates child-only removal, and the Back-press comment is now
+true. iOS drives the same JSX, which is all D23 asks of a passthrough. **M3.** README: a
+`SegmentedControl` owns no window, and the bench says what one `quick` run on a shared machine
+is; `host.md` states the layout-move rule, `picker.md` the unhosted half. N1, N2, N7, N8 done,
+N10 corrected above — and two comments rewritten for naming measurements nobody took, hence
+the re-runs.
+
+### Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 460 tests / 25 suites | `f6bf3f8ead07` | 2 m 12 s | start 2.0 / med 4.0 / max 7.4 |
+| `harness:ios` | **PASS** | 165 tests / 13 suites | `f6bf3f8ead07` | 1 m 55 s | start 4.7 / med 4.9 / max 6.4 |
+| `harness:android` | **PASS** | 214 tests / 13 suites | `f6bf3f8ead07` | 5 m 52 s | start 6.4 / med 6.4 / max 8.9 |
+| `real-input:ios` | **PASS** | — | `f6bf3f8ead07` | 7 m 56 s | start 2.2 / med 3.0 / max 3.8 |
+| `real-input:android` | **PASS** | — | `f6bf3f8ead07` | 11 m 31 s | start 8.1 / med 4.9 / max 9.4 |
+| `harness:android:HostPopups` | stale | 2 failed of 24 tests / 1 suites | 0f13d91bbd95 (not this tree) | 51.1 s | start 2.6 / med 5.5 / max 7.7 |
+
+`need --for merge`: `need: merge is satisfied on this code tree.`
+
+Two rows the table does not print. `real-input:ios` went red once at this tree on `switch`:
+`testRealInputSwitch`, which no H2b file touches, missed a tap in the eighth minute of a full
+suite — as at `527552116ea6`, green above and at `d6851b858aad`. An 8 s echo window on someone
+else's case, so reported, not fixed. The stale `harness:android:HostPopups` row is the M1 proof
+below, and the reds at `d6851b858aad` are two of my own device jobs overlapping.
+
+### Red proofs
+
+- `HostPopups` "does not reopen a dialog that a hidden child left behind" -> delete
+  `model.setPresented(false)` from the dialog's `onDispose` -> `expected true to be false`, and
+  "comes down with its row, and leaves nothing when the Host is dropped" timed out reading
+  `1778972400000|1|1777593600000|1|1|2` (`presented=1`, `live=1`).
+- `hosted-date-picker` day-reaches-JS -> make OK commit only when nothing was picked ->
+  `a real tap on a dialog day ("no pick reported") reaches JS through the Host as a new day`,
+  with the case's other eleven checks green.
+- iOS anchor bound -> the one-sided version it replaced went red in a gate run at
+  `527552116ea6`: `the popover opened at y 213.67 while the field ends at 587.00 - it is not
+  anchored to the control that presented it`. The 220 pt displacement was never built, so the
+  comment calls that half arithmetic.
+
+### N items skipped
+
+- **N4** `host.md`'s hosted-Picker "refusal" is a re-pick of the row already shown, not a
+  parent rejecting a change; `SegRows` already has a `refuse` fixture to copy into `PopupHost`.
+- **N5** `followTimeValueInDialog` (`HybridNitroUiDatePicker.kt:1397`) still has no gate.
+- **N6** No outside tap is ever pressed on a hosted Android menu or dialog; the harness comment
+  now names that gap instead of claiming the dismissal.
+- **N9** `PickerModel.reportLock` still guards nothing.
+- **N11** A hosted `SegmentedControl`'s selected state is checked by label, not uiautomator.
