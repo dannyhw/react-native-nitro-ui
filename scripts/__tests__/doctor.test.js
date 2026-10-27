@@ -85,11 +85,13 @@ describe('simulators', () => {
     ],
   };
 
-  it('picks the newest available iOS runtime of the major', () => {
-    expect(pickIosRuntime(runtimes, 27)?.identifier).toBe(
+  it('picks the pinned runtime, not the newest one', () => {
+    expect(pickIosRuntime(runtimes, '27.0')?.identifier).toBe(
       'com.apple.CoreSimulator.SimRuntime.iOS-27-0'
     );
-    expect(pickIosRuntime(runtimes, 28)).toBeNull();
+    // 27.1 is installed but unavailable here; it is never picked for 27.0 anyway.
+    expect(pickIosRuntime(runtimes, '27.1')).toBeNull();
+    expect(pickIosRuntime(runtimes, '28.0')).toBeNull();
   });
 
   it('finds device types by exact name', () => {

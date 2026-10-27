@@ -16,6 +16,9 @@ export const RESERVED_EMULATOR_PORT = RESERVED_EMULATOR_PORTS[0];
 export const REQUIREMENTS = {
   xcodeMajor: 27,
   iosRuntimeMajor: 27,
+  // The gates and baselines run on 27.0; a later 27.x runtime may not carry the
+  // iPhone models the device pairs use (27.1 shipped for one new device only).
+  iosRuntime: '27.0',
   jdkMajor: 17,
   androidSystemImage: 'system-images;android-35;google_apis;arm64-v8a',
   androidApiLevel: 35,
@@ -122,22 +125,22 @@ export function bunStatus(wanted, actual) {
 /**
  * @param {{ runtimes?: Array<{ identifier: string, version: string, isAvailable?: boolean }> }} listing
  *   `xcrun simctl list runtimes -j`.
- * @param {number} major
- * @returns {{ identifier: string, version: string } | null} The newest available
- *   runtime with that major version.
+ * @param {string} version e.g. `27.0`: the runtime the gates run on, matched on
+ *   major and minor, never "the newest" - a newer point runtime can lack the
+ *   device types the pairs need.
+ * @returns {{ identifier: string, version: string } | null}
  */
-export function pickIosRuntime(listing, major) {
-  const candidates = (listing.runtimes ?? [])
-    .filter((runtime) => runtime.isAvailable !== false)
-    .filter((runtime) => parseVersion(runtime.version)?.[0] === major)
-    .filter((runtime) => runtime.identifier.includes('iOS'));
-  candidates.sort((a, b) =>
-    compareVersions(
-      parseVersion(b.version) ?? [],
-      parseVersion(a.version) ?? []
-    )
+export function pickIosRuntime(listing, version) {
+  const wanted = parseVersion(version) ?? [];
+  return (
+    (listing.runtimes ?? [])
+      .filter((runtime) => runtime.isAvailable !== false)
+      .filter((runtime) => runtime.identifier.includes('iOS'))
+      .find((runtime) => {
+        const have = parseVersion(runtime.version);
+        return have != null && have[0] === wanted[0] && have[1] === wanted[1];
+      }) ?? null
   );
-  return candidates[0] ?? null;
 }
 
 /**
