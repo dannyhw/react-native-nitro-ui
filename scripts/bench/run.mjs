@@ -71,14 +71,13 @@ import {
   scenarioActionOf,
 } from './lib.mjs';
 import {
-  machineLabelFromEnv,
-  machineLabelOf,
-  machineLabelProblem,
+  labelPreFlightProblem,
+  mintBaselineFileFor,
   openBaselineForCheck,
 } from './baseline.mjs';
+import { collectMachine, tryExec } from './machine.mjs';
 import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
 import {
-  baselinePath,
   BASELINES_DIR,
   readJson,
   resolveCompareTarget,
@@ -134,69 +133,6 @@ function resolveRef(ref) {
   } catch {
     return ref;
   }
-}
-
-function tryExec(command, args) {
-  try {
-    return execFileSync(command, args, {
-      encoding: 'utf8',
-      timeout: 30_000,
-    }).trim();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Who ran this, on what, and how busy they were (T02 review S10, D9, R4).
- *
- * A baseline is only meaningful if it says so: the load average decides whether
- * the run may mint one at all, and the OS runtime is part of the device key
- * because a runtime change breaks comparability sooner than a device change.
- *
- * `load` is the sampler that ran with the run, so the file carries the load of
- * the whole run (`loadSamples`) and not just the instant this function happens to
- * be called in. `loadavg1`/`loadavg5` stay what they always were - the end-of-run
- * instant, which is all a results file from before R4 had, and what
- * `bench/tools/arm-ratios.mjs` and the markdown report already read.
- */
-function collectMachine(platform, device, load) {
-  const loadavg = os.loadavg();
-  const cpuCount = os.cpus().length;
-  const machine = {
-    // A label, not os.hostname(): results and baselines are committed to a public repo (D25).
-    // It also picks the directory this machine's baselines live in, so `main` refuses an
-    // unusable one before the run starts (see scripts/bench/baseline.mjs).
-    hostname: machineLabelFromEnv(),
-    osPlatform: os.platform(),
-    osRelease: os.release(),
-    osVersion: os.version(),
-    arch: os.arch(),
-    cpuCount,
-    // D15: device keys stay class-level, so the CPU model is what tells two
-    // machines claiming the same `android35-emu-pixel9` / `ios27-sim-iphone17`
-    // key apart when a baseline is being compared across desks or with CI.
-    cpuModel: os.cpus()[0]?.model ?? null,
-    loadavg1: loadavg[0] ?? null,
-    loadavg5: loadavg[1] ?? null,
-    loadSamples: load?.summary({ cpuCount }) ?? null,
-    totalMemoryGb: Math.round((os.totalmem() / 1024 ** 3) * 10) / 10,
-    xcode: tryExec('xcodebuild', ['-version'])?.split('\n')[0] ?? null,
-  };
-  machine.quiet =
-    isNumberLike(machine.loadavg1) && loadBlocker(machine) === null;
-  if (platform === 'ios') {
-    machine.simRuntime = device.runtime ?? null;
-  } else {
-    machine.avd = device.avd ?? null;
-    machine.androidApi = device.sdk ?? null;
-    machine.androidImage = device.image ?? null;
-  }
-  return machine;
-}
-
-function isNumberLike(value) {
-  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function log(message) {
@@ -623,17 +559,12 @@ export async function main(argv) {
   }
 
   // A baseline is keyed by machine as well as by device (bench/baselines/README.md),
-  // so an unlabelled machine has no directory to write one to. Refuse on the same
-  // second as the load check below rather than three hours later, when the run would
-  // have discovered it - and an unusable label is refused for `--check` too, because
-  // there is no other machine's file to fall back to.
-  const minting = argv.includes('--update-baseline');
-  const labelProblem =
-    minting || argv.includes('--check')
-      ? machineLabelProblem(machineLabelFromEnv(), {
-          flag: minting ? '--update-baseline' : '--check',
-        })
-      : null;
+  // so a run that cannot name its machine has no directory to gate against and none
+  // to write one to. Refuse on the same second as the load check below rather than
+  // three hours later, when the run would have discovered it. `--force` does not
+  // bypass this one: the load and cleanliness guards judge measurement quality, and
+  // this is the absence of a path to write to.
+  const labelProblem = labelPreFlightProblem(argv);
   if (labelProblem != null) {
     log(`\n${labelProblem}`);
     process.exitCode = 2;
@@ -840,23 +771,31 @@ export async function main(argv) {
   }
 
   if (argv.includes('--update-baseline')) {
-    const file = baselinePath(run.deviceKey, machineLabelOf(run));
-    const outcome = writeBaseline(file, run, { force });
-    if (outcome.written) {
-      log(`Baseline written: ${path.relative(process.cwd(), file)}`);
-      if (outcome.note != null) {
-        log(`  ${outcome.note}`);
-      }
-      if (force) {
-        log('  (written with --force; review the guards below)');
-      }
-    } else {
-      log(
-        `\n--update-baseline refused (pass --force to override):\n${outcome.blockers
-          .map((reason) => `  - ${reason}`)
-          .join('\n')}`
-      );
+    const mint = mintBaselineFileFor({ baselinesDir: BASELINES_DIR, run });
+    if (mint.refusal != null) {
+      // The pre-flight above normally rules this out; the guard is here because a
+      // baseline must never be resolved from anything but the run that made it.
+      log(`\n${mint.refusal}`);
       exitCode = Math.max(exitCode, 2);
+    } else {
+      const file = mint.file;
+      const outcome = writeBaseline(file, run, { force });
+      if (outcome.written) {
+        log(`Baseline written: ${path.relative(process.cwd(), file)}`);
+        if (outcome.note != null) {
+          log(`  ${outcome.note}`);
+        }
+        if (force) {
+          log('  (written with --force; review the guards below)');
+        }
+      } else {
+        log(
+          `\n--update-baseline refused (pass --force to override):\n${outcome.blockers
+            .map((reason) => `  - ${reason}`)
+            .join('\n')}`
+        );
+        exitCode = Math.max(exitCode, 2);
+      }
     }
   }
 

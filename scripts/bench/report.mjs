@@ -40,12 +40,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  baselineFileFor,
-  machineLabelOf,
-  machineLabelProblem,
-  openBaselineForCheck,
-} from './baseline.mjs';
+import { mintBaselineFileFor, openBaselineForCheck } from './baseline.mjs';
 import { formatCommittedJsonFile } from './format.mjs';
 
 import {
@@ -66,26 +61,6 @@ const REPO_ROOT = path.resolve(
 );
 export const RESULTS_DIR = path.join(REPO_ROOT, 'bench', 'results');
 export const BASELINES_DIR = path.join(REPO_ROOT, 'bench', 'baselines');
-
-/**
- * The baseline file for one run.
- *
- * `deviceKey` already carries the platform and the OS runtime (D9:
- * `ios27-sim-iphoneair`, `android35-emu-pixel9`), and the machine label carries the
- * hardware underneath it (`bench/baselines/maintainer-mac-1/ios27-sim-iphone17.json`),
- * because a ratio to `rn-core` only cancels drift inside one machine. So the key is
- * (machine, device), and there is no path that reaches another machine's file.
- *
- * Throws on a label that cannot name a directory; the CLIs refuse with a message
- * first (`machineLabelProblem`).
- */
-export function baselinePath(deviceKey, machineLabel) {
-  return baselineFileFor({
-    baselinesDir: BASELINES_DIR,
-    deviceKey,
-    machineLabel,
-  });
-}
 
 export function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -218,21 +193,17 @@ if (
   }
 
   if (argv.includes('--update-baseline')) {
-    const machineLabel = machineLabelOf(run);
-    const refusal = machineLabelProblem(machineLabel, {
-      flag: '--update-baseline',
-    });
-    if (refusal != null) {
-      process.stderr.write(`\n${refusal}\n`);
+    const mint = mintBaselineFileFor({ baselinesDir: BASELINES_DIR, run });
+    if (mint.refusal != null) {
+      process.stderr.write(`\n${mint.refusal}\n`);
       exitCode = Math.max(exitCode, 2);
     } else {
-      const file = baselinePath(run.deviceKey, machineLabel);
-      const outcome = writeBaseline(file, run, {
+      const outcome = writeBaseline(mint.file, run, {
         force: argv.includes('--force'),
       });
       if (outcome.written) {
         process.stdout.write(
-          `\nWrote baseline ${path.relative(REPO_ROOT, file)}\n` +
+          `\nWrote baseline ${path.relative(REPO_ROOT, mint.file)}\n` +
             (outcome.note == null ? '' : `  ${outcome.note}\n`)
         );
       } else {

@@ -3,7 +3,7 @@
  *
  * A baseline is a measurement of *one* machine's simulator or emulator. The gate
  * divides by `rn-core` measured in the same run, which cancels drift *inside* that
- * machine and nothing beyond it (`docs/tasks/PROCESS-review-2026-10-26.md` SS5), so
+ * machine and nothing beyond it (`docs/tasks/PROCESS-review-2026-10-26.md` §5), so
  * the committed file is keyed by machine as well as by device class:
  *
  *   bench/baselines/<machine-label>/<deviceKey>.json
@@ -78,7 +78,7 @@ export function machineLabelProblem(label, { flag }) {
   if (label == null || label === UNLABELLED_MACHINE) {
     return (
       `${flag}: this run has no machine label, so there is no per-machine baseline to gate against.\n` +
-      '        Baselines live at bench/baselines/<label>/<deviceKey>.json, and a run labels itself with NITRO_UI_MACHINE_LABEL - export NITRO_UI_MACHINE_LABEL=maintainer-mac-<n> in the shell that runs the bench (`node scripts/doctor.mjs` checks it) and measure again, so the results file says which machine produced it. See bench/baselines/README.md.'
+      '        Baselines live at bench/baselines/<label>/<deviceKey>.json, and a run labels itself with NITRO_UI_MACHINE_LABEL - export NITRO_UI_MACHINE_LABEL=maintainer-mac-<n> in the shell that runs the bench, and measure again, so the results file says which machine produced it. See bench/baselines/README.md.'
     );
   }
   if (!MACHINE_LABEL_PATTERN.test(label)) {
@@ -104,11 +104,74 @@ export function machineLabelProblem(label, { flag }) {
  * @returns {string} `<baselinesDir>/<machineLabel>/<deviceKey>.json`
  */
 export function baselineFileFor({ baselinesDir, deviceKey, machineLabel }) {
-  const problem = machineLabelProblem(machineLabel, { flag: 'baselinePath' });
+  const problem = machineLabelProblem(machineLabel, {
+    flag: 'baselineFileFor',
+  });
   if (problem != null) {
     throw new Error(problem);
   }
   return path.join(baselinesDir, machineLabel, `${deviceKey}.json`);
+}
+
+/**
+ * Why the flags in `argv` cannot work on the machine described by `env`, or null.
+ *
+ * The pre-flight `run.mjs` runs before it boots a device. A baseline is keyed by
+ * machine, so a run that cannot name its machine has no directory to gate against
+ * and none to write one to: discovering that at the end of a `--plan full` run
+ * throws away three hours, which is the same reason R4 refuses a busy machine up
+ * front. A plain run - no `--check`, no `--update-baseline` - compares nothing
+ * against a committed file, so it needs no label and is not refused.
+ *
+ * `--force` does not bypass this, unlike the load and cleanliness guards: those are
+ * judgements about measurement quality, and this is the absence of a path to write
+ * to.
+ *
+ * @param {string[]} argv the runner's arguments
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string | null} the refusal, naming the fix
+ */
+export function labelPreFlightProblem(argv, env = process.env) {
+  const minting = argv.includes('--update-baseline');
+  if (!minting && !argv.includes('--check')) {
+    return null;
+  }
+  return machineLabelProblem(machineLabelFromEnv(env), {
+    flag: minting ? '--update-baseline' : '--check',
+  });
+}
+
+/**
+ * The file `--update-baseline` would write for this run, or the reason it cannot.
+ *
+ * Takes the run rather than a label, and reads nothing from the environment: the run
+ * being minted decides its own directory, so a runner that recorded one machine and
+ * then resolved against whatever the shell says now cannot land its baseline in
+ * another machine's file. Both CLIs call this, which is what keeps `run.mjs` (a live
+ * run) and `report.mjs` (a re-report) writing the same path for the same results.
+ *
+ * @param {object} options
+ * @param {string} options.baselinesDir the `bench/baselines` directory
+ * @param {any} options.run the run doing the minting
+ * @returns {{ file: string | null, machineLabel: string | null, refusal: string | null }}
+ */
+export function mintBaselineFileFor({ baselinesDir, run }) {
+  const machineLabel = machineLabelOf(run);
+  const refusal = machineLabelProblem(machineLabel, {
+    flag: '--update-baseline',
+  });
+  if (refusal != null) {
+    return { file: null, machineLabel, refusal };
+  }
+  return {
+    file: baselineFileFor({
+      baselinesDir,
+      deviceKey: run.deviceKey,
+      machineLabel,
+    }),
+    machineLabel,
+    refusal: null,
+  };
 }
 
 /**

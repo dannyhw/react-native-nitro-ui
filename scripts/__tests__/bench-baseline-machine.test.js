@@ -467,6 +467,15 @@ describe('the bench CLIs on a per-machine baseline', () => {
           ...process.env,
           PATH: `${bin}:${process.env.PATH}`,
           NITRO_UI_MACHINE_LABEL: MINE,
+          // Blank every device the caller might otherwise inherit. `check` can run
+          // inside a leased shell, where IOS_SIM_UDID names a real simulator: a test
+          // that expects a refusal *before* the device would then go on to boot it and
+          // wait out the timeout instead of failing, and its "never reached the device"
+          // assertions would be vacuous.
+          IOS_SIM_UDID: '',
+          ANDROID_SERIAL: '',
+          ANDROID_AVD: '',
+          AVD: '',
           ...env,
         },
       }
@@ -645,6 +654,23 @@ describe('the bench CLIs on a per-machine baseline', () => {
       expect(out.status).toBe(2);
       expect(out.all).toContain('--update-baseline');
       expect(out.all).toContain('NITRO_UI_MACHINE_LABEL');
+      // `--force` does not talk its way past this one: the guards it does override
+      // judge a measurement, and here there is simply no path to write to.
+      const forced = cli(
+        ws,
+        'run.mjs',
+        [
+          '--platform',
+          'ios',
+          '--plan',
+          'quick',
+          '--update-baseline',
+          '--force',
+        ],
+        { NITRO_UI_MACHINE_LABEL: '', IOS_SIM_UDID: '' }
+      );
+      expect(forced.status).toBe(2);
+      expect(forced.all).toContain('NITRO_UI_MACHINE_LABEL');
       // It never got as far as the device it would otherwise boot, let alone the
       // three-hour plan behind that (the R4 load check below it is also untouched).
       expect(out.all).not.toContain('No iOS simulator');
@@ -683,39 +709,53 @@ describe('the bench CLIs on a per-machine baseline', () => {
  * The rule the layout is supposed to encode, checked where it is claimed.
  *
  * A device-key-only lookup resurrected in one call site would read the neighbouring
- * machine's table and never say so, so the shape of the call sites and of the
- * committed tree is asserted here: every baseline path takes a machine label, and
- * every committed baseline sits in the directory of the machine it records.
+ * machine's table and never say so. The structural answer is now the stronger one:
+ * **neither CLI resolves a baseline path or reads a label at all** - both hand the
+ * run to `baseline.mjs` and use what comes back. So there is no call site left at
+ * which to get the label wrong, and the assertion is that the CLIs stay out of it.
+ * That is weaker than a behaviour test and stronger than nothing: the behaviour is
+ * pinned above, over a real child process and a real tree.
  */
-describe('nothing looks a baseline up by device key alone', () => {
+describe('only baseline.mjs resolves a baseline path', () => {
   const benchDir = path.join(process.cwd(), 'scripts', 'bench');
 
-  it('every baselinePath call site passes a machine label', () => {
+  /** Comments out, so the assertion is about the code and not about its prose. */
+  const codeOnly = (source) =>
+    source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+      .replace(/\/\/[^\n`]*$/gm, '');
+
+  it('neither CLI reads a machine label from anywhere', () => {
     for (const name of ['run.mjs', 'report.mjs']) {
-      const source = readFileSync(path.join(benchDir, name), 'utf8');
-      const calls = [...source.matchAll(/baselinePath\(([^)]*)\)/g)].map(
-        (match) => match[1]
-      );
-      expect(calls.length).toBeGreaterThan(0);
-      for (const args of calls) {
-        expect([name, args]).toEqual([
-          name,
-          expect.stringContaining('machine'),
-        ]);
-      }
-      expect(source).toContain('openBaselineForCheck');
+      const code = codeOnly(readFileSync(path.join(benchDir, name), 'utf8'));
+      // Pairwise, so a failure says which file got involved.
+      expect([name, code]).toEqual([
+        name,
+        expect.not.stringMatching(
+          /NITRO_UI_MACHINE_LABEL|machineLabel|hostname/
+        ),
+      ]);
+      // It asks the module for a path, in both directions, and builds none.
+      expect([name, code]).toEqual([
+        name,
+        expect.stringMatching(/mintBaselineFileFor[\s\S]*openBaselineForCheck/),
+      ]);
     }
   });
 
-  it('only baseline.mjs joins a baselines directory with a device key', () => {
+  it('no bench script but baseline.mjs builds a baseline file path', () => {
     for (const name of readdirSync(benchDir)) {
       if (!name.endsWith('.mjs') || name === 'baseline.mjs') {
         continue;
       }
-      const source = readFileSync(path.join(benchDir, name), 'utf8');
-      expect([name, /path\.join\(\s*BASELINES_DIR/.test(source)]).toEqual([
+      const code = codeOnly(readFileSync(path.join(benchDir, name), 'utf8'));
+      // The baselines *directory* may be named (report.mjs defines the constant
+      // both CLIs hand over); what nothing else may do is join a directory with a
+      // device key to reach a file.
+      expect([name, code]).toEqual([
         name,
-        false,
+        expect.not.stringMatching(/path\.(join|resolve)\([^)]*deviceKey/),
       ]);
     }
   });
