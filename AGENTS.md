@@ -49,6 +49,11 @@ Background (read the sections your brief points to):
     `main.async` hops when already on main;
   - controlled values use the event-count handshake (core-architecture §4).
 - Benchmarks for components: include numbers in your report.
+- **Wait for a gate with `gate.mjs`, never a `sleep`/`tail` loop:** `node scripts/gate.mjs <gate>
+  --background` starts it detached and prints its pid and log path; `node scripts/gate.mjs wait
+  --gate <gate> [--timeout-minutes N]` blocks, prints one progress line a minute, and leaves with the
+  gate's own exit code (or `13` for "still running" at the timeout). A backgrounded run writes its
+  ledger line through the same code path as a foreground one.
 - **Every new test or gate must be shown to fail.** Before you rely on it, break the thing it guards
   (wrong size, dropped event, regressed ratio, freed memory) and confirm it goes red; say in your
   report how you proved it. Test fixtures must not coincide with the right answer (e.g. a sizing
