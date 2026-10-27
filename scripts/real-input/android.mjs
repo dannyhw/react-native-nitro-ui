@@ -619,7 +619,10 @@ const CHECKS = {
     );
     t.log.checkEquals(
       'and a SegmentedControl opens no window of its own, hosted or not',
-      t.popupWindowCount(),
+      t.waitForPopupCount(
+        0,
+        'the hosted SegmentedControl to own no window of its own'
+      ),
       0
     );
   },
@@ -1149,7 +1152,7 @@ const CHECKS = {
     await t.tapNode(control);
     t.log.checkEquals(
       'a real tap on the anchor opens the menu as a popup window',
-      t.popupWindowCount(),
+      t.waitForPopupCount(1, 'a real tap on the anchor to open a popup window'),
       1
     );
     // Wait for the dump to carry the menu's rows before asking it about
@@ -1164,7 +1167,7 @@ const CHECKS = {
     await t.pressBack();
     t.log.checkEquals(
       'Back shuts the popup (no window left behind)',
-      t.popupWindowCount(),
+      t.waitForPopupCount(0, 'the back gesture to take the popup down'),
       0
     );
     t.log.checkEquals(
@@ -1188,7 +1191,10 @@ const CHECKS = {
     );
     t.log.checkEquals(
       'tapping the row that is already chosen closes the menu',
-      t.popupWindowCount(),
+      t.waitForPopupCount(
+        0,
+        'a pick of the row already chosen to take the menu down'
+      ),
       0
     );
     t.log.checkEquals(
@@ -1211,7 +1217,11 @@ const CHECKS = {
       t.requireEcho(ECHO.pickerEvents),
       '1'
     );
-    t.log.checkEquals('choosing closes its own popup', t.popupWindowCount(), 0);
+    t.log.checkEquals(
+      'choosing closes its own popup',
+      t.waitForPopupCount(0, 'the pick to take that popup down'),
+      0
+    );
 
     // 4. The box follows a title that moved with no React render: this picker is
     //    uncontrolled, so nothing told React the title changed, and `nuiSizingKey`
@@ -1269,7 +1279,11 @@ const CHECKS = {
       t.waitForEcho(ECHO.rejectEvents, '2', 'the repeated tap to register'),
       '2'
     );
-    t.log.checkEquals('choosing shut that popup too', t.popupWindowCount(), 0);
+    t.log.checkEquals(
+      'choosing shut that popup too',
+      t.waitForPopupCount(0, 'the second pick to take its popup down'),
+      0
+    );
 
     // 6. The leak case (B1's shape, for popups): open a menu, then have React take
     //    the view away underneath it, three times. Each cycle ends with no popup
@@ -1289,7 +1303,10 @@ const CHECKS = {
       // app's is on screen. Steps 1-3 already proved such a popup carries rows.
       t.log.checkEquals(
         `cycle ${String(cycle)}: the drop picker's menu is open as a popup window`,
-        t.popupWindowCount(),
+        t.waitForPopupCount(
+          1,
+          `cycle ${String(cycle)}'s menu to open as a popup window`
+        ),
         1
       );
       // The unmount is on a timer inside the app (2.5 s), so the menu is definitely
@@ -1300,7 +1317,10 @@ const CHECKS = {
       );
       t.log.checkEquals(
         `cycle ${String(cycle)}: unmounting with the menu open leaves no popup window`,
-        t.popupWindowCount(),
+        t.waitForPopupCount(
+          0,
+          `cycle ${String(cycle)}: the unmount to take the open popup down`
+        ),
         0
       );
       if (cycle < 3) {
@@ -1336,7 +1356,7 @@ const CHECKS = {
     await t.tapNode(locked);
     t.log.checkEquals(
       'a real tap on the disabled picker opens no menu',
-      t.popupWindowCount(),
+      t.waitForPopupCount(0, 'a tap on the disabled picker to open nothing'),
       0
     );
     const unlocked = await t.requireControlOnScreen(
@@ -1345,11 +1365,15 @@ const CHECKS = {
     await t.tapNode(unlocked);
     t.log.checkEquals(
       'the ordinary picker, tapped the same way, opens one - so the line above measured a refusal',
-      t.popupWindowCount(),
+      t.waitForPopupCount(1, 'a tap on the enabled picker to open its menu'),
       1
     );
     await t.pressBack();
-    t.log.checkEquals('and that menu goes away again', t.popupWindowCount(), 0);
+    t.log.checkEquals(
+      'and that menu goes away again',
+      t.waitForPopupCount(0, 'the back gesture to take that menu down'),
+      0
+    );
 
     // 8. What a screen reader is offered (M3). The dump is the only witness for
     //    this: the accessibility tree is what TalkBack reads, and a name sitting on
