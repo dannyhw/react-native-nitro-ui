@@ -24,6 +24,12 @@ import {
   pickIosRuntime,
   renderDevicesConfig,
   simulatorsByUdid,
+  simulatorsByUdidWithState,
+  emulatorsFromAdbDevices,
+  unownedBootedDevices,
+  unownedCheckProblem,
+  coldCacheWarning,
+  mainCheckoutPath,
 } from '../doctor-core.mjs';
 import { normalizeDevices } from '../lease-core.mjs';
 
@@ -239,4 +245,207 @@ describe('AVD config', () => {
 it('fails the run only on a failing result', () => {
   expect(exitCode([{ status: 'ok' }, { status: 'warn' }])).toBe(0);
   expect(exitCode([{ status: 'ok' }, { status: 'fail' }])).toBe(1);
+});
+
+/**
+ * Who owns what is booted, and how warm the machine is (X9 items 6 and 3).
+ *
+ * Both features exist because a symptom was read as something else for days: harness
+ * numbers moved and nobody could say why (an unleased simulator eating cores), and a
+ * first build took 9.5 min because nothing on that machine had ever compiled this
+ * code. A check that stays quiet in those states is worse than no check, so each
+ * rule below has a case that says "and it must still say something".
+ */
+describe('unowned devices', () => {
+  const pool = normalizeDevices(
+    renderDevicesConfig(
+      DEFAULT_PAIRS.map((pair, index) => ({ ...pair, udid: `UDID-${index}` })),
+      '27.0'
+    )
+  );
+
+  const sims = (states) =>
+    new Map(
+      Object.entries(states).map(([udid, state]) => [
+        udid,
+        { udid, name: `Sim ${udid}`, state },
+      ])
+    );
+
+  const listing = (states) => ({
+    devices: {
+      'com.apple.CoreSimulator.SimRuntime.iOS-27-0': Object.entries(states).map(
+        ([udid, state]) => ({ udid, name: `Sim ${udid}`, state })
+      ),
+    },
+  });
+
+  it('reads simulator state as well as identity', () => {
+    const byUdid = simulatorsByUdidWithState(
+      listing({ UDID_1: 'Booted', UDID_2: 'Shutdown' })
+    );
+    expect(byUdid.get('UDID_1').state).toBe('Booted');
+    expect(byUdid.get('UDID_2').state).toBe('Shutdown');
+    // An unavailable device is not one anybody can lease or leave running.
+    const withGone = simulatorsByUdidWithState({
+      devices: {
+        runtime: [
+          { udid: 'GONE', name: 'x', state: 'Booted', isAvailable: false },
+          { udid: 'HERE', name: 'y', state: 'Shutdown' },
+        ],
+      },
+    });
+    expect([...withGone.keys()]).toEqual(['HERE']);
+  });
+
+  it('reports a booted pool simulator that no lease holds, and only that one', () => {
+    const warnings = unownedBootedDevices({
+      pool,
+      simulators: sims({ 'UDID-0': 'Booted', 'UDID-1': 'Shutdown' }),
+      emulators: [],
+      leases: [],
+    });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('pair-a');
+    expect(warnings[0]).toContain('UDID-0');
+    expect(warnings[0]).toContain('no lease holds it');
+  });
+
+  it('stays quiet when a live lease holds it - a leased device is not a leak', () => {
+    expect(
+      unownedBootedDevices({
+        pool,
+        simulators: sims({ 'UDID-0': 'Booted', 'UDID-1': 'Booted' }),
+        emulators: [],
+        leases: [{ task: 'X9', holds: ['pair-a', 'pair-b'] }],
+      })
+    ).toEqual([]);
+  });
+
+  it('counts an exclusive lease as holding every pair', () => {
+    expect(
+      unownedBootedDevices({
+        pool,
+        simulators: sims({ 'UDID-0': 'Booted', 'UDID-1': 'Booted' }),
+        emulators: [],
+        leases: [
+          { task: 'BENCH', holds: ['pair-a', 'pair-b'], exclusive: true },
+        ],
+      })
+    ).toEqual([]);
+  });
+
+  it('names a running pool emulator, and ignores one that is not the pool', () => {
+    const attached = [
+      { serial: 'emulator-5574', state: 'device', avd: 'nitroui_a' },
+      { serial: 'emulator-5588', state: 'device', avd: 'someone_elses_avd' },
+    ];
+    const warnings = unownedBootedDevices({
+      pool,
+      simulators: sims({}),
+      emulators: attached,
+      leases: [],
+    });
+    expect(warnings).toEqual([
+      'pair-a: emulator emulator-5574 (AVD nitroui_a) is running and no lease holds it',
+    ]);
+  });
+
+  it('never reports the reserved emulator, whoever booted it', () => {
+    // The reserved serial has the *pool's* AVD behind it in a misconfigured file;
+    // the port rule still has to win, because that device belongs to the human.
+    const warnings = unownedBootedDevices({
+      pool: {
+        pairs: [{ id: 'pair-x', android: { avd: 'mine', emulatorPort: 5560 } }],
+      },
+      simulators: new Map(),
+      emulators: [{ serial: 'emulator-5560', avd: 'mine' }],
+      leases: [],
+    });
+    expect(warnings).toEqual([]);
+  });
+
+  it('maps an adb serial to its AVD through the pool, and leaves strangers unnamed', () => {
+    const attached = emulatorsFromAdbDevices(
+      [
+        'List of devices attached',
+        'emulator-5574\tdevice',
+        'emulator-5570\toffline',
+        'R5CT123ABC\tdevice',
+        '',
+      ].join('\n'),
+      pool.pairs
+    );
+    expect(attached).toEqual([
+      { serial: 'emulator-5574', state: 'device', avd: 'nitroui_a' },
+      { serial: 'emulator-5570', state: 'offline', avd: 'nitroui_b' },
+      { serial: 'R5CT123ABC', state: 'device', avd: null },
+    ]);
+  });
+
+  it('says which tool is missing instead of a clean bill of health', () => {
+    expect(unownedCheckProblem({ xcrunOk: true, adbOk: true })).toBeNull();
+    expect(unownedCheckProblem({ xcrunOk: true, adbOk: false })).toBe(
+      'cannot check for unowned devices without adb'
+    );
+    expect(unownedCheckProblem({ xcrunOk: false, adbOk: false })).toContain(
+      'xcrun simctl and adb'
+    );
+  });
+});
+
+describe('cold build caches', () => {
+  const stats = (hits, misses) =>
+    `Cacheable calls:    ${hits + misses} / ${hits + misses} (100.0%)\n` +
+    `  Hits:             ${hits} / ${hits + misses} (${(100 * hits) / (hits + misses)}.00%)\n` +
+    `  Misses:           ${misses} / ${hits + misses} (100.0%)\n`;
+
+  it('warns on a machine that has never compiled this code', () => {
+    const cold = coldCacheWarning(stats(0, 1030));
+    expect(cold.status).toBe('warn');
+    expect(cold.detail).toContain('0 hits / 1030 misses');
+    expect(cold.detail).toContain('cold');
+    expect(cold.fix).toContain('doctor.mjs --prime');
+  });
+
+  it('accepts a warm machine, and does not need a perfect hit rate', () => {
+    const warm = coldCacheWarning(stats(4200, 1800));
+    expect(warm.status).toBe('ok');
+    expect(warm.detail).toContain('4200 hits / 1800 misses');
+    expect(warm.fix).toBeUndefined();
+  });
+
+  it('says "unknown" rather than guessing when ccache is not installed', () => {
+    expect(coldCacheWarning(null).status).toBe('unknown');
+    expect(coldCacheWarning('').status).toBe('unknown');
+    expect(coldCacheWarning('ccache: unrecognized option').status).toBe(
+      'unknown'
+    );
+  });
+});
+
+describe('where --prime must build', () => {
+  it('is the worktree itself in the main checkout', () => {
+    expect(
+      mainCheckoutPath({
+        toplevel: '/repos/nitro-ui',
+        commonDir: '.git',
+      })
+    ).toBe('/repos/nitro-ui');
+  });
+
+  it('is the main checkout when called from a linked worktree', () => {
+    // ccache and Gradle's cache are shared anyway; Xcode's derived data and the
+    // pod install are not, so priming a throwaway worktree warms nothing durable.
+    expect(
+      mainCheckoutPath({
+        toplevel: '/oss/nitro-ui-worktrees/X9',
+        commonDir: '/oss/react-native-nitro-ui/.git',
+      })
+    ).toBe('/oss/react-native-nitro-ui');
+  });
+
+  it('gives up when git cannot answer, rather than building in the wrong place', () => {
+    expect(mainCheckoutPath({ toplevel: null, commonDir: '.git' })).toBeNull();
+  });
 });

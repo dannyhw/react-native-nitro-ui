@@ -7,7 +7,12 @@
  * (`scripts/__tests__/doctor.test.js`).
  */
 
+import path from 'node:path';
+
 import { RESERVED_EMULATOR_PORTS } from './lease-core.mjs';
+
+/** Local alias so `mainCheckoutPath` stays a pure string function. */
+const nodePath = path;
 
 /** The emulator port every script refuses (the human's own emulator). */
 export const RESERVED_EMULATOR_PORT = RESERVED_EMULATOR_PORTS[0];
@@ -311,4 +316,263 @@ export function applyAvdConfig(ini) {
  */
 export function exitCode(results) {
   return results.some((result) => result.status === 'fail') ? 1 : 0;
+}
+
+/* ----------------------------- unowned devices ---------------------------- */
+
+/**
+ * The simulators in a `simctl list devices -j`, keyed by UDID, with their state.
+ *
+ * `simulatorsByUdid` above drops the state, and the whole point of the unowned
+ * check is to know which pool devices are *Booted*, so this keeps it.
+ *
+ * @param {{ devices?: Record<string, Array<{ udid: string, name: string, state?: string, isAvailable?: boolean }>> }} listing
+ * @returns {Map<string, { udid: string, name: string, state: string, runtime: string }>}
+ */
+export function simulatorsByUdidWithState(listing) {
+  const out = new Map();
+  for (const [runtime, devices] of Object.entries(listing.devices ?? {})) {
+    for (const device of devices) {
+      if (device.isAvailable === false) continue;
+      out.set(device.udid, {
+        udid: device.udid,
+        name: device.name,
+        state: device.state ?? 'Unknown',
+        runtime,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * The serials `adb devices` reports as attached, with their state.
+ *
+ * @param {string} text `adb devices` output
+ * @returns {Array<{ serial: string, state: string }>}
+ */
+export function parseAdbDevices(text) {
+  const out = [];
+  for (const line of String(text ?? '').split('\n')) {
+    const match = /^(\S+)\t(device|offline|unauthorized)\b/.exec(line);
+    if (match == null) continue;
+    out.push({ serial: match[1], state: match[2] });
+  }
+  return out;
+}
+
+/**
+ * The pair ids every *live* lease holds.
+ *
+ * A lease records `holds: [pairId]` (`lease.mjs`), and an `--exclusive` lease
+ * holds every pair. `lease.mjs list` is the human answer to "who has what", and
+ * this is the same question for the script. Expired leases are already gone from
+ * the file by the time `pruneExpired` has run, so callers pass what that left.
+ *
+ * @param {object[]} leases
+ * @returns {Set<string>}
+ */
+export function leasedPairIds(leases) {
+  const ids = new Set();
+  for (const lease of leases ?? []) {
+    for (const hold of lease?.holds ?? []) {
+      if (typeof hold === 'string') ids.add(hold);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Pool devices that are booted while no lease holds them.
+ *
+ * The failure this reports (X9): a task boots a pool simulator or emulator and
+ * dies before releasing its lease, or boots a device by hand instead of leasing
+ * it. Either way the next task's `lease.mjs acquire` happily hands out that pair,
+ * and two tasks now share one device - which is what the lease system exists to
+ * prevent. The lease file says who *owns* a pair; only `simctl` and `adb` say what
+ * is *awake*; nobody compared them, so nobody knew.
+ *
+ * A report, never an action: shutting down a device this script did not start is
+ * against the rules this repo runs by (AGENTS.md), and a device that is awake for
+ * a good reason - a person's own debugging, a bench that booted it deliberately -
+ * is nobody's business to power off.
+ *
+ * Only devices in the *pool* are considered, and only when something booted them:
+ * a machine with an idle pool and an unrelated booted simulator says nothing, and
+ * an unleased simulator that is off is the normal state of a fresh machine.
+ *
+ * @param {object} options
+ * @param {{pairs: Array<{id: string, ios?: {udid?: string} | null, android?: {avd?: string, emulatorPort?: number} | null}>}} pool the normalised devices.json
+ * @param {Map<string, {name: string, state: string}>} simulators by UDID, from `simulatorsByUdidWithState`
+ * @param {Array<{serial: string, avd: string | null}>} emulators attached serials with their AVD name, from `adb emu avd name`
+ * @param {object[]} leases the live leases
+ * @param {number[]} [reservedPorts] serials nobody may lease
+ * @returns {string[]} one warning per unowned booted device
+ */
+export function unownedBootedDevices({
+  pool,
+  simulators,
+  emulators,
+  leases,
+  reservedPorts = RESERVED_EMULATOR_PORTS,
+}) {
+  const held = leasedPairIds(leases);
+  const warnings = [];
+  for (const pair of pool?.pairs ?? []) {
+    if (held.has(pair.id)) continue;
+    const udid = pair.ios?.udid;
+    if (udid != null) {
+      const sim = simulators?.get?.(udid);
+      if (sim?.state === 'Booted') {
+        warnings.push(
+          `${pair.id}: simulator "${sim.name}" (${udid}) is Booted and no lease holds it`
+        );
+      }
+    }
+    const avd = pair.android?.avd;
+    if (avd != null) {
+      for (const entry of emulators ?? []) {
+        if (entry.avd !== avd) continue;
+        const port = Number(/^emulator-(\d+)$/.exec(entry.serial)?.[1] ?? NaN);
+        // The human's own emulator is never this script's to comment on, let
+        // alone touch (AGENTS.md): it is not unowned, it is someone's.
+        if (reservedPorts.includes(port)) continue;
+        warnings.push(
+          `${pair.id}: emulator ${entry.serial} (AVD ${avd}) is running and no lease holds it`
+        );
+      }
+    }
+  }
+  return warnings;
+}
+
+/**
+ * The attached emulators, with the AVD each serial belongs to.
+ *
+ * `adb devices` reports serials and states but never the AVD name, and asking the
+ * device (`adb -s <serial> emu avd name`) costs a server round-trip per device and
+ * fails on an offline one. The pool already assigns one port per AVD, so that
+ * mapping is the answer, and it works for an offline device too — which is exactly
+ * the state a leaked emulator is usually in. A serial outside the pool's ports is
+ * somebody else's emulator and gets `null`, so no warning can blame it on a pair.
+ *
+ * @param {string} text `adb devices` output
+ * @param {Array<{android?: {avd?: string, emulatorPort?: number} | null}>} pairs the normalised pool
+ * @returns {Array<{serial: string, state: string, avd: string | null}>}
+ */
+export function emulatorsFromAdbDevices(text, pairs) {
+  const avdBySerial = new Map(
+    (pairs ?? [])
+      .filter(
+        (pair) =>
+          pair?.android?.avd != null && pair.android.emulatorPort != null
+      )
+      .map((pair) => [
+        `emulator-${pair.android.emulatorPort}`,
+        /** @type {string} */ (pair.android.avd),
+      ])
+  );
+  return parseAdbDevices(text).map((entry) => ({
+    ...entry,
+    avd: avdBySerial.get(entry.serial) ?? null,
+  }));
+}
+
+/**
+ * Whether an unowned-device check can say anything at all.
+ *
+ * A silently-skipped check is the worst version of this feature: it reads as "all
+ * clear" when the truth is "no adb on this machine". So the caller states which
+ * tool is missing instead of printing a clean bill of health.
+ *
+ * @param {{ xcrunOk: boolean, adbOk: boolean }} tools
+ * @returns {string | null}
+ */
+export function unownedCheckProblem(tools) {
+  const missing = [
+    tools.xcrunOk ? null : 'xcrun simctl',
+    tools.adbOk ? null : 'adb',
+  ].filter(Boolean);
+  if (missing.length === 0) return null;
+  return `cannot check for unowned devices without ${missing.join(' and ')}`;
+}
+
+/* ------------------------------- cold caches ------------------------------ */
+
+/**
+ * Whether a machine's build caches look cold, from `ccache -s` (X9).
+ *
+ * The signal, and why this one: the first native build on a fresh machine took
+ * 9.5 min on iOS and 4 m 43 s on Android against 138 s and 17 s warm (X6), so
+ * "is this machine warm?" is really "has a native compile ever run here that this
+ * one can reuse?". Gradle's caches and Xcode's module cache grow only as a
+ * by-product of the same compiles, so they cannot say anything ccache's hit rate
+ * does not also say - and unlike a build-directory existence check, ccache
+ * distinguishes "this machine has built *this kind* of code" from "this machine
+ * has a stale build directory from another branch". An empty Gradle cache with a
+ * full ccache is a machine that will still build fast, which a directory check
+ * would report backwards.
+ *
+ * A machine with no ccache at all is `unknown`, not cold: nothing here can judge
+ * it, and saying "cold" would be a guess about a tool that is not installed.
+ *
+ * The threshold is a hit *count*, not a hit rate: a machine with two calls and no
+ * misses is not warm, it is untouched, and 100 hits is below what one real build
+ * of this repo produces. The rate is still printed, because it is the readable part.
+ *
+ * @param {string | null} statsText `ccache --show-stats` output, or null when ccache is missing
+ * @param {{ minHits?: number }} [thresholds]
+ * @returns {{status: 'ok' | 'warn' | 'unknown', detail: string, fix?: string}}
+ */
+export function coldCacheWarning(statsText, thresholds = {}) {
+  const { minHits = 100 } = thresholds;
+  if (statsText == null || statsText.trim() === '') {
+    return {
+      status: 'unknown',
+      detail: 'no ccache to judge (its hit rate is the signal used here)',
+    };
+  }
+  const number = (label) => {
+    const match = new RegExp(`${label}:[^\\d]*(\\d+)`).exec(statsText);
+    return match == null ? null : Number(match[1]);
+  };
+  const hits = number('Hits');
+  const misses = number('Misses');
+  if (hits == null || misses == null) {
+    return {
+      status: 'unknown',
+      detail: 'ccache stats did not report Hits/Misses',
+    };
+  }
+  const calls = hits + misses;
+  const rate = calls === 0 ? 0 : hits / calls;
+  const detail = `ccache ${String(hits)} hits / ${String(misses)} misses (${(rate * 100).toFixed(0)}%)`;
+  if (hits >= minHits) return { status: 'ok', detail };
+  return {
+    status: 'warn',
+    detail: `${detail} - the first native build here will be cold`,
+    fix: `node scripts/doctor.mjs --prime (builds both platforms once, warming ccache, Gradle and the module caches)`,
+  };
+}
+
+/**
+ * Where the shared caches of this repo actually live, given git's own answers.
+ *
+ * `--prime` must build in the *main* checkout, not the worktree it happens to be
+ * called from: ccache and Gradle's cache are shared anyway, but Xcode's derived
+ * data and the pod install are per directory, and a task's throwaway worktree
+ * would throw that build away. `git rev-parse` says which is which: a linked
+ * worktree reports an absolute `--git-common-dir` inside the main checkout, the
+ * main checkout reports a relative `.git`.
+ *
+ * @param {{ toplevel: string | null, commonDir: string | null }} git
+ * @returns {string | null} absolute path to the main checkout, or null when git did not answer
+ */
+export function mainCheckoutPath({ toplevel, commonDir }) {
+  if (toplevel == null || toplevel === '') return null;
+  // A relative common dir means "this very checkout is the main one".
+  if (commonDir == null || !nodePath.isAbsolute(commonDir)) return toplevel;
+  return nodePath.basename(commonDir) === '.git'
+    ? nodePath.dirname(commonDir)
+    : toplevel;
 }

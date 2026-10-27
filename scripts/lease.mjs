@@ -25,6 +25,8 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
@@ -44,6 +46,12 @@ import {
   withLock,
   writeJsonAtomic,
 } from './lease-core.mjs';
+import {
+  emulatorsFromAdbDevices,
+  simulatorsByUdidWithState,
+  unownedBootedDevices,
+  unownedCheckProblem,
+} from './doctor-core.mjs';
 
 const USAGE =
   'usage: node scripts/lease.mjs acquire --task <id> [--platform ios|android|both]\n' +
@@ -132,6 +140,103 @@ function parseArgs(argv) {
     throw new Error(`--wait-minutes and --ttl-minutes need numbers\n${USAGE}`);
   }
   return options;
+}
+
+/**
+ * The machine's pool, or null when there is none.
+ *
+ * Only for read-only reporting: `list` works without a `devices.json` (the lease
+ * file is the interesting one), so a missing or broken pool must not turn a
+ * report into an error. `acquire` keeps using `loadDevices`, which does fail.
+ */
+function loadDevicesOrNull(options, paths) {
+  try {
+    return loadDevices(options, paths).devices;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pool devices that are running with no lease (X9 item 6), as warnings.
+ *
+ * A read-only `simctl list` and `adb devices`: no boot, no `emu avd name`
+ * round-trip, because the AVD behind a serial comes from the pool's own port
+ * assignment. Either tool may be missing, and `unownedCheckProblem` then says so
+ * rather than leaving a clean bill of health where a check did not run.
+ *
+ * `NITRO_UI_SIMCTL_BIN` / `NITRO_UI_ADB_BIN` name the programs to run. Tests use
+ * them to point at a canned-output script instead of the real tools (so the check
+ * is not machine-dependent, and a missing tool is testable too); production never
+ * sets them.
+ *
+ * @param {ReturnType<typeof normalizeDevices> | null} devices
+ * @param {object[]} leases live leases
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string[]}
+ */
+function scanUnownedDevices(devices, leases, env = process.env) {
+  if (devices == null) return [];
+  const listing = runJson(
+    env.NITRO_UI_SIMCTL_BIN ?? 'xcrun',
+    ['simctl', 'list', 'devices', '-j'],
+    env
+  );
+  const attached = runText(adbPath(env), ['devices'], env);
+  const problem = unownedCheckProblem({
+    xcrunOk: listing != null,
+    adbOk: attached != null,
+  });
+  const warnings =
+    listing == null && attached == null
+      ? []
+      : unownedBootedDevices({
+          pool: devices,
+          simulators: simulatorsByUdidWithState(listing ?? {}),
+          emulators: emulatorsFromAdbDevices(attached ?? '', devices.pairs),
+          leases,
+          reservedPorts: devices.reservedEmulatorPorts,
+        });
+  return problem == null ? warnings : [problem, ...warnings];
+}
+
+/** Where `adb` lives, or the bare name when no SDK root is set. */
+function adbPath(env) {
+  if (env.NITRO_UI_ADB_BIN != null) return env.NITRO_UI_ADB_BIN;
+  const sdk = env.ANDROID_HOME ?? env.ANDROID_SDK_ROOT;
+  return sdk != null && existsSync(join(sdk, 'platform-tools/adb'))
+    ? join(sdk, 'platform-tools/adb')
+    : 'adb';
+}
+
+/** @returns {string | null} stdout, or null when the command could not run */
+function runText(command, args, env = process.env) {
+  try {
+    const result = spawnSync(command, args, {
+      encoding: 'utf8',
+      timeout: 20_000,
+      env,
+    });
+    if (result.status !== 0) return null;
+    return result.stdout ?? '';
+  } catch {
+    return null;
+  }
+}
+
+/** @returns {object | null} parsed JSON, or null when the command could not run */
+function runJson(command, args, env = process.env) {
+  return parseJsonOrNull(runText(command, args, env));
+}
+
+/** @param {string | null} text */
+function parseJsonOrNull(text) {
+  if (text == null) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 /** The machine's pool, with the reason it is missing spelled out. */
@@ -315,12 +420,21 @@ function main(argv) {
       readJson(paths.leases, { leases: [] }),
       Date.now()
     );
+    // What is booted right now, which neither file says (X9 item 6). Written to
+    // stderr in both output modes: `--json`'s stdout is the lease state, and an
+    // agent reading it should not have a host-snapshot mixed into the record.
+    const unowned = scanUnownedDevices(
+      loadDevicesOrNull(options, paths),
+      state.leases
+    );
     if (options.json) {
       process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+      for (const warning of unowned) log(`lease: ${warning}`);
       return 0;
     }
     if (state.leases.length === 0 && state.pendingExclusive == null) {
       process.stdout.write(`no leases in ${paths.leases}\n`);
+      for (const warning of unowned) log(`lease: ${warning}`);
       return 0;
     }
     for (const lease of state.leases) {
@@ -343,6 +457,7 @@ function main(argv) {
           `wants an exclusive lease, ${Math.round((Date.now() - entry.requestedAt) / 1000)}s waiting\n`
       );
     }
+    for (const warning of unowned) log(`lease: ${warning}`);
     return 0;
   }
 
