@@ -154,13 +154,10 @@ src/components/<Name>/<Name>.nitro.ts   the Nitro spec
 src/components/<Name>/<Name>.tsx        the JS wrapper
 src/components/<Name>/NitroUi<Name>Config.ts
 example/src/<Name>Screen.tsx            the tab's screen (behaviour: hand-written)
-nitro.json                              one autolinking entry (`ios: swift`, `android:
-                                        kotlin`) — nitrogen reads it and refuses to generate
-                                        a Hybrid View that is not in it, so it goes in first
 
 # 2. say what the control is, and let the lists follow
 src/components/<Name>/component.json    copy one and edit it
-bun run regen                           nitrogen + the registry
+bun run regen                           the registry, then nitrogen, then the registry
 
 # 3. the behaviour a manifest cannot describe
 src/index.ts                            the export list
@@ -184,19 +181,24 @@ is already there is copied rather than re-rendered, and existing rows keep their
 positions. `scripts/__tests__/registry.test.js` asserts that running `--write`
 over a copy of the tree leaves every shipped file byte-identical.
 
-Two files the brief might have expected the generator to own are deliberately
-only **checked**:
+One file the brief might have expected the generator to own is deliberately only
+**checked**:
 
-- `nitro.json` is nitrogen's output — it rewrites the file on every run and orders
-  entries by spec-discovery order, so a second writer would make `nitrogen:check`
-  and `registry:check` fail in whichever order they last ran.
 - `src/index.ts` exports `<Host>`, which has no manifest (a container, not a
   control), and its export lists name per-component types that vary by rule no
   manifest carries (`SegmentedControlChange`, `DatePickerVariant`). Its header
   prose is also the statement of what is public.
 
-Both checks catch the mistake a hand-written file actually makes: a component
-exists and something downstream cannot see it.
+The check on it catches the mistake a hand-written file actually makes: a
+component exists and something downstream cannot see it.
+
+`nitro.json` is not in that list: the registry generates its `autolinking`
+section, because the alternative is a per-component edit a merge throws away
+(see "Merging two components"). Nitrogen only *reads* the file — `nitrogen src
+--config nitro.json` — and writes it nowhere in this repo's scripts, so the
+registry is the only writer and nothing contends for it. `regen` runs the
+registry before nitrogen for exactly that reason: nitrogen refuses to generate a
+Hybrid View with no entry, so the entry has to exist first.
 
 The behaviour tables stay hand-written, and a test says so when one is missing:
 `scripts/__tests__/component-coverage.test.js` fails if a bench arm has no branch
