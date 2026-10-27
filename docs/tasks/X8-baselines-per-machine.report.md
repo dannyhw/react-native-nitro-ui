@@ -36,8 +36,8 @@ resolver, and a test asserts no bench script joins `BASELINES_DIR` with a device
 so a call site cannot silently resurrect the old lookup.
 
 Verified against the committed data, not only fixtures: through the new resolver
-`maintainer-mac-1` reads both real baselines (168 cells each) and `maintainer-mac-2` is
-told to mint its own; `report.mjs --check` against the real
+`maintainer-mac-1` reads both real baselines (168 cells on iOS, 140 on Android) and
+`maintainer-mac-2` is told to mint its own; `report.mjs --check` against the real
 `maintainer-mac-1/ios27-sim-iphone17.json` still gates. The published package is
 unchanged (`package-files`: 465 files, matches `etc/package-files.txt`).
 
@@ -66,8 +66,9 @@ Suite: `scripts/__tests__/bench-baseline-machine.test.js` (25 tests). Fixtures u
 tempting file is a table that would change the verdict if read — never a pass — so a
 fallback that should be gone shows up as a wrong answer rather than a green test.
 
-- path built without the machine label -> `join(baselinesDir, \`${deviceKey}.json\`)` ->
-  11 tests red, incl. `keys the file by machine label, then device key` and
+- path built without the machine label -> `baselineFileFor` joins `baselinesDir` with
+  just the device key -> 11 tests red, incl.
+  `keys the file by machine label, then device key` and
   `mints into the machine directory, creating it`.
 - provenance check disabled -> `return null` at the top of
   `baselineProvenanceProblem` -> `refuses a file whose hostname is another machine…` ->
