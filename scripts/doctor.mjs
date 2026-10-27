@@ -40,6 +40,7 @@ import {
   bunStatus,
   cocoapodsProblem,
   deviceTypeId,
+  supportedIphones,
   devicesConfigProblems,
   exitCode,
   parseAvdList,
@@ -607,13 +608,16 @@ function setupDevices({ runtime, tools }) {
         sim.name === pair.simulatorName && sim.runtime === runtime.identifier
     )?.udid;
     if (udid == null) {
-      const type = deviceTypeId(types, pair.simulatorType);
+      const type = deviceTypeId(types, pair.simulatorType, runtime);
       if (type == null) {
+        const iphones = supportedIphones(runtime);
         results.push({
           area: 'setup',
           name: pair.simulatorName,
           status: 'fail',
-          detail: `no "${pair.simulatorType}" device type`,
+          detail:
+            `iOS ${runtime.version} has no "${pair.simulatorType}" device type` +
+            (iphones.length > 0 ? ` (it supports: ${iphones.join(', ')})` : ''),
         });
         continue;
       }

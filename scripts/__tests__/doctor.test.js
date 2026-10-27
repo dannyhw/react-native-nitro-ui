@@ -16,6 +16,7 @@ import {
   cocoapodsProblem,
   compareVersions,
   deviceTypeId,
+  supportedIphones,
   devicesConfigProblems,
   exitCode,
   parseAvdList,
@@ -108,6 +109,26 @@ describe('simulators', () => {
       'com.apple.CoreSimulator.SimDeviceType.iPhone-17'
     );
     expect(deviceTypeId(types, 'iPhone Air')).toBeNull();
+  });
+
+  it("prefers the runtime's own supported types over the global list", () => {
+    const types = {
+      devicetypes: [{ name: 'iPhone 17', identifier: 'from-another-xcode' }],
+    };
+    const runtime = {
+      supportedDeviceTypes: [
+        {
+          name: 'iPhone 17',
+          identifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17',
+        },
+        { name: 'iPad Pro', identifier: 'ipad' },
+      ],
+    };
+    expect(deviceTypeId(types, 'iPhone 17', runtime)).toBe(
+      'com.apple.CoreSimulator.SimDeviceType.iPhone-17'
+    );
+    expect(deviceTypeId(types, 'iPhone Air', runtime)).toBeNull();
+    expect(supportedIphones(runtime)).toEqual(['iPhone 17']);
   });
 
   it('indexes available simulators by UDID with their runtime', () => {

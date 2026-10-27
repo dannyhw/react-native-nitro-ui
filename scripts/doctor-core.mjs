@@ -141,16 +141,30 @@ export function pickIosRuntime(listing, major) {
 }
 
 /**
+ * The device type to create a simulator with, taken from the runtime's own
+ * `supportedDeviceTypes` when it lists them: `simctl list devicetypes` spans every
+ * installed Xcode and runtime, and a type from there that this runtime does not
+ * support fails `simctl create` with "Incompatible device" (code 403).
+ *
  * @param {{ devicetypes?: Array<{ identifier: string, name: string }> }} listing
- *   `xcrun simctl list devicetypes -j`.
+ *   `xcrun simctl list devicetypes -j`, the fallback for a runtime without the list.
  * @param {string} name e.g. `iPhone 17`.
+ * @param {{ supportedDeviceTypes?: Array<{ identifier: string, name: string }> }} [runtime]
  * @returns {string | null}
  */
-export function deviceTypeId(listing, name) {
-  return (
-    (listing.devicetypes ?? []).find((type) => type.name === name)
-      ?.identifier ?? null
-  );
+export function deviceTypeId(listing, name, runtime) {
+  const types = runtime?.supportedDeviceTypes ?? listing.devicetypes ?? [];
+  return types.find((type) => type.name === name)?.identifier ?? null;
+}
+
+/**
+ * @param {{ supportedDeviceTypes?: Array<{ name: string }> }} runtime
+ * @returns {string[]} The iPhone models the runtime supports, for an error message.
+ */
+export function supportedIphones(runtime) {
+  return (runtime.supportedDeviceTypes ?? [])
+    .map((type) => type.name)
+    .filter((name) => name.startsWith('iPhone'));
 }
 
 /**
