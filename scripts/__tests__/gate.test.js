@@ -1730,6 +1730,25 @@ describe('gate.mjs --background and wait', () => {
     }
   }
 
+  /** Polls until the log holds `text` (the gate has begun producing output). */
+  async function waitForLog(dir, record, text, timeoutMs = 30_000) {
+    const file = logFile(dir, record.logPath);
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      try {
+        if (fs.readFileSync(file, 'utf8').includes(text)) return;
+      } catch {
+        /* not created yet */
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `the gate's log never contained ${JSON.stringify(text)}`
+        );
+      }
+      await sleep(50);
+    }
+  }
+
   const iosOnly = {
     'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
   };
@@ -1738,9 +1757,11 @@ describe('gate.mjs --background and wait', () => {
     const dir = checkout(iosOnly);
     const startedAt = Date.now();
     const started = runCli(dir, ['harness:android', '--background'], {
-      // Longer than any plausible launcher overhead, so "returned early" below is
-      // a measurement and not a coincidence.
-      FAKE_SLEEP: '5',
+      // Long enough that the gate is certainly still mid-run by the time `wait`
+      // gets its first look (see the wait below), and longer than any plausible
+      // launcher overhead, so "returned early" is a measurement and not a
+      // coincidence.
+      FAKE_SLEEP: '20',
       FAKE_PROGRESS: 'Compiling Switch.swift',
     });
     expect(started.status).toBe(0);
@@ -1764,6 +1785,15 @@ describe('gate.mjs --background and wait', () => {
     const status = runCli(dir, ['status']);
     expect(status.stdout).toContain('running harness:android');
     expect(status.stdout).toMatch(/pid \d+/);
+
+    // Wait for the gate to have *written* the line `wait` is about to be asked to
+    // report. `wait` prints progress once, on its first pass, and a gate that has
+    // not started printing yet leaves it with the launcher's own header as the last
+    // line - which is what the full `check` (36 suites at once) caught: the
+    // assertion below was passing only because the machine was idle enough for the
+    // child to beat `wait` to the file. The claim under test is "progress comes from
+    // the log", so the fixture supplies the log's content rather than racing it.
+    await waitForLog(dir, record, 'Compiling Switch.swift');
 
     const wait = runCli(dir, ['wait', '--gate', 'harness:android']);
     expect(wait.status).toBe(0);
