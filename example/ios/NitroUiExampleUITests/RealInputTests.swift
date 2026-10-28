@@ -138,9 +138,14 @@ final class RealInputTests: XCTestCase {
       "the Switch should start off before any touch is delivered"
     )
 
-    control.centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.switchValue) { $0 == "on" },
+      try tapUntilValue(
+        "switch-controlled",
+        echo: Echo.switchValue,
+        expected: "on",
+        as: "the controlled Switch",
+        waitingFor: "the first real tap"
+      ),
       "on",
       "one real tap should flip the Switch, and React should render \"on\""
     )
@@ -151,9 +156,14 @@ final class RealInputTests: XCTestCase {
     // `docs/tasks/T15-real-input.report.md` has the measurements.
     try assertStillInPlace("switch-controlled", startedAt: whereItStarted, after: "the first real tap")
 
-    try required("switch-controlled", as: "the controlled Switch").centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.switchValue) { $0 == "off" },
+      try tapUntilValue(
+        "switch-controlled",
+        echo: Echo.switchValue,
+        expected: "off",
+        as: "the controlled Switch",
+        waitingFor: "the second real tap"
+      ),
       "off",
       "a second real tap should flip it back, so the check is not one fluke"
     )
@@ -177,18 +187,28 @@ final class RealInputTests: XCTestCase {
       "the hosted Switch should start off before any touch is delivered"
     )
 
-    control.centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.hostValue) { $0 == "on" },
+      try tapUntilValue(
+        "host-switch-0",
+        echo: Echo.hostValue,
+        expected: "on",
+        as: "the Switch inside the Host",
+        waitingFor: "the first real tap"
+      ),
       "on",
       "one real tap should flip a Switch inside a Host, and React should render \"on\""
     )
 
     try assertStillInPlace("host-switch-0", startedAt: whereItStarted, after: "the first real tap")
 
-    try required("host-switch-0", as: "the Switch inside the Host").centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.hostValue) { $0 == "off" },
+      try tapUntilValue(
+        "host-switch-0",
+        echo: Echo.hostValue,
+        expected: "off",
+        as: "the Switch inside the Host",
+        waitingFor: "the second real tap"
+      ),
       "off",
       "a second real tap should flip it back, so the check is not one fluke"
     )
@@ -227,9 +247,14 @@ final class RealInputTests: XCTestCase {
       "the hosted Buttons should start with no presses recorded"
     )
 
-    control.centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.hostButtonPresses) { $0 == "1" },
+      try tapUntilValue(
+        "host-button",
+        echo: Echo.hostButtonPresses,
+        expected: "1",
+        as: "the Button inside the Host",
+        waitingFor: "the first real tap"
+      ),
       "1",
       "one real tap on a Button inside a Host should reach onPress, and React should render 1 (the dump above shows what was on screen instead)"
     )
@@ -241,9 +266,14 @@ final class RealInputTests: XCTestCase {
       "a real tap on the disabled Button inside the Host should be refused: onPress was passed to it too, so a count that moves proves the touch was not refused"
     )
 
-    control.centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.hostButtonPresses) { $0 == "2" },
+      try tapUntilValue(
+        "host-button",
+        echo: Echo.hostButtonPresses,
+        expected: "2",
+        as: "the Button inside the Host",
+        waitingFor: "the second real tap"
+      ),
       "2",
       "a second real tap should press the hosted Button again - which is also what proves the line above measured a refusal and not a screen that stopped rendering"
     )
@@ -376,18 +406,26 @@ final class RealInputTests: XCTestCase {
       "a Switch keeps its own width inside a Host too (\(switchWidth) against \(barWidth))"
     )
 
-    let button = try required("host-mixed-button", as: "the Button of the mixed Host")
-    button.centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.hostMixedState) { $0 == "off 0.50 1" },
+      try tapUntilValue(
+        "host-mixed-button",
+        echo: Echo.hostMixedState,
+        expected: "off 0.50 1",
+        as: "the Button of the mixed Host",
+        waitingFor: "the real tap on the mixed Host's Button"
+      ),
       "off 0.50 1",
       "the Button in a mixed Host should press, and nothing else in the echo should move (the dump above shows what was on screen instead)"
     )
 
-    let flip = try required("host-mixed-switch", as: "the Switch of the mixed Host")
-    flip.centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.hostMixedState) { $0 == "on 0.50 1" },
+      try tapUntilValue(
+        "host-mixed-switch",
+        echo: Echo.hostMixedState,
+        expected: "on 0.50 1",
+        as: "the Switch of the mixed Host",
+        waitingFor: "the real tap on the mixed Host's Switch"
+      ),
       "on 0.50 1",
       "the Switch in the same Host should answer too, with the press count left where the Button put it"
     )
@@ -417,7 +455,11 @@ final class RealInputTests: XCTestCase {
       "the hosted DatePicker should show the day JS gave it"
     )
 
-    field.centre.tap()
+    try tapUntilPresentation(
+      "host-datepicker",
+      as: "the DatePicker inside the Host",
+      waitingFor: "the real tap on the hosted field"
+    )
     let opened = try openPresentation(from: field, watching: Echo.hostDateValue)
     try pickSomeDay(in: opened, from: field, watching: Echo.hostDateValue) { $0 != seeded }
 
@@ -463,20 +505,30 @@ final class RealInputTests: XCTestCase {
       "the hosted SegmentedControl should show the index JS gave it"
     )
 
-    control.atFraction(0.5).tap()
     XCTAssertEqual(
-      readUntil(Echo.hostSegmentedIndex) { $0 == "1" },
+      try tapUntilValue(
+        "host-segmented",
+        echo: Echo.hostSegmentedIndex,
+        expected: "1",
+        as: "the SegmentedControl inside the Host",
+        waitingFor: "the real tap on the middle segment",
+        atFractionX: 0.5
+      ),
       "1",
       "a real tap on the middle segment of a SegmentedControl inside a Host should reach JS as index 1"
     )
 
     try assertStillInPlace("host-segmented", startedAt: whereItStarted, after: "the first real tap")
 
-    try required("host-segmented", as: "the SegmentedControl inside the Host")
-      .atFraction(0.9)
-      .tap()
     XCTAssertEqual(
-      readUntil(Echo.hostSegmentedIndex) { $0 == "2" },
+      try tapUntilValue(
+        "host-segmented",
+        echo: Echo.hostSegmentedIndex,
+        expected: "2",
+        as: "the SegmentedControl inside the Host",
+        waitingFor: "the real tap on the last segment",
+        atFractionX: 0.9
+      ),
       "2",
       "a real tap on the last segment of the hosted SegmentedControl should reach JS as index 2"
     )
@@ -496,7 +548,6 @@ final class RealInputTests: XCTestCase {
   func testRealInputHostedPicker() throws {
     try goToTab(Tab.hostTab, showing: Echo.hostValue)
     try scrollIntoView("host-picker", as: "the Picker inside the Host")
-    let control = try required("host-picker", as: "the Picker inside the Host")
     XCTAssertEqual(
       try read(Echo.hostPickerIndex),
       "1",
@@ -504,8 +555,15 @@ final class RealInputTests: XCTestCase {
     )
 
     // 1. Opening. The rows exist only while the menu is open, which is also the witness
-    //    that the hosted anchor answered a real touch.
-    control.centre.tap()
+    //    that the hosted anchor answered a real touch - so the press is repeated until
+    //    one is up, and "the anchor is deaf" stops being the first explanation offered
+    //    for a touch the simulator never delivered.
+    try tapUntilOption(
+      "host-picker",
+      as: "the Picker inside the Host",
+      option: "Gamma",
+      waitingFor: "the real tap on the hosted anchor"
+    )
     _ = try waitForOption("Gamma", "the hosted Picker's menu to open")
     XCTAssertEqual(
       try read(Echo.hostPickerIndex),
@@ -521,9 +579,13 @@ final class RealInputTests: XCTestCase {
     )
 
     // 3. Choosing something else.
-    try waitForOption("Gamma", "the hosted menu to be tappable").tap()
     XCTAssertEqual(
-      readUntil(Echo.hostPickerIndex) { $0 == "2" },
+      try tapOptionUntilValue(
+        option: "Gamma",
+        echo: Echo.hostPickerIndex,
+        expected: "2",
+        waitingFor: "the real tap on a hosted menu row"
+      ),
       "2",
       "a real tap on a hosted menu row should reach JS as index 2"
     )
@@ -548,8 +610,17 @@ final class RealInputTests: XCTestCase {
     //    and no change is reported - the binding's own rule (G6), read here through a
     //    Host. The witness that the menu reopened is a different row from the one being
     //    tapped: while it is open both exist, and only one of them survives closing.
-    try required("host-picker", as: "the Picker inside the Host").centre.tap()
+    try tapUntilOption(
+      "host-picker",
+      as: "the Picker inside the Host",
+      option: "Beta",
+      waitingFor: "the real tap that reopens the hosted menu"
+    )
     _ = try waitForOption("Beta", "the hosted menu to reopen")
+    // The row tap here stays blind on purpose: its correct outcome is that *nothing*
+    // is reported, so there is no witness to wait for and a retry would press a
+    // closing menu a second time. What the helper above guarantees is only that the
+    // menu this tap lands in was really opened by a touch.
     try waitForOption("Gamma", "the reopened hosted menu to list its current choice").tap()
     _ = waitUntilOptionGone("Beta", "the hosted menu to close")
     XCTAssertEqual(
@@ -644,9 +715,14 @@ final class RealInputTests: XCTestCase {
       "the Button should start with no presses recorded"
     )
 
-    control.centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.buttonCount) { $0 == "1" },
+      try tapUntilValue(
+        "real-input-enabled",
+        echo: Echo.buttonCount,
+        expected: "1",
+        as: "the enabled Button",
+        waitingFor: "the first real tap"
+      ),
       "1",
       "one real tap on the enabled Button should reach onPress and React should render 1 - the hierarchy dump above shows what was on screen instead"
     )
@@ -658,9 +734,14 @@ final class RealInputTests: XCTestCase {
       "a real tap on the disabled Button should be refused: onPress was passed to it too, so a count that moves proves the touch was not refused"
     )
 
-    control.centre.tap()
     XCTAssertEqual(
-      readUntil(Echo.buttonCount) { $0 == "2" },
+      try tapUntilValue(
+        "real-input-enabled",
+        echo: Echo.buttonCount,
+        expected: "2",
+        as: "the enabled Button",
+        waitingFor: "the second real tap"
+      ),
       "2",
       "a second real tap should press the enabled Button again - which is also what proves the line above measured a refusal and not a screen that had stopped rendering"
     )
@@ -701,9 +782,15 @@ final class RealInputTests: XCTestCase {
 
     // The three options are single digits, so the segments are the same width and
     // the middle of the control is the middle segment on both platforms.
-    control.atFraction(0.5).tap()
     XCTAssertEqual(
-      readUntil(Echo.segmentedIndex) { $0 == "1" },
+      try tapUntilValue(
+        "real-input-segmented",
+        echo: Echo.segmentedIndex,
+        expected: "1",
+        as: "the uncontrolled SegmentedControl",
+        waitingFor: "the real tap on the second segment",
+        atFractionX: 0.5
+      ),
       "1",
       "a real tap on the second segment should reach JS as index 1"
     )
@@ -713,18 +800,21 @@ final class RealInputTests: XCTestCase {
 
     // A different segment, so a second change is owed: a control that reported the
     // same index twice would also satisfy the line above by echoing once.
-    try required("real-input-segmented", as: "the uncontrolled SegmentedControl")
-      .atFraction(0.12)
-      .tap()
     XCTAssertEqual(
-      readUntil(Echo.segmentedIndex) { $0 == "0" },
+      try tapUntilValue(
+        "real-input-segmented",
+        echo: Echo.segmentedIndex,
+        expected: "0",
+        as: "the uncontrolled SegmentedControl",
+        waitingFor: "the real tap on the first segment",
+        atFractionX: 0.12
+      ),
       "0",
       "a real tap on the first segment should reach JS as index 0"
     )
     XCTAssertEqual(try read(Echo.segmentedEvents), "2", "two taps should report two changes")
 
     // The refusing parent.
-    let rejecting = try required("real-input-segmented-reject", as: "the controlled SegmentedControl")
     XCTAssertEqual(
       try read(Echo.rejectValue),
       "0",
@@ -732,9 +822,15 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(try read(Echo.rejectEvents), "0", "no change should be reported before a touch")
 
-    rejecting.atFraction(0.5).tap()
     XCTAssertEqual(
-      readUntil(Echo.rejectEvents) { $0 == "1" },
+      try tapUntilValue(
+        "real-input-segmented-reject",
+        echo: Echo.rejectEvents,
+        expected: "1",
+        as: "the controlled SegmentedControl",
+        waitingFor: "the real tap on the controlled control's second segment",
+        atFractionX: 0.5
+      ),
       "1",
       "a real tap on the controlled control's second segment should still reach JS - native paints optimistically (core.md section 4)"
     )
@@ -746,11 +842,15 @@ final class RealInputTests: XCTestCase {
 
     // The snap-back oracle, explained above: this tap can only be reported if the
     // selection went back to the first segment.
-    try required("real-input-segmented-reject", as: "the controlled SegmentedControl")
-      .atFraction(0.5)
-      .tap()
     XCTAssertEqual(
-      readUntil(Echo.rejectEvents) { $0 == "2" },
+      try tapUntilValue(
+        "real-input-segmented-reject",
+        echo: Echo.rejectEvents,
+        expected: "2",
+        as: "the controlled SegmentedControl",
+        waitingFor: "the second real tap on segment 2",
+        atFractionX: 0.5
+      ),
       "2",
       "a second tap on segment 2 should be a fresh selection, which is only true if the refused one was rolled back"
     )
@@ -818,8 +918,14 @@ final class RealInputTests: XCTestCase {
     )
 
     // 1. Opening. The rows exist only while the menu is open, which is also the
-    //    witness that the anchor answered a touch at all.
-    control.centre.tap()
+    //    witness that the anchor answered a touch at all - so the press is repeated
+    //    until a row is up rather than asserted once and read as a deaf Picker.
+    try tapUntilOption(
+      "real-input-picker",
+      as: "the uncontrolled Picker",
+      option: Choice.longest,
+      waitingFor: "the real tap on the anchor"
+    )
     _ = try waitForOption(Choice.longest, "the menu to open")
     XCTAssertEqual(
       try read(Echo.pickerEvents),
@@ -842,8 +948,29 @@ final class RealInputTests: XCTestCase {
     // 3. The way out that changes nothing: tap the row that is already chosen. The
     //    menu closes and no change is reported - the binding's own rule, and the
     //    reason a person can leave a menu they opened by mistake.
-    try waitForOption(Choice.first, "the menu's first row to be tappable").tap()
-    _ = waitUntilOptionGone(Choice.longest, "the menu to close")
+    //
+    //    The witness for *this* press is the menu going away, and it is a safe one to
+    //    retry: choosing the row that is already chosen reports nothing however often
+    //    it happens, so an attempt that follows a dropped tap cannot move the echo the
+    //    assertion below reads.
+    try pressUntil(
+      named: "menu row \"\(Choice.first)\"",
+      waitingFor: "the real tap on the row that was already chosen",
+      press: { attempt in
+        // The first attempt insists the row is there, as this check always has. A
+        // later one does not: a row can legitimately have gone because the earlier
+        // tap *did* travel and the echo is merely slow, and pressing a menu that is
+        // on its way out would double-count a choice. Nothing to press, so just keep
+        // waiting for the value.
+        if attempt > 1 && !optionRow(Choice.first).exists {
+          return
+        }
+        try waitForOption(Choice.first, "the menu's first row to be tappable").tap()
+      },
+      reading: { "\(optionLabels(containing: Choice.longest)) row(s) named \"\(Choice.longest)\"" }
+    ) { shown in
+      shown.hasPrefix("0 ")
+    }
     XCTAssertEqual(optionLabels(containing: Choice.longest), 0, "the menu should be closed")
     XCTAssertEqual(
       try read(Echo.pickerEvents),
@@ -852,10 +979,19 @@ final class RealInputTests: XCTestCase {
     )
 
     // 4. Choosing something else.
-    try required("real-input-picker", as: "the uncontrolled Picker").centre.tap()
-    try waitForOption(Choice.longest, "the menu to open again").tap()
+    try tapUntilOption(
+      "real-input-picker",
+      as: "the uncontrolled Picker",
+      option: Choice.longest,
+      waitingFor: "the real tap that reopens the menu"
+    )
     XCTAssertEqual(
-      readUntil(Echo.pickerIndex) { $0 == "2" },
+      try tapOptionUntilValue(
+        option: Choice.longest,
+        echo: Echo.pickerIndex,
+        expected: "2",
+        waitingFor: "the real tap on the third row"
+      ),
       "2",
       "a real tap on the third row should reach JS as index 2"
     )
@@ -874,16 +1010,24 @@ final class RealInputTests: XCTestCase {
     )
 
     // 6. A choice the parent refuses.
-    let rejecting = try required("real-input-picker-reject", as: "the controlled Picker")
     XCTAssertEqual(
       try read(Echo.rejectValue),
       "0",
       "the refusing parent pins its Picker at index 0"
     )
-    rejecting.centre.tap()
-    try waitForOption("Ridge", "the refusing Picker's menu to open").tap()
+    try tapUntilOption(
+      "real-input-picker-reject",
+      as: "the controlled Picker",
+      option: "Ridge",
+      waitingFor: "the real tap on the controlled Picker"
+    )
     XCTAssertEqual(
-      readUntil(Echo.rejectEvents) { $0 == "1" },
+      try tapOptionUntilValue(
+        option: "Ridge",
+        echo: Echo.rejectEvents,
+        expected: "1",
+        waitingFor: "the real tap on the controlled Picker's menu row"
+      ),
       "1",
       "a real tap on the controlled Picker should still reach JS - native paints optimistically (core.md section 4)"
     )
@@ -936,7 +1080,27 @@ final class RealInputTests: XCTestCase {
     let windowsWhileMounted = app.windows.count
     for cycle in 1...3 {
       if cycle > 1 {
-        try required(Echo.dropRemount, as: "the button that brings the drop Picker back").centre.tap()
+        // Same lesson as the press below it, on the button that brings the row back:
+        // an un-witnessed remount that never happened would make the armed press that
+        // follows read as a dead screen. The arm button is the witness - it is
+        // rendered in the same branch as the Picker, so seeing it says the row, and
+        // with it the Picker, is mounted again.
+        try pressUntil(
+          named: "\"\(Echo.dropRemount)\"",
+          waitingFor: "cycle \(cycle): the drop Picker to be mounted again",
+          press: { _ in
+            try required(Echo.dropRemount, as: "the button that brings the drop Picker back")
+              .centre
+              .tap()
+          },
+          reading: {
+            app.descendants(matching: .any)[Echo.dropArm].firstMatch.exists
+              ? "the arm button is up"
+              : "nothing"
+          }
+        ) { shown in
+          shown == "the arm button is up"
+        }
       }
       try tapUntilEcho(
         Echo.dropArm,
@@ -944,7 +1108,12 @@ final class RealInputTests: XCTestCase {
         as: "the button that arms the unmount",
         waitingFor: "cycle \(cycle): the unmount to be armed"
       )
-      try required("real-input-drop-picker", as: "the drop Picker").centre.tap()
+      try tapUntilOption(
+        "real-input-drop-picker",
+        as: "the drop Picker",
+        option: "Beta",
+        waitingFor: "cycle \(cycle): the real tap on the drop Picker"
+      )
       _ = try waitForOption("Beta", "cycle \(cycle): the drop Picker's menu to open")
       let beatWhileOpen = tickerBeat()
       print(
@@ -1017,7 +1186,16 @@ final class RealInputTests: XCTestCase {
       0,
       "a real tap on a disabled Picker should open nothing"
     )
-    try required("enabled-one", as: "the enabled Picker").centre.tap()
+    // Retried, because this line is the second half of the claim above it: the
+    // enabled Picker opening is what turns "nothing appeared" into a *refusal*
+    // rather than a screen that answers nothing. A dropped tap here would otherwise
+    // fail as "the enabled Picker cannot present its list".
+    try tapUntilOption(
+      "enabled-one",
+      as: "the enabled Picker",
+      option: "Cinder",
+      waitingFor: "the real tap on the enabled Picker"
+    )
     _ = try waitForOption(
       "Cinder",
       "the enabled Picker's menu to open, after the disabled one refused"
@@ -1050,7 +1228,11 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(try read(Echo.dateEvents), "0", "no change should be reported before a touch")
 
-    field.centre.tap()
+    try tapUntilPresentation(
+      "real-input-date",
+      as: "the uncontrolled DatePicker field",
+      waitingFor: "the real tap on the field"
+    )
     let opened = try openPresentation(from: field, watching: Echo.dateValue)
     try pickSomeDay(in: opened, from: field, watching: Echo.dateValue) { $0 != "-" }
 
@@ -1083,7 +1265,11 @@ final class RealInputTests: XCTestCase {
       "0",
       "no change should be reported on the controlled control yet"
     )
-    rejecting.centre.tap()
+    try tapUntilPresentation(
+      "real-input-date-reject",
+      as: "the controlled DatePicker field",
+      waitingFor: "the real tap on the controlled field"
+    )
     let rejectingPopover = try openPresentation(from: rejecting, watching: Echo.rejectEvents)
     try pickSomeDay(in: rejectingPopover, from: rejecting, watching: Echo.rejectEvents) { $0 != "0" }
     XCTAssertEqual(
@@ -1571,6 +1757,222 @@ final class RealInputTests: XCTestCase {
     } while Date() < deadline
     dumpHierarchy("nothing matched what was waited for on \(identifier)")
     return shown
+  }
+
+  /// Press something, then wait for the witness that the press *arrived*, and retry
+  /// the press until the witness shows or the attempts run out.
+  ///
+  /// Every check in this file used to be `tap(); XCTAssert(readUntil(...))`: it
+  /// waited for the answer and nothing waited for the question. A synthesised touch
+  /// can be dropped by the OS at any load (`FOLLOWUPS.md:58`; X6 saw it in two of
+  /// four full runs), and this machine reproduces it - on 2026-10-28 `testRealInputSwitch`
+  /// failed 11/11 runs, one on tap 1 and one on tap 2, with the hierarchy dump
+  /// showing the SwiftUI `Switch`'s own `value:` unmoved. Nothing reached the binding
+  /// to be painted optimistically, so the missing thing is the delivery, not an
+  /// answer. The suite already knew: `tapUntilEcho` retries the press that arms the
+  /// leak case "because pressing blind once cost a red run whose only symptom was a
+  /// Picker that survived", and that check has not flaked since. This is that lesson
+  /// applied everywhere else, with the witness as a closure because it is not always
+  /// an element that appears: for a Switch it is a rendered *value*, for a
+  /// `compact` field it is a popover, for a menu anchor it is a row.
+  ///
+  /// Retrying cannot manufacture a result: an attempt happens only while the witness
+  /// is still absent, and each witness below is unreachable without a delivered
+  /// touch. What a retry does cost is that an echo which arrives *late* rather than
+  /// never can be overtapped - a real but far rarer fault (the drop is measured, the
+  /// late echo is not, and every attempt waits three whole seconds first). It shows
+  /// up as the failure text quoting a reading that moved past what was expected,
+  /// which is a different sentence from the one a drop produces.
+  ///
+  /// When every attempt fails, the message names both readings and says which of the
+  /// two faults it is: taps that were never delivered, or a control that ignores a
+  /// real touch - the distinction a blind tap could not make, and the reason this is
+  /// not simply a road to green.
+  ///
+  /// - Parameter press: delivers the touch, re-finding its target each attempt: a
+  ///   control that moved (a Picker whose title grew) must be aimed at where it is now.
+  ///   It is told which attempt this is, so a press that can only be made while
+  ///   something is on screen (an open menu's row) can insist on it the first time and
+  ///   treat it as gone - nothing to press, just keep waiting - after that.
+  /// - Parameter reading: what the witness currently says, for the log line and the
+  ///   failure. Keep it cheap and non-fatal - `read(_:)` XCTFails on a missing id.
+  /// - Parameter raised: whether the witness has arrived.
+  /// - Parameter attemptWindow: how long one press gets to show its witness. The
+  ///   default is `reactTimeout` - the same budget the blind `readUntil` it replaces
+  ///   already gave a control - so a check gets that wait *plus* the retries rather
+  ///   than three attempts sharing what was one wait. A control that answers in six
+  ///   seconds on a loaded machine was never broken, and this helper must not be the
+  ///   reason it starts failing.
+  @discardableResult
+  private func pressUntil(
+    named what: String,
+    waitingFor: String,
+    attempts: Int = 3,
+    attemptWindow: TimeInterval? = nil,
+    press: (_ attempt: Int) throws -> Void,
+    reading: () -> String,
+    _ raised: (String) -> Bool
+  ) throws -> String {
+    let window = attemptWindow ?? reactTimeout
+    var shown = ""
+    for attempt in 1...attempts {
+      try press(attempt)
+      let until = Date().addingTimeInterval(window)
+      while Date() < until {
+        shown = reading()
+        if raised(shown) {
+          if attempt > 1 {
+            print(
+              "real-input (ios): \(waitingFor): \(what) answered on tap \(attempt)/\(attempts) - the earlier tap(s) were never delivered"
+            )
+          }
+          return shown
+        }
+        Thread.sleep(forTimeInterval: 0.2)
+      }
+      print(
+        "real-input (ios): \(waitingFor): tap \(attempt)/\(attempts) left \(what) at \"\(shown)\""
+      )
+    }
+    dumpHierarchy("\(attempts) presses on \(what) raised no witness")
+    XCTFail(
+      "\(waitingFor): \(attempts) real presses on \(what) left it at \"\(shown)\" - "
+        + "either the touches were never delivered (FOLLOWUPS.md:58) or \(what) ignores "
+        + "a real touch; the dump above says which. One delivered touch was enough to "
+        + "pass, so this is not a control that answers sometimes."
+    )
+    throw RealInputCheckAborted(identifier: what)
+  }
+
+  /// The text an echo carries right now, without failing when it is not there.
+  private func echoText(_ identifier: String) -> String {
+    let node = app.descendants(matching: .any)[identifier].firstMatch
+    guard node.exists else {
+      return ""
+    }
+    return node.label.isEmpty ? ((node.value as? String) ?? "") : node.label
+  }
+
+  /// Tap a control until the on-screen *value* it is meant to change says so.
+  ///
+  /// The value rather than the echo's *existence*, which is what `tapUntilEcho`
+  /// waits for and is not enough here: `switch-controlled-value` is on screen from
+  /// the first render, so existence alone passes untouched. Keying on the value also
+  /// means each flip is unreachable without a delivered touch.
+  ///
+  /// - Parameter atFractionX: how far across the control to press, for the controls
+  ///   where the middle is not the segment under test (see `atFraction(_:)`).
+  private func tapUntilValue(
+    _ identifier: String,
+    echo: String,
+    expected: String,
+    as what: String,
+    waitingFor: String,
+    atFractionX: CGFloat? = nil,
+    attempts: Int = 3
+  ) throws -> String {
+    return try pressUntil(
+      named: "\(what) (\(identifier))",
+      waitingFor: waitingFor,
+      attempts: attempts,
+      press: { _ in
+        let control = try required(identifier, as: what)
+        if let atFractionX {
+          control.atFraction(atFractionX).tap()
+        } else {
+          control.centre.tap()
+        }
+      },
+      reading: { self.echoText(echo) }
+    ) { shown in
+      shown == expected
+    }
+  }
+
+  /// Tap a `compact` field until it presents something.
+  ///
+  /// Same fault, different witness: a DatePicker's first hop is a *window*, so what
+  /// proves the touch arrived is the popover itself and no echo can be read while it
+  /// is up. `openPresentation(from:watching:)` cannot tell a dropped tap from a field
+  /// that cannot present; this can, and it is the retry the last-row check has used
+  /// all along for the same reason (its own comment: a press released while the list
+  /// is settling can be eaten by the control's own recogniser).
+  private func tapUntilPresentation(
+    _ identifier: String,
+    as what: String,
+    waitingFor: String,
+    attempts: Int = 3
+  ) throws {
+    let popovers = app.descendants(matching: .popover)
+    try pressUntil(
+      named: "\(what) (\(identifier))",
+      waitingFor: waitingFor,
+      attempts: attempts,
+      press: { _ in try required(identifier, as: what).centre.tap() },
+      reading: { String(describing: popovers.count) }
+    ) { shown in
+      shown != "0"
+    }
+  }
+
+  /// Tap a menu anchor until one of its rows - named here, so it cannot be some
+  /// other text on screen - is up.
+  ///
+  /// A row is the only witness a menu has while it is open (the rows exist because of
+  /// the press), and without this a dropped tap on the anchor reads as the
+  /// `waitForOption` failure "no menu row labelled X appeared", i.e. as a Picker that
+  /// answers a touch but cannot present its list.
+  private func tapUntilOption(
+    _ identifier: String,
+    as what: String,
+    option title: String,
+    waitingFor: String,
+    attempts: Int = 3
+  ) throws {
+    try pressUntil(
+      named: "\(what) (\(identifier))",
+      waitingFor: waitingFor,
+      attempts: attempts,
+      press: { _ in try required(identifier, as: what).centre.tap() },
+      reading: { "\(optionLabels(containing: title)) row(s) named \"\(title)\"" }
+    ) { shown in
+      !shown.hasPrefix("0 ")
+    }
+  }
+
+  /// Tap an open menu's row until the *value* it should report arrives.
+  ///
+  /// The row is re-found each attempt, which is exactly when it can still be found:
+  /// a pick that travelled closes the menu and moves the value, so the loop has
+  /// already returned, and a pick that never arrived leaves the menu open with that
+  /// row still on screen. Keying on the value rather than on the menu leaving the
+  /// tree is what keeps a tap that opened nothing from reading as a choice.
+  ///
+  /// A later attempt presses only while the row is still up. If it has gone, the
+  /// earlier tap travelled and the echo is merely slow, and pressing where the menu
+  /// was would aim at whatever the closed menu left behind - so that attempt waits
+  /// out its window instead.
+  private func tapOptionUntilValue(
+    option title: String,
+    echo: String,
+    expected: String,
+    waitingFor: String,
+    attempts: Int = 3
+  ) throws -> String {
+    return try pressUntil(
+      named: "menu row \"\(title)\"",
+      waitingFor: waitingFor,
+      attempts: attempts,
+      press: { attempt in
+        if attempt > 1 && !optionRow(title).exists {
+          return
+        }
+        try waitForOption(title, "the menu row \"\(title)\" to be tappable").tap()
+      },
+      reading: { self.echoText(echo) }
+    ) { shown in
+      shown == expected
+    }
   }
 
   /// `readUntil` for the echoes that carry a number.
