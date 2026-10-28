@@ -1725,6 +1725,283 @@ export const EXCERPT_MAX_FAILURES = 20;
 export const EXCERPT_MAX_BYTES = 128 * 1024;
 
 /**
+ * How much of one kept line an excerpt carries.
+ *
+ * The excerpt scrubs only the lines it keeps (review N3), so this is also the
+ * bound on what the scrubber is asked to read: ~170 kept lines at most, so
+ * scrubbing an excerpt's content costs a few milliseconds whatever the log's
+ * size. A line past the cap keeps its head - the failure message is at the
+ * front of a jest line, and the part past the cap is a data blob nobody reads -
+ * and says so. The tail past the cap is *dropped*, not passed through, so a
+ * credential can only ever appear here as an unusable fragment of a longer one.
+ */
+export const EXCERPT_MAX_LINE_CHARS = 64 * 1024;
+
+/**
+ * The characters a key may contain, in `KEY=value`, `"KEY": "value"` or `--key`
+ * spelling. `/`, space and quote are not key characters, which is what bounds a
+ * run's start in a URL or a shell line.
+ */
+const KEY_CHAR = /[A-Za-z0-9_.-]/;
+
+/**
+ * How far back from a `:`/`=` a key may reach. Every credential key a build log
+ * prints is far shorter than this, and the bound is what makes the scan's cost
+ * depend on the size of the file rather than on the length of its longest line
+ * (review N3).
+ */
+const MAX_KEY_SCAN = 128;
+
+/**
+ * The keys whose *whole* value is a header, scheme included.
+ *
+ * The generic assignment rule takes one word, which for `Authorization: Bearer
+ * abc…` replaces the word `Bearer` and publishes the credential beside a
+ * `[scrubbed]` marker that reads as if it had worked - the first version's bug
+ * (review M5). `Cookie` is the same case: its value is a whole session.
+ */
+const HEADER_KEY =
+  /^(?:(?:[\w.-]*[-_.]?)?authorization|[\w.-]*proxy[-_.]?authorization|[\w.-]*set[-_.]cookie|[\w.-]*cookie)$/i;
+
+/** Characters that end a bare (unquoted) value. Same set the rule has always used. */
+const BARE_VALUE_END = new Set([
+  ' ',
+  '\t',
+  '"',
+  "'",
+  ',',
+  ';',
+  '&',
+  '<',
+  '>',
+  '|',
+  '\\',
+  '\r',
+]);
+
+/**
+ * Rewrites every credential assignment in `text` in one left-to-right pass.
+ *
+ * This replaces the two regexes that did the job before, and it exists because of
+ * what they cost (review N3): `(^|[^A-Za-z0-9-])(?:[\w.-]*[-_.]?)?authorization…`
+ * and `\b[\w.-]{3,}` restart an unbounded scan at every `.`/`_`/`-` boundary, so a
+ * line that is one long dotted or base64url run - a Metro bundle graph, an
+ * xcodebuild `-showBuildSettings` dump, a SwiftPM manifest - measured 12.6 s at
+ * 40 KB and 199 s at 160 KB under Node 24. `export` of a log like that did not
+ * finish: the measurement ran past twenty minutes and was killed.
+ *
+ * The pass works the other way round. It looks for the *separators*, which are
+ * rare, and reads back a bounded distance for the key, so cost is a function of
+ * the file rather than of its longest line.
+ *
+ * Which candidates it considers, and why that is the same set the `\b` anchor
+ * could reach: at a `:` or `=`, the key run ending there (up to `MAX_KEY_SCAN`
+ * back), then every suffix of it that begins at a word boundary - i.e. after a
+ * `.` or a `-`. Leftmost first, as `String.replace` matches leftmost first. So
+ * `systemProp.foo.password=x` and `//registry.npmjs.org/:_auth=…` still match,
+ * and `sort_key`, `monkey`, `keyframes` and `session_count` still do not, which
+ * is the assertion that makes this rewrite safe to land.
+ *
+ * A rejected candidate consumes the value it examined rather than just the
+ * separator, because that is what a `/g` replace's `lastIndex` did: `return all`
+ * in the old code skipped the *match*, and the match included the value. The
+ * `i = valueEnd` below is that behaviour, and it is why `password=[scrubbed]`
+ * is not offered to the next candidate as a fresh key.
+ *
+ * @param {string} text
+ * @param {(replacement: string) => string} scrub counts one replacement and returns its argument
+ * @returns {string}
+ */
+function scrubAssignments(text, scrub) {
+  let out = '';
+  // Start of the region still known to be copied out verbatim.
+  let chunkStart = 0;
+  let i = 0;
+  const n = text.length;
+
+  while (i < n) {
+    const separator = text[i];
+    if (separator !== ':' && separator !== '=') {
+      i += 1;
+      continue;
+    }
+
+    // What sits just before the separator. The old rules allowed the key's own
+    // closing quote and whitespace there - `["']?(\s*[:=]\s*)` - so the run is
+    // looked for from there, not from the separator, or `"password": "x"` reads
+    // `"password"` as a run of nothing and is skipped.
+    let before = i;
+    const trimSpaces = () => {
+      while (
+        before > chunkStart &&
+        (text[before - 1] === ' ' || text[before - 1] === '\t')
+      )
+        before -= 1;
+    };
+    trimSpaces();
+    if (
+      before > chunkStart &&
+      (text[before - 1] === '"' || text[before - 1] === "'")
+    ) {
+      before -= 1;
+      trimSpaces();
+    }
+
+    // The key run ending there, bounded, with any trailing `_`/`-`/`.` dropped:
+    // those are separators in their own right, not the end of a key.
+    let runStart = before;
+    const earliest = Math.max(chunkStart, before - MAX_KEY_SCAN);
+    while (runStart > earliest && KEY_CHAR.test(text[runStart - 1]))
+      runStart -= 1;
+    const run = text.slice(runStart, before).replace(/[-_.]+$/, '');
+    if (run === '') {
+      i += 1;
+      continue;
+    }
+    const runEnd = runStart + run.length;
+    // A separator the run does not reach even with that allowance (`foo - : x`)
+    // was not matchable by the old rules either.
+    if (runEnd !== before) {
+      i += 1;
+      continue;
+    }
+
+    // A time like `16:18:47`, which the header rule could otherwise reach through
+    // its `[\w.-]*` prefix. Only digits before, and digits right after.
+    if (
+      separator === ':' &&
+      /^\d+$/.test(run) &&
+      /^\d/.test(text.slice(i + 1, i + 3))
+    ) {
+      i += 1;
+      continue;
+    }
+    // A URL's authority (`https://user:pass@host`) belongs to the userinfo rule,
+    // which has already run over this text. Both rules were `/g` scans over the
+    // same string and left this shape to userinfo; skipping the separator keeps
+    // that division of labour.
+    if (
+      separator === ':' &&
+      text.startsWith('//', i + 1) &&
+      text.lastIndexOf('\n', i) < text.lastIndexOf('/', i)
+    ) {
+      i += 3;
+      continue;
+    }
+
+    // The key: for a header-shaped run, all of it (the old header rule's prefix
+    // class absorbed anything before `cookie`/`authorization`). Otherwise the
+    // leftmost word-boundary suffix the old `\b[\w.-]{3,}` could match.
+    let keyStart = runStart;
+    const wholeIsHeader = HEADER_KEY.test(run);
+    if (!wholeIsHeader) {
+      keyStart = -1;
+      for (let k = runStart; k < runEnd; k += 1) {
+        if (!/[A-Za-z0-9_]/.test(text[k])) continue;
+        if (k > runStart && /[A-Za-z0-9_]/.test(text[k - 1])) continue;
+        const candidate = text.slice(k, runEnd);
+        if (candidate.length >= 3 && CREDENTIAL_KEY.test(candidate)) {
+          keyStart = k;
+          break;
+        }
+      }
+      if (keyStart < 0) {
+        i += 1;
+        continue;
+      }
+    }
+
+    // Whitespace after the separator. Any quote here belongs to the *value*: in
+    // the old pattern the key's optional quote came before the separator, and the
+    // one after it opened the value (`"key": "value"`).
+    let j = i + 1;
+    while (j < n && (text[j] === ' ' || text[j] === '\t')) j += 1;
+
+    const endOfLine = text.indexOf('\n', i);
+    const lineEnd = endOfLine === -1 ? n : endOfLine;
+    const openQuote = text[j] === '"' || text[j] === "'" ? text[j] : '';
+
+    // Values are *not* bounded the way the key scan is. Both scans are single
+    // passes over what they read, so a long value costs its own length and
+    // nothing else; capping one would only leave the tail of a real credential
+    // in a committed file, which is the whole thing this is for.
+    /** Where a quoted value opened at `j` ends, or -1 when it is never closed. */
+    const closingQuote = () => {
+      const close = text.indexOf(openQuote, j + 1);
+      return close === -1 || close > lineEnd ? -1 : close;
+    };
+    /** The end of a bare value, which stops at the first delimiter. */
+    const bareEnd = (from) => {
+      let k = from;
+      while (k < lineEnd && !BARE_VALUE_END.has(text[k])) k += 1;
+      return k;
+    };
+
+    // Where the value begins and ends, and the two characters that wrap it. The
+    // emit below is `text.slice(keyStart, j)` plus `open` plus the marker plus
+    // `close`, so each character in the line is accounted for exactly once - the
+    // bug this avoids is emitting the value's own opening quote twice, which is
+    // what the first draft of this pass did to `"key": "value"`.
+    let valueEnd = j;
+    let open = '';
+    let close = '';
+    let trailing = '';
+
+    if (openQuote !== '') {
+      const closing = closingQuote();
+      if (closing === -1) {
+        // An unclosed quote: there is no value to replace inside, so read the
+        // bare run from the quote itself, which is what the old alternation fell
+        // through to.
+        valueEnd = bareEnd(j);
+      } else {
+        open = openQuote;
+        close = openQuote;
+        valueEnd = closing;
+      }
+    } else {
+      valueEnd = bareEnd(j);
+    }
+
+    if (wholeIsHeader && open === '') {
+      // A header's value is the whole rest of the line, scheme included, and
+      // stops early only at the closing quote of the shell argument that holds it
+      // (`-H 'Authorization: token abc…'`) - keeping that quote so the line still
+      // reads as the command that ran.
+      valueEnd = lineEnd;
+      const quoted = /^(.*?)(["'])$/.exec(text.slice(j, valueEnd));
+      if (quoted != null && quoted[1].trim() !== '') {
+        valueEnd = j + quoted[1].length;
+        trailing = quoted[2];
+      }
+    }
+
+    // Where this candidate's match ends, which is also where scanning resumes -
+    // `valueEnd` points *at* the closing quote, and `close` has already emitted
+    // it. Skipping that is how the first draft printed `[scrubbed]''`.
+    const consumed = valueEnd + close.length + trailing.length;
+    const value = text.slice(j + open.length, valueEnd);
+    if (value.trim() === '' || value.trim() === '[scrubbed]') {
+      // Nothing to hide - and the region up to the value's end is consumed, the
+      // way the old rule's `lastIndex` did after a match it returned unchanged.
+      out += text.slice(chunkStart, consumed);
+      i = Math.max(i + 1, consumed);
+      chunkStart = i;
+      continue;
+    }
+
+    out += text.slice(chunkStart, keyStart);
+    out += scrub(
+      `${text.slice(keyStart, j)}${open}[scrubbed]${close}${trailing}`
+    );
+    i = consumed;
+    chunkStart = i;
+  }
+
+  return out + text.slice(chunkStart);
+}
+
+/**
  * Which key names count as credentials. Matched against the whole key, so
  * `sort_key`, `monkey` and `keyframes` are not credentials.
  *
@@ -1791,64 +2068,38 @@ export function scrubSecrets(text) {
   );
 
   // URL userinfo, including a percent-encoded password.
-  out = out.replace(
-    /(\b[a-z][a-z0-9+.-]*:\/\/)([^\s/@]+:)[^\s@]+(@)/gi,
-    (_all, scheme, user, at) => scrub(`${scheme}${user}[scrubbed]${at}`)
-  );
-
-  // `Authorization: <scheme> <credential>`, `Cookie: …`, `Set-Cookie: …`.
   //
-  // The whole value goes, scheme included. The generic assignment rule below would
-  // otherwise replace the first token after the colon - the word `Bearer` - and
-  // publish the credential next to a `[scrubbed]` marker that reads as if it worked.
-  // A quoted value keeps its quotes so the JSON or YAML around it survives; an
-  // unquoted one runs to the end of the line, because that is where a header ends.
+  // Bounded, and anchored at a non-word character rather than `\b`, for the same
+  // reason as `scrubAssignments` (review N3): `[^\s/@]+:` then `[^\s@]+(@)` is a
+  // scan that fails only after reading the rest of the line, at every colon, so
+  // 64 KB of `a.` cost 3.4 s and a megabyte cost over ten minutes. The bounds also
+  // mean a username longer than 256 characters or a password longer than 64 KiB
+  // keeps its tail, which is a data blob rather than a credential by then.
   out = out.replace(
-    /(^|[^A-Za-z0-9-])((?:[\w.-]*[-_.]?)?authorization|[\w.-]*proxy[-_.]?authorization|[\w.-]*set[-_.]cookie|[\w.-]*cookie)(["']?)(\s*[:=]\s*)\s*(?:"([^"\n]*)"|'([^'\n]*)'|([^\n]*))/gi,
-    (all, before, key, quoteAfterKey, sep, dq, sq, bareValue) => {
-      const quote = dq != null ? '"' : sq != null ? "'" : '';
-      let value = dq ?? sq ?? bareValue ?? '';
-      // A value that is not quoted but sits *inside* a quoted shell argument
-      // (`-H 'Authorization: token abc'`) ends at the closing quote: keep that
-      // quote, or the line loses its syntax and a reader cannot tell what ran.
-      let trailing = '';
-      if (quote === '') {
-        const unquoted = /^(.*?)(["'])$/.exec(value);
-        if (unquoted != null && unquoted[1].trim() !== '') {
-          value = unquoted[1];
-          trailing = unquoted[2];
-        }
-      }
-      if (value.trim() === '' || value.trim() === '[scrubbed]') return all;
-      return scrub(
-        `${before}${key}${quoteAfterKey}${sep}${quote}[scrubbed]${quote}${trailing}`
-      );
-    }
+    /(^|[^A-Za-z0-9])([a-z][a-z0-9+.-]{0,32}:\/\/)([^\s/@:]{1,256}:)([^\s@]{1,65536})(@)/gi,
+    (_all, before, scheme, user, _password, at) =>
+      scrub(`${before}${scheme}${user}[scrubbed]${at}`)
   );
 
-  // `KEY = value` in shell, JSON, YAML, PHP-array and plain-log spelling. The value
-  // is quoted or bare and only the value is replaced, so `--token` in a printed
-  // command line still shows which flag was involved.
-  const quoted = String.raw`(?:"([^"\n]*)"|'([^'\n]*)')`;
-  const bare = String.raw`([^\s"',;&<>|\\]+)`;
-  out = out.replace(
-    new RegExp(
-      String.raw`(\b[\w.-]{3,})(["']?)(\s*[:=]\s*)\s*(?:${quoted}|${bare})`,
-      'g'
-    ),
-    (all, key, quoteAfterKey, sep, dq, sq, bareValue) => {
-      if (!CREDENTIAL_KEY.test(key)) return all;
-      const value = dq ?? sq ?? bareValue;
-      if (value == null || value === '' || value === '[scrubbed]') return all;
-      const quote = dq != null ? '"' : sq != null ? "'" : '';
-      return scrub(`${key}${quoteAfterKey}${sep}${quote}[scrubbed]${quote}`);
-    }
-  );
+  // `Authorization: <scheme> <credential>`, `Cookie: …`, `Set-Cookie: …` and every
+  // `KEY = value` whose key looks like a credential, in shell, JSON, YAML, INI,
+  // PHP-array and plain-log spelling. One pass, for the reason in
+  // `scrubAssignments`: as two regexes these were quadratic in a long line, which
+  // is how a Metro bundle graph hung `export` (review N3).
+  //
+  // A header's *whole* value goes, scheme included. The generic rule on its own
+  // would replace the first token after the colon - the word `Bearer` - and
+  // publish the credential next to a `[scrubbed]` marker that reads as if it
+  // worked. A quoted value keeps its quotes so the JSON or YAML around it
+  // survives; an unquoted one runs to the end of the line, because that is where
+  // a header ends.
+  out = scrubAssignments(out, scrub);
 
   // `--token value`, `--token=value` (the assignment rule above takes the second
-  // form, so this only has to handle the spaced one).
+  // form, so this only has to handle the spaced one). Bounded for the same reason
+  // as the two rules above.
   out = out.replace(
-    /(--[\w-]*(?:token|secret|password|passwd|key|auth|cookie|credential)[\w-]*)(\s+)([^\s]{4,})/gi,
+    /(--[\w-]{0,128}(?:token|secret|password|passwd|key|auth|cookie|credential)[\w-]{0,128})(\s+)([^\s]{4,65536})/gi,
     (all, flag, sep, value) =>
       CREDENTIAL_KEY.test(flag.replace(/^-+/, '')) ||
       /(?:token|secret|password|passwd|api[-_]?key|auth)/i.test(flag)
@@ -1860,7 +2111,7 @@ export function scrubSecrets(text) {
   // or a plist leaves in a build log. (`.npmrc` is INI, not XML — its `_auth=` and
   // `_authToken=` are covered by the assignment rule above.)
   out = out.replace(
-    /<([A-Za-z][\w.-]*)>([^<\n]*)<\/\1>/g,
+    /<([A-Za-z][\w.-]{0,128})>([^<\n]{0,65536})<\/\1>/g,
     (all, name, value) =>
       CREDENTIAL_KEY.test(name) && value.trim() !== ''
         ? scrub(`<${name}>[scrubbed]</${name}>`)
@@ -2032,15 +2283,62 @@ export function renderFailureExcerpt({
   tailLines = EXCERPT_TAIL_LINES,
   redactions = [],
 }) {
-  const { text: scrubbedText, replaced } = scrubSecrets(logText ?? '');
+  // Select first, scrub second (review N3). The old order scrubbed the *whole*
+  // log - up to `EXCERPT_MAX_LOG_BYTES`, 200 MiB - to keep its failure lines and
+  // its 150-line tail, so the cost of an excerpt was the cost of the largest log
+  // in the repo, and one pathological line made it unbounded. Selection is a
+  // line scan and cannot be fooled by an unscrubbed line: it matches on `FAIL`,
+  // `●` and `✕`, which no secret contains.
+  const raw = String(logText ?? '');
   // The device block is the *tail* of a failing device run's log, so taking "the
   // last 150 lines" without splitting would spend the whole excerpt on `simctl`
   // output and show none of the failure (X12 item 3 fed straight into item 2).
-  const { body, context } = splitDeviceContext(scrubbedText);
+  const { body, context } = splitDeviceContext(raw);
   const lines = body.split('\n');
   const tail = lines.slice(-Math.max(0, tailLines));
   const truncated = lines.length > tail.length;
+
+  // One place that trims and scrubs a kept line, so no section can be added to
+  // an excerpt later without going through the scrubber.
+  let replaced = 0;
+  const keep = (line) => {
+    const text = String(line ?? '');
+    const capped =
+      text.length > EXCERPT_MAX_LINE_CHARS
+        ? `${text.slice(0, EXCERPT_MAX_LINE_CHARS)} …[line truncated]`
+        : text;
+    const result = scrubSecrets(capped);
+    replaced += result.replaced;
+    return result.text;
+  };
+
+  const keptTail = tail.map((line) => keep(line));
+  const keptContext =
+    context == null
+      ? null
+      : context
+          .split('\n')
+          .filter((line) => line.trim() !== '')
+          .map((line) => keep(line));
+
   const load = entry?.load ?? null;
+  const failures = failureLinesFrom(body);
+  const failureSection =
+    failures.length === 0
+      ? ['_(none matched — the log had no jest/real-input failure lines)_']
+      : failures.map((line) => `- \`${escapeMarkdown(keep(line))}\``);
+  const contextSection =
+    keptContext == null
+      ? []
+      : [
+          '',
+          '## Device and run context (captured when the gate failed)',
+          '',
+          '```',
+          ...keptContext,
+          '```',
+        ];
+  // Built last, because it reports `replaced`, which every `keep` above counts.
   const header = [
     `# Failure excerpt — ${String(entry?.gate ?? '?')}`,
     '',
@@ -2057,22 +2355,6 @@ export function renderFailureExcerpt({
     '## Failing tests and assertion messages',
     '',
   ];
-  const failures = failureLinesFrom(body);
-  const failureSection =
-    failures.length === 0
-      ? ['_(none matched — the log had no jest/real-input failure lines)_']
-      : failures.map((line) => `- \`${escapeMarkdown(line)}\``);
-  const contextSection =
-    context == null
-      ? []
-      : [
-          '',
-          '## Device and run context (captured when the gate failed)',
-          '',
-          '```',
-          ...context.split('\n').filter((line) => line.trim() !== ''),
-          '```',
-        ];
   const body2 = [
     ...header,
     ...failureSection,
@@ -2081,7 +2363,7 @@ export function renderFailureExcerpt({
     `## Last ${String(tail.length)} log line(s)${truncated ? ` (of ${String(lines.length)} — the rest is in the full log above)` : ''}`,
     '',
     '```',
-    ...tail,
+    ...keptTail,
     '```',
     '',
   ];
