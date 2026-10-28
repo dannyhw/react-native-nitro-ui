@@ -1208,13 +1208,18 @@ final class RealInputTests: XCTestCase {
         + "Line was: \(before)"
     )
 
+    /*
+     * Type, then ask about focus — not the other way round.
+     *
+     * The precondition order this check shipped with (wait for `focused=1`, then type) turned out to be
+     * unmeasurable on this arm for a reason worth stating: after a real tap the hosted `UITextField` reports
+     * UIKit's "Keyboard Focused" accessibility trait while the spike's own mirror still answers
+     * `focused=0`, so waiting on the mirror blocks forever on a field UIKit considers in an edit session.
+     * A burst that lands is the stronger evidence of a session anyway — no keystroke is counted without one —
+     * so the burst comes first and `focused` is asserted *after* it, where a field that really is editing has
+     * republished. If that last line is red, the finding is the mirror's, not the typing's.
+     */
     field.centre.tap()
-    _ = try readField(
-      Echo.spikeFrozen,
-      "focused",
-      "1",
-      "a tap to focus the frozen field"
-    )
     field.typeText("qq")
 
     let accepted = try readField(
@@ -1241,6 +1246,14 @@ final class RealInputTests: XCTestCase {
       "frozen",
       "JS never adopted the rejected text. Line was: \(reverted)"
     )
+    // Asserted last on purpose: see the note above about what UIKit's trait and the mirror said when this
+    // line was a precondition. A field that counted two edits of its own has to be able to say it is editing.
+    XCTAssertEqual(
+      echoField(reverted, "focused"),
+      "1",
+      "the field that took the keystrokes should report itself focused once it has republished. "
+        + "Line was: \(reverted)"
+    )
   }
 
   /// T18 P5 — **keystroke→commit**, spike field against RN's own `TextInput`, in one run.
@@ -1264,8 +1277,12 @@ final class RealInputTests: XCTestCase {
       try scrollIntoView(identifier, as: what, hittableIsEnough: true)
       let field = try required(identifier, as: what)
       let beforeEvents = Int(echoField(try read(echo), "events")) ?? 0
+      /*
+       * Tap, burst, then read. A focus precondition is not what the measurement needs (a counted keystroke
+       * already proves an edit session, and the iOS arm's mirror was seen answering `focused=0` for a field
+       * UIKit reports as first responder), and it is the thing that broke when a target sat below the fold.
+       */
       field.centre.tap()
-      _ = try readField(echo, "focused", "1", "\(what) to take focus")
       field.typeText(burst)
       let line = readUntil(echo, timeout: 12) { text in
         Int(echoField(text, "events")).map { $0 >= beforeEvents + burst.count } ?? false
@@ -1992,7 +2009,21 @@ final class RealInputTests: XCTestCase {
      * room. Controls that merely *present* something keep the strict band; a plain field asks for this.
      */
     func isTappable() -> Bool {
-      return isReachable() || (hittableIsEnough && node.exists && node.isHittable)
+      guard node.exists else { return false }
+      /*
+       * The tap lands on the element's centre, so that point has to be on the screen — and the system's own
+       * opinion about being hittable does not say it is. Measured on this screen: `spike-frozen` sat at
+       * midY=-323.8 and `rn-type-target` at midY=1443.3 while both still reported `isHittable`, and the two
+       * checks that trusted it failed with "focused never read 1" about fields that were mounted, live and
+       * perfectly typable, because the synthesised tap went outside the window.
+       *
+       * So the relaxation is "anywhere inside the window", not "hittable": that is what the midY=143 case
+       * needed, and it still fails the off-screen case, which is the half that has to keep failing.
+       */
+      let centreIsOnScreen = node.frame.midY > window.minY
+        && node.frame.midY < window.maxY
+      return isReachable()
+        || (hittableIsEnough && centreIsOnScreen && node.isHittable)
     }
 
     func scroll(by delta: CGFloat) {
