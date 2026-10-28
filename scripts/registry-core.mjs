@@ -929,11 +929,22 @@ export function sizingTableContent(manifests, current, currentText) {
       .filter((m) => m.sizing != null)
       .map((m) => [`${HYBRID_PREFIX}${m.hybridView}`, m.sizing])
   );
+  // A self-sizing view that is deliberately *not* a component: T18's spike field
+  // (`NON_CONTROL_AUTOLINKING`, and see `SPIKE_SIZING_KEYS` for why it is in
+  // that list). Its row is hand-written beside the generated ones and copied
+  // through, for the same reason `NitroUiHost`'s autolinking entry is: dropping a
+  // file's own config because the registry has no opinion on it is the generator
+  // deleting something it was never asked to own.
+  const kept = Object.keys(current ?? {}).filter(
+    (key) => !wanted.has(key) && SPIKE_SIZING_KEYS.has(key)
+  );
   const keys = orderRegionEntries(Object.keys(current ?? {}), [
     ...wanted.keys(),
+    ...kept,
   ]);
   const body = keys.map(
-    (key) => `  ${JSON.stringify(key)}: ${JSON.stringify(wanted.get(key))}`
+    (key) =>
+      `  ${JSON.stringify(key)}: ${JSON.stringify(wanted.get(key) ?? current?.[key])}`
   );
   return `{\n${body.join(',\n')}\n}\n`;
 }
@@ -950,7 +961,27 @@ export function sizingTableContent(manifests, current, currentText) {
  * unknown key would also ignore a component deleted from the registry and left
  * behind in `nitro.json`.
  */
-export const NON_CONTROL_AUTOLINKING = ['NitroUiCore', 'NitroUiHost'];
+export const NON_CONTROL_AUTOLINKING = [
+  'NitroUiCore',
+  'NitroUiHost',
+  // T18's TextField spike (`src/spike/TextField`): a Hybrid View on the real
+  // hosting path, which is the only place its questions have answers, and not a
+  // component — no manifest, no export, no docs page. Named here for the same
+  // reason `NitroUiHost` is: a rule that ignored every unknown key would also
+  // ignore a component whose manifest was never written. Delete this entry with
+  // the spike.
+  'NitroUiSpikeTextField',
+];
+
+/**
+ * Rows of `nitro-ui.sizing.json` for views in {@link NON_CONTROL_AUTOLINKING}
+ * that size themselves — today only T18's spike field, which has to be a real
+ * `fillWidth` self-sizing control for P4's auto-grow and `cachedSizes` curves to
+ * be measuring the thing G8 would ship.
+ *
+ * @see sizingTableContent, which copies these through instead of dropping them.
+ */
+export const SPIKE_SIZING_KEYS = new Set(['HybridNitroUiSpikeTextField']);
 
 /**
  * Exports from `src/index.ts` whose directory has no manifest: `<Host>`, the shared

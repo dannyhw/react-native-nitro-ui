@@ -525,10 +525,12 @@ describe('the generated tables cover what they claim', () => {
     expect(wrong.files[SIZING_TABLE_FILE]).toContain(
       '"HybridNitroUiButton": "intrinsic"'
     );
-    const withHost = table.replace(
-      /("intrinsic")\n\}\n$/,
-      '$1,\n  "HybridNitroUiHost": "intrinsic"\n}\n'
-    );
+    // Appended after the table's last row whatever that row's policy is. The fixture used
+    // to be a regex pinned to `"intrinsic"` at the end of the file, which was really an
+    // assumption about which component happened to be listed last - and T18's spike adds a
+    // `fillWidth` row, so the assumption would have failed for a reason the test is not
+    // about. What the fixture needs is only "valid JSON with one extra key in it".
+    const withHost = `${table.replace(/\n\}\n$/, '')},\n  "HybridNitroUiHost": "intrinsic"\n}\n`;
     expect(withHost).toContain('"HybridNitroUiHost"');
     expect(() => JSON.parse(withHost)).not.toThrow();
     const extra = runPlan(null, { [SIZING_TABLE_FILE]: withHost });

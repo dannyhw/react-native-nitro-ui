@@ -10,6 +10,7 @@
 #import "NitroUi-Swift-Cxx-Umbrella.hpp"
 #import <type_traits>
 
+#include "HybridNitroUiSpikeTextFieldSpecSwift.hpp"
 #include "HybridNitroUiCore.hpp"
 #include "HybridNitroUiButtonSpecSwift.hpp"
 #include "HybridNitroUiProgressSpecSwift.hpp"
@@ -29,6 +30,13 @@
   using namespace margelo::nitro;
   using namespace margelo::nitro::nitroui;
 
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiSpikeTextField",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiSpikeTextFieldSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiSpikeTextField();
+      return hybridObject;
+    }
+  );
   HybridObjectRegistry::registerHybridObjectConstructor(
     "NitroUiCore",
     []() -> std::shared_ptr<HybridObject> {

@@ -47,6 +47,8 @@ final class RealInputTests: XCTestCase {
     static let datePickerTab = "tab-datepicker"
     static let pickerTab = "tab-picker"
     static let hostTab = "tab-host"
+    /// T18's TextField spike screen (`docs/tasks/T18-textfield-spike.md`); deleted with `src/spike/`.
+    static let spikeTab = "tab-spike"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -78,6 +80,14 @@ final class RealInputTests: XCTestCase {
     static let hostSegmentedIndex = "host-segmented-index"
     static let hostPickerIndex = "host-picker-index"
     static let hostDateValue = "host-datepicker-value"
+    // T18 spike. Each echo is one `key=value` line the spike screen renders from a
+    // field's own callbacks plus `nuiTestState()` — the only thing a query from out
+    // here can read.
+    static let spikeScreen = "spike-screen"
+    static let spikeTargetA = "spike-type-target-echo"
+    static let spikeTargetB = "spike-type-target-b-echo"
+    static let spikeWrite = "spike-write-echo"
+    static let spikeSize = "spike-size-echo"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -1024,7 +1034,170 @@ final class RealInputTests: XCTestCase {
     )
   }
 
+  // MARK: - T18's typing oracle
+
+  /// Real key events must reach the spike's hosted text field and come back out
+  /// through the handshake (brief item 1 of `docs/tasks/T18-textfield-spike.md`,
+  /// Q2 §7 P2). On iOS this arm is the hosted `UITextField`; Android's twin of this
+  /// check drives the `BasicTextField(TextFieldState)` arm, which is why the shared id is
+  /// `spike-text-typing` rather than a per-platform name.
+  ///
+  /// This is the gate the whole TextField decision hangs on. Q2's own rule: if typing
+  /// into a hosted field cannot be driven without a test-only hook, a TextField is a
+  /// no-go. `XCUIElement.typeText(_:)` synthesises keystrokes through the simulator's
+  /// keyboard, so they travel UIKit's text-input machinery into the field's own editing
+  /// handling and then out through Nitro — nothing in the app is asked to cooperate.
+  ///
+  /// Both halves are asserted on purpose. `typed=` alone would pass a field whose JS
+  /// state was written by something other than the keyboard; `focused=1` alone would
+  /// pass a field that took focus and then swallowed the text. Together they are key
+  /// events → UIKit → Nitro → JS → re-render, with no seam in the app.
+  func testRealInputSpikeTextTyping() throws {
+    try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
+    try scrollIntoView("spike-type-target-b", as: "the spike text field")
+    let field = try required("spike-type-target-b", as: "the spike text field")
+    let before = try read(Echo.spikeTargetB)
+    XCTAssertTrue(
+      before.contains("impl="),
+      "the field should report which shape hosts it, so a red run cannot be blamed "
+        + "on the wrong arm. Line was: \(before)"
+    )
+
+    field.centre.tap()
+    _ = try readField(Echo.spikeTargetB, "focused", "1", "a tap to put the field in an edit session")
+
+    field.typeText("abc123")
+    let typed = try readField(
+      Echo.spikeTargetB,
+      "typed",
+      "abc123",
+      "real key events to reach the hosted field"
+    )
+    XCTAssertGreaterThanOrEqual(
+      Double(echoField(typed, "events")) ?? 0,
+      1,
+      "native should count the edits as its own events — the handshake ran, not just "
+        + "the view. Line was: \(typed)"
+    )
+    // Kept as the measurement rather than an exact assertion, because it is one of P5's
+    // numbers: a 6-character burst producing 6 events means the field emits per
+    // keystroke, and 1 means it emits per committed edit.
+    print("real-input spike: events for a 6-character burst = \(echoField(typed, "events"))")
+    XCTAssertEqual(
+      echoField(typed, "displayed"),
+      "abc123",
+      "native's own mirror should hold the same text React was told. Line was: \(typed)"
+    )
+
+    field.typeText("de")
+    let appended = try readField(
+      Echo.spikeTargetB,
+      "typed",
+      "abc123de",
+      "a second burst to append rather than replace"
+    )
+    XCTAssertEqual(
+      echoField(appended, "composing"),
+      "0",
+      "with no composition open the field can answer the question, so it should say so. "
+        + "Line was: \(appended)"
+    )
+
+    // End the session the way a person does, by dismissing the keyboard: a tap above
+    // the field, on the screen's own background.
+    app.windows.firstMatch
+      .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04))
+      .tap()
+    let blurred = try readField(
+      Echo.spikeTargetB,
+      "focused",
+      "0",
+      "dismissing the keyboard to end the edit session"
+    )
+    XCTAssertEqual(
+      echoField(blurred, "typed"),
+      "abc123de",
+      "closing the keyboard must not lose the text. Line was: \(blurred)"
+    )
+  }
+
+  /// The *other* iOS shape must type the same way, which is the coexistence half of
+  /// Q2 §3's question: can SwiftUI's `TextField` and a hosted `UITextField` live in one
+  /// library? Here they are two fields in one screen, in two hosts of the same type,
+  /// and both have to take real typing.
+  ///
+  /// This check also fixes what arm A cannot see. SwiftUI gives no API for "what marked
+  /// text does this field hold" or "where is the caret", so the spike reports those as
+  /// unobserved (`composing=0`, `selection=-1--1`) rather than guessing. If those ever
+  /// come back with real numbers, somebody wired a channel this arm does not have, and
+  /// the A/B's cost column would be quietly wrong — which is the class of thing a
+  /// prototype is uniquely able to get wrong.
+  func testRealInputSpikeTextCoexist() throws {
+    try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
+    try scrollIntoView("spike-type-target", as: "the SwiftUI arm field")
+    let field = try required("spike-type-target", as: "the SwiftUI arm field")
+    field.centre.tap()
+    let focused = try readField(
+      Echo.spikeTargetA,
+      "focused",
+      "1",
+      "a tap to focus a SwiftUI TextField"
+    )
+    XCTAssertEqual(
+      echoField(focused, "focus"),
+      "1",
+      "the tap that focused one arm must be reported by it. Line was: \(focused)"
+    )
+
+    field.typeText("swift")
+    let typed = try readField(
+      Echo.spikeTargetA,
+      "typed",
+      "swift",
+      "typing to reach a SwiftUI TextField through the same path"
+    )
+    XCTAssertEqual(
+      echoField(typed, "impl"),
+      "swiftui",
+      "and the field must say it is the SwiftUI arm, or this proved nothing about it. "
+        + "Line was: \(typed)"
+    )
+    XCTAssertEqual(
+      echoField(typed, "selection"),
+      "-1--1",
+      "arm A cannot observe the caret, so it has to report it unobserved rather than "
+        + "guessed. Line was: \(typed)"
+    )
+  }
+
   // MARK: - Reading the screen
+
+  /// Reads a spike echo line until one of its `key=value` fields says what was
+  /// expected, and returns the line. Aborts the check if it never does.
+  ///
+  /// The spike's echoes carry native's own mirror (`focused=`, `composing=`,
+  /// `lastWrite=`) next to React's (`typed=`), and a check has to be able to wait on
+  /// either: `typed=` is only as fresh as the last render, so waiting on it alone can
+  /// time out on a field that actually worked. Android's twin of this is
+  /// `waitForEchoField` in `scripts/real-input/android.mjs`.
+  private func readField(
+    _ identifier: String,
+    _ key: String,
+    _ expected: String,
+    _ why: String
+  ) throws -> String {
+    let line = readUntil(identifier) { text in
+      echoField(text, key) == expected
+    }
+    if echoField(line, key) != expected {
+      XCTFail(
+        "timed out waiting for \(why) on \(identifier): \"\(key)\" never read "
+          + "\"\(expected)\" (the line was \"\(line)\")"
+      )
+      throw RealInputCheckAborted(identifier: identifier)
+    }
+    return line
+  }
 
   /// A real tap on the `compact` field must open SwiftUI's own presentation, and a
   /// real tap on a day inside it must reach JS as a new instant.

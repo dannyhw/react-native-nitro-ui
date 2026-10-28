@@ -135,6 +135,21 @@ const HOST_CONTROL_ROWS = Object.freeze([
       'and OK, Cancel, Back and removing the child each close it',
     screen: 'host',
   },
+  // T18's TextField spike (`docs/tasks/T18-textfield-spike.md`), hand-written for the same reason as the
+  // Host rows: the spike is not a component and has no manifest, so the generator writes no row for it.
+  // These two are Q2 §7 P2's gate — brief item 1 — and are deleted with `src/spike/`.
+  {
+    id: 'spike-text-typing',
+    title:
+      'real key events reach a hosted text field and come back through the handshake',
+    screen: 'spike',
+  },
+  {
+    id: 'spike-text-coexist',
+    title:
+      'a second field in the same screen types the same way, whatever the arm prop says',
+    screen: 'spike',
+  },
 ]);
 
 /** Every control the suite proves, in the order it proves them. */

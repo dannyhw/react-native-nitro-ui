@@ -16,6 +16,8 @@ import { NitroUiSwitchConfig } from '../components/Switch/NitroUiSwitchConfig';
 // registry writes no row for it. The "covers every generated config" test below is
 // what fails if a Hybrid View arrives without a manifest, or without its row here.
 import { NitroUiHostConfig } from '../components/Host/NitroUiHostConfig';
+// T18's TextField spike: also unmanifested, also generated. Deleted with `src/spike/`.
+import { NitroUiSpikeTextFieldConfig } from '../spike/TextField/NativeNitroUiSpikeTextField';
 
 const generatedDir = join(
   __dirname,
@@ -43,6 +45,14 @@ const copies: Record<string, unknown> = {
   // @end-generated
   // `<Host>` again: no manifest, so no generated row.
   'NitroUiHostConfig.json': NitroUiHostConfig,
+  // T18's TextField spike (`src/spike/TextField`). Listed for the same reason `<Host>` is — it has no
+  // manifest, so the generated region above writes no row for it — and listed *here* rather than skipped,
+  // because the coverage test below compares this table's keys against everything nitrogen generated: a
+  // generated config with no row is exactly the drift this file exists to catch, and the spike's copy is a
+  // hand-written copy like any other. Comparing its bytes is a free check that the spike's Fabric props
+  // still match codegen, which matters because the spike's device suite cannot mount the view at all if the
+  // copy loses one. Delete this row with the spike.
+  'NitroUiSpikeTextFieldConfig.json': NitroUiSpikeTextFieldConfig,
 };
 
 describe('hand-written view configs', () => {

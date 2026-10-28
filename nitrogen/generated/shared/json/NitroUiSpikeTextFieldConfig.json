@@ -1,0 +1,29 @@
+{
+  "uiViewClassName": "NitroUiSpikeTextField",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "iosImplementation": true,
+    "value": true,
+    "defaultValue": true,
+    "mostRecentEventCount": true,
+    "placeholder": true,
+    "disabled": true,
+    "maxLength": true,
+    "multiline": true,
+    "maxLines": true,
+    "keyboardHints": true,
+    "autoFocus": true,
+    "accessibilityLabel": true,
+    "testID": true,
+    "nuiPerfId": true,
+    "onValueChange": true,
+    "onFocus": true,
+    "onBlur": true,
+    "onSubmitEditing": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}

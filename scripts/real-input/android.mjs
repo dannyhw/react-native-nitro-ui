@@ -92,6 +92,13 @@ const ECHO = {
   hostDateDropButton: 'host-datepicker-drop',
   hostDateGone: 'host-datepicker-drop-gone',
   hostDateRemount: 'host-datepicker-drop-remount',
+  // T18 spike (`docs/tasks/T18-textfield-spike.md`): the typing oracle's echo lines. Each is one
+  // `key=value` line the spike screen renders from the field's own callbacks plus `nuiTestState()`.
+  spikeScreen: 'spike-screen',
+  spikeTargetA: 'spike-type-target-echo',
+  spikeTargetB: 'spike-type-target-b-echo',
+  spikeWrite: 'spike-write-echo',
+  spikeSize: 'spike-size-echo',
 };
 
 /** The system Back key, which is how a person dismisses an open popup. */
@@ -1630,7 +1637,203 @@ const CHECKS = {
         'kept as evidence, not asserted'
     );
   },
+
+  /**
+   * T18's typing oracle, Android half (brief item 1, Q2 §7 P2): OS-level key events
+   * must reach a hosted `BasicTextField(TextFieldState)` and come back out through
+   * the handshake.
+   *
+   * This is the gate the whole spike hangs on. Q2's own rule is that if typing into
+   * a Compose field cannot be driven without a test-only hook, TextField is a no-go,
+   * so the check is deliberately blunt: tap (which must *focus* it — asserted), then
+   * `adb shell input text`, then require the app's own echo to carry the typed text
+   * **and** native's own `focused=1` / `events` bumped past zero.
+   *
+   * Why both halves: `typed=` alone would pass a field whose JS state was written by
+   * something other than the keyboard, and `focused=1` alone would pass a field that
+   * took focus and then swallowed the text. Together they are key events → IME →
+   * Compose → Nitro → JS → re-render, with no seam in the app.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'spike-text-typing': async (t) => {
+    const before = t.requireEcho(ECHO.spikeTargetA);
+    t.log.check(
+      'the field is hosted by Compose (not a shim the test drove instead)',
+      before.includes('impl=compose')
+    );
+    t.log.checkEquals('and it starts empty', echoField(before, 'typed'), '');
+
+    const control = await t.requireControlOnScreen('spike typing target');
+    await t.tapAndType(control, 'abc123', ECHO.spikeTargetA);
+
+    const typed = t.waitForEchoField(
+      ECHO.spikeTargetA,
+      'typed',
+      'abc123',
+      'the typed text to reach React'
+    );
+    t.log.checkEquals(
+      'a real key event reaches the Compose field',
+      echoField(typed, 'typed'),
+      'abc123'
+    );
+    t.log.checkEquals(
+      'the field reported focus before the text arrived',
+      echoField(typed, 'focus'),
+      '1'
+    );
+    const events = Number(echoField(typed, 'events'));
+    t.log.check(
+      'native counted the edits as its own events (the handshake ran, not just the view)',
+      events >= 1
+    );
+    // Kept as the measurement rather than an assertion, because it is one of P5's
+    // numbers and an assertion would hide the answer: a 6-character burst that
+    // produced 6 events means the field emits per keystroke, and 1 means it emits per
+    // committed edit. Q2 §1 assumes the former and the spec comment promises the
+    // latter, so the report says which one the platform actually gives.
+    t.log.note(`events reported for a 6-character burst: ${String(events)}`);
+    // The mirror is native's own reading, cached on main and answered on the JS
+    // thread. `displayed=` agreeing with `typed=` says the two halves of the field
+    // saw the same string, which is the claim Q2 §2 is about.
+    t.log.checkEquals(
+      "native's mirror holds the same text React was told",
+      echoField(typed, 'displayed'),
+      'abc123'
+    );
+
+    await t.type('de');
+    const appended = t.waitForEchoField(
+      ECHO.spikeTargetA,
+      'typed',
+      'abc123de',
+      'a second burst to append'
+    );
+    t.log.checkEquals(
+      'a second burst appends rather than replaces',
+      echoField(appended, 'typed'),
+      'abc123de'
+    );
+
+    await t.pressBack();
+    const blurred = t.waitForEchoField(
+      ECHO.spikeTargetA,
+      'focused',
+      '0',
+      'Back to end the edit session'
+    );
+    t.log.checkEquals(
+      'Back closes the keyboard and the field reports blur',
+      echoField(blurred, 'blur'),
+      '1'
+    );
+    t.log.checkEquals(
+      'closing the keyboard did not lose the text',
+      echoField(blurred, 'typed'),
+      'abc123de'
+    );
+  },
+
+  /**
+   * T18's typing oracle, second arm (`iosImplementation` on a platform that has one
+   * shape): the prop must be **inert** on Android, and typing must still work.
+   *
+   * P1's A/B is an iOS-only question, so on Android both values of the prop have to
+   * land on the same Compose field and give the same answer. If this field ever
+   * reported `impl=` something else, the A/B would be measuring a platform difference
+   * that does not exist, which is the kind of false result a spike is uniquely good at
+   * producing.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'spike-text-coexist': async (t) => {
+    const before = t.requireEcho(ECHO.spikeTargetB);
+    t.log.check(
+      'the other arm value still hosts Compose on Android (the prop is inert here)',
+      before.includes('impl=compose')
+    );
+
+    const control = await t.requireControlOnScreen('spike typing target b');
+    await t.tapAndType(control, 'xyz', ECHO.spikeTargetB);
+    const typed = t.waitForEchoField(
+      ECHO.spikeTargetB,
+      'typed',
+      'xyz',
+      'the second field to receive text'
+    );
+    t.log.checkEquals(
+      'it types the same way (one Android shape, whatever the iOS arm says)',
+      echoField(typed, 'typed'),
+      'xyz'
+    );
+    t.log.checkEquals(
+      'and it reports the same host',
+      echoField(typed, 'impl'),
+      'compose'
+    );
+    await t.pressBack();
+  },
 };
+
+/**
+ * One `key=value` field of a spike echo line, or `''` when the line does not have it.
+ *
+ * The spike's echoes are `key=value` pairs rendered as on-screen `Text`, because a
+ * `uiautomator dump` can read nothing else. Values never contain a space in the cases
+ * these checks assert on, so splitting on the next space is the whole parser; the
+ * `typed=` of a field holding a space is asserted by prefix instead, which is why
+ * `checkIncludes` is used where a space could appear.
+ *
+ * @param {string | null} line
+ * @param {string} key
+ * @returns {string}
+ */
+function echoField(line, key) {
+  if (line == null) {
+    return '';
+  }
+  const prefix = `${key}=`;
+  for (const part of line.split(' ')) {
+    if (part.startsWith(prefix)) {
+      return part.slice(prefix.length);
+    }
+  }
+  return '';
+}
+
+/**
+ * `adb shell input text`'s argument form.
+ *
+ * The string is parsed twice — once by the device's shell and once by the `input`
+ * tool — so a space has to travel as `%s` and a `%` as `%25`. Anything outside this
+ * safe set is refused rather than escaped by guesswork: a check that typed the wrong
+ * string and asserted on the wrong string is worse than a check that says it cannot
+ * type that string. Q2 §2.4's emoji vector is therefore proved through
+ * `nuiTestApplyWrite` (P3), not through typing, and this says so out loud.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function encodeInputText(text) {
+  let encoded = '';
+  for (const char of text) {
+    if (char === ' ') {
+      encoded += '%s';
+    } else if (char === '%') {
+      encoded += '%25';
+    } else if (/^[A-Za-z0-9._\-@:/]$/.test(char)) {
+      encoded += char;
+    } else {
+      throw new Error(
+        `real-input: cannot type "${char}" with \`input text\` (it is outside the ` +
+          'set the tool accepts twice-parsed). Assert this string through a write ' +
+          'instead of through typing.'
+      );
+    }
+  }
+  return encoded;
+}
 
 /**
  * Tap back onto the day an inline calendar is showing, and require that JS is told.
@@ -2232,7 +2435,7 @@ class DeviceHarness {
    * The example's tabs are its only navigation.
    *
    * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker' | 'host'} screen
+   *   | 'picker' | 'host' | 'spike'} screen
    */
   async goToScreen(screen) {
     const label = {
@@ -2243,6 +2446,7 @@ class DeviceHarness {
       datepicker: 'Dates',
       picker: 'Picker',
       host: 'Host',
+      spike: 'Spike',
     }[screen];
     const anchor = {
       switch: ECHO.switchValue,
@@ -2252,6 +2456,7 @@ class DeviceHarness {
       datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
       host: ECHO.hostValue,
+      spike: ECHO.spikeScreen,
     }[screen];
     // Asked from wherever the last control left the scroll, an echo that is scrolled
     // out of sight is simply not in the tree, and this would go looking for a tab to
@@ -2338,6 +2543,36 @@ class DeviceHarness {
    */
   key(keyCode) {
     this.shell(`input keyevent ${String(keyCode)}`);
+  }
+
+  /**
+   * Type real characters, through the same InputManager path a hardware keyboard
+   * uses: `adb shell input text` injects key events into the focused window, so
+   * they travel InputDispatcher → the IME → the focused Compose / UIKit field.
+   *
+   * This is T18's typing oracle (Q2 §7 P2, orchestrator answer 2), and the point of
+   * it is what it does **not** use: no test-only hook, no `setText`, no in-app
+   * writer. A text field is the first control in this suite whose state cannot be
+   * changed by a touch alone, so the suite had no way to prove an edit session works
+   * end to end until it had a way to type. `input text` is that way, and it is the
+   * same tool `input tap` (already the suite's touch source) comes from.
+   *
+   * The field must already hold focus - `input text` has no target argument, which
+   * is also why a check has to tap before it types and can therefore prove that the
+   * tap focused the field.
+   *
+   * Encoding: `input text` is parsed twice (once by the device shell, once by the
+   * `input` tool), so a space is `%s` and anything outside the safe set is rejected
+   * rather than escaped by guesswork. A check that needs an emoji or an apostrophe
+   * needs a different mechanism, and saying so here beats typing the wrong string
+   * and asserting on it. P3's emoji vector is therefore asserted through
+   * `nuiTestApplyWrite`, not through typing.
+   *
+   * @param {string} text
+   */
+  typeText(text) {
+    const encoded = encodeInputText(text);
+    this.shell(`input text ${encoded}`);
   }
 
   /**
@@ -2638,6 +2873,71 @@ function makeContext(harness, log) {
     async tapNode(node) {
       harness.tap(node);
       await sleep(250);
+    },
+
+    /**
+     * Type real characters into whatever holds focus.
+     *
+     * The typing oracle of Q2 §7 P2: `adb shell input text` is the same
+     * InputManager path a hardware keyboard takes, so a change in the on-screen
+     * echo can only be key events → IME → the focused Compose field → Nitro → JS →
+     * re-render. Nothing in the app is asked to cooperate, which is the whole
+     * point — a test-only insertion seam would prove the app's own code, not the
+     * platform path.
+     *
+     * @param {string} text
+     */
+    async type(text) {
+      harness.typeText(text);
+      await sleep(300);
+    },
+
+    /**
+     * Focus a control by tapping it, then type. Returns the focus count the echo
+     * reported, which is the half of the proof a bare `typeText` cannot give: that
+     * the *tap* put the field in an edit session.
+     *
+     * @param {import('./uiautomator.mjs').UiautomatorNode} node
+     * @param {string} text
+     * @param {string} echoID
+     */
+    async tapAndType(node, text, echoID) {
+      await this.tapNode(node);
+      const focused = this.waitForEchoField(
+        echoID,
+        'focused',
+        '1',
+        'the field to report focus'
+      );
+      await this.type(text);
+      return focused;
+    },
+
+    /**
+     * An echo line polled until its `key` reads `expected`, then the whole line.
+     *
+     * The spike's echoes carry native's own mirror (`focused=`, `composing=`,
+     * `lastWrite=`), and those are what a check has to wait on: JS's `typed=` can
+     * only ever be as fresh as the last render, so waiting on it alone would time
+     * out on a field that actually worked but re-rendered first.
+     *
+     * @param {string} echoID
+     * @param {string} key
+     * @param {string} expected
+     * @param {string} why
+     */
+    waitForEchoField(echoID, key, expected, why) {
+      const shown = this.echoWithin(
+        echoID,
+        (text) => echoField(text, key) === expected
+      );
+      if (echoField(shown, key) !== expected) {
+        log.abort(
+          `timed out waiting for ${why}: "${key}" never read "${expected}" ` +
+            `(the line was ${String(shown ?? 'nothing on screen')})`
+        );
+      }
+      return shown;
     },
 
     /**

@@ -13,6 +13,11 @@ import com.margelo.nitro.nitroui.views.HybridNitroUiProgressManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSliderManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSegmentedControlManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSwitchManager
+// T18's TextField spike (`src/spike/`). Deliberately below the generated manager imports rather than
+// among them: the registry owns the contiguous run of generated rows and reports anything inside it that
+// is not one of them, so a spike row has to sit outside the run - the same reason `NitroUiHostViewManager`
+// does. Delete this import and its row with the spike.
+import com.margelo.nitro.nitroui.views.HybridNitroUiSpikeTextFieldManager
 
 /**
  * The React package of `react-native-nitro-ui`.
@@ -55,6 +60,9 @@ class NitroUiPackage : BaseReactPackage() {
     // nitrogen emits a `SimpleViewManager` for it, and a container needs the
     // `IViewGroupManager` half. See `NitroUiHostViewManager`.
     NitroUiHostViewManager(),
+    // T18's spike field, and the only registered view that is not a shipped component. It is outside the
+    // generated run for the reason on the import above. Delete with the spike.
+    HybridNitroUiSpikeTextFieldManager(),
   )
 
   companion object {
