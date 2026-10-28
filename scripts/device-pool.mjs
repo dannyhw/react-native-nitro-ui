@@ -261,14 +261,28 @@ export function deviceOperations({
     },
 
     /**
-     * The cheapest reset that reports what it did. `pm clear` answers `Success` or `Failed`, and
-     * the answer is returned rather than reduced to a boolean: a reset that failed on a device
-     * still coming up has to say which, because "Failed" and "no such package" need different
-     * things from whoever reads the line.
+     * The cheapest reset that reports what it did: `adb -s <serial> shell pm clear <appId>`, which
+     * wipes the app's data directory and leaves the installed bundle alone.
+     *
+     * The `shell` is not decoration. `pm` is a *device-side* command, so `adb -s X pm clear Y` —
+     * what this line used to build — answers `adb: unknown command pm` on stderr, empty stdout and
+     * exit 1 on every device, forever. The retry loop then looked like a device that would not
+     * clear, four times, and the log said "pm clear FAILED (no answer)" instead of "this command
+     * was never a command".
+     *
+     * `pm clear` answers `Success` or `Failure`/`Failed` on stdout, and the answer is returned
+     * rather than reduced to a boolean: a reset that failed has to say which, because a device
+     * still coming up and a package that is not installed need different things from whoever reads
+     * the line. An empty stdout with a non-zero exit is reported with its exit code for the same
+     * reason — that combination is how a *malformed* command answers, as opposed to a refused one.
      */
     clearAppData(serial, appId, adbPort = null) {
-      const answer = out(adb(['-s', serial, 'pm', 'clear', appId], adbPort));
-      return { ok: /Success/i.test(answer), answer: answer || '(no answer)' };
+      const res = adb(['-s', serial, 'shell', 'pm', 'clear', appId], adbPort);
+      const answer = out(res);
+      return {
+        ok: /Success/i.test(answer),
+        answer: answer || `(no answer, exit ${String(res.status)})`,
+      };
     },
 
     shutdownAndroid(serial, adbPort = null) {
