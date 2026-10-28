@@ -20,10 +20,10 @@ accel check now reads `emulator -accel-check`'s exit status: the phrase it looke
 printed, so the check reported the device unusable on every Android run here while it was using
 Hypervisor.Framework.
 
-**Per-suite timing:** a harness plugin writes `.gates/suite-timing/<gate>-*.json` as each file
-finishes, the ledger carries it (`LEDGER_VERSION` 3), `gate.mjs table --full` prints it. It paid for
-itself immediately — the first version summed `result.testResults`, a field the harness does not
-return, so every suite reported 0 tests and the whole restart/test-body split was silently wrong.
+**Per-suite timing:** a harness plugin writes `<log>.suites.json` in the gate log store as each file
+finishes, the ledger carries it (`LEDGER_VERSION` 6), `table --full` prints it. It paid for itself —
+the first version summed `result.testResults`, a field the harness does not return, so every suite
+reported 0 tests and the restart/test-body split was silently wrong.
 
 **A warm device pool the lease owns** (`scripts/device-pool.mjs`): `acquire --boot` boots what is
 down, waits for the load to settle, resets the app; `release` leaves devices up; reaping (idle past
