@@ -74,7 +74,7 @@ this branch's number, not a re-state of the threshold.
 | --- | --- | --- | --- |
 | Typing works on both platforms through harness or real input | Android `input text` → IME → Compose → Nitro → JS echo; iOS XCUITest `typeText`; 6-char burst = **6 events** on both; no test-only seam | typing works | **pass** |
 | Composition survives a controlled write and `maxLength` | guard exists on both shapes and drops the write (`lastWrite=composing`, `HybridNitroUiSpikeTextField.swift:424`, `NitroSpikeTextFieldCompose.kt:221`); observability measured (`marked=1` on `UITextField`, `composition` read as 0 on Compose, none on SwiftUI); no composition was ever opened | survives | **not measured** — precondition only |
-| A rejected change reverts with no lost character at 10 keys/s | `spike-text-reject` both platforms: field took the edits (`nativeEvents=2`), then `displayed=frozen`, `unreported=0`; iOS drives 10 keys 100 ms apart | reverts, none lost | **pass** |
+| A rejected change reverts with no lost character at 10 keys/s | iOS: ten `typeText` calls 100 ms apart, all ten counted (`nativeEvents=10`), then `displayed=frozen`, `typed=frozen`, `unreported=0`. Android: one `input text` burst of two keys, `nativeEvents=2`, same revert. The 10 keys/s half is iOS-measured | reverts, none lost | **pass** (Android at two keys, not at the named rate) |
 | First-keystroke→commit p95 ≤ RN `TextInput` × 1.5, same run | **Android 78 ms vs 26 ms = 3.00×**; iOS 17.0 ms vs 71.0 ms = 0.24× | ≤1.5× | **fail on Android** (iOS passes) |
 | Auto-grow converges in ≤1 correction (D17) | iOS 0.5 corrections/bucket (2 over 4 buckets), Android 1.0 (4 over 4) | ≤1 | **pass** |
 | N=200 recycle/drop leak-free | Android `retained_after_drop_miB=0`, private-dirty 42.12 → 42.12 MiB after drop, 185 KiB/field while held; iOS has no heap probe | leak-free | **pass (Android)**, unmeasured (iOS) |
@@ -224,9 +224,10 @@ the commit messages, not deliberate mutations, and listed as such.
   greater than or equal to 1` at `field.log.focus >= spikeAsks`. These are the two FAIL rows above.
 - `awaitHostedField` / the focus probe -> no mutation needed: `focus:no-field` and `no-control` are
   what the probe writes when the ask finds nothing, and they are what the iOS runs printed.
-- `real-input spike-text-reject` -> the two-key burst form -> `nativeEvents=1` for two keys, because
-  the revert races the second character (`866411d`); recorded as a finding, and the control now
-  drives 10 keys at 100 ms, which is the rate Q2 §7 names.
+- `real-input spike-text-reject` (iOS) -> the two-key burst form -> `nativeEvents=1` for two keys,
+  because the revert races the second character (`866411d`); recorded as a finding about the arm, and
+  the control now drives ten keys 100 ms apart, which is the rate Q2 §7 names. Android's twin still
+  types one `input text qq` and asks for `nativeEvents=2`.
 - `real-input spike-latency` (iOS) -> a tap aimed under a keyboard the previous field left open ->
   `Neither element nor any descendant has keyboard focus` (`866411d`, `01cdb72`).
 - `real-input spike-text-coexist` (iOS) -> before `5752010`, `onFocus` reported `focus=1` while
@@ -276,8 +277,9 @@ the commit messages, not deliberate mutations, and listed as such.
   `cps` counting (code points, no split surrogate) and "the cap is not on the write path" were.
 - App `console.log` reaches the iOS harness runner's stdout only when a suite fails; harness tooling
   (R1 line), and it is why the iOS numbers needed receipt runs.
-- Cold-start and host-cost effects on the 3.00× are unmeasured: without a `component.json` the bench
-  manifest path (`harness-timing.mjs`) is unavailable to the spike.
+- Cold-start and host-cost effects on the 3.00× are unmeasured: the spike has no bench arm (bench arms
+  are generated from `component.json`, `bench/src/types.ts:18-27`), so nothing here is a release-build
+  number.
 - Android's `focus()` is state-dependent rather than absent: it lands on the probe's instances and
   not on `P5 focus latency`'s field, on one tree, in one run. Only the failure is measured.
 
