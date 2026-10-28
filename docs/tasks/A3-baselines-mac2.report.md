@@ -348,6 +348,16 @@ launching.
 - Nothing else: no source, native, runner or test file changed; `bench/results/` stays gitignored and
   `maintainer-mac-1`'s two files are untouched.
 
+## Merge note
+
+The branch base is `9cf95f3`; `main` has moved to `c47a280` with docs-only commits since (Q1–Q4
+research, the Q4 FOLLOWUPS triage, the 0.4 plan, X4's brief). One file changed in both:
+`docs/tasks/FOLLOWUPS.md` — Q4 rewrote it and A3 appends two lines at the end, so expect a conflict
+there and resolve by keeping Q4's triaged file plus A3's two new lines. Nothing else collides, and
+nothing in either direction touches platform code, so `check` carries over: the code-tree digest is
+unchanged by `docs/` and `bench/` edits, which is why the three commits here still show
+`35948172d50e`.
+
 ## Follow-ups
 
 - bench/iOS: `@expo/ui`'s two DatePicker cells at N=200 present on only 55/160 and 87/160 measured
