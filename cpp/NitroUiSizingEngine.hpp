@@ -483,6 +483,27 @@ namespace margelo::nitro::nitroui {
       /// Hash a (component, sizingKey) pair for `guesses_`. Epoch 0 is never a real
       /// epoch, so no live key can collide with a guess key.
       static uint64_t guessHash(const char* componentName, const std::string& sizingKey);
+      /**
+       * The size to file in `cache_` / `guesses_` for a size a host reported.
+       *
+       * A `fillWidth` report's width is a restatement of the box the control was
+       * measured at, so it is replaced here with the width the component itself
+       * declared; only the height is the control's answer. That is the whole
+       * consequence of the policy being taken seriously: the one place a cached
+       * `fillWidth` width reaches the screen is a node measured under an *infinite*
+       * width constraint (a control in a horizontal scroller), where
+       * `measureContent` has no box width to substitute - and filing a report's
+       * width there delivered whichever parent a bounded instance had last been
+       * measured at (`docs/tasks/FOLLOWUPS.md` row 10). The declared number is
+       * what the component publishes for exactly that case, so the cached width is
+       * now always the component's own.
+       *
+       * `intrinsic` reports, and a `fillWidth` component that declared nothing, are
+       * filed unchanged: there is no honest replacement to offer for the latter.
+       *
+       * Caller holds the lock.
+       */
+      NitroUiMeasuredSize filedSizeLocked(const NitroUiMeasuredSize& reported, const std::string& componentName) const;
       /// Forget what a component's configurations last measured (a fresh
       /// declaration supersedes the engine's own history). Caller holds the lock.
       void dropGuessesForLocked(uint32_t hash, const char* componentName);

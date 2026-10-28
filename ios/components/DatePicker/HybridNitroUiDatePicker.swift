@@ -595,12 +595,22 @@ private struct PlatformPicker: View {
       displayedComponents: model.components
     )
     .labelsHidden()
+    // The appearance is recorded *inside* the identity, in this order and not the
+    // other way round: `.onAppear` applied outside `.id(_:)` belongs to the
+    // enclosing structure, which survives a re-identification, so it fired once per
+    // mount and ``DatePickerModel/builtBounds`` kept describing the bounds of the
+    // *first* build rather than the one on screen. That is the G5 re-review 2
+    // follow-up (`docs/tasks/FOLLOWUPS.md` row 46): the escape clause of
+    // ``controlIdentity`` compares the value against `builtBounds`, so stale bounds
+    // compare against a range the live control does not hold - a value past the
+    // bound the model widened away from still looks "outside", and each crossing
+    // costs a rebuild the live control does not need.
+    .onAppear { model.noteControlBuilt(minimum: model.minimum, maximum: model.maximum) }
     // Re-identified by ``DatePickerModel/controlIdentity``, and only there: the same
     // key, applied one level out to `PlatformPicker` from its call sites, was measured
     // to assert in `UICalendarView _setVisibleMonth:` - which is the failure the
     // identity exists to avoid.
     .id(model.controlIdentity)
-    .onAppear { model.noteControlBuilt(minimum: model.minimum, maximum: model.maximum) }
   }
 
   /// The bounds, as the range SwiftUI's `DatePicker(in:)` wants.
