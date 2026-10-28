@@ -1057,6 +1057,12 @@ describe('the lease owns the device lifecycle', () => {
     const acquired = cli(['acquire', '--task', 'BENCH', '--exclusive']);
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toMatch(/reap skipped \(pool state was unreadable/);
+    // And the promise is withdrawn out loud: "every device is off" is the one thing a bench host
+    // cannot be told when the pool could not even read its own state.
+    expect(acquired.stderr).toContain('the pool was NOT powered off');
+    expect(acquired.stderr).not.toContain(
+      'every device no other lease holds is off'
+    );
     expect(log()).not.toContain('emu kill');
     // The lease still exists: naming a pair does not need the pool's memory, only killing does.
     expect(acquired.stdout).toContain('NITRO_UI_LEASE_ID');
