@@ -1,7 +1,8 @@
 {
-  "$comment": "Copy to ~/.nitro-ui/devices.json on each machine and edit. One file per machine: UDIDs, AVD names and ports do not travel between machines, which is why briefs must stop naming them (docs/tasks/PROCESS-review-2026-10-26.md section 4, rank 7). Lease them with: node scripts/lease.mjs acquire --task <id>. Put any device a person owns in reservedIdentifiers by name (its AVD name or simulator UDID) so no lease can hand it out - and note that emulator port 5560 is refused by every script here, so it needs no entry. maxConcurrentBuilds caps how many heavy native builds run at once on this machine (see build-slot); leave it at 1 unless the machine has cores to spare, and note that a value that is not a positive integer is read as the default and named in the build's output. Read from another path with --config, or move the whole directory with NITRO_UI_HOME. Placeholder identifiers below - create the real devices first (xcrun simctl create, avdmanager create avd) and paste their UDID/AVD names here.",
+  "$comment": "Copy to ~/.nitro-ui/devices.json on each machine and edit. One file per machine: UDIDs, AVD names and ports do not travel between machines, which is why briefs must stop naming them (docs/tasks/PROCESS-review-2026-10-26.md section 4, rank 7). Lease them with: node scripts/lease.mjs acquire --task <id>. Put any device a person owns in reservedIdentifiers by name (its AVD name or simulator UDID) so no lease can hand it out - and note that emulator port 5560 is refused by every script here, so it needs no entry. maxConcurrentBuilds caps how many heavy native builds run at once on this machine (see build-slot); leave it at 1 unless the machine has cores to spare, and note that a value that is not a positive integer is read as the default and named in the build's output. idleShutdownMinutes is how long a warm device may sit between runs before `lease.mjs` powers it off (X11): the pool keeps a device booted so the next task does not pay 54 s for a boot, and this is the guard against the pile of idle simulators that makes the next measurement wrong. 0 means reap as soon as a run lets go. Read from another path with --config, or move the whole directory with NITRO_UI_HOME. Placeholder identifiers below - create the real devices first (xcrun simctl create, avdmanager create avd) and paste their UDID/AVD names here.",
   "maxDeviceLeases": 2,
   "maxConcurrentBuilds": 1,
+  "idleShutdownMinutes": 30,
   "reservedEmulatorPorts": [5560],
   "reservedIdentifiers": [],
   "pairs": [
@@ -31,7 +32,7 @@
       "android": {
         "avd": "nitro-ui-b",
         "emulatorPort": 5576,
-        "adbPort": 5044,
+        "adbPort": 5045,
         "apiLevel": 35,
         "profile": "pixel_9"
       },
