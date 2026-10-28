@@ -5,6 +5,29 @@
 (pair-a: sim `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / `emulator-5574` / Metro `8295`) ·
 **Machine:** `maintainer-mac-1`
 
+> **Read with the review.** `T18b-textfield-followup.review.md` accepts this report with
+> corrections, and they override the text below. **Q2 §7's go is not reached.** No no-go trigger
+> fired on Android, but five go lines are unmet or unmeasured: N=200 memory, composition, X4
+> rules 1/3/4, iOS latency and iOS reject. Starting G8 in 0.5 is therefore the owner's call, not
+> a result of this spike. "The design is settled" doesn't hold. Specifically:
+> - The Android latency pass is real but not decisive. The arms always ran in the same order,
+>   and over the first 18 samples of each arm the spike is 1.31–2.00× RN at the median (M2).
+> - iOS 1.38× is a lower bound on the field's ratio, not an upper one. The >2× trigger isn't ruled
+>   out (M3).
+> - The iOS reject check counts the warm-up key: 8 of 10 burst keys arrived (M4).
+> - iOS focus lands on the SwiftUI arm only. The `UITextField` arm still sometimes fails (M5).
+> - Final-tree iOS numbers do exist, in the 21:21 full run (M6).
+> - The red `harness:android` had four failing suites, two with assertion failures, not only
+>   timeouts. It is still unrelated to this diff (M7).
+> - P1 failed in 3 of 10 iOS runs (M8).
+> - The G8 must-haves are missing (M9).
+> - Auto-grow was measured with JS writes only (M10).
+> - Several red proofs were not seen red at the check they guard, or never went red (M11).
+>
+> The review's answers to the three questions below recommend: the spike suite plus real-input
+> as the Android evidence; finding P1's cause before it becomes a gate; and an in-app iOS latency
+> instrument as G8's first task.
+
 ## Summary
 
 T18's no-go rested on two measurements. Re-measured as Q2 §7 names them, both come out the other way.
