@@ -240,6 +240,25 @@ cases that went red, named below.
 - `keeps the record of an emulator whose adb server did not answer` -> that branch in `shutdownDevice` disabled -> **1 red**; the simulator twin the same way -> **1 red**
 - `reaps nothing on an exclusive acquire either, when the pool state was unreadable` -> the fail-closed case's summary restored to "every device no other lease holds is off" -> **1 red**
 
+Then the two the live proof found (`de172a7`, `dba18b9`), one exact replacement each, over the same
+two suites:
+
+- `launches the emulator on the adb server the pair owns` -> the launch environment stops carrying
+  `ANDROID_ADB_SERVER_PORT` -> **1 red**; and -> `ensureBooted` stops passing `adbPort` into
+  `bootEmulator` -> **1 red** (the two ends of one wire: the value has to reach the process)
+- `refuses to read an unreachable device as "not installed"` -> the stderr rule deleted -> **1 red**;
+  -> `adb:` dropped from the prefix list, leaving the live bug's own phrase unrecognised -> **1 red**
+- `reads an empty, silent failure as not installed` -> `ok` made to require a `package:` line ->
+  **1 red**; `keeps a device-side "not found" an answer` -> the list loosened to any error-shaped
+  line -> **1 red**
+
+The last of those needed a second attempt, and the first attempt is worth recording: the case was
+written with `Error: Package … not found` on **stdout**, a stream the new rule never reads, so it
+passed while the rule was loosened to match anything error-shaped — a guard that guarded nothing.
+Moved to stderr (where an error line arrives) and pinned on both streams, it goes red under that
+mutation, which is the direction that keeps the N5 fix from regressing into four retries per fresh
+AVD.
+
 One number this round does *not* claim: an earlier hand-run of the `canActOnKey` mutation showed 19
 red because the replacement did not compile (`entry` was not in scope), so 16 of those were a
 ReferenceError, not a caught bug. The sweep's valid mutation turns 3 red in one direction and 32 in
@@ -257,6 +276,8 @@ the other.
 - `scripts/__tests__/{emulator-launch,harness-suite-timing,device-pool,lease-pool-cli}.test.js` —
   new: 16 + 22 + 45 + 17 = 100 tests; plus 4 claim cases in the existing `gate.test.js`. All shown
   red above.
+- `scripts/__tests__/device-ops.test.js` — new in fix round 2 (22 tests): the same tools behind
+  stub `adb` / `xcrun` / `emulator` binaries, so the parsers the injected fakes replaced are covered.
 - `scripts/real-input/{android,ios}.mjs` — boot hints from the shared config, and no
   `open -a Simulator` (Xcode 27's app asks DeviceKit for a device no lease handed out).
 - `AGENTS.md`, `CONTRIBUTING.md` — the lease owns device lifecycle; measured boot costs.
@@ -280,6 +301,11 @@ the other.
   `pm path` / `get_app_container … app` probe in front of it, so a fresh AVD is a one-ask no-op
   instead of four retries and a misleading line (N5). The retry is still there for the device that
   *is* installed and still settling, which is what the first real boot actually hit.
+- harness sizing: `Picker · G6` (`asks a wheel the box question after a variant change`) decided a
+  re-run this round — the same tree's `harness:ios` failed it once (load median 57, max 98) and
+  passed it once (median 40, max 75), with the machine's other tenants in the background both
+  times. Not this branch's code (no `example/` file changed in fix round 2), and not a claim that
+  the suite is flaky in general: one reproduction of that difference, in one direction.
 - lease list: only a *waiting exclusive* request is persisted (an earlier `--exclusive --wait` of
   mine showed as a `waiting` row); an ordinary `acquire --wait-minutes` is not, so a blocked task
   looks idle from outside and nobody can tell waiting from stuck. Persisting the wait, or one
@@ -353,6 +379,12 @@ to know which ones a run touched, which is not something the pool can know — s
 is that the reset is storage-complete, not state-complete. CONTRIBUTING says the same thing where a
 task would read it.
 
+
+**Answered in fix round 2.** Question 1: the orchestrator chose **option A** — merge with that row
+documented, since `main` fails it the same way and F1 takes it next. Question 2: `A4` released
+`A4-297ow` at about 20:51Z, so both harnesses ran on the freed pair at this tree and are green, and
+the M1/M2 reset proofs ran on hardware — which is where the two boot-side bugs in `## Fix round 2`
+came from.
 
 ## Fix round 1
 
@@ -479,3 +511,33 @@ round with `avdmanager delete avd -n nitroui`. `avdmanager list avd` before that
 AVDs: `nitroui` (this one), `nitroui_a`, `nitroui_b` (both in `devices.json`) and
 `Pixel_9`. Nothing else references the name: the string `nitroui` outside the pool AVDs
 appears only as the example app's bundle id and as the Kotlin package name.
+
+## Fix round 2
+
+Scope first: **nothing reaps passively** — `list`, `acquire` and `release` never power a device off;
+reaping is the explicit `reap` plus an `--exclusive` acquire's power-off, and `exceptLeaseId`
+self-skipping is gone from every passive path. M1 re-validates at each kill: lock, fresh leases and
+claims, then `emu kill`. M2 refuses a reset on a claimed device whoever holds it, and skips only a
+warm re-acquire. N1 fails closed on an unreadable `pool.json`; N2 says unknown, never off; N5 makes
+not-installed a one-ask no-op; N4 stays a limitation.
+
+A cold boot on hardware found two more, invisible to a fake: an emulator registers with the adb
+server in **its own** environment, so the pool booted a device it could not see — up in 31 s,
+`degraded` after a 7-minute poll — whose empty `pm path` exit 1 then read as "not installed", logging
+a clean no-op for a device never reached. A stub `emulator` now records its launch env, a stub `adb`
+its stderr.
+
+Live proofs passed on both platforms: a fresh lease clears both markers, a warm re-acquire leaves
+them, a live claim answers `SKIPPED`.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 844 tests / 38 suites | `4c63694981df` | 2 m 58 s | start 4.2 / med 4.3 / max 6.5 |
+| `harness:ios` | **PASS** | 165 tests / 13 suites | `1cf7e34b2e0c` (ios tree) | 2 m 19 s | start 17.6 / med 40.1 / max 74.8 |
+| `harness:android` | **PASS** | 214 tests / 13 suites | `1cf7e34b2e0c` (android tree) | 6 m 18 s | start 20.3 / med 4.9 / max 20.3 |
+| `real-input:ios` | stale | — | 9d9ce869206a (not this tree) | 10 m 47 s | start 2.1 / med 3.8 / max 15.7 |
+| `real-input:android` | stale | — | 9d9ce869206a (not this tree) | 12 m 02 s | start 2.3 / med 2.1 / max 3.6 |
+
+`need --for review`: need: review is satisfied on this code tree.
+
+M4 corrected; `real-input:ios` is red on `main` too — option A, merge with the row documented.
