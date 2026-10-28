@@ -78,6 +78,11 @@ function mountRecords(implementation, { mounted, n = 50 }) {
       measured: ITERATIONS,
       platform: 'ios 27.0',
       probeClock: 'CLOCK_UPTIME_RAW',
+      // The waiting rule this fixture's app would have reported (iOS's defaults). A run
+      // that records none is refused by `baselineBlockers`, so every mintable fixture
+      // has to carry one.
+      mountTimeoutMs: 1_500,
+      presentedTimeoutMs: 8_000,
     },
   ];
   for (let launch = 0; launch < LAUNCHES; launch++) {

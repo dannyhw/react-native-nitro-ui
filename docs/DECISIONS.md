@@ -49,26 +49,43 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
     iteration; the runner prints them per launch, the report prints them per cell, and
     both the refusal and the left-out-cell note say where the detail lives. A count of
     nulls cannot be diagnosed after the fact, and a mint refusal is the expensive moment
-    to discover that. Relatedly: the probe's native "no frame" backstop is a **ceiling**
-    (90 s on both platforms), not the wait the runner asked for - it used to be a
-    hardcoded 2 s on both, which silently *was* the timeout however long JS waited.
-  - **A4 amendment (2026-10-28) - the waiting rule is a measurement, and it is 8 s.**
-    `presented` waits 8 000 ms (was 2 000) and `mounted` 1 500 ms, on data from
-    `docs/tasks/A4-ios-baseline-mac2.report.md`: 200 `@expo/ui` DatePickers present their
-    first frame at p50 2.7-3.0 s on the canonical iPhone 17 simulator - above the old wait,
-    which is why those cells lost 40 % and 54 % of their samples - while the slowest frame
-    measured anywhere in the task's runs was 3.9 s and the slowest mount 226 ms. Raising
-    the wait is **value-neutral for any cell that already measured every iteration** (an
-    arriving sample keeps its stamp, so its median cannot move), and a committed baseline
-    has no incomplete cells - so this does not invalidate the tables minted under 2 s. Only
-    the cells that were losing samples change, and they change towards the truth, because
-    the iterations a short wait drops are exactly the slow ones.
+    to discover that. Relatedly: the probe's native "no frame" backstop is a **ceiling**,
+    not the wait the runner asked for - it used to be a hardcoded 2 s, which silently
+    *was* the timeout however long JS waited. iOS's ceiling is now 90 s; Android's stays
+    at 2 s, and the requested-timeout cap is per platform (80 s on iOS, 1.9 s on Android)
+    so the wait a run asks for is always the wait that answers.
+  - **A4 amendment (2026-10-28) - the waiting rule is a measurement, and iOS's is 8 s.**
+    `presented` waits 8 000 ms on iOS (was 2 000) and **2 000 ms on Android, unchanged**;
+    `mounted` waits 1 500 ms on both. The evidence is iOS evidence
+    (`docs/tasks/A4-ios-baseline-mac2.report.md`): 200 `@expo/ui` DatePickers present
+    their first frame at p50 2.7-3.0 s on the canonical iPhone 17 simulator - above the
+    old wait, which is why those two cells lost 66 % and 46 % of their samples - while the
+    slowest iOS frame measured anywhere in the task's runs was 3.6 s (3 850 ms in the 40 s
+    diagnostic) and the slowest mount 226 ms. Raising a wait is **value-neutral for any
+    cell that already measured every iteration** (an arriving sample keeps its stamp, so
+    its median cannot move), so mac-1's iOS table survives the raise untouched; the cells
+    that were losing samples change, and they change towards the truth, because the
+    iterations a short wait drops are exactly the slow ones.
+  - **A4 amendment, round 1 (2026-10-28) - the longer wait is scoped to iOS.** The same
+    amendment first applied 8 s to both platforms. Review M1 found the premise wrong on
+    Android: the Android cells that lose presenting samples are not waiting-too-shortly
+    cells. 4 are `rn-core` cells the runner does not await at all (`not-awaited`), and 8
+    are `update.progress`/`update.picker` on both `@expo/ui` arms at N=1 and N=50, which
+    **await and time out on both signals, every iteration** (A3: those arms never produce
+    a Fabric transaction there). Waiting 6 s longer per iteration cannot produce a frame
+    that never comes; it inflates the CPU rows that bracket the wait (`opBatch` in
+    `bench/src/runner.ts` integrates main-thread work over it, ~2.7x on those rows) and
+    costs ~2.7 h per Android full run at ~80 % of the per-launch budget. So Android's
+    defaults, its native backstop and its launch budgets are exactly the pre-A4 numbers,
+    which is also what keeps this machine's committed Android table and Android run times
+    unchanged. The 8 never-mounting Android `update.*` reference cells are a follow-up
+    (a platform-scoped `NO_MOUNT_SIGNAL` entry), not part of this task.
   - **A4 amendment (2026-10-28) - the waiting rule is recorded, and a longer wait is a diagnostic.**
-    `--timeout-mount` / `--timeout-presented` raise how long a launch waits for a signal
+    `--timeout-mount` / `--timeout-presented` change how long a launch waits for a signal
     (to ask "did that arm never draw, or did it draw later than we waited?"). A run that
-    raises one cannot mint: a sample that arrives keeps its value, but *which* samples
-    arrive moves the median. Baselines carry their `timeouts` block so a `presented`
-    column has its rule attached.
+    asks for longer than its platform's default cannot mint: a sample that arrives keeps
+    its value, but *which* samples arrive moves the median. Baselines carry their
+    `timeouts` block so a `presented` column has its rule attached.
   - Device keys = platform + OS runtime + device class (e.g. `ios27-sim-iphone17`,
     `android35-emu-pixel9`). One canonical device per platform; other hardware uses `--compare`.
   - Locally and on hosted CI, benchmarks **inform review**; they block only on a clear regression

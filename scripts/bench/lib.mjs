@@ -115,57 +115,115 @@ export const COMPARISON_IMPLEMENTATIONS = IMPLEMENTATIONS.filter(
 );
 
 /**
- * The waiting rule a baseline has to be minted under (A4).
+ * The waiting rule a baseline has to be minted under, **per platform** (A4).
  *
- * `bench/src/plan.ts` owns these numbers - it is what parses them off the launch plan -
- * and they are restated here because `scripts/` cannot import the app's TypeScript.
- * `scripts/__tests__/bench-missing-samples.test.js` imports both sides and fails if they
- * disagree.
+ * `bench/src/plan.ts` `BENCH_DEFAULT_TIMEOUTS` owns these numbers - it is what parses
+ * them off the launch plan - and they are restated here because `scripts/` cannot import
+ * the app's TypeScript. `scripts/__tests__/bench-missing-samples.test.js` imports both
+ * sides and fails if they disagree, on either platform.
  *
- * A run that waited longer for a presenting frame is a **diagnostic**, like a
- * `--perf-marks` run: a sample that arrives keeps its value, but *which* samples arrive
- * changes the median, so its ratios are not comparable with a table recorded under a
- * different rule. `baselineBlockers()` refuses one instead of letting it quietly
- * redefine what `presented` means.
+ * A run that waited anything other than the platform's default is a **diagnostic**, like
+ * a `--perf-marks` run - in either direction: a sample that arrives keeps its value, but
+ * *which* samples arrive changes the median, so its ratios are not comparable with a
+ * table recorded under a different rule. `baselineBlockers()` refuses one instead of
+ * letting it quietly redefine what `presented` means.
+ *
+ * `presentationCeilingMs` and `maxRequestedTimeoutMs` are here for the same reason: the
+ * native backstop decides what a requested wait can mean, and Android's is 2 s because
+ * the longer wait is scoped to iOS (review M1). A cap that let a run ask past the
+ * backstop would record a timeout the run never asked for.
  */
-export const BASELINE_MOUNT_TIMEOUT_MS = 1500;
-export const BASELINE_PRESENTED_TIMEOUT_MS = 8000;
+export const BASELINE_TIMEOUTS_MS = {
+  ios: {
+    mountTimeoutMs: 1500,
+    presentedTimeoutMs: 8000,
+    presentationCeilingMs: 90_000,
+    maxRequestedTimeoutMs: 80_000,
+  },
+  android: {
+    mountTimeoutMs: 1500,
+    presentedTimeoutMs: 2000,
+    presentationCeilingMs: 2_000,
+    maxRequestedTimeoutMs: 1_900,
+  },
+};
+
+/** The rule for one platform, or an error naming the ones that have a rule. */
+export function baselineTimeoutsFor(platform) {
+  const timeouts = BASELINE_TIMEOUTS_MS[platform];
+  if (timeouts == null) {
+    throw new Error(
+      `no baseline waiting rule for platform "${String(platform)}" (known: ${Object.keys(
+        BASELINE_TIMEOUTS_MS
+      ).join(', ')})`
+    );
+  }
+  return timeouts;
+}
 
 /**
- * The per-launch wall-clock budgets, by scenario action, that `run.mjs` starts from.
- * Restated here so `launchBudgetMs` can be tested without importing the runner (which
- * cannot be imported under jest: `import.meta`).
+ * The per-launch wall-clock budgets, by platform and scenario action, that `run.mjs`
+ * starts from. Restated here so `launchBudgetMs` can be tested without importing the
+ * runner (which cannot be imported under jest: `import.meta`).
  *
- * Each must exceed what a launch can spend waiting under the default rule - see the
- * comment on `TIMEOUTS` in `run.mjs` and the test that keeps the two honest.
+ * Each must exceed what a launch of *that platform* can spend waiting under its default
+ * rule - see the comment on `TIMEOUTS` in `run.mjs` and the test that keeps the two
+ * honest. Android's row is the pre-A4 table: its waits never changed, so the allowance
+ * for a launch did not either (review M1).
  */
 export const DEFAULT_SCENARIO_BUDGETS = {
-  mount: 300_000,
-  update: 300_000,
-  memory: 300_000,
-  leak: 420_000,
+  ios: {
+    mount: 300_000,
+    update: 300_000,
+    memory: 300_000,
+    leak: 420_000,
+  },
+  android: {
+    mount: 180_000,
+    update: 180_000,
+    memory: 180_000,
+    leak: 300_000,
+  },
 };
 
 /**
  * The wall-clock budget for one launch: the scenario's allowance, widened by any extra
  * waiting this launch was asked to do.
  *
- * The base already covers waiting at the defaults (see `DEFAULT_SCENARIO_BUDGETS`). What
- * it cannot know is a run that asks for longer: an iteration of `mount` waits up to
- * `mount` + `presented` for its own two signals and again `mount` in the teardown that
- * follows, so asking for a 40 s presenting wait adds 32 s per iteration - 800 s across a
- * launch. Left alone, that launch would be killed as *stalled* for a reason the runner
- * itself introduced, and a killed launch becomes a `problem` (and a mint refusal) instead
- * of 20 iterations each recording a `probe-timeout` reason.
+ * The base already covers waiting at that platform's defaults (see
+ * `DEFAULT_SCENARIO_BUDGETS`). What it cannot know is a run that asks for longer: an
+ * iteration of `mount` waits up to `mount` + `presented` for its own two signals and
+ * again `mount` in the teardown that follows, so asking for a 40 s presenting wait on iOS
+ * adds 32 s per iteration - 800 s across a launch. Left alone, that launch would be
+ * killed as *stalled* for a reason the runner itself introduced, and a killed launch
+ * becomes a `problem` (and a mint refusal) instead of 20 iterations each recording a
+ * `probe-timeout` reason.
+ *
+ * `platform` is required: the two platforms wait different amounts (review M1), so a
+ * budget that assumed one of them would be too small for iOS or would quietly allow
+ * Android launches four times the waiting its own table was sized for.
  *
  * `overrideSeconds` is the `BENCH_LAUNCH_TIMEOUT_S` escape hatch and wins outright: that
  * override exists precisely to set the budget by hand.
  */
 export function launchBudgetMs(
   entry,
-  { scenarioBudgets = DEFAULT_SCENARIO_BUDGETS, overrideSeconds = null } = {}
+  {
+    platform,
+    scenarioBudgets = DEFAULT_SCENARIO_BUDGETS,
+    overrideSeconds = null,
+  } = {}
 ) {
-  const base = scenarioBudgets[scenarioActionOf(entry.scenario)] ?? 180_000;
+  const budgets = scenarioBudgets[platform];
+  const defaults = baselineTimeoutsFor(platform);
+  if (budgets == null) {
+    throw new Error(
+      `no launch budgets for platform "${String(platform)}" (known: ${Object.keys(
+        scenarioBudgets
+      ).join(', ')})`
+    );
+  }
+  const base = budgets[scenarioActionOf(entry.scenario)] ?? 180_000;
   if (isNumber(overrideSeconds) && overrideSeconds > 0) {
     return base;
   }
@@ -173,12 +231,12 @@ export function launchBudgetMs(
   // waits twice and `memory`/`leak` not at all, so this only ever over-allows.
   const waitsFor = (mount, presented) => 2 * mount + presented;
   const asked = waitsFor(
-    entry.mountTimeoutMs ?? BASELINE_MOUNT_TIMEOUT_MS,
-    entry.presentedTimeoutMs ?? BASELINE_PRESENTED_TIMEOUT_MS
+    entry.mountTimeoutMs ?? defaults.mountTimeoutMs,
+    entry.presentedTimeoutMs ?? defaults.presentedTimeoutMs
   );
   const standard = waitsFor(
-    BASELINE_MOUNT_TIMEOUT_MS,
-    BASELINE_PRESENTED_TIMEOUT_MS
+    defaults.mountTimeoutMs,
+    defaults.presentedTimeoutMs
   );
   return (
     base +
@@ -187,18 +245,21 @@ export function launchBudgetMs(
 }
 
 /**
- * The longest signal timeout a run may ask for (`--timeout-mount`,
+ * The longest signal timeout a run may ask for on one platform (`--timeout-mount`,
  * `--timeout-presented`, and the `mountTimeout=`/`presentedTimeout=` launch flags).
  *
- * Both platforms arm a native backstop for a process that never draws at all - 90 s
- * (`kBenchPresentationCeilingSeconds` in `HybridBenchProbe.mm`,
- * `PRESENTATION_CEILING_MS` in `HybridBenchProbe.kt`) - and a backstop that wins the
- * race *is* the timeout: it would answer `-1` and the recorded reason would blame a
- * wait the run never asked for. So the requested wait stays strictly below the ceiling,
- * which keeps "we stopped asking" and "the process is not drawing" two distinguishable
- * answers. `bench/src/plan.ts` `MAX_TIMEOUT_MS` restates this number for the app.
+ * Both platforms arm a native backstop for a process that never draws at all, and a
+ * backstop that wins the race *is* the timeout: it would answer `-1` and the recorded
+ * reason would blame a wait the run never asked for. So the requested wait stays strictly
+ * below that platform's ceiling - 90 s on iOS (`kBenchPresentationCeilingSeconds`), 2 s on
+ * Android (`PRESENTATION_CEILING_MS`, unchanged from before A4 because the longer wait is
+ * scoped to iOS: review M1). That asymmetry is the point: on Android the answer to "how
+ * long can I wait for a presenting frame?" is 2 s, and a flag that appeared to raise it
+ * would be a lie. `bench/src/plan.ts` `BENCH_DEFAULT_TIMEOUTS` restates both for the app.
  */
-export const MAX_REQUESTED_TIMEOUT_MS = 80_000;
+export function maxRequestedTimeoutMsFor(platform) {
+  return baselineTimeoutsFor(platform).maxRequestedTimeoutMs;
+}
 
 /**
  * `--timeout-mount <ms>` / `--timeout-presented <ms>`: how long each launch waits for a
@@ -209,12 +270,18 @@ export const MAX_REQUESTED_TIMEOUT_MS = 80_000;
  * default 2 s when the arm in question takes 40 s. The value rides the launch string
  * rather than an env var because a release build has no env, exactly like `marks`.
  *
+ * The cap is the *platform's*, because the native backstop that decides whether the wait
+ * you asked for is the wait you get is per platform (see `maxRequestedTimeoutMsFor`). On
+ * Android, asking for a 40 s presenting wait is refused here rather than measured as a
+ * 2 s timeout.
+ *
  * Returns the problem rather than exiting, so a test can prove the validation without
  * spawning a run. A run that raises a timeout is not baseline material (see
- * `BASELINE_*_TIMEOUT_MS`) and `run.mjs` says so at startup.
+ * `BASELINE_TIMEOUTS_MS`) and `run.mjs` says so at startup.
  */
-export function parseTimeoutFlags(argv, readFlag) {
+export function parseTimeoutFlags(argv, readFlag, platform) {
   const out = { mountTimeoutMs: null, presentedTimeoutMs: null, problem: null };
+  const maxMs = maxRequestedTimeoutMsFor(platform);
   for (const [name, key] of [
     ['--timeout-mount', 'mountTimeoutMs'],
     ['--timeout-presented', 'presentedTimeoutMs'],
@@ -224,10 +291,12 @@ export function parseTimeoutFlags(argv, readFlag) {
     }
     const raw = readFlag(name);
     const ms = raw == null ? Number.NaN : Number(raw);
-    if (!Number.isFinite(ms) || ms < 1 || ms > MAX_REQUESTED_TIMEOUT_MS) {
+    if (!Number.isFinite(ms) || ms < 1 || ms > maxMs) {
       out.problem = `${name} must be a number of milliseconds between 1 and ${String(
-        MAX_REQUESTED_TIMEOUT_MS
-      )} (both platforms arm a 90 s native backstop, and one that answers first would record a wait the run never asked for)`;
+        maxMs
+      )} on ${String(platform)} (that platform arms a ${String(
+        baselineTimeoutsFor(platform).presentationCeilingMs
+      )} ms native backstop, and one that answers first would record a wait the run never asked for)`;
       return out;
     }
     out[key] = ms;
@@ -2183,16 +2252,28 @@ export function baselineBlockers(run) {
         WHERE_THE_DETAILS_LIVE
     );
   }
-  // Waiting longer than the rule the baseline is recorded under is the same kind of
-  // disqualifier as `--perf-marks`: the samples that arrive keep their values, but
-  // *which* arrive changes the median, so the run cannot redefine `presented`.
+  // Waiting longer than the platform's rule is the same kind of disqualifier as
+  // `--perf-marks`: the samples that arrive keep their values, but *which* arrive changes
+  // the median, so the run cannot redefine `presented`. The rule is per platform (M1), so
+  // the comparison reads the file's own platform rather than one shared number.
   const timeouts = requestedTimeouts(run);
+  const defaults =
+    run.platform == null ? null : (BASELINE_TIMEOUTS_MS[run.platform] ?? null);
   if (
-    timeouts.presentedTimeoutMs > BASELINE_PRESENTED_TIMEOUT_MS ||
-    timeouts.mountTimeoutMs > BASELINE_MOUNT_TIMEOUT_MS
+    defaults != null &&
+    (timeouts.mountTimeoutMs > defaults.mountTimeoutMs ||
+      timeouts.presentedTimeoutMs > defaults.presentedTimeoutMs)
   ) {
     reasons.push(
-      `the run waited longer for a signal than a baseline is recorded under (${String(timeouts.mountTimeoutMs)} ms mount / ${String(timeouts.presentedTimeoutMs)} ms presented vs ${String(BASELINE_MOUNT_TIMEOUT_MS)}/${String(BASELINE_PRESENTED_TIMEOUT_MS)}), so which samples arrived is not comparable with a committed baseline - it is a diagnostic run like --perf-marks`
+      `the run waited longer for a signal than a baseline is recorded under (${String(
+        timeouts.mountTimeoutMs
+      )} ms mount / ${String(
+        timeouts.presentedTimeoutMs
+      )} ms presented vs ${String(
+        defaults.mountTimeoutMs
+      )}/${String(defaults.presentedTimeoutMs)} on ${String(
+        run.platform
+      )}), so which samples arrived is not comparable with a committed baseline - it is a diagnostic run like --perf-marks`
     );
   }
   const machine = run.machine ?? {};
@@ -2298,11 +2379,11 @@ export function buildBaseline(run) {
       mountTimeoutMs:
         timeouts.mountTimeoutMs > 0
           ? timeouts.mountTimeoutMs
-          : BASELINE_MOUNT_TIMEOUT_MS,
+          : baselineTimeoutsFor(run.platform).mountTimeoutMs,
       presentedTimeoutMs:
         timeouts.presentedTimeoutMs > 0
           ? timeouts.presentedTimeoutMs
-          : BASELINE_PRESENTED_TIMEOUT_MS,
+          : baselineTimeoutsFor(run.platform).presentedTimeoutMs,
     },
     /**
      * Comparison-arm cells left out of `cells`, and why (A4). Empty in a run where

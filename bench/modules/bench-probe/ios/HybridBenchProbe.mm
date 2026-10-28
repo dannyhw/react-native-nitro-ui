@@ -76,7 +76,11 @@ namespace margelo::nitro::benchprobe {
    * timeout: every long wait would be answered `-1` at the ceiling and the diagnostic
    * A4 added (`presentedTimeout=` on the launch plan) would measure nothing but this
    * number. Kept finite so a stalled launch still ends: the plan parser caps a
-   * requested timeout below this (see `PRESENTED_TIMEOUT_FLAG` in `bench/src/plan.ts`).
+   * requested timeout below this (see `BENCH_DEFAULT_TIMEOUTS` in
+   * `bench/src/plan.ts`).
+   *
+   * 90 s is iOS's own number. Android's is 2 s, unchanged from before A4, because the
+   * longer wait A4 measured here is scoped to iOS (review M1).
    */
   static constexpr double kBenchPresentationCeilingSeconds = 90.0;
 
