@@ -1195,7 +1195,7 @@ final class RealInputTests: XCTestCase {
   func testRealInputSpikeTextReject() throws {
     try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
     try scrollIntoView("spike-frozen", as: "the frozen field", hittableIsEnough: true)
-    let field = try focusByTap("spike-frozen", as: "the frozen field")
+    let field = try tapToType("spike-frozen", as: "the frozen field")
     let before = try read(Echo.spikeFrozen)
     XCTAssertEqual(
       echoField(before, "displayed"),
@@ -1281,12 +1281,11 @@ final class RealInputTests: XCTestCase {
     /// Type one burst into the field `identifier` and return the commit stamps its echo recorded.
     func measure(_ identifier: String, _ echo: String, _ what: String) throws -> [Double] {
       try scrollIntoView(identifier, as: what, hittableIsEnough: true)
-      let field = try focusByTap(identifier, as: what)
+      let field = try tapToType(identifier, as: what)
       let beforeEvents = Int(echoField(try read(echo), "events")) ?? 0
-      // Burst, then read. Focus is settled by the tap helper rather than by the app's mirror: the spike
-      // arm's mirror was seen answering `focused=0` for a field UIKit reports as first responder, so the
-      // system's own trait is the precondition that can be waited on — and the burst is what the
-      // measurement is, so nothing between the tap and it should cost time.
+      // Burst, then read. The tap helper is what proves the field is editable; the app's mirror is not,
+      // because it was seen answering `focused=0` for a field UIKit reports as first responder. Nothing
+      // else goes between the tap and the burst: the burst is the measurement.
       field.typeText(burst)
       let line = readUntil(echo, timeout: 12) { text in
         Int(echoField(text, "events")).map { $0 >= beforeEvents + burst.count } ?? false
@@ -1975,21 +1974,21 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// Tap a field until the system itself says the field holds keyboard focus.
+  /// Tap a field to open an edit session, and refuse to return unless one opened.
   ///
-  /// The tap needs verifying because whatever is in front of it may not be the field. Measured on the spike
-  /// screen: `typeText` aimed at RN's `TextInput` control failed with "Neither element nor any descendant has
-  /// keyboard focus" for a field whose centre sat at midY=623 of an 874 pt window - inside the window,
-  /// reported `isHittable`, and underneath the keyboard the *previous* field had left open (iOS keeps the
-  /// keyboard up when focus moves between fields, which is what the typing check above relies on). The
-  /// synthesised tap went to the keyboard, so the burst would have gone there too, and the check would have
-  /// measured a keyboard.
+  /// Why a tap needs proving at all: `isHittable` says a point can be touched, not that the field is what
+  /// sits there. Measured on the spike screen, `typeText` aimed at RN's `TextInput` control failed with
+  /// "Neither element nor any descendant has keyboard focus" for a field whose centre sat at midY=623 of an
+  /// 874 pt window — inside the window, hittable, and underneath the keyboard the *previous* field had left
+  /// open (iOS keeps a keyboard up when focus moves between fields, which is what the typing check relies on
+  /// to end a session). The synthesised tap went to the keyboard, so a burst typed after it would have been
+  /// measured against a keyboard.
   ///
-  /// `hasKeyboardFocus` is the property keystrokes actually need, and unlike the spike's mirror it is UIKit's
-  /// own answer: the checks above learned that the mirror can lag a field UIKit already considers first
-  /// responder. When focus does not move the field is scrolled up and tapped again, because the ordinary
-  /// reason is that it sits under the keyboard.
-  private func focusByTap(
+  /// The proof is the keyboard appearing, which is the only edit-session signal this XCUITest exposes:
+  /// XCTest's headers carry no keyboard-focus property on `XCUIElement` (measured by grepping them), so the
+  /// alternative was the app's own mirror — and the checks above show that mirror can lag a field UIKit
+  /// already considers first responder. When no keyboard appears the field is scrolled up and tapped again.
+  private func tapToType(
     _ identifier: String,
     as what: String,
     maxTaps: Int = 4
@@ -1997,20 +1996,18 @@ final class RealInputTests: XCTestCase {
     let node = try required(identifier, as: what)
     for _ in 1 ... maxTaps {
       node.centre.tap()
-      let deadline = Date().addingTimeInterval(1.0)
-      var focused = node.hasKeyboardFocus
-      while !focused && Date() < deadline {
+      let deadline = Date().addingTimeInterval(1.2)
+      while Date() < deadline {
+        if app.keyboards.firstMatch.exists {
+          return node
+        }
         Thread.sleep(forTimeInterval: 0.1)
-        focused = node.hasKeyboardFocus
-      }
-      if focused {
-        return node
       }
       scrollScreen(by: -160, anchorDy: 0.42)
     }
     XCTFail(
-      "\(what) (\(identifier)) never took keyboard focus after \(maxTaps) taps - no burst typed into it "
-        + "could be read as its edits"
+      "\(what) (\(identifier)) opened no keyboard after \(maxTaps) taps - whatever the burst typed "
+        + "into next was not this field"
     )
     throw RealInputCheckAborted(identifier: identifier)
   }
@@ -2043,7 +2040,16 @@ final class RealInputTests: XCTestCase {
     let node = try required(identifier, as: what)
     let window = app.windows.firstMatch.frame
     let top = window.minY + 150
-    let bottom = window.maxY - 120
+    /*
+     * The keyboard is part of "where a tap can land", and it is not in the app's window. iOS leaves a
+     * keyboard up when focus moves from one field to another, so on a screen that has already typed into one
+     * field everything below the first field is covered: `rn-type-target` sat at midY=623 of an 874 pt
+     * window, inside the window and `isHittable`, with the keyboard drawn over it, and its tap went to the
+     * keyboard instead. The band therefore stops at the keyboard's top when there is one.
+     */
+    let keyboard = app.keyboards.firstMatch
+    let keyboardTop = keyboard.exists ? keyboard.frame.minY : window.maxY
+    let bottom = min(window.maxY - 120, keyboardTop - 24)
 
     func isReachable() -> Bool {
       let centre = node.frame.midY
