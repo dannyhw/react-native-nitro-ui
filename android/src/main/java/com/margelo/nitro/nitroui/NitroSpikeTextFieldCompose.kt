@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -21,6 +22,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -167,13 +170,25 @@ internal fun NitroSpikeAndroidField(
   // `snapshotFlow`, not the `onTextLayout` lambda: that lambda runs *inside* the layout pass, and emitting a
   // JS event from a layout pass is a re-entrant render. `text`, `selection` and `composition` are all
   // snapshot state, so this sees every edit — including one the IME made without coming through here.
+  // The mirror renderer, installed for the lifetime of the composable so the model can publish *before* it
+  // fires a callback (`SpikeTextFieldModel.renderMirror`). Cleared on dispose, because a recycled host keeps
+  // its model and a stale closure would capture a `TextFieldState` that no longer exists.
+  DisposableEffect(model) {
+    model.renderMirror = publishMirror
+    onDispose { model.renderMirror = null }
+  }
+
   LaunchedEffect(state, model) {
     snapshotFlow {
       SpikeTextSnapshot(
         text = state.text.toString(),
         composing = (state.composition?.length ?: 0) > 0,
         selectionStart = state.selection.min,
-        selectionLength = state.selection.max - state.selection.min
+        selectionLength = state.selection.max - state.selection.min,
+        // Focus is part of what this observes — see `SpikeTextFieldModel.focused`. Without it a bare tap
+        // changes no text and republishes nothing, and the mirror keeps asserting `focused=0` after the
+        // field has focus.
+        focused = model.focused
       )
     }.collect { snapshot ->
       publishMirror()
@@ -192,7 +207,7 @@ internal fun NitroSpikeAndroidField(
     }
     val wanted = model.writeText
     val current = state.text.toString()
-    model.lastWrite = when {
+    val outcome = when {
       current == wanted -> "same"
       // Q2 §2.4: mid-composition a write is *dropped*, not applied. Composing text belongs to the user.
       (state.composition?.length ?: 0) > 0 -> "composing"
@@ -206,6 +221,11 @@ internal fun NitroSpikeAndroidField(
         "applied"
       }
     }
+    model.lastWrite = outcome
+    // Published here rather than left to the `snapshotFlow` collect so the mirror and the outcome move
+    // together: an assertion that reads `lastWrite=applied` should never see the pre-write text in the same
+    // line.
+    publishMirror()
   }
 
   // `focus()` / `blur()` arrive as ticks, so a call that lands before this composable is attached cannot
@@ -235,6 +255,16 @@ internal fun NitroSpikeAndroidField(
       // A field is a `fillWidth` control: the box owns the width, the content owns the height
       // (`docs/architecture/sizing.md` §5). Without this it measures its preferred width.
       .fillMaxWidth()
+      // `accessibilityLabel` goes on the control's own semantics node, the way `HybridNitroUiButton.kt:381`
+      // does it — and the real-input runner needs it there for a reason beyond TalkBack: `adb shell input
+      // text` has no target argument, so the only way to aim the keystrokes at this field is to tap the node
+      // that carries the label. A field that published no label would leave the typing oracle with nothing
+      // to tap, which is the opposite of a green test.
+      .then(
+        model.accessibilityLabel?.let { label ->
+          Modifier.semantics { contentDescription = label }
+        } ?: Modifier
+      )
       .focusRequester(focusRequester)
       .onFocusChanged { s -> model.focusMoved(s.isFocused) },
     enabled = !model.disabled,
@@ -265,7 +295,8 @@ private data class SpikeTextSnapshot(
   val text: String,
   val composing: Boolean,
   val selectionStart: Int,
-  val selectionLength: Int
+  val selectionLength: Int,
+  val focused: Boolean
 )
 
 /**

@@ -87,6 +87,13 @@ final class SpikeTextFieldModel: NitroUiModel {
   var lines = -1
   /// Outcome of the last `nuiTestApplyWrite`, for `nuiTestState()`.
   var lastWrite = "none"
+  ///
+  /// The text the last emit handed JS. `nil` until the field emits anything.
+  ///
+  /// This is what `equal=` / `cps=` compare against when the field is uncontrolled — Android keeps the same
+  /// field (`SpikeTextFieldModel.lastEmitted`). Without it an uncontrolled field compares its text against
+  /// `nil` and answers `equal=0`, which looks like a broken handshake and is nothing of the sort.
+  var emitted: String?
   /// A programmatic write waiting for the main-thread hop that applies it.
   var pendingWrite: String?
 
@@ -498,6 +505,7 @@ enum SpikeTextFieldCommit {
   /// The user changed the text: native owns it, counts it, emits it.
   static func user(_ model: SpikeTextFieldModel, _ requested: String) {
     let eventCount = model.state.user(requested)
+    model.emitted = requested
     model.objectWillChange.send()
     model.onChange?(requested, Double(eventCount))
   }
@@ -544,7 +552,9 @@ enum SpikeTextFieldCommit {
     mirror.unreported = model.state.unreported != nil
     mirror.lastWrite = model.lastWrite
     mirror.lines = model.lines
-    let js = model.state.js ?? ""
+    // Same rule as Android's `mirrorLine` (`HybridNitroUiSpikeTextField.kt`): controlled compares against
+    // React's `value`, uncontrolled against the last string the field handed JS.
+    let js = model.state.js ?? model.emitted ?? ""
     mirror.equal = model.state.displayed == js
     mirror.jsCodePoints = nitroSpikeCodePoints(js)
   }
@@ -914,6 +924,7 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
     model.selectionLength = -1
     model.lines = -1
     model.lastWrite = "none"
+    model.emitted = nil
     model.pendingWrite = nil
     model.onChange = nil
     model.onFocus = nil

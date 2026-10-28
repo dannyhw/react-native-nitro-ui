@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -94,6 +94,20 @@ function Field(props: {
     }
   }, []);
 
+  /*
+   * One refresh shortly after mount, because the two halves of a hosted view do not become ready at the same
+   * moment: `hybridRef` fires in the commit that creates the Fabric node, while the hosted SwiftUI / Compose
+   * subtree — the thing that publishes the mirror — is composed on a later pass. So the mirror `hybridRef`'s
+   * own `refresh()` reads is the empty string, and every check that reads the echo *before* the first
+   * keystroke ("is this field actually hosted by Compose?") reads a line with no `impl=` in it. A wait is
+   * not a hook: nothing is written, this only re-reads the cached line one beat later, which is the same
+   * thing a person's first tap does.
+   */
+  useEffect(() => {
+    const timer = setTimeout(refresh, 120);
+    return () => clearTimeout(timer);
+  }, [refresh]);
+
   return (
     <View
       style={
@@ -148,7 +162,9 @@ export default function SpikeTextFieldScreen() {
   const writeRef = useRef<SpikeTextFieldHandle | null>(null);
   const [writeEcho, setWriteEcho] = useState('write=');
   const multilineRef = useRef<SpikeTextFieldHandle | null>(null);
-  const [sizeEcho, setSizeEcho] = useState('sizes h=0.0 cache=0 spike=0');
+  const [sizeEcho, setSizeEcho] = useState(
+    'sizes h=0.0 cache=0 meas=0 ledger=0'
+  );
 
   const readWriteMirror = useCallback(() => {
     const view = writeRef.current;
@@ -158,12 +174,17 @@ export default function SpikeTextFieldScreen() {
   }, []);
 
   const reportSizes = useCallback(() => {
+    // `cachedSizes` is a **count** of configurations (`NitroUiSizingStats`), not a map, so the cache's growth
+    // is read as a delta across a known sequence of widths rather than by filtering keys — the engine does
+    // not expose them. `measurements` and `ledgerEntries` travel with it because P4's claim is that the
+    // bucketing bounds the *cache*, and a claim about the cache that quietly grew the ledger instead is
+    // worth seeing in the same line.
     const stats = nitroUiCore.sizingStats();
-    const keys = Object.keys(stats.cachedSizes ?? {});
-    const spike = keys.filter((key) => key.includes('NitroUiSpikeTextField'));
     const height = multilineRef.current?.measureContent().height ?? 0;
     setSizeEcho(
-      `sizes h=${height.toFixed(1)} cache=${String(keys.length)} spike=${String(spike.length)}`
+      `sizes h=${height.toFixed(1)} cache=${String(stats.cachedSizes)} meas=${String(
+        stats.measurements
+      )} ledger=${String(stats.ledgerEntries)}`
     );
   }, []);
 
@@ -175,7 +196,12 @@ export default function SpikeTextFieldScreen() {
       ]}
     >
       <StatusBar barStyle={iOS ? 'light-content' : 'dark-content'} />
+      {/* `spike-screen` is the anchor every real-input check navigates by (`goToScreen` asks "am I already
+          standing on the spike screen?" before tapping a tab), so it has to be on a node that is on-screen
+          whatever else scrolled away. The ScrollView is that node; the root would work too, but the scroll
+          view is the thing the checks actually interact with. */}
       <ScrollView
+        testID="spike-screen"
         style={styles.scroll}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"

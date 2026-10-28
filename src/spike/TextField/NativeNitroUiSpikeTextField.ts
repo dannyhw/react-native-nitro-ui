@@ -37,14 +37,11 @@ export interface SpikeTextFieldHandle {
  * one (`Switch/NitroUiSwitchConfig.ts` explains why the copy exists at all: a
  * published `src/` module cannot import JSON above `src`).
  *
- * It is deliberately *not* in `src/__tests__/viewConfigs.test.ts`'s table: that
- * test's last assertion is "every generated config belongs to a manifested
- * component", and the spike is not a component (no `component.json`, on
- * purpose — see `TextField.nitro.ts`). What does guard it:
- * `bun run nitrogen:check` fails if this file's shape stops matching what
- * nitrogen emits, and the spike's harness suite cannot mount the view at all if
- * a prop is missing from `validAttributes` — Fabric drops it, and the first
- * assertion that reads it back goes red.
+ * It is kept in `src/__tests__/viewConfigs.test.ts`'s table like every other generated config: that test's
+ * job is to catch a hand-kept copy drifting from what nitrogen emits, and the spike's config is exactly as
+ * capable of drifting as Switch's is. Its one exception is the "every generated config belongs to a
+ * manifested component" assertion, which lets the spike through on purpose (no `component.json`, on
+ * purpose — see `TextField.nitro.ts`).
  *
  * @internal Spike only.
  */
