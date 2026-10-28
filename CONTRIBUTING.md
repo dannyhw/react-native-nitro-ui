@@ -478,6 +478,19 @@ asks the strict question. A task report starts from
 ledger beside it. The rules are in the header of `scripts/gate.mjs` and in
 `scripts/gate-core.mjs`.
 
+A run's **log** is not in the worktree: it goes to the clone's gate log store,
+`<git-common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`, which every
+worktree of the clone shares and `git worktree remove` leaves alone, so removing a
+merged worktree cannot lose the evidence (`gate.mjs logs [--branch b] [--failed]
+[--all]` lists it; 35 days, then 64 MiB, oldest first). `export --task <id>` also
+writes a scrubbed excerpt of every **failed** run into
+`docs/tasks/<ID>/failures/<run>.log` — the failing test names, the assertion
+messages, the last 150 lines, the load at both ends and, for a failed device gate,
+the booted simulators, the leased emulator's adb state, the lease list, load1 and
+the app's last `logcat` lines — and names that file in the ledger line's
+`failureLogPath`. Passing runs get no file, and nothing that looks like a
+credential is written at all.
+
 ### Build speed
 
 Nothing in this section changes what a library user gets. It is all in
