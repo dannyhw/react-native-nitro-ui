@@ -314,14 +314,14 @@ reinstalls from `HARNESS_APP_PATH`. M3: a live lease protects its devices on the
 `--idle-minutes` reaches only unleased ones, `phase: 'booting'` is written and bounded. M4: identity
 comes from the devices.json pair, never the stored serial; the device answers `emu avd name` before a
 kill; an unreadable `acquiredAt` counts as alive. M6: an exclusive lease powers the pool off with or
-without `--boot`, keyed from devices.json. N8: AVD `nitroui` deleted (613 MB). Files changed gains
-`scripts/__tests__/lease.test.js`. Device rows stay stale — `A4` held both pairs all round (item 2).
+without `--boot`, keyed from devices.json. N8: AVD `nitroui` deleted (613 MB). New test:
+`lease.test.js`. Device rows stay stale: `A4` held both pairs all round (item 2).
 
 21 mutations at tree `911d1ce1b9fd`, all red (`mutations-fix1.mjs`): M1 `pm clear` minus `shell`; M2
 uninstall, container check, reinstall each dropped; M3 decision `held`, loop `held`, override
 outranks a hold, `phase: null`, unbounded booting, own-lease skip; M4 stored serial used, `avd name`
-off, never asked, date unreadable; M6 boot-path only, keys from `pool.json`; M7 early release; N1
-I/O under the lock; N2 at module, patch, config. Two the sweep found, not the review: loop- and
+off, never asked, date unreadable; M6 boot-path only, keys from `pool.json`; M7 early release; N1 I/O
+under the lock; N2 at module, patch, config. Two the sweep found, not the review: loop- and
 decision-level `held` mask each other, and nothing called `markBooting` (`49c5f02`).
 
 | Gate | Result | Counts | Code tree | Duration | Load |
