@@ -318,8 +318,10 @@ it on iOS by design of `simctl uninstall`: the **keychain** and the **privacy-co
 So a task inherits neither storage nor app files but can inherit a device that has already been told
 "allow notifications" or "allow photo access", and any future test that asserts a permission prompt
 appears on a warm pooled device will be asserting it against a simulator that already answered it.
-`simctl privacy reset` and a keychain wipe are the fixes and neither is cheap enough to run per
-hand-off; the honest statement is that the reset is storage-complete, not state-complete.
+`simctl privacy <udid> reset <service> [<bundle>]` covers the second but only per service — you have
+to know which ones a run touched, which is not something the pool can know — so the honest statement
+is that the reset is storage-complete, not state-complete. CONTRIBUTING says the same thing where a
+task would read it.
 
 
 ## Fix round 1

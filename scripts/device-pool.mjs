@@ -24,11 +24,23 @@
  *    clean exit and a killed task cannot wedge a device as "in use" forever;
  *  - a device a *live lease* holds is never powered off on a timer, and `--idle-minutes` does not
  *    override that either (X11 review M3): a build, a Metro session, a real-input run or a person
- *    reading a stack trace make no claim, and 31 minutes of that is ordinary work, not a leak;
- *  - `lease.mjs reap` powers a device off once it has been idle past `idleShutdownMinutes`
- *    (devices.json, default 30) and no live lease holds it - never while a claim is live, and never
- *    on the strength of a stored serial: it derives the device's identity from devices.json and has
- *    the emulator confirm it (`emu avd name`) before anything is powered off (X11 review M4);
+ *    reading a stack trace make no claim, and 31 minutes of that is ordinary work, not a leak. It
+ *    covers the task that holds the lease too - the `exceptLeaseId` self-exemption that used to
+ *    live here is what let a task's own `list` kill its own claim-less run;
+ *  - **nothing reaps passively** (X11 fix round 2, the orchestrator's scope decision): `acquire`,
+ *    `release` and `list` never power a device off and never reset one. Reaping runs on an explicit
+ *    `lease.mjs reap` and on the power-off an `--exclusive` acquire promises, and nowhere else. It
+ *    powers a device off once that device has been idle past `idleShutdownMinutes` (devices.json,
+ *    default 30) and no live lease holds it - never while a claim is live, and never on the
+ *    strength of a stored serial: it derives the device's identity from devices.json and has the
+ *    emulator confirm it (`emu avd name`) before anything is powered off (X11 review M4);
+ *  - **every kill re-validates at the moment it acts** (X11 re-review M1). The plan a reap makes is
+ *    not an authorisation: each device is re-read under a brief lock immediately before its own
+ *    `simctl shutdown` / `emu kill`, so a lease and claim taken after the plan are seen. The window
+ *    that used to exist was as wide as the *previous* device's I/O - five minutes of `simctl`, two
+ *    of adb - and the device lost in it was leased and claimed at the time;
+ *  - a reset is refused on a device with a live claim, whoever holds it (X11 re-review M2), and an
+ *    app that is not installed is a successful no-op rather than four retries (X11 re-review N5);
  *  - `acquire --exclusive` hands a bench a quiet machine and does so whether or not `--boot` was
  *    passed (X11 review M6). There is no `release --exclusive` - releasing leaves devices warm.
  *
