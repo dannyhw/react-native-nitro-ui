@@ -2237,9 +2237,10 @@ function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
     // under the resolved one.
     tmpDir: [os.tmpdir(), fs.realpathSync(os.tmpdir())],
   });
-  // Per-(ts, gate) counter: `ts` is second-granular, and two failed runs of one gate
-  // in the same second would otherwise share one file name and the later export
-  // would overwrite the earlier excerpt while both ledger lines pointed at it.
+  // Per-name counter: the excerpt's file name is second-granular, so two failed runs
+  // of one gate in the same second have the same name and would share one file - the
+  // later export overwriting the earlier excerpt while both ledger lines pointed at
+  // it. Counting by the name itself is what makes that impossible (review N2).
   const sequenceByName = new Map();
   rawLines.forEach((raw, index) => {
     const entry = entries[index];
@@ -2284,7 +2285,12 @@ function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
       });
       return;
     }
-    const key = `${String(entry.ts ?? '?')}|${String(entry.gate ?? '?')}`;
+    // Keyed on the *name*, not the raw `ts`: the name is what two runs must not
+    // share, and `failureExcerptName` drops the milliseconds that make the ts
+    // different. Keying on `ts` (round 1) gave two runs in one second the same
+    // sequence, so the second export wrote over the first excerpt and both ledger
+    // lines pointed at it (review N2).
+    const key = failureExcerptName(entry, 1);
     const sequence = (sequenceByName.get(key) ?? 0) + 1;
     sequenceByName.set(key, sequence);
     const relative = path
