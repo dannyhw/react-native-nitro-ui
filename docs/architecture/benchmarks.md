@@ -65,6 +65,8 @@ Useful flags:
 | --------------------- | --------------------------------------------------------------- |
 | `--only <impl,impl>`  | Restrict the implementation dimension                           |
 | `--component <name>`  | Restrict the run to one component's cells                       |
+| `--scenario <name>`   | Restrict it to one scenario's cells, e.g. `mount.date-picker`    |
+| `--n <value>`         | Restrict it to cells measured at that instance count             |
 | `--launches N`        | Overrides the launches per cell (for a fast smoke test)         |
 | `--skip-build`        | Reuse the installed release artifact instead of rebuilding       |
 | `--prebuild`          | Force `expo prebuild --clean` first                              |
@@ -74,10 +76,57 @@ Useful flags:
 | `--force`             | Override a `--update-baseline` refusal (local experiments only)  |
 | `--shutdown`          | Shut down a device the runner itself booted when it finishes     |
 | `--perf-marks`        | Diagnostic run: turn on the library's own native perf marks    |
+| `--timeout-mount <ms>` | How long each iteration waits for the mount signal (default 1500) |
+| `--timeout-presented <ms>` | …and for the presenting frame (default 2000)                 |
+
+The two `--timeout-*` flags exist to answer one question a results file otherwise cannot:
+**did that arm's frame never come, or did it come later than we were willing to wait?**
+A4 needed it - `@expo/ui`'s DatePicker at N=200 on one machine lost 40 % and 54 % of its
+presenting samples at the default 2 000 ms, and a count of nulls cannot tell a slow arm
+from a dead probe. Three things make that work, and all three are load-bearing:
+
+- the value rides the **launch string** (`…:presentedTimeout=40000`), not an env var: a
+  release build has no env, and one launch must be fully described by the string the
+  runner passed it;
+- each platform's native "this window never drew" backstop is a **90 s ceiling**, not the
+  wait. It used to be a hardcoded 2 s on both, so raising only the JS timeout changed
+  nothing - every long wait was answered `-1` by the ceiling at 2 s;
+- a run that raises either timeout **cannot mint a baseline**: a sample that arrives keeps
+  its value, but *which* samples arrive moves the median. It is a diagnostic like
+  `--perf-marks`, and says so at startup. Every baseline records the rule it was minted
+  under in its own `timeouts` block.
+
+### When a signal does not arrive
+
+Every iteration that gets no `mountedNs`/`presentedNs` records **why**, in that
+iteration's `missing` array: `probe-timeout` (with the timeout in force and how long the
+wait actually ran), `not-awaited` (the cell declares `mountSignal: false`, so the null is
+by construction, not a lost signal), or `probe-error` (the probe threw or answered
+unparseably, with its message). Those reasons are tallied per cell (`cell.missing`),
+printed per launch in the progress line (`80 iterations, 80 presented probe-timeout
+(2000 ms)`) and per cell in the report, and quoted by a baseline refusal. A cell key never
+carries a timeout, so a diagnostic run lands in the same rows as a normal one - only its
+*values* are not comparable, and `baselineBlockers()` is what enforces that.
 
 The runner restores Android animation scales it reset, and `--shutdown` covers
 the "I booted it, I clean it up" case; a device that was already up is left
 alone.
+
+`--scenario` and `--n` exist for exactly the run above: once the reasons say
+`probe-timeout`, the next question is "how long would that frame have taken?", and that
+needs one cell, four arms and a long wait - not three hours of plan:
+
+```sh
+node scripts/bench/run.mjs --platform ios --plan full --component date-picker \
+  --scenario mount.date-picker --n 200 --launches 8 --timeout-presented 40000
+```
+
+`--plan full` still supplies the cell list (so an unmeasured cell cannot sneak in), the
+three filters cut it to one cell, and the reported numbers land in the same cell keys as a
+normal run - they are simply not mintable. `--update-baseline` refuses a narrowed schedule
+before booting anything: a baseline file *is* the whole table `--check` gates against, and
+minting one from one cell would leave the other 41 reading `not measured in base` - which
+looks like a passing gate. `--force` overrides that too, for a local experiment.
 
 `--check` and `--update-baseline` need `NITRO_UI_MACHINE_LABEL`: baselines are keyed
 by machine as well as device, so without a usable label both refuse before the run
@@ -264,9 +313,19 @@ run, so `--check` gates on that machine, on both platforms. On iOS more of the c
 are noise-suppressed (their own within-run spread is over 10 %) than on Android, so the
 iOS gate is real but narrower. Neither baseline records a leak slope — no arm climbed
 monotonically in either run — so the leak cells read `new arm` under `--check`.
-`maintainer-mac-2` has none yet, so there `--check` refuses until that machine mints
-its own. The `renders.json` gate is separate, live, and committed - it counts JS
-renders, so it needs no machine directory.
+`maintainer-mac-2` has Android committed (`android35-emu-pixel9.json`) and **no iOS file
+yet** - its one attempt was refused over two `@expo/ui` DatePicker cells, which is what
+A4's completeness amendment and the probe investigation are about. Until that machine
+mints iOS, `--check` there refuses on iOS and gates on Android. The `renders.json` gate
+is separate, live, and committed - it counts JS renders, so it needs no machine directory.
+
+Completeness is judged **per arm** (D9, A4 amendment): an incomplete metric on the gated
+`nitro-ui` arm or on the `rn-core` control refuses a mint, because those carry verdicts,
+while the same defect on a comparison arm (the two `expo-ui-*` references - not our code)
+costs that one
+cell its row and is recorded in the file's `skippedCells` with its metric, sample counts
+and recorded reasons. A comparison arm informs review and gates nothing, so its lost
+frames are not a reason a machine ends up with no baseline at all.
 
 The gate exists once (`gate()` in `scripts/bench/lib.mjs`) and is used identically
 by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:

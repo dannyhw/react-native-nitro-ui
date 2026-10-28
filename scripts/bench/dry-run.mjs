@@ -38,7 +38,12 @@ import {
   iosDeviceClassName,
   iosDeviceKey,
 } from './devices.mjs';
-import { buildSchedule, loadBlocker, loadCeiling } from './lib.mjs';
+import {
+  buildSchedule,
+  loadBlocker,
+  loadCeiling,
+  narrowingProblem,
+} from './lib.mjs';
 
 /**
  * The iOS device key from a simulator listing alone.
@@ -244,20 +249,27 @@ export function dryRunReport(input) {
   const checking = argv.includes('--check');
   const forced = argv.includes('--force');
   // The run's own schedule builder, so the launch count and the `--component` /
-  // `--only` refusals are the real ones rather than a re-derivation that could
-  // drift. It throws for exactly the cases worth naming, so the message is kept.
+  // `--only` / `--scenario` refusals are the real ones rather than a re-derivation that
+  // could drift. It throws for exactly the cases worth naming, so the message is kept.
   let schedule = [];
   let scheduleProblem = null;
+  const filters = {
+    only: argv.includes('--only')
+      ? String(argv[argv.indexOf('--only') + 1])
+      : null,
+    component,
+    scenario: argv.includes('--scenario')
+      ? String(argv[argv.indexOf('--scenario') + 1])
+      : null,
+    n: argv.includes('--n') ? Number(argv[argv.indexOf('--n') + 1]) : null,
+  };
   try {
     schedule = buildSchedule({
       plan,
       launches,
-      only: argv.includes('--only')
-        ? String(argv[argv.indexOf('--only') + 1])
-        : null,
       perfMarks: argv.includes('--perf-marks'),
-      component,
       platform,
+      ...filters,
     });
   } catch (error) {
     scheduleProblem = String(error.message ?? error);
@@ -333,6 +345,25 @@ export function dryRunReport(input) {
     }
     if (minting && blocker != null && !forced) {
       problems.push(`--update-baseline: ${blocker} (pass --force to override)`);
+    }
+    // The same narrowing guard `run.mjs` applies before it boots anything, so a dry
+    // run cannot print "would start" for a mint the run would refuse.
+    if (minting && !forced) {
+      const narrowed = narrowingProblem({
+        scheduled: schedule.length,
+        wholePlan: buildSchedule({
+          plan,
+          launches,
+          platform,
+          perfMarks: argv.includes('--perf-marks'),
+        }).length,
+        filters,
+      });
+      if (narrowed != null) {
+        problems.push(
+          `--update-baseline: ${narrowed} (pass --force to override)`
+        );
+      }
     }
     if (checking && exists === false) {
       problems.push(

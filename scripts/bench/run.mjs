@@ -69,6 +69,7 @@ import {
   launchBudgetMs,
   launchPlanString,
   loadBlocker,
+  narrowingProblem,
   parseTimeoutFlags,
   requestedTimeouts,
   resultsFileName,
@@ -629,13 +630,48 @@ export async function main(argv) {
   // their ratios are same-run pairs, and a busy machine is information there, not
   // a disqualification.
   if (argv.includes('--update-baseline') && !argv.includes('--force')) {
+    const preflight = [];
     const blocker = loadBlocker({
       loadavg1: os.loadavg()[0] ?? null,
       cpuCount: os.cpus().length,
     });
     if (blocker != null) {
+      preflight.push(blocker);
+    }
+    // Same fail-fast reasoning for a narrowed schedule: a filtered run cannot mint the
+    // table `--check` gates against, and finding that out after three hours of device
+    // time is the same waste. Both numbers come from the real builder so arm scopes and
+    // any filter added later are counted, not re-derived here.
+    const filters = {
+      only: flag(argv, '--only'),
+      component: flag(argv, '--component'),
+      scenario: flag(argv, '--scenario'),
+      n: argv.includes('--n') ? Number(flag(argv, '--n')) : null,
+    };
+    const narrowed = narrowingProblem({
+      scheduled: buildSchedule({
+        plan,
+        launches,
+        perfMarks: argv.includes('--perf-marks'),
+        platform,
+        ...filters,
+      }).length,
+      wholePlan: buildSchedule({
+        plan,
+        launches,
+        perfMarks: argv.includes('--perf-marks'),
+        platform,
+      }).length,
+      filters,
+    });
+    if (narrowed != null) {
+      preflight.push(narrowed);
+    }
+    if (preflight.length > 0) {
       log(
-        `--update-baseline refused before the run started (pass --force to override):\n  - ${blocker}`
+        `--update-baseline refused before the run started (pass --force to override):\n${preflight
+          .map((reason) => `  - ${reason}`)
+          .join('\n')}`
       );
       process.exitCode = 2;
       return;
@@ -695,6 +731,8 @@ export async function main(argv) {
     only: flag(argv, '--only'),
     perfMarks,
     component,
+    scenario: flag(argv, '--scenario'),
+    n: argv.includes('--n') ? Number(flag(argv, '--n')) : null,
     platform,
     mountTimeoutMs: timeouts.mountTimeoutMs,
     presentedTimeoutMs: timeouts.presentedTimeoutMs,
@@ -705,9 +743,8 @@ export async function main(argv) {
         timeouts.mountTimeoutMs ?? BASELINE_MOUNT_TIMEOUT_MS
       )} ms, presented ${String(
         timeouts.presentedTimeoutMs ?? BASELINE_PRESENTED_TIMEOUT_MS
-      )} ms - DIAGNOSTIC: which samples arrive depends on this rule, so the run cannot mint a baseline, and a launch's wall-clock budget grew by the extra wait (BENCH_LAUNCH_TIMEOUT_S still overrides)`
+      )} ms - DIAGNOSTIC: which samples arrive depends on this rule, so the run cannot mint a baseline (launchBudget widens each launch's budget by the extra wait)`
     );
-    raiseLaunchBudget(timeouts);
   }
 
   // An arm with no cell for this platform's version of the component is a

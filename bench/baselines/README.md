@@ -162,10 +162,14 @@ overFraction }`. A run is refused when its **median** sample is over the ceiling
   is `n/a`, and:
   - on `nitro-ui` (the gated arm) or `rn-core` (every ratio's denominator) that **refuses
     the mint** - a survivor-biased verdict is not baseline material;
-  - on a comparison arm (`expo-ui-*`, `nitro-ui-host` - measured and reported, never
-    gated) it costs **that cell** its row: the file leaves it out and records it under
+  - on a comparison arm (`expo-ui-host-per-control`, `expo-ui-shared-host` - measured,
+    reported, never gated, **and not our code**) it costs **that cell** its row: the file
+    leaves it out and records it under
     `skippedCells` with the metric, its sample counts and the reasons that were recorded,
-    and the mint prints one line per cell left out. Before A4 the same defect refused the
+    and the mint prints one line per cell left out. `nitro-ui-host` is not a comparison
+    arm for this purpose even though it is never gated: it is nitro-ui's own runtime, so a
+    lost signal there is a fact about the library and refuses the mint, like `nitro-ui`
+    does. Before A4 the same defect refused the
     whole table, which is how one machine went without a baseline over two reference
     arms' frame probe (see the `maintainer-mac-2` status below).
     Either way the reason is in the file, not in someone's memory: every iteration that
