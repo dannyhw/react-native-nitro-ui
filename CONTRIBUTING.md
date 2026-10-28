@@ -94,6 +94,7 @@ Run from the repo root.
 | Command                       | What it does                                                                |
 | ----------------------------- | --------------------------------------------------------------------------- |
 | `bun run check`               | **All static gates.** Run this before pushing.                              |
+| `bun run check:serial`        | The same steps as one `&&` chain, for timing the runner against it          |
 | `bun run typecheck`           | `tsc` over the library and example                                          |
 | `bun run bench:typecheck`     | `tsc` over `bench/` for each platform                                       |
 | `bun run lint`                | ESLint, including the local perf-contract rules                             |
@@ -134,9 +135,12 @@ Run from the repo root.
 | `bun run hooks:uninstall`     | Remove them again                                                           |
 | `bun run clean`               | Delete build outputs (`lib/`, native build dirs)                            |
 
-`bun run check` = typecheck → bench:typecheck → lint → format → test →
-test:native → perf:renders → nitrogen:check → registry:check → autolinking:check → prepare →
-api-extractor:check → publint → manifest:check → readme:check. `perf:renders` is part of `check` on purpose: render
+`bun run check` runs those steps through a small scheduler (`scripts/check.mjs` +
+the step graph in `scripts/check-steps.mjs`), so independent ones overlap — up to
+half the machine's cores at once, `--jobs N` to override. The _steps_ are the same
+sixteen, in the same order, and `scripts/__tests__/check-runner.test.js` fails if
+the graph and `check:serial` ever disagree. `bun run check:serial` is the plain `&&`
+chain, for comparing the two. `perf:renders` is part of `check` on purpose: render
 counts are deterministic, so they can block, unlike anything measured on a device.
 
 ### Changing a README example
@@ -458,7 +462,13 @@ node scripts/lease.mjs release <id>
 ```
 
 The merge bar is `check`, both full harness runs and both real-input runs; a
-filtered harness run satisfies nothing. A task report starts from
+filtered harness run satisfies nothing. `table --full` adds the log path to every
+row and, under it, the per-step durations of the `check` run — `check` is the one
+gate long enough that its total is not an actionable number, so the ledger keeps
+what each of the sixteen steps cost. At merge, `need` may accept a `check` from
+another branch's ledger when it passed on this exact code tree and its commit is
+merged here (see `docs/tasks/ORCHESTRATOR.md`, "The loop" step 5); `--no-reuse`
+asks the strict question. A task report starts from
 `docs/tasks/REPORT-TEMPLATE.md`, and `gate.mjs export --task <id>` commits the
 ledger beside it. The rules are in the header of `scripts/gate.mjs` and in
 `scripts/gate-core.mjs`.

@@ -43,6 +43,18 @@ any machine. The live state is in `STATUS.md` (task table) and `RECOVERY.md`
    records them in `FOLLOWUPS.md`.
 5. Merge (`git merge --no-ff task/<ID>-…`), confirm `bun run check` on the
    merged tree, push, and update `STATUS.md` / `RECOVERY.md` in the same push.
+   "Confirm" is usually a look, not a re-run (X10): `need --for merge` accepts a
+   `check` that passed on an **identical code tree** from any branch ledger in
+   `.gates/`, provided that line's commit is an ancestor of the merged `HEAD`
+   (`git merge-base --is-ancestor`). A merge that brought in nothing but the
+   branch's own work produces a tree whose digest *is* the one that passed, so
+   re-running the sixteen steps would prove nothing new. The row then reads
+   `PASS (reused)` in `gate.mjs table`, and `need` names the branch and the
+   commit it borrowed. When `main` moved as well, the digests differ and the run
+   is owed as before. `check` only: a device gate is evidence about a binary
+   built on a particular machine and lease, and a review round is evidence about
+   its own diff. `--no-reuse` asks the strict question when you do not want to
+   take the rule's word for it.
 
 Delegation template (implementer):
 
