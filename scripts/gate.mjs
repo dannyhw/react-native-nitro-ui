@@ -2440,9 +2440,30 @@ function commandLogs({ branch, failedOnly, all, prune }) {
 function outcomeOfStoredLogs(storeDir) {
   const records = listBackgroundRecords(storeDir);
   const byLogPath = new Map();
+  const put = (key, value, entry) => {
+    if (typeof key !== 'string' || key === '') return;
+    const previous = byLogPath.get(key);
+    // A judgement beats a gap, and a later record beats an earlier one: a legacy
+    // `.gate.json` names the worktree path while the store holds the migrated copy.
+    byLogPath.set(
+      key,
+      previous === undefined || previous == null ? value : previous
+    );
+    if (entry != null && !entriesByLogPath.has(key)) {
+      entriesByLogPath.set(key, entry);
+    }
+  };
   for (const record of records) {
     if (typeof record?.logPath !== 'string' || record.logPath === '') continue;
-    byLogPath.set(record.logPath, storedLogFailed(record, null));
+    const verdict = storedLogFailed(record, null);
+    put(record.logPath, verdict, null);
+    // N1: a pre-X12 record names `.gates/logs/<name>`, and its copy in the store is
+    // under `.gates/logs/<branch>/<name>`. Both spellings have to reach the verdict.
+    put(
+      migratedStorePath(record.logPath, record.branch ?? null),
+      verdict,
+      null
+    );
   }
   // A ledger line is evidence about a run even when its record is gone (a run from
   // before this task wrote a record for every gate), so the lines fill the gaps -
@@ -2455,8 +2476,13 @@ function outcomeOfStoredLogs(storeDir) {
     { entries: readLedger(currentBranch()).entries },
   ]) {
     for (const entry of ledger.entries ?? []) {
-      if (typeof entry?.logPath === 'string' && entry.logPath !== '') {
+      if (typeof entry?.logPath !== 'string' || entry.logPath === '') continue;
+      if (!entriesByLogPath.has(entry.logPath)) {
         entriesByLogPath.set(entry.logPath, entry);
+      }
+      const migrated = migratedStorePath(entry.logPath, entry.branch ?? null);
+      if (migrated != null && !entriesByLogPath.has(migrated)) {
+        entriesByLogPath.set(migrated, entry);
       }
     }
   }
@@ -2483,17 +2509,56 @@ function outcomeOfStoredLogs(storeDir) {
  * segment" (M2), and it needs no list of known branches - which is exactly why it
  * still works for a branch whose worktree, and whose ledger, is gone.
  *
- * A migrated pre-X12 log under `.gates/logs/` has no branch in its path and reads
- * `(unknown)`; its ledger line carries the branch, which is what `export` uses.
+/**
+ * Which branch a store-relative log path belongs to.
+ *
+ * A migrated pre-X12 log lives at `.gates/logs/<branch>/<name>`, because
+ * `migrateWorktreeLogs` files it under the branch it found it on - so the branch
+ * *is* in the path, and round 1's claim that it was not was wrong. Reading the
+ * `.gates/` prefix as "no branch here" is what made every legacy log invisible to
+ * `logs --branch`, which is review N1: A4 and X11 have legacy logs right now.
+ *
+ * A log still loose in `.gates/logs/` (the fallback layout, or one someone dropped
+ * there) has no branch to report and says so.
+ *
+ * @param {string} relative store-relative path, `/`-separated
  */
 function branchOfStoredLog(relative) {
   const normalised = String(relative ?? '')
     .split(path.sep)
-    .join('/');
-  if (normalised.startsWith(`${LEDGER_DIR}/`)) return '(unknown)';
+    .join('/')
+    .replace(/^\.gates\/logs\//, '');
   const segments = normalised.split('/');
   // Everything but the file name: `task/a/b/check-….log` is branch `task/a/b`.
   return segments.length > 1 ? segments.slice(0, -1).join('/') : '(unknown)';
+}
+
+/**
+ * The path a legacy log's copy has in the store, or null when `logPath` is not
+ * legacy spelling.
+ *
+ * `outcomeOfStoredLogs` keys its judgements by stored path, and a pre-X12 ledger
+ * line or `.gate.json` names `.gates/logs/check-….log` - the *worktree's* path,
+ * which is not where the migrated copy sits. Without this the store knows the run
+ * failed and cannot say which file that was, and `--failed` reports the log as
+ * unjudgeable while its own line says `fail` (review N1).
+ *
+ * @param {string} logPath the path a record or ledger line names
+ * @param {string | null} branch the branch that line or record carries
+ */
+function migratedStorePath(logPath, branch) {
+  const prefix = `${LEDGER_DIR}/logs/`;
+  const normalised = String(logPath ?? '')
+    .split(path.sep)
+    .join('/');
+  if (!normalised.startsWith(prefix)) return null;
+  const name = normalised.slice(prefix.length);
+  // Only a loose file migrates to `<branch>/<name>`; anything already in a
+  // subdirectory keeps that subdirectory, and this is not the path to guess at it.
+  if (name === '' || name.includes('/') || branch == null || branch === '') {
+    return null;
+  }
+  return `${prefix}${branch}/${name}`;
 }
 
 function formatBytes(bytes) {
