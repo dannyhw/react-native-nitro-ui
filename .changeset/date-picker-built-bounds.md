@@ -1,0 +1,5 @@
+---
+'react-native-nitro-ui': patch
+---
+
+`DatePicker` no longer rebuilds its calendar when a bound changes by less than the control can show. The record of the bounds a platform control was built with was taken once per mount, from outside the control's identity, so after `minimumDate`/`maximumDate` moved it still described the first build; a value crossing the bound the picker had just widened away from then looked out of range, and each crossing replaced the live calendar — resetting its page, and a wheel's scroll position — for no reason. The bounds are now recorded where the control is built, so the comparison uses the control that is actually on screen. One related rebuild goes with it: widening a bound and moving the value out of the old one in a single batch used to rebuild the calendar _twice_, because the identity that went on screen said "value outside" and the next render of anything said it no longer did. That second one, the render an app cannot predict, is gone; a widen-plus-move batch is now exactly one rebuild on both platforms.

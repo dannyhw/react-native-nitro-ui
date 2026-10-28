@@ -92,6 +92,49 @@ export interface NitroUiSegmentedControlMethods extends HybridViewMethods {
    * this is safe to call from the JS thread (core.md §5).
    */
   measureContent(): NitroUiSegmentedControlSize;
+
+  /**
+   * TEMPORARY, test-only: ask the platform to look at the pixels this control is
+   * actually drawing and say whether `color` (an ARGB `processColor` int) is among
+   * them. Result is stored for ``nuiTestPixelReport``.
+   *
+   * Nothing else can answer `docs/tasks/Q4-followups-triage.md` row 27. Every other
+   * reading this control offers is a prop echo: `hybridRef.tintColor` reports what
+   * React sent on both platforms, so it cannot tell a tint that arrived from a tint
+   * the platform ignored — which is precisely the bug that made `tintColor` a
+   * documented iOS no-op (G4 F1) while the docs still claimed it painted the
+   * selected segment. Only the drawn pixels know.
+   *
+   * Sampling runs on the platform's UI thread and stores its answer, so this returns
+   * at once; poll ``nuiTestPixelReport`` the way the Slider's
+   * `nuiTestAccessibilityStep` pair works (`ios/core/NitroUiMainThread.swift`: never
+   * block a Nitro method for main).
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   */
+  nuiTestPixelProbe(color: number): void;
+
+  /**
+   * TEMPORARY, test-only: what the last ``nuiTestPixelProbe`` found, as one line —
+   * empty until a probe has run.
+   *
+   * Shape, on both platforms: `n=<count> size=<w>x<h> want=#RRGGBB hits=<n>
+   * mean=#RRGGBB closest=#RRGGBB`, where the leading count is how many probes this
+   * control has answered — the only way a test can tell a fresh answer from the previous
+   * one, since the probe is asynchronous. `hits` counts the sampled pixels that match
+   * the requested colour within tolerance, `mean` is the area-weighted average of
+   * everything drawn, and `closest` is the nearest colour found. A control that drew
+   * nothing says `no pixels` / `no image`.
+   *
+   * Both platforms composite the control over a neutral mid grey before reading it,
+   * because the iOS 26+ selection fill is glass and arrives translucent: sampled on its
+   * own, a 102×31 pt control returned only 566 opaque pixels and they were the labels and
+   * the track — the fill was filtered out and the probe reported "no such colour" for a
+   * colour the control had demonstrably been told to draw.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestPixelReport(): string;
 }
 
 /**

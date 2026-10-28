@@ -107,7 +107,10 @@ type MenuReport = {
   rows: number;
 };
 
-/** The DatePicker report split: displayed ms, presented, calendar pair, live, builds. */
+/**
+ * The DatePicker report split: displayed ms, presented, calendar pair, live, builds,
+ * built bounds.
+ */
 type DateReport = {
   displayed: number;
   presented: boolean;
@@ -174,14 +177,21 @@ function parseMenuReport(line: string): MenuReport {
 }
 
 function parseDateReport(line: string): DateReport {
-  // `displayed | presented | calendarMonth | calendarHasSelection | live | builds`,
-  // per `DatePickerModel.readReport`. The calendar pair is two fields, which is where a
-  // `parts[3]` here comes from: it reads `calendarHasSelection`, and `-1` for a control
-  // with no calendar on screen looks exactly like a count that never came down.
+  // `displayed | presented | calendarMonth | calendarHasSelection | live | builds
+  // | builtMinimum | builtMaximum`, per `DatePickerModel.readReport`. The calendar pair
+  // is two fields, which is where a `parts[3]` here comes from: it reads
+  // `calendarHasSelection`, and `-1` for a control with no calendar on screen looks
+  // exactly like a count that never came down.
+  //
+  // Eight since F3 appended what the control on screen was built with, so a bounds
+  // change could be told apart from a re-render. This guard is the reason the pair is
+  // documented rather than assumed: it is what caught that `HostPopups` was still
+  // reading six, and the two new fields sit *after* the pair, so every index below is
+  // the field it always was.
   const parts = line.split('|');
-  if (parts.length !== 6) {
+  if (parts.length !== 8) {
     throw new Error(
-      `Date report is not six fields: "${line}". Shape changes break every gate here.`
+      `Date report is not eight fields: "${line}". Shape changes break every gate here.`
     );
   }
   return {

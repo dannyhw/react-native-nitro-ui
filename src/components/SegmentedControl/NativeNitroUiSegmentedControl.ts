@@ -44,6 +44,16 @@ export interface NitroUiSegmentedControlHandle {
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
   measureContent(): NitroUiSegmentedControlSize;
+  /**
+   * Test-only pixel probe - see `NitroUiSegmentedControlMethods.nuiTestPixelProbe`.
+   * @internal
+   */
+  nuiTestPixelProbe(color: number): void;
+  /**
+   * Test-only readback - see `NitroUiSegmentedControlMethods.nuiTestPixelReport`.
+   * @internal
+   */
+  nuiTestPixelReport(): string;
 }
 
 /**

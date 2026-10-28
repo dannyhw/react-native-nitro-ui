@@ -272,6 +272,8 @@ export interface SegmentedControlProps extends ViewProps {
             width: number;
             height: number;
         };
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
     }) => void) | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;

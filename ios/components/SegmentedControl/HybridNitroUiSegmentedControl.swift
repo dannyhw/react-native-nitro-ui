@@ -45,6 +45,46 @@ final class SegmentedControlModel: NitroUiModel {
     super.init()
   }
 
+  // MARK: - Pixel probe (test-only)
+
+  /// What the last pixel probe saw, as one line. Written on main, read from JS.
+  ///
+  /// A separate lock-guarded field rather than a published one for the same reason
+  /// Slider's `a11yStepReport` is: the probe runs on main and a Nitro method may not
+  /// block for it, so nothing may recompose because this moved.
+  private var pixelReport = ""
+  /// How many reports have been made, so a test can tell a fresh one from a repeat.
+  private var pixelProbes = 0
+  private let pixelReportLock = NSLock()
+
+  /// Store what a probe found. Safe from any thread.
+  func publishPixelReport(_ report: String) {
+    pixelReportLock.lock()
+    pixelProbes += 1
+    pixelReport = "n=\(pixelProbes) \(report)"
+    pixelReportLock.unlock()
+  }
+
+  /// The last probe's report. Safe from any thread.
+  func readPixelReport() -> String {
+    pixelReportLock.lock()
+    defer { pixelReportLock.unlock() }
+    return pixelReport
+  }
+
+  /// Forget the last probe, for recycling.
+  ///
+  /// Android's model `reset()` does this, and the reason is worth the symmetry rather
+  /// than the asymmetry: a recycled view whose report still described another owner's
+  /// pixels would let a test read a hit that is not its control's. The `n=` counter
+  /// keeps that from being silent, but "empty until the next probe" is the state a
+  /// fresh mount should start in on both platforms.
+  func clearPixelReport() {
+    pixelReportLock.lock()
+    pixelReport = ""
+    pixelReportLock.unlock()
+  }
+
   /// A segment index that exists in `options`, as a whole number in range.
   ///
   /// The one rule of this component: `options` and the selection arrive in one
@@ -121,14 +161,47 @@ struct SegmentedControlContent: NitroUIContent {
 
 /// `.tint()` has no "unset" form, so the default keeps SwiftUI's accent colour.
 ///
-/// On a segmented `Picker` a per-instance `.tint(_:)` has **no visible effect**: the
-/// selected segment keeps the scheme's accent fill (measured on iOS 27, reviewed as G4
-/// F1). `tintColor` is therefore an Android-only prop — see
-/// `docs/components/segmented-control.md`. A per-instance iOS tint would mean drawing
-/// the row instead of hosting `Picker`; `UIAppearance` on `UISegmentedControl` is not a
-/// substitute, because it would restyle every segmented `Picker` in the app. The
-/// modifier stays so the prop has one honest code path on both platforms and a
-/// per-instance tint can be added here without changing the spec.
+/// On a segmented `Picker` a per-instance `.tint(_:)` has **no visible effect** (G4 F1,
+/// and measured again for F3), and `tintColor` is therefore an Android-only prop - see
+/// `docs/components/segmented-control.md`, Limits. This is what F3 measured, on iOS 27
+/// on the leased simulator and nowhere else: the brief's bar was "no per-instance
+/// approach on iOS 15.1+" and the pre-liquid-glass releases were not tested, so treat
+/// everything below as one OS's observation rather than UIKit's contract.
+///
+/// The row is reachable. The pixel probe walks this control's own hosted subtree and
+/// finds a real `UISegmentedControl` inside it (`UIKitPlatformViewHost<
+/// PlatformViewRepresentableAdaptor<SystemSegmentedControl>>`), and writing its
+/// `selectedSegmentTintColor` paints the segment: 9253 pixels of the requested magenta
+/// in a 102x31 pt control, against zero for the untinted look. That is the opposite of
+/// what the previous round's docs said, which claimed the knob was unreachable.
+///
+/// It does not stay painted. After the first change of selection the probe reads
+/// `hits=0` on that same control - the colour is off the screen - while the property
+/// itself still reports the colour that was written (seen through a temporary
+/// diagnostic since removed from this file; re-run the probe with a
+/// `selectedSegmentTintColor` read added to say it again). Re-writing the value did not
+/// put it back at either of the two points that were tried: inline on the control's own
+/// `.valueChanged`, and in a `CATransaction` completion block, which is the first moment
+/// after the selection animation is genuinely over. Those two pushes were in the build
+/// that produced `hits=0`, so this is not "re-writing was not attempted".
+///
+/// Which is why the workaround is not taken. A tint bought this way shows on the first
+/// frame and vanishes on the first tap, and whether it survives depends on which OS
+/// release is doing the compositing. That is worse for an app than a prop that has never
+/// done anything.
+///
+/// Two claims this deliberately does not make, because they came from the throwaway
+/// version that tried the push and are not facts about iOS. One: that iOS cannot *undo* a
+/// tint. It can - that version kept the colour only because the view doing the pushing
+/// existed solely while a tint was asked for, and it is not in this repo (`git log
+/// --all -S "selectedSegmentTintColor ="` finds no such code). Two: that a recycled host
+/// would hand one app's colour to the next. Both were prototype defects and saying them
+/// here would put a reason in print that no one can reproduce.
+///
+/// The `.tint(_:)` call stays: it is the honest declarative statement, it costs nothing,
+/// and the probe is the instrument that says the day either SwiftUI or UIKit makes a
+/// per-instance tint real - which is the day the prop, the docs and the harness's iOS
+/// half change together.
 private struct OptionalSegmentedTint: ViewModifier {
   let color: UIColor?
 
@@ -394,6 +467,7 @@ final class HybridNitroUiSegmentedControl: HybridNitroUiSegmentedControlSpec, Re
 
   func prepareForRecycle() {
     model.options = []
+    model.clearPixelReport()
     model.state = NitroUiControlledValue<Double>(displayed: 0)
     model.defaultSelectedIndex = 0
     model.didApplyDefault = false
@@ -427,4 +501,135 @@ final class HybridNitroUiSegmentedControl: HybridNitroUiSegmentedControlSpec, Re
   private var model: SegmentedControlModel {
     return host.model
   }
+}
+
+// MARK: - Pixel probe (test-only)
+
+extension HybridNitroUiSegmentedControl {
+  /// Count the pixels this control draws that are `color`, and store the answer.
+  ///
+  /// Posted to main rather than run inline: reading pixels needs the layer rendered,
+  /// and a Nitro method may not block for main (`NitroUiMainThread.swift`'s rule), so
+  /// this writes what it found for ``nuiTestPixelReport()`` to read back — the same
+  /// two-method shape Slider's `nuiTestAccessibilityStep` pair uses.
+  func nuiTestPixelProbe(color: Double) throws {
+    let run = { [weak self] in
+      guard let self else { return }
+      self.model.publishPixelReport(nitroUiSamplePixels(of: self.host, for: color))
+    }
+    if Thread.isMainThread {
+      run()
+    } else {
+      DispatchQueue.main.async(execute: run)
+    }
+  }
+
+  func nuiTestPixelReport() throws -> String {
+    return model.readPixelReport()
+  }
+}
+
+/// Per-channel-sum budget for "this pixel is the colour". The selected capsule is
+/// composited over the material behind it, so what reaches a sampled pixel is the
+/// tint plus what the glass lets through — close to the requested colour, rarely
+/// exactly it. The budget is deliberately small: the colours a test probes for are
+/// chosen to be nothing the control draws on its own, and a false "hit" would make
+/// the whole instrument meaningless.
+private let nitroUiPixelTolerance = 30
+
+/// The red/green/blue of an ARGB `processColor` int, 0…255, or nil for "no colour".
+///
+/// Decoded from the number rather than through a `UIColor`, for the same reason
+/// `UIColor.init(nitroUiARGB:)` exists: iOS and Android hand over the same colour as
+/// two different `Double`s, and only the low 32 bits matter.
+private func nitroUiARGBChannels(_ value: Double) -> (red: Int, green: Int, blue: Int)? {
+  guard value.isFinite, value >= -2_147_483_648, value <= 4_294_967_295 else {
+    return nil
+  }
+  let argb = UInt32(truncatingIfNeeded: Int64(value))
+  return (
+    Int((argb >> 16) & 0xff), Int((argb >> 8) & 0xff), Int(argb & 0xff)
+  )
+}
+
+/// What the pixels `view` is drawing say about `color`, as one line for a test's
+/// failure message. See ``HybridNitroUiSegmentedControl/nuiTestPixelProbe(color:)``.
+///
+/// `afterScreenUpdates: true` is the half that matters: it asks for what is on screen
+/// rather than what the layer tree said at the start of the transaction, so a colour
+/// applied one runloop turn earlier is what gets read. The full subtree is sampled,
+/// because which segment is selected — and therefore where the colour is — is the
+/// thing under test.
+private func nitroUiSamplePixels(of view: UIView, for color: Double) -> String {
+  let bounds = view.bounds
+  guard let target = nitroUiARGBChannels(color) else {
+    return "n=0 no colour"
+  }
+  guard bounds.width >= 2, bounds.height >= 2 else {
+    return "n=0 size=\(Int(bounds.width))x\(Int(bounds.height)) no pixels"
+  }
+  let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
+    view.drawHierarchy(in: bounds, afterScreenUpdates: true)
+  }
+  guard let bitmap = image.cgImage else {
+    return "n=0 size=\(Int(bounds.width))x\(Int(bounds.height)) no image"
+  }
+  let width = bitmap.width, height = bitmap.height
+  let bytesPerRow = 4 * width
+  var data = [UInt8](repeating: 0, count: bytesPerRow * height)
+  guard
+    let space = CGColorSpace(name: CGColorSpace.sRGB),
+    let context = CGContext(
+      data: &data, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
+      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+  else {
+    return "n=0 size=\(Int(bounds.width))x\(Int(bounds.height)) no context"
+  }
+  // The backdrop is the part that makes this measurement mean anything on iOS 26+.
+  // The selected segment is a liquid-glass lens, and captured on its own it comes back
+  // *translucent*: over a control 102x31 points, only 566 pixels arrived opaque, and
+  // they were the labels and the track - the fill itself was filtered out, so the probe
+  // reported "no such colour" for a colour the control was demonstrably asked to draw.
+  // Compositing over a neutral mid grey first makes every pixel comparable, and keeps
+  // the comparison fair in both directions: a light tint and a dark one both move the
+  // mean away from the middle.
+  context.setFillColor(UIColor(white: 0.5, alpha: 1).cgColor)
+  context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+  context.draw(bitmap, in: CGRect(x: 0, y: 0, width: width, height: height))
+  var hits = 0
+  var redSum = 0, greenSum = 0, blueSum = 0
+  var closest = (distance: Int.max, red: 0, green: 0, blue: 0)
+  for row in 0..<height {
+    for column in 0..<width {
+      let offset = row * bytesPerRow + column * 4
+      // Premultiplied, and composited over the backdrop above, so every pixel here is
+      // opaque and its channels are already final - sum them as they are. (The first
+      // version of this multiplied each channel by the pixel's alpha and then divided by
+      // the pixel count, which left every channel 255x too large and let the sum spill
+      // out of the six hex digits it prints into: `mean=#8FAFB6EB`. The backdrop is what
+      // makes the alpha term unnecessary, which is the point of putting it there.)
+      let red = Int(data[offset]), green = Int(data[offset + 1]), blue = Int(data[offset + 2])
+      redSum += red
+      greenSum += green
+      blueSum += blue
+      let distance =
+        abs(red - target.red) + abs(green - target.green) + abs(blue - target.blue)
+      if distance <= nitroUiPixelTolerance {
+        hits += 1
+      }
+      if distance < closest.distance {
+        closest = (distance, red, green, blue)
+      }
+    }
+  }
+  let area = width * height
+  // One division per channel, then the three together as hex. Same arithmetic as
+  // Android's `nitroUiSamplePixels`, so a `mean` read off either platform is the same
+  // number for the same drawing.
+  let mean = (redSum / area) << 16 | (greenSum / area) << 8 | blueSum / area
+  return String(
+    format: "size=%dx%d want=#%02X%02X%02X hits=%d mean=#%06X closest=#%02X%02X%02X",
+    Int(bounds.width), Int(bounds.height), target.red, target.green, target.blue,
+    hits, mean, closest.red, closest.green, closest.blue
+  )
 }

@@ -82,6 +82,14 @@ type SegmentedHandle = {
    */
   readonly onValueChange?: unknown;
   measureContent(): { width: number; height: number };
+  /**
+   * Ask the platform what this control actually drew, and read the answer back
+   * (`nuiTestPixelProbe` is fire-and-forget on the UI thread, so the report arrives
+   * on a later read). Declared, not imported: D14 keeps Hybrid View types off the
+   * public surface.
+   */
+  nuiTestPixelProbe(color: number): void;
+  nuiTestPixelReport(): string;
 };
 
 /** Handles by testID, so a test can ask each control what it holds. */
@@ -299,6 +307,115 @@ function poisonConfigurations(keys: readonly string[]): void {
 /** Let queued work land before reading counters that only move on a later turn. */
 async function settle(ms = 250): Promise<void> {
   await sleep(ms);
+}
+
+/**
+ * Ask `testId`'s control what colour it drew, and wait for that probe's own answer.
+ *
+ * `nuiTestPixelProbe` is fire-and-forget: reading pixels needs the UI thread and a
+ * Nitro method may not block for it, so the result arrives on a later read of
+ * `nuiTestPixelReport`. Each report is numbered (`n=3 …`) precisely so this can wait
+ * for *this* probe rather than for the previous one to have gone stale - the same
+ * reason Slider's `accessibilityStepReport` helper polls on change.
+ */
+async function pixelProbe(
+  testId: string,
+  color: number,
+  what: string
+): Promise<string> {
+  const handle = handles.get(testId);
+  if (handle == null) {
+    throw new Error(
+      `testID "${testId}" has no handle - it was never rendered.`
+    );
+  }
+  const before = handle.nuiTestPixelReport();
+  handle.nuiTestPixelProbe(color);
+  const report = await pollUntil(
+    () => {
+      const next = handle.nuiTestPixelReport();
+      return next === before || next === '' ? null : next;
+    },
+    () =>
+      new Error(
+        `the pixel probe for "${testId}" (${what}) never reported. Last report: ` +
+          `"${handle.nuiTestPixelReport()}".`
+      ),
+    8000
+  );
+  // A report that sampled nothing means the control drew nothing at all - a view that
+  // is not on screen, or a host whose layer is empty. Waiting on that would make every
+  // later assertion pass for the wrong reason, so it fails here, where it reads.
+  if (/no pixels|no image|no context|no colour|size=0x/.test(report)) {
+    throw new Error(
+      `the pixel probe for "${testId}" (${what}) sampled nothing: ${report}`
+    );
+  }
+  // The report's own shape, checked on every probe rather than trusted. Both
+  // platforms composite over a backdrop and average the whole control into `mean`, and
+  // an average is exactly where an arithmetic slip hides: iOS's first version weighted
+  // each channel by the pixel's alpha - always 255 once composited - and divided by the
+  // pixel count, so every channel came out 255x too large and the sum spilled out of
+  // the six digits it prints into (`mean=#8FAFB6EB`). A malformed `mean` is not only
+  // unreadable, it is a field a later round was invited to assert on, so a platform that
+  // starts overrunning it has to fail here rather than read as a colour nobody expected.
+  if (!/ mean=#[0-9A-F]{6}( |$)/.test(report)) {
+    throw new Error(
+      `the pixel probe for "${testId}" (${what}) reported a mean that is not six ` +
+        `hex digits: ${report}`
+    );
+  }
+  return report;
+}
+
+/**
+ * Require the probe report to say the colour was, or was not, on the screen.
+ *
+ * Thrown rather than `expect(...).toMatch`, because the whole diagnosis is in the
+ * report line - the size, how many pixels hit, the mean colour and the nearest one
+ * found - and Jest shortens long strings in a matcher failure.
+ */
+function expectPixels(
+  report: string,
+  want: 'present' | 'absent',
+  what: string
+): void {
+  const hits = /hits=(\d+)/.exec(report)?.[1];
+  if (hits == null) {
+    throw new Error(`${what}: the probe reported no hit count: ${report}`);
+  }
+  const found = Number(hits) > 0;
+  if (found !== (want === 'present')) {
+    throw new Error(
+      `${what}: expected the probed colour to be ${want} on screen, and the ` +
+        `platform said ${report}`
+    );
+  }
+}
+
+/**
+ * Tap the middle of segment `index` of `testId` and require exactly one change event
+ * for that index.
+ *
+ * `pressBothEnds` taps both ends and compares the whole log, which is what its own
+ * test wants and what this one cannot use: the tint test taps one segment at a time and
+ * needs to know which tap moved it. The centre is a fair target here because the row is
+ * as wide as its labels - no over-wide fitting is involved, so no segment is off box.
+ */
+async function tapSegment(
+  testId: string,
+  index: number,
+  optionCount: number
+): Promise<void> {
+  const box = boxOf(testId);
+  expect(box).not.toBeNull();
+  const before = eventLog.length;
+  await userEvent.pressAt(
+    box!.x + (box!.width * (2 * index + 1)) / (2 * optionCount),
+    box!.y + box!.height / 2
+  );
+  await waitForEvents(before + 1);
+  expect(eventLog.slice(before)).toEqual([`${testId}:${String(index)}`]);
 }
 
 /**
@@ -1025,6 +1142,174 @@ describe('SegmentedControl · G4', () => {
       'tinted:3',
       'tinted:0',
     ]);
+    unmount();
+  });
+
+  it('shows tintColor on the selected segment, on the screen and not next door', async () => {
+    // `tintColor` had a documented history of lying, because every reading this control
+    // offered was a prop echo: `hybridRef.tintColor` reports what React sent on both
+    // platforms, so it could not tell a tint that arrived from a tint the platform
+    // dropped - which is how iOS ended up with docs claiming the colour painted the
+    // selected segment while the screenshots showed the default one (G4 F1, and
+    // `docs/tasks/Q4-followups-triage.md` row 27). So this asks the question that has an
+    // answer: is the colour on the screen?
+    //
+    // Two controls are the test rather than one, because "the tint arrived" and "the
+    // tint stayed inside its own control" are one requirement: a fix that reached the
+    // neighbouring row would be a global restyle (that is why `UISegmentedControl
+    // .appearance()` is banned in the iOS file), and asserting only the first half would
+    // let it through.
+    //
+    // The expectation differs by platform, and that difference is the documented state of
+    // the prop (`docs/components/segmented-control.md`, Limits) - what is new in F3 is
+    // that it is now *asserted* instead of merely claimed: Android paints it, and iOS
+    // does not, and neither is allowed to drift away from what the docs say without this
+    // test failing. The iOS half is the regression guard the last two rounds did not
+    // have; see `HybridNitroUiSegmentedControl.swift`'s `OptionalSegmentedTint` for the
+    // measurements behind why it stays that way.
+    //
+    // Magenta, because neither platform draws it by itself: iOS uses the scheme's accent
+    // and Android the scheme's `secondaryContainer` (both measured on the two devices
+    // this suite runs on, and both shown in the report line a failure carries). A colour
+    // the theme already owns would pass for nothing.
+    const TINT = processColor('#FF00A0') as number;
+    const TINT_CSS = '#FF00A0';
+    const RETINT = processColor('#00B8D4') as number;
+    const OPTIONS = ['Left', 'Right'];
+
+    const tree = (tint: string | null) => (
+      <View style={rowStyle}>
+        <SegmentedControl
+          options={OPTIONS}
+          onChange={recordChange('painted')}
+          testID="painted"
+          tintColor={tint}
+          hybridRef={captureHybrid('painted')}
+        />
+        <SegmentedControl
+          options={OPTIONS}
+          onChange={recordChange('plain')}
+          testID="plain"
+          tintColor={null}
+          hybridRef={captureHybrid('plain')}
+        />
+      </View>
+    );
+
+    const { rerender, unmount } = await render(tree(null), { timeout: 20000 });
+    await waitForTestId('painted');
+    await waitForMeasured('painted', 'two short options');
+    await settle(400);
+
+    // Before anything is sent: neither control carries the colour, so a hit later cannot
+    // be something that was already on screen. This also catches a probe that reports a
+    // hit whatever it sees, which would make every assertion below meaningless.
+    expectPixels(
+      await pixelProbe('painted', TINT, 'the control while untinted'),
+      'absent',
+      '"painted" while it still had no tintColor'
+    );
+    expectPixels(
+      await pixelProbe('plain', TINT, 'the control that never asks for one'),
+      'absent',
+      '"plain", which has no tintColor'
+    );
+
+    await rerender(tree(TINT_CSS));
+    await pollUntil(
+      () => (handles.get('painted')?.tintColor === TINT ? true : null),
+      () =>
+        new Error(
+          `"painted" never reported the new tint - the handle says ` +
+            `${String(handles.get('painted')?.tintColor)}.`
+        ),
+      5000
+    );
+    // The handle agreeing is a prop echo and proves nothing about pixels, so the settle
+    // covers the frame the new colour needs. Then the whole sequence below is run on the
+    // drawn result: applied, kept across a selection change, moved to a second colour,
+    // and taken away again.
+    await settle(400);
+    const painted = await pixelProbe('painted', TINT, 'the tinted control');
+    console.log(`tint pixels (${Platform.OS}): ${painted}`);
+
+    await tapSegment('painted', 1, OPTIONS.length);
+    await settle(300);
+    const afterTap = await pixelProbe(
+      'painted',
+      TINT,
+      'the tinted control, after a tap'
+    );
+
+    await tapSegment('painted', 0, OPTIONS.length);
+    await settle(300);
+    const backAgain = await pixelProbe(
+      'painted',
+      TINT,
+      'the tinted control, back on the first segment'
+    );
+
+    if (Platform.OS === 'android') {
+      expectPixels(
+        painted,
+        'present',
+        `"painted" after tintColor="${TINT_CSS}"`
+      );
+      expectPixels(
+        afterTap,
+        'present',
+        '"painted" after the tap onto the 2nd segment'
+      );
+      expectPixels(
+        backAgain,
+        'present',
+        '"painted" after the tap back to the 1st'
+      );
+      expectPixels(
+        await pixelProbe('plain', TINT, 'the untinted neighbour'),
+        'absent',
+        '"plain" beside a tinted control - a tint must not reach its neighbour'
+      );
+
+      // A second colour, because a tint that stuck at whatever it first painted would
+      // pass everything above: the prop has to keep working, not have worked once. And
+      // removing it has to give the row back to the scheme, which is the half that a
+      // cached colour set or an appearance-style global would get wrong.
+      await rerender(tree('#00B8D4'));
+      await settle(400);
+      expectPixels(
+        await pixelProbe('painted', RETINT, 'the control after a second tint'),
+        'present',
+        '"painted" after tintColor="#00B8D4"'
+      );
+      expectPixels(
+        await pixelProbe('painted', TINT, 'the control after a second tint'),
+        'absent',
+        '"painted" after the colour changed - the first tint must be gone'
+      );
+      await rerender(tree(null));
+      await settle(400);
+      expectPixels(
+        await pixelProbe(
+          'painted',
+          TINT,
+          'the control after the tint was removed'
+        ),
+        'absent',
+        '"painted" after tintColor went back to null'
+      );
+    } else {
+      // iOS: the documented no-op, asserted. Three readings, because the interesting part
+      // is not that nothing happens once - it is that nothing happens *every* time, so
+      // the prop cannot be half-applied, and no other row's colour can leak in.
+      expectPixels(
+        painted,
+        'absent',
+        `"painted" after tintColor="${TINT_CSS}" (iOS)`
+      );
+      expectPixels(afterTap, 'absent', '"painted" after a tap (iOS)');
+      expectPixels(backAgain, 'absent', '"painted" after tapping back (iOS)');
+    }
     unmount();
   });
 

@@ -186,7 +186,7 @@ export interface NitroUiDatePickerMethods extends HybridViewMethods {
 
   /**
    * TEMPORARY, test-only: what this control currently shows, as one line:
-   * `<displayed ms>|<presented 0|1>`.
+   * `<displayed ms>|<presented 0|1>|<calendar month>|<calendar has selection>|<live presentations>|<control builds>|<built minimum>|<built maximum>`.
    *
    * The displayed instant is the one thing neither a geometry query nor a prop
    * read can see: `valueMillis` is what React *asked for*, and after a change JS
@@ -194,6 +194,11 @@ export interface NitroUiDatePickerMethods extends HybridViewMethods {
    * rejection test, and of the DST round-trip. The presented flag is what makes
    * "the dialog closed when the view went away" a structural assertion rather
    * than a screenshot.
+   *
+   * The last two fields are the bounds the platform control *on screen* was built
+   * with (`-1` = none built yet, `-2` = that bound is unset) - what the rebuild
+   * decision is keyed on, as distinct from what React last sent. Both platforms
+   * record them at the moment the control is built.
    *
    * It is a method rather than a prop because it reads UI-thread state from any
    * thread: the answer is snapshotted under the same lock that guards the write

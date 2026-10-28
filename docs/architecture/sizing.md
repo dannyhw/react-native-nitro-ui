@@ -311,19 +311,30 @@ the shadow node's first measure. `NitroUiDeclaredFallbacks` closes that gap (§5
 other ways a box has no height never went anywhere.) On iOS the stalled host then paints SwiftUI's minimum content
 (`clipsToBounds` is false), which looks like a working control that has lost its track.
 
-**What a `fillWidth` cache entry stores.** Only the height is the configuration's own answer. The
-width in the entry is the last box width some instance was measured at — a restatement of a parent,
-not a fact about the control — so it is never compared, and the one case where it reaches the screen
-is a node measured under an *infinite* width constraint (a control in a horizontal scroller), where
-there is no box width to use. Two consequences a component author must know:
+**What a `fillWidth` cache entry stores.** Only the height is the configuration's own answer, and
+the entry stores it that way: a report's width is **not** filed — the width in a `fillWidth` entry is
+the one the component *declared* (`filedSizeLocked`, `cpp/NitroUiSizingEngine.cpp`). That is not
+cosmetic. A report's width is a restatement of whichever box that instance was measured at, so
+filing it made one parent's width the answer for every later instance, and the policy is only
+harmless about that where it gets to replace the number: `measureContent` substitutes the box width
+**only when the constraint width is finite**, so the one case where the cached width reaches the
+screen is a node measured under an *infinite* width constraint — a control in a horizontal
+scroller. Filing measured widths is therefore exactly what made such a control draw at some other
+instance's box width, forever: the report agrees with the cache by height, which is all the policy
+allows it to compare, so it confirms rather than corrects. Storing the declared width is what makes
+an unbounded parent draw the number the component published for that case, and it is the number
+`docs/components/slider.md` already documents the declared width as being *for*. Three consequences
+a component author must know:
 
 - a `fillWidth` control whose **height depends on its width** (a wrapping label, a multi-line text
   field) cannot share one entry between its widths, because an entry holds one height: it has to put
   the width in its `nuiSizingKey` so each width becomes its own configuration. A Slider's height does
   not move with its width — measured 200/300/328 pt on iOS and 200/480 dp on Android, same height.
 - the first frame of a cold `fillWidth` mount is the declared **height** at whatever width the box
-  has, which is why the width in `setFallback` barely matters and the height has to be right (D14,
-  D17).
+  has, so under a finite parent the height in `setFallback` is the half that shows (D14, D17).
+- under an **infinite** parent the declared **width** is what draws, on the first frame and on every
+  frame after it. Declare the width you would want a control to have when nothing is asking it to be
+  any particular width; do not treat it as a placeholder.
 
 ## 6. Traps (each one measured, each one cost someone an hour)
 

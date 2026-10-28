@@ -1,0 +1,5 @@
+---
+'react-native-nitro-ui': patch
+---
+
+`SegmentedControl`'s `tintColor` documentation now says why iOS ignores it, and the behaviour is checked rather than asserted in prose. Nothing changes for an app: the prop paints the selected segment's container and border on Android and does nothing on iOS, as before. What changed is the reason given — the earlier text said the knob was unreachable from SwiftUI, and on iOS 27 that turned out not to be true. The hosted `UISegmentedControl` is reachable and setting its `selectedSegmentTintColor` does paint it (9253 pixels of the requested colour, against zero untinted), but the colour is off the screen after the first change of selection while the property still reports the colour that was written, and writing it again did not bring it back at either of the two timings tried. A tint that survives until the first tap is worse than a prop that never did anything, so the prop stays documented as Android-only — now with a pixel probe on both platforms that fails the suite if either one stops matching that sentence. Measured on iOS 27 only; earlier iOS releases were not tested.
