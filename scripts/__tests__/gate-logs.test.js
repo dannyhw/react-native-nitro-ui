@@ -1676,9 +1676,17 @@ describe('gate.mjs export attaches failure evidence', () => {
     // And the scratch directory, which is the leak round 1 found in *its own*
     // exported excerpt: `/private/var/folders/x4/<32 chars>/T/...` names the machine
     // as precisely as `$HOME`, and jest prints it for every temp fixture.
+    // A literal `/tmp` (Linux, so CI) names no machine, and `localPathRedactions`
+    // leaves it alone on purpose (it filters out anything no longer than `/tmp`), so
+    // the fixture's path passes through there. Every longer scratch path is redacted,
+    // including macOS's `/private/tmp` and its per-user `/var/folders/...`.
     const tmp = fs.realpathSync(os.tmpdir());
-    expect(excerpt).not.toContain(tmp);
-    expect(excerpt).toContain('<tmp>/x12-jest-fixture');
+    if (tmp === '/tmp') {
+      expect(excerpt).toContain(`${tmp}/x12-jest-fixture`);
+    } else {
+      expect(excerpt).not.toContain(tmp);
+      expect(excerpt).toContain('<tmp>/x12-jest-fixture');
+    }
     // The placeholders in their place, so the file is still useful: a reader on the
     // machine that ran the gate can find the log and knows which checkout ran it.
     // (The fake's HOME *is* the checkout here, so the stack frame reads as `<repo>`
