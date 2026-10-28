@@ -114,6 +114,46 @@ export interface BenchListProps {
 }
 
 /**
+ * Why one iteration produced no value for a latency signal.
+ *
+ * A missing sample used to be one bit - `null` - so a results file could say *how
+ * many* presenting frames never arrived but never *why*, and the `n/a` that follows
+ * refused a baseline with no evidence attached (A3's iOS mint: 105 of 160 samples
+ * missing on one arm, cause undiagnosed). Every null now carries a code:
+ *
+ * - `'probe-timeout'` - the probe was asked and answered `-1` at the end of its
+ *   timeout. The common case, and the only one whose meaning depends on how long the
+ *   wait was, which is why `waitedMs` and `timeoutMs` travel with it.
+ * - `'not-awaited'` - the cell declares `mountSignal: false`, so the runner never
+ *   asked. The null is by construction rather than a lost signal, and without this
+ *   code a per-cell summary would read those iterations as timeouts.
+ * - `'probe-error'` - the call threw or answered unparseably. `detail` carries the
+ *   message: unlike a timeout, this says the probe is broken, not that a frame was slow.
+ */
+export type MissingSampleReason =
+  'probe-timeout' | 'not-awaited' | 'probe-error';
+
+/**
+ * One iteration's reason for one missing signal, compact enough to record on every
+ * iteration of every launch.
+ *
+ * `kind`/`scenario`/`implementation`/`n`/`launch`/`index` are already on the `iter`
+ * record this rides, so a reason is three short fields plus a timeout number - about
+ * 40 bytes of NDJSON, and under 1 % on a full-plan results file.
+ */
+export interface MissingSample {
+  /** Which signal did not arrive. */
+  metric: 'mountedNs' | 'presentedNs';
+  reason: MissingSampleReason;
+  /** Wall-clock ms the runner actually waited, so a claimed timeout can be checked. */
+  waitedMs: number;
+  /** The timeout in force for this wait; null when nothing was waited. */
+  timeoutMs: number | null;
+  /** `probe-error` only: the message, clipped by the caller. */
+  detail?: string;
+}
+
+/**
  * One native perf mark from the runtime under test, already converted to the
  * probe's nanosecond base so it lines up with `t0` (D1).
  */
@@ -148,6 +188,23 @@ export interface BenchPlan {
    * results cell key.
    */
   perfMarks: boolean;
+  /**
+   * How long this launch waits for the mount signal
+   * (`scenario:implementation:N:mountTimeout=1500`, default 1500).
+   */
+  mountTimeoutMs: number;
+  /**
+   * How long this launch waits for the presenting frame
+   * (`scenario:implementation:N:presentedTimeout=40000`, default 2000).
+   *
+   * Overridable per launch because the only way to tell "this arm never draws" from
+   * "this arm draws slower than we wait" is to wait longer, and a release build has
+   * no env to read - so it travels on the launch string like `marks` does. A run
+   * that raises it is stamped in its results file and cannot mint a baseline: the
+   * samples that arrive keep their values, but *which* samples arrive changes the
+   * median, and a ratio is only comparable under one waiting rule.
+   */
+  presentedTimeoutMs: number;
 }
 
 /** One line of the NDJSON a launch writes. */
@@ -169,6 +226,14 @@ export type BenchRecord =
        * are by construction, not a lost signal.
        */
       mountSignal: boolean;
+      /**
+       * What this launch waited for, so a `probe-timeout` reason in an `iter`
+       * record can be checked against the rule that was in force. Written as
+       * `timeout=<ms>` / `presentedTimeout=<ms>` flags on the launch string, so a
+       * release build with no env can still be asked to wait longer (A4).
+       */
+      mountTimeoutMs: number;
+      presentedTimeoutMs: number;
     }
   | {
       kind: 'iter';
@@ -182,6 +247,12 @@ export type BenchRecord =
       jsCommitNs: number | null;
       mountedNs: number | null;
       presentedNs: number | null;
+      /**
+       * Why a null above is null, one entry per missing signal. Absent (not `[]`)
+       * on the normal path, so every `iter` record in a healthy run stays the
+       * size it was.
+       */
+      missing?: MissingSample[];
     }
   | {
       kind: 'cpu';

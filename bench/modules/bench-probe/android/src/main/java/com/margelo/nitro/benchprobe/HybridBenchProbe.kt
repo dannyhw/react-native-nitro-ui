@@ -48,11 +48,28 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
     const val NS_PER_TICK = 1_000_000_000.0 / TICKS_PER_SECOND
 
     /**
-     * How long to wait for the presenting frame before reporting "no signal".
-     * A static screen after a mount produces exactly one frame, so this only
-     * fires when the window is genuinely not drawing.
+     * How long the **pacing** frame wait (`nextFrameNs`) waits before giving up and
+     * reporting "now". Pacing only; a slow frame here costs nothing but a slightly
+     * short gap between iterations.
      */
     const val FRAME_TIMEOUT_MS = 2_000L
+
+    /**
+     * The ceiling on waiting for the *measured* presenting frame, in milliseconds.
+     *
+     * A backstop for a window that never draws, **not** the wait the runner asked for:
+     * that is the `timeoutMs` of `awaitPresented`, which resolves the same capture
+     * first through the same once-guard. It has to sit well above any timeout the
+     * runner can request, because a backstop that wins the race *becomes* the timeout -
+     * every long wait would be answered `-1` at this number and A4's `presentedTimeout=`
+     * diagnostic would measure nothing else. The plan parser caps a requested timeout
+     * below it (`PRESENTED_TIMEOUT_FLAG` in `bench/src/plan.ts`).
+     *
+     * Before A4 this was `FRAME_TIMEOUT_MS` (2 s), which silently made 2 s the real
+     * timeout on Android no matter what JS asked for. The iOS side has the same
+     * ceiling (`kBenchPresentationCeilingSeconds`).
+     */
+    const val PRESENTATION_CEILING_MS = 90_000L
   }
 
   /**
@@ -184,6 +201,15 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
         }
       }
       if (giveUp) {
+        // When the *presented* wait gives up, stop listening for this capture's frames
+        // too. With the old 2 s native ceiling this path rarely ran - the ceiling
+        // usually answered first - but a JS timeout that wins the race would otherwise
+        // leave the window listener attached until the ceiling, delivering every frame
+        // to a capture nobody waits for. Not on the mount path: a late mount still has
+        // its presenting frame to catch.
+        if (!mount) {
+          stopFrameCapture(target)
+        }
         if (mount) resolveMount(target) else resolvePresented(target)
       }
     }, timeoutMs.toLong().coerceAtLeast(1L))
@@ -247,7 +273,7 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
    * - whose intended vsync is by construction earlier than the `nanoTime()`
    * stamp taken inside it. The old condition therefore recorded the first frame
    * drawn *after* presentation, which only exists when something invalidates
-   * again within `FRAME_TIMEOUT_MS`: every `update` cell had it (a thumb
+   * again within the capture's ceiling: every `update` cell had it (a thumb
    * animation) and a static `mount` screen mostly did not. Acceptance now asks
    * the real question - did this frame's animation phase run no earlier than
    * the mount? - in [frameMetricsEndNs].
@@ -323,7 +349,10 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
       if (giveUp) {
         resolvePresented(target)
       }
-    }, FRAME_TIMEOUT_MS)
+      // The ceiling, not FRAME_TIMEOUT_MS: this is the measured capture, and a
+      // backstop that wins the race against `awaitPresented(timeoutMs)` would
+      // replace the timeout the runner asked for with this one.
+    }, PRESENTATION_CEILING_MS)
   }
 
   /**
