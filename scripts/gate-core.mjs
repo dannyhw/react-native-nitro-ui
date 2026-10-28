@@ -1554,9 +1554,11 @@ export function logNameFor(gate, startedAt) {
  *
  *   1. an absolute path — a line whose store was renamed or moved, and a path
  *      `export` or a test wrote deliberately;
- *   2. `.gates/logs/<name>` — everything written before X12, in a worktree that is
- *      still on disk, or in its leftover `.git/worktrees/<n>/` directory after
- *      removal;
+ *   2. `.gates/logs/<name>` — everything written before X12. This checkout's own
+ *      copy if it is still on disk, then the store's copy under
+ *      `.gates/logs/<branch>/` (where the migration put it, keyed by the branch the
+ *      line carries — see `migrateWorktreeLogs`), then the flat spelling an earlier
+ *      migration used;
  *   3. `<branch>/<name>` — the current format, relative to the store.
  *
  * Resolution order is *worktree first, store second*. A `.gates/logs/` file that
@@ -1565,8 +1567,14 @@ export function logNameFor(gate, startedAt) {
  * store would mean the copy silently wins over the original, which is the wrong
  * order for evidence.
  *
+ * `logBranch` is what makes a migrated line findable once its worktree is gone. A
+ * pre-X12 path carries no branch, and once the worktree is removed there is no
+ * checkout left to ask which branch wrote it — so the caller passes the branch from
+ * the line or the record that closed the run, and a `task/a/b` name keeps its
+ * slashes rather than being guessed at from the path's first segment.
+ *
  * @param {object | null | undefined} entry a ledger line
- * @param {{storeDir?: string | null, repoRoot?: string | null, worktreeGitDir?: string | null, existsSync?: (file: string) => boolean}} options
+ * @param {{storeDir?: string | null, repoRoot?: string | null, logBranch?: string | null, extraCandidates?: string | string[] | null, existsSync?: (file: string) => boolean}} options
  * @returns {{file: string | null, candidates: string[]}} the first existing
  *   candidate, and every path that was asked — so a caller can say *where* it
  *   looked when the answer is "nowhere".
@@ -1574,16 +1582,45 @@ export function logNameFor(gate, startedAt) {
 export function ledgerLogCandidates(entry, options) {
   const logPath = typeof entry?.logPath === 'string' ? entry.logPath : null;
   const candidates = [];
+  const join = (root, relative) =>
+    `${String(root).replace(/\/+$/, '')}/${relative.replace(/^\/+/, '')}`;
   if (logPath != null && logPath !== '') {
     if (logPath.startsWith('/')) candidates.push(logPath);
-    for (const root of [
-      options.repoRoot ?? null,
-      options.worktreeGitDir ?? null,
-      options.storeDir ?? null,
-    ]) {
-      if (root == null) continue;
-      candidates.push(`${root.replace(/\/+$/, '')}/${logPath}`);
+    const storeDir = options.storeDir ?? null;
+    if (logPath.startsWith(`${LEDGER_DIR}/logs/`)) {
+      // Legacy spelling: this checkout's own copy first (it is the original, if it
+      // is still there), then the store's copy — keyed by the branch that wrote it,
+      // then the flat spelling an older migration used.
+      const legacy = logPath.slice(`${LEDGER_DIR}/logs/`.length);
+      if (options.repoRoot != null) {
+        candidates.push(join(options.repoRoot, logPath));
+      }
+      if (storeDir != null) {
+        const inStore = (worktree) =>
+          join(storeDir, `${LEDGER_DIR}/logs/${worktree}${legacy}`);
+        const logBranch = options.logBranch ?? null;
+        if (logBranch != null && logBranch !== '') {
+          candidates.push(inStore(`${String(logBranch).replace(/^\/+/, '')}/`));
+        }
+        candidates.push(inStore(''));
+      }
+    } else {
+      for (const root of [options.repoRoot ?? null, storeDir]) {
+        if (root == null) continue;
+        candidates.push(join(root, logPath));
+      }
     }
+  }
+  // Anything the caller wants offered last: a line whose `logPath` was derived by
+  // older code may name a file that was never written, and the canonical path for
+  // that run is worth one more stat before the export says "no log".
+  for (const extra of [options.extraCandidates ?? []].flat()) {
+    if (
+      typeof extra === 'string' &&
+      extra !== '' &&
+      !candidates.includes(extra)
+    )
+      candidates.push(extra);
   }
   const exists = options.existsSync ?? ((file) => file != null && false);
   return {
@@ -1690,9 +1727,12 @@ export const EXCERPT_MAX_BYTES = 128 * 1024;
 /**
  * Which key names count as credentials. Matched against the whole key, so
  * `sort_key`, `monkey` and `keyframes` are not credentials.
+ *
+ * `[_-]?auth` is here because `.npmrc` writes `_auth=` (base64 `user:password`) for a
+ * registry, and that line is exactly what a failing `npm publish` prints.
  */
 const CREDENTIAL_KEY =
-  /^(?:[\w.-]*(?:token|secret|password|passwd|passfile|credential|authorization|bearer|cookie|dsn|npm[-_.]?config)[\w.-]*|[\w.-]*(?:api|access|secret|private|auth|session|encryption|signing|deploy)[-_.]?key[\w.-]*|[\w.-]*session[-_.]?(?:id|key|token)[\w.-]*|auth|auth[-_.]?(?:token|key|header)|x[-_.]?sc[-_.]?auth|aws[-_.]?access[-_.]?key[-_.]?(?:id|secret))$/i;
+  /^(?:[\w.-]*(?:token|secret|password|passwd|passfile|credential|authorization|bearer|cookie|dsn|npm[-_.]?config)[\w.-]*|[\w.-]*(?:api|access|secret|private|auth|session|encryption|signing|deploy)[-_.]?key[\w.-]*|[\w.-]*session[-_.]?(?:id|key|token)[\w.-]*|[_-]?auth|auth[-_.]?(?:token|key|header)|x[-_.]?sc[-_.]?auth|aws[-_.]?access[-_.]?key[-_.]?(?:id|secret))$/i;
 
 /** Values that are credentials by *shape* alone, wherever they appear. */
 const CREDENTIAL_SHAPE =
@@ -1706,12 +1746,16 @@ const CREDENTIAL_SHAPE =
  *
  *   - a PEM private-key block, whole;
  *   - a URL's userinfo (`https://user:***@host/`);
+ *   - `Authorization:` / `Proxy-Authorization:` / `Cookie:` / `Set-Cookie:`, whose
+ *     **whole** value goes — scheme included. Replacing only the first token would
+ *     scrub the word `Bearer` and publish the credential beside a marker that reads
+ *     as if it had worked, which is what the first version of this did;
  *   - the value of any assignment whose key looks like a credential —
  *     token/secret/password/passwd/passfile/credential/authorization/bearer/cookie/
  *     dsn/`NPM_CONFIG_*`, or `<something>_key` where the something is api/access/
- *     secret/private/auth/session/encryption/signing/deploy, plus `auth`,
- *     `SESSION_ID` and `X_SC_AUTH` — in any of `KEY=value`, `"KEY": "value"`,
- *     `KEY: value`, `--key value` or `<token>value</token>`;
+ *     secret/private/auth/session/encryption/signing/deploy, plus `.npmrc`'s `_auth`
+ *     /`_authToken`/`_password`, `auth`, `SESSION_ID` and `X_SC_AUTH` — in any of
+ *     `KEY=value`, `"KEY": "value"`, `KEY: value`, `--key value` or `<token>…</token>`;
  *   - a bare credential *shape*: `ghp_…`, `npm_…`, `github_pat_…`, a Slack
  *     `xox…-…`, an AWS access-key id, a JWT.
  *
@@ -1721,10 +1765,12 @@ const CREDENTIAL_SHAPE =
  * because the cost of hiding a build flag's argument is a reader's mild confusion,
  * and the cost of missing a token is a rotated credential.
  *
- * Not scrubbed: absolute paths, usernames, hostnames. `ORCHESTRATOR.md` keeps those
- * out of the repo by rule rather than by regex, and a scrubber that mangled a
- * simulator path would make an excerpt unusable. An excerpt's own header says it is
- * a committed file worth a look before it is pushed.
+ * **Paths and hostnames are not this function's business, and are still scrubbed** —
+ * by `redactLocalPaths`, which `renderFailureExcerpt` applies to everything it writes
+ * (review M4, D25). The split is by mechanism, not by policy: a credential's shape is
+ * recognisable anywhere, whereas only the caller knows where its own repo, store and
+ * home directory are. Together the two mean an excerpt commits no token and no home
+ * path; neither alone does.
  *
  * @param {string} text
  * @returns {{text: string, replaced: number}}
@@ -1750,6 +1796,36 @@ export function scrubSecrets(text) {
     (_all, scheme, user, at) => scrub(`${scheme}${user}[scrubbed]${at}`)
   );
 
+  // `Authorization: <scheme> <credential>`, `Cookie: …`, `Set-Cookie: …`.
+  //
+  // The whole value goes, scheme included. The generic assignment rule below would
+  // otherwise replace the first token after the colon - the word `Bearer` - and
+  // publish the credential next to a `[scrubbed]` marker that reads as if it worked.
+  // A quoted value keeps its quotes so the JSON or YAML around it survives; an
+  // unquoted one runs to the end of the line, because that is where a header ends.
+  out = out.replace(
+    /(^|[^A-Za-z0-9-])((?:[\w.-]*[-_.]?)?authorization|[\w.-]*proxy[-_.]?authorization|[\w.-]*set[-_.]cookie|[\w.-]*cookie)(["']?)(\s*[:=]\s*)\s*(?:"([^"\n]*)"|'([^'\n]*)'|([^\n]*))/gi,
+    (all, before, key, quoteAfterKey, sep, dq, sq, bareValue) => {
+      const quote = dq != null ? '"' : sq != null ? "'" : '';
+      let value = dq ?? sq ?? bareValue ?? '';
+      // A value that is not quoted but sits *inside* a quoted shell argument
+      // (`-H 'Authorization: token abc'`) ends at the closing quote: keep that
+      // quote, or the line loses its syntax and a reader cannot tell what ran.
+      let trailing = '';
+      if (quote === '') {
+        const unquoted = /^(.*?)(["'])$/.exec(value);
+        if (unquoted != null && unquoted[1].trim() !== '') {
+          value = unquoted[1];
+          trailing = unquoted[2];
+        }
+      }
+      if (value.trim() === '' || value.trim() === '[scrubbed]') return all;
+      return scrub(
+        `${before}${key}${quoteAfterKey}${sep}${quote}[scrubbed]${quote}${trailing}`
+      );
+    }
+  );
+
   // `KEY = value` in shell, JSON, YAML, PHP-array and plain-log spelling. The value
   // is quoted or bare and only the value is replaced, so `--token` in a printed
   // command line still shows which flag was involved.
@@ -1763,7 +1839,7 @@ export function scrubSecrets(text) {
     (all, key, quoteAfterKey, sep, dq, sq, bareValue) => {
       if (!CREDENTIAL_KEY.test(key)) return all;
       const value = dq ?? sq ?? bareValue;
-      if (value == null || value === '') return all;
+      if (value == null || value === '' || value === '[scrubbed]') return all;
       const quote = dq != null ? '"' : sq != null ? "'" : '';
       return scrub(`${key}${quoteAfterKey}${sep}${quote}[scrubbed]${quote}`);
     }
@@ -1780,7 +1856,9 @@ export function scrubSecrets(text) {
         : all
   );
 
-  // `<token>value</token>` / `<auth>value</auth>` (`.npmrc` writes the latter).
+  // `<token>value</token>` / `<auth>value</auth>`: the XML shapes a Maven `settings.xml`
+  // or a plist leaves in a build log. (`.npmrc` is INI, not XML — its `_auth=` and
+  // `_authToken=` are covered by the assignment rule above.)
   out = out.replace(
     /<([A-Za-z][\w.-]*)>([^<\n]*)<\/\1>/g,
     (all, name, value) =>
@@ -1867,6 +1945,55 @@ export function failureLinesFrom(text, max = EXCERPT_MAX_FAILURES) {
 }
 
 /**
+ * Local paths that must not survive into a committed file, and what replaces them.
+ *
+ * Why (review M4, D25): this repo is public, and an excerpt is written *into* it. The
+ * old header printed `Full log: … (/Users/<name>/…)` in every excerpt, by
+ * construction - so the rule "never write home paths into a committed file" was
+ * broken by the tool that produced the file, and the only defence was a comment
+ * telling the reader to look first. A store or lease path is still useful to that
+ * reader as a placeholder: `<store>/task/X3/check-….log` says where to look on the
+ * machine that ran it, without saying who that machine belongs to.
+ *
+ * Longest first, because `/Users/name/repo` sits inside `/Users/name` and the
+ * specific one has to win. Anything shorter than three characters is dropped: a home
+ * of `/` or a user called `a` would shred every path in a stack trace, which is the
+ * opposite of useful evidence.
+ *
+ * @param {{repoRoot?: string | null, storeDir?: string | null, leaseFile?: string | null, home?: string | null, hostname?: string | null}} [paths]
+ * @returns {Array<[string, string]>}
+ */
+export function localPathRedactions(paths = {}) {
+  const wanted = [
+    [paths.storeDir, '<store>'],
+    [paths.repoRoot, '<repo>'],
+    [paths.leaseFile, '<lease file>'],
+    // `~` is what a human types, so the redaction stays readable.
+    [paths.home, '~'],
+    [paths.hostname, '<host>'],
+  ];
+  return wanted
+    .filter(
+      ([value, replacement]) =>
+        typeof value === 'string' &&
+        value.length >= 3 &&
+        !value.includes('\0') &&
+        !value.startsWith('<') &&
+        value !== replacement
+    )
+    .sort((a, b) => b[0].length - a[0].length);
+}
+
+/** Applies `localPathRedactions` pairs to a piece of text. */
+export function redactLocalPaths(text, redactions) {
+  let out = String(text ?? '');
+  for (const [needle, replacement] of redactions ?? []) {
+    out = out.split(needle).join(replacement);
+  }
+  return out;
+}
+
+/**
  * The failure excerpt `gate.mjs export` commits beside the ledger for one red run.
  *
  * Contents, in the order a reader wants them: what ran and how it ended, the
@@ -1880,6 +2007,10 @@ export function failureLinesFrom(text, max = EXCERPT_MAX_FAILURES) {
  * @param {string} options.logText the log's text, unscrubbed
  * @param {string} [options.logLocation] where the full log is now, for the header
  * @param {number} [options.tailLines]
+ * @param {Array<[string, string]>} [options.redactions] local paths to replace,
+ *   from `localPathRedactions`. Applied to the whole excerpt - header, device
+ *   block and tail - because a jest stack trace carries the same home path the
+ *   header would, and scrubbing only the header would be theatre.
  * @returns {{content: string, scrubbed: number, truncated: boolean}}
  */
 export function renderFailureExcerpt({
@@ -1887,6 +2018,7 @@ export function renderFailureExcerpt({
   logText,
   logLocation = null,
   tailLines = EXCERPT_TAIL_LINES,
+  redactions = [],
 }) {
   const { text: scrubbedText, replaced } = scrubSecrets(logText ?? '');
   // The device block is the *tail* of a failing device run's log, so taking "the
@@ -1908,7 +2040,7 @@ export function renderFailureExcerpt({
     // The line that makes the difference between "we lost the log" (Q3) and
     // "we know where to look": the excerpt is a copy, the store has the original.
     `- Full log: \`${String(entry?.logPath ?? 'not recorded')}\`${logLocation == null ? '' : ` (${String(logLocation)})`}`,
-    `- Scrubbed: ${String(replaced)} credential-looking value(s) were replaced before this file was written. Device identifiers appear only when the run recorded them; this file is committed, so read it before pushing.`,
+    `- Scrubbed: ${String(replaced)} credential-looking value(s) were replaced, and this checkout's, the store's and your home paths are written as \`<repo>\`/\`<store>\`/\`~\`, before this file was written. Device identifiers appear only when the run recorded its own lease.`,
     '',
     '## Failing tests and assertion messages',
     '',
@@ -1942,7 +2074,10 @@ export function renderFailureExcerpt({
     '',
   ];
   return {
-    content: clampToBytes(body2.join('\n')),
+    content: clampToBytes(
+      redactLocalPaths(body2.join('\n'), redactions),
+      EXCERPT_MAX_BYTES
+    ),
     scrubbed: replaced,
     truncated,
   };
@@ -1999,15 +2134,26 @@ function describeDeviceForExcerpt(entry) {
 /**
  * A short id for one ledger line, used as the excerpt's file name.
  *
- * Timestamp + gate, sanitised the same way log names are, so the excerpt for a run
- * is recognisable from `gates.jsonl` without reading either file. Not the log path:
- * slashes in a branch-qualified log path would turn a file name into a directory.
+ * Timestamp + gate + a sequence number, sanitised the same way log names are, so the
+ * excerpt for a run is recognisable from `gates.jsonl` without reading either file.
+ * Not the log path: slashes in a branch-qualified log path would turn a file name
+ * into a directory.
+ *
+ * The sequence is not decoration. `ts` is second-granular and two failed runs of one
+ * gate inside the same second are a thing that happens (a re-run after a typo in a
+ * command), so a name made of the timestamp and gate alone would have the second
+ * export overwrite the first excerpt while both ledger lines pointed at it.
+ *
+ * @param {object} entry a failed ledger line
+ * @param {number} [sequence] 1-based position of this run among the exported failures
  */
-export function failureExcerptName(entry) {
+export function failureExcerptName(entry, sequence = 1) {
   const ts = String(entry?.ts ?? 'unknown')
     .replaceAll(':', '-')
     .replace(/\.\d+Z$/, 'Z');
-  return `${ts}--${String(entry?.gate ?? 'gate').replaceAll(/[^\w.-]+/g, '+')}.log`;
+  const gate = String(entry?.gate ?? 'gate').replaceAll(/[^\w.-]+/g, '+');
+  const n = Math.max(1, Math.trunc(Number(sequence) || 1));
+  return `${ts}--${gate}--${String(n).padStart(2, '0')}.log`;
 }
 
 /**
@@ -2017,6 +2163,9 @@ export function failureExcerptName(entry) {
  * corrupt line, or a pass, gets nothing — the brief's "never copies a passing run's
  * log" — and a fail with no log has no evidence to attach, which the export says
  * out loud rather than writing an empty file.
+ *
+ * `storedLogFailed` is the other half of the question, for a caller that is looking
+ * at a *log in the store* rather than a line in a ledger.
  */
 export function isFailedRunWithLog(entry) {
   return (
@@ -2026,6 +2175,32 @@ export function isFailedRunWithLog(entry) {
     typeof entry.logPath === 'string' &&
     entry.logPath !== ''
   );
+}
+
+/**
+ * Did this stored log belong to a run that failed?
+ *
+ * One place for the answer, because two callers need it and must not disagree: the
+ * record that closed the run (`result`, `exitCode`), and, for a run whose record is
+ * older than that field or missing altogether, the ledger line, if the caller has one.
+ *
+ * @param {object | null | undefined} record the store's record for the log
+ * @param {object | null | undefined} entry the ledger line for the same run
+ * @returns {boolean | null} null when neither source can say
+ */
+export function storedLogFailed(record, entry = null) {
+  if (record?.done === true) {
+    if (typeof record.result === 'string') return record.result === 'fail';
+    if (record.exitCode != null) return Number(record.exitCode) !== 0;
+  }
+  if (record?.done !== true && record?.result != null) {
+    return String(record.result) === 'fail';
+  }
+  if (entry != null && entry.corrupt !== true) {
+    if (entry.result === 'fail') return true;
+    if (entry.result === 'pass') return false;
+  }
+  return null;
 }
 
 /**
@@ -2270,6 +2445,44 @@ export const WAIT_PROGRESS_INTERVAL_MS = 60_000;
  */
 export function backgroundRecordPath(logPath) {
   return String(logPath).replace(/\.log$/, '.gate.json');
+}
+
+/**
+ * Which background records belong to *this* checkout, newest first.
+ *
+ * The store is one directory shared by every worktree of the clone, so "the newest
+ * record for `check`" is a question with the wrong subject once two tasks run gates
+ * at the same time - which is the normal case here, not an edge one (review M1: a
+ * passing run in worktree C reported worktree B's exit 7 and exited 7). Both halves
+ * are compared, and for a reason: the branch alone would still let two worktrees on
+ * one branch (a `git worktree add --force`, a detached pair) adopt each other's
+ * runs, and the directory alone would not tell a re-run of this branch from another
+ * task's run of a different one.
+ *
+ * A record with neither field is from before this scoping existed and matches: the
+ * alternative is that `wait` loses a run that is happening right now, which is a
+ * worse failure than the one being fixed.
+ *
+ * @param {object[]} records every record in the store
+ * @param {{branch: string | null, worktree: string | null}} own this checkout
+ * @returns {object[]}
+ */
+export function ownBackgroundRecords(records, { branch, worktree }) {
+  return (records ?? []).filter((record) => {
+    if (record == null || typeof record !== 'object') return false;
+    const recordBranch =
+      typeof record.branch === 'string' && record.branch !== ''
+        ? record.branch
+        : null;
+    const recordWorktree =
+      typeof record.worktree === 'string' && record.worktree !== ''
+        ? record.worktree
+        : null;
+    if (recordBranch == null && recordWorktree == null) return true;
+    if (recordWorktree != null && recordWorktree !== worktree) return false;
+    if (recordBranch != null && recordBranch !== branch) return false;
+    return true;
+  });
 }
 
 /**
