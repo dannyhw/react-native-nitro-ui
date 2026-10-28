@@ -297,13 +297,14 @@ choice is mine to make but not to settle alone:
   review of `da0b31f`, not of `05528f5`.
 
 **Fix round 1, same question, still open.** Option A did not become available: `A4-297ow` held both
-pairs for the whole round (98 min by 18:13Z, 862 min of TTL left), and its worktree is writing a real
-iOS baseline run — `bench+--platform+ios+--plan+full+--launches+8+--update-baseline` started 16:03Z
-and its log was still growing at 18:12Z. That is exactly what an exclusive lease is for, so I did not
-wait on it or take anything from it: I ran nothing on a device this round, which is also why the live
-reset proofs for M1/M2 are unit-level against faked `adb`/`simctl` rather than on hardware. If the
-rows must be fresh before merge, they need a window when `A4` has released; `check` is green at this
-tree and the harness path itself has not moved since `9d9ce869206a`.
+pairs for the whole round (105 min by 18:18Z, 855 min of TTL left), and its worktree is in a real iOS
+baseline run — `bench --platform ios --plan full --launches 8 --update-baseline` started 16:03Z and
+was at **cell 809 of 1568 at 18:19Z**, so it has roughly two more hours to go. That is exactly what an
+exclusive lease is for, so I neither waited on it nor took anything from it: **nothing in this round
+touched a device**, which is also why the live reset proofs for M1/M2 are unit-level against faked
+`adb`/`simctl` rather than on hardware. If those two rows must be fresh before merge, they need a
+window after `A4` releases; `check` is green at this tree (`911d1ce1b9fd`) and no harness-path code has
+moved since the green runs at `9d9ce869206a`.
 
 
 ## Fix round 1
