@@ -673,6 +673,18 @@ describe('gate.mjs export attaches failure evidence', () => {
     expect(
       fs.existsSync(path.join(dir, 'docs', 'tasks', 'X12', 'failures'))
     ).toBe(false);
+    // And the committed line points at nothing rather than at a file that does not
+    // exist: a `failureLogPath` on a run whose evidence was never found sends a
+    // reader looking for a file that is not there.
+    const [committed] = fs
+      .readFileSync(
+        path.join(dir, 'docs', 'tasks', 'X12', 'gates.jsonl'),
+        'utf8'
+      )
+      .split('\n')
+      .filter((raw) => raw.trim() !== '')
+      .map((raw) => JSON.parse(raw));
+    expect(committed.failureLogPath).toBeNull();
   });
 });
 
