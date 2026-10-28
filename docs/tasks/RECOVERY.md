@@ -18,7 +18,7 @@
 >
 > **Components:** 0.4 is a button-anchored Menu (G7a/G7b), after X4; TextField moved to 0.5 (D30;
 > T18/T18b kept as branches). F3 (0.3.x-visible fixes) merged from maintainer-mac-1.
-> **Next device task after X11 merges: F1** (`F1-determinism.md`): `real-input:ios` fails the Switch
+> **X11 and A4 merged (2026-10-28); next device task: F1** (`F1-determinism.md`): `real-input:ios` fails the Switch
 > check 11/11 on `main` on this machine, so it blocks merges that owe real input.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
