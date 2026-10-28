@@ -329,11 +329,11 @@ run, so `--check` gates on that machine, on both platforms. On iOS more of the c
 are noise-suppressed (their own within-run spread is over 10 %) than on Android, so the
 iOS gate is real but narrower. Neither baseline records a leak slope — no arm climbed
 monotonically in either run — so the leak cells read `new arm` under `--check`.
-`maintainer-mac-2` has Android committed (`android35-emu-pixel9.json`) and **no iOS file
-yet** - its one attempt was refused over two `@expo/ui` DatePicker cells, which is what
-A4's completeness amendment and the probe investigation are about. Until that machine
-mints iOS, `--check` there refuses on iOS and gates on Android. The `renders.json` gate
-is separate, live, and committed - it counts JS renders, so it needs no machine directory.
+`maintainer-mac-2` has both files too: its iOS one was refused at first, over two `@expo/ui`
+DatePicker cells, which is what A4's completeness amendment and the probe investigation are
+about — the mint rule was the symptom and a wait shorter than the frame was the cause. The
+`renders.json` gate is separate, live, and committed - it counts JS renders, so it needs no
+machine directory.
 
 Completeness is judged **per arm** (D9, A4 amendment): an incomplete metric on the gated
 `nitro-ui` arm or on the `rn-core` control refuses a mint, because those carry verdicts,
