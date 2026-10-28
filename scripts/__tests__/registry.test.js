@@ -792,7 +792,11 @@ describe('gen-registry on a scratch tree', () => {
     expect(scripts.registry).toContain('gen-registry.mjs --write');
     expect(scripts['registry:check']).toContain('gen-registry.mjs --check');
     expect(scripts.regen).toContain('bun run registry');
-    expect(scripts.check).toMatch(/bun run registry:check/);
+    // X10 made `check` a runner over a step graph, so the chain to assert against
+    // is `check:serial` - the steps the runner is required to be equal to
+    // (scripts/__tests__/check-runner.test.js is what holds that together).
+    expect(scripts['check:serial']).toMatch(/bun run registry:check/);
+    expect(scripts.check).toContain('scripts/check.mjs');
   });
 
   it('--check passes on an untouched tree and --write there changes nothing', () => {
