@@ -48,7 +48,7 @@ import {
   withLock,
   writeJsonAtomic,
 } from './lease-core.mjs';
-import { DevicePool, readPool } from './device-pool.mjs';
+import { DevicePool } from './device-pool.mjs';
 import {
   emulatorsFromAdbDevices,
   simulatorsByUdidWithState,
@@ -752,6 +752,20 @@ function poolHandoff({ pool, result, options, log }) {
       timeoutMs: (options.bootTimeoutMinutes ?? 7) * 60_000,
     });
     for (const key of booted.booted) log(`lease: booted ${key}`);
+    if (booted.booted.length > 0) {
+      // Printed, because a boot cost is only ever a measurement (X11 review N4): the numbers in
+      // AGENTS.md and CONTRIBUTING.md used to be folklore, copied from a machine nobody timed. This
+      // is the pool's own wait - ask to "attached and booted, and the load settled or the wait gave
+      // up" - so the next person times it here instead of repeating someone else's guess. Only on a
+      // real boot: on a warm reuse there is no cost to report.
+      log(
+        `lease: the boot wait took ${(booted.waitedMs / 1000).toFixed(1)}s ` +
+          '(device attached + load settle, or a timeout)' +
+          (booted.degraded.length > 0
+            ? ` - degraded: ${booted.degraded.join(', ')}`
+            : '')
+      );
+    }
     for (const key of booted.degraded) {
       log(
         `lease: WARN ${key} did not come up - the harness will boot it, slowly`
@@ -878,10 +892,13 @@ function poolRows(devices, paths) {
 /** How a keep reads to whoever asked: the reason code, in the order it matters. */
 const KEEP_REASONS = {
   'busy': 'a run is using it',
+  // Every reason reads as itself, so `list`/`reap` never print a reason code the ledger or a
+  // person has to look up. `unowned-grace` is the answer for a lease that has run out - the
+  // phrasing is the honest one only when it is paired with the lease id, which `list` prints.
   'booting': 'a boot is in progress',
   'idle-grace': `idle, under the limit`,
   'lease-held': 'a live lease holds it',
-  'unowned-grace': 'no lease holds it, under the idle limit',
+  'unowned-grace': 'no live lease holds it, under the idle limit',
 };
 
 function reportReap(reaped, log, { reportKeeps = false } = {}) {

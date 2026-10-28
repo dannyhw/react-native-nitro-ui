@@ -2,33 +2,44 @@
 /**
  * The warm device pool (X11).
  *
- * Booting a device is the most expensive thing a task does by accident: a paired AVD is ~20 s, an
- * iOS 27 simulator is 4-6 minutes and drives this 10-core machine's 1-minute load past 100 on the
- * way up. Tasks used to boot their devices, run one suite and power them down, so nothing was
- * ever reused and every run re-paid the boot. This module owns the alternative: a device that is
- * already booted stays booted and is handed to the next lease, and **only this module powers pool
- * devices off**.
+ * Booting a device is the most expensive thing a task does by accident. A paired AVD takes tens of
+ * seconds; an iOS 27 simulator takes minutes and drives this 10-core machine's 1-minute load to
+ * peaks of 58-74 on the way up (measured over four cold boots, X11 report item 6 - and still 16-21
+ * after 150 s, well above the bench's settle ceiling of 5). Tasks used to boot their devices, run
+ * one suite and power them down, so nothing was ever reused and every run re-paid the boot. This
+ * module owns the alternative: a device that is already booted stays booted and is handed to the
+ * next lease, and **only this module powers pool devices off**.
  *
  * The rules, in one place:
  *
- *  - `lease.mjs acquire` boots the pair it hands out and waits until each device is attached and
- *    the machine's load is under the settle ceiling (or a timeout passes, with a warning);
- *  - the harness never shuts a leased device down (`scripts/patch-harness-android.mjs` makes its
- *    Android `dispose` leave the emulator alone), so a device leaves a run warm instead of off;
+ *  - `lease.mjs acquire --boot` boots the pair it hands out and waits until each device is attached
+ *    and the machine's load is under the settle ceiling (or a timeout passes, with a warning);
+ *  - the harness leaves a device it was handed alone: it shuts an emulator down only when it started
+ *    that emulator itself (`instance.js`'s `startedByHarness`), so a warm device a lease handed over
+ *    leaves a run booted. The patch's contribution is on the other side - when the harness does have
+ *    to boot one, it lands on the leased console port and this repo's GPU mode (X11 review N5: the
+ *    patch does not touch `dispose`, and does not need to);
  *  - a gate claims its lease's devices for the length of its run. A claim is a pid, and a dead pid
  *    is not a claim: that is the whole concurrency protocol, so a reaper never has to trust a
  *    clean exit and a killed task cannot wedge a device as "in use" forever;
+ *  - a device a *live lease* holds is never powered off on a timer, and `--idle-minutes` does not
+ *    override that either (X11 review M3): a build, a Metro session, a real-input run or a person
+ *    reading a stack trace make no claim, and 31 minutes of that is ordinary work, not a leak;
  *  - `lease.mjs reap` powers a device off once it has been idle past `idleShutdownMinutes`
- *    (devices.json, default 30) - lease gone or not - and never while a claim is live;
- *  - `lease.mjs release --exclusive` is the one hand-off that powers devices off, because an
- *    exclusive lease ends by handing over a quiet machine.
+ *    (devices.json, default 30) and no live lease holds it - never while a claim is live, and never
+ *    on the strength of a stored serial: it derives the device's identity from devices.json and has
+ *    the emulator confirm it (`emu avd name`) before anything is powered off (X11 review M4);
+ *  - `acquire --exclusive` hands a bench a quiet machine and does so whether or not `--boot` was
+ *    passed (X11 review M6). There is no `release --exclusive` - releasing leaves devices warm.
  *
  * State is per-machine, beside the leases it references:
  *
  *   ~/.nitro-ui/pool.json   one record per device this pool has booted
  *
- * It is read-modify-written under the *same* `leases.lock` as `leases.json`, which is what keeps
- * "does anyone own this device?" answerable without a second source of truth.
+ * Decisions are taken under the *same* `leases.lock` as `leases.json` - which is what keeps "does
+ * anyone own this device?" answerable without a second source of truth - but the device I/O a reap
+ * does (each one a spawn of up to two minutes) happens with the lock released, so a slow shutdown
+ * cannot fail another task's `acquire` (X11 review N1).
  *
  * Devices come from `devices.json` and nowhere else: the same list the lease hands out is the only
  * list anything may shut down. A device that is booted but not named there is somebody else's -

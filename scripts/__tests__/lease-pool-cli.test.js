@@ -262,7 +262,8 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('devices not booted');
     // The whole point of the default: a lease is a booking, and a booking that silently boots two
-    // devices is the load this machine cannot afford (an iOS boot alone moves load1 past 100).
+    // devices is the load this machine cannot afford - an iOS simulator boot alone takes `load1` to
+    // 58-74 on this box (X11 report item 6), and a cold boot is the whole reason the pool exists.
     expect(log()).toBe('');
     expect(poolDevices()).toEqual([]);
   });
@@ -272,7 +273,7 @@ describe('the lease owns the device lifecycle', () => {
     const acquired = cli(['acquire', '--task', 'T1', '--boot']);
     expect(acquired.status).toBe(0);
     // Both devices were already up, so nothing should have been started - the warm path is the
-    // common one, and paying 54 s per task for a boot that was not needed is the bug.
+    // common one, and paying for a boot that was not needed is the bug this path exists to avoid.
     expect(acquired.stderr).toContain('is already up - reusing it');
     expect(log()).not.toContain('emulator @');
     expect(log()).not.toContain('simctl boot');
@@ -326,6 +327,10 @@ describe('the lease owns the device lifecycle', () => {
     expect(log()).toContain(`simctl boot ${UDID_A}`);
     // Headless: the pool that opens Simulator.app boots a device no lease handed out.
     expect(log()).not.toContain('open');
+    // And it says what the wait cost (N4): the docs' "54 s"/"~200 s" were folklore nobody timed, so
+    // the pool prints the number instead of anyone quoting them. This fixture's device never comes
+    // up, so the honest reading is the timeout it gave up at.
+    expect(acquired.stderr).toMatch(/boot wait took [\d.]+s/);
   });
 
   it('leaves a leased device alone while it was told not to boot', () => {

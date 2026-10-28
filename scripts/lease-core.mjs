@@ -87,8 +87,10 @@ export const DEFAULT_MAX_DEVICE_LEASES = 2;
  * per machine through devices.json's `idleShutdownMinutes`. Thirty minutes covers the gap between
  * two runs by one task and a task that acquired and then went to lunch, and a machine that idles
  * longer than that has no reason to be paying for a booted emulator - which is also what makes an
- * iOS simulator boot (load1 ~100 on this 10-core machine, 4-6 min to settle) the most expensive
- * thing a task can do by accident.
+ * iOS simulator boot the most expensive thing a task can do by accident: X11 timed four cold boots
+ * of the pool's simulator and saw `load1` peak at 58.5, 64.6, 72.2 and 74.3 on a 10-core machine,
+ * still 16-21 after 150 seconds. `lease.mjs acquire --boot` prints how long each boot wait took,
+ * so the current cost on a given machine is a measurement rather than a number copied from here.
  */
 export const IDLE_SHUTDOWN_DEFAULT_MINUTES = 30;
 

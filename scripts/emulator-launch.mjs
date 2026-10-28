@@ -65,11 +65,27 @@ export const SOFTWARE_GPU_MODE = 'swiftshader_indirect';
  * finds no bench entry will assume it was missed: `scripts/bench/**` never
  * starts an emulator and never chooses a GPU mode, so baselines keep the boot
  * the bench host's device already has.
+ *
+ * And the answer to the question that follows from it (X11 review N7), read off
+ * git rather than remembered: neither committed Android baseline records a GPU
+ * mode, and neither was minted on a tree that had one. `maintainer-mac-1`'s
+ * (`3533d64`, 2026-10-25) predates even the `-port` patch; `maintainer-mac-2`'s
+ * (`9cf95f3`, 2026-10-28) carries the `-port` patch but no GPU override, so both
+ * devices came up on upstream's `-gpu swiftshader_indirect`. This file changes
+ * that default to `host`, so from here the device a bench measures is booted
+ * differently than the one its baseline was minted on - on any machine where the
+ * harness or the pool does the booting. A bench host that wants to keep
+ * comparing like with like pins `NITRO_UI_EMULATOR_GPU=swiftshader_indirect` in
+ * the shell that mints or runs the baseline; a host that intends to move to host
+ * rendering re-mints and says so in the commit that lands the new file.
  */
 export const BENCH_GPU_MODE_NOTE =
   'scripts/bench/** boots no emulator and passes no launch arguments, so a bench ' +
   'measures the device as it finds it. Pin NITRO_UI_EMULATOR_GPU in the bench ' +
-  "host's own shell if a baseline needs a particular GPU mode.";
+  "host's own shell if a baseline needs a particular GPU mode: the committed " +
+  'Android baselines were minted before this repo chose a mode, which was ' +
+  "upstream's swiftshader_indirect, while a device booted here now defaults to " +
+  'host.';
 
 /** The emulator console ports `-port` accepts: even, 5554-5682 (see lease-core). */
 export const EMULATOR_PORT_FLOOR = 5554;
