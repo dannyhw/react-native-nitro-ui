@@ -441,6 +441,16 @@ What that means in practice:
   trace - and 31 idle minutes is ordinary work. The way to get a leased device
   powered off is to release its lease, not to pass a flag in your own shell;
   `list` names whose it is.
+- **What a reset does not cover.** The between-task reset clears the example
+  app's data (`pm clear`; `simctl uninstall` plus a check that the data container
+  is gone). It does not clear the iOS **keychain** or the **privacy-consent
+  (TCC) grants** - `simctl uninstall` leaves both. `simctl privacy <udid> reset
+  <service> [<bundle>]` covers the second, but per service: you have to know
+  which ones a run touched, which is not something the pool can know, so it is
+  not run per hand-off. A warm pooled device can therefore inherit a permission
+  prompt somebody already answered. The reset is storage-complete, not
+  state-complete; a test that asserts a permission prompt appears needs a
+  freshly created device, not a pooled one.
 - **A device is only ever powered off if `devices.json` names it**, and never
   on a reserved serial. The pool shuts down what the machine _declared_, never
   something it merely observed booted. And it never acts on the serial a state
