@@ -27,14 +27,15 @@ return, so every suite reported 0 tests and the whole restart/test-body split wa
 
 **A warm device pool the lease owns** (`scripts/device-pool.mjs`): `acquire --boot` boots what is
 down, waits for the load to settle, resets the app; `release` leaves devices up; reaping (idle past
-`idleShutdownMinutes`) runs from the lease commands people already type, with no daemon. A gate
-claims its lease's devices for the duration of the run, so a reap cannot power off an emulator
-mid-suite and a second gate aimed at the same device is refused before it starts. A claim is a pid,
-so a killed gate wedges nothing. Three bugs came from running it, not faking it: a claim record
-with no serial made a live emulator read as "already off" and dropped it from the pool; `pm clear`
-answers `Failed` for a few seconds on an emulator that has just attached, so the reset now retries
-and quotes the device's own answer; and `reap --idle-minutes 0` lost the comparison against the
-limit in devices.json, answering "keeping it up" about the number it had been told to override.
+`idleShutdownMinutes`) runs only from an explicit `lease.mjs reap` or an `--exclusive` acquire (fix
+round 2). A gate claims its lease's devices for the duration of the run, so a reap cannot power off
+an emulator mid-suite and a second gate aimed at the same device is refused before it starts. A
+claim is a pid, so a killed gate wedges nothing. Three bugs came from running it, not faking it: a
+claim record with no serial made a live emulator read as "already off" and dropped it from the pool;
+`pm clear` answers `Failed` for a few seconds on an emulator that has just attached, so the reset
+now retries and quotes the device's own answer; and `reap --idle-minutes 0` lost the comparison
+against the limit in devices.json, answering "keeping it up" about the number it had been told to
+override.
 
 Benches are deliberately unchanged and say why (`BENCH_GPU_MODE_NOTE`). Concurrent harnesses are
 measured and **not recommended** — see item 5.
@@ -248,8 +249,10 @@ tree; the tests it adds did not exist before it.
   stripped before naming.
 - gate.mjs: a SIGTERM to a backgrounded gate leaves it running (it forwards the signal to its child
   and then waits on a child that has already exited); `kill -9` is needed today.
-- lease pool: `pm clear` retried until PackageManager wakes works, but waiting on `pm path` would
-  say *why* it is waiting rather than trying four times.
+- lease pool: `pm clear` retried until PackageManager wakes works, and fix round 2 added the
+  `pm path` / `get_app_container … app` probe in front of it, so a fresh AVD is a one-ask no-op
+  instead of four retries and a misleading line (N5). The retry is still there for the device that
+  *is* installed and still settling, which is what the first real boot actually hit.
 - lease list: only a *waiting exclusive* request is persisted (an earlier `--exclusive --wait` of
   mine showed as a `waiting` row); an ordinary `acquire --wait-minutes` is not, so a blocked task
   looks idle from outside and nobody can tell waiting from stuck. Persisting the wait, or one
