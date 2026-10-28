@@ -24,6 +24,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -36,19 +37,26 @@ import { deviceOperations } from '../device-pool.mjs';
  * One stub for each tool: print the answer file for the subcommand being run, then exit with its
  * status file. An absent answer file means "printed nothing", and an absent status file means 0, so
  * the two things a real tool does when it is wedged are both expressible.
+ *
+ * `stderr` is a separate channel because the device forces the distinction: on the API 35 emulator
+ * this pool runs on, `pm path` for an absent package and `pm path` for a device the client cannot
+ * reach have the same stdout (empty) and the same status (1). The only difference is the `adb:` line
+ * the second one writes to stderr, and reading the first shape as the second one is how a reset
+ * reports a clean no-op on a device it never reached.
  */
 const STUB = (kind) =>
   [
     '#!/bin/sh',
     'here=$(dirname "$0")',
     'answer() { cat "$here/../answers/$1" 2>/dev/null; }',
+    'answer_err() { cat "$here/../answers/$1.err" 2>/dev/null; }',
     'status() { cat "$here/../answers/$1.status" 2>/dev/null || printf 0; }',
     'case "$*" in',
     kind === 'adb'
       ? [
           '  *\'emu avd name\'*) answer avd_name; exit "$(status avd_name)" ;;',
           '  *devices*) answer devices; exit "$(status devices)" ;;',
-          '  *\'pm path\'*) answer pm_path; exit "$(status pm_path)" ;;',
+          '  *\'pm path\'*) answer_err pm_path >&2; answer pm_path; exit "$(status pm_path)" ;;',
         ].join('\n')
       : [
           "  *'get_app_container'*' app'*) answer app_container; exit \"$(status app_container)\" ;;",
@@ -60,7 +68,31 @@ const STUB = (kind) =>
     '',
   ].join('\n');
 
+/**
+ * A stub `emulator` whose only job is to report how it was started: its argv, and the adb server in
+ * the environment it was handed. That environment is the whole point — an emulator registers with
+ * the adb server named by `ANDROID_ADB_SERVER_PORT` in *its own* environment, so a boot that uses the
+ * pair's private server port for its later calls but not at launch produces a device that comes up
+ * perfectly and is invisible to the pool for the entire boot timeout.
+ */
+const EMULATOR_STUB = [
+  '#!/bin/sh',
+  'here=$(dirname "$0")',
+  'printf %s "$*" > "$here/../answers/emu.argv"',
+  'printf %s "${ANDROID_ADB_SERVER_PORT-none}" > "$here/../answers/emu.adb_server"',
+  'exit 0',
+  '',
+].join('\n');
+
 let home;
+
+const readIf = (file) => {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+};
 
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'nitro-ui-ops-'));
@@ -71,8 +103,12 @@ beforeEach(() => {
   for (const [name, kind] of [
     ['adb', 'adb'],
     ['xcrun', 'simctl'],
+    ['emulator', 'emulator'],
   ]) {
-    writeFileSync(join(bins, name), STUB(kind));
+    writeFileSync(
+      join(bins, name),
+      kind === 'emulator' ? EMULATOR_STUB : STUB(kind)
+    );
     chmodSync(join(bins, name), 0o755);
   }
 });
@@ -81,9 +117,13 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-/** What the stubbed tool prints (and exits with) for its next question. */
-const answer = (name, text, status = null) => {
+/**
+ * What the stubbed tool prints (and exits with) for its next question. `err` goes to stderr, which
+ * some answers only exist on.
+ */
+const answer = (name, text, status = null, err = null) => {
   writeFileSync(join(home, 'answers', name), text);
+  if (err != null) writeFileSync(join(home, 'answers', `${name}.err`), err);
   if (status != null)
     writeFileSync(join(home, 'answers', `${name}.status`), String(status));
 };
@@ -209,6 +249,58 @@ describe('did the tool answer at all (X11 re-review N2)', () => {
   });
 });
 
+describe('what an emulator is started with', () => {
+  const opsWithEmulator = () =>
+    deviceOperations({
+      home,
+      env: {
+        NITRO_UI_ADB_BIN: join(home, 'bin/adb'),
+        NITRO_UI_SIMCTL_BIN: join(home, 'bin/xcrun'),
+        EMULATOR_BIN: join(home, 'bin/emulator'),
+      },
+    });
+
+  /** The stub is detached, so its record of its own launch arrives asynchronously. */
+  const recorded = async (file, deadlineMs = 5_000) => {
+    const path = join(home, 'answers', file);
+    const stop = Date.now() + deadlineMs;
+    for (;;) {
+      const text = readIf(path);
+      if (text != null) return text;
+      if (Date.now() > stop)
+        throw new Error(
+          `${file} was never written (the emulator never started)`
+        );
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  };
+
+  it('launches the emulator on the adb server the pair owns', async () => {
+    // The bug this case exists for, found by the first cold boot on hardware rather than by any
+    // fake: an emulator registers with the adb server named in *its own* environment, so a boot that
+    // uses the pair's private server only in its later calls leaves a device that comes up in 31
+    // seconds (`Boot completed in 31078 ms` in its log) while `adb -P 5043 devices` stays empty for
+    // the whole 7-minute wait. `acquire --boot` is exactly that case: it boots before the env file
+    // that exports `ANDROID_ADB_SERVER_PORT` exists, so the port has to be passed explicitly.
+    const result = await opsWithEmulator().bootEmulator({
+      avd: 'nitro-ui-a',
+      port: 5574,
+      adbPort: 5043,
+    });
+    expect(result).toBe(true);
+    expect(await recorded('emu.adb_server')).toBe('5043');
+    expect(await recorded('emu.argv')).toContain('-port 5574');
+  });
+
+  it('leaves the server alone when the pair names none', async () => {
+    // No adbPort is a real configuration (a machine with one default server), and the launch must
+    // then inherit the environment rather than invent a port - `none` is what the stub writes when
+    // the variable is absent, and `undefined` or an empty string would be a different bug.
+    await opsWithEmulator().bootEmulator({ avd: 'nitro-ui-a', port: 5574 });
+    expect(await recorded('emu.adb_server')).toBe('none');
+  });
+});
+
 describe('is the app on the device (X11 re-review N5)', () => {
   it('reads a `package:` line as installed', () => {
     answer(
@@ -222,10 +314,43 @@ describe('is the app on the device (X11 re-review N5)', () => {
     });
   });
 
-  it("reads `No package found` as not installed, on the device's word", () => {
-    // `pm path` exits 1 and prints the reason, and that *is* an answer: it is what turns a fresh AVD
-    // into a reset that had nothing to do instead of four retries and a misleading line.
-    answer('pm_path', 'No package found for user: 0\n', 1);
+  it('reads an empty, silent failure as not installed — the answer this API level really gives', () => {
+    // Measured on the API 35 device this pool runs on: `pm path` for a package that is absent exits 1
+    // and prints **nothing at all**, on either stream. The first fixture for this case claimed
+    // `No package found for user: 0`, a line from older platform tools, and a code path built on it
+    // would be right for the wrong reason: the rule is "an answer from the device, saying no", and
+    // here the only evidence is the exit status with no client error behind it.
+    answer('pm_path', '', 1);
+    expect(ops().deviceAppInstalled(ANDROID, 'nitroui.example')).toMatchObject({
+      answered: true,
+      ok: false,
+    });
+  });
+
+  it('refuses to read an unreachable device as "not installed" (the false no-op)', () => {
+    // Same stdout, same exit status as the case above, and it is *not* an answer: this is adb
+    // saying it has never heard of the serial. Reading it as "not installed" is what produced a
+    // real `reset avd:nitroui_a: pm clear` line for a device the pool could not reach at all - the
+    // boot had gone to a different adb server, and the reset reported a clean no-op without asking
+    // the device anything. Fall back to attempting the clear, whose failure is honest.
+    answer('pm_path', '', 1, "adb: device 'emulator-5574' not found");
+    expect(ops().deviceAppInstalled(ANDROID, 'nitroui.example')).toMatchObject({
+      answered: false,
+      ok: false,
+    });
+    answer('pm_path', '', 1, 'error: device offline');
+    expect(ops().deviceAppInstalled(ANDROID, 'nitroui.example')).toMatchObject({
+      answered: false,
+      ok: false,
+    });
+  });
+
+  it('keeps a device-side "not found" an answer, not a client error', () => {
+    // The other side of the prefix rule, and the reason it is a list rather than "anything that
+    // looks like an error": some API levels answer an absent package from the device itself with
+    // `Error: Package 'x' is not installed`, which must remain a no-op. A loose `/error/i` test
+    // would send every fresh AVD back to four retries and a misleading line - the original N5 bug.
+    answer('pm_path', "Error: Package 'nitroui.example' is not installed\n", 1);
     expect(ops().deviceAppInstalled(ANDROID, 'nitroui.example')).toMatchObject({
       answered: true,
       ok: false,

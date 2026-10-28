@@ -322,6 +322,18 @@ export function deviceOperations({
      * falls back to attempting the clear and reporting the device's own answer, which is honest in
      * both directions.
      *
+     * **The three answers, measured on the API 35 device this pool runs on**, because the first
+     * version guessed at two of them: installed is exit 0 with `package:/data/app/…`; genuinely not
+     * installed is **exit 1 with nothing on stdout and nothing on stderr** (not the `No package
+     * found` line this file's first fixture was written with, which this API level never prints); and
+     * a device the client cannot reach is exit 1 with `adb: device 'emulator-5574' not found` on
+     * **stderr**. The last two are identical on stdout, so the second version read an unreachable
+     * device as "not installed" — and did, on a real `acquire --boot` where the boot had gone to the
+     * wrong adb server: the log said `reset avd:nitroui_a: pm clear` as a clean no-op for a device
+     * that had never been asked anything, on a pair whose app was very much installed. So a
+     * client-side error on stderr means "could not ask", the same rule the `emu avd name` parser
+     * applies to the same phrases.
+     *
      * @returns {{answered: boolean, ok: boolean, answer: string}}
      */
     deviceAppInstalled(device, appId) {
@@ -333,11 +345,28 @@ export function deviceOperations({
           device.adbPort ?? null
         );
         const answer = out(res);
+        const firstErr = String(res?.stderr ?? '')
+          .split('\n')
+          .find(Boolean)
+          ?.trim();
         if (res?.error != null || res?.status == null)
           return {
             answered: false,
             ok: false,
             answer: `could not ask (${answer || String(res?.error ?? 'no exit status')})`,
+          };
+        // The client's own voice, not the device's: `adb: device 'X' not found`, `error: device
+        // offline`, `error: no devices/emulators found`. Only an answer *from* the device may become
+        // a no-op, so the prefixes are listed rather than matched loosely — `Error: Package 'x' not
+        // found` is a device answering, on some API levels, and must stay an answer.
+        if (
+          firstErr != null &&
+          /^(adb:|error: device|error: no devices)/i.test(firstErr)
+        )
+          return {
+            answered: false,
+            ok: false,
+            answer: `could not ask (${firstErr})`,
           };
         return {
           answered: true,
@@ -589,8 +618,24 @@ export function deviceOperations({
      * Starts an emulator detached, from the one launch configuration (`scripts/emulator-launch.mjs`),
      * and returns at once: the caller waits on `adb devices`, not on this process. Its log lives
      * beside the pool state, so "why did that boot fail" has an answer after the shell is gone.
+     *
+     * `adbPort` has to travel into the **launch environment**, not merely into the later calls: an
+     * emulator registers itself with the adb server named by `ANDROID_ADB_SERVER_PORT` in its own
+     * environment, and when that is unset it registers with the default one on 5037. Every pool
+     * operation then asks the pair's private server, which never hears of the device - so the boot
+     * succeeds, the device is up in thirty seconds (measured: `Boot completed in 31078 ms` in its own
+     * log), and the pool polls a server that answers "no devices attached" for the entire timeout,
+     * then reports a device that is running as `degraded`. This is the one path where the variable is
+     * not already in the environment: `acquire --boot` boots *before* the env file it prints exists,
+     * so at that moment the private port lives only in devices.json. The harness's own boot needs
+     * nothing here because a gate runs inside a sourced lease env.
+     *
+     * Measured on hardware: launch without it and `adb -P 5043 devices` stays empty for seven minutes
+     * while `adb -P 5037 devices` lists the emulator; launch with it and 5043 lists it inside 45 s. No
+     * fake can show this, because an injected `attachedSerials` answers the same either way - which is
+     * how it survived every unit test until the first real cold boot.
      */
-    bootEmulator({ avd, port }) {
+    bootEmulator({ avd, port, adbPort = null }) {
       const args = emulatorLaunchArgs({
         avd,
         port,
@@ -599,18 +644,24 @@ export function deviceOperations({
       const logDir = join(dirname(poolStatePath(home)), 'logs');
       mkdirSync(logDir, { recursive: true });
       const logFile = join(logDir, `emulator-${port ?? 'auto'}-${now()}.log`);
+      const launchEnv =
+        adbPort == null
+          ? env
+          : { ...env, ANDROID_ADB_SERVER_PORT: String(adbPort) };
       try {
         const fd = openSync(logFile, 'a');
         const child = spawn(env.EMULATOR_BIN || 'emulator', args, {
           detached: true,
           stdio: ['ignore', fd, fd],
-          env,
+          env: launchEnv,
         });
         child.unref();
         closeSync(fd);
         log(
           `  emulator ${avd}${port ? `:${port}` : ''}: boot requested ` +
-            `(gpu ${emulatorGpuMode(env)}, log ${logFile})`
+            `(gpu ${emulatorGpuMode(env)}${
+              adbPort == null ? '' : `, adb server ${adbPort}`
+            }, log ${logFile})`
         );
         return child.pid != null;
       } catch (error) {
@@ -1018,7 +1069,11 @@ export class DevicePool {
       );
       const started =
         w.kind === 'android'
-          ? this.ops.bootEmulator({ avd: w.avd, port: w.port })
+          ? this.ops.bootEmulator({
+              avd: w.avd,
+              port: w.port,
+              adbPort: w.adbPort,
+            })
           : this.ops.bootSimulator(w.udid);
       if (!started) {
         refused.add(w.key);
