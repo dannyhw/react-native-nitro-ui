@@ -17,6 +17,10 @@
 >
 > **Components:** 0.4 is a button-anchored Menu (G7a/G7b) plus a TextField spike (T18), starting
 > after X3 and X4 merge; see `PLAN-0.4.md`.
+> Research done during the mint (read-only, merged): `Q1-menu-design.md` (+ D29, the owner's Menu
+> answers) feeds the G7a brief; `Q2-textfield-research.md` (orchestrator answers appended) feeds T18;
+> `Q3-flaky-tests.md` has the patches for F1; `Q4-followups-triage.md` turned FOLLOWUPS into groups
+> F1–F6 (pruned by F0).
 >
 > Queue (owner-approved 2026-10-27; X3 and X9 merged): after the A3 mint, **X11**
 > (`X11-device-throughput.md`: emulator `-gpu host`, warm device pool, harness timing) and **X10**
