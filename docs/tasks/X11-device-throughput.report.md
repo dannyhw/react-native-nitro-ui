@@ -218,6 +218,32 @@ tree; the tests it adds did not exist before it.
 - four gate-claim cases (`claims the platform it runs on`, `refuses a device another live run holds`, `runs anyway under NITRO_UI_GATE_DEVICE_FORCE=1`, `claims nothing when the environment names no lease`) were shown red when introduced at `ac4fa4b` and pass unchanged on this tree; their assertions were re-run green after the claim-message wording fix.
 - `flattenTests` (item 3's fix) was additionally shown red by the same `result.testResults` mutation above, which is the proof that the real-run bug cannot come back silently.
 
+### Fix round 2
+
+Run by `x11-fr2-sweep.mjs` over `device-pool.test.js`, `device-ops.test.js` and
+`lease-pool-cli.test.js` — 131 cases — at code tree `ab21be4cd6f5` (the script lives in
+`/private/var/folders/…/opencode/`, uncommitted, as round 1's `mutations-fix1.mjs` does; the lines
+below are its summary, which prints one per mutation). Each mutation is one exact replacement (or,
+for the two identical `status !== 0` lines in different functions, a line address with its own assert
+that the line is what it claims), reverted from git before the next one. The count is the number of
+cases that went red, named below.
+
+- `leaves a device a lease and a claim took during its own act pass, up` and two more -> `canActOnKey` always answers `allowed` -> **3 red**: that case, `notices a live lease that appears mid-pass even with no claim on the record`, `does not shut down an idle device the exclusive hand-off found untracked, under a lease`
+- `refuses to reset a device a gate is running on, whoever owns the claim` -> `busyDevices` replaced by an empty map -> **2 red**: that case plus the CLI's `skips a reset on a device whose gate claim is live, even for a brand-new lease` (the two guards the M2 fix has, proven apart)
+- `does not reset a pair when the task already held the lease and nothing booted` -> `warmReacquire = false` -> **2 red**: that case and its no-claim twin, which is the only case the skip alone protects
+- `treats an app that is not installed as a reset that had nothing to do` -> the not-installed branch disabled -> **2 red**: that case and `still installs the app on an iOS simulator that had none, when one is available`
+- `attempts the clear when the install probe could not answer` -> `installed.answered &&` dropped, so "no answer" reads as "not installed" -> **1 red**
+- `marks the pair booting from inside \`ensureBooted\`` -> the `markBooting` call removed from `ensureBooted` -> **1 red** (the N3 item round 1 left open: its old test called the writer, not the caller)
+- `refuses to power a device off when a live lease holds it, asked directly` -> `shutdownDevice`'s own hold check dropped -> **1 red**; `does not shut down an idle device the exclusive hand-off found untracked` -> the declared path's check dropped -> **1 red**; both together -> **2 red** (the masking N3 described, now on both sides)
+- four `answers "no name" for …` cases -> the `emu avd name` parser reduced to `first || null` -> **4 red** (only reachable from `device-ops.test.js`: every injected fake answers with a name)
+- `says "unknown" when adb answers with a nonzero exit` / `says "unknown" for a simulator listing it cannot parse…` -> each tool's `status !== 0` relaxed to `status == null` -> **1 red each**
+- `keeps the record of an emulator whose adb server did not answer` -> that branch in `shutdownDevice` disabled -> **1 red**; the simulator twin the same way -> **1 red**
+- `reaps nothing on an exclusive acquire either, when the pool state was unreadable` -> the fail-closed case's summary restored to "every device no other lease holds is off" -> **1 red**
+
+One number this round does *not* claim: an earlier hand-run of the `canActOnKey` mutation showed 19
+red because the replacement did not compile (`entry` was not in scope), so 16 of those were a
+ReferenceError, not a caught bug. The sweep's version is valid JS and the honest count is 3.
+
 ## Files changed
 
 - `scripts/emulator-launch.mjs`, `scripts/patch-harness-android.mjs`,
