@@ -107,6 +107,14 @@ import {
 } from './gate-core.mjs';
 import { contentHash, isCodeFile } from './app-stamp-core.mjs';
 import {
+  SUITE_TIMING_ENV,
+  SUITE_TIMING_GATE_ENV,
+  formatSuiteTimings,
+  readSuiteTiming,
+  suiteTimingPath,
+} from './harness-suite-timing.mjs';
+import { claimDevicesFromEnv } from './device-pool.mjs';
+import {
   emulatorSerial,
   isReservedSerial,
   pruneExpired,
@@ -136,6 +144,7 @@ const USAGE =
   '       (a device gate reads its device from `node scripts/lease.mjs acquire`;\n' +
   '        a harness/real-input gate needs app.stamp from scripts/build-app.mjs)\n' +
   '\n' +
+  '       (NITRO_UI_GATE_DEVICE_FORCE=1 claims a device another live run holds)\n' +
   '       (--background starts a gate detached and returns at once, so waiting\n' +
   '        costs no polling; `wait` then blocks until it ends, prints a progress\n' +
   "        line a minute, and exits with the gate's own code. Exit 13 means\n" +
@@ -184,6 +193,9 @@ const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'];
  * style spelling is how the rest of this CLI's flags are written.
  */
 const BACKGROUND_FLAGS = ['--background', '--background=true'];
+
+/** Set to run a device gate on a device another live run has claimed (see `runGate`). */
+const DEVICE_FORCE_RE = /^(1|true|yes)$/i;
 
 const repoRoot = repoRootOf();
 
@@ -687,10 +699,14 @@ function listStoredLogs(dir) {
         walk(absolute);
         continue;
       }
-      // The `.gate.json` records travel with their log, and `steps.json` with the
-      // run that wrote it, so all three are swept together - a directory of
-      // orphaned records is not evidence either.
-      if (!/\.(log|gate\.json|steps\.json)$/.test(entry.name)) continue;
+      // The `.gate.json` records travel with their log, `steps.json` with the run that
+      // wrote it (X10) and `suites.json` with the harness run that wrote it (X11), so
+      // all four are swept together - a directory of orphaned records is not evidence
+      // either. Anything named `<log>.<something>.json` that is left out of this list
+      // is a file that can never be deleted: it sits in the store forever, growing past
+      // the cap retention is supposed to hold.
+      if (!/\.(log|gate\.json|steps\.json|suites\.json)$/.test(entry.name))
+        continue;
       try {
         const stats = fs.statSync(absolute);
         found.push({
@@ -1582,7 +1598,62 @@ function changedCodePaths({ base }) {
  * on one tree and finished on another be read as evidence about either. Both are
  * recorded, and a line where they differ is never green (N1).
  */
+/**
+ * Runs one gate, holding a claim on the device it is about to use (X11).
+ *
+ * Two rules make this worth a wrapper around the runner:
+ *
+ *   - a device gate marks its lease's devices *in use* for the duration of the run, so a reap
+ *     started by another task cannot power off an emulator mid-suite, and a second gate on the
+ *     same device is refused before it spends four minutes building rather than after it fought
+ *     over Metro and the screenshots;
+ *   - the claim dies with the process whether the run ends well or not, because a claim is a pid
+ *     and a reaper treats a dead pid as no claim. No `finally` has to succeed for the device to
+ *     become reclaimable - which is why a killed gate cannot wedge a device.
+ *
+ * Nothing is claimed when the environment names no lease (a plain `bun run check`, CI): the
+ * claim is about a machine's pool, not about a run in general. `NITRO_UI_GATE_DEVICE_FORCE=1`
+ * claims a device another live run holds, for the one case where that is the point - it is an env
+ * var rather than a flag because a backgrounded gate is re-spawned from this command line, and a
+ * flag here would need stripping in two places to keep it out of the gate's own argv.
+ */
 async function runGate(name, resolved, options = {}) {
+  let claim = null;
+  if (resolved.platform != null) {
+    try {
+      claim = claimDevicesFromEnv({
+        gate: name,
+        platform: resolved.platform,
+        force: DEVICE_FORCE_RE.test(
+          process.env.NITRO_UI_GATE_DEVICE_FORCE ?? ''
+        ),
+      });
+    } catch (error) {
+      process.stderr.write(`gate: ${error.message}\n`);
+      return 1;
+    }
+    if (claim != null)
+      process.stderr.write(
+        `gate: claimed ${claim.keys.join(', ')} for this run\n`
+      );
+  }
+  try {
+    return await runGateUnclaimed(name, resolved, options);
+  } finally {
+    // Best-effort and never fatal: an unreachable state file must not turn a
+    // passing run into a failing one, and the pid rule above already frees the
+    // device if this does not happen.
+    if (claim != null) {
+      try {
+        claim.pool.releaseClaim(claim);
+      } catch {
+        /* the claim expires with this pid */
+      }
+    }
+  }
+}
+
+async function runGateUnclaimed(name, resolved, options = {}) {
   const branch = currentBranch();
   const before = readTrees();
   const device = deviceFromEnv(process.env, resolved.platform);
@@ -1614,6 +1685,18 @@ async function runGate(name, resolved, options = {}) {
     fromEnv: backgroundLog,
   });
   fs.mkdirSync(path.dirname(absoluteLog), { recursive: true });
+  // Per-suite timings for a harness run (X11, ledger v6). Named from the run's log,
+  // which is how X10's review N7 settled this for `check`'s steps: one run's file has
+  // one namer, derived from a name the launcher and the runner already agree on, so a
+  // reader is never sent to a file that was never written. It therefore lands in the
+  // clone's log store and outlives `git worktree remove` like the log does, and
+  // retention sweeps it with the log (`listStoredLogs`). It used to be
+  // `<repo>/.gates/suite-timing/<gate>-<ts>-<pid>.json` — in the worktree, outside the
+  // retention walk, and named by a second function. Nothing in a ledger cites the old
+  // path (the line carries the parsed record, not a pointer), so those files die with
+  // their worktree instead of needing a migration.
+  const suiteTimingFile =
+    resolved.platform == null ? null : suiteTimingPath(absoluteLog);
   // Appending for a backgrounded run: the launcher already has that file open in
   // append mode for this process's own stdout/stderr, and truncating it here would
   // erase the lines that explain a crash.
@@ -1671,6 +1754,15 @@ async function runGate(name, resolved, options = {}) {
         delete childEnv.NITRO_UI_GATE_LOG;
         if (stepTimingsPath != null) {
           childEnv.NITRO_UI_CHECK_STEPS_FILE = stepTimingsPath;
+        }
+        // Per-suite timings (X11, ledger v6): the harness's plugin writes durations
+        // into the file named from this run's log, and the ledger line below cites the
+        // parsed record. Only a harness run can produce them. The gate's own name goes
+        // with it because the file's name is a folded spelling of it (`:` -> `+`), and
+        // a header that says which gate a timing belongs to should not be approximate.
+        if (suiteTimingFile != null) {
+          childEnv[SUITE_TIMING_ENV] = suiteTimingFile;
+          childEnv[SUITE_TIMING_GATE_ENV] = name;
         }
         return childEnv;
       })(),
@@ -1772,6 +1864,8 @@ async function runGate(name, resolved, options = {}) {
     counts: parseTestCounts(logText) ?? summaries[0] ?? null,
     summaries,
     stepTimings,
+    suiteTimings:
+      suiteTimingFile == null ? null : readSuiteTiming(suiteTimingFile),
     logPath,
     startedAt,
     exitCode: exit.code ?? (exit.signal != null ? null : 1),
@@ -1825,6 +1919,20 @@ async function runGate(name, resolved, options = {}) {
       'gate: check reported no steps, so nothing was checked - recording a fail ' +
         'even though the runner exited 0. A check that runs no steps is not a pass;\n' +
         '        run `bun run check` by hand and look for the step list header.\n'
+    );
+  }
+  // Slowest suites first, on the terminal and in the log, because the point of
+  // recording them is that somebody reads them at the moment a run looks slow rather
+  // than months later. Written to the log as well as the terminal: for a backgrounded
+  // run the log is the only place anybody reads this, and `echo` is false there.
+  const timings = line.suiteTimings;
+  if (timings != null && timings.suites.length > 0) {
+    const table = formatSuiteTimings(timings, { limit: 12 });
+    logStream.write(`${table}\n`);
+    if (echo) process.stdout.write(`${table}\n`);
+  } else if (suiteTimingFile != null) {
+    process.stderr.write(
+      'gate: no per-suite timings recorded - the harness plugin did not run\n'
     );
   }
   if (result === 'fail' && resolved.bench) {
@@ -2187,6 +2295,24 @@ function commandTable({ stage, full, reuse = true }) {
     // this stays `check`'s section in practice without naming it as such.
     const steps = renderStepTimings({ entries, gates: MERGE_GATES });
     if (steps !== '') process.stdout.write(`\n${steps}\n`);
+    // Per-suite durations for a harness run (X11, ledger v6), and the two breakdowns
+    // are not interchangeable: `check`'s steps say which *stage of the script* was
+    // slow, these say which *test file* was. Iterating the reported rows rather than
+    // the whole ledger matters - a branch with thirty recorded runs would otherwise
+    // print thirty tables - and a row with no timings prints nothing, so the section
+    // claims "measured" and never reads as "all fast".
+    const rows = summarizeGates({
+      entries,
+      tree: read.tree,
+      trees: read.trees,
+      stage,
+      required: MERGE_GATES,
+    });
+    for (const row of rows) {
+      const timings = row.entry?.suiteTimings;
+      if ((timings?.suites?.length ?? 0) === 0) continue;
+      process.stdout.write(`\n${formatSuiteTimings(timings, { limit: 15 })}\n`);
+    }
   }
   return 0;
 }

@@ -1137,6 +1137,112 @@ describe('logs survive git worktree remove', () => {
     expect(logs.stdout).toContain('task/x12-fixture/check-');
   });
 
+  it('sweeps a per-run timing sidecar with the log it belongs to (X11 v6)', () => {
+    // Retention's file-name filter is an allow-list, so a per-run file that is not on
+    // it can never be deleted: it sits in the shared store past the byte cap forever,
+    // and that cap is the only thing limiting its growth. Moving `.suites.json` into
+    // the store (ledger v6) is exactly the change that adds a per-run file without
+    // adding its name to the filter, so both sidecars are asserted here - `.steps.json`
+    // from X10 is already on the list and this is what keeps it there.
+    const dir = makeRepo();
+    const store = storeOf(dir);
+    const branchDir = path.join(store, 'task', 'x12-fixture');
+    fs.mkdirSync(branchDir, { recursive: true });
+    const aged = (Date.now() - 60 * 86_400_000) / 1000;
+    const written = [];
+    for (const name of [
+      'harness+ios-2026-09-01T00-00-00.000Z.log',
+      'harness+ios-2026-09-01T00-00-00.000Z.log.suites.json',
+      'check-2026-09-01T00-00-00.000Z.log',
+      'check-2026-09-01T00-00-00.000Z.log.steps.json',
+    ]) {
+      const file = path.join(branchDir, name);
+      fs.writeFileSync(file, '{}\n');
+      fs.utimesSync(file, aged, aged);
+      written.push(file);
+    }
+    // A young sidecar, to prove the rule is age and not name.
+    const young = path.join(branchDir, 'harness+android-today.log.suites.json');
+    fs.writeFileSync(young, '{}\n');
+
+    const pruned = runCli(dir, ['logs', '--prune']);
+    expect(pruned.status).toBe(0);
+    expect(pruned.stdout).toContain('retention removed 4 file(s)');
+    for (const file of written) expect(fs.existsSync(file)).toBe(false);
+    expect(fs.existsSync(young)).toBe(true);
+  });
+
+  it("puts a harness run's timings in the store, named from its log (X11 v6)", () => {
+    // Where the file goes is the whole point of the change: the Q3 incident was
+    // evidence that died with a worktree, and a per-run file that lives in the
+    // worktree re-creates it. Asserting the *path* rather than the parsed record is
+    // what a unit test of `suiteTimingPath` cannot do, because it takes a log path it
+    // is handed; this is the only place the log's real name, from a real run, is what
+    // the sidecar is derived from.
+    const dir = makeRepo();
+    const suites = JSON.stringify({
+      version: 1,
+      gate: null,
+      platform: 'ios',
+      suites: [
+        {
+          file: '__tests__/Switch.harness.tsx',
+          durationMs: 40_400,
+          testBodyMs: 3_200,
+          tests: 42,
+          failed: 0,
+          status: 'passed',
+        },
+      ],
+    });
+    const run = runCli(
+      dir,
+      ['harness:ios'],
+      { FAKE_SUITES_JSON: suites },
+      // The fake runner plays the harness plugin: it writes the file the env names,
+      // and prints the gate name the other variable carries.
+      '[ -n "$HARNESS_SUITE_TIMING" ] && printf %s "$FAKE_SUITES_JSON" > "$HARNESS_SUITE_TIMING"; echo "plugin env: file=${HARNESS_SUITE_TIMING-unset} gate=${HARNESS_SUITE_TIMING_GATE-unset}"'
+    );
+    expect(run.status).toBe(0);
+
+    // The gate's own name travels with it, unfolded: the file name is a lossy spelling.
+    expect(run.stdout).toContain('plugin env: file=');
+    expect(run.stdout).toContain('gate=harness:ios');
+
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    expect(line.gate).toBe('harness:ios');
+    expect(line.suiteTimings.suites[0].file).toBe(
+      '__tests__/Switch.harness.tsx'
+    );
+    // And the file itself is in the clone's store, in this branch's directory, named
+    // `<the log>.suites.json` — so it is in the one place `git worktree remove` never
+    // touches, and it is findable from the ledger line beside it.
+    const expected = path.join(
+      storeOf(dir),
+      'task',
+      'x12-fixture',
+      `${line.logPath.split('/').pop()}.suites.json`
+    );
+    expect(fs.existsSync(expected)).toBe(true);
+    // Nothing under the worktree's own `.gates/` — the old location.
+    const inWorktree = [];
+    const walk = (current) => {
+      let names;
+      try {
+        names = fs.readdirSync(current, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of names) {
+        const absolute = path.join(current, entry.name);
+        if (entry.isDirectory()) walk(absolute);
+        else if (entry.name.endsWith('.suites.json')) inWorktree.push(absolute);
+      }
+    };
+    walk(path.join(dir, '.gates'));
+    expect(inWorktree).toEqual([]);
+  });
+
   it('prunes on every run, not only when `logs` is asked (N1)', () => {
     // The `logs` command prunes by itself, so a test that only used it could not
     // tell "retention runs on every gate" from "retention runs when you list". A run

@@ -1,26 +1,107 @@
 diff --git a/dist/emulator-startup.js b/dist/emulator-startup.js
-index 33621b6ae4025988e08d0618c27ccf7490341d61..bdc442bd4282062e1105a27a5e267337e3c3f5cb 100644
+index 33621b6ae4025988e08d0618c27ccf7490341d61..67211db0963b63e147b45c95427c05471fe53fa4 100644
 --- a/dist/emulator-startup.js
 +++ b/dist/emulator-startup.js
-@@ -26,7 +26,20 @@ export const getEmulatorStartupArgs = (name, mode) => {
+@@ -26,17 +26,67 @@ export const getEmulatorStartupArgs = (name, mode) => {
          : mode === 'snapshot-reuse'
              ? ['-no-snapshot-save']
              : ['-no-snapshot-load', '-no-snapshot-save'];
 -    return [`@${name}`, ...modeArgs, ...COMMON_EMULATOR_ARGS];
-+    // nitro-ui patch: boot on the console port the caller was assigned.
-+    // Several tasks share one machine, each with its own AVD, its own private
-+    // adb server and a device the person owns that must never be used. Without
-+    // `-port` the emulator takes the lowest free console port, so a leased AVD
-+    // can land on a serial another task was told not to touch, and the serial
-+    // the lease exported (`emulator-5574`) is not the one that exists. When
-+    // EMULATOR_PORT is set, the emulator either gets that port or fails to
-+    // start - which is the answer a lease needs. Drop this patch once
-+    // react-native-harness accepts a port.
-+    const port = process.env.EMULATOR_PORT ?? '';
-+    const portArgs = /^\d+$/.test(port) && Number(port) % 2 === 0 && Number(port) >= 5554 && Number(port) <= 5682
-+        ? ['-port', port]
-+        : [];
-+    return [`@${name}`, ...portArgs, ...modeArgs, ...COMMON_EMULATOR_ARGS];
+-};
+-/**
+- * Parses the output of `emulator -accel-check` to determine whether
+- * hardware acceleration (KVM on Linux, HVF on macOS) is usable. The
+- * emulator prints a message containing "is installed and usable" when
+- * acceleration is available.
+- */
+-export const isAccelerationUsable = (accelCheckOutput) => {
+-    return accelCheckOutput.includes('is installed and usable');
++    // nitro-ui patch: boot on the console port the caller was assigned, on the
++    // GPU this repo's launch configuration names. Several tasks share one
++    // machine, each with its own AVD, its own private adb server and a device
++    // the person owns that must never be used. Without `-port` the emulator
++    // takes the lowest free console port, so a leased AVD can land on a serial
++    // another task was told not to touch, and the serial the lease exported
++    // (`emulator-5574`) is not the one that exists. When EMULATOR_PORT is set
++    // the emulator either gets that port or fails to start - which is the
++    // answer a lease needs; a port that cannot be a console port at all is a
++    // mistake in the environment, and dropping `-port` there would boot the AVD
++    // on any free serial, which is the very thing this patch prevents. The GPU
++    // mode is `host` rather than upstream's `swiftshader_indirect`: software
++    // rendering is most of why the Android harness costs three times iOS. Set
++    // NITRO_UI_EMULATOR_GPU to override for one shell (an A/B run, or a bench
++    // host pinning its baseline's mode).
++    // Drop this patch once react-native-harness accepts a port and a GPU mode.
++    //
++    // nitro-ui: the block below is rendered verbatim by
++    // scripts/emulator-launch.mjs (harnessLaunchBlock).
++    // scripts/__tests__/emulator-launch.test.js fails if the patch and that
++    // file disagree, or if this stops matching emulatorLaunchArgs().
++    const nitroUiPort = process.env.EMULATOR_PORT ?? '';
++    let nitroUiPortArgs = [];
++    if (nitroUiPort !== '') {
++        const nitroUiPortNumber = Number(nitroUiPort);
++        const nitroUiPortOk = /^\d+$/.test(nitroUiPort) && nitroUiPortNumber % 2 === 0 && nitroUiPortNumber >= 5554 && nitroUiPortNumber <= 5682;
++        if (!nitroUiPortOk) {
++            throw new Error(`EMULATOR_PORT="${nitroUiPort}" is not a console port the emulator can take (even numbers 5554-5682)`);
++        }
++        nitroUiPortArgs = ['-port', nitroUiPort];
++    }
++    const nitroUiGpu = (process.env.NITRO_UI_EMULATOR_GPU ?? '').trim() || 'host';
++    return [`@${name}`, ...nitroUiPortArgs, ...modeArgs, '-no-window', '-gpu', nitroUiGpu, '-noaudio', '-no-boot-anim', '-no-metrics'];
  };
++    /**
++     * Parses the output of `emulator -accel-check` to determine whether hardware
++     * acceleration (KVM on Linux, HVF on macOS) is usable.
++     *
++     * nitro-ui patch: the exit status is the check's answer. This emulator version
++     * prints "accel: / 0 / Hypervisor.Framework OS X Version ..." rather than the
++     * phrase upstream looked for ("is installed and usable"), so every Android
++     * harness run on a machine with Hypervisor.Framework warned that it was about
++     * to fall back to very slow software emulation while it was using hardware
++     * acceleration the whole time (docs/tasks/X11-device-throughput.md).
++     *
++     * Rendered verbatim by scripts/emulator-launch.mjs (harnessAccelBlock); the
++     * caller passes the exit status, which nano-spawn only carries on a non-zero
++     * exit (`error.exitCode`), so a resolved spawn means 0.
++     * scripts/__tests__/emulator-launch.test.js fails if the patch and that file
++     * disagree.
++     */
++    const nitroUiAccelUnusablePhrases = ['is not installed', 'is not usable', 'not available', 'haxm is not installed', 'kvm is not available'];
++    const nitroUiAccelUsablePhrases = ['is installed and usable', 'hypervisor.framework', 'hvf', 'kvm', 'accel'];
++    export const isAccelerationUsable = (accelCheckOutput, exitCode = null) => {
++        const text = String(accelCheckOutput ?? '').toLowerCase();
++        if (exitCode != null)
++            return Number(exitCode) === 0;
++        if (nitroUiAccelUnusablePhrases.some((phrase) => text.includes(phrase)))
++            return false;
++        return nitroUiAccelUsablePhrases.some((phrase) => text.includes(phrase));
++    };
  /**
-  * Parses the output of `emulator -accel-check` to determine whether
+  * Runs `emulator -accel-check` and logs a non-fatal warning when hardware
+  * acceleration (KVM/HVF) appears unavailable, in which case the emulator
+@@ -46,6 +96,7 @@ export const isAccelerationUsable = (accelCheckOutput) => {
+  */
+ export const warnIfEmulatorAccelerationUnavailable = async () => {
+     let combinedOutput;
++    let nitroUiAccelExitCode = 0;
+     try {
+         const emulatorBinaryPath = getEmulatorBinaryPath();
+         const { stdout, stderr } = await spawn(emulatorBinaryPath, [
+@@ -59,6 +110,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
+             // `-accel-check` reports that acceleration is unavailable, so treat
+             // its output as a normal (non-fatal) result rather than swallowing it.
+             combinedOutput = `${error.stdout}\n${error.stderr}`;
++            nitroUiAccelExitCode = typeof error.exitCode === 'number' ? error.exitCode : 1;
+         }
+         else {
+             // Failed to even run the check (e.g. binary missing). This must never
+@@ -67,7 +119,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
+             return;
+         }
+     }
+-    if (!isAccelerationUsable(combinedOutput)) {
++    if (!isAccelerationUsable(combinedOutput, nitroUiAccelExitCode)) {
+         logger.warn('Hardware acceleration (KVM/HVF) appears unavailable for the Android emulator. It will fall back to very slow software emulation.');
+     }
+ };
