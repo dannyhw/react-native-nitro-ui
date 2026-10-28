@@ -55,13 +55,12 @@ ledger: platform trees ios 75cef8436a00 android 346faf0806c9
 | `real-input:ios` | stale | — | 9d9ce869206a (not this tree) | 10 m 47 s | start 2.1 / med 3.8 / max 15.7 |
 | `real-input:android` | stale | — | 9d9ce869206a (not this tree) | 12 m 02 s | start 2.3 / med 2.1 / max 3.6 |
 
-`need --for review` against this tree asks for `harness:ios` and `harness:android`; both apps are
-built and stamped at `86bbaae359c3` and the devices are warm, but **the re-runs are blocked, not
-skipped**: `A4` took an exclusive lease on `pair-a` + `pair-b` at 14:14 and still holds it (92 min
-so far, 868 min of TTL left), so nothing can boot a pair. A waiter is parked on the lease. The
-stale rows above are the same gates on the previous tree (`9d9ce869206a`, `da0b31f`), where they
-were green; the only code that has moved since is `poolReapDecision`'s idle-limit precedence and its
-two tests, plus a docs/usage fix — nothing on the harness path.
+`need --for review` against this tree asks for `harness:ios` and `harness:android`. Both apps are
+built and stamped at `86bbaae359c3`, but **the re-runs are blocked, not skipped**: `A4` took an
+exclusive lease on `pair-a` + `pair-b` at 14:14 and still held it at 16:15 (114 min, 846 min of TTL
+left). The stale rows above are those same gates on the previous tree (`9d9ce869206a`), where they
+were green; the only device-path code that has moved since is `poolReapDecision`'s idle-limit
+precedence and its two tests, plus docs — nothing on the harness path. See Questions.
 
 ## Measurements
 
@@ -213,9 +212,10 @@ after the ✕; a case whose mutation could not be applied is marked as not claim
   and then waits on a child that has already exited); `kill -9` is needed today.
 - lease pool: `pm clear` retried until PackageManager wakes works, but waiting on `pm path` would
   say *why* it is waiting rather than trying four times.
-- lease list: a queued `acquire --wait-minutes` is invisible in `lease.mjs list`, so a blocked task
-  looks idle from outside and nobody can tell waiting from stuck. One `waiting` row naming the
-  holder would settle that without asking the human.
+- lease list: only a *waiting exclusive* request is persisted (an earlier `--exclusive --wait` of
+  mine showed as a `waiting` row); an ordinary `acquire --wait-minutes` is not, so a blocked task
+  looks idle from outside and nobody can tell waiting from stuck. Persisting the wait, or one
+  `--json` line for it, would settle that.
 
 ## Questions for orchestrator
 
@@ -238,19 +238,17 @@ fixing it is a touch-delivery investigation in code this brief must not touch.
 - Option C: re-run and hope for a green roll. X6 did exactly that; it is deterministic now, so a
   green roll would be a worse record than the honest red.
 
-**2. The device re-runs `need --for review` asks for are blocked by another task, not skipped.**
-`A4` took an exclusive lease on both pairs at 14:14 and holds it with 14+ hours of TTL; my waiter is
-parked on the queue (and `lease.mjs list` does not show waiters — see below). Everything else is
-ready: both apps are built and stamped at `86bbaae359c3`, the tree's only device-path change since
-the green runs is `poolReapDecision`'s idle-limit precedence plus its tests. Either I run the two
-harnesses as soon as the pair frees (and append a `## Fix round` note with a fresh table), or the
-review proceeds on the previous tree's rows, which the table already labels stale. Recommendation:
-wait for the pair — it is minutes of queue, not a design question — and treat the report as final
-once those two rows print PASS at this tree.
+**2. The two device re-runs `need --for review` asks for are blocked by another task, not skipped.**
+`A4` took an exclusive lease on both pairs at 14:14 and still held it at 16:15 (114 min, 846 min of
+TTL left, still writing files). I queued `acquire --boot --wait-minutes` twice and stopped the
+waiter at the end of my round rather than leaving a process parked overnight, so **no lease is held
+and no device is booted by me**. Everything else is ready: both apps are built and stamped at
+`86bbaae359c3`, and the only device-path change since the green runs at `9d9ce869206a` is
+`poolReapDecision`'s idle-limit precedence plus its two tests — nothing on the harness path. So the
+choice is mine to make but not to settle alone:
 
-## Follow-ups (lease behaviour seen while blocked)
-
-- lease list: only a *waiting exclusive* request is persisted (an earlier `--exclusive --wait` of
-  mine showed as a `waiting` row); an ordinary `acquire --wait-minutes` is not, so a blocked task
-  looks idle from outside and nobody can tell waiting from stuck. Persisting the wait, or a
-  `--json` line for it, would settle that.
+- **Option A (recommended): run the two harnesses on the next free pair and append a short `## Fix
+  round` note with a fresh table.** Minutes of queue, no design question, and the report then ends
+  with two PASS rows at this tree.
+- Option B: review on the rows as they stand. Honest — the table says `stale` and why — but it is
+  review of `da0b31f`, not of `05528f5`.
