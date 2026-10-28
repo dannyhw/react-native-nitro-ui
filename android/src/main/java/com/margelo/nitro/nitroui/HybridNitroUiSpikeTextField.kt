@@ -146,7 +146,11 @@ internal class SpikeTextFieldModel : NitroUiModel() {
   var focusTick by mutableIntStateOf(0)
   var blurTick by mutableIntStateOf(0)
 
-  /** Posted when focus has to be *taken away*; the host's view is the only thing that can do it. */
+  /**
+   * Posted when focus has to be *taken away*. Installed by the composable, which is where Compose's
+   * `FocusManager` lives — the view's own `clearFocus()` is a different focus system and was measured not to
+   * release a Compose field (`NitroSpikeTextFieldCompose.kt`, `P5 focus latency`).
+   */
   var requestClearFocus: (() -> Unit)? = null
 
   /**
@@ -336,7 +340,6 @@ class HybridNitroUiSpikeTextField(
     // P4 is a sizing spike: a field's height is its own and its width is Yoga's box.
     host.wantsContentSize = true
     host.sizingPolicy = NitroUiSizing.POLICY_FILL_WIDTH
-    model.requestClearFocus = { host.clearFocus() }
     declareFallback()
   }
 

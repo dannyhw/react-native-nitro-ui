@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -139,6 +140,24 @@ internal fun NitroSpikeAndroidField(
   val limit = model.maxLength
   val inputTransformation = remember(limit) { SpikeCodePointLimit(limit) }
   val focusRequester = remember { FocusRequester() }
+  val focusManager = LocalFocusManager.current
+  /*
+   * `blur()` has to be answered by the focus system that actually holds the focus.
+   *
+   * The spike first wired the model's clear-focus hook to `host.clearFocus()` — a `View.clearFocus()` on the
+   * ComposeView's container. Measured on emulator-5574 (harness `P5 focus latency`, tree `ae0c564ca684`, gate
+   * log `harness+android+TextFieldSpike-2026-10-28T17-33-13.097Z.log`): after `blur()` the mirror still read
+   * `focused=1` and `onBlur` never fired, so the ask was dropped on the floor between the two focus systems.
+   * `focus()` never had that problem because it goes through Compose (`focusRequester`).
+   *
+   * `force = true`: focus is cleared, not handed to a focus restorer. The observable is Compose's own
+   * `onFocusChanged(false)` → `model.focusMoved(false)` → `onBlur` plus a `focused=0` mirror line.
+   */
+  DisposableEffect(focusManager) {
+    val previous = model.requestClearFocus
+    model.requestClearFocus = { focusManager.clearFocus(force = true) }
+    onDispose { model.requestClearFocus = previous }
+  }
 
   val initial = when {
     model.state.js != null -> model.state.js!!
