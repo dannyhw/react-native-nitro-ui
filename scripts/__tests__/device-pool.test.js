@@ -260,6 +260,28 @@ describe('the reap decision', () => {
       }).idleShutdownMinutes
     ).toBe(IDLE_SHUTDOWN_DEFAULT_MINUTES);
   });
+
+  it('lets an explicit override outrank the record, including a zero', () => {
+    // The record says 30 (that is what devices.json stamped at boot). An override of 0 is the
+    // CLI's `--idle-minutes 0`; `??` is what makes it work, and `||` is the bug this pins.
+    const entry = entryOf({ key: 'avd:A', usedAgo: MINUTE });
+    expect(
+      poolReapDecision(entry, {
+        nowMs: NOW,
+        leases: [],
+        defaultIdleMinutes: 30,
+        overrideIdleMinutes: 0,
+      })
+    ).toMatchObject({ action: 'reap', reason: 'lease-gone' });
+    // Without the override, the same record at the same age is in its grace period.
+    expect(
+      poolReapDecision(entry, {
+        nowMs: NOW,
+        leases: [],
+        defaultIdleMinutes: 30,
+      })
+    ).toMatchObject({ action: 'keep', reason: 'unowned-grace' });
+  });
 });
 
 describe('the settle ceiling', () => {
@@ -524,6 +546,28 @@ describe('reaping', () => {
     // be asking about an emulator it has never seen.
     expect(calls).toContainEqual(['emu-kill', 'emulator-5574', 5043]);
     expect(readPool(home).devices).toEqual([]);
+  });
+
+  it('takes --idle-minutes over what devices.json says', () => {
+    // devices.json in this fixture says 30, and the record carries that 30. `reap({
+    // idleMinutes: 0 })` is the operator's "power the pool off now" - the command a machine's
+    // human reaches for when they want their fans back - and it used to be answered with
+    // "keeping it up (idle, under the limit)", because the config value won the comparison.
+    withLeases([lease()]);
+    withDevice(entryOf({ key: 'avd:nitro-ui-a', usedAgo: 1 * MINUTE }));
+    const { pool, calls } = fakePool({
+      home,
+      state: { serials: ['emulator-5574'], simulators: new Map() },
+    });
+    const done = pool.reap({ idleMinutes: 0 });
+    expect(done.reaped).toEqual([{ key: 'avd:nitro-ui-a', reason: 'idle' }]);
+    expect(calls).toContainEqual(['emu-kill', 'emulator-5574', 5043]);
+    // And the default is still the config's: no argument, no early power-off.
+    withDevice(entryOf({ key: 'avd:nitro-ui-a', usedAgo: 1 * MINUTE }));
+    expect(pool.reap().kept[0]).toMatchObject({
+      key: 'avd:nitro-ui-a',
+      reason: 'idle-grace',
+    });
   });
 
   it('leaves a device alone while a live claim holds it', () => {

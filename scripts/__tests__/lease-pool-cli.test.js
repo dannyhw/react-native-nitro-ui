@@ -299,6 +299,24 @@ describe('the lease owns the device lifecycle', () => {
     expect(poolDevices()).toEqual([]);
   });
 
+  it('honours `reap --idle-minutes 0` over devices.json, as power-off now', () => {
+    // The command a machine's human types when they want their own machine back. devices.json
+    // says 30 in this fixture (and the record carries that 30), and this device is only five
+    // minutes idle, so the plain reap keeps it - and used to keep it even when 0 was asked for,
+    // because the config value won the comparison. `lease.mjs reap --idle-minutes 0` said
+    // "keeping avd:nitro-ui-a up (idle, under the limit)" about the very number the caller
+    // overrode.
+    tools({ androidUp: true });
+    warmDevice(idleEntry({ idleMinutes: 5 }));
+    const kept = cli(['reap']);
+    expect(kept.stderr).toContain('keeping avd:nitro-ui-a');
+    expect(log()).not.toContain('emu kill');
+    const reaped = cli(['reap', '--idle-minutes', '0']);
+    expect(reaped.status).toBe(0);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+    expect(poolDevices()).toEqual([]);
+  });
+
   it('leaves an idle device alone when told not to reap', () => {
     // The device is reported *up* on purpose: a stub that answered "no devices" would let a
     // forced reap pass this case by forgetting the record without ever touching a device, which

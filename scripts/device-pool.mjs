@@ -866,11 +866,16 @@ export class DevicePool {
           continue;
         }
         const forced = shutdownKeys.includes(entry.key);
+        // An explicit `--idle-minutes` is the caller overriding devices.json for this one call —
+        // `reap --idle-minutes 0` is "power the pool off now", the cleanup command a machine's
+        // operator reaches for. The record's own limit (the config value stamped at boot) only
+        // applies when nobody asked.
         const decision = poolReapDecision(entry, {
           nowMs,
           leases,
           defaultIdleMinutes:
             this.idleShutdownMinutesFor(entry.kind) ?? idleMinutes,
+          overrideIdleMinutes: idleMinutes,
           isPidAlive: this.isPidAlive,
         });
         if (!forced && decision.action === 'keep') {
