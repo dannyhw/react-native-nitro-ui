@@ -582,10 +582,17 @@ describe('gate.mjs export attaches failure evidence', () => {
     expect(written[0]).toBe(path.basename(failed.failureLogPath));
 
     const excerpt = fs.readFileSync(path.join(failuresDir, written[0]), 'utf8');
-    // Failing test names and assertion messages, not just a tail.
-    expect(excerpt).toContain('FAIL ios/core/Core.test.tsx');
-    expect(excerpt).toContain('Expected: true');
-    expect(excerpt).toContain('Received: false');
+    // Failing test names and assertion messages, in their own section rather than
+    // only somewhere in the tail: a log shorter than 150 lines repeats everything in
+    // the tail, so asserting on the whole file would pass even if the failure list
+    // were never written (which is how the first version of this test read).
+    const failuresSection = excerpt
+      .split('## Failing tests and assertion messages')[1]
+      .split('\n## ')[0];
+    expect(failuresSection).toContain('FAIL ios/core/Core.test.tsx');
+    expect(failuresSection).toContain('Expected: true');
+    expect(failuresSection).toContain('Received: false');
+    expect(failuresSection).toContain('Switch › renders the checked state');
     // The header a reader needs: which gate, which tree, what load, where the
     // *full* log is.
     expect(excerpt).toContain('# Failure excerpt \u2014 check');
