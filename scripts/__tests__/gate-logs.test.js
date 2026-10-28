@@ -42,10 +42,13 @@ import {
   gateLogStoreDir,
   isFailedRunWithLog,
   ledgerLogCandidates,
+  localPathRedactions,
   logNameFor,
   logRelativePath,
   planLogRetention,
+  redactLocalPaths,
   renderFailureExcerpt,
+  scrubMachinePaths,
   scrubSecrets,
   splitDeviceContext,
   summarizeLoad,
@@ -1384,6 +1387,214 @@ describe('scrubSecrets (what may be committed)', () => {
   it('does not call a keyword argument a credential', () => {
     const log = 'sort_key=name\nmonkey=3 jobs\nkeyframes=1\nsession_count=4\n';
     expect(scrubSecrets(log).text).toBe(log);
+  });
+
+  it('scrubs a multi-word password rather than its first word (N5)', () => {
+    // A YAML or properties value is not quoted, and a passphrase is words. Taking
+    // one word published the rest: `nexusPassword: correct horse battery` came out
+    // as `nexusPassword: [scrubbed] horse battery`, which is three quarters of the
+    // secret with a marker that reads as if it had been handled.
+    const cases = [
+      'password: correct horse battery staple',
+      '  nexusPassword = correct horse battery',
+      'git config credential.helper store\npassphrase: a b c d e',
+    ];
+    for (const line of cases) {
+      const { text } = scrubSecrets(line);
+      expect(text).not.toContain('horse');
+      expect(text).not.toContain('battery');
+      expect(text).not.toContain('staple');
+    }
+    // And a line that carries a *second* assignment keeps it: the two-token env
+    // dump is the realistic shape, and swallowing the rest of the line there would
+    // turn evidence into mush.
+    const both = scrubSecrets(
+      'NPM_TOKEN=abcdef123456 GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz123456'
+    );
+    expect(both.text).toContain('GITHUB_TOKEN=');
+    expect(both.text).not.toContain('ghp_');
+    expect(both.replaced).toBe(2);
+  });
+
+  it('scrubs an email address, and leaves an image scale alone (N5)', () => {
+    // D25 lists emails, and a build log prints them: `git log`, `.npmrc`'s
+    // `email=`, CocoaPods' `Author: Someone <…>`, a Gradle publication's pom.
+    const cases = [
+      ['email=daniel@example.com', 'daniel@example.com'],
+      ['Author: Dan <dan@example.co.uk> 2026', 'dan@example.co.uk'],
+      ['pushed by williams@corp.internal to main', 'williams@corp.internal'],
+    ];
+    for (const [line, address] of cases) {
+      const { text } = scrubSecrets(line);
+      expect(text).not.toContain(address);
+      expect(text).toContain('<email>');
+    }
+    // `logo@2x.png` is not an address, and redacting it would mangle the ordinary
+    // log lines an excerpt exists to keep readable.
+    const asset = 'copy logo@2x.png and @3x into assets\n';
+    expect(scrubSecrets(asset).text).toBe(asset);
+  });
+
+  it('scrubs a `curl -u user:pass` and a bare `user:pass@host` (N5)', () => {
+    // The userinfo rule is a *URL* rule, so the two shapes a build script actually
+    // prints slipped through: the flag form, and the bare authority a curl error
+    // echoes back.
+    const cases = [
+      "curl -u janitor:'hunter2 pass' https://repo.internal/x",
+      'curl --user janitor:hunter2pass https://repo.internal/x',
+      'curl -u janitor:hunter2pass https://repo.internal/x',
+      'request to janitor:hunter2pass@repo.internal/x failed',
+      '--user=janitor:hunter2pass',
+    ];
+    for (const line of cases) {
+      const { text } = scrubSecrets(line);
+      expect(text).not.toContain('hunter2');
+      expect(text).toContain('[scrubbed]');
+      // The host survives where the line names one, so a reader still knows which
+      // service leaked.
+      if (line.includes('repo.internal'))
+        expect(text).toContain('repo.internal');
+    }
+    // A time is not a credential: `16:18:47` has the same shape as `user:pass`.
+    expect(scrubSecrets('failed at 16:18:47 after 3 retries').replaced).toBe(0);
+  });
+});
+
+/* ------------------- an excerpt must not name a person or a box ------------------- */
+
+describe('localPathRedactions covers what identifies a machine (N5)', () => {
+  // D25: the repo is public and an excerpt is committed into it. Round 1 covered
+  // the exact strings it happened to know - store, repo, lease file, `$HOME`,
+  // hostname, scratch dir. These are the rest of the shapes a real log prints,
+  // each one named by the re-review after it found them in a committed excerpt.
+  const HOME = '/Users/danielwilliams';
+  const base = {
+    repoRoot: `${HOME}/Workspace/oss/nitro-ui`,
+    storeDir: `${HOME}/Workspace/oss/nitro-ui/.git/nitro-ui-gates`,
+    leaseFile: `${HOME}/.nitro-ui/leases.json`,
+    home: HOME,
+    username: 'danielwilliams',
+    hostname: 'Daniels-MacBook-Pro.local',
+    tmpDir: '/private/var/folders/x4/ZZ34Q44R7S30Q5V4F04F0000gn/T',
+  };
+
+  const apply = (text, extra = {}) =>
+    redactLocalPaths(text, localPathRedactions({ ...base, ...extra }));
+
+  it('redacts the bare username where it stands for a person', () => {
+    for (const line of [
+      'ssh danielwilliams@build-box.internal',
+      'whoami\ndanielwilliams',
+      'user: danielwilliams',
+      'USER=danielwilliams',
+      'login: danielwilliams (console)',
+      'ps -o user,pid -p 4242\ndanielwilliams 4242',
+    ]) {
+      expect(apply(line)).not.toContain('danielwilliams');
+      expect(apply(line)).toContain('<user>');
+    }
+  });
+
+  it('does not redact a username that would shred the log', () => {
+    // A username is a word like any other: `main`, `test`, `admin`. Redacting one
+    // of those wherever it appears would turn every branch name and every test
+    // summary into a placeholder, which is an unreadable excerpt, not a private
+    // one. So the bare-name rule is limited to identity positions and to names
+    // that are unlikely to be an ordinary word.
+    for (const username of [
+      'main',
+      'test',
+      'admin',
+      'ci',
+      'guest',
+      'dev',
+      'ab',
+    ]) {
+      const redacted = apply('checkout main and run the test suite', {
+        username,
+      });
+      expect(redacted).toBe('checkout main and run the test suite');
+    }
+  });
+
+  it('redacts the hostname in every form a log prints it', () => {
+    for (const form of [
+      'Daniels-MacBook-Pro.local',
+      'Daniels-MacBook-Pro',
+      'daniels-macbook-pro.local',
+      'daniels-macbook-pro',
+      'DANIELS-MACBOOK-PRO',
+    ]) {
+      expect(apply(`ping ${form} (10.0.0.7) failed`)).not.toContain(
+        form.toLowerCase()
+      );
+      expect(apply(`ping ${form} (10.0.0.7) failed`)).toContain('<host>');
+    }
+    // Including inside a path or a URL, where the exact-string rule of round 1
+    // could not reach.
+    expect(apply('/Volumes/Daniels-MacBook-Pro/tmp/build')).not.toContain(
+      'Daniels-MacBook-Pro'
+    );
+    expect(apply('ssh user@Daniels-MacBook-Pro.local')).not.toContain(
+      'Daniels-MacBook-Pro.local'
+    );
+  });
+
+  it('redacts the whole per-user scratch folder, not only /T', () => {
+    // Xcode, SwiftPM and CoreSimulator write beside the temp dir: `…/C/com.apple
+    // .Xcode/...`, `…/0/com.apple.devicermanager`, and a device log repeats the
+    // hashed folder itself. Only `…/T` was redacted, so the hash went out anyway.
+    const parent = '/private/var/folders/x4/ZZ34Q44R7S30Q5V4F04F0000gn';
+    for (const line of [
+      `${parent}/C/com.apple.Xcode/ DerivedData`,
+      `${parent}/0/com.apple.CoreSimulator.CoreSimulatorService/logs`,
+      `${parent}/T/x12-jest-fixture`,
+      `/var/folders/x4/ZZ34Q44R7S30Q5V4F04F0000gn/TemporaryItems`,
+    ]) {
+      expect(apply(line)).not.toContain('ZZ34Q44R7S30Q5V4F04F0000');
+      expect(apply(line)).toContain('<tmp>');
+    }
+  });
+
+  it('still leaves a plain /tmp alone', () => {
+    // Redacting `/tmp` would mangle every unrelated path in a log, and it names no
+    // machine.
+    expect(apply('rm -rf /tmp/whatever')).toBe('rm -rf /tmp/whatever');
+  });
+});
+
+describe('an excerpt redacts machine paths by shape, not only by exact string (N5)', () => {
+  // The exact-string redactions can only name *this* user's folders. A log can
+  // carry another person's too - a CI artifact, a shared cache, a teammate's
+  // stack trace pasted into an assertion - and those need a rule that recognises
+  // the shape.
+  const shapes = [
+    ['/Users/janesmith/.gradle/daemon.log', 'janesmith', '<user>'],
+    ['/home/janesmith/.android/avd', 'janesmith', '<user>'],
+    [
+      '/private/var/folders/9q/QWERTYUIOPASDFGHJKLZXCVBNM12345/T/jest-x',
+      'QWERTYUIOPASDFGHJKLZXCVBNM12345',
+      '<tmp>',
+    ],
+    ['/System/Volumes/Data/Users/janesmith/Library', 'janesmith', '<user>'],
+  ];
+  for (const [line, secret, marker] of shapes) {
+    it(`redacts ${line}`, () => {
+      const result = scrubMachinePaths(line);
+      expect(result).not.toContain(secret);
+      expect(result).toContain(marker);
+    });
+  }
+
+  it('leaves a path that names nobody alone', () => {
+    for (const line of [
+      '/usr/local/bin/xcodebuild -project App.xcodeproj',
+      '/Applications/Xcode.app/Contents/Developer',
+      'node_modules/react-native/index.js',
+      '/tmp/x12-jest-fixture',
+    ]) {
+      expect(scrubMachinePaths(line)).toBe(line);
+    }
   });
 });
 

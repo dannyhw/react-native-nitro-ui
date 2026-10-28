@@ -1780,6 +1780,81 @@ const BARE_VALUE_END = new Set([
 ]);
 
 /**
+ * The machine-identifying *shapes* a log can carry that no caller could list.
+ *
+ * `localPathRedactions` is the exact-string half: this checkout's repo, store,
+ * lease file, `$HOME`, scratch folder and hostname. It is precise - it cannot
+ * mangle anything - and it is blind by construction, because it can only name
+ * folders on the machine running the gate. A gate log carries other people's: a CI
+ * artifact's `/home/jenkins/…`, a stack trace pasted from a teammate's
+ * `/Users/janesmith/…`, a CoreSimulator line repeating its own hashed per-user
+ * folder. Found by the re-review, which found them in an excerpt round 1 had
+ * already committed.
+ *
+ * Each rule replaces the part that names a *person or a box* and leaves the rest
+ * of the path alone, because the path is the half that explains a failure. The
+ * exclusions are the other half of the design: `Shared` and the CI service
+ * accounts are roles, not people, and redacting them would shred a CI log while
+ * hiding nobody.
+ */
+const MACHINE_PATH_RULES = [
+  {
+    // A home directory under a known root.
+    re: /\/(?:Users|home)\/([A-Za-z0-9._-]{1,63})(?=\/|$)/g,
+    named: true,
+    out: (root) => `${root}<user>`,
+    root: /\/(?:Users|home)\//,
+  },
+  {
+    // The per-user scratch folder macOS builds (`/var/folders/<3 hex>/<32 base36>`),
+    // and every subdirectory of it. Xcode, SwiftPM and CoreSimulator write beside
+    // the temp dir - `…/C/com.apple.Xcode/…`, `…/0/com.apple.CoreSimulator…` - so
+    // redacting only `…/T`, as round 1 did, still published the hash.
+    re: /(?:\/private)?\/var\/folders\/[A-Za-z0-9]{1,4}\/[A-Za-z0-9_-]{10,}(?=\/|$)/g,
+    out: () => '<tmp>',
+  },
+];
+
+/**
+ * Account names that are roles rather than people, so redacting them would shred a
+ * log to hide nobody. `AMBIGUOUS_USERNAMES` covers the ordinary-word case; these
+ * are the CI and system accounts a container's paths are full of.
+ */
+const SERVICE_ACCOUNTS =
+  /^(?:Shared|runner|jenkins|vagrant|vsts|container|system|shared)$/i;
+
+/**
+ * Replaces the machine-identifying shapes in `text`.
+ *
+ * @param {string} text
+ * @param {(count: number) => void} [onReplace] told how many replacements were made
+ * @returns {string}
+ */
+export function scrubMachinePaths(text, onReplace = null) {
+  let out = String(text ?? '');
+  let count = 0;
+  for (const rule of MACHINE_PATH_RULES) {
+    out = out.replace(rule.re, (whole, ...rest) => {
+      // Only the home rule captures a name, so it says so: with no capture group
+      // the callback's second argument is the match offset, and testing `412`
+      // against the account list is not a question — which is how the first draft
+      // of this crashed `export` outright.
+      const name = rule.named ? String(rest[0]) : null;
+      if (
+        (name != null && SERVICE_ACCOUNTS.test(name)) ||
+        (name != null && AMBIGUOUS_USERNAMES.has(name.toLowerCase()))
+      ) {
+        return whole;
+      }
+      count += 1;
+      return rule.out(whole.match(rule.root ?? /^$/)?.[0] ?? '');
+    });
+  }
+  if (onReplace != null && count > 0) onReplace(count);
+  return out;
+}
+
+/**
  * Rewrites every credential assignment in `text` in one left-to-right pass.
  *
  * This replaces the two regexes that did the job before, and it exists because of
@@ -1961,6 +2036,27 @@ function scrubAssignments(text, scrub) {
       }
     } else {
       valueEnd = bareEnd(j);
+      // In a config file the value is the *rest of the line*, and a passphrase is
+      // words: `password: correct horse battery` is one secret, not four tokens of
+      // which the first is redacted (review N5). A config-style separator is a `:`,
+      // or an `=` with spaces around it (`pass = hunter2`); a tight `key=value` is
+      // shell, env or CLI spelling, where a space ends the argument - which is why
+      // `NPM_TOKEN=a GITHUB_TOKEN=b` still reports two replacements, not one.
+      const configStyle =
+        !'[{'.includes(text[j]) &&
+        (separator === ':' ||
+          (separator === '=' &&
+            (text[i - 1] === ' ' ||
+              text[i - 1] === '\t' ||
+              text[i + 1] === ' ')));
+      if (configStyle) {
+        valueEnd = lineEnd;
+        while (
+          valueEnd > j &&
+          (text[valueEnd - 1] === ' ' || text[valueEnd - 1] === '\t')
+        )
+          valueEnd -= 1;
+      }
     }
 
     if (wholeIsHeader && open === '') {
@@ -2009,11 +2105,53 @@ function scrubAssignments(text, scrub) {
  * registry, and that line is exactly what a failing `npm publish` prints.
  */
 const CREDENTIAL_KEY =
-  /^(?:[\w.-]*(?:token|secret|password|passwd|passfile|credential|authorization|bearer|cookie|dsn|npm[-_.]?config)[\w.-]*|[\w.-]*(?:api|access|secret|private|auth|session|encryption|signing|deploy)[-_.]?key[\w.-]*|[\w.-]*session[-_.]?(?:id|key|token)[\w.-]*|[_-]?auth|auth[-_.]?(?:token|key|header)|x[-_.]?sc[-_.]?auth|aws[-_.]?access[-_.]?key[-_.]?(?:id|secret))$/i;
+  /^(?:[\w.-]*(?:token|secret|password|passwd|passfile|passphrase|credential|authorization|bearer|cookie|dsn|npm[-_.]?config)[\w.-]*|[\w.-]*(?:api|access|secret|private|auth|session|encryption|signing|deploy)[-_.]?key[\w.-]*|[\w.-]*session[-_.]?(?:id|key|token)[\w.-]*|[_-]?auth|auth[-_.]?(?:token|key|header)|x[-_.]?sc[-_.]?auth|aws[-_.]?access[-_.]?key[-_.]?(?:id|secret))$/i;
 
 /** Values that are credentials by *shape* alone, wherever they appear. */
+/**
+ * Values that are credentials by *shape* alone, wherever they appear.
+ *
+ * Each prefix is a vendor's own, so the rule cannot guess at "random-looking
+ * strings" and shred a stack trace. `sk-ant-`, `sk_live_`/`sk_test_`, `glpat-`
+ * and `AIza` are the four the re-review found missing; a build that installs a
+ * publishing or deploy plugin prints them the same way it prints a `ghp_`.
+ */
 const CREDENTIAL_SHAPE =
-  /\b(gh[pousr]_[A-Za-z0-9]{20,}|npm_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/g;
+  /\b(gh[pousr]_[A-Za-z0-9]{20,}|npm_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|sk-ant-[A-Za-z0-9_-]{20,}|sk_(?:live|test)_[A-Za-z0-9]{16,}|glpat-[A-Za-z0-9_-]{15,}|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/g;
+
+/**
+ * An email address. D25 lists these, and a build log prints them constantly:
+ * `git log`, `.npmrc`'s `email=`, a podspec's or pom's author, a CocoaPods or
+ * Gradle publication failure echoing the identity it tried to publish as.
+ *
+ * The first domain label has to start with a letter, which is what keeps
+ * `logo@2x.png` and `icon@3x.png` - the shape that would otherwise be mangled in
+ * every React Native build log - as the filenames they are.
+ */
+const EMAIL =
+  /(^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,64})@([A-Za-z][A-Za-z0-9-]{0,62}(?:\.[A-Za-z0-9-]{0,62})*\.[A-Za-z]{2,24})(?=$|[^A-Za-z0-9-])/g;
+
+/**
+ * Addresses that are a protocol's own, not a person's.
+ *
+ * `git@github.com:owner/repo.git` is how a clone's remote prints in a release
+ * job's log, and redacting it would hide the one line that says which repository
+ * the job was pushing to while naming exactly nobody.
+ */
+const PROTOCOL_ACCOUNTS = /^git@(?:github|gitlab|bitbucket)\.com$/i;
+
+/**
+ * `curl -u user:pass`, `--user=user:pass`, and a bare `user:pass@host`.
+ *
+ * The URL rule above only fires on a `scheme://` authority, so these two shapes -
+ * the flag a build script passes and the authority a curl error echoes back -
+ * went out whole (review N5).
+ */
+const FLAG_USERINFO =
+  /(^|[^A-Za-z0-9-])(-{1,2}u(?:ser)?)([= ]+)([A-Za-z0-9._%+@-]{1,64}:)(?:"([^"\n]*)"|'([^'\n]*)'|([^\s"']{1,4096}))/gi;
+
+const BARE_USERINFO =
+  /(^|[\s/"'`([{@=])([A-Za-z0-9._%+@-]{1,64}:)([^\s@"'`\])}]{1,4096})(?=@[A-Za-z0-9-.])/g;
 
 /**
  * Scrubs the secret shapes from a log before it is committed.
@@ -2121,6 +2259,40 @@ export function scrubSecrets(text) {
   // Bare shapes.
   out = out.replace(CREDENTIAL_SHAPE, () => scrub('[scrubbed: credential]'));
 
+  // `curl -u user:pass` and `user:pass@host`, which are not URL authorities and so
+  // never reached the rule above (review N5). The host stays: it is the half that
+  // tells a reader *which* service leaked.
+  out = out.replace(
+    FLAG_USERINFO,
+    (all, before, flag, sep, user, dq, sq, bareValue) => {
+      const value = dq ?? sq ?? bareValue ?? '';
+      if (value === '' || value === '[scrubbed]') return all;
+      const quote = dq != null ? '"' : sq != null ? "'" : '';
+      return scrub(`${before}${flag}${sep}${user}${quote}[scrubbed]${quote}`);
+    }
+  );
+  out = out.replace(BARE_USERINFO, (all, before, user, password) =>
+    // The `@host` sits in the lookahead, so it is not part of the match and the
+    // host survives by dropping the password alone.
+    password === '[scrubbed]' ? all : scrub(`${before}${user}[scrubbed]`)
+  );
+
+  // Email addresses (D25). After everything else, so an address inside a credential
+  // value is already gone and this only handles the plain kind.
+  out = out.replace(EMAIL, (all, before, user, domain) =>
+    PROTOCOL_ACCOUNTS.test(`${user}@${domain}`)
+      ? all
+      : scrub(`${before}<email>`)
+  );
+
+  // And the paths that name *someone else's* machine, which no caller can list:
+  // `localPathRedactions` knows this checkout's folders, and nothing knows a
+  // teammate's username or a CI runner's hashed scratch folder until a log carries
+  // one (review N5).
+  out = scrubMachinePaths(out, (count) => {
+    replaced += count;
+  });
+
   return { text: out, replaced };
 }
 
@@ -2196,23 +2368,120 @@ export function failureLinesFrom(text, max = EXCERPT_MAX_FAILURES) {
 }
 
 /**
- * Local paths that must not survive into a committed file, and what replaces them.
+ * Words a username could plausibly be that are far more likely to appear in a log
+ * as something else. Redacting these wherever they occur would turn every branch
+ * name, package name and log level into a placeholder, which is an unreadable
+ * excerpt rather than a private one: the path-shaped rules in
+ * `MACHINE_PATH_RULES` still catch the cases where they really are an account.
+ */
+const AMBIGUOUS_USERNAMES = new Set([
+  'main',
+  'master',
+  'dev',
+  'develop',
+  'test',
+  'tests',
+  'demo',
+  'sample',
+  'admin',
+  'guest',
+  'user',
+  'root',
+  'owner',
+  'staff',
+  'ci',
+  'bot',
+  'node',
+  'npm',
+  'bun',
+  'react',
+  'ios',
+  'android',
+  'mac',
+  'localhost',
+  'unknown',
+  'nobody',
+  'shared',
+]);
+
+/**
+ * Escapes a literal for use inside a RegExp.
  *
- * Why (review M4, D25): this repo is public, and an excerpt is written *into* it. The
- * old header printed `Full log: … (/Users/<name>/…)` in every excerpt, by
+ * @param {string} value
+ */
+function escapeForRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Rules for the two strings that name a machine and the person on it: the bare
+ * username and the hostname.
+ *
+ * Both have to be matched as whole words and in every spelling a log happens to
+ * print, because the exact-string rule they replace only ever caught the one form
+ * the caller happened to pass (`os.hostname()` returns the FQDN; `ping` prints the
+ * short form, `git` prints the lowercased one, and a stack trace prints the bare
+ * name). Review N5 found all three variants in one committed excerpt.
+ *
+ * @param {{username?: string | null, hostname?: string | null}} paths
+ * @returns {Array<[string | RegExp, string]>}
+ */
+function identityRules(paths) {
+  const rules = [];
+  const wordRule = (literal, replacement, flags = 'g') => [
+    new RegExp(
+      `(^|[^A-Za-z0-9._-])${escapeForRegExp(literal)}(?![A-Za-z0-9._-])`,
+      flags
+    ),
+    `$1${replacement}`,
+  ];
+  const worthMatching = (value) =>
+    value.length >= 3 &&
+    /^[A-Za-z0-9._-]+$/.test(value) &&
+    !AMBIGUOUS_USERNAMES.has(value.toLowerCase());
+
+  const username =
+    typeof paths.username === 'string' ? paths.username.trim() : '';
+  if (worthMatching(username)) rules.push(wordRule(username, '<user>'));
+
+  // `host`, `host.local`, `host.example.com`: `os.hostname()` gives one of them and
+  // a log prints any of the others - `ping` the short form, `git` the lowercased
+  // one, a mount point the bare label. Review N5 found three spellings of the same
+  // machine in one excerpt, of which exactly one was redacted.
+  const hostname =
+    typeof paths.hostname === 'string' ? paths.hostname.trim() : '';
+  const labels = hostname.split('.').filter((label) => label !== '');
+  const forms = new Set([hostname, labels[0] ?? '']);
+  if (labels.length > 1) forms.add(labels[0]);
+  for (const form of forms) {
+    if (worthMatching(form)) rules.push(wordRule(form, '<host>', 'gi'));
+  }
+  return rules;
+}
+
+/**
+ * Local paths and identity strings that must not survive into a committed file,
+ * and what replaces them.
+ *
+ * Why (review M4, D25): this repo is public, and an excerpt is written *into* it.
+ * The old header printed `Full log: … (/Users/<name>/…)` in every excerpt, by
  * construction - so the rule "never write home paths into a committed file" was
  * broken by the tool that produced the file, and the only defence was a comment
  * telling the reader to look first. A store or lease path is still useful to that
  * reader as a placeholder: `<store>/task/X3/check-….log` says where to look on the
  * machine that ran it, without saying who that machine belongs to.
  *
- * Longest first, because `/Users/name/repo` sits inside `/Users/name` and the
- * specific one has to win. Anything shorter than three characters is dropped: a home
- * of `/` or a user called `a` would shred every path in a stack trace, which is the
- * opposite of useful evidence.
+ * Entries are applied in order: the exact strings first, longest first, so the
+ * more specific path wins (`/Users/name/repo` before `/Users/name`), and the
+ * word-shaped identity rules last, once the paths that *contain* a name are
+ * already placeholders. Anything shorter than three characters is dropped: a home
+ * of `/` or a user called `a` would shred every path in a stack trace, which is
+ * the opposite of useful evidence.
  *
- * @param {{repoRoot?: string | null, storeDir?: string | null, leaseFile?: string | null, home?: string | null, hostname?: string | null, tmpDir?: string | string[] | null}} [paths]
- * @returns {Array<[string, string]>}
+ * @param {{repoRoot?: string | null, storeDir?: string | null, leaseFile?: string | null,
+ *   home?: string | null, hostname?: string | null, username?: string | null,
+ *   tmpDir?: string | string[] | null}} [paths]
+ * @returns {Array<[string | RegExp, string]>}
  */
 export function localPathRedactions(paths = {}) {
   // The scratch directory is per user and per machine (`/var/folders/<3 hex>/<32
@@ -2235,7 +2504,7 @@ export function localPathRedactions(paths = {}) {
     [paths.hostname, '<host>'],
     ...tmpDirs.map((value) => [value, '<tmp>']),
   ];
-  return wanted
+  const exact = wanted
     .filter(
       ([value, replacement]) =>
         typeof value === 'string' &&
@@ -2245,13 +2514,60 @@ export function localPathRedactions(paths = {}) {
         value !== replacement
     )
     .sort((a, b) => b[0].length - a[0].length);
+
+  // …and the folder the scratch directory sits *in*, which is the half that is
+  // hashed. Round 1 redacted `…/T` only, so Xcode's `…/C/com.apple.Xcode/…` and
+  // CoreSimulator's `…/0/…` still published `<3 hex>/<32 base36>` - the same
+  // machine fingerprint by another name (review N5).
+  // This machine's own scratch folder, in *every* subdirectory of it. Round 1
+  // redacted `…/T` only, so Xcode's `…/C/com.apple.Xcode/…` and CoreSimulator's
+  // `…/0/…` went out carrying the same `<3 hex>/<32 base36>` fingerprint by another
+  // name (review N5).
+  const shapeRules = [];
+  for (const dir of new Set(
+    tmpDirs.map((value) => scratchFolderParent(value))
+  )) {
+    if (dir == null) continue;
+    const literal = escapeForRegExp(dir.replace(/^\/private(?=\/var\/)/, ''));
+    shapeRules.push([
+      new RegExp(`(?:/private)?${literal}(?=/|$)`, 'g'),
+      '<tmp>',
+    ]);
+  }
+
+  // Applied last: these match a bare *word*, so they have to run after the paths
+  // that contain the same word are already placeholders.
+  return [...exact, ...shapeRules, ...identityRules(paths)];
+}
+
+/**
+ * The hashed per-user scratch folder a temp path sits under, or null.
+ *
+ * `/private/var/folders/<3 hex>/<32 base36>/T` is what `os.tmpdir()` returns on
+ * macOS; the parent of the `T` is the part that names the machine, and `C`, `0`
+ * and `X` beside it hold Xcode's, CoreSimulator's and CoreUI's caches.
+ *
+ * @param {string} dir
+ * @returns {string | null}
+ */
+function scratchFolderParent(dir) {
+  const match = /(?:^|\/)(?:private\/)?var\/folders\/[^/]+\/[^/]+(?=\/|$)/.exec(
+    dir
+  );
+  if (match == null) return null;
+  return match[0].startsWith('/') ? match[0] : `/${match[0]}`;
 }
 
 /** Applies `localPathRedactions` pairs to a piece of text. */
 export function redactLocalPaths(text, redactions) {
   let out = String(text ?? '');
   for (const [needle, replacement] of redactions ?? []) {
-    out = out.split(needle).join(replacement);
+    // A pair is either a literal path or a whole-word rule; a regex's replacement
+    // may refer to its guard group, which `split`/`join` could not honour.
+    out =
+      needle instanceof RegExp
+        ? out.replace(needle, replacement)
+        : out.split(needle).join(replacement);
   }
   return out;
 }
@@ -2298,15 +2614,19 @@ export function renderFailureExcerpt({
   const tail = lines.slice(-Math.max(0, tailLines));
   const truncated = lines.length > tail.length;
 
-  // One place that trims and scrubs a kept line, so no section can be added to
-  // an excerpt later without going through the scrubber.
+  // One place that trims, redacts and scrubs a kept line, so no section can be
+  // added to an excerpt later without going through both. The order matters:
+  // `redactLocalPaths` first, because its exact-string rules know that
+  // `<this repo>/example/index.js` is *this* checkout and become `<repo>/…`, while
+  // the shape rules below would stop at `<tmp>/…/example/index.js` and lose the
+  // more useful placeholder.
   let replaced = 0;
   const keep = (line) => {
-    const text = String(line ?? '');
+    const redacted = redactLocalPaths(String(line ?? ''), redactions);
     const capped =
-      text.length > EXCERPT_MAX_LINE_CHARS
-        ? `${text.slice(0, EXCERPT_MAX_LINE_CHARS)} …[line truncated]`
-        : text;
+      redacted.length > EXCERPT_MAX_LINE_CHARS
+        ? `${redacted.slice(0, EXCERPT_MAX_LINE_CHARS)} …[line truncated]`
+        : redacted;
     const result = scrubSecrets(capped);
     replaced += result.replaced;
     return result.text;
@@ -2350,7 +2670,7 @@ export function renderFailureExcerpt({
     // The line that makes the difference between "we lost the log" (Q3) and
     // "we know where to look": the excerpt is a copy, the store has the original.
     `- Full log: \`${String(entry?.logPath ?? 'not recorded')}\`${logLocation == null ? '' : ` (${String(logLocation)})`}`,
-    `- Scrubbed: ${String(replaced)} credential-looking value(s) were replaced, and this checkout's, the store's and your home paths are written as \`<repo>\`/\`<store>\`/\`~\`, before this file was written. Device identifiers appear only when the run recorded its own lease.`,
+    `- Scrubbed: ${String(replaced)} credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as \`<repo>\`/\`<store>\`/\`~\`/\`<user>\`/\`<host>\`/\`<tmp>\`, before this file was written. Device identifiers appear only when the run recorded its own lease.`,
     '',
     '## Failing tests and assertion messages',
     '',

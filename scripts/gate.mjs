@@ -2212,6 +2212,10 @@ function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
     leaseFile: path.join(statePaths(stateHome(process.env)).leases),
     home: os.homedir(),
     hostname: os.hostname(),
+    // The bare name, because `$HOME` only gives it as part of a path: `whoami`,
+    // `ps -o user`, `ssh <user>@host` and `USER=` print it on its own, and review
+    // N5 found all of them in an excerpt that carried no home path at all.
+    username: process.env.USER ?? os.userInfo().username,
     // Both spellings of the scratch dir: jest prints resolved paths (`/private/var/…`
     // on macOS) while `os.tmpdir()` returns the symlink, and a log fixture lives
     // under the resolved one.
