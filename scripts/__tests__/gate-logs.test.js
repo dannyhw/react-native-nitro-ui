@@ -1450,6 +1450,28 @@ describe('scrubSecrets is linear in what it reads (re-review N3)', () => {
     expect(result.ms).toBeLessThan(BUDGET_MS);
   });
 
+  it('is not quadratic when one separator sits at the end of a long run', () => {
+    // The case the linear pass can still get wrong on its own. There is one
+    // separator, so the outer scan costs nothing; but the *key* is a megabyte of
+    // dotted text, and the pass considers every word boundary inside it as a
+    // candidate key, each one tested against the credential-key pattern. Bounding
+    // how far back a key may reach (`MAX_KEY_SCAN`) is what keeps that bounded;
+    // drop the bound and this line is quadratic again.
+    //
+    // The run has to *end* on a word character: `a.a.a…=` ends on a dot, which the
+    // "a separator the key run does not reach" guard rejects before any candidate
+    // is considered, and a fixture that bails out early proves nothing.
+    const result = scrubTimed(
+      `${'a.'.repeat(500_000).slice(0, -1)}=not-a-secret`
+    );
+    expect(result.ms).toBeLessThan(BUDGET_MS);
+  });
+
+  it('is not quadratic in one long undotted run before a separator', () => {
+    const result = scrubTimed(`${'a'.repeat(1_000_000)}:not-a-secret`);
+    expect(result.ms).toBeLessThan(BUDGET_MS);
+  });
+
   it('still finds the credential shapes inside a long line', () => {
     // The cheap way to pass a timing test is to stop matching things. This is the
     // counterweight: the same shapes the short-line tests assert, now buried at the
