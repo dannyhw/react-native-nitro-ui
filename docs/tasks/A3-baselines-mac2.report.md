@@ -11,8 +11,9 @@ server 5043, Metro 8295)
 committed in its own commit, and `--check` on Android now gates on `maintainer-mac-2`: 166 nitro-ui
 rows within tolerance, 27 noise-suppressed, 7 `new arm` (the `leak` cells, which store no slope),
 0 failures. It came from one clean `--plan full --launches 8` run at `9cf95f3`, 1848/1848 launches,
-`problems: []`, ART `speed-profile` on the first attempt, and the quietest whole-run sampling in
-the repo so far — 2475 samples, median 1.47 against that machine's 5.0 ceiling, **none** over.
+`problems: []`, ART `speed-profile` on the first attempt, and the quietest whole-run sampling of any
+baseline in the repo — 2475 samples, median 1.47 against that machine's 5.0 ceiling, **none** over
+(mac-1's iOS file, the only other one with `loadSamples`, had 59 of 1740 over).
 
 iOS was refused by the completeness guard, not by load, and per the brief that is the end of it:
 `mount.date-picker` at N=200 presented on 55 of 160 measured iterations on
@@ -273,9 +274,14 @@ Supporting absolutes (median of per-launch medians, nitro-ui vs `expo-ui-shared-
   the reference, spreads 0.9–3.5 %.
 - mount UI CPU per op: switch 16.7 vs 9.1, button 21.7 vs 12.0, picker 48.0 vs 32.4, progress 14.6
   vs 16.2, segmented-control 36.3 vs 24.9, slider 20.2 vs 11.2.
-- update UI CPU per op (N=50): switch 1.77× (9.60 vs 5.41 ms), button 1.86× (12.01 vs 6.49), picker
-  **0.46×** (25.33 vs 55.65), progress **0.09×** (4.20 vs 47.92), segmented-control 0.88× (30.01 vs
-  34.07), slider 1.24× (7.08 vs 5.69).
+- update UI CPU per op (N=50), for the four cells whose reference arm actually mounted: switch
+  1.77× (9.60 vs 5.41 ms), button 1.86× (12.01 vs 6.49), segmented-control 0.88× (30.01 vs 34.07),
+  slider 1.24× (7.08 vs 5.69). The other two are the artefact A1b recorded for this same cell:
+  `update.progress` and `update.picker` on `expo-ui-shared-host` never mounted
+  (`missingMount` 160/160, so no `presented`/`mounted` signal and no gated metric), and their
+  CPU/op figures — 47.92 and 55.65 ms/op — are what an arm charges for work it never displayed.
+  The 0.09× and 0.46× they would give are not quotable, and only `nitro-ui` arms gate, so the
+  baseline is unaffected.
 - memory per instance at N=200: switch 143.7 vs 50.0 KiB, button 188.6 vs 76.6, picker 291.8 vs
   312.8, progress 131.6 vs 78.7, segmented-control 329.6 vs 287.8, slider 148.2 vs 61.6.
 
