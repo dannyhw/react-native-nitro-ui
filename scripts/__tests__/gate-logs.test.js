@@ -1856,6 +1856,34 @@ describe('scrubSecrets (what may be committed)', () => {
     expect(scrubSecrets(log).text).toBe(log);
   });
 
+  it('takes a config value to the end of the line, but not a JSON object', () => {
+    // The two halves of one rule. A config file's value is the rest of the line,
+    // because a passphrase is words (`password: correct horse battery`). A
+    // *structural* character after the separator means the value is not a phrase:
+    // it is an object, and swallowing to end-of-line would take the file's shape
+    // with it, so the reader loses the key that leaked as well as the secret.
+    const config = scrubSecrets('nexusPassword: correct horse battery');
+    expect(config.text).toBe('nexusPassword: [scrubbed]');
+    expect(config.replaced).toBe(1);
+
+    const json = scrubSecrets('cfg = { "password": "hunter2secret" }');
+    expect(json.text).toBe('cfg = { "password": "[scrubbed]" }');
+    // The object is still an object: the braces and the key survive, so the line
+    // still says *where* the credential sat.
+    expect(json.text).toContain('{ "password":');
+    expect(json.text).toContain('}');
+    expect(json.text).not.toContain('hunter2secret');
+
+    // The guard's real job is an *unquoted* object, where "the rest of the line"
+    // would swallow every key after the credential-shaped one. Without it, a
+    // config dump's remaining evidence — which is usually the reason the run is
+    // interesting — disappears from the committed excerpt.
+    const nested = scrubSecrets('nested {"a":{"secret":{"b":"c"}}}');
+    expect(nested.text).toContain('"b":"c"');
+    expect(nested.text).toContain('}');
+    expect(nested.replaced).toBe(1);
+  });
+
   it('scrubs a multi-word password rather than its first word (N5)', () => {
     // A YAML or properties value is not quoted, and a passphrase is words. Taking
     // one word published the rest: `nexusPassword: correct horse battery` came out
@@ -1900,6 +1928,13 @@ describe('scrubSecrets (what may be committed)', () => {
     // log lines an excerpt exists to keep readable.
     const asset = 'copy logo@2x.png and @3x into assets\n';
     expect(scrubSecrets(asset).text).toBe(asset);
+    // Nor is a protocol's own account: `git@github.com:owner/repo.git` is how every
+    // clone prints its remote, and redacting it hides which repository a release job
+    // pushed while naming nobody.
+    const remote =
+      'git push git@github.com:margelo/react-native-nitro-modules.git main\n';
+    expect(scrubSecrets(remote).text).toBe(remote);
+    expect(scrubSecrets(remote).replaced).toBe(0);
   });
 
   it('scrubs a `curl -u user:pass` and a bare `user:pass@host` (N5)', () => {
@@ -1992,16 +2027,20 @@ describe('localPathRedactions covers what identifies a machine (N5)', () => {
       'daniels-macbook-pro',
       'DANIELS-MACBOOK-PRO',
     ]) {
-      expect(apply(`ping ${form} (10.0.0.7) failed`)).not.toContain(
-        form.toLowerCase()
-      );
-      expect(apply(`ping ${form} (10.0.0.7) failed`)).toContain('<host>');
+      // Compared case-insensitively, and against the *lowercased* text: asserting
+      // `not.toContain(form.toLowerCase())` on text that still reads
+      // `Daniels-MacBook-Pro` is true whether or not anything was redacted, which is
+      // how the first draft of this test stayed green with the short-form rule
+      // deleted — the very thing it was written to catch (review N4's own complaint).
+      const redacted = apply(`ping ${form} (10.0.0.7) failed`).toLowerCase();
+      expect(redacted).not.toContain('daniels-macbook-pro');
+      expect(redacted).toContain('<host>');
     }
     // Including inside a path or a URL, where the exact-string rule of round 1
     // could not reach.
-    expect(apply('/Volumes/Daniels-MacBook-Pro/tmp/build')).not.toContain(
-      'Daniels-MacBook-Pro'
-    );
+    expect(
+      apply('/Volumes/Daniels-MacBook-Pro/tmp/build').toLowerCase()
+    ).not.toContain('daniels-macbook-pro');
     expect(apply('ssh user@Daniels-MacBook-Pro.local')).not.toContain(
       'Daniels-MacBook-Pro.local'
     );
@@ -2025,8 +2064,52 @@ describe('localPathRedactions covers what identifies a machine (N5)', () => {
 
   it('still leaves a plain /tmp alone', () => {
     // Redacting `/tmp` would mangle every unrelated path in a log, and it names no
-    // machine.
+    // machine. Not hypothetical: `os.tmpdir()` *is* `/tmp` on a Linux runner and
+    // `gate.mjs` passes it, so the rule that keeps a short tmpdir out of the list is
+    // the difference between a CI log that reads and one where every `/tmp/...`
+    // became a placeholder.
     expect(apply('rm -rf /tmp/whatever')).toBe('rm -rf /tmp/whatever');
+    const linux = { tmpDir: '/tmp' };
+    expect(apply('rm -rf /tmp/whatever', linux)).toBe('rm -rf /tmp/whatever');
+    expect(apply('rm -rf /tmp/whatever', linux)).not.toContain('<tmp>');
+    // A macOS-style scratch dir still redacts on both spellings, so the guard above
+    // is a floor and not a general exemption.
+    expect(apply(`${base.tmpDir}/jest-x`)).not.toContain(
+      'ZZ34Q44R7S30Q5V4F04F0000'
+    );
+  });
+
+  it('will not match an identity string too short to be safe', () => {
+    // Both guards are load-bearing in the same direction: a 2-character username or
+    // hostname, matched as a "whole word", would fire inside half the identifiers in
+    // a stack trace. Dropping it costs nothing — such a name appears in `$HOME` and
+    // in the store path, where the exact-string rules already cover it.
+    const shortUser = redactLocalPaths(
+      'ps -o user=p | grep -w id && whoami says id',
+      localPathRedactions({
+        home: '/Users/id',
+        username: 'id',
+        hostname: 'id',
+        repoRoot: null,
+        storeDir: null,
+        leaseFile: null,
+        tmpDir: '/tmp',
+      })
+    );
+    expect(shortUser).toBe('ps -o user=p | grep -w id && whoami says id');
+    // And the home path itself is still gone, which is the coverage the length
+    // guard gives up in exchange.
+    expect(
+      redactLocalPaths(
+        '/Users/id/.gradle',
+        localPathRedactions({
+          home: '/Users/id',
+          username: 'id',
+          hostname: 'id',
+          tmpDir: '/tmp',
+        })
+      )
+    ).toBe('~/.gradle');
   });
 });
 
@@ -2054,11 +2137,19 @@ describe('an excerpt redacts machine paths by shape, not only by exact string (N
   }
 
   it('leaves a path that names nobody alone', () => {
+    // The other half of the rule. A container or a CI box is full of accounts that are
+    // roles, and redacting those shreds an excerpt to hide no person: `/home/ci` and
+    // `/Users/Shared` are the lines a CI log repeats.
     for (const line of [
       '/usr/local/bin/xcodebuild -project App.xcodeproj',
       '/Applications/Xcode.app/Contents/Developer',
       'node_modules/react-native/index.js',
       '/tmp/x12-jest-fixture',
+      '/Users/Shared/Jenkins/Caches/gradle',
+      '/home/ci/.gradle/daemon.log',
+      '/home/runner/work/react-native-nitro-ui',
+      '/home/vagrant/.android/avd',
+      '/opt/homebrew/bin/bun',
     ]) {
       expect(scrubMachinePaths(line)).toBe(line);
     }
