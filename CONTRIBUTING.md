@@ -353,6 +353,7 @@ cp scripts/devices.example.json ~/.nitro-ui/devices.json   # then put your real 
 {
   "maxDeviceLeases": 2,
   "maxConcurrentBuilds": 1,
+  "idleShutdownMinutes": 30,
   "reservedEmulatorPorts": [5560],
   "reservedIdentifiers": [],
   "pairs": [
@@ -388,6 +389,52 @@ real one.
 `ANDROID_ADB_SERVER_PORT` is part of a lease on purpose: a private adb server per
 task means one task's `adb` never queues behind another's, and it is what makes
 `adb kill-server` on the default port somebody else's problem - so don't.
+
+### The lease owns device lifecycle (X11)
+
+Booting costs 54 s on Android and about 200 s on an iOS 27 simulator - which
+additionally drives `load1` past 100 for four to six minutes - and every task
+used to pay it twice, once for the harness and once for real-input, then shut
+its devices down so the next task paid it too. So the lease now keeps the pair
+it hands out **warm**, and a task stops powering devices off.
+
+```sh
+node scripts/lease.mjs acquire --task X11 --boot        # boots the pair, waits until settled
+node scripts/lease.mjs list                             # what is booted, and who holds it
+node scripts/lease.mjs reap                             # powers off what is idle past the limit
+node scripts/lease.mjs release X11                      # devices stay up, on purpose
+```
+
+What that means in practice:
+
+- **Booting is opt-in.** `--boot` (or `NITRO_UI_LEASE_BOOT=1`, which is what an
+  agent's shell should set) boots what is down, waits for `adb devices` /
+  `simctl list` rather than for the boot process, waits for the load average to
+  fall under the bench's settle ceiling, and resets the example app. Without it
+  a lease only reserves names - which is what a test, a CI runner or a bench
+  host wants.
+- **Reaping is the cheap half and it is not opt-in.** `acquire`, `release`,
+  `list` and `reap` power off any pool device idle past `idleShutdownMinutes`
+  (`devices.json`, default 30; `0` means "as soon as a run lets go"). No
+  daemon: the reaper runs from the commands people already type. `--no-reap`
+  opts out, and `NITRO_UI_LEASE_BOOT=0` takes the whole device lifecycle
+  offline for a machine that manages its own devices.
+- **A device is only ever powered off if `devices.json` names it**, and never
+  on a reserved serial. The pool shuts down what the machine _declared_, never
+  something it merely observed booted.
+- **A run in flight is never interrupted.** A gate claims the devices of the
+  lease it runs under for the duration of the run (`scripts/gate.mjs`), so a
+  reap cannot power off an emulator mid-suite, and a second gate aimed at the
+  same device is refused before it starts. `NITRO_UI_GATE_DEVICE_FORCE=1` runs
+  anyway; a bench that wants the machine to itself uses `--exclusive`, which
+  powers off every non-leased pool device before it returns.
+- **A claim is a pid.** A gate that is killed leaves a claim that a reaper
+  treats as no claim at all, so nothing has to trust a clean exit - and a
+  device cannot be wedged "in use" by a process that no longer exists.
+- Nothing opens Simulator.app: a pooled simulator is booted with `simctl boot`
+  and stays headless. On Xcode 27 the app asks DeviceKit for a default device
+  and boots one no lease handed out, which is exactly the background load the
+  pool exists to remove. A human who wants to watch one opens it by hand.
 
 ## Running the on-device (Harness) tests
 

@@ -697,7 +697,7 @@ describe('claims', () => {
       force: true,
     });
     expect(taken.conflicts).toHaveLength(1);
-    expect(logs.join('\n')).toContain('--device-force');
+    expect(logs.join('\n')).toContain('NITRO_UI_GATE_DEVICE_FORCE=1');
   });
 
   it('ignores a claim whose process is gone', () => {
