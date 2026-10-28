@@ -1526,14 +1526,13 @@ export class DevicePool {
           });
           continue;
         }
-        planned.push({ entry, decision, forced, heldSet });
+        // `heldSet` is deliberately not carried here: what a kill may do is answered by the fresh
+        // read in pass 2, and a plan that *could* be handed an authority is one that eventually
+        // will be. The hold-sets stay local to this pass, which is the widest they should ever have
+        // been (X11 re-review M1).
+        planned.push({ entry, decision, forced });
       }
-      return {
-        planned,
-        decided,
-        held: heldForced,
-        keys: state.devices.map((x) => x.key),
-      };
+      return { planned, decided, keys: state.devices.map((x) => x.key) };
     });
     if (plan.aborted != null) {
       return {
