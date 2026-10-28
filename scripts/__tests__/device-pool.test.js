@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import {
+  BOOTING_PROTECTION_MS,
   IDLE_SHUTDOWN_DEFAULT_MINUTES,
   deviceIsBusy,
   loadSettleCeiling,
@@ -768,6 +769,72 @@ describe('reaping', () => {
     expect(done.reaped).toEqual([]);
     expect(done.kept[0]).toMatchObject({ reason: 'booting' });
     expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
+  });
+
+  it('writes the booting phase before the wait, so a warm reuse cannot be reaped mid-boot', () => {
+    // X11 review M3: `phase: 'booting'` used to be read by `deviceIsBusy` and written by nobody, so
+    // the protection was a comment. The case that matters is a *warm reuse*: `markBooting` keeps the
+    // record's old timestamps on purpose (a device that was up 90 minutes ago is still 90 minutes
+    // old), so the record is already past its idle limit for the whole up-to-`settleTimeoutMs` wait,
+    // and another process's reap in that window would kill a boot in flight.
+    withLeases([]);
+    withDevice(
+      entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 90 * MINUTE })
+    );
+    const { pool, calls } = fakePool({
+      home,
+      state: { serials: ['emulator-5574'], simulators: new Map() },
+    });
+    // Deliberately not the same lease: the pool writes this line as it starts a boot for the lease it
+    // is handing out, and the reaper in the window is a *different* process.
+    pool.markBooting(PAIR_A, lease('X9-1', { task: 'X9' }));
+    expect(readPool(home).devices[0]).toMatchObject({
+      phase: 'booting',
+      phaseAtMs: NOW,
+    });
+    const done = pool.reap({ idleMinutes: 0 });
+    expect(done.reaped).toEqual([]);
+    expect(done.kept[0]).toMatchObject({ reason: 'booting' });
+    expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
+    // And the window is closed by the boot finishing, so a device that came up is never stuck off
+    // the idle clock: the same reap after `notePair` does power it off.
+    pool.notePair(PAIR_A, lease('X9-1', { task: 'X9' }), {
+      booted: ['avd:nitro-ui-a'],
+    });
+    expect(readPool(home).devices[0].phase).toBe(null);
+    const after = pool.reap({ idleMinutes: 0 });
+    expect(after.reaped).toEqual([
+      { key: 'avd:nitro-ui-a', reason: 'lease-gone' },
+    ]);
+  });
+
+  it('lets a booting phase expire, so a task that died mid-boot cannot wedge a device', () => {
+    // The bound on the protection above. A boot that outlives `settleTimeoutMs` is a crashed task,
+    // not a boot in progress, and an unbounded phase is the "never reaped, forever warm" leak the
+    // pool exists to clean up - so the phase protects for one boot's worth of time, not for ever.
+    // 31 s past the bound: not on it.
+    withLeases([]);
+    withDevice(
+      entryOf({
+        key: 'avd:nitro-ui-a',
+        leaseId: null,
+        usedAgo: 90 * MINUTE,
+        phase: 'booting',
+      })
+    );
+    const state = readPool(home);
+    state.devices[0].phaseAtMs = NOW - BOOTING_PROTECTION_MS - 31_000;
+    writeFileSync(poolStatePath(home), JSON.stringify(state, null, 2));
+    const { pool, calls } = fakePool({
+      home,
+      state: { serials: ['emulator-5574'], simulators: new Map() },
+    });
+    expect(deviceIsBusy(state.devices[0], NOW)).toBe(false);
+    const done = pool.reap({ idleMinutes: 0 });
+    expect(done.reaped).toEqual([
+      { key: 'avd:nitro-ui-a', reason: 'lease-gone' },
+    ]);
+    expect(calls).toContainEqual(['emu-kill', 'emulator-5574', 5043]);
   });
 
   it('takes --idle-minutes over what devices.json says, for a device nobody leases', () => {
