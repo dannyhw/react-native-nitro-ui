@@ -794,6 +794,100 @@ describe('logs survive git worktree remove', () => {
     expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
   });
 
+  it('ignores an NITRO_UI_GATE_LOG that names another branch’s run (N8)', () => {
+    // The store is one directory shared by the whole clone, so "inside the store"
+    // (round 1's rule) is not a boundary: it admits another worktree's run and
+    // another branch's. A leaked or inherited variable would then have this run append
+    // its output into that log, name it in *this* branch's ledger line, and mark that
+    // run's `.gate.json` done — so the other task's `wait` returns while its gate is
+    // still running.
+    const dir = makeRepo();
+    const theirs = path.join(
+      storeOf(dir),
+      'task',
+      'x12-other-branch',
+      'check-still-running.log'
+    );
+    fs.mkdirSync(path.dirname(theirs), { recursive: true });
+    fs.writeFileSync(theirs, 'another branch’s gate is mid-flight\n');
+    const theirRecord = theirs.replace(/\.log$/, '.gate.json');
+    fs.writeFileSync(
+      theirRecord,
+      JSON.stringify({
+        version: 1,
+        gate: 'check',
+        pid: 4321,
+        startedAt: Date.now(),
+        logPath: 'task/x12-other-branch/check-still-running.log',
+        done: false,
+        branch: 'task/x12-other-branch',
+      })
+    );
+
+    const run = runCli(dir, ['check'], { NITRO_UI_GATE_LOG: theirs });
+    expect(run.status).toBe(0);
+    expect(run.stderr).toContain('ignoring NITRO_UI_GATE_LOG');
+    // Untouched, and still not done.
+    expect(fs.readFileSync(theirs, 'utf8')).toBe(
+      'another branch’s gate is mid-flight\n'
+    );
+    expect(JSON.parse(fs.readFileSync(theirRecord, 'utf8')).done).toBe(false);
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    expect(line.logPath.startsWith('task/x12-fixture/')).toBe(true);
+  });
+
+  it('accepts NITRO_UI_GATE_LOG for this branch, in a subdirectory the launcher made', () => {
+    // The allowed half, spelled the way `startBackgroundGate` spells it: this
+    // branch's directory, a name it has already opened. Narrowing the rule must not
+    // break the one caller that sets the variable.
+    const dir = makeRepo();
+    const chosen = path.join(
+      storeOf(dir),
+      'task',
+      'x12-fixture',
+      'check-my-own-background-run.log'
+    );
+    const run = runCli(dir, ['check'], { NITRO_UI_GATE_LOG: chosen });
+    expect(run.status).toBe(0);
+    expect(run.stderr).not.toContain('ignoring NITRO_UI_GATE_LOG');
+    expect(fs.readFileSync(chosen, 'utf8')).toContain('fake gate:');
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    expect(line.logPath).toBe(
+      'task/x12-fixture/check-my-own-background-run.log'
+    );
+  });
+
+  it('accepts this branch’s log spelled through a symlink, not just resolved', () => {
+    // The prefix test in `logPathsFor` compares realpaths, because a directory reached
+    // through a symlink shares no prefix with its own location — on macOS that is the
+    // `/var` → `/private/var` pair, and a checkout under any symlinked path hits it
+    // too. Spelling the launcher's own path a different way must not turn it into an
+    // intrusion: that would reject every background run in such a checkout. No other
+    // test reaches it, because the launcher's path and the store's agree by
+    // construction — which is how a rule that rejects its own caller could ship.
+    const dir = makeRepo();
+    // The branch directory the launcher would have created before handing over the
+    // path it opens; the symlink is the different spelling of the same directory.
+    fs.mkdirSync(path.join(storeOf(dir), 'task', 'x12-fixture'), {
+      recursive: true,
+    });
+    const link = path.join(scratch('x12-link-'), 'store');
+    fs.symlinkSync(storeOf(dir), link, 'dir');
+    const chosen = path.join(
+      link,
+      'task',
+      'x12-fixture',
+      'check-via-symlink.log'
+    );
+    const run = runCli(dir, ['check'], { NITRO_UI_GATE_LOG: chosen });
+    expect(run.status).toBe(0);
+    expect(run.stderr).not.toContain('ignoring NITRO_UI_GATE_LOG');
+    // Written where the variable said, and named the way the store names it.
+    expect(fs.existsSync(chosen)).toBe(true);
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    expect(line.logPath).toBe('task/x12-fixture/check-via-symlink.log');
+  });
+
   it('ignores an NITRO_UI_GATE_LOG that points outside the store (N7)', () => {
     const dir = makeRepo();
     const elsewhere = path.join(scratch('x12-outside-'), 'stolen.log');
