@@ -675,13 +675,23 @@ function main(argv) {
       exceptLeaseId: lease.id,
     });
     reportReap(reaped, log);
+    // The promise an exclusive lease makes, stated only when it was kept. A reap that was skipped
+    // (an unreadable `pool.json`) or that could not power something off leaves devices running
+    // under this bench, and a line saying "every device is off" would be the one thing a bench host
+    // cannot afford to believe. `reportReap` has already said why; this line has to agree with it.
     log(
-      `lease: exclusive - every device no other lease holds is off ` +
-        `(${reaped.reaped.length} shut down, ${reaped.alreadyOff.length} already off` +
-        (reaped.kept.length > 0
-          ? `, ${reaped.kept.length} held by a lease`
-          : '') +
-        ')'
+      reaped.skipped != null
+        ? 'lease: exclusive - the pool was NOT powered off (see the line above)'
+        : `lease: exclusive - ${
+            reaped.failed.length > 0
+              ? `${reaped.failed.length} device(s) are still up`
+              : 'every device no other lease holds is off'
+          } ` +
+            `(${reaped.reaped.length} shut down, ${reaped.alreadyOff.length} already off` +
+            (reaped.kept.length > 0
+              ? `, ${reaped.kept.length} held by a lease`
+              : '') +
+            `)`
     );
   }
 
