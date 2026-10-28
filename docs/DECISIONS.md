@@ -276,3 +276,21 @@ as `bun`, not `root`, and Changesets then names tags `react-native-nitro-ui@0.1.
 - **`primaryAction` ships iOS-only:** tap runs it, long-press opens the menu. It is ignored on
   Android and documented as iOS-only.
 - **`disabled` while open closes the menu**, as Picker and DatePicker do, and a harness test gates it.
+
+## D30 — 0.4 ships without TextField (2026-10-28)
+
+The owner's decision: 0.4 ships with what is ready and doesn't wait for TextField. G8 (TextField)
+moves to 0.5. The two spikes stay as unmerged evidence branches, because they ship prototype files:
+`task/T18-textfield-spike` (`246495c`) and `task/T18b-textfield-followup` (`052b377`). Both reviews
+are ACCEPT WITH CORRECTIONS; each report opens with a "Read with the review" note.
+
+- **T18:** its no-go reasons were measurement errors. The focus test unmounted its own field, and
+  the "latency" was the gap between keystroke callbacks.
+- **T18b:** Q2's go bar is not reached, and no no-go trigger fired. Android passes latency, reject
+  and `maxLength`. Still open:
+  - about 30 MiB retained at N=200;
+  - composition and X4 rules 1, 3 and 4 unmeasured;
+  - the iOS latency of 1.38× is a lower bound only;
+  - iOS reject is one key short;
+  - iOS focus on the `UITextField` arm is flaky;
+  - P1 fails in 3 of 10 iOS runs.

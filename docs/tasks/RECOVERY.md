@@ -16,8 +16,8 @@
 > and one more exclusive window. It was delegated once X3 and X9 had released their leases (this machine is a
 > dedicated spare: benches need an idle machine, not a time of day). Step 3 (X3) is merged, and so is X9.
 >
-> **Components:** 0.4 is a button-anchored Menu (G7a/G7b) plus a TextField spike (T18), starting
-> after X3 and X4 merge; see `PLAN-0.4.md`.
+> **Components:** 0.4 is a button-anchored Menu (G7a/G7b), after X4; TextField moved to 0.5 (D30;
+> T18/T18b kept as branches). F3 (0.3.x-visible fixes) merged from maintainer-mac-1.
 > **Next device task after X11 merges: F1** (`F1-determinism.md`): `real-input:ios` fails the Switch
 > check 11/11 on `main` on this machine, so it blocks merges that owe real input.
 >
