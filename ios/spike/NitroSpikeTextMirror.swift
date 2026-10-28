@@ -56,6 +56,16 @@ struct NitroSpikeTextMirror: @unchecked Sendable {
   /// Outcome of the last `nuiTestApplyWrite`: `none`, `applied`, `stale`,
   /// `composing` or `same`.
   var lastWrite: String = "none"
+  /// The branch the frozen arm chose, reported by both publish paths.
+  ///
+  /// `impl=` used to be written by whoever published last, and arm A's publish path is the only one that can
+  /// run before a `UITextField` exists — so on the first iOS run an instance asked for `textfield` reported
+  /// `impl=swiftui`, and nothing could tell "the prop never arrived" from "the representable is not attached
+  /// yet" from "the branch never got built". `frozen=` is the branch, `live=` is the attachment; `impl=` stays
+  /// the shape of the numbers in the rest of the line.
+  var frozenImplementation: String = ""
+  /// A live `UITextField` is attached to this instance (arm B only, and only after `makeUIView`).
+  var liveField: Bool = false
 
   /// Snapshot of `displayed`, cached for the JS thread.
   private(set) var rendered: String = ""
@@ -69,6 +79,7 @@ struct NitroSpikeTextMirror: @unchecked Sendable {
       + " selection=\(selectionStart)-\(selectionLength)"
       + " impl=\(implementation) lines=\(lines)"
       + " equal=\(equal ? 1 : 0) cps=\(jsCodePoints) lastWrite=\(lastWrite)"
+      + " frozen=\(frozenImplementation) live=\(liveField ? 1 : 0)"
   }
 }
 

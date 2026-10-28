@@ -70,6 +70,56 @@ internal class SpikeTextFieldModel : NitroUiModel() {
   var lastWrite = "none"
 
   /**
+   * [writeSeq] of the attempt [lastWrite] describes.
+   *
+   * The outcome is written from two places — the posted write itself (the outcomes that change no text:
+   * `ignored`, `stale`) and the composable that carries out an accepted one (`applied`, `same`, `composing`) —
+   * and those two do not run in a fixed order. Measured: two writes posted back to back (`start`, then
+   * `other`), and the effect for the *first* one ran after the second had already recorded `ignored`, putting
+   * `lastWrite=same` back in the mirror. A caller reading the outcome was being told about the older write.
+   * So every attempt is numbered and only a newer number may replace the answer.
+   */
+  private var lastWriteSeq = 0
+
+  /**
+   * Counts every write attempt, accepted or not, so [recordWriteOutcome] can tell which one is newest.
+   *
+   * [writeTick] cannot do this job: it only counts *accepted* writes, and the outcomes that matter most —
+   * `ignored`, `stale` — are precisely the ones that change nothing and so do not bump it.
+   */
+  private var writeSeq = 0
+
+  /**
+   * The attempt whose outcome the composable is about to report.
+   *
+   * Only an *accepted* write moves it: the composable reports for the newest accepted attempt, and a refusal
+   * (`ignored` / `stale`) never had a composable visit to report, so it must not claim one.
+   */
+  var writeSeqForTick = 0
+    private set
+
+  /** Record the outcome of attempt [seq]; a superseded attempt's answer is dropped. */
+  fun recordWriteOutcome(seq: Int, outcome: String) {
+    if (seq >= lastWriteSeq) {
+      lastWriteSeq = seq
+      lastWrite = outcome
+    }
+  }
+
+  /** Accept [text] as a new edit attempt, numbered for [recordWriteOutcome]. */
+  fun acceptWrite(text: String) {
+    writeSeqForTick = ++writeSeq
+    state.displayed = text
+    writeText = text
+    writeTick += 1
+  }
+
+  /** Refuse a write that never becomes an edit, and say why. */
+  fun refuseWrite(outcome: String) {
+    recordWriteOutcome(++writeSeq, outcome)
+  }
+
+  /**
    * A React write that [reconcileForWrite] accepted, as a tick + payload.
    *
    * A tick rather than a bare value because writing `state.text` during composition is not allowed, and a
@@ -77,6 +127,20 @@ internal class SpikeTextFieldModel : NitroUiModel() {
    */
   var writeTick by mutableIntStateOf(0)
   var writeText = ""
+
+  /**
+   * The highest [writeTick] the composable has already carried out.
+   *
+   * What makes a write idempotent across a recomposition. `LaunchedEffect(model.writeTick)` is keyed on the
+   * tick, so it does not re-run while the composable lives — but when the hosted subtree is *recreated*, the
+   * effect is brand new and runs again for the tick that is sitting there, replaying a write that already
+   * happened. Measured: the P3 scenario's `placeholder` change recomposed the subtree, the old `other` write
+   * re-ran, and it overwrote `lastWrite` from `ignored` back to `same` — so a caller reading the outcome after
+   * an unrelated re-render was told a different answer about a write that had not been re-attempted. A
+   * shipped field has the same hazard in the shape of a stale render writing old text back into the field,
+   * which is Q2 §2.1's failure mode; the guard belongs in the model, not in the composable's `remember`.
+   */
+  var writeConsumed by mutableIntStateOf(0)
 
   /** `focus()` / `blur()` as ticks, for the same reason: they must run where a focus owner exists. */
   var focusTick by mutableIntStateOf(0)
@@ -87,7 +151,7 @@ internal class SpikeTextFieldModel : NitroUiModel() {
 
   /**
    * Republishes the mirror line from the live `TextFieldState`. Installed by the composable, which is the
-   * only place that may read it, and called by [userEdited] / [focusMoved] / a applied write *before* the
+   * only place that may read it, and called by [userEdited] / [focusMoved] / an applied write *before* the
    * corresponding callback fires.
    *
    * The order is the whole point, and it was a device run that found it: `onFocus` reaches JS synchronously
@@ -97,6 +161,18 @@ internal class SpikeTextFieldModel : NitroUiModel() {
    * and makes every cached read agree with the event that triggered it.
    */
   var renderMirror: (() -> Unit)? = null
+
+  /**
+   * Republishes [renderMirror]'s line only if one is installed.
+   *
+   * The guard is not decoration: a recycled host keeps its model, and between the composable disposing and
+   * the next one installing, `renderMirror` is null. Calling through it unguarded is a crash, and calling
+   * nothing silently leaves the cached line describing a state that no longer exists — which is how "the
+   * write was ignored" gets reported as "the write was applied".
+   */
+  fun publishRenderedMirror() {
+    renderMirror?.invoke()
+  }
 
   var onChange: ((String, Double) -> Unit)? = null
   var onFocus: (() -> Unit)? = null
@@ -155,7 +231,12 @@ internal class SpikeTextFieldModel : NitroUiModel() {
       // Kotlin's `==`, i.e. a UTF-16 sequence comparison — the same rule JS's `===` uses, and *not* the rule
       // Swift's `==` uses. This key is the vector: iOS and Android can answer it differently for the same
       // user action, and P3 is where that gets measured rather than argued about.
-      " equal=${if (text == js) 1 else 0} cps=${spikeCodePoints(js)} lastWrite=$lastWrite"
+      " equal=${if (text == js) 1 else 0} cps=${spikeCodePoints(js)} lastWrite=$lastWrite" +
+      // iOS added these two keys to make its two-shape A/B readable (an instance asked for the
+      // `UITextField` branch published arm A's numbers until the representable got built). Android has one
+      // shape, so both are constants here — but the schema stays one schema, which is the whole reason the
+      // harness can parse all three shapes with one function and why P1 asserts the key sets are equal.
+      " frozen=compose live=1"
   }
 
   /** The user changed the text: native owns it, counts it, emits it. See [lastEmitted]. */
@@ -208,6 +289,7 @@ internal class SpikeTextFieldModel : NitroUiModel() {
     focused = false
     lastWrite = "none"
     writeTick = 0
+    writeConsumed = 0
     writeText = ""
     focusTick = 0
     blurTick = 0
@@ -487,14 +569,12 @@ class HybridNitroUiSpikeTextField(
       pending == model.state.displayed
     ) {
       if (model.state.jsEvents < model.state.nativeEvents && pending != model.state.displayed) {
-        model.lastWrite = "stale"
+        model.refuseWrite("stale")
       }
       host.commit()
       return
     }
-    model.state.displayed = pending
-    model.writeText = pending
-    model.writeTick += 1
+    model.acceptWrite(pending)
     host.commit()
   }
 
@@ -543,14 +623,15 @@ class HybridNitroUiSpikeTextField(
     host.post {
       val js = model.state.js
       when {
-        js != null && js != text -> model.lastWrite = "ignored"
-        model.state.jsEvents < model.state.nativeEvents -> model.lastWrite = "stale"
-        else -> {
-          model.state.displayed = text
-          model.writeText = text
-          model.writeTick += 1
-        }
+        js != null && js != text -> model.refuseWrite("ignored")
+        model.state.jsEvents < model.state.nativeEvents -> model.refuseWrite("stale")
+        else -> model.acceptWrite(text)
       }
+      // Published from here as well as from the composable's `writeTick` effect, because the two outcomes
+      // that change *nothing* — `ignored` and `stale` — never bump the tick and so would never be republished
+      // otherwise. A caller reading `nuiTestState()` after a rejected write would see the previous outcome,
+      // which is the exact way to report a guard that worked as a guard that did not.
+      model.publishRenderedMirror()
       host.commit()
     }
   }

@@ -202,11 +202,19 @@ internal fun NitroSpikeAndroidField(
   // iOS's synchronous `textField.text = …` does not: a real difference between the arms, and the kind of
   // thing P1's table is for.
   LaunchedEffect(model.writeTick) {
-    if (model.writeTick == 0) {
+    if (model.writeTick == 0 || model.writeConsumed >= model.writeTick) {
       return@LaunchedEffect
     }
+    model.writeConsumed = model.writeTick
     val wanted = model.writeText
     val current = state.text.toString()
+    // Seeded before the edit, because the `snapshotFlow` collect above treats a change it did not predict as a
+    // user edit — and a write is not one. Without this, every applied write, and in particular every *revert*
+    // of a rejected edit, counted a second native event and emitted a second time back to JS. It still
+    // converges (React's state write is idempotent), but the counter would report a typist making twice as
+    // many edits as they did, and the handshake would do double the commits. iOS's arm has the same rule
+    // structurally: `textField.text = …` inside its `applying` guard does not re-enter `editingChanged`.
+    model.lastEmitted = wanted
     val outcome = when {
       current == wanted -> "same"
       // Q2 §2.4: mid-composition a write is *dropped*, not applied. Composing text belongs to the user.
@@ -221,7 +229,7 @@ internal fun NitroSpikeAndroidField(
         "applied"
       }
     }
-    model.lastWrite = outcome
+    model.recordWriteOutcome(model.writeSeqForTick, outcome)
     // Published here rather than left to the `snapshotFlow` collect so the mirror and the outcome move
     // together: an assertion that reads `lastWrite=applied` should never see the pre-write text in the same
     // line.
