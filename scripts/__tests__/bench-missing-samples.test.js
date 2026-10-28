@@ -30,6 +30,9 @@ import {
   BASELINE_MOUNT_TIMEOUT_MS,
   BASELINE_PRESENTED_TIMEOUT_MS,
   COMPARISON_IMPLEMENTATIONS,
+  DEFAULT_SCENARIO_BUDGETS,
+  MEASURED_ITERATIONS,
+  WARMUP_ITERATIONS,
   MAX_MISSING_SAMPLE_RATIO,
   MAX_REQUESTED_TIMEOUT_MS,
   aggregateRecords,
@@ -650,26 +653,51 @@ describe('the per-launch budget follows the requested waits', () => {
 
   it('leaves the default run at the table value', () => {
     // The number this rule is named after, pinned: A4 raised the presented wait from
-    // 2 000 to 8 000 ms on measured data, and the budget must still be the plain table
-    // value when nobody asks for more.
+    // 2 000 to 8 000 ms on measured data, and the budget must stay the plain table value
+    // when nobody asks for more.
     expect(BASELINE_PRESENTED_TIMEOUT_MS).toBe(8_000);
-    expect(launchBudgetMs(entry({}))).toBe(180_000);
+    expect(launchBudgetMs(entry({}))).toBe(DEFAULT_SCENARIO_BUDGETS.mount);
     expect(
       launchBudgetMs(
         entry({ presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS })
       )
-    ).toBe(180_000);
+    ).toBe(DEFAULT_SCENARIO_BUDGETS.mount);
     // A *shorter* wait does not shrink the budget either: the launch still has to fit
     // the same work, and a run that gives up early is not a faster launch.
-    expect(launchBudgetMs(entry({ presentedTimeoutMs: 2_000 }))).toBe(180_000);
+    expect(launchBudgetMs(entry({ presentedTimeoutMs: 2_000 }))).toBe(
+      DEFAULT_SCENARIO_BUDGETS.mount
+    );
+  });
+
+  it('starts above the most a default launch can spend waiting', () => {
+    // The reason the table is what it is. A launch where no frame ever arrives waits the
+    // full default on every iteration: 25 x (2 mount + 1 presented) = 275 s for `mount`.
+    // A budget below that kills the launch as "stalled" for a reason the runner chose,
+    // and a killed launch loses 20 iterations of data and becomes a `problem` - a mint
+    // refusal - instead of 20 recorded `probe-timeout` reasons. A4's raise from 2 000 to
+    // 8 000 ms is what pushed the waiting ceiling past the old 180 s table value.
+    const worstDefaultWaitMs =
+      (WARMUP_ITERATIONS + MEASURED_ITERATIONS) *
+      (2 * BASELINE_MOUNT_TIMEOUT_MS + BASELINE_PRESENTED_TIMEOUT_MS);
+    expect(worstDefaultWaitMs).toBe(275_000);
+    for (const action of ['mount', 'update', 'memory']) {
+      expect(DEFAULT_SCENARIO_BUDGETS[action]).toBeGreaterThan(
+        worstDefaultWaitMs
+      );
+    }
+    // `leak` never waits for a signal (it samples footprints), so it needs room for the
+    // allocation work rather than the waiting, and is the largest of the four.
+    expect(DEFAULT_SCENARIO_BUDGETS.leak).toBeGreaterThan(
+      DEFAULT_SCENARIO_BUDGETS.mount
+    );
   });
 
   it('grows by the extra wait for every iteration of the launch', () => {
-    // 25 iterations x (40 000 - 8 000) extra = 800 000 ms on top of the 180 000 budget.
+    // 25 iterations x (40 000 - 8 000) extra = 800 000 ms on top of the table value.
     // Without this a diagnostic run is killed as "stalled" for waiting on purpose, and a
     // killed launch becomes a `problem` - which is also a mint refusal.
     expect(launchBudgetMs(entry({ presentedTimeoutMs: 40_000 }))).toBe(
-      180_000 + 25 * 32_000
+      DEFAULT_SCENARIO_BUDGETS.mount + 25 * 32_000
     );
     // A mount wait counts twice per iteration (`mount` waits for its own signal and
     // again in the teardown), so both additions have to show up.
@@ -677,7 +705,10 @@ describe('the per-launch budget follows the requested waits', () => {
       launchBudgetMs(
         entry({ mountTimeoutMs: 5_000, presentedTimeoutMs: 40_000 })
       )
-    ).toBe(180_000 + 25 * (2 * (5_000 - BASELINE_MOUNT_TIMEOUT_MS) + 32_000));
+    ).toBe(
+      DEFAULT_SCENARIO_BUDGETS.mount +
+        25 * (2 * (5_000 - BASELINE_MOUNT_TIMEOUT_MS) + 32_000)
+    );
   });
 
   it('keeps the leak budget the largest, and honours an explicit override', () => {
@@ -685,7 +716,7 @@ describe('the per-launch budget follows the requested waits', () => {
       launchBudgetMs(
         entry({ scenario: 'leak.date-picker', presentedTimeoutMs: 40_000 })
       )
-    ).toBe(300_000 + 25 * 32_000);
+    ).toBe(DEFAULT_SCENARIO_BUDGETS.leak + 25 * 32_000);
     // `BENCH_LAUNCH_TIMEOUT_S` is set by hand precisely to decide this question, so when
     // it is present `run.mjs` has already rewritten the whole table to it and the
     // requested waits must not add anything on top.
