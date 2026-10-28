@@ -939,9 +939,9 @@ function runCli(dir, args, extraEnv = {}, hook = '') {
     encoding: 'utf8',
     timeout: 120_000,
     // Same reason as `gitEnv`: the CLI runs git in `dir`, and an inherited GIT_DIR
-    // would send it somewhere else. `pathsChangedSince` now runs `git diff` and
-    // `git status`, so a redirected CLI would answer the M1 question about the wrong
-    // repository - and reuse is the answer that decides whether a merge goes ahead.
+    // would send it somewhere else. `need --for merge` now reads `HEAD^{tree}` and
+    // `git status` there, so a redirected CLI would answer the reuse question about the
+    // wrong repository - and reuse is the answer that decides whether a merge goes ahead.
     env: {
       ...gitEnv(dir),
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
