@@ -99,6 +99,9 @@ const ECHO = {
   spikeTargetB: 'spike-type-target-b-echo',
   spikeWrite: 'spike-write-echo',
   spikeSize: 'spike-size-echo',
+  // P3 §2.1 (a rejected edit reverting) and P5 (keystroke→commit) read these two.
+  spikeFrozen: 'spike-frozen-echo',
+  rnTarget: 'rn-type-target-echo',
 };
 
 /** The system Back key, which is how a person dismisses an open popup. */
@@ -1788,7 +1791,211 @@ const CHECKS = {
     );
     await t.pressBack();
   },
+
+  /**
+   * T18 P3 / Q2 §2.1 — **a rejected edit reverts**, driven by the keyboard.
+   *
+   * This is the handshake's central promise, and the harness cannot make it: a *programmatic* write is not an
+   * edit the control made, so applying one against a frozen `value` exercises the control rule rather than the
+   * revert. The revert needs an edit the field made itself, and the only thing that makes one here is a real
+   * key event. So the screen mounts a field whose `value` JS never changes, the runner types into it, and the
+   * echo has to come back showing native's text while JS never accepted it.
+   *
+   * The two assertions are the two halves of the promise: the field *took* the text (otherwise "it reverted"
+   * would describe a field that never accepted input, which every broken field passes), and it then gave it
+   * back with no character lost.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'spike-text-reject': async (t) => {
+    const before = t.requireEcho(ECHO.spikeFrozen);
+    t.log.check(
+      'the frozen field is hosted and starts at the value JS holds',
+      echoField(before, 'displayed') === 'frozen' &&
+        echoField(before, 'impl') !== ''
+    );
+
+    const control = await t.requireControlOnScreen('frozen field');
+    await t.tapNode(control);
+    await t.waitForEchoField(
+      ECHO.spikeFrozen,
+      'focused',
+      '1',
+      'the frozen field to take focus'
+    );
+    await t.type('qq');
+
+    // The keystrokes have to reach the control first. Without this, a field that swallowed the text outright
+    // would "revert" perfectly and the check would pass a field that cannot be typed into at all.
+    const accepted = t.waitForEchoField(
+      ECHO.spikeFrozen,
+      'nativeEvents',
+      '2',
+      'the control to count two of its own edits'
+    );
+    t.log.checkEquals(
+      'the control accepted the keystrokes as its own edits',
+      echoField(accepted, 'nativeEvents'),
+      '2'
+    );
+    t.log.note(
+      `while JS held its ground, typed= read ${echoField(accepted, 'typed')}`
+    );
+
+    // And the revert: React's next commit carries the same `value` plus the new `mostRecentEventCount`, so
+    // native puts its own text back. `displayed` is native's own mirror, so this is the control saying it gave
+    // the text back rather than the test asserting it.
+    const reverted = t.waitForEchoField(
+      ECHO.spikeFrozen,
+      'displayed',
+      'frozen',
+      'the rejected edit to revert'
+    );
+    t.log.checkEquals(
+      'the rejected edit reverted to the value JS kept',
+      echoField(reverted, 'displayed'),
+      'frozen'
+    );
+    t.log.checkEquals(
+      'JS never adopted the rejected text',
+      echoField(reverted, 'typed'),
+      'frozen'
+    );
+    // Q2 §2.4 again, on the path a fast typist takes: the field must not have marked itself unreported while
+    // all this was happening, or every later write would be permanently stale.
+    t.log.checkEquals(
+      'no edit marked the field unreported (Q2 §2.4)',
+      echoField(reverted, 'unreported'),
+      '0'
+    );
+    await t.pressBack();
+  },
+
+  /**
+   * T18 P5 — **keystroke→commit**, spike field against RN's own `TextInput`, in one run.
+   *
+   * The bench cannot carry this (its arms come from `component.json`, and the spike has none) and the JS
+   * harness cannot either: RN's `TextInput` emits nothing for a programmatic write, so a write-driven
+   * comparison would measure the spike field alone. What *is* symmetric is typing — both fields receive the
+   * same OS keystrokes and both report the wall-clock of the `onValueChange`/`onChangeText` that followed, in
+   * their own echo lines.
+   *
+   * What the number contains, and what it does not:
+   *
+   *  - each value is the gap between consecutive commits, so it is per keystroke and independent of how many
+   *    characters one burst happened to produce;
+   *  - the burst is typed as one `input text` call and read from one dump, because `uiautomator dump` costs
+   *    hundreds of milliseconds and would otherwise dominate what it measures;
+   *  - the floor is printed too: the runner times its own `input text` round trip, and the report carries the
+   *    ratio, which is the number Q2 §7's go line is about.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'spike-latency': async (t) => {
+    const BURST = 8;
+    const text = 'abcdefgh'.slice(0, BURST);
+
+    /**
+     * Type one burst into the field named by `description` and return its commit timestamps.
+     *
+     * The control is found (and the page scrolled to it) *before* the echo is read: both echoes live at the
+     * bottom of a long screen, and `requireEcho` reads wherever the page happens to be standing.
+     *
+     * @param {string} description
+     * @param {string} echoID
+     */
+    const measure = async (description, echoID) => {
+      const control = await t.requireControlOnScreen(description);
+      const before = t.requireEcho(echoID);
+      const beforeEvents = Number(echoField(before, 'events') || '0');
+      await t.tapNode(control);
+      await t.waitForEchoField(
+        echoID,
+        'focused',
+        '1',
+        `${description} to focus`
+      );
+
+      const startedAt = Date.now();
+      await t.type(text);
+      const roundTrip = Date.now() - startedAt;
+      // One beat for the last commit's echo to reach the tree: `waitForEchoField` polls the *rendered* line,
+      // and the burst's final character is also the final render.
+      await sleep(300);
+      // One wait for the whole burst rather than one per character, for the reason in the header.
+      const line = t.waitForEchoField(
+        echoID,
+        'events',
+        String(beforeEvents + BURST),
+        `${description} to report ${String(BURST)} commits`
+      );
+      const stamps = echoField(line, 'ats')
+        .split(',')
+        .filter((entry) => entry !== '')
+        .map(Number)
+        .filter((entry) => Number.isFinite(entry));
+      return { stamps, roundTrip };
+    };
+
+    const spike = await measure('spike typing target', ECHO.spikeTargetA);
+    await t.pressBack();
+    const rn = await measure('rn typing target', ECHO.rnTarget);
+    await t.pressBack();
+
+    const gaps = (/** @type {number[]} */ stamps) =>
+      stamps.slice(1).map((at, index) => at - (stamps[index] ?? at));
+    const spikeGaps = gaps(spike.stamps);
+    const rnGaps = gaps(rn.stamps);
+
+    t.log.check(
+      'both fields committed every keystroke of the burst',
+      spike.stamps.length === BURST && rn.stamps.length === BURST
+    );
+    t.log.check(
+      'the spike field committed at all (a zero-length gap list is not a fast field)',
+      spikeGaps.length > 0 && rnGaps.length > 0
+    );
+
+    const spikeP95 = percentile(spikeGaps, 0.95);
+    const rnP95 = percentile(rnGaps, 0.95);
+    const ratio = rnP95 > 0 ? spikeP95 / rnP95 : Number.POSITIVE_INFINITY;
+    t.log.note(
+      `keystroke→commit p95: spike ${String(spikeP95)}ms vs RN TextInput ` +
+        `${String(rnP95)}ms (ratio ${ratio.toFixed(2)}×) · ` +
+        `input text round trip ${String(spike.roundTrip)}ms is the floor inside both`
+    );
+    t.log.note(
+      `spike gaps ${JSON.stringify(spikeGaps)} · rn gaps ${JSON.stringify(rnGaps)}`
+    );
+    // Deliberately *not* asserted: the go line is a multiplier on a duration, and D21 says a duration
+    // threshold is not a verdict on a shared machine. The real-input runner has no timing gate to consult, so
+    // the number goes to the report, where the machine's load is known.
+    t.log.note(
+      `go line: p95 ≤ RN × 1.5, no-go above 2× — reported, not gated (D21)`
+    );
+  },
 };
+
+/**
+ * The p-th percentile of a small sample, nearest-rank.
+ *
+ * Spike fields are deliberately tiny (a burst of keystrokes), where nearest-rank is what "p95" means in
+ * practice and does not invent an interpolation between two samples that are milliseconds apart.
+ *
+ * @param {number[]} values
+ * @param {number} p
+ */
+function percentile(values, p) {
+  if (values.length === 0) {
+    return 0;
+  }
+  const sorted = values.slice().sort((a, b) => a - b);
+  const index = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil(sorted.length * p) - 1)
+  );
+  return sorted[index] ?? 0;
+}
 
 /**
  * One `key=value` field of a spike echo line, or `''` when the line does not have it.

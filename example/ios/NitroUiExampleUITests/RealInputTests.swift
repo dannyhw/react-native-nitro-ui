@@ -88,6 +88,8 @@ final class RealInputTests: XCTestCase {
     static let spikeTargetB = "spike-type-target-b-echo"
     static let spikeWrite = "spike-write-echo"
     static let spikeSize = "spike-size-echo"
+    static let spikeFrozen = "spike-frozen-echo"
+    static let rnTarget = "rn-type-target-echo"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -1103,21 +1105,23 @@ final class RealInputTests: XCTestCase {
         + "Line was: \(appended)"
     )
 
-    // End the session the way a person does, by dismissing the keyboard: a tap above
-    // the field, on the screen's own background.
-    app.windows.firstMatch
-      .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04))
-      .tap()
+    // End the session the way a person does in a form: by moving to the next field. On iOS that hands first
+    // responder to the other field, which is what makes the first one report `focused=0`; the keyboard itself
+    // stays up because somebody is still editing. (The screen sets `keyboardShouldPersistTaps="handled"`, so a
+    // tap on its background does *not* dismiss the keyboard — measured: tapping at the top of the window left
+    // `focused=1` for the whole 8 s. Android's twin of this step blurs the same way, by focus transfer, because
+    // Back there hides the IME and keeps focus.)
+    try required("spike-type-target", as: "the SwiftUI arm field").centre.tap()
     let blurred = try readField(
       Echo.spikeTargetB,
       "focused",
       "0",
-      "dismissing the keyboard to end the edit session"
+      "handing focus to the other field to end this field's edit session"
     )
     XCTAssertEqual(
       echoField(blurred, "typed"),
       "abc123de",
-      "closing the keyboard must not lose the text. Line was: \(blurred)"
+      "losing focus must not lose the text. Line was: \(blurred)"
     )
   }
 
@@ -1134,7 +1138,11 @@ final class RealInputTests: XCTestCase {
   /// prototype is uniquely able to get wrong.
   func testRealInputSpikeTextCoexist() throws {
     try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
-    try scrollIntoView("spike-type-target", as: "the SwiftUI arm field")
+    try scrollIntoView(
+      "spike-type-target",
+      as: "the SwiftUI arm field",
+      hittableIsEnough: true
+    )
     let field = try required("spike-type-target", as: "the SwiftUI arm field")
     field.centre.tap()
     let focused = try readField(
@@ -1168,6 +1176,157 @@ final class RealInputTests: XCTestCase {
       "arm A cannot observe the caret, so it has to report it unobserved rather than "
         + "guessed. Line was: \(typed)"
     )
+  }
+
+  /// T18 P3 / Q2 §2.1 — **a rejected edit reverts**, driven by real key events.
+  ///
+  /// Android's twin is `spike-text-reject`. The handshake's central promise cannot be tested from JS: a
+  /// *programmatic* write is not an edit the control made, so applying one against a frozen `value` exercises
+  /// the control rule rather than the revert. The revert needs an edit the field made itself, and the only
+  /// thing that makes one here is the keyboard. The screen mounts a field whose `value` JS never moves
+  /// (`spike-frozen`), this check types into it, and native has to hand the text back.
+  ///
+  /// Both halves are asserted in order on purpose: first that the control *took* the keystrokes as its own
+  /// edits (otherwise "it reverted" would describe a field that never accepted input, which every broken field
+  /// passes), then that it gave them back with no character lost. The order also matters for the second
+  /// assertion — the mirror is republished on the edit, so by the time `nativeEvents=2` was read the line
+  /// already said `displayed=frozenqq`, and `displayed=frozen` afterwards is the revert rather than a stale
+  /// snapshot that never moved.
+  func testRealInputSpikeTextReject() throws {
+    try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
+    try scrollIntoView("spike-frozen", as: "the frozen field", hittableIsEnough: true)
+    let field = try required("spike-frozen", as: "the frozen field")
+    let before = try read(Echo.spikeFrozen)
+    XCTAssertEqual(
+      echoField(before, "displayed"),
+      "frozen",
+      "the frozen field should start at the value JS holds. Line was: \(before)"
+    )
+    XCTAssertFalse(
+      echoField(before, "impl").isEmpty,
+      "and it should be hosted at all, or a revert is being reported for a field that never mounted. "
+        + "Line was: \(before)"
+    )
+
+    field.centre.tap()
+    _ = try readField(
+      Echo.spikeFrozen,
+      "focused",
+      "1",
+      "a tap to focus the frozen field"
+    )
+    field.typeText("qq")
+
+    let accepted = try readField(
+      Echo.spikeFrozen,
+      "nativeEvents",
+      "2",
+      "the control to count two edits of its own"
+    )
+    XCTAssertEqual(
+      echoField(accepted, "unreported"),
+      "0",
+      "no keystroke may mark the field unreported (Q2 §2.4) — a fast typist's writes would go "
+        + "permanently stale. Line was: \(accepted)"
+    )
+
+    let reverted = try readField(
+      Echo.spikeFrozen,
+      "displayed",
+      "frozen",
+      "the rejected edit to revert to what JS kept"
+    )
+    XCTAssertEqual(
+      echoField(reverted, "typed"),
+      "frozen",
+      "JS never adopted the rejected text. Line was: \(reverted)"
+    )
+  }
+
+  /// T18 P5 — **keystroke→commit**, spike field against RN's own `TextInput`, in one run.
+  ///
+  /// Android's twin is `spike-latency`. This is the number Q2 §7's go line puts a multiplier on, and it is
+  /// only symmetric on the typing path: RN's `TextInput` emits nothing for a programmatic write, so a
+  /// write-driven comparison would measure the spike field alone. Here both fields receive the same burst of
+  /// real keystrokes and both report the wall clock of the callback that followed, in their own echo lines, so
+  /// what is compared is the gap between consecutive commits — per keystroke, and independent of how many
+  /// characters one burst happened to produce.
+  ///
+  /// The ratio is *printed*, not asserted (D21: a duration threshold is not a verdict on a shared machine),
+  /// and the carry-count assertion is a floor rather than an exact number: a shape that coalesced two
+  /// keystrokes into one commit is a finding the report carries, not a red test that hides the curve.
+  func testRealInputSpikeLatency() throws {
+    let burst = "abcdefgh"
+    try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
+
+    /// Type one burst into the field `identifier` and return the commit stamps its echo recorded.
+    func measure(_ identifier: String, _ echo: String, _ what: String) throws -> [Double] {
+      try scrollIntoView(identifier, as: what, hittableIsEnough: true)
+      let field = try required(identifier, as: what)
+      let beforeEvents = Int(echoField(try read(echo), "events")) ?? 0
+      field.centre.tap()
+      _ = try readField(echo, "focused", "1", "\(what) to take focus")
+      field.typeText(burst)
+      let line = readUntil(echo, timeout: 12) { text in
+        Int(echoField(text, "events")).map { $0 >= beforeEvents + burst.count } ?? false
+      }
+      return echoField(line, "ats")
+        .split(separator: ",")
+        .compactMap { Double($0) }
+    }
+
+    let spikeStamps = try measure("spike-type-target", Echo.spikeTargetA, "the spike field")
+    // Focus transfer, not Back: iOS keeps the keyboard up when another field takes focus, which is exactly
+    // what the typing check relies on to end a session.
+    let rnStamps = try measure("rn-type-target", Echo.rnTarget, "the RN TextInput control")
+
+    let spikeGaps = gapsBetweenCommits(spikeStamps)
+    let rnGaps = gapsBetweenCommits(rnStamps)
+
+    XCTAssertGreaterThanOrEqual(
+      spikeStamps.count,
+      2,
+      "the spike field committed too few times to measure a gap \(spikeStamps.count)"
+    )
+    XCTAssertGreaterThanOrEqual(
+      rnStamps.count,
+      2,
+      "RN's TextInput committed too few times to measure a gap \(rnStamps.count)"
+    )
+    let spikeP95 = nearestRankPercentile(spikeGaps, 0.95)
+    let rnP95 = nearestRankPercentile(rnGaps, 0.95)
+    let ratio = rnP95 > 0 ? spikeP95 / rnP95 : .greatestFiniteMagnitude
+    print(
+      "real-input spike: keystroke→commit p95 spike=\(String(format: "%.1f", spikeP95))ms "
+        + "rn=\(String(format: "%.1f", rnP95))ms ratio=\(String(format: "%.2f", ratio))× "
+        + "spikeStamps=\(spikeStamps.count) rnStamps=\(rnStamps.count) "
+        + "spikeGaps=\(spikeGaps) rnGaps=\(rnGaps) "
+        + "(go line: p95 ≤ RN × 1.5, no-go above 2× — reported, not gated)"
+    )
+  }
+
+  /// The gap between consecutive commit stamps, which is the per-keystroke quantity.
+  ///
+  /// Stamps are the wall clock each field recorded inside its own change callback, so the difference between
+  /// two of them is not contaminated by how the burst was delivered. Android's twin is `gaps` in
+  /// `scripts/real-input/android.mjs`.
+  private func gapsBetweenCommits(_ stamps: [Double]) -> [Double] {
+    guard stamps.count > 1 else { return [] }
+    return (1 ..< stamps.count).map { index in
+      (stamps[index] ?? 0) - (stamps[index - 1] ?? 0)
+    }
+  }
+
+  /// The p-th percentile of a small sample, nearest-rank.
+  ///
+  /// The samples here are bursts of keystrokes, where nearest-rank is what "p95" means in practice and does
+  /// not invent an interpolation between two stamps milliseconds apart. Android's twin is `percentile` in
+  /// `scripts/real-input/android.mjs`.
+  private func nearestRankPercentile(_ values: [Double], _ p: Double) -> Double {
+    guard !values.isEmpty else { return 0 }
+    let sorted = values.sorted()
+    let index = min(sorted.count - 1, max(0, Int((Double(sorted.count) * p).rounded(.up)) - 1))
+    return sorted[index]
   }
 
   // MARK: - Reading the screen
@@ -1722,6 +1881,23 @@ final class RealInputTests: XCTestCase {
     return (node.value as? String) ?? ""
   }
 
+  /// One `key=value` token out of an echo line, or "" when the line has no such key.
+  ///
+  /// The spike's echo lines are native's own mirror line plus what JS was told, all rendered as text, so a
+  /// check can read a counter without any in-app hook. "" rather than an optional because every call site is
+  /// an equality against a literal, and a missing key should read as a wrong answer rather than a crash. The
+  /// mirror's own keys and their spelling are shared with Android
+  /// (`SpikeTextFieldModel.mirrorLine`, `NitroSpikeTextMirror.refresh`).
+  private func echoField(_ line: String, _ key: String) -> String {
+    for token in line.split(separator: " ") {
+      guard let equals = token.firstIndex(of: "=") else { continue }
+      if token[..<equals] == Substring(key) {
+        return String(token[token.index(after: equals)...])
+      }
+    }
+    return ""
+  }
+
   /// Poll an echo until it says something acceptable, then report the last thing
   /// it said - so a failure names the value that arrived, not just the one that
   /// was wanted.
@@ -1788,7 +1964,8 @@ final class RealInputTests: XCTestCase {
   private func scrollIntoView(
     _ identifier: String,
     as what: String,
-    maxSteps: Int = 40
+    maxSteps: Int = 40,
+    hittableIsEnough: Bool = false
   ) throws {
     let node = try required(identifier, as: what)
     let window = app.windows.firstMatch.frame
@@ -1798,6 +1975,24 @@ final class RealInputTests: XCTestCase {
     func isReachable() -> Bool {
       let centre = node.frame.midY
       return centre > top && centre < bottom
+    }
+
+    /*
+     * Whether a tap would actually land, which is what the band only stands in for.
+     *
+     * Measured on the spike screen: its first typing target sits at midY=143, seven points above the band, and
+     * the screen is already scrolled to the top — so scrolling it "into the band" is impossible, and the helper
+     * reported "the screen holding it does not scroll" about a control that was fully visible and took the tap
+     * on the very next line. A control pinned near the top of a screen at rest is the ordinary case, so a
+     * control the system says is hittable satisfies the precondition — when the caller only needs the tap to
+     * land.
+     *
+     * That is opt-in, because the band's real job is elsewhere: a Picker whose anchor sits under the nav bar can
+     * be perfectly hittable and still have nowhere to open its menu upward, and the existing checks assert that
+     * room. Controls that merely *present* something keep the strict band; a plain field asks for this.
+     */
+    func isTappable() -> Bool {
+      return isReachable() || (hittableIsEnough && node.exists && node.isHittable)
     }
 
     func scroll(by delta: CGFloat) {
@@ -1813,7 +2008,7 @@ final class RealInputTests: XCTestCase {
     var steps = 0
     var lastCentre = node.frame.midY
     var stuck = 0
-    while !isReachable() && steps < maxSteps {
+    while !isTappable() && steps < maxSteps {
       scroll(by: node.frame.midY < top ? step : -step)
       steps += 1
       let centre = node.frame.midY
@@ -1824,15 +2019,18 @@ final class RealInputTests: XCTestCase {
         XCTAssertTrue(
           false,
           "\(what) (\(identifier)) did not move after \(steps) scroll steps (midY=\(centre) of "
-            + "\(window.height)); the screen holding it does not scroll, so no tap could reach it"
+            + "\(window.height)) and is not hittable where it sits; the screen holding it does not "
+            + "scroll, so no tap could reach it"
         )
         throw RealInputCheckAborted(identifier: identifier)
       }
       lastCentre = centre
     }
     XCTAssertTrue(
-      isReachable(),
-      "\(what) (\(identifier)) could not be brought into the tappable band after \(steps) scroll steps (midY=\(node.frame.midY) of \(window.height)); tapping it anyway would read a scroll problem as a refusal"
+      isTappable(),
+      "\(what) (\(identifier)) could not be brought where a tap would land after \(steps) scroll steps "
+        + "(midY=\(node.frame.midY) of \(window.height), hittable=\(node.isHittable)); tapping it anyway "
+        + "would read a scroll problem as a refusal"
     )
   }
 
