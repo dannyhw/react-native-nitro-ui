@@ -1322,8 +1322,10 @@ describe('DatePicker · G5', () => {
     // the identity that went on screen was `<granular>|outside`, the next render of
     // anything computed plain `<granular>`, and that difference is a second rebuild: the
     // page or wheel position this fix exists to keep, lost one render later than anyone
-    // would think to look. Measured on iOS before this round's fix: `widened=9`,
-    // `afterFlips=10`, the tenth build landing on the first flip's render.
+    // would think to look. Measured on iOS before this round's fix: `afterFlips` was
+    // one build above `widened` - this assertion failed as `expected 9 to be 8`, and a
+    // per-step probe run before it read `widened=9 afterFlips=10` with the extra build
+    // appearing on the *first* flip's render, not spread over the three.
     //
     // `controlIdentity` now skips the suffix when the granular part already changed,
     // because that render is replacing the control for the bounds' own sake and the

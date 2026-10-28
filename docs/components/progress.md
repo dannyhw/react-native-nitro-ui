@@ -102,9 +102,13 @@ both platforms (`NitroUiDeclaredFallbacks`, registered at startup — a Fabric m
 before any view exists). Two things follow, both measured rather than argued:
 
 - The declared height is the *linear* one, which is also the default variant, so
-  a cold bar is laid out at the right thickness on the first frame. For a
-  `fillWidth` fallback the width barely matters (the box's width replaces it); the
-  height is the number that has to be right (sizing.md §5).
+  a cold bar is laid out at the right thickness on the first frame. Under a finite
+  parent the declared **height** is the half that shows, because the box owns the
+  width (sizing.md §5). Under a parent that gives no finite width — a bar inside a
+  horizontal `ScrollView` — the declared **width** is what draws, on the first frame
+  and on every frame after it: there is no box width to substitute and a linear bar
+  has no intrinsic width of its own, so 320 is not a placeholder there, it is the
+  length of the bar the user sees. Declare the width you would want that bar to be.
 - The fallback map is keyed by **component**, not by configuration, so a cold
   mount of the *ring* starts from the bar's box and is corrected to 20 pt / 40 dp
   one frame later. That is D17's one-frame budget, documented here and named by

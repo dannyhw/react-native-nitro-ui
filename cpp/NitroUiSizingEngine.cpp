@@ -88,10 +88,11 @@ namespace margelo::nitro::nitroui {
      *   the answer a cold mount got depended on the last parent that happened to
      *   be measured.
      *
-     * A `fillWidth` width can only ever be a restatement of the box, so it says
-     * such a configuration is only the height; what is filed beside it is the
+     * A `fillWidth` width can only ever restate the box the instance was measured
+     * at, so the only number such a configuration owns is the height. Hence the
+     * comparison above takes the height alone, and what gets filed beside it is the
      * component's own declared width rather than the reported one (see
-     * `filedSizeLocked`) - see `docs/architecture/sizing.md` SS5.
+     * `filedSizeLocked`) - `docs/architecture/sizing.md` SS5.
      *
      * An `intrinsic` control's width *is* its own answer, so nothing is ignored
      * there: Switch behaves exactly as before.

@@ -635,12 +635,17 @@ final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
 
   /// See `HybridNitroUiSwitch.declaresFallback`.
   ///
-  /// A Slider is the repo's first `fillWidth` control, so only the height is
-  /// really ours: the shadow node replaces the width with the Yoga box's whenever
-  /// that box is finite (`cpp/NitroUiIntrinsic.hpp:208`). The width still has to
-  /// be a plausible number, because an unbounded parent is the one case where it
-  /// survives - a Slider in a horizontal scroller lays out at this width until
-  /// its own measurement arrives.
+  /// A Slider is the repo's first `fillWidth` control, so under a finite parent only
+  /// the height is really ours: the shadow node replaces the width with the Yoga
+  /// box's whenever that box is finite (`cpp/NitroUiIntrinsic.hpp:208`).
+  ///
+  /// The width is not a placeholder, though, because an unbounded parent is the one
+  /// case where nothing replaces it - and since F3 nothing files a measured width
+  /// into a `fillWidth` entry either, so a Slider in a horizontal scroller draws at
+  /// this width on every frame, not "until its own measurement arrives". That is the
+  /// case `docs/components/slider.md` documents and
+  /// `hands an unbounded parent its declared width, not another instance's box`
+  /// asserts; declare the width you want such a Slider to be (sizing.md SS5).
   ///
   /// Heights are measured, not guessed (DECISIONS D14), and a `fillWidth` control
   /// that declares too small a height is worse than an `intrinsic` one that does:
