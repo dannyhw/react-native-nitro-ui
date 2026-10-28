@@ -813,20 +813,52 @@ function gitInTempRepo(dir, args) {
 
 describe('the git helpers cannot be pointed at another repository (N1)', () => {
   it('strips every environment variable that overrides cwd', () => {
-    // The variables git obeys *instead of* cwd. Deleting them is the fix, so the list is asserted:
-    // a helper that stops clearing one of them fails here rather than in someone's real checkout.
+    // The variables git obeys *instead of* cwd. Asserting they are absent only tests anything if
+    // something put them there first, so the process environment is poisoned for the duration - with
+    // a *different* repository, so an environment that failed to strip them answers about the wrong
+    // checkout and this goes red rather than passing by coincidence.
     const dir = makeRepo();
-    const env = gitEnv(dir);
-    for (const name of [
-      'GIT_DIR',
-      'GIT_WORK_TREE',
-      'GIT_INDEX_FILE',
-      'GIT_COMMON_DIR',
-      'GIT_OBJECT_DIRECTORY',
-      'GIT_GRAFT_FILE',
-      'GIT_NAMESPACE',
-    ]) {
-      expect(env[name]).toBeUndefined();
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'x10-elsewhere-'));
+    try {
+      gitIn(elsewhere, ['init', '-q', '-b', 'main']);
+      const gitDir = path.join(elsewhere, '.git');
+      const poisoned = {
+        GIT_DIR: gitDir,
+        GIT_WORK_TREE: elsewhere,
+        GIT_INDEX_FILE: path.join(gitDir, 'INDEX'),
+        GIT_COMMON_DIR: gitDir,
+        GIT_OBJECT_DIRECTORY: path.join(gitDir, 'objects'),
+        GIT_GRAFT_FILE: path.join(elsewhere, 'grafts'),
+        GIT_NAMESPACE: 'refs/namespaces/x',
+      };
+      const saved = {};
+      for (const [name, value] of Object.entries(poisoned)) {
+        saved[name] = process.env[name];
+        process.env[name] = value;
+      }
+      try {
+        for (const name of Object.keys(poisoned)) {
+          expect(gitEnv(dir)[name]).toBeUndefined();
+        }
+        // One question, two environments: the helper's answers about `dir`; the inherited one is
+        // talking about the other checkout, which is the whole hazard.
+        expect(gitIn(dir, ['rev-parse', '--show-toplevel'])).toBe(
+          fs.realpathSync(dir)
+        );
+        const inherited = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+          cwd: dir,
+          encoding: 'utf8',
+          env: { ...process.env },
+        });
+        expect(inherited.stdout.trim()).toBe(fs.realpathSync(elsewhere));
+      } finally {
+        for (const [name, value] of Object.entries(saved)) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+      }
+    } finally {
+      fs.rmSync(elsewhere, { recursive: true, force: true });
     }
   });
 
