@@ -245,6 +245,49 @@ export function launchBudgetMs(
 }
 
 /**
+ * Why an `--update-baseline` run cannot mint *because of the waiting it asked for*, or null.
+ *
+ * `run.mjs` prints any `--timeout-*` run as DIAGNOSTIC - "cannot mint a baseline" - so a
+ * mint that asked for a non-default wait had to be refused, and until A4 round 1 it was not:
+ * `baselineBlockers()` only looked upward, so `--timeout-presented 1000 --update-baseline`
+ * quietly minted a table whose `presented` column meant something else (review N1). Refusing
+ * at startup is the same fail-fast the load and narrowing guards use: the run would have
+ * discovered it at the end, after hours of device time, and the rule is already knowable
+ * from the flags.
+ *
+ * Asking for the platform's own default explicitly is not a problem - it is the rule the
+ * baseline is recorded under, written down rather than defaulted to.
+ */
+export function timeoutRuleProblem({
+  platform,
+  mountTimeoutMs = null,
+  presentedTimeoutMs = null,
+}) {
+  if (mountTimeoutMs == null && presentedTimeoutMs == null) {
+    return null;
+  }
+  const defaults = baselineTimeoutsFor(platform);
+  const mount = mountTimeoutMs ?? defaults.mountTimeoutMs;
+  const presented = presentedTimeoutMs ?? defaults.presentedTimeoutMs;
+  if (
+    mount === defaults.mountTimeoutMs &&
+    presented === defaults.presentedTimeoutMs
+  ) {
+    return null;
+  }
+  return (
+    `the run asks to wait ${String(mount)} ms for a mount and ${String(
+      presented
+    )} ms for a presenting frame, and ${String(
+      platform
+    )} baselines are recorded at ${String(defaults.mountTimeoutMs)}/${String(
+      defaults.presentedTimeoutMs
+    )} - which samples arrive depends on that rule, so the run is a diagnostic. Drop the ` +
+    '`--timeout-*` flags to mint, or run without `--update-baseline`.'
+  );
+}
+
+/**
  * The longest signal timeout a run may ask for on one platform (`--timeout-mount`,
  * `--timeout-presented`, and the `mountTimeout=`/`presentedTimeout=` launch flags).
  *
@@ -2252,29 +2295,46 @@ export function baselineBlockers(run) {
         WHERE_THE_DETAILS_LIVE
     );
   }
-  // Waiting longer than the platform's rule is the same kind of disqualifier as
-  // `--perf-marks`: the samples that arrive keep their values, but *which* arrive changes
-  // the median, so the run cannot redefine `presented`. The rule is per platform (M1), so
-  // the comparison reads the file's own platform rather than one shared number.
+  // Waiting under anything other than the platform's default rule is the same kind of
+  // disqualifier as `--perf-marks`: the samples that arrive keep their values, but
+  // *which* arrive changes the median, so the run cannot redefine `presented`. In either
+  // direction, and in either half of the rule (A4, review N1): a 1 000 ms wait is as
+  // little baseline material as a 40 000 ms one, and it is the rule `run.mjs` says the
+  // run is diagnostic under at startup, so refusing only the long side let a short one
+  // mint while the terminal said it could not.
   const timeouts = requestedTimeouts(run);
   const defaults =
     run.platform == null ? null : (BASELINE_TIMEOUTS_MS[run.platform] ?? null);
-  if (
-    defaults != null &&
-    (timeouts.mountTimeoutMs > defaults.mountTimeoutMs ||
-      timeouts.presentedTimeoutMs > defaults.presentedTimeoutMs)
-  ) {
-    reasons.push(
-      `the run waited longer for a signal than a baseline is recorded under (${String(
-        timeouts.mountTimeoutMs
-      )} ms mount / ${String(
-        timeouts.presentedTimeoutMs
-      )} ms presented vs ${String(
-        defaults.mountTimeoutMs
-      )}/${String(defaults.presentedTimeoutMs)} on ${String(
-        run.platform
-      )}), so which samples arrived is not comparable with a committed baseline - it is a diagnostic run like --perf-marks`
-    );
+  if (defaults != null) {
+    if (timeouts.mountTimeoutMs === 0 || timeouts.presentedTimeoutMs === 0) {
+      reasons.push(
+        `no launch recorded the waiting rule it measured under (${String(
+          timeouts.mountTimeoutMs
+        )} ms mount / ${String(
+          timeouts.presentedTimeoutMs
+        )} ms presented), so this file could not say which rule its \`presented\` column means - it is a run of an app built before the launch flag existed, or one whose app did not report the plan it parsed`
+      );
+    } else if (
+      timeouts.mountTimeoutMs !== defaults.mountTimeoutMs ||
+      timeouts.presentedTimeoutMs !== defaults.presentedTimeoutMs
+    ) {
+      const direction =
+        timeouts.presentedTimeoutMs < defaults.presentedTimeoutMs ||
+        timeouts.mountTimeoutMs < defaults.mountTimeoutMs
+          ? 'waited less time for a signal than'
+          : 'waited longer for a signal than';
+      reasons.push(
+        `the run ${direction} a baseline is recorded under (${String(
+          timeouts.mountTimeoutMs
+        )} ms mount / ${String(
+          timeouts.presentedTimeoutMs
+        )} ms presented vs ${String(
+          defaults.mountTimeoutMs
+        )}/${String(defaults.presentedTimeoutMs)} on ${String(
+          run.platform
+        )}), so which samples arrived is not comparable with a committed baseline - it is a diagnostic run like --perf-marks`
+      );
+    }
   }
   const machine = run.machine ?? {};
   const load = loadBlocker(machine);
@@ -2374,16 +2434,18 @@ export function buildBaseline(run) {
      * column only means anything with its timeout attached: raise the wait and
      * previously-missing samples start arriving, which moves the median without
      * anything about the app changing.
+     *
+     * Read back from what the app reported, never filled in from the rule we happen to
+     * want (review N1): a launch set that recorded nothing gets `null`, not the current
+     * default, because stamping 8 000 ms on a table whose app waited 2 000 ms is exactly
+     * the false claim this field exists to prevent. `baselineBlockers()` refuses such a
+     * run, so `null` only appears in a file forced past that guard.
      */
     timeouts: {
       mountTimeoutMs:
-        timeouts.mountTimeoutMs > 0
-          ? timeouts.mountTimeoutMs
-          : baselineTimeoutsFor(run.platform).mountTimeoutMs,
+        timeouts.mountTimeoutMs > 0 ? timeouts.mountTimeoutMs : null,
       presentedTimeoutMs:
-        timeouts.presentedTimeoutMs > 0
-          ? timeouts.presentedTimeoutMs
-          : baselineTimeoutsFor(run.platform).presentedTimeoutMs,
+        timeouts.presentedTimeoutMs > 0 ? timeouts.presentedTimeoutMs : null,
     },
     /**
      * Comparison-arm cells left out of `cells`, and why (A4). Empty in a run where

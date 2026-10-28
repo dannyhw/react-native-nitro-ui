@@ -499,6 +499,49 @@ describe('bench --dry-run (the CLI)', () => {
     }
   });
 
+  it('refuses to mint under a non-default waiting rule, and names it', () => {
+    // Review N1: `run.mjs` prints any `--timeout-*` run as DIAGNOSTIC ("cannot mint a
+    // baseline"), so `--update-baseline --timeout-presented 1000` has to be a refusal,
+    // and the dry run's whole job is to answer that before the device is booted. The
+    // shorter side is the case that used to mint.
+    const root = workspace();
+    // Both platforms asked for a wait *under* their own default (8 000 / 2 000), which
+    // is the shape that used to mint. Asking past a platform's backstop is refused
+    // earlier still, by the flag cap itself.
+    for (const [platform, ms] of [
+      ['ios', '1000'],
+      ['android', '1000'],
+    ]) {
+      const out = cli(root, [
+        '--platform',
+        platform,
+        '--plan',
+        'quick',
+        '--update-baseline',
+        '--timeout-presented',
+        ms,
+        '--dry-run',
+      ]);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain('Mint:      would refuse');
+      expect(out.all).toContain(`${ms} ms for a presenting frame`);
+      expect(out.all).toContain('Drop the `--timeout-*` flags to mint');
+    }
+    // Asking for the platform's own default explicitly is not a diagnostic, so the
+    // waiting rule alone must not refuse the mint.
+    const atRule = cli(root, [
+      '--platform',
+      'ios',
+      '--plan',
+      'quick',
+      '--update-baseline',
+      '--timeout-presented',
+      '8000',
+      '--dry-run',
+    ]);
+    expect(atRule.all).not.toContain('for a presenting frame');
+  });
+
   it('still refuses a bad flag before printing anything, and keeps the usage line', () => {
     const root = workspace();
     const bad = cli(root, ['--platform', 'spectrum', '--dry-run']);

@@ -70,6 +70,7 @@ import {
   loadBlocker,
   narrowingProblem,
   parseTimeoutFlags,
+  timeoutRuleProblem,
   requestedTimeouts,
   resultsFileName,
   summarizeMissingReasons,
@@ -696,6 +697,18 @@ export async function main(argv) {
     if (narrowed != null) {
       preflight.push(narrowed);
     }
+    // Same for the waiting rule: the runner's own startup line calls any `--timeout-*`
+    // run a diagnostic that "cannot mint a baseline", so a mint that asks for a
+    // non-default wait has to be refused - and refusing it after four hours of device
+    // time is the waste this preflight exists to prevent (review N1).
+    const waitingProblem = timeoutRuleProblem({
+      platform,
+      mountTimeoutMs: timeouts.mountTimeoutMs,
+      presentedTimeoutMs: timeouts.presentedTimeoutMs,
+    });
+    if (waitingProblem != null) {
+      preflight.push(waitingProblem);
+    }
     if (preflight.length > 0) {
       log(
         `--update-baseline refused before the run started (pass --force to override):\n${preflight
@@ -855,8 +868,8 @@ export async function main(argv) {
     /**
      * The waiting rule this run measured under (A4). Read back from the cells rather
      * than echoed from the flags, so a run whose app binary predates the launch flag
-     * cannot claim a timeout it never applied - the check below compares the two and says
-     * so. Zero means "nothing recorded", which is what a run of an app built
+     * cannot claim a timeout it never applied - the problem below compares the two and
+     * says so. Zero means "nothing recorded", which is what a run of an app built
      * before the flag looks like, and `baselineBlockers()` refuses to mint from it.
      */
     timeouts: requestedTimeouts({ cells }),
