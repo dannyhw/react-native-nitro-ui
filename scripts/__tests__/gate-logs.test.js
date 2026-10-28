@@ -597,7 +597,11 @@ describe('gate.mjs export attaches failure evidence', () => {
     // *full* log is.
     expect(excerpt).toContain('# Failure excerpt \u2014 check');
     expect(excerpt).toContain(failed.tree.slice(0, 12));
+    // Named, not just mentioned: "Full log: not recorded" would satisfy a test that
+    // only looked for the label, and the whole point is that a reader can find the
+    // original - so the path and the location the export resolved must both be there.
     expect(excerpt).toContain(`Full log: \`${failed.logPath}\``);
+    expect(excerpt).toContain(path.join(storeOf(dir), failed.logPath));
     expect(excerpt).toMatch(/## Last \d+ log line\(s\)/);
     expect(EXCERPT_TAIL_LINES).toBe(150);
     expect(excerpt).toContain('Load: start');
