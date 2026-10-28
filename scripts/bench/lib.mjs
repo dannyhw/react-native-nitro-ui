@@ -91,23 +91,27 @@ export const IMPLEMENTATIONS = [
 ];
 
 /**
- * The arms a baseline **compares against** rather than gates: everything measured
- * except the library under development and the `rn-core` control.
+ * The arms a baseline **compares against** rather than gates: the two `@expo/ui`
+ * references. Everything measured except the library under development (`nitro-ui` and
+ * its `nitro-ui-host` variant) and the `rn-core` control.
  *
  * This is the A4 amendment to D9. An incomplete metric on a comparison arm makes that
  * one cell's ratio survivor-biased - which is a reason not to print or gate it, and
  * never a reason to refuse a whole table, because these arms carry no verdict
- * (`GATED_IMPLEMENTATIONS`). One such cell refusing an entire machine's baseline is
- * how A3's `maintainer-mac-2` iOS mint died: `mount.date-picker` at N=200 presented on
- * 55/160 and 87/160 measured iterations on the two `@expo/ui` arms and nothing else was
- * wrong. Under the amendment that cell is left out and recorded; a gap in `nitro-ui`
- * (gated) or `rn-core` (the denominator of every ratio) still refuses the mint.
+ * (`GATED_IMPLEMENTATIONS`) and are not our code. One such cell refusing an entire
+ * machine's baseline is how A3's `maintainer-mac-2` iOS mint died: `mount.date-picker`
+ * at N=200 presented on 55/160 and 87/160 measured iterations on the two `@expo/ui` arms
+ * and nothing else was wrong. Under the amendment that cell is left out and recorded; a
+ * gap in `nitro-ui`, `nitro-ui-host` or `rn-core` still refuses the mint.
  *
- * `nitro-ui-host` counts as a comparison arm for the same reason `expo-ui-*` does: it
- * is measured, reported, and never gated.
+ * `nitro-ui-host` stays with the gated arm deliberately (the brief is explicit): it is
+ * our own runtime, so a lost signal there is a fact about nitro-ui, not about a
+ * third-party reference, and a machine should not mint a table in which one of our arms
+ * could not be measured.
  */
 export const COMPARISON_IMPLEMENTATIONS = IMPLEMENTATIONS.filter(
-  (name) => name !== 'nitro-ui' && name !== 'rn-core'
+  (name) =>
+    name !== 'nitro-ui' && name !== 'nitro-ui-host' && name !== 'rn-core'
 );
 
 /**
@@ -485,6 +489,8 @@ export function buildSchedule({
   only = null,
   perfMarks = false,
   component = null,
+  scenario = null,
+  n = null,
   platform = null,
   mountTimeoutMs = null,
   presentedTimeoutMs = null,
@@ -500,14 +506,27 @@ export function buildSchedule({
   // a component's cells is the unit of work a task or a review asks for
   // (`--component slider`). `null` keeps the historical behaviour of measuring
   // every component the plan knows about.
-  const wantedCells =
-    component == null
-      ? cells
-      : cells.filter((cell) => componentOf(cell.scenario) === component);
+  const wantedCells = cells
+    .filter(
+      (cell) => component == null || componentOf(cell.scenario) === component
+    )
+    .filter(
+      (cell) =>
+        scenario == null ||
+        cell.scenario === scenario ||
+        cell.scenario.startsWith(`${scenario}.`)
+    )
+    .filter((cell) => n == null || cell.n === n);
   if (wantedCells.length === 0) {
+    if (component != null) {
+      throw new Error(
+        `--component ${String(component)} matched no cell in plan "${String(plan)}" ` +
+          `(components here: ${[...new Set(cells.map((cell) => componentOf(cell.scenario)))].join(', ')})`
+      );
+    }
     throw new Error(
-      `--component ${String(component)} matched no cell in plan "${String(plan)}" ` +
-        `(components here: ${[...new Set(cells.map((cell) => componentOf(cell.scenario)))].join(', ')})`
+      `--scenario ${String(scenario)}${n == null ? '' : ` with --n ${String(n)}`} matched no cell in plan "${String(plan)}" ` +
+        `(cells here: ${[...new Set(cells.map((cell) => `${cell.scenario}@${String(cell.n)}`))].join(', ')})`
     );
   }
   let wanted =
@@ -1982,6 +2001,42 @@ export function loadBlocker(machine) {
 }
 
 /**
+ * Why a run that narrowed its own schedule must not mint a baseline, or null.
+ *
+ * A baseline file *is* the table `--check` gates against, so minting one from a filtered
+ * run replaces a machine's whole table with the one cell the run measured - and every
+ * other row then reads `not measured in base`, which looks like a passing gate. The plan
+ * name check in `baselineBlockers()` cannot see this: `--plan full --scenario
+ * mount.date-picker --n 200` records `plan: "full"` truthfully while measuring 1 of 42
+ * cells.
+ *
+ * A4 needs the filters for its diagnostic (`--scenario`/`--n` exist for that run), so the
+ * filters stay and the mint is what gets refused - at startup, before a run that could
+ * never be minted costs an hour of device time.
+ *
+ * `scheduled` is the run's own schedule length and `wholePlan` the same call with no
+ * filters: comparing the two catches every narrowing flag at once, including ones added
+ * later, and cannot drift from what the schedule builder actually does. Arm scopes are
+ * already in both numbers, so a platform that legitimately has fewer arms is not
+ * mistaken for a narrowed run.
+ */
+export function narrowingProblem({ scheduled, wholePlan, filters }) {
+  if (scheduled >= wholePlan) {
+    return null;
+  }
+  const named = Object.entries(filters)
+    .filter(([, value]) => value != null)
+    .map(([name, value]) => `--${name} ${String(value)}`)
+    .join(' ');
+  return (
+    `the schedule is narrowed to ${String(scheduled)} of ${String(wholePlan)} launches ` +
+    `(${named}), so this run measures part of the plan and cannot mint the whole table \`--check\` gates ` +
+    `against - the rest would read "not measured in base". Drop the filter to mint, or run without ` +
+    '`--update-baseline` for a diagnostic.'
+  );
+}
+
+/**
  * The waiting rule a run measured under: the largest timeout any of its cells was
  * asked to wait for, and 0 when a results file predates the field.
  *
@@ -2009,20 +2064,21 @@ export function requestedTimeouts(run) {
 /**
  * The incomplete metrics of a run, split by whose fault it is (A4).
  *
- * `refusals` are cells whose incomplete metric makes a number the baseline *gates on*
- * unusable: a `nitro-ui` row (the only gated arm), or any metric of `rn-core`, which is
- * the denominator of every ratio in the file. Those refuse the whole mint - a
- * survivor-biased verdict is not baseline material, and this half of the rule is
+ * `refusals` are cells whose incomplete metric makes a number the baseline *gates on* or
+ * *is about our own runtime*: a `nitro-ui` or `nitro-ui-host` row, or any metric of
+ * `rn-core`, which is the denominator of every ratio in the file. Those refuse the whole
+ * mint - a survivor-biased verdict is not baseline material, and this half of the rule is
  * unchanged from round 4.
  *
- * `comparisonGaps` are the same defect on an arm that carries no verdict (`expo-ui-*`,
- * `nitro-ui-host`). Those cells are left out of the baseline and recorded, because
- * refusing a machine's entire table over a reference arm's frame probe throws away every
- * gated row that run measured correctly - which is exactly what A3's iOS mint did for
- * 55/160 and 87/160 samples on two `@expo/ui` cells.
+ * `comparisonGaps` are the same defect on an arm that is neither gated nor ours
+ * (`COMPARISON_IMPLEMENTATIONS`: the two `@expo/ui` references). Those cells are left out
+ * of the baseline and recorded, because refusing a machine's entire table over a
+ * reference arm's frame probe throws away every gated row that run measured correctly -
+ * which is exactly what A3's iOS mint did for 55/160 and 87/160 samples on two
+ * `@expo/ui` cells.
  *
  * Both halves key on the arm, not the component or scenario: what matters is whether the
- * number gates anything.
+ * number gates anything, and whether it is our runtime being measured.
  */
 export function baselineCompleteness(run) {
   const incomplete = Object.entries(cellsFrom(run.cells ?? run)).flatMap(
@@ -2038,15 +2094,13 @@ export function baselineCompleteness(run) {
   const comparisonGaps = [];
   for (const entry of incomplete) {
     // `rn-core` is not gated either, but its metrics *are* every ratio's
-    // denominator: an incomplete control metric poisons the row above it, so the
-    // control belongs with the gated arm, not with the comparison arms.
-    if (
-      GATED_IMPLEMENTATIONS.includes(entry.implementation) ||
-      entry.implementation === 'rn-core'
-    ) {
-      refusals.push(entry);
-    } else {
+    // denominator, and `nitro-ui-host` is our own runtime: both belong with the
+    // gated arm, not with the third-party reference arms. Everything that is not a
+    // named comparison arm therefore refuses.
+    if (COMPARISON_IMPLEMENTATIONS.includes(entry.implementation)) {
       comparisonGaps.push(entry);
+    } else {
+      refusals.push(entry);
     }
   }
   return { refusals, comparisonGaps, incomplete };

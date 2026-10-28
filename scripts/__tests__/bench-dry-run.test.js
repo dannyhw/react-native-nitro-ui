@@ -358,6 +358,38 @@ describe('the dry-run report and its exit code', () => {
     );
   });
 
+  it('refuses to mint from a narrowed schedule, and says a plain run is fine', () => {
+    // The A4 diagnostic shape: one cell, so the mint must be refused *here* rather
+    // than three hours later, and the same command without `--update-baseline` is
+    // exactly what a diagnostic run should do.
+    const argv = ['--scenario', 'mount.date-picker', '--n', '200'];
+    const mint = dryRunReport({
+      ...base,
+      plan: 'full',
+      launches: 8,
+      argv: [...argv, '--update-baseline'],
+    });
+    expect(mint.exitCode).toBe(2);
+    expect(mint.problems.join('\n')).toContain('--update-baseline');
+    expect(mint.problems.join('\n')).toContain('narrowed to');
+    expect(mint.lines.join('\n')).toContain('Mint:      would refuse');
+
+    // Forced, it is a local experiment again and the guard steps aside like `--force`
+    // does for the load rule.
+    const forced = dryRunReport({
+      ...base,
+      plan: 'full',
+      launches: 8,
+      argv: [...argv, '--update-baseline', '--force'],
+    });
+    expect(forced.problems.join('\n')).not.toContain('narrowed to');
+
+    // Without the mint flag the same narrow run is legitimate: a diagnostic that gates
+    // nothing needs one cell, not the whole plan.
+    const plain = dryRunReport({ ...base, plan: 'full', launches: 8, argv });
+    expect(plain.exitCode).toBe(0);
+  });
+
   it('lists no reasons when everything resolves', () => {
     expect(dryRunReport(base).problems).toEqual([]);
   });

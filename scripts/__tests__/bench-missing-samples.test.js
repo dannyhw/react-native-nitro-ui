@@ -40,6 +40,7 @@ import {
   describeMissing,
   incompleteMetrics,
   launchBudgetMs,
+  narrowingProblem,
   launchPlanString,
   parseTimeoutFlags,
   requestedTimeouts,
@@ -217,15 +218,26 @@ const ARMS = {
 };
 
 /**
+ * The `nitro-ui-host` arm, which the plan only schedules on Android, so it is not in the
+ * default fixture - the refusal test needs it anyway.
+ */
+const HOST_ARM = { mounted: 115_000 };
+
+/**
  * A whole mintable run, with one arm's `mount` cell optionally gutted.
  *
- * The gap defaults to the A3 shape: 12 of 80 measured iterations without a presenting
- * frame, which is over the 10 % budget (`MAX_MISSING_SAMPLE_RATIO`) and therefore
- * incomplete. The arm is a parameter because which arm it is decides everything.
+ * The gap defaults to the A3 shape: 3 of 20 measured iterations per launch (12 of 80),
+ * which is over the 10 % budget (`MAX_MISSING_SAMPLE_RATIO`) and therefore incomplete.
+ * The arm is a parameter because which arm it is decides everything.
  */
-function mintableRun({ gapOn = null, reason = 'probe-timeout' } = {}) {
+function mintableRun({
+  gapOn = null,
+  reason = 'probe-timeout',
+  withHost = false,
+} = {}) {
+  const arms = withHost ? { ...ARMS, 'nitro-ui-host': HOST_ARM } : ARMS;
   const records = [];
-  for (const [implementation, values] of Object.entries(ARMS)) {
+  for (const [implementation, values] of Object.entries(arms)) {
     records.push(
       ...cellRecords({
         implementation,
@@ -498,12 +510,21 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     expect(reasons[0]).toContain('.ndjson');
   });
 
-  it('treats every non-gated, non-control arm as a comparison arm', () => {
+  it('leaves only the third-party reference arms out, and treats the rest as ours', () => {
     expect(COMPARISON_IMPLEMENTATIONS).toEqual([
       'expo-ui-host-per-control',
       'expo-ui-shared-host',
-      'nitro-ui-host',
     ]);
+  });
+
+  it('refuses a nitro-ui-host gap, because that is our own runtime', () => {
+    // The brief is explicit that `nitro-ui-host` belongs with the gated arm even though
+    // it is never gated: a lost signal there is a fact about nitro-ui, and a machine
+    // should not mint a table in which one of our arms could not be measured.
+    const run = mintableRun({ withHost: true, gapOn: 'nitro-ui-host' });
+    const reasons = baselineBlockers(run);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toContain('mount:nitro-ui-host:50 presentedNs');
   });
 
   it('mints with nothing left out when every signal arrived', () => {
@@ -922,5 +943,75 @@ describe('a scheduled launch carries its timeouts', () => {
         scheduled[0].n
       )
     ).toBe(cellKey(plain[0].scenario, plain[0].implementation, plain[0].n));
+  });
+});
+
+describe('a narrowed run cannot mint the whole table', () => {
+  const filtersFor = (extra) => ({
+    only: null,
+    component: null,
+    scenario: null,
+    n: null,
+    ...extra,
+  });
+  const sizes = (extra, platform = 'ios') => {
+    const filters = filtersFor(extra);
+    return {
+      scheduled: buildSchedule({
+        plan: 'full',
+        launches: 8,
+        platform,
+        ...filters,
+      }).length,
+      wholePlan: buildSchedule({ plan: 'full', launches: 8, platform }).length,
+      filters,
+    };
+  };
+
+  it('says nothing about a run that measured the whole plan', () => {
+    expect(narrowingProblem(sizes({}))).toBeNull();
+    // `--only` naming every arm is not a narrowing, and the plan/launches guards in
+    // `baselineBlockers` are not confused by an arm list either.
+    expect(
+      narrowingProblem(
+        sizes({
+          only: 'rn-core,nitro-ui,expo-ui-shared-host,expo-ui-host-per-control',
+        })
+      )
+    ).toBeNull();
+  });
+
+  it('refuses the mint for each filter, and names it', () => {
+    for (const [extra, expected] of [
+      [{ scenario: 'mount.date-picker' }, '--scenario mount.date-picker'],
+      [{ n: 200 }, '--n 200'],
+      [{ component: 'slider' }, '--component slider'],
+      [{ only: 'nitro-ui,rn-core' }, '--only nitro-ui,rn-core'],
+    ]) {
+      const problem = narrowingProblem(sizes(extra));
+      expect(problem).toContain('narrowed to');
+      expect(problem).toContain(expected);
+      expect(problem).toContain('not measured in base');
+    }
+  });
+
+  it('catches the diagnostic run shape the docs recommend', () => {
+    // The exact command in docs/architecture/benchmarks.md: one cell of the plan.
+    const diagnostic = sizes({
+      component: 'date-picker',
+      scenario: 'mount.date-picker',
+      n: 200,
+    });
+    expect(diagnostic.scheduled).toBeLessThan(diagnostic.wholePlan);
+    expect(narrowingProblem(diagnostic)).not.toBeNull();
+    expect(sizes({}).scheduled).toBe(sizes({}).wholePlan);
+  });
+
+  it('does not mistake a platform with fewer arms for a filtered run', () => {
+    // Android has an extra scoped arm, so its whole plan differs from iOS's. Each
+    // platform is compared with itself, which is what makes the comparison meaningful.
+    const android = sizes({}, 'android');
+    expect(narrowingProblem(android)).toBeNull();
+    expect(android.wholePlan).not.toBe(sizes({}, 'ios').wholePlan);
   });
 });
