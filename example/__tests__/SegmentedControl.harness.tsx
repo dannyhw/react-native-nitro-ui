@@ -325,7 +325,9 @@ async function pixelProbe(
 ): Promise<string> {
   const handle = handles.get(testId);
   if (handle == null) {
-    throw new Error(`testID "${testId}" has no handle - it was never rendered.`);
+    throw new Error(
+      `testID "${testId}" has no handle - it was never rendered.`
+    );
   }
   const before = handle.nuiTestPixelReport();
   handle.nuiTestPixelProbe(color);
@@ -1234,9 +1236,21 @@ describe('SegmentedControl · G4', () => {
     );
 
     if (Platform.OS === 'android') {
-      expectPixels(painted, 'present', `"painted" after tintColor="${TINT_CSS}"`);
-      expectPixels(afterTap, 'present', '"painted" after the tap onto the 2nd segment');
-      expectPixels(backAgain, 'present', '"painted" after the tap back to the 1st');
+      expectPixels(
+        painted,
+        'present',
+        `"painted" after tintColor="${TINT_CSS}"`
+      );
+      expectPixels(
+        afterTap,
+        'present',
+        '"painted" after the tap onto the 2nd segment'
+      );
+      expectPixels(
+        backAgain,
+        'present',
+        '"painted" after the tap back to the 1st'
+      );
       expectPixels(
         await pixelProbe('plain', TINT, 'the untinted neighbour'),
         'absent',
@@ -1262,7 +1276,11 @@ describe('SegmentedControl · G4', () => {
       await rerender(tree(null));
       await settle(400);
       expectPixels(
-        await pixelProbe('painted', TINT, 'the control after the tint was removed'),
+        await pixelProbe(
+          'painted',
+          TINT,
+          'the control after the tint was removed'
+        ),
         'absent',
         '"painted" after tintColor went back to null'
       );
@@ -1270,7 +1288,11 @@ describe('SegmentedControl · G4', () => {
       // iOS: the documented no-op, asserted. Three readings, because the interesting part
       // is not that nothing happens once - it is that nothing happens *every* time, so
       // the prop cannot be half-applied, and no other row's colour can leak in.
-      expectPixels(painted, 'absent', `"painted" after tintColor="${TINT_CSS}" (iOS)`);
+      expectPixels(
+        painted,
+        'absent',
+        `"painted" after tintColor="${TINT_CSS}" (iOS)`
+      );
       expectPixels(afterTap, 'absent', '"painted" after a tap (iOS)');
       expectPixels(backAgain, 'absent', '"painted" after tapping back (iOS)');
     }
