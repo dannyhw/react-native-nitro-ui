@@ -237,13 +237,27 @@ drops the now-wrong cached sizes.
 - `tintColor` is **Android-only**: it replaces the selected segment's container
   **and** border and leaves every other colour to the scheme. On iOS it has **no
   visible effect** — a SwiftUI segmented `Picker` ignores `.tint()` (and
-  `.accentColor`); the only per-control knob is
-  `UISegmentedControl.selectedSegmentTintColor`, which SwiftUI does not expose, so
-  setting it per instance would mean UIKit introspection or a global
-  `UISegmentedControl.appearance()`. We do neither: the iOS implementation still
-  applies `.tint()` (harmless, and the right call if SwiftUI ever honours it), and
-  the prop simply changes nothing there. A tinted row looks like the default one on
-  iOS.
+  `.accentColor`). The iOS implementation still applies `.tint()` (harmless, and the
+  right call if SwiftUI ever honours it), and the prop simply changes nothing there.
+  A tinted row looks like the default one on iOS.
+  - **Why not reach into the hosted control?** F3 measured the obvious workaround and
+    rejected it on evidence, not on principle. The row *is* reachable — the harness
+    probe walks the hosted subtree and finds a real `UISegmentedControl`, and writing
+    its `selectedSegmentTintColor` does paint the segment (9253 pixels of the requested
+    colour in a 102×31 pt control, against zero untinted). It does not *stay* painted:
+    iOS 27's selection lens re-configures on the first tap and the colour is gone from
+    the screen while the property still reads back what was written, and re-writing the
+    same value does not bring it back. Nor is it cleanly undone: in the version that
+    tried it, the view doing the pushing only existed while a tint was asked for, so
+    taking `tintColor` back to `undefined` left 9290 pixels of the old colour on screen.
+    So the result
+    would be a control whose colour depends on whether the user has tapped it yet, and
+    on which OS release is compositing, kept true only by re-writing a private view
+    hierarchy on every interaction. `UISegmentedControl.appearance()` remains out for
+    the reason it was always out: it restyles every segmented `Picker` in the app,
+    including the ones the app does not own. The prop is therefore documented as
+    Android-only and **asserted** that way — the harness probes pixels on both
+    platforms, so neither platform can drift from this sentence without failing.
 - The platforms do not agree on how a segment gets its width (equal shares on
   Android, SwiftUI's own distribution on iOS), so a row of unequal labels looks
   different on each. Both grow with the labels, which is all the sizing key

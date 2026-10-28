@@ -112,6 +112,14 @@ abstract class HybridNitroUiSegmentedControlSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun measureContent(): NitroUiSegmentedControlSize
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPixelProbe(color: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPixelReport(): String
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

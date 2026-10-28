@@ -1,6 +1,9 @@
 package com.margelo.nitro.nitroui
 
 import android.app.Activity
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Looper
 import android.view.View
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +31,7 @@ import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.absoluteValue
 
 /*
  * The SegmentedControl component: the Material 3 single-choice segmented button
@@ -106,6 +110,41 @@ internal class SegmentedControlModel : NitroUiModel() {
   var didApplyDefault = false
 
   /**
+   * What the last pixel probe saw, as one line, or empty before the first one.
+   *
+   * Written on the UI thread by [HybridNitroUiSegmentedControl.nuiTestPixelProbe] and
+   * read from any thread by [HybridNitroUiSegmentedControl.nuiTestPixelReport]: a
+   * Nitro method may not block for the UI thread, so the answer travels as a stored
+   * string exactly as iOS's does (`SegmentedControlModel.publishPixelReport`). Plain
+   * rather than observable, because nothing may recompose because a test reading moved.
+   *
+   * The `n=` prefix counts probes, which is the only way a test can tell a fresh
+   * answer from the previous one when the probe is asynchronous. Cleared with the rest
+   * of the model: a recycled view that still reported another owner's pixels would let
+   * a test credit a hit that is not its control's.
+   */
+  var pixelReport = ""
+    private set
+
+  private val pixelReportLock = Any()
+
+  /** How many probes have reported, under [pixelReportLock]. */
+  private var pixelProbes = 0
+
+  /** Store what a probe found, numbered. Safe from any thread. */
+  fun publishPixelReport(report: String) {
+    synchronized(pixelReportLock) {
+      pixelProbes += 1
+      pixelReport = "n=$pixelProbes $report"
+    }
+  }
+
+  /** The last probe's report. Safe from any thread. */
+  fun readPixelReport(): String {
+    synchronized(pixelReportLock) { return pixelReport }
+  }
+
+  /**
    * `onValueChange`, as Nitro delivered it. The generated spec types the prop as a
    * plain Kotlin function, which `Func_double_double` implements.
    */
@@ -126,6 +165,9 @@ internal class SegmentedControlModel : NitroUiModel() {
     defaultSelectedIndex = 0.0
     didApplyDefault = false
     onChange = null
+    // Test state too: a recycled view that still reported another owner's pixels
+    // would let a test read a hit that is not its control's.
+    pixelReport = ""
   }
 
   /**
@@ -646,5 +688,98 @@ class HybridNitroUiSegmentedControl(
   override fun measureContent(): NitroUiSegmentedControlSize {
     val size = host.contentSize ?: return NitroUiSegmentedControlSize(0.0, 0.0)
     return NitroUiSegmentedControlSize(size.width, size.height)
+  }
+
+  /**
+   * Count the pixels this control draws that are [color], and store the answer for
+   * [nuiTestPixelReport].
+   *
+   * Posted to the UI thread rather than run inline: reading pixels needs the view
+   * drawn, and a Nitro method may not block for it, so the answer is stored and read
+   * back. Same shape on iOS (`SegmentedControlModel.publishPixelReport`).
+   */
+  override fun nuiTestPixelProbe(color: Double) {
+    val run = { model.publishPixelReport(host.nitroUiSamplePixels(color)) }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      run()
+    } else {
+      host.post { run() }
+    }
+  }
+
+  override fun nuiTestPixelReport(): String = model.readPixelReport()
+}
+
+// MARK: - Pixel probe (test-only)
+
+/** Per-channel-sum budget for "this pixel is the colour"; see the iOS constant. */
+private const val NITRO_UI_PIXEL_TOLERANCE = 30
+
+/**
+ * What the pixels this view is drawing say about [color], as one line for a test's
+ * failure message. The shape is shared with iOS (`nitroUiSamplePixels`), so one harness
+ * test can read both.
+ *
+ * `draw(Canvas)` on the host view: Compose renders into this view tree, so the drawing
+ * pass is what the screen shows - the only reading that can tell a tint the platform
+ * applied from one it dropped. `draw` rather than a pixel copy from the window because a
+ * hybrid view has no surface of its own to copy.
+ *
+ * The same neutral mid-grey backdrop iOS uses, for the same reason: a fill that comes
+ * back translucent must still be comparable, and a middle backdrop treats a light tint
+ * and a dark one alike.
+ */
+private fun View.nitroUiSamplePixels(color: Double): String {
+  val width = width
+  val height = height
+  val argb = color.toLong()
+  val red = (argb shr 16 and 0xff).toInt()
+  val green = (argb shr 8 and 0xff).toInt()
+  val blue = (argb and 0xff).toInt()
+  if (width < 2 || height < 2) {
+    return "size=${width}x$height no pixels"
+  }
+  val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+  try {
+    val canvas = Canvas(bitmap)
+    canvas.drawColor(0xFF808080.toInt())
+    draw(canvas)
+    var hits = 0
+    var redSum = 0L
+    var greenSum = 0L
+    var blueSum = 0L
+    var closestDistance = Int.MAX_VALUE
+    var closestRed = 0
+    var closestGreen = 0
+    var closestBlue = 0
+    for (row in 0 until height) {
+      for (column in 0 until width) {
+        val pixel = bitmap.getPixel(column, row)
+        val pixelRed = pixel shr 16 and 0xff
+        val pixelGreen = pixel shr 8 and 0xff
+        val pixelBlue = pixel and 0xff
+        redSum += pixelRed
+        greenSum += pixelGreen
+        blueSum += pixelBlue
+        val distance =
+          (pixelRed - red).absoluteValue + (pixelGreen - green).absoluteValue +
+          (pixelBlue - blue).absoluteValue
+        if (distance <= NITRO_UI_PIXEL_TOLERANCE) {
+          hits += 1
+        }
+        if (distance < closestDistance) {
+          closestDistance = distance
+          closestRed = pixelRed
+          closestGreen = pixelGreen
+          closestBlue = pixelBlue
+        }
+      }
+    }
+    val area = (width * height).toLong()
+    val mean = (redSum / area shl 16) or (greenSum / area shl 8) or (blueSum / area)
+    return "size=${width}x$height want=#%02X%02X%02X hits=$hits mean=#%06X closest=#%02X%02X%02X"
+      .format(red, green, blue, mean, closestRed, closestGreen, closestBlue)
+  } finally {
+    bitmap.recycle()
   }
 }
