@@ -494,7 +494,7 @@ namespace margelo::nitro::nitroui {
        * width constraint (a control in a horizontal scroller), where
        * `measureContent` has no box width to substitute - and filing a report's
        * width there delivered whichever parent a bounded instance had last been
-       * measured at (`docs/tasks/FOLLOWUPS.md` row 10). The declared number is
+       * measured at (`docs/tasks/Q4-followups-triage.md` row 10). The declared number is
        * what the component publishes for exactly that case, so the cached width is
        * now always the component's own.
        *

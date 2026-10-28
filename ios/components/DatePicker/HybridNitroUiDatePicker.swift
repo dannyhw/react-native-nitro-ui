@@ -160,11 +160,13 @@ final class DatePickerModel: NitroUiModel {
     // tested: the number has to move when a bound really moved, and must not when only
     // the bound's millisecond did.
     // The last two are what the control ON SCREEN was built with - the two halves of
-    // `builtBounds`, flattened so both platforms can publish the same pair. They are
-    // the only witness that the identity's bounds actually reached the live control:
-    // `controlBuilds` counts *appearances*, and an `.id(_:)` change on a control that
-    // is already on screen does not move that count (measured, and the reason the
-    // `keeps the live control…` test says what it says). `-1` = no control built yet,
+    // `builtBounds`, flattened so both platforms can publish the same pair. Read them
+    // next to `controlBuilds`: since F3 moved the appearance handler *inside* `.id(_:)`,
+    // the count is the witness that the identity changed and this pair is the witness
+    // that the bounds the identity was built from reached the control - neither says it
+    // alone, and before the move neither said anything, because the handler belonged to
+    // the enclosing structure that survives a re-identification (so the count never
+    // moved and this pair stayed on the first build). `-1` = no control built yet,
     // `-2` = that bound is unset.
     let built = builtBounds.map { bounds in
       "\(Int64(bounds.minimum ?? Self.NO_BOUND))|\(Int64(bounds.maximum ?? Self.NO_BOUND))"
@@ -190,6 +192,15 @@ final class DatePickerModel: NitroUiModel {
   /// React last sent, which is the comparison ``controlIdentity`` needs.
   private(set) var builtBounds: (minimum: Double?, maximum: Double?)?
 
+  /// ``granularBoundsIdentity`` as it read for the control that is on screen, recorded
+  /// with ``builtBounds`` in the same breath and for the same reason: it describes the
+  /// live control, not what React last sent.
+  ///
+  /// It is what lets ``controlIdentity`` tell "the escape clause has something to say
+  /// about this control" apart from "this render is replacing the control anyway", which
+  /// is the difference between one rebuild and two. See there.
+  private(set) var builtGranular: String?
+
   /// A platform control appeared, built from these bounds.
   ///
   /// `controlBuilds` counts appearances, the closest thing SwiftUI offers to "this
@@ -201,6 +212,22 @@ final class DatePickerModel: NitroUiModel {
   func noteControlBuilt(minimum: Double?, maximum: Double?) {
     controlBuilds += 1
     builtBounds = (minimum, maximum)
+    builtGranular = granularBoundsIdentity
+  }
+
+  /// Forget what the live control holds, for the one path that tears it down: recycling,
+  /// which keeps this model but not the control (and therefore not the next mount's
+  /// control either). Without this the *next* mount's first render would compare itself
+  /// against a bounds pair recorded for a different app's calendar, and
+  /// ``controlIdentity``'s suppression depends on ``builtGranular`` meaning exactly "the
+  /// control on screen" - a stale one could as easily drop a suffix that was needed as
+  /// keep one that was not.
+  ///
+  /// `controlBuilds` deliberately survives, as the other counters do: the harness reads
+  /// it per mount and a fresh mount starts a fresh baseline by re-rendering.
+  func clearBuiltBounds() {
+    builtBounds = nil
+    builtGranular = nil
   }
 
   /// What the platform control's SwiftUI identity is keyed on.
@@ -233,25 +260,46 @@ final class DatePickerModel: NitroUiModel {
   /// Such a re-identification rebuilds once more than the bounds alone ask for; the
   /// alternative is the assert. Since F3 the comparison is against the bounds of the
   /// control actually on screen: the appearance that records ``builtBounds`` moved
-  /// *inside* `.id(_:)` (`docs/tasks/FOLLOWUPS.md` row 46), so widening a bound updates
-  /// the record and a value crossing the bound that was widened away from no longer
-  /// costs a rebuild.
+  /// *inside* `.id(_:)` (`docs/tasks/Q4-followups-triage.md` row 46), so widening a bound
+  /// updates the record and a value crossing the bound that was widened away from no
+  /// longer costs a rebuild.
+  ///
+  /// The suffix is suppressed when ``granularBoundsIdentity`` has itself moved on from
+  /// ``builtGranular``, and that case is not rare - it is what happens when an app
+  /// widens a bound and moves the value out of the old one in a single batch, the exact
+  /// shape the clause exists for. The record only updates when the new control appears,
+  /// so the render that goes on screen says `outside`; nothing republishes, so the
+  /// *next* render of any prop says plain `<granular>` - a different identity, a second
+  /// rebuild, and the page or wheel position the first one cost the user is lost one
+  /// render later than anyone would think to look. Measured on iOS before this
+  /// suppression, on the `records the bounds…` case: the widen rebuilt to 9 and the
+  /// first later re-render rebuilt to 10. When the granular part changed, the control is
+  /// being replaced for the bounds' own sake and the fresh control arrives holding the
+  /// new bounds, so the suffix asks for nothing and is dropped: one rebuild, and the
+  /// identity stays put after it.
+  ///
+  /// What is left is the clause's own narrow case: a bound that moved below the
+  /// control's granularity (a minute on a `time` picker, a day on a date one) so the
+  /// granular part cannot see the move while the live control really is holding a bound
+  /// the value has left. There the suffix still bounces once, on the render after the
+  /// one that moved the bound, and that rebuild is one the control earns - a live
+  /// `UIDatePicker` clamping that value is the SIGABRT above.
   ///
   /// Applied as `.id(_:)` to the control itself. One level out, on `PlatformPicker`, the
   /// same key was measured to assert in `UICalendarView _setVisibleMonth:` - the fresh
   /// control is asked for a month its own bounds exclude as it goes on screen.
   var controlIdentity: String {
-    var identity = granularBoundsIdentity
+    let granular = granularBoundsIdentity
     guard let built = builtBounds else {
-      return identity
+      return granular
     }
     let lower = built.minimum ?? -.greatestFiniteMagnitude
     let upper = max(built.maximum ?? .greatestFiniteMagnitude, lower)
     let shown = state.displayed
-    if shown < lower || shown > upper {
-      identity += "|outside"
+    if (shown < lower || shown > upper) && granular == builtGranular {
+      return granular + "|outside"
     }
-    return identity
+    return granular
   }
 
   /// ``controlIdentity``'s first part: the two bounds, rounded down to the step the
@@ -615,7 +663,7 @@ private struct PlatformPicker: View {
     // enclosing structure, which survives a re-identification, so it fired once per
     // mount and ``DatePickerModel/builtBounds`` kept describing the bounds of the
     // *first* build rather than the one on screen. That is the G5 re-review 2
-    // follow-up (`docs/tasks/FOLLOWUPS.md` row 46): the escape clause of
+    // follow-up (`docs/tasks/Q4-followups-triage.md` row 46): the escape clause of
     // ``controlIdentity`` compares the value against `builtBounds`, so stale bounds
     // compare against a range the live control does not hold - a value past the
     // bound the model widened away from still looks "outside", and each crossing
@@ -1350,6 +1398,13 @@ final class HybridNitroUiDatePicker: HybridNitroUiDatePickerSpec, RecyclableView
     model.variant = "compact"
     model.minimum = nil
     model.maximum = nil
+    // The two witnesses of what the live control holds go with the control: recycling
+    // keeps the hosting controller (`core-architecture` §2), so the *next* mount of this
+    // instance would otherwise compare its first render against a bounds pair recorded
+    // for a different app's calendar - and ``controlIdentity``'s suppression depends on
+    // `builtGranular` meaning "the control on screen", so a stale one could as easily
+    // drop a suffix that was needed as keep one that was not.
+    model.clearBuiltBounds()
     model.disabled = false
     model.tint = nil
     model.testID = nil

@@ -578,12 +578,16 @@ private func nitroUiSamplePixels(of view: UIView, for color: Double) -> String {
   for row in 0..<height {
     for column in 0..<width {
       let offset = row * bytesPerRow + column * 4
-      // Premultiplied, and composited over the backdrop above, so alpha is already spent.
+      // Premultiplied, and composited over the backdrop above, so every pixel here is
+      // opaque and its channels are already final - sum them as they are. (The first
+      // version of this multiplied each channel by the pixel's alpha and then divided by
+      // the pixel count, which left every channel 255x too large and let the sum spill
+      // out of the six hex digits it prints into: `mean=#8FAFB6EB`. The backdrop is what
+      // makes the alpha term unnecessary, which is the point of putting it there.)
       let red = Int(data[offset]), green = Int(data[offset + 1]), blue = Int(data[offset + 2])
-      let area = Int(data[offset + 3])
-      redSum += red * area
-      greenSum += green * area
-      blueSum += blue * area
+      redSum += red
+      greenSum += green
+      blueSum += blue
       let distance =
         abs(red - target.red) + abs(green - target.green) + abs(blue - target.blue)
       if distance <= nitroUiPixelTolerance {
@@ -595,10 +599,13 @@ private func nitroUiSamplePixels(of view: UIView, for color: Double) -> String {
     }
   }
   let area = width * height
+  // One division per channel, then the three together as hex. Same arithmetic as
+  // Android's `nitroUiSamplePixels`, so a `mean` read off either platform is the same
+  // number for the same drawing.
+  let mean = (redSum / area) << 16 | (greenSum / area) << 8 | blueSum / area
   return String(
     format: "size=%dx%d want=#%02X%02X%02X hits=%d mean=#%06X closest=#%02X%02X%02X",
     Int(bounds.width), Int(bounds.height), target.red, target.green, target.blue,
-    hits, (redSum / area) << 16 | (greenSum / area) << 8 | blueSum / area,
-    closest.red, closest.green, closest.blue
+    hits, mean, closest.red, closest.green, closest.blue
   )
 }
