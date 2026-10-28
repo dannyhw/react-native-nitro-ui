@@ -187,10 +187,11 @@ overFraction }`. A run is refused when its **median** sample is over the ceiling
     "45 missing". See `docs/DECISIONS.md` D9 (A4 amendments).
 - **Minted under its platform's default waiting rule.** `mounted` waits 1 500 ms on both
   platforms; `presented` waits **8 000 ms on iOS and 2 000 ms on Android** unless a run asks
-  for longer (`--timeout-presented`, `--timeout-mount`, capped per platform at 80 s and
-  1 900 ms). A run that asks for longer is a diagnostic, because the samples that arrive keep
-  their values but _which_ arrive changes the median. Such a run is refused, and every
-  baseline records the rule it was made under in its `timeouts` block.
+  otherwise (`--timeout-presented`, `--timeout-mount`, capped per platform at 80 s and
+  1 900 ms). A run that asks for anything other than its platform's default is a
+  diagnostic — in either direction — because the samples that arrive keep their values but
+  _which_ arrive changes the median. Such a run is refused, and every baseline records the
+  rule it was made under in its `timeouts` block.
 
   The 8 s is A4's iOS measurement, not a habit
   (`docs/tasks/A4-ios-baseline-mac2.report.md`), and **Android is unchanged from before

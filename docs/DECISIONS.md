@@ -80,12 +80,15 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
     which is also what keeps this machine's committed Android table and Android run times
     unchanged. The 8 never-mounting Android `update.*` reference cells are a follow-up
     (a platform-scoped `NO_MOUNT_SIGNAL` entry), not part of this task.
-  - **A4 amendment (2026-10-28) - the waiting rule is recorded, and a longer wait is a diagnostic.**
+  - **A4 amendment (2026-10-28) - the waiting rule is recorded, and any non-default wait is a diagnostic.**
     `--timeout-mount` / `--timeout-presented` change how long a launch waits for a signal
     (to ask "did that arm never draw, or did it draw later than we waited?"). A run that
-    asks for longer than its platform's default cannot mint: a sample that arrives keeps
-    its value, but *which* samples arrive moves the median. Baselines carry their
-    `timeouts` block so a `presented` column has its rule attached.
+    asks for anything other than its platform's default cannot mint - in either
+    direction: a sample that arrives keeps its value, but *which* samples arrive moves the
+    median, and a 1 000 ms wait is as little baseline material as a 40 s one. Baselines
+    carry their `timeouts` block so a `presented` column has its rule attached, and that
+    block is read back from what the app reported: a run whose app recorded nothing is
+    refused rather than stamped with whatever the default happens to be today.
   - Device keys = platform + OS runtime + device class (e.g. `ios27-sim-iphone17`,
     `android35-emu-pixel9`). One canonical device per platform; other hardware uses `--compare`.
   - Locally and on hosted CI, benchmarks **inform review**; they block only on a clear regression

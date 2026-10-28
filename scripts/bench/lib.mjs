@@ -2277,10 +2277,10 @@ export function baselineBlockers(run) {
   }
   // A baseline is a table of ratios, so it can only be minted while every metric the
   // table *gates on* is actually being measured (round 4's completeness rule, narrowed
-  // by A4). An incomplete metric on a gated arm (`nitro-ui`) or on `rn-core` (the
-  // denominator of every ratio) makes the surviving ratios survivor-biased verdicts, and
-  // refuses the mint. The same defect on a comparison arm (`expo-ui-*`, `nitro-ui-host`)
-  // leaves just that cell out - see `baselineCompleteness()`.
+  // by A4). An incomplete metric on a gated arm (`nitro-ui`, or our own `nitro-ui-host`)
+  // or on `rn-core` (the denominator of every ratio) makes the surviving ratios
+  // survivor-biased verdicts, and refuses the mint. The same defect on a third-party
+  // comparison arm (`expo-ui-*`) leaves just that cell out - `baselineCompleteness()`.
   const { refusals } = baselineCompleteness(run);
   if (refusals.length > 0) {
     const where = refusals
