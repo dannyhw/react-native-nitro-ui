@@ -261,3 +261,18 @@ Because a staged version is not live yet, tags and GitHub releases cannot be mad
 creates `vX.Y.Z` at the commit that bumped it with notes from `CHANGELOG.md`. Changesets keeps versioning and the
 Version Packages PR, but its own tags and releases are switched off: with `.` in `workspaces` manypkg reports the tool
 as `bun`, not `root`, and Changesets then names tags `react-native-nitro-ui@0.1.1` instead of `v0.1.1`.
+
+## D29 — 0.4 scope and the Menu API (2026-10-27)
+
+0.4 is a button-anchored Menu and a TextField spike, started after the registry (X3) and conformance
+(X4) groundwork (`docs/tasks/PLAN-0.4.md`). The Menu follows `docs/tasks/Q1-menu-design.md`:
+
+- **No value:** no controlled-value handshake. Open state is uncontrolled and observed through
+  `onOpen`/`onClose`. No imperative `open()`/`close()` in 0.4.
+- **Items:** a typed, nested `group` struct array (sections and one level of submenu), never
+  JSON/AnyMap or child RN views.
+- **Submenus:** nested on iOS. Android renders a submenu's items inline under a divider (the same
+  kind of documented platform difference as Picker's iOS-only `wheel`).
+- **`primaryAction` ships iOS-only:** tap runs it, long-press opens the menu. It is ignored on
+  Android and documented as iOS-only.
+- **`disabled` while open closes the menu**, as Picker and DatePicker do, and a harness test gates it.
