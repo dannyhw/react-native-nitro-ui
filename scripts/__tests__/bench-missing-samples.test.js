@@ -27,14 +27,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
-  BASELINE_MOUNT_TIMEOUT_MS,
-  BASELINE_PRESENTED_TIMEOUT_MS,
+  BASELINE_TIMEOUTS_MS,
   COMPARISON_IMPLEMENTATIONS,
   DEFAULT_SCENARIO_BUDGETS,
   MEASURED_ITERATIONS,
   WARMUP_ITERATIONS,
   MAX_MISSING_SAMPLE_RATIO,
-  MAX_REQUESTED_TIMEOUT_MS,
+  maxRequestedTimeoutMsFor,
   aggregateRecords,
   baselineBlockers,
   buildBaseline,
@@ -53,17 +52,20 @@ import {
 // The bench app's plan parser is pure TypeScript over types only (no native imports),
 // so it can be imported here rather than grepped. That makes the round trip below -
 // `launchPlanString` in, `parsePlan` out - a real check of the launch flag.
-import {
-  DEFAULT_MOUNT_TIMEOUT_MS as APP_DEFAULT_MOUNT_TIMEOUT_MS,
-  DEFAULT_PRESENTED_TIMEOUT_MS as APP_DEFAULT_PRESENTED_TIMEOUT_MS,
-  MAX_TIMEOUT_MS as APP_MAX_TIMEOUT_MS,
-  parsePlan,
-} from '../../bench/src/plan';
+import { BENCH_DEFAULT_TIMEOUTS, parsePlan } from '../../bench/src/plan';
 import { detailSections } from '../bench/render.mjs';
 
 const LAUNCHES = 4;
 const ITERATIONS = 20;
 const QUIET = [1, 1.01, 0.995, 1.005];
+
+/**
+ * The waiting rule a baseline is minted under, per platform (A4/M1). Most fixtures in
+ * this file are iOS-shaped because that is the run A4 minted; the ones that are not say
+ * so by naming `ANDROID_RULE`.
+ */
+const IOS_RULE = BASELINE_TIMEOUTS_MS.ios;
+const ANDROID_RULE = BASELINE_TIMEOUTS_MS.android;
 
 /**
  * Records for one cell, with `missingPresented`/`missingMount` iterations whose null
@@ -86,8 +88,8 @@ function cellRecords({
   missingPresented = 0,
   missingMount = 0,
   reason = 'probe-timeout',
-  presentedTimeoutMs = BASELINE_PRESENTED_TIMEOUT_MS,
-  mountTimeoutMs = BASELINE_MOUNT_TIMEOUT_MS,
+  presentedTimeoutMs = IOS_RULE.presentedTimeoutMs,
+  mountTimeoutMs = IOS_RULE.mountTimeoutMs,
   mountSignal = true,
 }) {
   const records = [
@@ -237,6 +239,7 @@ function mintableRun({
   gapOn = null,
   reason = 'probe-timeout',
   withHost = false,
+  platform = 'ios',
 } = {}) {
   const arms = withHost ? { ...ARMS, 'nitro-ui-host': HOST_ARM } : ARMS;
   const records = [];
@@ -253,14 +256,18 @@ function mintableRun({
     records.push(...memoryRecords({ implementation }));
   }
   return {
-    platform: 'ios',
-    deviceKey: 'ios27-sim-testdevice',
+    platform,
+    deviceKey: `${platform}27-sim-testdevice`,
     deviceName: 'nitro-ui A',
     sha: 'abc1234',
     dirty: false,
     plan: 'full',
     launches: 8,
     perfMarks: false,
+    // Android mints are only mintable at the compiled regime (D9); iOS has no ART and
+    // reports null, which the guard below already exempts.
+    art:
+      platform === 'android' ? { status: 'speed-profile', primed: true } : null,
     createdAt: '2026-10-28T00:00:00.000Z',
     machine: { cpuCount: 10, loadavg1: 1.5 },
     problems: [],
@@ -282,8 +289,8 @@ describe('why a sample is missing is recorded, per iteration', () => {
           'probe-timeout': {
             count: 12,
             // 2000 + 0.4 rounds to 2000.4: the wait really did run to the timeout.
-            maxWaitedMs: BASELINE_PRESENTED_TIMEOUT_MS + 0.4,
-            timeoutMs: [BASELINE_PRESENTED_TIMEOUT_MS],
+            maxWaitedMs: IOS_RULE.presentedTimeoutMs + 0.4,
+            timeoutMs: [IOS_RULE.presentedTimeoutMs],
             details: undefined,
           },
         },
@@ -318,7 +325,7 @@ describe('why a sample is missing is recorded, per iteration', () => {
       'not-awaited': {
         count: 20,
         maxWaitedMs: 0,
-        timeoutMs: [BASELINE_PRESENTED_TIMEOUT_MS],
+        timeoutMs: [IOS_RULE.presentedTimeoutMs],
         details: undefined,
       },
     });
@@ -390,8 +397,8 @@ describe('why a sample is missing is recorded, per iteration', () => {
       missingMount: 1,
     }).filter((record) => record.launch === 0);
     expect(summarizeMissingReasons(launch)).toBe(
-      `1 mounted probe-timeout (${String(BASELINE_MOUNT_TIMEOUT_MS)} ms), ` +
-        `3 presented probe-timeout (${String(BASELINE_PRESENTED_TIMEOUT_MS)} ms)`
+      `1 mounted probe-timeout (${String(IOS_RULE.mountTimeoutMs)} ms), ` +
+        `3 presented probe-timeout (${String(IOS_RULE.presentedTimeoutMs)} ms)`
     );
     // Nothing missing: the line stays exactly as short as it was before A4.
     expect(
@@ -434,7 +441,7 @@ describe('why a sample is missing is recorded, per iteration', () => {
     const detail = detailSections(run);
     expect(detail).toContain('Missing samples:');
     expect(detail).toContain(
-      `12 probe-timeout (asked ${String(BASELINE_PRESENTED_TIMEOUT_MS)} ms`
+      `12 probe-timeout (asked ${String(IOS_RULE.presentedTimeoutMs)} ms`
     );
     expect(detail).toContain('which launch, which iteration');
   });
@@ -485,8 +492,8 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     // Names the metric, its sample counts, and the reasons that were recorded.
     expect(skipped.skipReasons).toEqual([
       `presentedNs: 68 of 80 samples arrived - presentedNs: 12 probe-timeout (asked ${String(
-        BASELINE_PRESENTED_TIMEOUT_MS
-      )} ms, waited up to ${String(BASELINE_PRESENTED_TIMEOUT_MS + 0.4)} ms)`,
+        IOS_RULE.presentedTimeoutMs
+      )} ms, waited up to ${String(IOS_RULE.presentedTimeoutMs + 0.4)} ms)`,
     ]);
     // Every other cell of that arm is still there, and so is every nitro-ui row.
     expect(Object.keys(baseline.cells)).toContain(
@@ -514,7 +521,7 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     const reasons = baselineBlockers(mintableRun({ gapOn: 'nitro-ui' }));
     expect(reasons[0]).toContain('probe-timeout');
     expect(reasons[0]).toContain(
-      `asked ${String(BASELINE_PRESENTED_TIMEOUT_MS)} ms`
+      `asked ${String(IOS_RULE.presentedTimeoutMs)} ms`
     );
     expect(reasons[0]).toContain('results file');
     expect(reasons[0]).toContain('.ndjson');
@@ -562,7 +569,7 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
       'mount:expo-ui-shared-host:50: presentedNs: 68 of 80 samples arrived'
     );
     expect(lines[1]).toContain(
-      `12 probe-timeout (asked ${String(BASELINE_PRESENTED_TIMEOUT_MS)} ms`
+      `12 probe-timeout (asked ${String(IOS_RULE.presentedTimeoutMs)} ms`
     );
     expect(lines.at(-1)).toContain(
       '`bench/baselines/maintainer-mac-2/ios27-sim-iphone17.json` -> `skippedCells`'
@@ -575,7 +582,7 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
       const run = mintableRun();
       for (const cell of Object.values(run.cells)) {
         cell.timeouts = {
-          mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS,
+          mountTimeoutMs: IOS_RULE.mountTimeoutMs,
           presentedTimeoutMs,
         };
       }
@@ -584,25 +591,54 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     // One millisecond over the rule already changes which samples arrive, so the
     // boundary is the rule itself - a guard weakened by a factor of ten would pass a
     // wait well past it and mint a table whose `presented` column means something else.
-    const justOver = BASELINE_PRESENTED_TIMEOUT_MS + 1;
+    const justOver = IOS_RULE.presentedTimeoutMs + 1;
     const reasons = baselineBlockers(runWith(justOver));
     expect(reasons).toHaveLength(1);
     expect(reasons[0]).toContain('waited longer for a signal than a baseline');
     expect(reasons[0]).toContain(`${String(justOver)} ms presented`);
-    expect(baselineBlockers(runWith(BASELINE_PRESENTED_TIMEOUT_MS))).toEqual(
-      []
-    );
+    expect(baselineBlockers(runWith(IOS_RULE.presentedTimeoutMs))).toEqual([]);
     // Same on the mount side, and the diagnostic flag is what reaches here.
     const mounted = mintableRun();
     for (const cell of Object.values(mounted.cells)) {
       cell.timeouts = {
-        mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS + 1,
-        presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS,
+        mountTimeoutMs: IOS_RULE.mountTimeoutMs + 1,
+        presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
       };
     }
     expect(baselineBlockers(mounted)[0]).toContain(
-      `${String(BASELINE_MOUNT_TIMEOUT_MS + 1)} ms mount`
+      `${String(IOS_RULE.mountTimeoutMs + 1)} ms mount`
     );
+  });
+
+  it("mints Android under Android's rule, not iOS's", () => {
+    // The whole point of per-platform defaults (M1): a 2 000 ms Android run is *at* its
+    // rule and must mint, while the same 2 000 ms on iOS is a short diagnostic. Reading
+    // one platform's rule for the other would refuse every Android mint the moment iOS
+    // moved, and accept an Android run recorded at iOS's 8 s.
+    const android = mintableRun({ platform: 'android' });
+    for (const cell of Object.values(android.cells)) {
+      cell.timeouts = {
+        mountTimeoutMs: ANDROID_RULE.mountTimeoutMs,
+        presentedTimeoutMs: ANDROID_RULE.presentedTimeoutMs,
+      };
+    }
+    expect(baselineBlockers(android)).toEqual([]);
+    expect(buildBaseline(android).timeouts).toEqual({
+      mountTimeoutMs: 1_500,
+      presentedTimeoutMs: 2_000,
+    });
+    // The rule Android is recorded under is the one from before A4, unchanged.
+    expect(ANDROID_RULE.presentedTimeoutMs).toBe(2_000);
+    expect(ANDROID_RULE.mountTimeoutMs).toBe(1_500);
+    // And iOS's 8 s would not be a valid Android rule: `baselineBlockers` reads the
+    // file's own platform, so an 8 s Android run is refused as a diagnostic.
+    for (const cell of Object.values(android.cells)) {
+      cell.timeouts = {
+        mountTimeoutMs: 1_500,
+        presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
+      };
+    }
+    expect(baselineBlockers(android)[0]).toContain('on android');
   });
 
   it('records the rule it was minted under in the file', () => {
@@ -621,13 +657,13 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     const atRule = mintableRun();
     for (const cell of Object.values(atRule.cells)) {
       cell.timeouts = {
-        mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS,
-        presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS,
+        mountTimeoutMs: IOS_RULE.mountTimeoutMs,
+        presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
       };
     }
     expect(buildBaseline(atRule).timeouts).toEqual({
-      mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS,
-      presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS,
+      mountTimeoutMs: IOS_RULE.mountTimeoutMs,
+      presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
     });
     // A results file from before the flag recorded nothing, and gets the default.
     const before = mintableRun();
@@ -636,8 +672,8 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     }
     expect(baselineBlockers(before)).toEqual([]);
     expect(buildBaseline(before).timeouts).toEqual({
-      mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS,
-      presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS,
+      mountTimeoutMs: IOS_RULE.mountTimeoutMs,
+      presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
     });
   });
 });
@@ -652,81 +688,116 @@ describe('the per-launch budget follows the requested waits', () => {
   });
 
   it('leaves the default run at the table value', () => {
-    // The number this rule is named after, pinned: A4 raised the presented wait from
-    // 2 000 to 8 000 ms on measured data, and the budget must stay the plain table value
-    // when nobody asks for more.
-    expect(BASELINE_PRESENTED_TIMEOUT_MS).toBe(8_000);
-    expect(launchBudgetMs(entry({}))).toBe(DEFAULT_SCENARIO_BUDGETS.mount);
+    // The number this rule is named after, pinned: A4 raised iOS's presented wait from
+    // 2 000 to 8 000 ms and left Android's at 2 000 (M1), and the budget must stay the
+    // plain table value when nobody asks for more.
+    expect(IOS_RULE.presentedTimeoutMs).toBe(8_000);
+    expect(ANDROID_RULE.presentedTimeoutMs).toBe(2_000);
+    expect(launchBudgetMs(entry({}), { platform: 'ios' })).toBe(
+      DEFAULT_SCENARIO_BUDGETS.ios.mount
+    );
     expect(
       launchBudgetMs(
-        entry({ presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS })
+        entry({ presentedTimeoutMs: IOS_RULE.presentedTimeoutMs }),
+        { platform: 'ios' }
       )
-    ).toBe(DEFAULT_SCENARIO_BUDGETS.mount);
+    ).toBe(DEFAULT_SCENARIO_BUDGETS.ios.mount);
     // A *shorter* wait does not shrink the budget either: the launch still has to fit
     // the same work, and a run that gives up early is not a faster launch.
-    expect(launchBudgetMs(entry({ presentedTimeoutMs: 2_000 }))).toBe(
-      DEFAULT_SCENARIO_BUDGETS.mount
-    );
+    expect(
+      launchBudgetMs(entry({ presentedTimeoutMs: 2_000 }), {
+        platform: 'ios',
+      })
+    ).toBe(DEFAULT_SCENARIO_BUDGETS.ios.mount);
   });
 
-  it('starts above the most a default launch can spend waiting', () => {
+  it('starts above the most a default launch can spend waiting, per platform', () => {
     // The reason the table is what it is. A launch where no frame ever arrives waits the
-    // full default on every iteration: 25 x (2 mount + 1 presented) = 275 s for `mount`.
-    // A budget below that kills the launch as "stalled" for a reason the runner chose,
-    // and a killed launch loses 20 iterations of data and becomes a `problem` - a mint
-    // refusal - instead of 20 recorded `probe-timeout` reasons. A4's raise from 2 000 to
-    // 8 000 ms is what pushed the waiting ceiling past the old 180 s table value.
-    const worstDefaultWaitMs =
-      (WARMUP_ITERATIONS + MEASURED_ITERATIONS) *
-      (2 * BASELINE_MOUNT_TIMEOUT_MS + BASELINE_PRESENTED_TIMEOUT_MS);
-    expect(worstDefaultWaitMs).toBe(275_000);
-    for (const action of ['mount', 'update', 'memory']) {
-      expect(DEFAULT_SCENARIO_BUDGETS[action]).toBeGreaterThan(
-        worstDefaultWaitMs
+    // full default on every iteration: 25 x (2 mount + 1 presented). A budget below that
+    // kills the launch as "stalled" for a reason the runner chose, and a killed launch
+    // loses 20 iterations of data and becomes a `problem` - a mint refusal - instead of
+    // 20 recorded `probe-timeout` reasons. A4's raise from 2 000 to 8 000 ms is what
+    // pushed iOS past the old 180 s table value; Android's 125 s is what keeps its own
+    // row honest if anyone shrinks it again.
+    for (const platform of ['ios', 'android']) {
+      const rule = BASELINE_TIMEOUTS_MS[platform];
+      const worst =
+        (WARMUP_ITERATIONS + MEASURED_ITERATIONS) *
+        (2 * rule.mountTimeoutMs + rule.presentedTimeoutMs);
+      expect(worst).toBe(platform === 'ios' ? 275_000 : 125_000);
+      for (const action of ['mount', 'update', 'memory']) {
+        expect(DEFAULT_SCENARIO_BUDGETS[platform][action]).toBeGreaterThan(
+          worst
+        );
+      }
+      // `leak` never waits for a signal (it samples footprints), so it needs room for the
+      // allocation work rather than the waiting, and is the largest of the four.
+      expect(DEFAULT_SCENARIO_BUDGETS[platform].leak).toBeGreaterThan(
+        DEFAULT_SCENARIO_BUDGETS[platform].mount
       );
     }
-    // `leak` never waits for a signal (it samples footprints), so it needs room for the
-    // allocation work rather than the waiting, and is the largest of the four.
-    expect(DEFAULT_SCENARIO_BUDGETS.leak).toBeGreaterThan(
-      DEFAULT_SCENARIO_BUDGETS.mount
+  });
+
+  it('asks for a platform rather than guessing one', () => {
+    // iOS's default wait needs 275 s of headroom and Android's table only has 180 s, so a
+    // budget computed for the wrong platform is a stalled-launch kill in one direction and
+    // a 4x over-allowance in the other. Falling back to a default platform is how that
+    // would happen quietly.
+    expect(() => launchBudgetMs(entry({}))).toThrow(
+      /no baseline waiting rule for platform/
     );
+    expect(() =>
+      launchBudgetMs(entry({}), {
+        platform: 'ios',
+        scenarioBudgets: { android: { mount: 1 } },
+      })
+    ).toThrow(/no launch budgets for platform/);
   });
 
   it('grows by the extra wait for every iteration of the launch', () => {
     // 25 iterations x (40 000 - 8 000) extra = 800 000 ms on top of the table value.
     // Without this a diagnostic run is killed as "stalled" for waiting on purpose, and a
     // killed launch becomes a `problem` - which is also a mint refusal.
-    expect(launchBudgetMs(entry({ presentedTimeoutMs: 40_000 }))).toBe(
-      DEFAULT_SCENARIO_BUDGETS.mount + 25 * 32_000
-    );
+    expect(
+      launchBudgetMs(entry({ presentedTimeoutMs: 40_000 }), {
+        platform: 'ios',
+      })
+    ).toBe(DEFAULT_SCENARIO_BUDGETS.ios.mount + 25 * 32_000);
     // A mount wait counts twice per iteration (`mount` waits for its own signal and
     // again in the teardown), so both additions have to show up.
     expect(
       launchBudgetMs(
-        entry({ mountTimeoutMs: 5_000, presentedTimeoutMs: 40_000 })
+        entry({ mountTimeoutMs: 5_000, presentedTimeoutMs: 40_000 }),
+        {
+          platform: 'ios',
+        }
       )
     ).toBe(
-      DEFAULT_SCENARIO_BUDGETS.mount +
-        25 * (2 * (5_000 - BASELINE_MOUNT_TIMEOUT_MS) + 32_000)
+      DEFAULT_SCENARIO_BUDGETS.ios.mount +
+        25 * (2 * (5_000 - IOS_RULE.mountTimeoutMs) + 32_000)
     );
   });
 
   it('keeps the leak budget the largest, and honours an explicit override', () => {
     expect(
       launchBudgetMs(
-        entry({ scenario: 'leak.date-picker', presentedTimeoutMs: 40_000 })
+        entry({ scenario: 'leak.date-picker', presentedTimeoutMs: 40_000 }),
+        { platform: 'ios' }
       )
-    ).toBe(DEFAULT_SCENARIO_BUDGETS.leak + 25 * 32_000);
+    ).toBe(DEFAULT_SCENARIO_BUDGETS.ios.leak + 25 * 32_000);
     // `BENCH_LAUNCH_TIMEOUT_S` is set by hand precisely to decide this question, so when
     // it is present `run.mjs` has already rewritten the whole table to it and the
     // requested waits must not add anything on top.
     expect(
       launchBudgetMs(entry({ presentedTimeoutMs: 40_000 }), {
+        platform: 'ios',
         scenarioBudgets: {
-          mount: 600_000,
-          update: 600_000,
-          memory: 600_000,
-          leak: 600_000,
+          ios: {
+            mount: 600_000,
+            update: 600_000,
+            memory: 600_000,
+            leak: 600_000,
+          },
         },
         overrideSeconds: 600,
       })
@@ -739,7 +810,7 @@ describe('the timeout flags', () => {
 
   it('accepts a value inside the native backstop', () => {
     expect(
-      parseTimeoutFlags(['--timeout-presented', '40000'], readFlag)
+      parseTimeoutFlags(['--timeout-presented', '40000'], readFlag, 'ios')
     ).toEqual({
       mountTimeoutMs: null,
       presentedTimeoutMs: 40_000,
@@ -751,11 +822,45 @@ describe('the timeout flags', () => {
     for (const value of ['abc', '0', '-5', '90000']) {
       const out = parseTimeoutFlags(
         ['--timeout-presented', value],
-        () => value
+        () => value,
+        'ios'
       );
       expect(out.problem).toContain('--timeout-presented must be a number');
       expect(out.presentedTimeoutMs).toBeNull();
     }
+  });
+
+  it('caps the request by the platform it is running on', () => {
+    // The cap is per platform because the native backstop is (M1). 8 000 ms is a normal
+    // iOS request and a lie on Android, where the 2 s backstop answers first and the
+    // recorded reason would blame an 8 s wait that never happened - the exact A4 root
+    // cause. A shared 80 s cap is what let that happen on Android.
+    expect(
+      parseTimeoutFlags(['--timeout-presented', '8000'], () => '8000', 'ios')
+    ).toEqual({
+      mountTimeoutMs: null,
+      presentedTimeoutMs: 8_000,
+      problem: null,
+    });
+    const onAndroid = parseTimeoutFlags(
+      ['--timeout-presented', '8000'],
+      () => '8000',
+      'android'
+    );
+    expect(onAndroid.presentedTimeoutMs).toBeNull();
+    expect(onAndroid.problem).toContain('between 1 and 1900 on android');
+    expect(onAndroid.problem).toContain('2000 ms native backstop');
+    // Just under Android's ceiling it is a legitimate question ("does it present in
+    // 1 900 ms?"), so the guard is the backstop and not a blanket 2 s rule.
+    expect(
+      parseTimeoutFlags(
+        ['--timeout-presented', '1900'],
+        () => '1900',
+        'android'
+      ).problem
+    ).toBeNull();
+    expect(maxRequestedTimeoutMsFor('android')).toBe(1_900);
+    expect(maxRequestedTimeoutMsFor('ios')).toBe(80_000);
   });
 
   it('puts a requested timeout on the launch string, and leaves a default off it', () => {
@@ -795,7 +900,7 @@ describe('the timeout flags', () => {
       presentedTimeoutMs: 40_000,
     };
     const asString = launchPlanString(entry);
-    const parsed = parsePlan(asString);
+    const parsed = parsePlan(asString, 'ios');
     if (parsed == null) {
       throw new Error(`the app reads ${asString} as an unconfigured launch`);
     }
@@ -814,18 +919,28 @@ describe('the timeout flags', () => {
       cellKey(entry.scenario, entry.implementation, entry.n)
     );
 
-    // No flags: the app waits by the defaults, and the string is unchanged from before
-    // A4 (old results-file names and the app's own idle-screen parse stay valid).
-    const plain = parsePlan(
-      launchPlanString({
-        ...entry,
-        perfMarks: false,
-        mountTimeoutMs: undefined,
-        presentedTimeoutMs: undefined,
-      })
-    );
-    expect(plain?.mountTimeoutMs).toBe(APP_DEFAULT_MOUNT_TIMEOUT_MS);
-    expect(plain?.presentedTimeoutMs).toBe(APP_DEFAULT_PRESENTED_TIMEOUT_MS);
+    // No flags: the app waits by the platform's defaults, and the string is unchanged
+    // from before A4 (old results-file names and the app's own idle-screen parse stay
+    // valid). Both platforms are checked because the whole M1 fix is that the defaults
+    // are not one number: an app that read iOS's on Android would wait 8 s where the
+    // committed Android table was recorded at 2 s.
+    const plainString = launchPlanString({
+      ...entry,
+      perfMarks: false,
+      mountTimeoutMs: undefined,
+      presentedTimeoutMs: undefined,
+    });
+    for (const platform of ['ios', 'android']) {
+      const plain = parsePlan(plainString, platform);
+      expect({
+        mount: plain?.mountTimeoutMs,
+        presented: plain?.presentedTimeoutMs,
+      }).toEqual({
+        mount: BENCH_DEFAULT_TIMEOUTS[platform].mountTimeoutMs,
+        presented: BENCH_DEFAULT_TIMEOUTS[platform].presentedTimeoutMs,
+      });
+    }
+    expect(parsePlan(plainString, 'android')?.presentedTimeoutMs).toBe(2_000);
   });
 
   it('rejects a malformed timeout flag loudly, in the app too', () => {
@@ -840,13 +955,23 @@ describe('the timeout flags', () => {
       'mount:rn-core:50:presentedTimeout=1000,2000',
       'mount:rn-core:50:madeUpTimeout=1000',
     ]) {
-      expect(() => parsePlan(bad)).toThrow(/NITRO_BENCH plan/);
+      expect(() => parsePlan(bad, 'ios')).toThrow(/NITRO_BENCH plan/);
     }
+    // Past *this platform's* backstop is refused on the launch string too, so a
+    // hand-built plan cannot do what the flag guard refuses (M1).
+    expect(() =>
+      parsePlan('mount:rn-core:50:presentedTimeout=8000', 'android')
+    ).toThrow(/NITRO_BENCH plan/);
+    expect(
+      parsePlan('mount:rn-core:50:presentedTimeout=8000', 'ios')
+        ?.presentedTimeoutMs
+    ).toBe(8_000);
     // A bare `marks` still parses, and so does a valid combination of all three.
-    expect(parsePlan('mount:rn-core:50:marks')?.perfMarks).toBe(true);
+    expect(parsePlan('mount:rn-core:50:marks', 'ios')?.perfMarks).toBe(true);
     expect(
       parsePlan(
-        'mount:rn-core:50:marks,mountTimeout=2000,presentedTimeout=30000'
+        'mount:rn-core:50:marks,mountTimeout=2000,presentedTimeout=30000',
+        'ios'
       )?.presentedTimeoutMs
     ).toBe(30_000);
   });
@@ -920,48 +1045,77 @@ describe('the app really records the reasons the aggregator reads', () => {
 });
 
 describe('the two ends of the timeout rule agree', () => {
-  it('waits by the same defaults the baseline is minted under', () => {
-    expect(APP_DEFAULT_MOUNT_TIMEOUT_MS).toBe(BASELINE_MOUNT_TIMEOUT_MS);
-    expect(APP_DEFAULT_PRESENTED_TIMEOUT_MS).toBe(
-      BASELINE_PRESENTED_TIMEOUT_MS
-    );
-  });
-
-  it('caps a requested wait below the native backstop on both platforms', () => {
-    expect(APP_MAX_TIMEOUT_MS).toBe(MAX_REQUESTED_TIMEOUT_MS);
-    const ios = readFileSync(
+  const ios = () =>
+    readFileSync(
       resolve(
         process.cwd(),
         'bench/modules/bench-probe/ios/HybridBenchProbe.mm'
       ),
       'utf8'
     );
-    const android = readFileSync(
+  const android = () =>
+    readFileSync(
       resolve(
         process.cwd(),
         'bench/modules/bench-probe/android/src/main/java/com/margelo/nitro/benchprobe/HybridBenchProbe.kt'
       ),
       'utf8'
     );
+
+  it('waits by the same defaults the baseline is minted under, on both platforms', () => {
+    // The drift this pins is the expensive kind: a mint refused for a wait nobody asked
+    // for, or accepted under a rule it was not recorded with. Per platform, because the
+    // two no longer share a number (M1).
+    for (const platform of ['ios', 'android']) {
+      expect(BENCH_DEFAULT_TIMEOUTS[platform]).toEqual(
+        BASELINE_TIMEOUTS_MS[platform]
+      );
+    }
+    // Android's own numbers, stated plainly: nothing about the Android wait moved.
+    expect(BASELINE_TIMEOUTS_MS.android.mountTimeoutMs).toBe(1_500);
+    expect(BASELINE_TIMEOUTS_MS.android.presentedTimeoutMs).toBe(2_000);
+    expect(BASELINE_TIMEOUTS_MS.ios.presentedTimeoutMs).toBe(8_000);
+  });
+
+  it("caps a requested wait below that platform's native backstop", () => {
     const iosCeiling = Number(
-      /kBenchPresentationCeilingSeconds = ([0-9.]+)/.exec(ios)[1]
+      /kBenchPresentationCeilingSeconds = ([0-9.]+)/.exec(ios())[1]
     );
     const androidCeiling = Number(
-      /PRESENTATION_CEILING_MS = ([0-9_]+)L/.exec(android)[1].replace(/_/g, '')
+      /PRESENTATION_CEILING_MS = ([0-9_]+)L/
+        .exec(android())[1]
+        .replace(/_/g, '')
     );
-    expect(MAX_REQUESTED_TIMEOUT_MS).toBeLessThan(iosCeiling * 1000);
-    expect(MAX_REQUESTED_TIMEOUT_MS).toBeLessThan(androidCeiling);
-    // Two ceilings that disagree would make one platform's long wait a timeout and the
-    // other's a sample - the same class of bug A4 is chasing on one platform.
-    expect(iosCeiling * 1000).toBe(androidCeiling);
-    // The cap has to be generous enough to be worth asking for, and the thing worth
-    // asking about is an arm slower than the default wait: A4 measured the slowest frame
-    // anywhere at 3.9 s, so 10x the default presented wait (40 s at the 8 s default) keeps
-    // a diagnostic of a genuinely strange arm inside what can be requested.
-    expect(MAX_REQUESTED_TIMEOUT_MS).toBeGreaterThanOrEqual(
-      10 * BASELINE_PRESENTED_TIMEOUT_MS
+    for (const [platform, ceilingMs] of [
+      ['ios', iosCeiling * 1000],
+      ['android', androidCeiling],
+    ]) {
+      expect(BASELINE_TIMEOUTS_MS[platform].presentationCeilingMs).toBe(
+        ceilingMs
+      );
+      expect(maxRequestedTimeoutMsFor(platform)).toBeLessThan(ceilingMs);
+      expect(BENCH_DEFAULT_TIMEOUTS[platform].maxRequestedTimeoutMs).toBe(
+        maxRequestedTimeoutMsFor(platform)
+      );
+      // The cap has to reach at least as far as the platform's own default, or the
+      // default rule could not be asked for explicitly.
+      if (ceilingMs > BASELINE_TIMEOUTS_MS[platform].presentedTimeoutMs) {
+        expect(maxRequestedTimeoutMsFor(platform)).toBeGreaterThanOrEqual(
+          BASELINE_TIMEOUTS_MS[platform].presentedTimeoutMs
+        );
+      }
+    }
+    // 2 s on Android and 90 s on iOS is deliberate (M1), not drift: each is above its own
+    // platform's cap and the pair is pinned so the next change is a decision.
+    expect(androidCeiling).toBe(2_000);
+    expect(iosCeiling).toBe(90);
+    // iOS's cap has to stay generous enough to be worth asking for: A4 measured the
+    // slowest iOS frame at 3.6 s, so 10x the 8 s default keeps a strange arm inside
+    // what can be requested.
+    expect(maxRequestedTimeoutMsFor('ios')).toBe(40_000 * 2);
+    expect(maxRequestedTimeoutMsFor('ios')).toBeGreaterThanOrEqual(
+      10 * IOS_RULE.presentedTimeoutMs
     );
-    expect(MAX_REQUESTED_TIMEOUT_MS).toBe(40_000 * 2);
   });
 });
 
@@ -1124,7 +1278,7 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
         platform: 'ios 27.0',
         probeClock: 'CLOCK_UPTIME_RAW',
         mountSignal: true,
-        mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS,
+        mountTimeoutMs: IOS_RULE.mountTimeoutMs,
         presentedTimeoutMs,
       },
     ];
@@ -1179,7 +1333,7 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
   it('leaves a cell that measured everything identical, to the nanosecond', () => {
     for (const implementation of ['rn-core', 'nitro-ui']) {
       const before = medianUnder(implementation, 2_000);
-      const after = medianUnder(implementation, BASELINE_PRESENTED_TIMEOUT_MS);
+      const after = medianUnder(implementation, IOS_RULE.presentedTimeoutMs);
       expect(before.samples).toBe(LAUNCHES * ITERATIONS);
       expect(after).toEqual(before);
     }
@@ -1189,7 +1343,7 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
     const before = medianUnder('expo-ui-shared-host', 2_000);
     const after = medianUnder(
       'expo-ui-shared-host',
-      BASELINE_PRESENTED_TIMEOUT_MS
+      IOS_RULE.presentedTimeoutMs
     );
     // The old wait loses the slow tail: the cell is not reportable, and its median is the
     // fast survivors - A3's 97.5 ms recorded for an arm that presents in ~2 s.
@@ -1205,29 +1359,115 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
     expect(after.median).toBeGreaterThan(2_000e6);
   });
 
-  it('is the reason the default is what it is: above the slowest measured frame', () => {
-    // The rule has to clear the slowest frame measured anywhere in A4's runs (3.9 s, at
-    // `expo-ui-host-per-control` N=200) with room for a busy machine, and stay well under
-    // the 90 s native backstop so "we stopped asking" stays distinguishable.
-    const slowestMeasuredFrameMs = 3_900;
-    expect(BASELINE_PRESENTED_TIMEOUT_MS).toBeGreaterThan(
-      slowestMeasuredFrameMs
+  it('is the reason the iOS default is what it is: above the slowest measured frame', () => {
+    // The rule has to clear the slowest frame measured anywhere in A4's iOS runs (3 565
+    // ms, 3 850 ms in the 40 s diagnostic) with room for a busy machine, and stay well
+    // under the 90 s native backstop so "we stopped asking" stays distinguishable.
+    const slowestMeasuredFrameMs = 3_850;
+    expect(IOS_RULE.presentedTimeoutMs).toBeGreaterThan(slowestMeasuredFrameMs);
+    expect(IOS_RULE.presentedTimeoutMs).toBeLessThan(
+      maxRequestedTimeoutMsFor('ios')
     );
-    expect(BASELINE_PRESENTED_TIMEOUT_MS).toBeLessThan(
-      MAX_REQUESTED_TIMEOUT_MS
-    );
-    expect(MAX_REQUESTED_TIMEOUT_MS).toBeLessThan(90_000);
+    expect(maxRequestedTimeoutMsFor('ios')).toBeLessThan(90_000);
     // And the two ends have to agree, because the number that gates a mint is the
     // runner's and the number a launch actually waits by is the app's. `waits by the
     // same defaults the baseline is minted under` asserts the equality; this one is the
     // proof that a revert cannot slip through as a pair - both constants would have to
     // move together, and one of them is read from the app's own module.
-    expect(APP_DEFAULT_PRESENTED_TIMEOUT_MS).toBe(
-      BASELINE_PRESENTED_TIMEOUT_MS
+    expect(BENCH_DEFAULT_TIMEOUTS.ios.presentedTimeoutMs).toBe(
+      IOS_RULE.presentedTimeoutMs
     );
-    expect(APP_DEFAULT_PRESENTED_TIMEOUT_MS).toBeGreaterThan(
+    expect(BENCH_DEFAULT_TIMEOUTS.ios.presentedTimeoutMs).toBeGreaterThan(
       slowestMeasuredFrameMs
     );
+    // The evidence for 8 s is iOS evidence only, which is why Android did not take the
+    // raise (M1): nothing measured on Android has a frame between 2 s and 8 s - the cells
+    // that lose presenting samples there never draw one at all.
+    expect(ANDROID_RULE.presentedTimeoutMs).toBeLessThan(
+      slowestMeasuredFrameMs
+    );
+  });
+});
+
+describe('Android keeps the waiting rule it was minted with (review M1)', () => {
+  /**
+   * One place that reads Android's *effective* waits end to end: the string the runner
+   * puts on a default launch, the number the app parses off it, the native timer that
+   * could answer instead, the wall-clock budget the runner allows, and the rule a mint is
+   * refused under. Any of the five moving is the change M1 exists to prevent, and each is
+   * a different file, so a fix in one would otherwise look complete.
+   *
+   * Proven red by moving each in turn: the app default to 8 000 (both the parse and the
+   * mint-rule equality go red), the ceiling constant or its `postDelayed` call site to
+   * 90 s (the backstop and call-site tests), the budget table to iOS's (the table pin),
+   * and the platform's rule to iOS's (the mint test above).
+   */
+  const entry = {
+    scenario: 'update.progress',
+    implementation: 'expo-ui-shared-host',
+    n: 50,
+    launch: 0,
+  };
+
+  it('asks the app for no timeout at all, and the app waits 1 500 / 2 000', () => {
+    const [scheduled] = buildSchedule({
+      plan: 'quick',
+      launches: 1,
+      platform: 'android',
+      only: 'expo-ui-shared-host',
+    });
+    expect(launchPlanString(scheduled)).not.toContain('Timeout');
+    const parsed = parsePlan(launchPlanString(scheduled), 'android');
+    expect({
+      mount: parsed?.mountTimeoutMs,
+      presented: parsed?.presentedTimeoutMs,
+    }).toEqual({ mount: 1_500, presented: 2_000 });
+  });
+
+  it('has a native backstop at 2 s, so nothing can wait longer than that', () => {
+    const android = readFileSync(
+      resolve(
+        process.cwd(),
+        'bench/modules/bench-probe/android/src/main/java/com/margelo/nitro/benchprobe/HybridBenchProbe.kt'
+      ),
+      'utf8'
+    );
+    expect(
+      Number(
+        /PRESENTATION_CEILING_MS = ([0-9_]+)L/
+          .exec(android)[1]
+          .replace(/_/g, '')
+      )
+    ).toBe(2_000);
+    // Which is also why the requested cap there is 1 900 ms and not iOS's 80 s: past the
+    // backstop, the recorded timeout would not be the one the run asked for.
+    expect(maxRequestedTimeoutMsFor('android')).toBe(1_900);
+  });
+
+  it('gives each launch the pre-A4 budget, sized for those waits', () => {
+    expect(launchBudgetMs(entry, { platform: 'android' })).toBe(180_000);
+    // 25 iterations x (2 x 1 500 + 2 000) = 125 000 ms of worst-case waiting, inside it.
+    expect(25 * (2 * 1_500 + 2_000)).toBe(125_000);
+  });
+
+  it('does not pay the 8 s wait across the cells that never draw', () => {
+    // The cost M1 removes: the 8 Android `update.{progress,picker}:expo-ui-*` cells that
+    // await both signals and time out on every iteration (A3: "never mounted"). Each
+    // extra second of the presented wait is 1 s per iteration of every one of their
+    // launches, and it is not free CPU either - `opBatch` brackets the wait, so those
+    // comparison rows integrate main-thread work over it.
+    const affectedCells = 8;
+    const launches = 8;
+    const iterations = WARMUP_ITERATIONS + MEASURED_ITERATIONS;
+    const extraWaitMs = 8_000 - 2_000;
+    const extraSeconds =
+      (affectedCells * launches * iterations * extraWaitMs) / 1000;
+    expect(extraSeconds).toBe(9_600); // ~2.7 h per Android full run
+    // ...and at iOS's 8 s the same cells would run past the budget Android's launches get,
+    // which is the other half of why the raise was not simply taken at face value: a
+    // launch killed as "stalled" is a `problem`, and a `problem` refuses the whole mint.
+    expect((iterations * (2 * 1_500 + 8_000)) / 180_000).toBeGreaterThan(1);
+    expect((iterations * (2 * 1_500 + 2_000)) / 180_000).toBeLessThan(1);
   });
 });
 
@@ -1247,11 +1487,21 @@ describe('the two copies of the launch budgets agree', () => {
       resolve(process.cwd(), 'scripts/bench/run.mjs'),
       'utf8'
     );
-    const block = /const TIMEOUTS = \{([^}]*)\};/.exec(source);
+    const block = /const TIMEOUTS = \{([\s\S]*?)\n\};/.exec(source);
     expect(block).not.toBeNull();
+    // Per platform, so a table that is right for one and wrong for the other cannot be
+    // read as a flat match against `DEFAULT_SCENARIO_BUDGETS`.
     return Object.fromEntries(
-      [...String(block[1]).matchAll(/(\w+):\s*([0-9_]+)/g)].map(
-        ([, key, value]) => [key, Number(value.replace(/_/g, ''))]
+      [...String(block[1]).matchAll(/(ios|android):\s*\{([^}]*)\}/g)].map(
+        ([, platform, rows]) => [
+          platform,
+          Object.fromEntries(
+            [...rows.matchAll(/(\w+):\s*([0-9_]+)/g)].map(([, key, value]) => [
+              key,
+              Number(value.replace(/_/g, '')),
+            ])
+          ),
+        ]
       )
     );
   };
@@ -1272,8 +1522,10 @@ describe('the two copies of the launch budgets agree', () => {
       }
     }
     const table = runnerTable();
-    for (const action of actions) {
-      expect(table).toHaveProperty(action);
+    for (const platform of ['ios', 'android']) {
+      for (const action of actions) {
+        expect(table[platform]).toHaveProperty(action);
+      }
     }
     expect([...actions].sort()).toEqual(['leak', 'memory', 'mount', 'update']);
   });

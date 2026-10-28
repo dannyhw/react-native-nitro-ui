@@ -53,8 +53,7 @@ import {
 } from './devices.mjs';
 import {
   ARMS_WITHOUT_COMPONENT,
-  BASELINE_MOUNT_TIMEOUT_MS,
-  BASELINE_PRESENTED_TIMEOUT_MS,
+  baselineTimeoutsFor,
   LAUNCHES_PER_CELL,
   MARK_CAPABLE_IMPLEMENTATIONS,
   PLANS,
@@ -98,24 +97,33 @@ import {
  * hitting it means something is wrong, not that the component is slow.
  */
 /**
- * The wall-clock budget for one launch, by scenario action.
+ * The wall-clock budget for one launch, by platform and scenario action.
  *
  * A budget has to exceed the most a launch can *legitimately* spend waiting for signals,
  * or a slow arm is killed as "stalled" for a reason the runner itself chose - and a killed
  * launch loses all 20 of its iterations' data, which is strictly worse than the 20 recorded
- * `probe-timeout` reasons it replaces. That ceiling is the default waits times the
- * iterations of a launch: `mount` waits twice per iteration (its own signal, then the
- * teardown's) and once for the presenting frame, so 25 iterations at 1 500/8 000 ms is
- * 275 000 ms of possible waiting (A4 raised the presented wait from 2 000 ms, at which
- * point 180 000 was still comfortably above the 87 500 ms it allowed). The `leak` scenario
- * allocates 200 instances per iteration and does not wait for signals at all, so it keeps
- * its own larger allowance for the work rather than the waiting.
+ * `probe-timeout` reasons it replaces. That ceiling is the platform's default waits times
+ * the iterations of a launch: `mount` waits twice per iteration (its own signal, then the
+ * teardown's) and once for the presenting frame, so 25 iterations at iOS's 1 500/8 000 ms
+ * is 275 000 ms of possible waiting (A4 raised iOS's presented wait from 2 000 ms, at which
+ * point 180 000 was no longer enough). Android keeps the pre-A4 table because its waits
+ * never changed (review M1): 25 iterations at 1 500/2 000 ms is 125 000 ms, inside 180 000.
+ * The `leak` scenario allocates 200 instances per iteration and does not wait for signals at
+ * all, so it keeps its own larger allowance for the work rather than the waiting.
  */
 const TIMEOUTS = {
-  mount: 300_000,
-  update: 300_000,
-  memory: 300_000,
-  leak: 420_000,
+  ios: {
+    mount: 300_000,
+    update: 300_000,
+    memory: 300_000,
+    leak: 420_000,
+  },
+  android: {
+    mount: 180_000,
+    update: 180_000,
+    memory: 180_000,
+    leak: 300_000,
+  },
 };
 
 // A machine shared with other emulators or another agent's build can starve a
@@ -123,8 +131,10 @@ const TIMEOUTS = {
 // laptop turn a bench run into a wall of timeouts.
 const overrideSeconds = Number(process.env.BENCH_LAUNCH_TIMEOUT_S);
 if (Number.isFinite(overrideSeconds) && overrideSeconds > 0) {
-  for (const scenario of Object.keys(TIMEOUTS)) {
-    TIMEOUTS[scenario] = overrideSeconds * 1000;
+  for (const platformBudgets of Object.values(TIMEOUTS)) {
+    for (const scenario of Object.keys(platformBudgets)) {
+      platformBudgets[scenario] = overrideSeconds * 1000;
+    }
   }
 }
 
@@ -424,7 +434,7 @@ function parseNdjson(text) {
   return records;
 }
 
-async function runLaunch(target, entry) {
+async function runLaunch(target, entry, platform) {
   const started = Date.now();
   let deadChecks = 0;
   const handle = await target.run(entry);
@@ -432,7 +442,7 @@ async function runLaunch(target, entry) {
   // Keyed by the *action*, because a scenario cell carries its component
   // (`mount.slider`): the budget belongs to what the launch does, not to which
   // control it mounts - plus any longer signal waits this launch was asked for.
-  const budget = launchBudget(entry);
+  const budget = launchBudget(entry, platform);
   for (;;) {
     const text = target.read(handle);
     if (text.includes('"kind":"end"')) {
@@ -495,16 +505,17 @@ async function runLaunch(target, entry) {
  * The wall-clock budget for one launch, widened by whatever signal waits that launch
  * was asked to make.
  *
- * The budgets above assume the default waits: an iteration of `mount` waits up to
- * `mount` + `presented` for its own two signals and again `mount` in the teardown that
- * follows, so 25 iterations already contain ~87 s of waiting at the defaults. Ask for a
- * 40 s presenting wait and the same launch would be killed as *stalled* for a reason the
- * runner itself introduced - and a killed launch becomes a `problem`, a worse record
- * than the slow sample it was chasing. An explicit `BENCH_LAUNCH_TIMEOUT_S` still wins:
- * that override exists precisely to set the budget by hand.
+ * The budgets above assume that platform's default waits: an iteration of `mount` waits
+ * up to `mount` + `presented` for its own two signals and again `mount` in the teardown
+ * that follows, so 25 iterations already contain 125 s of waiting on Android and 275 s on
+ * iOS. Ask for a 40 s presenting wait and the same launch would be killed as *stalled*
+ * for a reason the runner itself introduced - and a killed launch becomes a `problem`, a
+ * worse record than the slow sample it was chasing. An explicit `BENCH_LAUNCH_TIMEOUT_S`
+ * still wins: that override exists precisely to set the budget by hand.
  */
-function launchBudget(entry) {
+function launchBudget(entry, platform) {
   return launchBudgetMs(entry, {
+    platform,
     scenarioBudgets: TIMEOUTS,
     overrideSeconds,
   });
@@ -532,7 +543,7 @@ function summarize(records) {
  * whose launches each outlast the sampling interval it is the only sampling there
  * is.
  */
-async function drive({ target, schedule, sample = () => {} }) {
+async function drive({ target, schedule, platform, sample = () => {} }) {
   const records = [];
   const problems = [];
   for (let index = 0; index < schedule.length; index++) {
@@ -543,7 +554,7 @@ async function drive({ target, schedule, sample = () => {} }) {
       `[${String(index + 1)}/${String(schedule.length)}] ${label} ... `
     );
     try {
-      const result = await runLaunch(target, entry);
+      const result = await runLaunch(target, entry, platform);
       records.push(
         ...result.records.map((record) => ({ ...record, launch: entry.launch }))
       );
@@ -601,7 +612,11 @@ export async function main(argv) {
     return;
   }
 
-  const timeouts = parseTimeoutFlags(argv, (name) => flag(argv, name));
+  const timeouts = parseTimeoutFlags(
+    argv,
+    (name) => flag(argv, name),
+    platform
+  );
   if (timeouts.problem != null) {
     log(timeouts.problem);
     process.exitCode = 2;
@@ -752,11 +767,12 @@ export async function main(argv) {
     presentedTimeoutMs: timeouts.presentedTimeoutMs,
   });
   if (timeouts.mountTimeoutMs != null || timeouts.presentedTimeoutMs != null) {
+    const rule = baselineTimeoutsFor(platform);
     log(
       `Timeouts:  mount ${String(
-        timeouts.mountTimeoutMs ?? BASELINE_MOUNT_TIMEOUT_MS
+        timeouts.mountTimeoutMs ?? rule.mountTimeoutMs
       )} ms, presented ${String(
-        timeouts.presentedTimeoutMs ?? BASELINE_PRESENTED_TIMEOUT_MS
+        timeouts.presentedTimeoutMs ?? rule.presentedTimeoutMs
       )} ms - DIAGNOSTIC: which samples arrive depends on this rule, so the run cannot mint a baseline (launchBudget widens each launch's budget by the extra wait)`
     );
   }
@@ -807,6 +823,7 @@ export async function main(argv) {
     ({ records, problems } = await drive({
       target,
       schedule,
+      platform,
       sample: () => load.sample(),
     }));
   } finally {
@@ -838,9 +855,9 @@ export async function main(argv) {
     /**
      * The waiting rule this run measured under (A4). Read back from the cells rather
      * than echoed from the flags, so a run whose app binary predates the launch flag
-     * cannot claim a timeout it never applied - `staleTimeoutApp()` compares the two and
-     * says so. Zero means "nothing recorded", which is what a run of an app built before
-     * the flag looks like.
+     * cannot claim a timeout it never applied - the check below compares the two and says
+     * so. Zero means "nothing recorded", which is what a run of an app built
+     * before the flag looks like, and `baselineBlockers()` refuses to mint from it.
      */
     timeouts: requestedTimeouts({ cells }),
     clock: Object.values(cells)[0]?.clock ?? null,

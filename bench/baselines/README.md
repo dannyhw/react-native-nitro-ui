@@ -103,13 +103,14 @@ tree) was refused, and it was not load: `mount.date-picker` at N=200 presented o
 iterations on `expo-ui-host-per-control` and 87 of 160 on `expo-ui-shared-host`. The cause was
 the waiting rule, not the machine — those arms present their first frame at p50 2 950 ms and
 2 702 ms on this simulator, above the 2 000 ms the runner waited, and the probe's native "no
-frame" backstop was a hardcoded 2 s that overrode any longer ask. `presented` now waits 8 000
-ms (see the rule above), the backstop is a 90 s ceiling, and the retry recorded **160/160 on
-both cells** with 196 complete rows, `skippedCells: {}`, and `timeouts` naming the rule it was
-made under.
+frame" backstop was a hardcoded 2 s that overrode any longer ask. On iOS `presented` now
+waits 8 000 ms and the backstop is a 90 s ceiling (Android keeps 2 000 ms and a 2 s backstop -
+see the rule above for why the change is iOS-only), and the retry recorded **160/160 on both
+cells** with 196 complete rows, `skippedCells: {}`, and `timeouts` naming the rule it was made
+under.
 
 The run: one clean `--plan full --launches 8` at `99ec3a0`, 1568/1568 launches, `problems: []`,
-4 h 24 min (10.2 s per launch — the same as A3's, because a launch waits for the frame, not
+4 h 26 min (10.2 s per launch — the same as A3's, because a launch waits for the frame, not
 for the timeout), and quiet over the whole run rather than at its end: 2100 load samples,
 median 3.05 against the 5.0 ceiling, p90 4.46, 86 over (4.1 %, under the allowance). `--check`
 on iOS gates there: 121 rows within tolerance, 74 suppressed by their own within-run spread,
@@ -184,18 +185,25 @@ overFraction }`. A run is refused when its **median** sample is over the ceiling
     timeout and how long the wait ran, `not-awaited`, `probe-error` with the message), so
     a refusal says "48 probe-timeout (asked 2000 ms, waited up to 2000.4 ms)" rather than
     "45 missing". See `docs/DECISIONS.md` D9 (A4 amendments).
-- **Minted under the default waiting rule.** `presented` waits 8 000 ms and `mounted`
-  1 500 ms unless a run asks otherwise (`--timeout-presented`, `--timeout-mount`), and a
-  run that asks for longer is a diagnostic: the samples that arrive keep their values,
-  but _which_ arrive changes the median. Such a run is refused, and every baseline
-  records the rule it was made under in its `timeouts` block.
+- **Minted under its platform's default waiting rule.** `mounted` waits 1 500 ms on both
+  platforms; `presented` waits **8 000 ms on iOS and 2 000 ms on Android** unless a run asks
+  for longer (`--timeout-presented`, `--timeout-mount`, capped per platform at 80 s and
+  1 900 ms). A run that asks for longer is a diagnostic, because the samples that arrive keep
+  their values but _which_ arrive changes the median. Such a run is refused, and every
+  baseline records the rule it was made under in its `timeouts` block.
 
-  The 8 s is A4's measurement, not a habit (`docs/tasks/A4-ios-baseline-mac2.report.md`).
-  It does not make the baselines minted under 2 s incomparable: a longer wait changes only
-  the cells that were losing samples, and a committed baseline has none of those — every
-  cell in it answered inside the shorter wait, so it answers identically under the longer
-  one. The cells that would have moved are the ones the completeness rule already kept out
-  of the file. `maintainer-mac-2`'s iOS file is the first minted under the new rule.
+  The 8 s is A4's iOS measurement, not a habit
+  (`docs/tasks/A4-ios-baseline-mac2.report.md`), and **Android is unchanged from before
+  A4**: its 8 `update.progress`/`update.picker` `@expo/ui` cells lose samples because those
+  arms never draw a frame there (A3: no Fabric transaction), not because 2 s is too short,
+  so a longer wait would only inflate their CPU rows and add ~2.7 h to a full Android run.
+  For iOS the raise is value-neutral wherever a cell was already complete: a sample that
+  arrived inside 2 s arrives with the identical stamp under 8 s, so its median cannot move.
+  That is why `maintainer-mac-1`'s iOS table stays comparable, and why
+  `maintainer-mac-2`'s iOS file is the first iOS table minted under the new rule. The 4
+  Android `rn-core` cells with missing signals are `not-awaited` by construction; the 8
+  `@expo/ui` ones await and time out every iteration, which is why they are ungated
+  comparison rows kept out of the table by the completeness rule.
 
 - **Machine + device key** — the label rules are above, and `--force` does not get
   around them. The load ceiling belongs to the _measuring_ machine: 7.0 on

@@ -1,16 +1,13 @@
 import { Platform } from 'react-native';
 
-import { DEFAULT_MOUNT_TIMEOUT_MS, DEFAULT_PRESENTED_TIMEOUT_MS } from './plan';
 import type { MissingSampleReason } from './types';
 import { benchProbe } from '../modules/bench-probe/src';
 
-/**
- * How long the runner waits for each native signal before calling it missing. The
- * launch plan can override both (`scenario:impl:N:presentedTimeout=40000`); the values
- * and the reason they exist live in `plan.ts`, which is what parses them, so importing
- * the plan parser does not pull this module's native object with it.
- */
-export { DEFAULT_MOUNT_TIMEOUT_MS, DEFAULT_PRESENTED_TIMEOUT_MS };
+// How long the runner waits for each native signal is decided by the launch plan, which
+// `plan.ts` parses per platform (`scenario:impl:N:presentedTimeout=40000`). Nothing here
+// defaults a timeout: a second copy of that rule is exactly what a stale build would
+// answer with, and `plan.ts` must stay free of this module so parsing a plan - and
+// rejecting a bad flag loudly - does not create the native hybrid object.
 
 /**
  * Single access point to the native probe.
@@ -117,10 +114,12 @@ async function awaitStamp(
  *
  * Prefer {@link awaitMountStamp}, which also reports why a null is a null; this
  * stays for callers that only need the number.
+ *
+ * `timeoutMs` has no default on purpose: the only honest number is the one the launch
+ * plan resolved for this platform, and a default here would be a second place to keep
+ * that rule.
  */
-export async function awaitMountNs(
-  timeoutMs = DEFAULT_MOUNT_TIMEOUT_MS
-): Promise<number | null> {
+export async function awaitMountNs(timeoutMs: number): Promise<number | null> {
   const wait = await awaitStamp(timeoutMs, (ms) => probe.awaitMount(ms));
   return wait.stamp;
 }
@@ -131,19 +130,19 @@ export async function awaitMountNs(
  * commit - not after a JS round trip (T02 review S2).
  */
 export async function awaitPresentedNs(
-  timeoutMs = DEFAULT_PRESENTED_TIMEOUT_MS
+  timeoutMs: number
 ): Promise<number | null> {
   const wait = await awaitStamp(timeoutMs, (ms) => probe.awaitPresented(ms));
   return wait.stamp;
 }
 
 /** As {@link awaitMountNs}, with the reason a missing stamp is missing. */
-export function awaitMountStamp(timeoutMs = DEFAULT_MOUNT_TIMEOUT_MS) {
+export function awaitMountStamp(timeoutMs: number) {
   return awaitStamp(timeoutMs, (ms) => probe.awaitMount(ms));
 }
 
 /** As {@link awaitPresentedNs}, with the reason a missing stamp is missing. */
-export function awaitPresentedStamp(timeoutMs = DEFAULT_PRESENTED_TIMEOUT_MS) {
+export function awaitPresentedStamp(timeoutMs: number) {
   return awaitStamp(timeoutMs, (ms) => probe.awaitPresented(ms));
 }
 

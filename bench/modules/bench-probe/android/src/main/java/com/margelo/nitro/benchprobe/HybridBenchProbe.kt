@@ -59,17 +59,18 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
      *
      * A backstop for a window that never draws, **not** the wait the runner asked for:
      * that is the `timeoutMs` of `awaitPresented`, which resolves the same capture
-     * first through the same once-guard. It has to sit well above any timeout the
-     * runner can request, because a backstop that wins the race *becomes* the timeout -
-     * every long wait would be answered `-1` at this number and A4's `presentedTimeout=`
-     * diagnostic would measure nothing else. The plan parser caps a requested timeout
-     * below it (`PRESENTED_TIMEOUT_FLAG` in `bench/src/plan.ts`).
+     * first through the same once-guard. A backstop that wins the race *becomes* the
+     * timeout - the recorded reason would blame a wait the run never asked for - so the
+     * plan parser caps a requested timeout strictly below this number
+     * (`BENCH_DEFAULT_TIMEOUTS.android` in `bench/src/plan.ts`).
      *
-     * Before A4 this was `FRAME_TIMEOUT_MS` (2 s), which silently made 2 s the real
-     * timeout on Android no matter what JS asked for. The iOS side has the same
-     * ceiling (`kBenchPresentationCeilingSeconds`).
+     * 2 s, unchanged from before A4 (review M1, the orchestrator's call): the longer
+     * wait A4 measured is scoped to iOS, because on Android the cells that lose
+     * presenting samples never draw a frame at all and a longer ceiling only hid that.
+     * iOS's ceiling is 90 s there (`kBenchPresentationCeilingSeconds`), which is why the
+     * two platforms' caps differ too.
      */
-    const val PRESENTATION_CEILING_MS = 90_000L
+    const val PRESENTATION_CEILING_MS = 2_000L
   }
 
   /**
@@ -201,15 +202,6 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
         }
       }
       if (giveUp) {
-        // When the *presented* wait gives up, stop listening for this capture's frames
-        // too. With the old 2 s native ceiling this path rarely ran - the ceiling
-        // usually answered first - but a JS timeout that wins the race would otherwise
-        // leave the window listener attached until the ceiling, delivering every frame
-        // to a capture nobody waits for. Not on the mount path: a late mount still has
-        // its presenting frame to catch.
-        if (!mount) {
-          stopFrameCapture(target)
-        }
         if (mount) resolveMount(target) else resolvePresented(target)
       }
     }, timeoutMs.toLong().coerceAtLeast(1L))

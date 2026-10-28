@@ -138,6 +138,11 @@ function cellRecords({
       measured: ITERATIONS,
       platform: 'ios 27.0',
       probeClock: 'CLOCK_UPTIME_RAW',
+      // The waiting rule this fixture's app would have reported (iOS's defaults). A run
+      // that records none is refused by `baselineBlockers`, so every mintable fixture
+      // has to carry one.
+      mountTimeoutMs: 1_500,
+      presentedTimeoutMs: 8_000,
     },
   ];
 
@@ -211,6 +216,8 @@ function memoryRecords({
       measured: 0,
       platform: 'ios 27.0',
       probeClock: 'CLOCK_UPTIME_RAW',
+      mountTimeoutMs: 1_500,
+      presentedTimeoutMs: 8_000,
     },
   ];
   const sample = (launch, phase, bytes) => {
@@ -546,8 +553,16 @@ describe('benchmark gate', () => {
    * `art` at all is refused rather than assumed compiled.
    */
   it('refuses to mint an Android baseline from an uncompiled app', () => {
+    // Rebuilt under Android's waiting rule, because that is what an Android run has to
+    // report to mint at all (A4/M1: the rule is per platform, and `makeRun`'s cells carry
+    // iOS's).
+    const androidCells = makeRun().cells;
+    for (const cell of Object.values(androidCells)) {
+      cell.timeouts = { mountTimeoutMs: 1_500, presentedTimeoutMs: 2_000 };
+    }
     const cleanAndroid = {
       ...makeRun(),
+      cells: androidCells,
       platform: 'android',
       dirty: false,
       problems: [],
