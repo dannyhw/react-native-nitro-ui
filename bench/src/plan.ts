@@ -116,7 +116,22 @@ export const PRESENTED_TIMEOUT_FLAG = 'presentedTimeout';
  * the ceiling. Both are documented next to their `dispatch_after`/`postDelayed`.
  */
 export const DEFAULT_MOUNT_TIMEOUT_MS = 1500;
-export const DEFAULT_PRESENTED_TIMEOUT_MS = 2000;
+/**
+ * How long a launch waits for the presenting frame.
+ *
+ * 8 000 ms, raised from 2 000 by A4 on measured data (`docs/tasks/
+ * A4-ios-baseline-mac2.report.md`): on the canonical iPhone 17 simulator, 200 `@expo/ui`
+ * DatePickers present their first frame at p50 ~2.7-3.0 s - *above* the old 2 s - so
+ * 55/160 and 69/160 of their iterations were recorded as missing and two reference cells
+ * were unusable. The worst frame seen anywhere in A4's runs was 3.9 s, so 8 s leaves
+ * roughly a doubling of the slowest measurement before samples start being dropped again.
+ *
+ * The change is value-neutral for any cell that is already complete: every iteration that
+ * answered within 2 s answers with the identical stamp under 8 s, so the median cannot
+ * move. It changes only cells that were losing samples - which is the point, and why the
+ * committed baselines (every cell of which is complete by the mint rule) stay comparable.
+ */
+export const DEFAULT_PRESENTED_TIMEOUT_MS = 8000;
 
 /**
  * The largest timeout a launch plan may ask for.

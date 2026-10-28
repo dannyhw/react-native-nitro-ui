@@ -279,8 +279,8 @@ describe('why a sample is missing is recorded, per iteration', () => {
           'probe-timeout': {
             count: 12,
             // 2000 + 0.4 rounds to 2000.4: the wait really did run to the timeout.
-            maxWaitedMs: 2000.4,
-            timeoutMs: [2000],
+            maxWaitedMs: BASELINE_PRESENTED_TIMEOUT_MS + 0.4,
+            timeoutMs: [BASELINE_PRESENTED_TIMEOUT_MS],
             details: undefined,
           },
         },
@@ -315,7 +315,7 @@ describe('why a sample is missing is recorded, per iteration', () => {
       'not-awaited': {
         count: 20,
         maxWaitedMs: 0,
-        timeoutMs: [2000],
+        timeoutMs: [BASELINE_PRESENTED_TIMEOUT_MS],
         details: undefined,
       },
     });
@@ -387,7 +387,8 @@ describe('why a sample is missing is recorded, per iteration', () => {
       missingMount: 1,
     }).filter((record) => record.launch === 0);
     expect(summarizeMissingReasons(launch)).toBe(
-      '1 mounted probe-timeout (1500 ms), 3 presented probe-timeout (2000 ms)'
+      `1 mounted probe-timeout (${String(BASELINE_MOUNT_TIMEOUT_MS)} ms), ` +
+        `3 presented probe-timeout (${String(BASELINE_PRESENTED_TIMEOUT_MS)} ms)`
     );
     // Nothing missing: the line stays exactly as short as it was before A4.
     expect(
@@ -429,7 +430,9 @@ describe('why a sample is missing is recorded, per iteration', () => {
     const run = mintableRun({ gapOn: 'expo-ui-shared-host' });
     const detail = detailSections(run);
     expect(detail).toContain('Missing samples:');
-    expect(detail).toContain('12 probe-timeout (asked 2000 ms');
+    expect(detail).toContain(
+      `12 probe-timeout (asked ${String(BASELINE_PRESENTED_TIMEOUT_MS)} ms`
+    );
     expect(detail).toContain('which launch, which iteration');
   });
 
@@ -478,7 +481,9 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     });
     // Names the metric, its sample counts, and the reasons that were recorded.
     expect(skipped.skipReasons).toEqual([
-      'presentedNs: 68 of 80 samples arrived - presentedNs: 12 probe-timeout (asked 2000 ms, waited up to 2000.4 ms)',
+      `presentedNs: 68 of 80 samples arrived - presentedNs: 12 probe-timeout (asked ${String(
+        BASELINE_PRESENTED_TIMEOUT_MS
+      )} ms, waited up to ${String(BASELINE_PRESENTED_TIMEOUT_MS + 0.4)} ms)`,
     ]);
     // Every other cell of that arm is still there, and so is every nitro-ui row.
     expect(Object.keys(baseline.cells)).toContain(
@@ -505,7 +510,9 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
   it('points the refusal at where the per-iteration detail lives', () => {
     const reasons = baselineBlockers(mintableRun({ gapOn: 'nitro-ui' }));
     expect(reasons[0]).toContain('probe-timeout');
-    expect(reasons[0]).toContain('asked 2000 ms');
+    expect(reasons[0]).toContain(
+      `asked ${String(BASELINE_PRESENTED_TIMEOUT_MS)} ms`
+    );
     expect(reasons[0]).toContain('results file');
     expect(reasons[0]).toContain('.ndjson');
   });
@@ -551,7 +558,9 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     expect(lines[1]).toContain(
       'mount:expo-ui-shared-host:50: presentedNs: 68 of 80 samples arrived'
     );
-    expect(lines[1]).toContain('12 probe-timeout (asked 2000 ms');
+    expect(lines[1]).toContain(
+      `12 probe-timeout (asked ${String(BASELINE_PRESENTED_TIMEOUT_MS)} ms`
+    );
     expect(lines.at(-1)).toContain(
       '`bench/baselines/maintainer-mac-2/ios27-sim-iphone17.json` -> `skippedCells`'
     );
@@ -570,21 +579,27 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
       return run;
     };
     // One millisecond over the rule already changes which samples arrive, so the
-    // boundary is the rule - a guard weakened by a factor of ten would pass a
-    // 6-second wait and mint a table whose `presented` column means something else.
-    const reasons = baselineBlockers(runWith(6_000));
+    // boundary is the rule itself - a guard weakened by a factor of ten would pass a
+    // wait well past it and mint a table whose `presented` column means something else.
+    const justOver = BASELINE_PRESENTED_TIMEOUT_MS + 1;
+    const reasons = baselineBlockers(runWith(justOver));
     expect(reasons).toHaveLength(1);
     expect(reasons[0]).toContain('waited longer for a signal than a baseline');
-    expect(reasons[0]).toContain('6000 ms presented');
+    expect(reasons[0]).toContain(`${String(justOver)} ms presented`);
     expect(baselineBlockers(runWith(BASELINE_PRESENTED_TIMEOUT_MS))).toEqual(
       []
     );
     // Same on the mount side, and the diagnostic flag is what reaches here.
     const mounted = mintableRun();
     for (const cell of Object.values(mounted.cells)) {
-      cell.timeouts = { mountTimeoutMs: 1501, presentedTimeoutMs: 2000 };
+      cell.timeouts = {
+        mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS + 1,
+        presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS,
+      };
     }
-    expect(baselineBlockers(mounted)[0]).toContain('1501 ms mount');
+    expect(baselineBlockers(mounted)[0]).toContain(
+      `${String(BASELINE_MOUNT_TIMEOUT_MS + 1)} ms mount`
+    );
   });
 
   it('records the rule it was minted under in the file', () => {
@@ -598,6 +613,18 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     expect(buildBaseline(run).timeouts).toEqual({
       mountTimeoutMs: 1500,
       presentedTimeoutMs: 1000,
+    });
+    // Minting at the rule records the rule.
+    const atRule = mintableRun();
+    for (const cell of Object.values(atRule.cells)) {
+      cell.timeouts = {
+        mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS,
+        presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS,
+      };
+    }
+    expect(buildBaseline(atRule).timeouts).toEqual({
+      mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS,
+      presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS,
     });
     // A results file from before the flag recorded nothing, and gets the default.
     const before = mintableRun();
@@ -622,16 +649,27 @@ describe('the per-launch budget follows the requested waits', () => {
   });
 
   it('leaves the default run at the table value', () => {
+    // The number this rule is named after, pinned: A4 raised the presented wait from
+    // 2 000 to 8 000 ms on measured data, and the budget must still be the plain table
+    // value when nobody asks for more.
+    expect(BASELINE_PRESENTED_TIMEOUT_MS).toBe(8_000);
     expect(launchBudgetMs(entry({}))).toBe(180_000);
-    expect(launchBudgetMs(entry({ presentedTimeoutMs: 2000 }))).toBe(180_000);
+    expect(
+      launchBudgetMs(
+        entry({ presentedTimeoutMs: BASELINE_PRESENTED_TIMEOUT_MS })
+      )
+    ).toBe(180_000);
+    // A *shorter* wait does not shrink the budget either: the launch still has to fit
+    // the same work, and a run that gives up early is not a faster launch.
+    expect(launchBudgetMs(entry({ presentedTimeoutMs: 2_000 }))).toBe(180_000);
   });
 
   it('grows by the extra wait for every iteration of the launch', () => {
-    // 25 iterations x (40 000 - 2 000) extra = 950 000 ms on top of the 180 000 budget.
+    // 25 iterations x (40 000 - 8 000) extra = 800 000 ms on top of the 180 000 budget.
     // Without this a diagnostic run is killed as "stalled" for waiting on purpose, and a
     // killed launch becomes a `problem` - which is also a mint refusal.
     expect(launchBudgetMs(entry({ presentedTimeoutMs: 40_000 }))).toBe(
-      180_000 + 25 * 38_000
+      180_000 + 25 * 32_000
     );
     // A mount wait counts twice per iteration (`mount` waits for its own signal and
     // again in the teardown), so both additions have to show up.
@@ -639,7 +677,7 @@ describe('the per-launch budget follows the requested waits', () => {
       launchBudgetMs(
         entry({ mountTimeoutMs: 5_000, presentedTimeoutMs: 40_000 })
       )
-    ).toBe(180_000 + 25 * (2 * 3_500 + 38_000));
+    ).toBe(180_000 + 25 * (2 * (5_000 - BASELINE_MOUNT_TIMEOUT_MS) + 32_000));
   });
 
   it('keeps the leak budget the largest, and honours an explicit override', () => {
@@ -647,7 +685,7 @@ describe('the per-launch budget follows the requested waits', () => {
       launchBudgetMs(
         entry({ scenario: 'leak.date-picker', presentedTimeoutMs: 40_000 })
       )
-    ).toBe(300_000 + 25 * 38_000);
+    ).toBe(300_000 + 25 * 32_000);
     // `BENCH_LAUNCH_TIMEOUT_S` is set by hand precisely to decide this question, so when
     // it is present `run.mjs` has already rewritten the whole table to it and the
     // requested waits must not add anything on top.
@@ -885,11 +923,14 @@ describe('the two ends of the timeout rule agree', () => {
     // Two ceilings that disagree would make one platform's long wait a timeout and the
     // other's a sample - the same class of bug A4 is chasing on one platform.
     expect(iosCeiling * 1000).toBe(androidCeiling);
-    // And the cap has to be generous enough to be worth asking for: 20x the default
-    // presented wait, so a 40 s arm is comfortably inside what can be requested.
+    // The cap has to be generous enough to be worth asking for, and the thing worth
+    // asking about is an arm slower than the default wait: A4 measured the slowest frame
+    // anywhere at 3.9 s, so 10x the default presented wait (40 s at the 8 s default) keeps
+    // a diagnostic of a genuinely strange arm inside what can be requested.
     expect(MAX_REQUESTED_TIMEOUT_MS).toBeGreaterThanOrEqual(
-      20 * BASELINE_PRESENTED_TIMEOUT_MS
+      10 * BASELINE_PRESENTED_TIMEOUT_MS
     );
+    expect(MAX_REQUESTED_TIMEOUT_MS).toBe(40_000 * 2);
   });
 });
 
@@ -1013,5 +1054,148 @@ describe('a narrowed run cannot mint the whole table', () => {
     const android = sizes({}, 'android');
     expect(narrowingProblem(android)).toBeNull();
     expect(android.wholePlan).not.toBe(sizes({}, 'ios').wholePlan);
+  });
+});
+
+describe('raising the waiting rule is value-neutral for a cell that was complete', () => {
+  /**
+   * The claim part 3 rests on, checked rather than argued: a longer wait changes *which*
+   * samples arrive and never *what* an arriving sample says. So a cell that already
+   * measured every iteration inside the old wait has identical numbers under the new one,
+   * and a committed baseline - every cell of which is complete by the mint rule - stays
+   * comparable across the change. The only cells that move are the ones that were losing
+   * samples, and they move towards the truth: the iterations a short wait dropped are
+   * exactly the slow ones, which is why their survivor-biased median reads fast.
+   *
+   * `timeToPresentMs` is A4's measured shape: `rn-core` on the 16 ms floor, `nitro-ui` at
+   * ~150 ms, and the two `@expo/ui` arms at N=200 with a frame that lands at 2.7-3.0 s -
+   * above the old 2 000 ms wait, below the new 8 000 ms one.
+   */
+  const timeToPresentMs = {
+    'rn-core': 16,
+    'nitro-ui': 150,
+    // The arm A3 lost frames on: frames land in a band that straddles the old 2 000 ms
+    // wait (so it loses its slow tail) and sits inside the new one.
+    'expo-ui-shared-host': 2400,
+  };
+
+  function recordsFor(implementation, { presentedTimeoutMs }) {
+    const floor = timeToPresentMs[implementation];
+    const records = [
+      {
+        kind: 'meta',
+        scenario: 'mount',
+        implementation,
+        n: 200,
+        launch: 0,
+        warmup: 0,
+        measured: ITERATIONS,
+        platform: 'ios 27.0',
+        probeClock: 'CLOCK_UPTIME_RAW',
+        mountSignal: true,
+        mountTimeoutMs: BASELINE_MOUNT_TIMEOUT_MS,
+        presentedTimeoutMs,
+      },
+    ];
+    for (let launch = 0; launch < LAUNCHES; launch++) {
+      for (let index = 0; index < ITERATIONS; index++) {
+        // Deterministic spread: -25 % to +15 % across the iteration. For the fast arms
+        // that band is far inside either wait; for the slow one it straddles the old wait
+        // and sits wholly inside the new one.
+        const tookMs = floor * (0.75 + 0.4 * (index / (ITERATIONS - 1)));
+        const lost = tookMs > presentedTimeoutMs;
+        records.push({
+          kind: 'iter',
+          scenario: 'mount',
+          implementation,
+          n: 200,
+          launch,
+          index,
+          warmup: false,
+          jsCommitNs: 5_000_000,
+          mountedNs: 20_000_000,
+          presentedNs: lost ? null : 20_000_000 + tookMs * 1e6,
+          ...(lost
+            ? {
+                missing: [
+                  {
+                    metric: 'presentedNs',
+                    reason: 'probe-timeout',
+                    waitedMs: presentedTimeoutMs + 0.4,
+                    timeoutMs: presentedTimeoutMs,
+                  },
+                ],
+              }
+            : {}),
+        });
+      }
+    }
+    return records;
+  }
+
+  const medianUnder = (implementation, presentedTimeoutMs) => {
+    const cells = aggregateRecords(
+      recordsFor(implementation, { presentedTimeoutMs })
+    );
+    const cell = cells[`mount:${implementation}:200`];
+    return {
+      median: cell.metrics.presentedNs.median,
+      samples: cell.metrics.presentedNs.samples,
+      incomplete: incompleteMetrics(cell).length > 0,
+    };
+  };
+
+  it('leaves a cell that measured everything identical, to the nanosecond', () => {
+    for (const implementation of ['rn-core', 'nitro-ui']) {
+      const before = medianUnder(implementation, 2_000);
+      const after = medianUnder(implementation, BASELINE_PRESENTED_TIMEOUT_MS);
+      expect(before.samples).toBe(LAUNCHES * ITERATIONS);
+      expect(after).toEqual(before);
+    }
+  });
+
+  it('is exactly the incomplete cell that changes, and towards its true median', () => {
+    const before = medianUnder('expo-ui-shared-host', 2_000);
+    const after = medianUnder(
+      'expo-ui-shared-host',
+      BASELINE_PRESENTED_TIMEOUT_MS
+    );
+    // The old wait loses the slow tail: the cell is not reportable, and its median is the
+    // fast survivors - A3's 97.5 ms recorded for an arm that presents in ~2 s.
+    expect(before.incomplete).toBe(true);
+    expect(before.samples).toBeGreaterThan(0);
+    expect(before.samples).toBeLessThan(LAUNCHES * ITERATIONS);
+    expect(before.median).toBeLessThan(2_000e6);
+    // The new wait measures every iteration, so the median is the arm's real number and it
+    // is *slower* than the survivor-biased one. Raising the wait never flatters an arm.
+    expect(after.incomplete).toBe(false);
+    expect(after.samples).toBe(LAUNCHES * ITERATIONS);
+    expect(after.median).toBeGreaterThan(before.median * 1.2);
+    expect(after.median).toBeGreaterThan(2_000e6);
+  });
+
+  it('is the reason the default is what it is: above the slowest measured frame', () => {
+    // The rule has to clear the slowest frame measured anywhere in A4's runs (3.9 s, at
+    // `expo-ui-host-per-control` N=200) with room for a busy machine, and stay well under
+    // the 90 s native backstop so "we stopped asking" stays distinguishable.
+    const slowestMeasuredFrameMs = 3_900;
+    expect(BASELINE_PRESENTED_TIMEOUT_MS).toBeGreaterThan(
+      slowestMeasuredFrameMs
+    );
+    expect(BASELINE_PRESENTED_TIMEOUT_MS).toBeLessThan(
+      MAX_REQUESTED_TIMEOUT_MS
+    );
+    expect(MAX_REQUESTED_TIMEOUT_MS).toBeLessThan(90_000);
+    // And the two ends have to agree, because the number that gates a mint is the
+    // runner's and the number a launch actually waits by is the app's. `waits by the
+    // same defaults the baseline is minted under` asserts the equality; this one is the
+    // proof that a revert cannot slip through as a pair - both constants would have to
+    // move together, and one of them is read from the app's own module.
+    expect(APP_DEFAULT_PRESENTED_TIMEOUT_MS).toBe(
+      BASELINE_PRESENTED_TIMEOUT_MS
+    );
+    expect(APP_DEFAULT_PRESENTED_TIMEOUT_MS).toBeGreaterThan(
+      slowestMeasuredFrameMs
+    );
   });
 });
