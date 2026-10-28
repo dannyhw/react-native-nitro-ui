@@ -173,3 +173,12 @@ behaviour is unverified.
 3. Is v1 without `TextInput.State`/`Keyboard.dismiss()` interop acceptable? *Recommend yes, as a 1.1 item.*
 4. Width bucket in `nuiSizingKey` for multiline, or engine cache eviction (core change touching six shipped
    controls)? *Recommend the bucket; decide after P4.*
+
+## Orchestrator answers (2026-10-28)
+
+1. Yes: use `BasicTextField(TextFieldState)`.
+2. Add IME-level typing (`adb shell input text` on the leased serial) to the real-input runner, and
+   use it as T18's Android oracle. No test-only insert method.
+3. The spike may skip `TextInput.State` / `Keyboard.dismiss()` integration. Whether G8 needs it goes
+   to the owner with T18's go/no-go.
+4. Decide after P4, leaning towards the width bucket over a sizing-engine change.
