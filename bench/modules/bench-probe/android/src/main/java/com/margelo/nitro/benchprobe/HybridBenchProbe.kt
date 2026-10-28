@@ -48,11 +48,29 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
     const val NS_PER_TICK = 1_000_000_000.0 / TICKS_PER_SECOND
 
     /**
-     * How long to wait for the presenting frame before reporting "no signal".
-     * A static screen after a mount produces exactly one frame, so this only
-     * fires when the window is genuinely not drawing.
+     * How long the **pacing** frame wait (`nextFrameNs`) waits before giving up and
+     * reporting "now". Pacing only; a slow frame here costs nothing but a slightly
+     * short gap between iterations.
      */
     const val FRAME_TIMEOUT_MS = 2_000L
+
+    /**
+     * The ceiling on waiting for the *measured* presenting frame, in milliseconds.
+     *
+     * A backstop for a window that never draws, **not** the wait the runner asked for:
+     * that is the `timeoutMs` of `awaitPresented`, which resolves the same capture
+     * first through the same once-guard. A backstop that wins the race *becomes* the
+     * timeout - the recorded reason would blame a wait the run never asked for - so the
+     * plan parser caps a requested timeout strictly below this number
+     * (`BENCH_DEFAULT_TIMEOUTS.android` in `bench/src/plan.ts`).
+     *
+     * 2 s, unchanged from before A4 (review M1, the orchestrator's call): the longer
+     * wait A4 measured is scoped to iOS, because on Android the cells that lose
+     * presenting samples never draw a frame at all and a longer ceiling only hid that.
+     * iOS's ceiling is 90 s there (`kBenchPresentationCeilingSeconds`), which is why the
+     * two platforms' caps differ too.
+     */
+    const val PRESENTATION_CEILING_MS = 2_000L
   }
 
   /**
@@ -247,7 +265,7 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
    * - whose intended vsync is by construction earlier than the `nanoTime()`
    * stamp taken inside it. The old condition therefore recorded the first frame
    * drawn *after* presentation, which only exists when something invalidates
-   * again within `FRAME_TIMEOUT_MS`: every `update` cell had it (a thumb
+   * again within the capture's ceiling: every `update` cell had it (a thumb
    * animation) and a static `mount` screen mostly did not. Acceptance now asks
    * the real question - did this frame's animation phase run no earlier than
    * the mount? - in [frameMetricsEndNs].
@@ -323,7 +341,10 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
       if (giveUp) {
         resolvePresented(target)
       }
-    }, FRAME_TIMEOUT_MS)
+      // The ceiling, not FRAME_TIMEOUT_MS: this is the measured capture, and a
+      // backstop that wins the race against `awaitPresented(timeoutMs)` would
+      // replace the timeout the runner asked for with this one.
+    }, PRESENTATION_CEILING_MS)
   }
 
   /**

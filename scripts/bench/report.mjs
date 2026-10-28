@@ -51,6 +51,7 @@ import {
   buildBaseline,
   isCompatibleBaseline,
   newestResultsName,
+  skippedCellNotes,
 } from './lib.mjs';
 import { comparisonSections, renderMarkdown } from './render.mjs';
 
@@ -99,17 +100,28 @@ export function resolveCompareTarget(value, platform) {
 export function writeBaseline(file, run, { force = false } = {}) {
   const blockers = force ? [] : baselineBlockers(run);
   if (blockers.length > 0) {
-    return { written: false, blockers };
+    return { written: false, blockers, baseline: null, skippedCellNotes: [] };
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(buildBaseline(run), null, 2)}\n`);
+  const baseline = buildBaseline(run);
+  fs.writeFileSync(file, `${JSON.stringify(baseline, null, 2)}\n`);
   // The baseline is a committed file, and `bun run format` checks committed
   // files - so the mint formats what it wrote instead of leaving a formatting
   // diff for whoever commits it (A1b follow-up).
   // From the repo root, so bunx finds this repo's prettier rather than the
   // bench app's (see scripts/bench/format.mjs).
   const { note } = formatCommittedJsonFile(file, { cwd: REPO_ROOT });
-  return { written: true, blockers: [], file, formatted: note == null, note };
+  return {
+    written: true,
+    blockers: [],
+    file,
+    baseline,
+    formatted: note == null,
+    note,
+    skippedCellNotes: skippedCellNotes(baseline, {
+      display: path.relative(REPO_ROOT, file),
+    }),
+  };
 }
 
 export function writeReportFiles({ run, markdown, fileName }) {

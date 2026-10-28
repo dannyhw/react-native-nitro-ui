@@ -16,6 +16,7 @@ import {
   componentOf,
   CONTROL_NOTE_THRESHOLD,
   controlMovement,
+  describeMissing,
   formatBytes,
   formatNs,
   formatRatio,
@@ -310,6 +311,19 @@ export function detailSections(run) {
               )}${entry.expected == null ? '' : ` of ${String(entry.expected)}`}`
           )
           .join(', ')}.\n`
+      );
+    }
+    /**
+     * Why the signals that are missing went missing (A4), printed for any cell that
+     * lost samples at all - not only for one that lost enough to be `n/a`. A gap small
+     * enough to stay reportable is still a probe behaving oddly, and "73 timeouts at
+     * 2000 ms" versus "73 probe-error" is the difference between a slow arm and a
+     * broken rig.
+     */
+    const missingLines = describeMissing(cell);
+    if (missingLines.length > 0) {
+      detail.push(
+        `Missing samples: ${missingLines.join('; ')}. Per-iteration detail (which launch, which iteration, how long the wait ran) is in this cell's \`raw\`/\`missing\` block in the results file and in the launch's \`.ndjson\`.\n`
       );
     }
     if (cell.marks != null) {

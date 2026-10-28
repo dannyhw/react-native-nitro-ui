@@ -65,6 +65,33 @@ namespace margelo::nitro::benchprobe {
     return static_cast<double>(static_cast<int64_t>(seconds * 1e9));
   }
 
+  /**
+   * The ceiling on waiting for a presenting frame, in seconds.
+   *
+   * This is a backstop for a process that never gets a frame (suspended, or a window
+   * that is not on screen), **not** the wait the runner asked for - that is the
+   * `timeoutMs` of `awaitPresented`, which resolves the same promise first through the
+   * same once-guard. It has to be well above any timeout the runner can ask for,
+   * because a backstop that fires earlier than the requested wait *becomes* the
+   * timeout: every long wait would be answered `-1` at the ceiling and the diagnostic
+   * A4 added (`presentedTimeout=` on the launch plan) would measure nothing but this
+   * number. Kept finite so a stalled launch still ends: the plan parser caps a
+   * requested timeout below this (see `BENCH_DEFAULT_TIMEOUTS` in
+   * `bench/src/plan.ts`).
+   *
+   * 90 s is iOS's own number. Android's is 2 s, unchanged from before A4, because the
+   * longer wait A4 measured here is scoped to iOS (review M1).
+   */
+  static constexpr double kBenchPresentationCeilingSeconds = 90.0;
+
+  /**
+   * How long the **pacing** frame wait (`nextFrameNs`) waits before giving up and
+   * reporting "now". Pacing only, so a slow frame here costs nothing but a slightly short
+   * gap between iterations - which is why it stays at 2 s on both platforms while the
+   * measured ceiling above does not (Android's `FRAME_TIMEOUT_MS` is the same idea).
+   */
+  static constexpr double kBenchPacingFrameCeilingSeconds = 2.0;
+
   // ------------------------------------------------ transaction capture ---
 
   /**
@@ -125,6 +152,15 @@ namespace margelo::nitro::benchprobe {
   /// Arm the one-shot frame capture for the transaction we just mounted.
   /// Must run on the main queue, in the same turn as the mount.
   ///
+  /// The safety timer below is a **ceiling, not the wait the runner asked for**: the
+  /// binding timeout is the one `awaitPresented(timeoutMs)` arms, and it resolves this
+  /// same promise exactly once through the same guard. It has to be a ceiling because
+  /// the runner can ask for longer than any fixed number (A4: `presentedTimeout=` on
+  /// the launch plan, to tell "this arm never draws" from "this arm draws slower than
+  /// we wait"); a 2 s backstop here would answer `-1` first and every long wait would
+  /// silently measure 2 s. It exists only so an app that never gets a frame (a
+  /// suspended process) cannot hang the runner.
+  ///
   /// `capture` is taken **by value on purpose**: both blocks below outlive this
   /// call, and a block that captures a reference parameter captures the referent,
   /// not an owning reference - which segfaults in `capture->mutex` when the
@@ -170,7 +206,7 @@ namespace margelo::nitro::benchprobe {
     // A suspended app never gives the frame: report "no signal" rather than
     // hanging the runner. The capture is a shared_ptr, so this block is safe to
     // fire after the display link won.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(2.0 * NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(kBenchPresentationCeilingSeconds * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
       bool armTimeout = false;
       {
@@ -499,7 +535,7 @@ namespace margelo::nitro::benchprobe {
 
       // Never let a missed frame (e.g. a suspended app) hang the runner. The
       // context outlives this block either way; see the comment above.
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(2.0 * NSEC_PER_SEC)),
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(kBenchPacingFrameCeilingSeconds * NSEC_PER_SEC)),
                      dispatch_get_main_queue(), ^{
         if (context->settled.load()) {
           return;

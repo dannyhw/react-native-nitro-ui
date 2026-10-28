@@ -358,6 +358,38 @@ describe('the dry-run report and its exit code', () => {
     );
   });
 
+  it('refuses to mint from a narrowed schedule, and says a plain run is fine', () => {
+    // The A4 diagnostic shape: one cell, so the mint must be refused *here* rather
+    // than three hours later, and the same command without `--update-baseline` is
+    // exactly what a diagnostic run should do.
+    const argv = ['--scenario', 'mount.date-picker', '--n', '200'];
+    const mint = dryRunReport({
+      ...base,
+      plan: 'full',
+      launches: 8,
+      argv: [...argv, '--update-baseline'],
+    });
+    expect(mint.exitCode).toBe(2);
+    expect(mint.problems.join('\n')).toContain('--update-baseline');
+    expect(mint.problems.join('\n')).toContain('narrowed to');
+    expect(mint.lines.join('\n')).toContain('Mint:      would refuse');
+
+    // Forced, it is a local experiment again and the guard steps aside like `--force`
+    // does for the load rule.
+    const forced = dryRunReport({
+      ...base,
+      plan: 'full',
+      launches: 8,
+      argv: [...argv, '--update-baseline', '--force'],
+    });
+    expect(forced.problems.join('\n')).not.toContain('narrowed to');
+
+    // Without the mint flag the same narrow run is legitimate: a diagnostic that gates
+    // nothing needs one cell, not the whole plan.
+    const plain = dryRunReport({ ...base, plan: 'full', launches: 8, argv });
+    expect(plain.exitCode).toBe(0);
+  });
+
   it('lists no reasons when everything resolves', () => {
     expect(dryRunReport(base).problems).toEqual([]);
   });
@@ -465,6 +497,49 @@ describe('bench --dry-run (the CLI)', () => {
       expect(out.all).toContain('ceiling');
       expect(out.all).toContain('reason(s) not to start');
     }
+  });
+
+  it('refuses to mint under a non-default waiting rule, and names it', () => {
+    // Review N1: `run.mjs` prints any `--timeout-*` run as DIAGNOSTIC ("cannot mint a
+    // baseline"), so `--update-baseline --timeout-presented 1000` has to be a refusal,
+    // and the dry run's whole job is to answer that before the device is booted. The
+    // shorter side is the case that used to mint.
+    const root = workspace();
+    // Both platforms asked for a wait *under* their own default (8 000 / 2 000), which
+    // is the shape that used to mint. Asking past a platform's backstop is refused
+    // earlier still, by the flag cap itself.
+    for (const [platform, ms] of [
+      ['ios', '1000'],
+      ['android', '1000'],
+    ]) {
+      const out = cli(root, [
+        '--platform',
+        platform,
+        '--plan',
+        'quick',
+        '--update-baseline',
+        '--timeout-presented',
+        ms,
+        '--dry-run',
+      ]);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain('Mint:      would refuse');
+      expect(out.all).toContain(`${ms} ms for a presenting frame`);
+      expect(out.all).toContain('Drop the `--timeout-*` flags to mint');
+    }
+    // Asking for the platform's own default explicitly is not a diagnostic, so the
+    // waiting rule alone must not refuse the mint.
+    const atRule = cli(root, [
+      '--platform',
+      'ios',
+      '--plan',
+      'quick',
+      '--update-baseline',
+      '--timeout-presented',
+      '8000',
+      '--dry-run',
+    ]);
+    expect(atRule.all).not.toContain('for a presenting frame');
   });
 
   it('still refuses a bad flag before printing anything, and keeps the usage line', () => {
