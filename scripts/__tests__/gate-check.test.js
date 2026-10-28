@@ -776,6 +776,26 @@ describe('gate.mjs need --for merge reuses a merged branch check', () => {
     expect(after.stdout).not.toContain('reused');
   }, 120_000);
 
+  it('does not reuse at review, even when another branch has a qualifying line', () => {
+    // The stage guard from the CLI's side. Two branches with *identical code* (B
+    // starts at A's commit), so A's `check` line would satisfy every other
+    // condition on B's tree, including the ancestry. A review round is evidence
+    // about its own diff, so borrowing it here would let an unproven round read as
+    // proven - which is why the rule is merge-only.
+    const dir = makeRepo();
+    branchThatPassedChecks(dir);
+    gitIn(dir, ['branch', 'task/x10-copy', BRANCH]);
+    gitIn(dir, ['checkout', '-q', 'task/x10-copy']);
+    // Same code as the branch that passed: the tree digest proves it.
+    const review = runCli(dir, ['need', '--for', 'review', '--base', 'main']);
+    expect(review.stdout).not.toContain('reused');
+    expect(review.stdout).toContain('check — never run on this tree');
+    // ...and the same command one stage up does take it, so the difference below
+    // is the stage and nothing else.
+    const merge = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(merge.stdout).toContain('reused from');
+  }, 120_000);
+
   it('does not reuse across a squash merge, where the tree matches and the commit does not', () => {
     // Isolates the ancestor test from the tree test: a squash merge produces the
     // same code and a history that does not contain the branch's commit, so the
