@@ -34,8 +34,8 @@ Background (read the sections your brief points to):
   is settled, `release` leaves it booted, and `lease.mjs reap` powers off anything idle past
   `idleShutdownMinutes`. So do *not* power off your devices at the end of a round — an idle device
   is the pool's business, and a warm one is the reason the next run does not pay 54 s (Android) or
-  200 s (iOS simulator, plus a 4–6 minute load-average spike) to boot. Only shut down a device you
-  started outside the lease.
+  ~200 s (iOS simulator, plus a `load1` spike to 56–78 that takes about 3 minutes to fall back
+  under the settle ceiling) to boot. Only shut down a device you started outside the lease.
 - Use unique Metro ports if your brief assigns one (`--port`), and kill Metro/Gradle daemons you
   started when done.
 
