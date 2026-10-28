@@ -12,6 +12,14 @@ import {
 
 export type { SpikeTextFieldHandle };
 
+/*
+ * The three "caller does not care" handlers, following `Button.tsx`'s `onPressNotProvided`. Module-level and
+ * stable so `useStableCallback`'s memo key never changes.
+ */
+function onFocusNotProvided(): void {}
+function onBlurNotProvided(): void {}
+function onSubmitEditingNotProvided(): void {}
+
 /**
  * T18 spike — the JS half of the spike field: props in, native view out.
  *
@@ -33,6 +41,11 @@ export interface SpikeTextFieldProps extends ViewProps {
   keyboardHints?: number | undefined;
   autoFocus?: boolean | undefined;
   onValueChange?: ((value: string) => void) | undefined;
+  /**
+   * Focus / blur / submit notifications, all three always sent as Nitro callbacks (see the note in the
+   * component body for why `null` is not an option), and using RN's own names — `TextField.nitro.ts`
+   * explains what that choice is measuring.
+   */
   onFocus?: (() => void) | undefined;
   onBlur?: (() => void) | undefined;
   onSubmitEditing?: (() => void) | undefined;
@@ -85,9 +98,20 @@ export function SpikeTextField({
   const controlled = useControlled(value, defaultValue ?? '', onValueChange);
   const hybridRefCallback = useStableCallback(hybridRef);
   const sizingId = useSizingId();
-  const handleFocus = useStableCallback(onFocus);
-  const handleBlur = useStableCallback(onBlur);
-  const handleSubmit = useStableCallback(onSubmitEditing);
+  /*
+   * Nitro callback props are never `null` — that is DECISIONS D7's rule and it has a sharp edge this spike
+   * hit head-on: nitrogen reads an optional callback prop with
+   * `ReactProp<std::optional<std::function<void()>>>::fromRawValue`, which throws
+   * `NitroUiSpikeTextField.onNuiFocus: Value is null, expected an Object` and takes the whole commit (and
+   * with it the screen) down. `Button.tsx:107` already lives by this — `onPressNotProvided` — and a field
+   * needs the same three no-ops, because `onNuiFocus` / `onNuiBlur` / `onSubmitEditing` are optional at the
+   * app boundary and a caller that passes none must not have to know the native reader has no null case.
+   */
+  const handleFocus = useStableCallback(onFocus ?? onFocusNotProvided);
+  const handleBlur = useStableCallback(onBlur ?? onBlurNotProvided);
+  const handleSubmit = useStableCallback(
+    onSubmitEditing ?? onSubmitEditingNotProvided
+  );
 
   const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
   const width = layoutWidth ?? measuredWidth;

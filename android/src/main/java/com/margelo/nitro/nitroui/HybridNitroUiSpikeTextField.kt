@@ -56,8 +56,15 @@ internal class SpikeTextFieldModel : NitroUiModel() {
   /** What the live `BasicTextField` last measured itself at, from `onTextLayout`. Observed. */
   var lines by mutableIntStateOf(0)
 
-  /** Focus, cached here so the mirror can be rendered from anywhere on main. */
-  var focused = false
+  /**
+   * Focus, cached here so the mirror can be rendered from anywhere on main.
+   *
+   * Snapshot state rather than a plain field for one reason: the mirror is republished when `snapshotFlow`
+   * below observes a change, and a tap that only moves focus changes nothing else. As a plain `var` the tap
+   * called `onFocus` and left the cached line saying `focused=0`, so the first thing the typing oracle
+   * asserts — that the tap focused the field — never went green.
+   */
+  var focused by mutableStateOf(false)
 
   /** Outcome of the last programmatic write: `none` / `applied` / `stale` / `composing` / `same`. */
   var lastWrite = "none"
@@ -77,6 +84,19 @@ internal class SpikeTextFieldModel : NitroUiModel() {
 
   /** Posted when focus has to be *taken away*; the host's view is the only thing that can do it. */
   var requestClearFocus: (() -> Unit)? = null
+
+  /**
+   * Republishes the mirror line from the live `TextFieldState`. Installed by the composable, which is the
+   * only place that may read it, and called by [userEdited] / [focusMoved] / a applied write *before* the
+   * corresponding callback fires.
+   *
+   * The order is the whole point, and it was a device run that found it: `onFocus` reaches JS synchronously
+   * and the spike screen's echo calls `nuiTestState()` right there, so a mirror published afterwards renders
+   * a line that says `focused=0` under `focus=1` — and the typing oracle's first assertion ("the tap focused
+   * the field") reads exactly that line. Publishing first costs nothing (the line is a `String` under a lock)
+   * and makes every cached read agree with the event that triggered it.
+   */
+  var renderMirror: (() -> Unit)? = null
 
   var onChange: ((String, Double) -> Unit)? = null
   var onFocus: (() -> Unit)? = null
@@ -119,7 +139,12 @@ internal class SpikeTextFieldModel : NitroUiModel() {
     selectionStart: Int,
     selectionLength: Int
   ): String {
-    val js = state.js ?: ""
+    // The JS side of the comparison. Controlled: the `value` React is holding. Uncontrolled: the text the
+    // last emit handed JS, because that *is* what JS believes the field says — comparing against `null`
+    // instead made every uncontrolled field answer `equal=0 cps=0`, which reads like a broken handshake and
+    // is nothing of the sort. `lastEmitted` also makes the key an invariant on this platform: an uncontrolled
+    // field that answers `equal=0` emitted a string it is not displaying.
+    val js = state.js ?: lastEmitted ?: ""
     return "displayed=$text nativeEvents=${state.nativeEvents} jsEvents=${state.jsEvents}" +
       " unreported=${if (state.unreported != null) 1 else 0}" +
       " composing=${if (composing) 1 else 0}" +
@@ -140,6 +165,7 @@ internal class SpikeTextFieldModel : NitroUiModel() {
     }
     lastEmitted = text
     val count = state.user(text)
+    renderMirror?.invoke()
     onChange?.invoke(text, count.toDouble())
   }
 
@@ -149,6 +175,7 @@ internal class SpikeTextFieldModel : NitroUiModel() {
       return
     }
     focused = isFocused
+    renderMirror?.invoke()
     if (isFocused) onFocus?.invoke() else onBlur?.invoke()
   }
 
@@ -190,6 +217,7 @@ internal class SpikeTextFieldModel : NitroUiModel() {
     onBlur = null
     onSubmit = null
     requestClearFocus = null
+    renderMirror = null
     publishMirror("")
   }
 }

@@ -1716,21 +1716,35 @@ const CHECKS = {
       'abc123de'
     );
 
-    await t.pressBack();
+    // Blur, proved the way a person actually blurs a field on Android: focus moves to another control.
+    //
+    // `KEYCODE_BACK` is *not* that. On Android Back is offered to the IME first and `LatinIME` consumes it to
+    // hide the keyboard while the focused view **keeps focus** (the cursor keeps blinking) — unlike iOS,
+    // where dismissing the keyboard resigns first responder. Asserting `focused=0` after Back here would be
+    // asserting iOS's behaviour on Android, and it failed on a device: the field stayed focused with the
+    // keyboard gone. So the check takes the route that exists on this platform, and the difference between
+    // the two platforms' Back key goes in the report as the finding it turned out to be.
+    const second = await t.requireControlOnScreen('spike typing target b');
+    await t.tapNode(second);
     const blurred = t.waitForEchoField(
       ECHO.spikeTargetA,
       'focused',
       '0',
-      'Back to end the edit session'
+      'the first field to lose focus to the second'
     );
     t.log.checkEquals(
-      'Back closes the keyboard and the field reports blur',
-      echoField(blurred, 'blur'),
-      '1'
+      'moving focus to another field reports blur, and keeps the text',
+      `${echoField(blurred, 'blur')} ${echoField(blurred, 'typed')}`,
+      '1 abc123de'
     );
+
+    // Back then dismisses the keyboard without touching the text — the case a person hits constantly, and
+    // the one that would show up as "the field lost my typing" if a hosted field mishandled the IME teardown.
+    await t.pressBack();
+    const afterBack = t.requireEcho(ECHO.spikeTargetA);
     t.log.checkEquals(
-      'closing the keyboard did not lose the text',
-      echoField(blurred, 'typed'),
+      'Back dismissed the keyboard without losing the text',
+      echoField(afterBack, 'typed'),
       'abc123de'
     );
   },

@@ -113,9 +113,26 @@ export interface NitroUiSpikeTextFieldProps
    * "what JS sees", rather than "what the IME buffer holds".
    */
   onValueChange?: (value: string, eventCount: number) => void;
-  /** The field took focus (first responder / `onFocusChanged`). */
+  /**
+   * The field took focus (first responder / `onFocusChanged`).
+   *
+   * Two naming facts the spike established on a device, both of which a shipped TextField inherits:
+   *
+   * 1. **It cannot be `null` on the native side.** Nitrogen reads an optional callback with
+   *    `ReactProp<std::optional<std::function<void()>>>::fromRawValue`, which has no null case — sending
+   *    `null` throws `NitroUiSpikeTextField.onFocus: Value is null, expected an Object` during the first
+   *    commit and the view never mounts. `Button.tsx:107`'s `onPressNotProvided` is the shipped answer and
+   *    `SpikeTextField.tsx` copies it. (This is what the "prop that disappears" rule D7b already implies;
+   *    it is just fatal for a callback in a way it is not for a number.)
+   * 2. **`onFocus` / `onBlur` are also Fabric base-view event names**
+   *    (`react/renderer/components/view/BaseViewEventEmitter.h:116`), so whether a Nitro callback prop may
+   *    carry either name at all is a question about RN's props/events split rather than about Nitro. The
+   *    spike runs the shipped RN names deliberately, on the real hosting path, so the answer is evidence
+   *    rather than an assumption: if these fields mount, G8 can use RN's names; if a field only mounts once
+   *    they are renamed, G8 has to pick names the base view does not own.
+   */
   onFocus?: () => void;
-  /** The field lost focus. */
+  /** The field lost focus. Same two facts as `onFocus`. */
   onBlur?: () => void;
   /**
    * Return pressed while the field is focused, and `keyboardHints` says the
