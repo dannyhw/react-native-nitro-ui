@@ -121,6 +121,19 @@ If an implementer's turn ends early (for example a tool call printed as text
 instead of run), check its worktree and resume the same thread with what is and
 isn't applied. Don't start a new session.
 
+## Lessons from two machines (2026-10-28)
+
+- A delegated run is done only when its final message carries the SHA **and** the report file
+  exists. Apex turns sometimes end mid-step ("Now let me…"); check the worktree and resume the same
+  thread with what is and isn't committed. Ask implementers to commit after each item.
+- OpenCode Apex stopped early repeatedly (X3, X10, X12 here; F3 twice and T18 once on mac-1).
+  Codex Apex (`codex_callstack`, `reasoningEffort: xhigh`) finished T18 and T18b in one run each.
+  Prefer it where the provider is enabled.
+- After each device run, read `node scripts/lease.mjs list`'s warnings: agents have released leases
+  but left the iPhone simulator booted.
+- Tell reviewers to run `check` and tests in the **foreground**. An Opus reviewer ended its turn
+  waiting on a background `check`.
+
 ## Rules that are easy to break
 
 - Never touch `emulator-5560`, the maintainer's own emulator. Don't name it any
