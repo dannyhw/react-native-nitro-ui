@@ -249,6 +249,12 @@ internal class DatePickerModel : NitroUiModel() {
     /** [calendarMonthUtcMillis]/[calendarHasSelection] when no calendar is composed. */
     private const val NO_CALENDAR = -1L
 
+    /** [readReport]'s built-bounds fields for "this mount has built no control". */
+    private const val NO_BUILT_CONTROL = -1L
+
+    /** [readReport]'s built-bounds fields for "the app never set that bound". */
+    private const val NO_BUILT_BOUND = -2L
+
     /**
      * How many presentations this process has open right now.
      *
@@ -285,11 +291,28 @@ internal class DatePickerModel : NitroUiModel() {
    */
   private var countedControl: Any? = null
 
+  /**
+   * The bounds the calendar on screen was built with, as the last two fields of
+   * [readReport].
+   *
+   * Recorded where the build is counted, because that is where a calendar is built:
+   * the `key(...)` block runs exactly when the `key` produced a new slot, so the
+   * bounds read there are the ones the new state was handed. iOS publishes the same
+   * pair from the control's own appearance
+   * (`HybridNitroUiDatePicker.swift`, `noteControlBuilt(minimum:maximum:)`), which is
+   * what lets one harness test assert "the identity's bounds reached the live
+   * control" on both platforms.
+   */
+  private var builtMinimum: Double? = null
+  private var builtMaximum: Double? = null
+
   /** One platform control built (see [controlBuilds]); counted once per control. */
   fun noteControlBuild(control: Any) {
     if (countedControl !== control) {
       countedControl = control
       controlBuilds.incrementAndGet()
+      builtMinimum = minimum
+      builtMaximum = maximum
     }
   }
 
@@ -418,18 +441,27 @@ internal class DatePickerModel : NitroUiModel() {
 
   /**
    * The last published report, as
-   * `"<displayed ms>|<presented>|<calendar month>|<calendar has selection>|<live presentations>|<calendar builds>"`.
+   * `"<displayed ms>|<presented>|<calendar month>|<calendar has selection>|<live presentations>|<calendar builds>|<built minimum>|<built maximum>"`.
    * Safe from any thread.
    *
    * The first two fields are published (they are model state); the calendar pair is
    * published by the calendar's own effect; the presentation count is read live,
    * because it is process-wide state that this mount does not own; the build count is
    * read live too, because the point of reading it is to compare it before and after a
-   * re-render.
+   * re-render. The last pair is what the calendar on screen was *built* with
+   * (see [noteControlBuild]) - `-1` for "no calendar built yet", `-2` for "that bound
+   * is unset" - so the same harness assertion about identity can be made on both
+   * platforms.
    */
   fun readReport(): String =
     synchronized(reportLock) {
-      "$report|$calendarMonthUtcMillis|$calendarHasSelection|${livePresentations.get()}|${controlBuilds.get()}"
+      // -1 on both fields for "no control built yet", exactly as iOS spells it, and
+      // -2 for one bound the app never set. The two cannot be told apart from the
+      // bounds alone (both are `null` there), so the build count decides.
+      val built = controlBuilds.get() > 0
+      "$report|$calendarMonthUtcMillis|$calendarHasSelection|${livePresentations.get()}|${controlBuilds.get()}|${
+        if (built) builtMinimum?.toLong() ?: NO_BUILT_BOUND else NO_BUILT_CONTROL
+      }|${if (built) builtMaximum?.toLong() ?: NO_BUILT_BOUND else NO_BUILT_CONTROL}"
     }
 
   // MARK: - Material 3's calendar arithmetic
