@@ -211,7 +211,6 @@ export function poolReapDecision(
     defaultIdleMinutes = IDLE_SHUTDOWN_DEFAULT_MINUTES,
     isPidAlive = pidIsAlive,
     overrideIdleMinutes = null,
-    exceptLeaseId = null,
   }
 ) {
   const started = entry?.bootedAtMs ?? nowMs;
@@ -220,12 +219,13 @@ export function poolReapDecision(
   const lease = entry?.leaseId
     ? (leases ?? []).find((x) => x.id === entry.leaseId)
     : undefined;
-  // Somebody else's live lease: off-limits on a timer, whatever the clock says (M3). Your *own*
-  // lease does not protect you from your own reaper - an idle hand-off is exactly what the idle
-  // clock exists to power off, and everybody leases, so treating your own hold as protection would
-  // stop the clock firing for anyone.
+  // Any live lease holds the device: off-limits on a timer, whatever the clock says, including the
+  // live lease of the task running the reap (X11 re-review M3). The `exceptLeaseId` that used to
+  // live in this signature is gone, and with it the self-exemption that let a task's own `list` or
+  // `reap` power off its own claim-less run; the exclusive power-off's exemption now lives in
+  // `DevicePool.reap`, where it applies only to devices the caller explicitly named.
   const leaseIsLiveNow = lease != null && leaseIsLive(lease, nowMs);
-  const held = leaseIsLiveNow && lease.id !== exceptLeaseId;
+  const held = leaseIsLiveNow;
   // An explicit override (the CLI's `--idle-minutes`) outranks what the record carries, because
   // the record's value came from devices.json in the first place and the flag exists to say
   // "not that number, this one, right now". `0` is a real override, so this is a null check.

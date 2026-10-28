@@ -106,6 +106,17 @@ describe('the lease owns the device lifecycle', () => {
       '#!/bin/sh',
       'echo "simctl $*" >> "$NITRO_UI_FAKE_CALLS"',
       'case "$*" in',
+      // Two different questions come through `get_app_container`, and one stub answer for both is
+      // how a reset starts lying: `… app` is "is it installed?" (X11 N5, asked *before* the reset),
+      // `… data` is "did the uninstall take the data with it?" (M2, asked after, and the honest
+      // answer here is no container). Installed by default, because that is what a pooled simulator
+      // is; `NITRO_UI_FAKE_APP_INSTALLED=0` is the fresh device.
+      "  *'get_app_container'*' app'*)",
+      '      if [ "${NITRO_UI_FAKE_APP_INSTALLED-1}" = 1 ]; then',
+      "        printf '%s\\n' '/Users/x/Library/Developer/CoreSimulator/Devices/UDID-A/bundle/NitroUiExample.app'",
+      '      else',
+      "        printf '%s\\n' 'Unable to find application container' ; exit 1",
+      '      fi ;;',
       "  *'get_app_container'*) exit 1 ;;",
       "  *'uninstall'*) exit 0 ;;",
       "  *'install'*) exit 0 ;;",
@@ -123,6 +134,16 @@ describe('the lease owns the device lifecycle', () => {
       // the emulator?" case answer no and still pass.
       `  *devices*) printf '%b\\n' ${shellQuote(adbDeviceText(androidUp))} ;;`,
       "  *boot_completed*) printf '1' ;;",
+      // "Is the package on the device?" (`adb shell pm path <pkg>`), asked before the clear so a
+      // fresh AVD is a no-op instead of four retries and a misleading line (X11 N5). Matched ahead
+      // of `pm clear`, whose pattern would not match it anyway - the order is only so a reader sees
+      // which question comes first.
+      "  *'pm path'*)",
+      '      if [ "${NITRO_UI_FAKE_PM_PATH-1}" = 1 ]; then',
+      "        printf 'package:/data/app/~~abc==/nitroui.example-def=.apk\\n'",
+      '      else',
+      "        printf 'No package found for user: 0\\n' ; exit 1",
+      '      fi ;;',
       // A device that answers `Failed` twice and then `Success`, counted in a file: that is what
       // an emulator whose `sys.boot_completed` is already 1 really does while PackageManager
       // settles, and it is what the first real boot of this code reported as a failed reset.
@@ -198,6 +219,14 @@ describe('the lease owns the device lifecycle', () => {
     } catch {
       return '';
     }
+  };
+
+  /** A leases.json with exactly these leases, so a case can be "somebody holds this pair right now". */
+  const withLeaseFile = (leases) => {
+    writeFileSync(
+      join(home, 'leases.json'),
+      `${JSON.stringify({ leases }, null, 2)}\n`
+    );
   };
 
   /** A pool.json with one warm device, idle for `minutes`. */
@@ -511,36 +540,74 @@ describe('the lease owns the device lifecycle', () => {
     expect(reaped.stderr).toContain('a live lease holds it');
   });
 
-  it('reaps an idle device no live lease holds, without being told to boot', () => {
-    // The other half of the same rule: protection is for a *live* lease, and this one has run out
-    // its TTL, which is what `list` calls an abandoned boot.
+  it('never reaps from `acquire`, idle device or not', () => {
+    // X11 fix round 2's scope decision, at the CLI: a lease is a booking. Round 1's version of this
+    // case asserted the opposite — that `acquire --no-boot` reaped an abandoned boot as a side
+    // effect — and that side effect is exactly what killed a task's own claim-less run when it ran
+    // `lease.mjs list` in its sourced shell (re-review M3's failure scenario). The abandoned boot is
+    // still reapable; the command is `lease.mjs reap`, typed by somebody who means it.
     tools({ androidUp: true });
-    warmDevice(idleEntry({ leaseId: 'T3-aaaa' }));
-    writeFileSync(
-      join(home, 'leases.json'),
-      `${JSON.stringify(
-        {
-          leases: [
-            {
-              id: 'T3-aaaa',
-              task: 'T3',
-              platform: 'both',
-              exclusive: false,
-              holds: ['pair-a'],
-              acquiredAt: new Date(Date.now() - 3000 * MINUTE).toISOString(),
-              ttlMinutes: 240,
-            },
-          ],
-        },
-        null,
-        2
-      )}\n`
-    );
+    warmDevice(idleEntry({ leaseId: 'gone' }));
     const acquired = cli(['acquire', '--task', 'T1', '--no-boot']);
     expect(acquired.status).toBe(0);
-    expect(acquired.stderr).toContain('shutting down emulator');
+    expect(acquired.stderr).not.toContain('shutting down emulator');
+    expect(log()).not.toContain('emu kill');
+    expect(poolDevices()).toHaveLength(1);
+    // And the explicit command reaches the same record once nothing leases it, because nothing about
+    // the record changed: same fixture, one word more on the command line, device off. Releasing
+    // first is also the rule the reap's own message points at - "somebody is using it" is answered
+    // by `release`, not by a flag.
+    expect(cli(['release', 'T1']).status).toBe(0);
+    const reaped = cli(['reap']);
+    expect(reaped.status).toBe(0);
+    expect(reaped.stderr).toContain('shutting down emulator');
     expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
     expect(poolDevices()).toEqual([]);
+  });
+
+  it('never reaps from `list`, which is the command every task runs most', () => {
+    // The exact shape of the re-review's probe P3: task A holds a live lease, its run has no
+    // in-flight claim (a build, Metro, a direct real-input run), and it looks at `list` — which used
+    // to reap, exempting its own lease, and power its own emulator off mid-run.
+    tools({ androidUp: true });
+    warmDevice(idleEntry({ leaseId: 'T1-aaaa' }));
+    withLeaseFile([
+      {
+        id: 'T1-aaaa',
+        task: 'T1',
+        platform: 'both',
+        exclusive: false,
+        holds: ['pair-a'],
+        acquiredAt: new Date().toISOString(),
+        ttlMinutes: 240,
+      },
+    ]);
+    const listed = cli(['list']);
+    expect(listed.status).toBe(0);
+    expect(listed.stdout).toContain('avd:nitro-ui-a');
+    expect(log()).not.toContain('emu kill');
+    expect(poolDevices()).toHaveLength(1);
+  });
+
+  it('never reaps from `release` — the devices it just let go are the warm ones', () => {
+    tools({ androidUp: true });
+    warmDevice(idleEntry({ leaseId: 'T1-aaaa', idleMinutes: 31 }));
+    withLeaseFile([
+      {
+        id: 'T1-aaaa',
+        task: 'T1',
+        platform: 'both',
+        exclusive: false,
+        holds: ['pair-a'],
+        acquiredAt: new Date().toISOString(),
+        ttlMinutes: 240,
+      },
+    ]);
+    const released = cli(['release', 'T1']);
+    expect(released.status).toBe(0);
+    expect(released.stdout).toContain('released T1-aaaa');
+    expect(log()).not.toContain('emu kill');
+    expect(poolDevices()).toHaveLength(1);
   });
 
   it('honours `reap --idle-minutes 0` over devices.json, as power-off now', () => {
@@ -788,14 +855,55 @@ describe('the lease owns the device lifecycle', () => {
     expect(poolDevices().map((x) => x.key)).toEqual([`avd:${AVD_A}`]);
   });
 
+  it('refuses to reap on a corrupt pool.json, and says which file', () => {
+    // X11 re-review N1: the same file that round 1 handled well for *leasing* handled badly for
+    // killing. `readPool` moved the unparseable file aside and returned an empty pool, and the reap
+    // then believed it: "no records, no claims, nothing leased in the records" is precisely the
+    // answer that lets an exclusive acquire `emu kill` the device whose live claim was in the file
+    // nobody could read. Reading is cheap and the file is the only record of who held what, so a
+    // pool that cannot remember powers nothing off, names the file, and leaves it where it is.
+    writeFileSync(join(home, 'pool.json'), 'not json at all');
+    const reaped = cli(['reap']);
+    expect(reaped.status).toBe(0);
+    expect(reaped.stderr).toMatch(/reap skipped \(pool state was unreadable/);
+    expect(reaped.stderr).toMatch(/pool\.json - nothing is powered off/);
+    expect(log()).not.toContain('emu kill');
+    // The evidence is not consumed by the refusal: a read that "recovers" by rewriting the file as
+    // empty is how the next command becomes confidently, wrongly certain nothing was in use.
+    expect(readFileSync(join(home, 'pool.json'), 'utf8')).toBe(
+      'not json at all'
+    );
+    expect(listHome('pool.json.corrupt-')).toHaveLength(0);
+  });
+
+  it('reaps nothing on an exclusive acquire either, when the pool state was unreadable', () => {
+    // The probe that made this a nit rather than a must-fix: a corrupt file that held a live claim
+    // on pair-b whose lease had already gone. `--exclusive` builds its kill list from devices.json
+    // (`shutdownKeys`), so it does not need a readable pool.json to *find* pair-b — which is exactly
+    // why it must not run at all when the state could not be read.
+    tools({ androidUp: true });
+    writeFileSync(join(home, 'pool.json'), '{"devices": [truncated');
+    const acquired = cli(['acquire', '--task', 'BENCH', '--exclusive']);
+    expect(acquired.status).toBe(0);
+    expect(acquired.stderr).toMatch(/reap skipped \(pool state was unreadable/);
+    expect(log()).not.toContain('emu kill');
+    // The lease still exists: naming a pair does not need the pool's memory, only killing does.
+    expect(acquired.stdout).toContain('NITRO_UI_LEASE_ID');
+  });
+
   it('keeps a corrupt pool.json as evidence and carries on leasing', () => {
+    // The lease half of the same file is still a lease (X11 fix round 2): nothing passive writes or
+    // reaps from it any more, so the corrupt file survives a plain `acquire` untouched, for the human
+    // the reap's message asks for. Where the pool *is* written - a boot, a claim - `readPool` still
+    // moves it aside and keeps it, which `device-pool.test.js` covers.
     writeFileSync(join(home, 'pool.json'), 'not json at all');
     const acquired = cli(['acquire', '--task', 'T9', '--no-boot']);
     expect(acquired.status).toBe(0);
     expect(acquired.stdout).toContain('NITRO_UI_LEASE_ID');
-    const kept = listHome('pool.json.corrupt-');
-    expect(kept).toHaveLength(1);
-    expect(readFileSync(join(home, kept[0]), 'utf8')).toBe('not json at all');
+    expect(readFileSync(join(home, 'pool.json'), 'utf8')).toBe(
+      'not json at all'
+    );
+    expect(listHome('pool.json.corrupt-')).toHaveLength(0);
   });
 
   const listHome = (prefix) =>

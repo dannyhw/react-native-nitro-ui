@@ -116,9 +116,12 @@ function parseArgs(argv) {
     json: false,
     // `--boot` / `--no-boot` win over the env default; the env can only force it off.
     boot: BOOT_FORCED_OFF ? false : BOOT_DEFAULT,
-    // Reaping is separate: it is a read of `pool.json` plus, at most, powering off a device that
-    // is idle past the limit and named in devices.json. Cheap enough to do from every lease
-    // command, which is what keeps an abandoned boot from outliving its task without a daemon.
+    // Reaping is not a background service (X11 fix round 2, the orchestrator's scope decision):
+    // `list`, `acquire` and `release` never power anything off. It happens when somebody types
+    // `lease.mjs reap`, and when an `--exclusive` acquire promises a quiet machine. This flag only
+    // opts the *explicit* reap out (`--no-reap`), for a machine whose devices are managed elsewhere;
+    // it cannot switch passive killing back on, because there is none left to switch on.
+    // `NITRO_UI_LEASE_BOOT=0` still forces the whole device lifecycle off, reap included.
     reap: !BOOT_FORCED_OFF,
     bootTimeoutMinutes: null,
     reset: true,
@@ -489,16 +492,11 @@ function main(argv) {
       readJson(paths.leases, { leases: [] }),
       Date.now()
     );
-    // Idle pool devices are reaped here too: `list` is the command that runs most often (every
-    // task looks at it before acquiring), so a boot abandoned three hours ago does not need a
-    // cron job to be noticed.
+    // `list` reads and reports; it powers nothing off (X11 fix round 2). It used to reap on every
+    // invocation, because it is the command that runs most often - which is exactly the problem: an
+    // agent that runs `list` between two commands, in a shell whose own lease is live, was a
+    // reaper. `lease.mjs reap` is the command that reaps, and it is typed on purpose.
     const listedDevices = loadDevicesOrNull(options, paths);
-    if (options.reap) {
-      reportReap(
-        reapPool({ devices: listedDevices, paths, options, log }),
-        log
-      );
-    }
     // What is booted right now, which neither file says (X9 item 6). Written to
     // stderr in both output modes: `--json`'s stdout is the lease state, and an
     // agent reading it should not have a host-snapshot mixed into the record.
@@ -621,19 +619,9 @@ function main(argv) {
       process.stdout.write(`released ${lease.id} (${lease.task})\n`);
     }
     // The devices stay booted - that is the pool's whole point: the next task inherits a warm
-    // device instead of paying for a boot. `reap` runs here anyway (idle clock ticked, claims
-    // pruned), and it powers off only what has outlived `idleShutdownMinutes`.
-    if (options.reap) {
-      reportReap(
-        reapPool({
-          devices: loadDevicesOrNull(options, paths),
-          paths,
-          options,
-          log,
-        }),
-        log
-      );
-    }
+    // device instead of paying for a boot. And `release` does not reap either (X11 fix round 2): the
+    // devices it just let go are the warm ones, and whatever else is idle on the machine is the
+    // business of the next explicit `lease.mjs reap`.
     return 0;
   }
 
@@ -670,13 +658,15 @@ function main(argv) {
   const { lease, pair } = result;
   const pool = poolFor({ devices, paths, options, log });
   if (lease.exclusive && pool != null) {
-    // A bench cannot mint a baseline next to somebody else's boot, idle or not - and this runs
-    // whether or not `--boot` was passed (X11 review M6). CONTRIBUTING tells a bench host to take a
-    // lease *without* `--boot` (the bench boots its own device, slowly, on purpose), and the promise
-    // that `--exclusive` powers the machine down is unconditional, so the power-off cannot live on
-    // the boot path only. A bench that asked for a quiet machine and got one device left running is
-    // the failure this fixes. The keys come from devices.json rather than `pool.json`, so a pool
-    // device booted outside the pool is included.
+    // The one reap an `acquire` runs (X11 fix round 2): an exclusive lease *promises* a quiet
+    // machine, so powering the pool down is the transaction, not a side effect that happens to ride
+    // along with somebody's `list`. It runs whether or not `--boot` was passed (X11 review M6):
+    // CONTRIBUTING tells a bench host to take a lease *without* `--boot` (the bench boots its own
+    // device, slowly, on purpose), and the promise that `--exclusive` powers the machine down is
+    // unconditional. A bench that asked for a quiet machine and got one device left running is the
+    // failure this fixes. The keys come from devices.json rather than `pool.json`, so a pool device
+    // booted outside the pool is included, and this is the only caller allowed to exempt a live
+    // lease from its own protection - its own, which holds every pair by definition.
     const reaped = pool.reap({
       shutdownKeys: poolShutdownKeys(pool),
       reason: 'exclusive acquire',
@@ -704,20 +694,8 @@ function main(argv) {
     if (options.boot && pool == null) {
       log('lease: --boot needs a devices.json to boot from, and there is none');
     }
-    // Reaping still runs: it is the cheap half, and it is what stops a boot somebody
-    // abandoned from outliving its task without a daemon to notice.
-    if (options.reap) {
-      reportReap(
-        reapPool({
-          devices,
-          paths,
-          options,
-          log,
-          exceptLeaseId: lease.id,
-        }),
-        log
-      );
-    }
+    // And no reap: a lease is a booking, and a booking that quietly powers devices off is the
+    // thing this round took away. `lease.mjs reap` is the command for that.
   }
 
   const envFile = renderEnvFile(lease, pair);
@@ -743,10 +721,11 @@ function main(argv) {
 function poolHandoff({ pool, result, options, log }) {
   const { lease, pair } = result;
 
-  // `already` (the task held a lease before) still boots: that is how a retry that came back
-  // without its devices gets them, and `ensureBooted` is a no-op when they are already up.
+  // Boots happen here; reaping does not (X11 fix round 2). `--no-reap` therefore no longer has
+  // anything on this path to suppress - the only reaps left are the explicit `lease.mjs reap` and an
+  // exclusive acquire's power-off, and neither is reached from a warm hand-off.
   if (!lease.exclusive) {
-    // Warm reuse first: an exclusive lease wants no devices, an ordinary one wants its own two.
+    // Warm reuse: an ordinary lease wants its own two devices back if they are still up.
     const booted = pool.ensureBooted(pair, lease, {
       platform: options.platform,
       timeoutMs: (options.bootTimeoutMinutes ?? 7) * 60_000,
@@ -771,32 +750,39 @@ function poolHandoff({ pool, result, options, log }) {
         `lease: WARN ${key} did not come up - the harness will boot it, slowly`
       );
     }
-    if (options.reset) {
+    // The reset is what stops a task inheriting the *previous* task's storage. When this task already
+    // held the lease and nothing had to be booted, there is no previous task: the storage on those
+    // devices is this task's own, and wiping it is the bug (X11 re-review M2). Re-running
+    // `acquire --boot` in a second shell to regenerate the env file is the documented way to get an
+    // env file, and it used to `pm clear` and `simctl uninstall` under the task's own running suite.
+    //
+    // Deliberately narrower than "skip whenever `already`": a re-acquire that *did* have to boot the
+    // pair is looking at devices that came up from a snapshot, which can be another task's data, and
+    // skipping there would reintroduce the inheritance the reset exists to prevent. So the skip is
+    // `already` *and* warm - exactly the case that made the probe's output. Anything that reaches the
+    // device anyway is stopped by `resetPair`'s own claim check (below), which is the part that
+    // protects a live run whatever the lease history.
+    const warmReacquire = result.already === true && booted.booted.length === 0;
+    if (options.reset && warmReacquire) {
+      log(
+        'lease: not resetting the pair - this task already held the lease and nothing was booted, ' +
+          'so the storage there is its own'
+      );
+    } else if (options.reset) {
       for (const row of pool.resetPair(pair)) {
         // The device's own answer, and how many tries it took: a reset that failed after four
         // attempts is a different problem from one that failed once and settled, and the reader
         // cannot tell the two apart without it.
-        const detail = row.ok
-          ? row.attempts > 1
-            ? ` (${row.attempts} tries)`
-            : ''
-          : ` FAILED (${row.answer}) - the next run inherits its data`;
+        const detail = row.skipped
+          ? ` SKIPPED (${row.skipped})`
+          : row.ok
+            ? row.attempts > 1
+              ? ` (${row.attempts} tries)`
+              : ''
+            : ` FAILED (${row.answer}) - the next run inherits its data`;
         log(`lease: reset ${row.key}: ${row.action}${detail}`);
       }
     }
-  }
-
-  // Reaping stays behind its own switch even on the boot path: `--boot --no-reap` is the
-  // invocation for a machine that warms its own pair and powers nothing else off, and the
-  // cleanup used to ride along here regardless.
-  if (options.reap) {
-    reportReap(
-      pool.reap({
-        idleMinutes: options.idleMinutes ?? undefined,
-        exceptLeaseId: lease.id,
-      }),
-      log
-    );
   }
 }
 
@@ -902,7 +888,13 @@ const KEEP_REASONS = {
 };
 
 function reportReap(reaped, log, { reportKeeps = false } = {}) {
-  if (reaped?.skipped != null) return;
+  if (reaped?.skipped != null) {
+    // Loud, because every caller left is one somebody typed: `lease.mjs reap`, or an exclusive
+    // acquire that promised a quiet machine and did not get one. A reap that quietly did nothing is
+    // the failure mode this line exists to prevent - it reads as "the pool is clean".
+    log(`lease: reap skipped (${reaped.skipped})`);
+    return;
+  }
   if (reportKeeps) {
     for (const x of reaped?.kept ?? []) {
       log(`lease: keeping ${x.key} up (${KEEP_REASONS[x.reason] ?? x.reason})`);
