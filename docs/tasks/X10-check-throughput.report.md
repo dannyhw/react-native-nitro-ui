@@ -241,15 +241,15 @@ N2 fixed (a fail now wins a timestamp tie); N4's two raw calls went with the tes
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 772 tests / 35 suites | `44fe6b5d8ae6` | 2 m 38 s | start 4.9 / med 5.7 / max 8.1 |
+| `check` | **PASS** | 772 tests / 35 suites | `8495687a1138` | 2 m 36 s | start 2.9 / med 5.5 / max 7.7 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 
-`gate.mjs check` green on tree `44fe6b5d8ae6` (git tree `8a972cc1ae8a`) at `16c6cec`;
+`gate.mjs check` green on tree `8495687a1138` (git tree `d8c342eac4b3`) at `efcbc46`;
 `need --for review` exits 1 with `2 gate(s) missing for review: harness:ios, harness:android`,
-`package.json` unmapped as in round 0. Red proofs in their own section below. `check` is 5 s
+`package.json` unmapped as in round 0. Red proofs in their own section below. `check` is 3 s
 slower than round 1 — deleting the drift proof is offset by nine new end-to-end cases.
 
 ## Files changed (fix round 2)
