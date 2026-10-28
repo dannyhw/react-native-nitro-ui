@@ -95,12 +95,15 @@ platform, so the API's most-used method is unimplementable as shaped today.
 Both have named fixes, and neither is the handshake:
 
 - **Android latency.** iOS's 0.24× says the emit→echo→commit round trip is cheap. The Android
-  number is inside a 750 ms `input text` round trip, a debug build, and a shared machine, and the
-  gaps (`[78,75,39,43,31,59,38]` vs `[26,1,17,19,17,12,17]`) say our half does two main-thread hops
-  per keystroke where RN does one. Re-measure in release with a bench arm before treating 3.00× as
-  the real ratio — but the spike is not allowed to assume it disappears.
+  number is inside a 750 ms `input text` round trip, a debug build, and a shared machine. The gaps
+  (`[78,75,39,43,31,59,38]` vs `[26,1,17,19,17,12,17]`) put our per-keystroke floor near 31 ms where
+  RN's reaches 1 ms, so it is a per-keystroke cost and not one stall — but why is not measured here.
+  Re-measure in release with a bench arm before treating 3.00× as the real ratio; the spike may not
+  assume it disappears.
 - **Imperative focus.** On iOS `@FocusState` is private to the SwiftUI subtree, so arm A has no
-  imperative path at all (asserted: a focus ask there moves nothing). Arm B's `focus()` arrives at a
+  imperative path at all — `focus()` returns without touching anything when the arm is A
+  (`ios/spike/HybridNitroUiSpikeTextField.swift:1021-1031`). That is a code reading, not a
+  measurement: the assertion for it sits behind this round's early return. Arm B's `focus()` arrives at a
   model with no `UITextField` behind it (`focus:no-field`) — sometimes because the representable was
   never built for that mount (`no-control` in a repeat run). Android is stranger than a broken path:
   the probe's own boxed instance takes focus (`spike_plain=1 spike_boxed=1`), and an identically
