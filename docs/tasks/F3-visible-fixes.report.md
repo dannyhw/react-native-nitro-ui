@@ -5,22 +5,21 @@
 
 ## Summary
 
-All three `docs/tasks/Q4-followups-triage.md` rows are done; two are fixes, one is a
-documented outcome reached by measurement rather than by repeating last round's claim.
+All three `docs/tasks/Q4-followups-triage.md` rows are done: two fixes, and one documented
+outcome reached by measurement rather than by repeating last round's claim.
 
 **Row 10 — `fillWidth` handed an unbounded parent another instance's width.** Fixed in the
 engine (`filedSizeLocked`), not in a component: a `fillWidth` report's width is a restatement
 of the box about to replace it, so it is no longer filed, and the component's *declared* width
-is substituted instead. That is what `sizing.md` §5 already described; the code did not do it.
-Two host expectations asserting the old "last box width wins" (`300`) became the declared
-`328`.
+is substituted instead — what `sizing.md` §5 already described; the code did not. Two host
+expectations asserting the old "last box width wins" (`300`) became the declared `328`.
 
 **Row 46 — `DatePicker` rebuilt a calendar it did not need to.** The `.onAppear` recording
 `builtBounds` was applied *outside* `.id(_:)`, so it fired once per mount while the identity
 kept changing, and iOS's escape clause compared the displayed value against bounds nobody was
 showing. Moving the recording inside the identity makes record and identity agree, and makes
-rebuilds observable on both platforms. Android gained the same two report fields so one test
-asserts the mechanism rather than one platform's quirk.
+rebuilds observable on both platforms. Android gained the same two fields so one test
+asserts the mechanism, not one platform's quirk.
 
 **Row 27 — `tintColor` on iOS: still a no-op, now on evidence.** The prop's only reading was
 a prop echo, which is how it reported a colour as applied on iOS for three releases. `docs`
@@ -29,16 +28,16 @@ claimed the knob was unreachable; it is reachable — the new pixel probe finds 
 102×31 pt control. It does not *stay* painted: iOS 27 re-configures the selection lens on the
 first tap and the colour leaves the screen while the property still reads back what was
 written, re-writing does not bring it back, and removing the tint left 9290 px behind. A tint
-that survives until the first touch, kept true by writing a private view hierarchy on every
-interaction, is worse for an app than a prop that never did anything — so the prop stays
-documented Android-only, and both platforms are now asserted that way.
+that survives until the first touch, kept true by writing a private hierarchy on every
+interaction, is worse than a prop that never did anything — so it stays documented
+Android-only, and both platforms are now asserted that way.
 
 **Spec surface, as asked:** the brief is patch-level, and this branch adds two methods to
 `SegmentedControl.nitro.ts` (`nuiTestPixelProbe`/`nuiTestPixelReport`). They are test-only and
 `@internal` — no app-visible prop changed shape (the api report diff is those two lines inside
-the existing `@internal` `hybridRef` type) — and they follow DatePicker's committed precedent.
-They exist because every other reading this control offers is a prop echo; without a pixel
-oracle, the sentence in the docs cannot be contradicted — which is the defect row 27 is about.
+the existing `hybridRef` type), and they follow DatePicker's committed precedent.
+Every other reading this control offers is a prop echo, so without a pixel oracle the docs
+cannot be contradicted — which is the defect row 27 is about.
 
 ## Gates
 
