@@ -57,7 +57,7 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
     `docs/tasks/A4-ios-baseline-mac2.report.md`: 200 `@expo/ui` DatePickers present their
     first frame at p50 2.7-3.0 s on the canonical iPhone 17 simulator - above the old wait,
     which is why those cells lost 40 % and 54 % of their samples - while the slowest frame
-    measured anywhere in the task's runs was 3.9 s and the slowest mount 213 ms. Raising
+    measured anywhere in the task's runs was 3.9 s and the slowest mount 226 ms. Raising
     the wait is **value-neutral for any cell that already measured every iteration** (an
     arriving sample keeps its stamp, so its median cannot move), and a committed baseline
     has no incomplete cells - so this does not invalidate the tables minted under 2 s. Only
