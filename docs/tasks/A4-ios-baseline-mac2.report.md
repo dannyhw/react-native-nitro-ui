@@ -113,8 +113,10 @@ Same cell, one day apart, same machine, same tree:
 under the 2 s rule — a launch waits for the frame, not for the timeout. Only a launch whose
 frames never arrive pays, and the per-launch budget was raised (300 s, 420 s `leak`) so it
 records 20 `probe-timeout` reasons instead of being killed as "stalled" with all data lost;
-`--check` on the mint: 121 rows within tolerance, 74 noise-suppressed, 7 `new arm` (leak, as on
-mac-1), **0 failures**.
+`--check` on the mint: 121 rows within tolerance, 74 noise-suppressed, 7 `new arm` — one per
+leak scenario, because no arm climbed monotonically in any run so those cells store no slope
+(mac-1's file shows the same 6, one fewer only because it was minted before `Picker`), **0
+failures**.
 
 **Probe-bias check (the brief's stop condition).** `presentedBeforeMount` — a presenting frame
 that predates its own iteration's mount — is **12.5 %** of iterations on the mint, against
