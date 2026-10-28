@@ -169,6 +169,8 @@ interface FieldOptions {
    * "is the height width-driven", and the first device run caught it by reporting one flat height four times.
    */
   width?: number | null;
+  /** Box height as a style, for a scenario that needs a field whose height is already known. */
+  height?: number | null;
 }
 
 interface FieldLog {
@@ -226,7 +228,14 @@ async function mountSpike(
         maxLines={props.maxLines ?? null}
         keyboardHints={props.keyboardHints ?? 0}
         layoutWidth={props.layoutWidth ?? null}
-        style={props.width == null ? undefined : { width: props.width }}
+        style={
+          props.width == null && props.height == null
+            ? undefined
+            : {
+                ...(props.width == null ? {} : { width: props.width }),
+                ...(props.height == null ? {} : { height: props.height }),
+              }
+        }
         onValueChange={(value) => {
           log.changes.push(value);
           log.lastChangeAt = Date.now();
@@ -353,7 +362,8 @@ function makeSiblingField() {
  */
 let focusCapability: {
   rnTakesFocus: boolean;
-  spikeTakesFocus: boolean;
+  spikeBoxedTakesFocus: boolean;
+  spikePlainTakesFocus: boolean;
 } | null = null;
 
 /** Ask for focus and report whether the event arrived, without failing when it does not. */
@@ -374,9 +384,27 @@ async function focusLands(
   return false;
 }
 
+/**
+ * Whether a field can take focus *on command* in this environment, measured once per run.
+ *
+ * The first iOS run of this file found the spike field's `focus()` producing no `onFocus` and a mirror that
+ * stayed at `focused=0`. Alone, that fact has two readings that want opposite responses: our imperative focus
+ * path is broken, or nothing takes focus on command inside an in-app test runner at all. So it is asked of
+ * the reference implementation — RN's own `TextInput`, same app, same clock. If RN's field focuses and the
+ * spike field does not, that is the spike's bug and the scenarios stay red. If neither does, focus latency
+ * is not measurable here, and a scenario that measured it would compare two zeroes.
+ *
+ * The spike field is asked twice because the second reading is geometry, not the responder chain: a hosted
+ * control has no height until its sizing correction answers, while RN's `TextInput` ships an intrinsic
+ * height and never shows that face. Each scenario then asserts on the answer for the box it actually
+ * mounts — `P5` boxed, like the `TextInput` it times against, and `X4` plain, because that is the shape it
+ * sizes. "A field with no box of its own cannot be focused on command" is a finding worth having either
+ * way, which is why both answers go into the evidence line.
+ */
 async function resolveFocusCapability(): Promise<{
   rnTakesFocus: boolean;
-  spikeTakesFocus: boolean;
+  spikeBoxedTakesFocus: boolean;
+  spikePlainTakesFocus: boolean;
 }> {
   if (focusCapability != null) {
     return focusCapability;
@@ -385,7 +413,7 @@ async function resolveFocusCapability(): Promise<{
     current: null,
   };
   let rnFocusEvents = 0;
-  const field = await mountSpike(
+  const plain = await mountSpike(
     { arm: focusableArm, defaultValue: '' },
     () => (
       <TextInput
@@ -405,28 +433,53 @@ async function resolveFocusCapability(): Promise<{
   );
   await waitFor(
     () => {
-      expect(field.handle()).not.toBeNull();
+      expect(plain.handle()).not.toBeNull();
       expect(rnInput.current).not.toBeNull();
     },
     { timeout: 10000, interval: 50 }
   );
-  const spikeTakesFocus = await focusLands(
-    () => field.handle()?.focus(),
-    () => field.log.focus
+  const spikePlainTakesFocus = await focusLands(
+    () => plain.handle()?.focus(),
+    () => plain.log.focus
   );
   const rnTakesFocus = await focusLands(
     () => rnInput.current?.focus(),
     () => rnFocusEvents
   );
-  // Leave nothing holding the keyboard for the scenarios that run after this one.
-  field.handle()?.blur();
+  plain.handle()?.blur();
   rnInput.current?.blur();
-  field.unmount();
-  focusCapability = { rnTakesFocus, spikeTakesFocus };
+  plain.unmount();
+
+  const boxed = await mountSpike({
+    arm: focusableArm,
+    defaultValue: '',
+    width: 320,
+    height: 44,
+  });
+  await waitFor(
+    () => {
+      expect(boxed.handle()).not.toBeNull();
+    },
+    { timeout: 10000, interval: 50 }
+  );
+  const spikeBoxedTakesFocus = await focusLands(
+    () => boxed.handle()?.focus(),
+    () => boxed.log.focus
+  );
+  boxed.handle()?.blur();
+  boxed.unmount();
+
+  focusCapability = {
+    rnTakesFocus,
+    spikeBoxedTakesFocus,
+    spikePlainTakesFocus,
+  };
   console.log(
-    `nui-spike focus_capability platform=${Platform.OS} rn_takes_focus=${
+    `nui-spike focus_capability platform=${Platform.OS} rn=${
       rnTakesFocus ? 1 : 0
-    } spike_takes_focus=${spikeTakesFocus ? 1 : 0}`
+    } spike_plain=${spikePlainTakesFocus ? 1 : 0} spike_boxed=${
+      spikeBoxedTakesFocus ? 1 : 0
+    }`
   );
   return focusCapability;
 }
@@ -962,7 +1015,10 @@ describe('T18 spike — TextField', () => {
     // Focus latency is only measurable on the arm that can take focus on command; the finding that the other
     // arm cannot is `spike_focus_swiftui_noop` below.
     const field = await mountSpike(
-      { arm: focusableArm, defaultValue: '' },
+      // Boxed, like the `TextInput` mounted beside it: `resolveFocusCapability` reports focus capability
+      // per box shape, and a latency comparison against a field that always has a height has to ask in a
+      // box too.
+      { arm: focusableArm, defaultValue: '', width: 320, height: 44 },
       () => (
         <TextInput
           testID="rn-harness-input"
@@ -995,13 +1051,15 @@ describe('T18 spike — TextField', () => {
      * is one.
      */
     const capability = await resolveFocusCapability();
-    if (!capability.spikeTakesFocus) {
+    if (!capability.spikeBoxedTakesFocus) {
       evidence('p5_focus', {
         platform: Platform.OS,
         samples: 0,
         spike_p95_ms: 'unmeasured',
         rn_p95_ms: 'unmeasured',
         ratio: 'unmeasured',
+        rn_takes_focus: capability.rnTakesFocus ? 1 : 0,
+        spike_plain_takes_focus: capability.spikePlainTakesFocus ? 1 : 0,
         swiftui_imperative_focus: iOS ? 'noop' : 'same arm',
         reason: capability.rnTakesFocus
           ? 'RN TextInput took focus on command and the spike field did not'
@@ -1124,9 +1182,14 @@ describe('T18 spike — TextField', () => {
     field.handle()?.nuiTestApplyWrite('abcdef');
     await mirrorReads(field, 'lastWrite', 'applied');
     const beforeImpl = field.mirror().impl;
-    // Focus is the observable only where a focus ask lands at all (see `resolveFocusCapability`). Where it
-    // does not, the claim is reported unobserved rather than being dropped quietly.
-    const focusObservable = (await resolveFocusCapability()).spikeTakesFocus;
+    /*
+     * Focus is the observable only where a focus ask lands at all (see `resolveFocusCapability`). Where it
+     * does not, the claim is reported unobserved rather than being dropped quietly. The answer has to be the
+     * one for *this* field's shape: the boxed answer belongs to P5's field, and borrowing it would make this
+     * scenario assert a capability it never asked for.
+     */
+    const focusObservable = (await resolveFocusCapability())
+      .spikePlainTakesFocus;
     if (focusObservable) {
       field.handle()?.focus();
       await mirrorReads(field, 'focused', '1');
