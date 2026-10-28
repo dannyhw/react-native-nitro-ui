@@ -253,8 +253,12 @@ describe('the reap decision', () => {
   });
 
   it('treats a claim from a dead pid as no claim at all', () => {
+    // An unleased device, because a live lease protects its device on the idle clock whatever the
+    // claims say (M3), and that is not the subject here: the question is whether a claim whose
+    // process is gone still counts as a claim, and the answer is no.
     const stale = entryOf({
       key: 'avd:nitro-ui-a',
+      leaseId: null,
       usedAgo: 41 * MINUTE,
       claims: [
         { pid: 4242, id: 'a', gate: 'harness:android', at: NOW - 41 * MINUTE },
@@ -263,14 +267,10 @@ describe('the reap decision', () => {
     expect(
       poolReapDecision(stale, {
         nowMs: NOW,
-        leases: [lease()],
+        leases: [],
         isPidAlive: () => false,
-        // The lease is not the subject here, and a live lease *does* protect a device on a timer
-        // (M3), so this is the caller's own lease: the question is whether a claim from a dead pid
-        // counts as a claim, and the answer is no.
-        exceptLeaseId: 'X1-1',
       })
-    ).toMatchObject({ action: 'reap', reason: 'idle' });
+    ).toMatchObject({ action: 'reap', reason: 'lease-gone' });
     expect(deviceIsBusy({ claims: [{ pid: 1 }] }, NOW, () => false)).toBe(
       false
     );
@@ -315,13 +315,19 @@ describe('the reap decision', () => {
     expect(
       poolReapDecision(
         // `null`, not `undefined`: a record the pool wrote from a config with no limit stores
-        // null, and the decision has to fall through to the caller's default (here: zero).
-        entryOf({ key: 'avd:A', usedAgo: MINUTE, idleShutdownMinutes: null }),
+        // null, and the decision has to fall through to the caller's default (here: zero). Unleased,
+        // because a live lease would protect the device on the clock and that is not what this is
+        // testing (M3).
+        entryOf({
+          key: 'avd:A',
+          leaseId: null,
+          usedAgo: MINUTE,
+          idleShutdownMinutes: null,
+        }),
         {
           nowMs: NOW,
-          leases: [lease()],
+          leases: [],
           defaultIdleMinutes: parsed.idleShutdownMinutes,
-          exceptLeaseId: 'X1-1',
         }
       )
     ).toMatchObject({ action: 'reap' });
@@ -439,6 +445,17 @@ function fakePool({
       calls.push(['attachedSerials', port ?? null]);
       return deviceState.serials;
     },
+    /**
+     * The same listing, with whether the server answered (X11 N2). `adbFails: true` is the wedged
+     * server the re-review describes: the command is killed at its timeout, so there is no stdout -
+     * which is what "no emulator attached" looks like to anything that only reads the list.
+     */
+    attachedSerialsResult: (port) => {
+      calls.push(['attachedSerials', port ?? null]);
+      return deviceState.adbFails
+        ? { ok: false, serials: [], answer: "ADB server didn't ACK" }
+        : { ok: true, serials: deviceState.serials, answer: 'ok' };
+    },
     bootComplete: (serial, port) => {
       calls.push(['bootComplete', serial, port ?? null]);
       return !!deviceState.bootComplete && deviceState.serials.includes(serial);
@@ -488,7 +505,20 @@ function fakePool({
         .filter(([, s]) => s === 'Booted')
         .map(([udid]) => udid);
     },
+    /** The same question with "did simctl answer" attached (X11 N2). */
+    bootedSimulatorsOrNull: () => {
+      calls.push(['booted-sims']);
+      return deviceState.simctlFails
+        ? null
+        : [...deviceState.simulators.entries()]
+            .filter(([, s]) => s === 'Booted')
+            .map(([udid]) => udid);
+    },
     simulators: () => deviceState.simulators,
+    simulatorsResult: () =>
+      deviceState.simctlFails
+        ? { ok: false, byUdid: new Map(), answer: 'simctl failed' }
+        : { ok: true, byUdid: deviceState.simulators, answer: 'ok' },
     bootSimulator: (udid) => {
       calls.push(['boot-sim', udid]);
       return deviceState.simulatorBoots;
@@ -496,6 +526,29 @@ function fakePool({
     shutdownSimulator: (udid) => {
       calls.push(['shutdown-sim', udid]);
       return deviceState.shutdownWorks;
+    },
+    /**
+     * "Is the app on the device?" (`pm path` / `get_app_container … app`), asked before a reset
+     * reports what it cleared (X11 N5). The default is a pooled device that has the app, which is the
+     * state a previous task leaves behind; `appInstalled: false` is a fresh AVD, and
+     * `installProbeFails: true` is the tool not answering - three different answers, and only the
+     * first two authorise a no-op.
+     */
+    deviceAppInstalled: (device, appId) => {
+      calls.push(['app-installed', device.kind, device.key, appId]);
+      if (deviceState.installProbeFails)
+        return { answered: false, ok: false, answer: 'adb timed out' };
+      const installed =
+        device.kind === 'ios'
+          ? deviceState.iosInstalled !== false
+          : deviceState.appInstalled !== false;
+      return {
+        answered: true,
+        ok: installed,
+        answer: installed
+          ? 'package:/data/app/nitroui.example/base.apk'
+          : 'No package found for user: 0',
+      };
     },
     /**
      * The iOS reset's three calls, against a fake simulator that keeps a data container while the
@@ -706,10 +759,13 @@ describe('reaping', () => {
     expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
   });
 
-  it('still reaps its own idle devices while holding a lease', () => {
-    // The protection is against *other* people's leases. The pool's job is to power off what has
-    // outlived its limit, and a task's own hand-off is exactly that: if "a live lease holds it"
-    // covered your own, the idle clock would never fire for anyone who leases, which is everybody.
+  it('lets a live lease protect its own devices from its own reap', () => {
+    // X11 re-review M3, the rule reversed. The old test here said "your hold does not stop your
+    // reap", and the failure that claim produced: task A acquires, builds for 20 minutes, starts a
+    // 12-minute direct real-input run that makes no claim, then runs `lease.mjs list` in its sourced
+    // shell - which reaped with `exceptLeaseId` from `NITRO_UI_LEASE_ID` and killed A's emulator
+    // mid-run. A lease is the thing that says "somebody is using this pair", and it does not stop
+    // being true because the person asking is the one who holds it.
     withLeases([
       lease('X1-1'),
       lease('B7-1', { task: 'B7', pairId: 'pair-b' }),
@@ -719,8 +775,34 @@ describe('reaping', () => {
       home,
       state: { serials: ['emulator-5574'], simulators: new Map() },
     });
+    // Even with the exemption passed by hand: the caller's own lease is a hold like any other, and
+    // the only caller allowed to pass it is the exclusive power-off below.
     const done = pool.reap({ exceptLeaseId: 'X1-1' });
-    expect(done.reaped).toEqual([{ key: 'avd:nitro-ui-a', reason: 'idle' }]);
+    expect(done.reaped).toEqual([]);
+    expect(done.kept[0]).toMatchObject({
+      key: 'avd:nitro-ui-a',
+      reason: 'lease-held',
+    });
+    expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
+    expect(readPool(home).devices).toHaveLength(1);
+  });
+
+  it('still reaps an abandoned boot under a lease that has gone', () => {
+    // The other half of the rule above, so that protecting a live lease is not the same as never
+    // reaping: the idle clock exists for the boot whose task released, expired, or died, and nobody
+    // leases those. `--idle-minutes 0` is the operator's "now", and this is what it reaches.
+    withLeases([lease('B7-1', { task: 'B7', pairId: 'pair-b' })]);
+    withDevice(
+      entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 31 * MINUTE })
+    );
+    const { pool, calls } = fakePool({
+      home,
+      state: { serials: ['emulator-5574'], simulators: new Map() },
+    });
+    const done = pool.reap({ idleMinutes: 0 });
+    expect(done.reaped).toEqual([
+      { key: 'avd:nitro-ui-a', reason: 'lease-gone' },
+    ]);
     expect(calls).toContainEqual(['emu-kill', 'emulator-5574', 5043]);
   });
 
@@ -972,14 +1054,18 @@ describe('reaping', () => {
     // An emulator that ignores `emu kill` is not hypothetical (a wedged guest keeps the process
     // up), and the honest answer is "still running, still mine, try again" - dropping the record
     // would leave a live device nobody tracks, off every idle clock, for the rest of the session.
-    withLeases([lease()]);
-    withDevice(entryOf({ key: 'avd:nitro-ui-a', usedAgo: 41 * MINUTE }));
+    withLeases([]);
+    withDevice(
+      entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 41 * MINUTE })
+    );
     const { pool, calls } = fakePool({
       home,
       state: { serials: ['emulator-5574'], shutdownWorks: false },
     });
-    const done = pool.reap({ exceptLeaseId: 'X1-1' });
-    expect(done.failed).toEqual([{ key: 'avd:nitro-ui-a', reason: 'idle' }]);
+    const done = pool.reap();
+    expect(done.failed).toEqual([
+      { key: 'avd:nitro-ui-a', reason: 'lease-gone' },
+    ]);
     expect(done.reaped).toEqual([]);
     expect(calls.filter((c) => c[0] === 'emu-kill')).toHaveLength(1);
     expect(readPool(home).devices).toHaveLength(1);

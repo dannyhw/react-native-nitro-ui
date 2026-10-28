@@ -52,7 +52,14 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, mkdirSync, openSync, renameSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+} from 'node:fs';
 import { cpus, loadavg } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -141,6 +148,29 @@ export function readPool(home = stateHome()) {
   if (!Array.isArray(state.devices)) state.devices = [];
   state.version = POOL_STATE_VERSION;
   return state;
+}
+
+/**
+ * What to say when a reap refuses to run because the pool state could not be read (X11 re-review
+ * N1). A file that cannot be parsed is moved aside and read as *empty*, and an empty pool means "no
+ * claims, no leases in the records" — precisely the answer that lets a reap power off the devices
+ * the lost file said were in use. The probe: a corrupt `pool.json` holding a live claim on pair-b
+ * whose lease had already gone, then an exclusive acquire (whose kill list comes from devices.json,
+ * not from the records), and `emu kill emulator-5576` runs; with a readable file it does not.
+ *
+ * So a pool that cannot read its own memory does not touch devices. Reading is cheap and the file is
+ * the only record of who held what, so the failure mode is a loud refusal naming the file, and the
+ * operator's next read rebuilds it.
+ *
+ * @returns {string | null} the reason to report, or null when the state was readable
+ */
+export function poolRecoverySkip(recovered) {
+  if (recovered == null) return null;
+  return (
+    `pool state was unreadable (${recovered.reason}) at ${recovered.from} - ` +
+    'nothing is powered off from a pool that cannot remember what it was ' +
+    'holding; look at that file, then re-run'
+  );
 }
 
 /** Pool keys for the devices a pair names, in the form records use (`avd:<name>` / `ios:<udid>`). */
@@ -268,17 +298,99 @@ export function deviceOperations({
     adb,
     simctl,
 
+    /**
+     * Whether the app is even installed, asked before a reset reports what it cleared
+     * (`adb -s <serial> shell pm path <pkg>`, `simctl get_app_container <udid> <bundle> app`).
+     *
+     * Three answers, not two, and the middle one is the reason this exists (X11 re-review N5). On an
+     * AVD where the app has never been installed, `pm clear` fails - four times, with sleeps - and the
+     * line said "the next run inherits its data" when there was no data to inherit. `ok` is only
+     * meaningful when `answered` is true: a timed-out `adb` has no status at all, and reading that as
+     * "not installed" would let a reset claim a clean no-op because the tool never answered. Unknown
+     * falls back to attempting the clear and reporting the device's own answer, which is honest in
+     * both directions.
+     *
+     * @returns {{answered: boolean, ok: boolean, answer: string}}
+     */
+    deviceAppInstalled(device, appId) {
+      if (device?.kind === 'android') {
+        if (!device.serial)
+          return { answered: false, ok: false, answer: 'no serial to address' };
+        const res = adb(
+          ['-s', device.serial, 'shell', 'pm', 'path', appId],
+          device.adbPort ?? null
+        );
+        const answer = out(res);
+        if (res?.error != null || res?.status == null)
+          return {
+            answered: false,
+            ok: false,
+            answer: `could not ask (${answer || String(res?.error ?? 'no exit status')})`,
+          };
+        return {
+          answered: true,
+          ok: res.status === 0 && /^package:/m.test(answer),
+          answer: answer || `exit ${res.status}`,
+        };
+      }
+      const res = simctl(['get_app_container', device?.udid, appId, 'app']);
+      const answer = out(res);
+      if (res?.error != null || res?.status == null)
+        return {
+          answered: false,
+          ok: false,
+          answer: `could not ask (${answer || String(res?.error ?? 'no exit status')})`,
+        };
+      return {
+        answered: true,
+        ok: res.status === 0 && answer !== '',
+        answer: answer || (res?.stderr ?? '').trim() || `exit ${res.status}`,
+      };
+    },
+
+    /**
+     * `adb devices`, and whether the server actually answered (X11 re-review N2).
+     *
+     * The boolean matters because the alternative is a timeout reading as an empty list: `adb
+     * devices` on a wedged server is killed at the 120 s timeout with no stdout, which is
+     * character-for-character what "no emulator is attached" looks like. A reaper that could not
+     * tell the two apart reported the device as "already off" and *dropped its record* — so a live
+     * emulator left the pool's memory while it was still burning a core, until an exclusive acquire
+     * found it again. `ok: false` means "I do not know", and the caller keeps the device.
+     *
+     * @returns {{ok: boolean, serials: string[], answer: string}}
+     */
+    attachedSerialsResult(adbPort = null) {
+      const res = adb(['devices'], adbPort);
+      const answer = out(res);
+      if (res?.error != null || res?.status !== 0) {
+        return {
+          ok: false,
+          serials: [],
+          answer:
+            answer ||
+            String(res?.stderr ?? '').trim() ||
+            String(res?.error?.message ?? `exit ${String(res?.status)}`),
+        };
+      }
+      return {
+        ok: true,
+        answer,
+        serials: answer
+          .split('\n')
+          .slice(1)
+          .map((line) => line.trim().split(/\s+/))
+          .filter(
+            ([serial, state]) =>
+              serial?.startsWith('emulator-') && state === 'device'
+          )
+          .map(([serial]) => serial),
+      };
+    },
+
     /** Serials the adb server reports as online (`adb devices`, state `device`). */
     attachedSerials(adbPort = null) {
-      return out(adb(['devices'], adbPort))
-        .split('\n')
-        .slice(1)
-        .map((line) => line.trim().split(/\s+/))
-        .filter(
-          ([serial, state]) =>
-            serial?.startsWith('emulator-') && state === 'device'
-        )
-        .map(([serial]) => serial);
+      return this.attachedSerialsResult(adbPort).serials;
     },
 
     /**
@@ -377,14 +489,34 @@ export function deviceOperations({
       return res.status === 0;
     },
 
-    /** Every simulator `simctl` knows about, by udid, with its state. */
-    simulators() {
+    /**
+     * Every simulator `simctl` knows about, and whether `simctl` answered (X11 re-review N2, same
+     * rule as `attachedSerialsResult` for the emulator side).
+     *
+     * @returns {{ok: boolean, byUdid: Map<string, string>, answer: string}}
+     */
+    simulatorsResult() {
       const res = simctl(['list', '-j', 'devices']);
+      if (res?.error != null || res?.status !== 0) {
+        return {
+          ok: false,
+          byUdid: new Map(),
+          answer:
+            String(res?.stderr ?? '').trim() ||
+            String(res?.error?.message ?? `exit ${String(res?.status)}`),
+        };
+      }
       let groups = {};
       try {
         groups = JSON.parse(out(res) || '{}')?.devices ?? {};
-      } catch {
-        return new Map();
+      } catch (error) {
+        // Unparseable output from a command that *did* run: the same "unknown" answer as a timeout,
+        // for the same reason - a reaper must not read a broken pipe as a shut-down simulator.
+        return {
+          ok: false,
+          byUdid: new Map(),
+          answer: String(error?.message ?? error),
+        };
       }
       const byUdid = new Map();
       for (const list of Object.values(groups)) {
@@ -393,7 +525,22 @@ export function deviceOperations({
           if (udid) byUdid.set(udid, x?.state ?? 'Shutdown');
         }
       }
-      return byUdid;
+      return { ok: true, byUdid, answer: 'ok' };
+    },
+
+    /** Every simulator `simctl` knows about, by udid, with its state. */
+    simulators() {
+      return this.simulatorsResult().byUdid;
+    },
+
+    /** Simulators `simctl` reports as Booted, or null when it did not answer (X11 N2). */
+    bootedSimulatorsOrNull() {
+      const { ok, byUdid } = this.simulatorsResult();
+      return ok
+        ? [...byUdid.entries()]
+            .filter(([, state]) => state === 'Booted')
+            .map(([udid]) => udid)
+        : null;
     },
 
     bootedSimulators() {
@@ -549,6 +696,35 @@ export class DevicePool {
   }
 
   /** Read-modify-write of `pool.json`, under the same lock as `leases.json`. */
+  /**
+   * Whether the pool state file can be read, without touching it (X11 re-review N1).
+   *
+   * Deliberately not `readPool`: that moves an unreadable file aside and returns an empty state, so
+   * using it for this check would consume the evidence the decision depends on — and `withPool`
+   * writes back whatever its callback saw, which is how "we could not read it" quietly becomes "we
+   * are certain nothing was in use". A missing file is readable: an empty pool is a real state.
+   *
+   * @returns {{ok: true} | {ok: false, file: string, reason: string}}
+   */
+  poolStateReadable() {
+    const file = poolStatePath(this.home);
+    let text;
+    try {
+      if (!existsSync(file)) return { ok: true };
+      text = readFileSync(file, 'utf8');
+    } catch (error) {
+      return { ok: false, file, reason: String(error?.message ?? error) };
+    }
+    try {
+      const state = JSON.parse(text);
+      if (state == null || typeof state !== 'object')
+        return { ok: false, file, reason: 'the file is not a JSON object' };
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, file, reason: String(error?.message ?? error) };
+    }
+  }
+
   withPool(fn) {
     return withLock({
       lockFile: join(this.home, 'leases.lock'),
@@ -930,6 +1106,17 @@ export class DevicePool {
    * leaves the pool empty for a consumer that does not install (and the reinstall failure is
    * reported, not swallowed).
    *
+   * What it refuses to do (X11 re-review M2): touch a device with a live gate claim, whoever holds
+   * it. `resetPair` used to consult nothing but the pair, so a task that re-ran `acquire --boot` in a
+   * second shell — the idempotent path, whose whole purpose is regenerating an env file — ran `pm
+   * clear` and `simctl uninstall` under its own running suite. The row now reads "not reset", with
+   * the pid and gate, and `acquire` skips the reset altogether when it is handing a task the lease it
+   * already held.
+   *
+   * And a device with no app installed is a *successful* no-op, not a failure (X11 re-review N5):
+   * the fresh-AVD case used to retry four times and then claim "the next run inherits its data" when
+   * there was no data to inherit.
+   *
    * @param {object} pair
    * @param {{appId?: {android: string, ios: string}, attempts?: number, reinstallApp?: string | null}} [options]
    */
@@ -941,70 +1128,251 @@ export class DevicePool {
       reinstallApp = process.env.HARNESS_APP_PATH ?? null,
     } = {}
   ) {
+    const devices = [
+      pair?.android?.avd
+        ? {
+            kind: 'android',
+            key: `avd:${pair.android.avd}`,
+            action: 'pm clear',
+            serial:
+              pair?.android?.emulatorPort != null
+                ? emulatorSerial(pair.android.emulatorPort)
+                : (pair?.android?.serial ?? null),
+            adbPort: pair.android?.adbPort ?? null,
+            appId: appId.android,
+          }
+        : null,
+      pair?.ios?.udid
+        ? {
+            kind: 'ios',
+            key: `ios:${pair.ios.udid}`,
+            action: 'simctl uninstall',
+            udid: pair.ios.udid,
+            appId: appId.ios,
+          }
+        : null,
+    ].filter((x) => x != null);
+    // One brief lock hold for the whole pair: whose device is it, right now. The clears themselves
+    // must not run under the lock (N1), and reading three fields is not what the lock is for.
+    const inUse = this.busyDevices(devices.map((d) => d.key));
     const results = [];
-    if (pair?.android?.avd) {
-      const serial =
-        pair?.android?.emulatorPort != null
-          ? emulatorSerial(pair.android.emulatorPort)
-          : (pair?.android?.serial ?? null);
-      let ok = false;
-      let answer = 'no serial to address';
-      let tries = 0;
-      while (!ok && tries < attempts) {
-        tries += 1;
-        if (!serial) break;
-        const clear = this.ops.clearAppData(
-          serial,
-          appId.android,
-          pair.android?.adbPort ?? null
-        );
-        ok = !!clear?.ok;
-        answer = clear?.answer ?? '(no answer)';
-        if (!ok && tries < attempts) this.sleep(this.pollMs);
+    for (const device of devices) {
+      const busy = inUse.get(device.key);
+      if (busy != null) {
+        this.log(`  ${device.key}: ${busy} - not reset`);
+        results.push({
+          key: device.key,
+          action: device.action,
+          ok: true,
+          skipped: busy,
+          attempts: 0,
+          answer: busy,
+        });
+        continue;
       }
-      results.push({
-        key: `avd:${pair.android.avd}`,
-        action: 'pm clear',
-        ok,
-        attempts: tries,
-        answer,
-      });
-    }
-    if (pair?.ios?.udid) {
-      const udid = pair.ios.udid;
-      const un = this.ops.uninstallSimulatorApp(udid, appId.ios);
-      // Believe the device, not the exit code: the thing a reset promises is that the data is
-      // gone, and `simctl` answers that directly.
-      const container = this.ops.simulatorDataContainer(udid, appId.ios);
-      let ok = !!un?.ok && container == null;
-      // Both answers, when both went wrong: "simctl refused" and "the container is still there" are
-      // different failures to whoever has to fix them, and reporting only one of them sends them to
-      // the wrong tool.
-      const parts = [un?.answer ?? '(no answer)'];
-      if (container != null)
-        parts.push(`data container survived: ${container}`);
-      let answer = parts.join('; ');
-      let tries = 1;
-      if (ok && reinstallApp != null) {
-        tries += 1;
-        const re = this.ops.installSimulatorApp(udid, reinstallApp);
-        // A device left without an app is worse than one with stale data, so a failed reinstall is
-        // a failed reset: the next run installs anyway, and whoever read the line should know the
-        // device is not ready.
-        ok = ok && !!re?.ok;
-        answer = re?.ok
-          ? `${answer}; reinstalled ${reinstallApp}`
-          : `${answer}; reinstall FAILED (${re?.answer})`;
+      const installed = this.ops.deviceAppInstalled(device, device.appId);
+      if (installed.answered && !installed.ok) {
+        // Nothing installed, nothing to clear, nothing inherited. Reported as a success with the
+        // device's own answer, and with no retries: the retries exist for a device that is still
+        // settling, which is not what "no such package" is (X11 re-review N5).
+        let answer = `not installed (${installed.answer}) - nothing to clear`;
+        let tries = 1;
+        if (device.kind === 'ios' && reinstallApp != null) {
+          // The one thing a device with no app still needs from a reset: the round-1 rule is that a
+          // device never leaves the pool empty for a consumer that does not install, so this is the
+          // install that would have followed a successful uninstall, taken directly.
+          tries += 1;
+          const re = this.ops.installSimulatorApp(device.udid, reinstallApp);
+          if (!re?.ok) {
+            results.push({
+              key: device.key,
+              action: device.action,
+              ok: false,
+              attempts: tries,
+              answer: `${answer}; reinstall FAILED (${re?.answer})`,
+            });
+            continue;
+          }
+          answer = `${answer}; installed ${reinstallApp}`;
+        }
+        results.push({
+          key: device.key,
+          action: device.action,
+          ok: true,
+          noop: 'app not installed',
+          attempts: tries,
+          answer,
+        });
+        continue;
       }
-      results.push({
-        key: `ios:${udid}`,
-        action: 'simctl uninstall',
-        ok,
-        attempts: tries,
-        answer,
-      });
+      results.push(
+        device.kind === 'android'
+          ? this.resetAndroid(device, { attempts })
+          : this.resetIos(device, { reinstallApp })
+      );
     }
     return results;
+  }
+
+  /**
+   * Which of these pool keys have a live claim, read in one lock hold (X11 re-review M2). Answers
+   * with the pid and gate because "in use" is not actionable — "in use by pid 4242
+   * (harness:ios)" is.
+   *
+   * A key with no record is not in use: a device the pool has never handed out has no claim on it.
+   * A record whose claims are all from dead pids is not in use either, and `pruneClaims` has already
+   * forgotten those by the time `acquire` gets here.
+   */
+  busyDevices(keys = []) {
+    const wanted = new Set(keys);
+    return this.withPool((state) => {
+      const byKey = new Map();
+      for (const entry of state.devices) {
+        if (
+          !wanted.has(entry.key) ||
+          !deviceIsBusy(entry, this.now(), this.isPidAlive)
+        )
+          continue;
+        const live = (entry.claims ?? []).find((c) => this.isPidAlive(c?.pid));
+        byKey.set(
+          entry.key,
+          entry.phase === 'booting'
+            ? 'a boot is in flight'
+            : `in use by pid ${live?.pid}${live?.gate ? ` (${live.gate})` : ''}`
+        );
+      }
+      return byKey;
+    });
+  }
+
+  /** Android half of the reset: `pm clear`, retried while the device settles. */
+  resetAndroid(device, { attempts }) {
+    const { serial } = device;
+    let ok = false;
+    let answer = 'no serial to address';
+    let tries = 0;
+    while (!ok && tries < attempts) {
+      tries += 1;
+      if (!serial) break;
+      const clear = this.ops.clearAppData(serial, device.appId, device.adbPort);
+      ok = !!clear?.ok;
+      answer = clear?.answer ?? '(no answer)';
+      if (!ok && tries < attempts) this.sleep(this.pollMs);
+    }
+    return {
+      key: device.key,
+      action: device.action,
+      ok,
+      attempts: tries,
+      answer,
+    };
+  }
+
+  /** iOS half of the reset: uninstall, verify the container is gone, reinstall when asked. */
+  resetIos(device, { reinstallApp }) {
+    const { udid } = device;
+    const un = this.ops.uninstallSimulatorApp(udid, device.appId);
+    // Believe the device, not the exit code: the thing a reset promises is that the data is
+    // gone, and `simctl` answers that directly.
+    const container = this.ops.simulatorDataContainer(udid, device.appId);
+    let ok = !!un?.ok && container == null;
+    // Both answers, when both went wrong: "simctl refused" and "the container is still there" are
+    // different failures to whoever has to fix them, and reporting only one of them sends them to
+    // the wrong tool.
+    const parts = [un?.answer ?? '(no answer)'];
+    if (container != null) parts.push(`data container survived: ${container}`);
+    let answer = parts.join('; ');
+    let tries = 1;
+    if (ok && reinstallApp != null) {
+      tries += 1;
+      const re = this.ops.installSimulatorApp(udid, reinstallApp);
+      // A device left without an app is worse than one with stale data, so a failed reinstall is
+      // a failed reset: the next run installs anyway, and whoever read the line should know the
+      // device is not ready.
+      ok = ok && !!re?.ok;
+      answer = re?.ok
+        ? `${answer}; reinstalled ${reinstallApp}`
+        : `${answer}; reinstall FAILED (${re?.answer})`;
+    }
+    return {
+      key: device.key,
+      action: device.action,
+      ok,
+      attempts: tries,
+      answer,
+    };
+  }
+
+  /**
+   * The state a kill decision is made against, read in one lock hold: the record, the leases, and
+   * the identifiers every live lease holds.
+   *
+   * This exists because "decide under the lock, act outside it" (X11 review N1) has a window, and
+   * the window is as wide as the previous device's I/O — `simctl shutdown` runs to five minutes, an
+   * `adb devices` to two (X11 re-review M1). A lease *and* a gate claim taken inside it used to be
+   * invisible: `reap` acted on pass 1's snapshot and killed a device that was leased and claimed by
+   * the time `emu kill` landed. So every act re-reads, briefly, immediately before it acts, and the
+   * `held` set it was handed is the one from *this* read rather than the one from the plan.
+   *
+   * What it does not do is hold the lock across `emu kill`: that is the failure N1 was about (the
+   * lock is the lease file's, held with a 10 s timeout and stolen at 30 s, so a stalled kill used to
+   * fail every other task's `acquire` on this machine). The window that remains is the few lines
+   * between releasing this lock and running the command — no device I/O in it — and closing that one
+   * means making a claim refuse while a reap is in flight, which the orchestrator took off this
+   * round's table along with passive reaping: nothing kills on a timer any more, so the only reaper
+   * is a command somebody typed, or an exclusive acquire.
+   *
+   * @returns {{entry: object | null, held: Set<string>}}
+   */
+  deviceState(key, { exceptLeaseId = null } = {}) {
+    return this.withPool((state) => {
+      const leasesNow = this.leases();
+      return {
+        entry: state.devices.find((x) => x.key === key) ?? null,
+        held: this.heldIdentifiers({ leases: leasesNow }),
+        heldForced: this.heldIdentifiers({
+          leases: leasesNow,
+          exceptLeaseId,
+        }),
+      };
+    });
+  }
+
+  /**
+   * Whether this device may still be powered off, answered from a fresh read (see `deviceState`).
+   * `reap` calls it immediately before each kill and nothing else calls it: a decision that is
+   * minutes old is not a decision. `forced` says whether pass 1 planned this device because the
+   * caller *named* it (`shutdownKeys`), exactly as it decided, so the re-read can neither widen nor
+   * narrow the exclusive power-off's exemption between planning and acting.
+   */
+  canActOnKey(key, { forced = false, exceptLeaseId = null } = {}) {
+    const nowMs = this.now();
+    const { entry, held, heldForced } = this.deviceState(key, {
+      exceptLeaseId,
+    });
+    const heldSet = forced ? heldForced : held;
+    if (entry == null) return { allowed: true, held: heldSet, entry: null };
+    if (deviceIsBusy(entry, nowMs, this.isPidAlive)) {
+      const live = (entry.claims ?? []).find((c) => this.isPidAlive(c?.pid));
+      return {
+        allowed: false,
+        held: heldSet,
+        entry,
+        why:
+          entry.phase === 'booting'
+            ? 'a boot is in flight'
+            : `in use by pid ${live?.pid}${live?.gate ? ` (${live.gate})` : ''}`,
+      };
+    }
+    if (heldSet.has(entry.id)) {
+      return {
+        allowed: false,
+        held: heldSet,
+        entry,
+        why: 'a live lease holds it',
+      };
+    }
+    return { allowed: true, held: heldSet, entry };
   }
 
   /**
@@ -1013,16 +1381,16 @@ export class DevicePool {
    *
    * Three passes, in this order:
    *
-   *  1. **decide**, under the lease lock, with no device I/O at all (X11 review N1);
-   *  2. **act** - `simctl shutdown`, `adb emu kill`, each of which can take seconds - with the lock
-   *     released;
-   *  3. **re-read and drop** the records for devices that are actually off, re-checking claims
-   *     first, so a run that started in the open window keeps its device.
+   *  1. **plan**, under the lease lock, with no device I/O at all (X11 review N1) — this pass only
+   *     decides *which devices are worth looking at*, it authorises nothing;
+   *  2. **act** — for each of them, re-read under a brief lock (`canActOnKey`) and kill only what is
+   *     still unheld and unclaimed at that moment, with the lock released before the command;
+   *  3. **re-read and drop** the records for devices that are actually off.
    *
-   * The split matters because the lock is the lease file's: it is held with a 10-second timeout and
-   * stolen from anyone who holds it 30 seconds, so an `adb emu kill` that stalls used to fail every
-   * other task's `acquire` and gate claim on this machine - and could lose the reaper its own lock
-   * mid-write.
+   * The re-read in pass 2 is the difference between a reap that is right about the machine and one
+   * that is right about the last ten minutes of it (X11 re-review M1), and pass 3 no longer needs a
+   * claim re-check to protect a run: it only forgets records whose device this pass just powered off
+   * or found genuinely off.
    *
    * With no devices.json loaded nothing is reapable: the pool shuts down the devices the machine
    * *declared*, never one it merely observed booted, and a caller that cannot name its pool has no
@@ -1032,8 +1400,8 @@ export class DevicePool {
   reap({
     idleMinutes,
     shutdownKeys = [],
-    reason = 'handoff',
-    exceptLeaseId = this.env?.NITRO_UI_LEASE_ID ?? null,
+    reason = 'idle',
+    exceptLeaseId = null,
   } = {}) {
     if (this.devices?.pairs == null) {
       return {
@@ -1047,11 +1415,47 @@ export class DevicePool {
       };
     }
     const nowMs = this.now();
+    // Fail closed before anything reads-and-writes the pool file. `readPool` moves an unreadable
+    // file aside and returns an empty state, and every `withPool` writes what its callback saw — so
+    // the very first lock hold (the claim prune below) would have replaced the corrupt file with an
+    // empty one and erased the evidence the decision needs. Hence a read-only probe of the raw file,
+    // which refuses without consuming it: the file stays exactly where it is until something writes
+    // the pool for a legitimate reason, and that something moves it aside with `readPool`'s own name.
+    const unreadable = this.poolStateReadable();
+    if (!unreadable.ok) {
+      return {
+        reaped: [],
+        kept: [],
+        alreadyOff: [],
+        failed: [],
+        refused: [],
+        skipped: poolRecoverySkip({
+          from: unreadable.file,
+          reason: unreadable.reason,
+        }),
+      };
+    }
     this.pruneClaims();
-    // Pass 1: the decision, read-only, holding the lock only for as long as reading JSON takes.
+    // Pass 1: which devices are worth acting on. Read-only, holding the lock for as long as reading
+    // JSON takes, and *authorising nothing* — every kill in pass 2 asks again.
     const plan = this.withPool((state) => {
+      if (state.recovered != null) {
+        return {
+          aborted: poolRecoverySkip(state.recovered),
+          planned: [],
+          decided: { kept: [], refused: [] },
+          keys: [],
+        };
+      }
       const leasesNow = this.leases();
-      const held = this.heldIdentifiers({
+      // Two hold-sets, because the exemption is not a general licence. `held` counts every live
+      // lease including the caller's own and governs the idle path (X11 re-review M3: a task's own
+      // `lease.mjs reap` used to read `NITRO_UI_LEASE_ID` and kill its own claim-less run).
+      // `heldForced` exempts `exceptLeaseId`, and only devices the caller *named* in `shutdownKeys`
+      // are judged against it - which is the exclusive power-off and nothing else, since that lease
+      // holds every pair by definition and would otherwise reap nothing.
+      const held = this.heldIdentifiers({ leases: leasesNow, nowMs });
+      const heldForced = this.heldIdentifiers({
         leases: leasesNow,
         nowMs,
         exceptLeaseId,
@@ -1072,6 +1476,24 @@ export class DevicePool {
           continue;
         }
         const forced = shutdownKeys.includes(entry.key);
+        const heldSet = forced ? heldForced : held;
+        // A pair a live lease holds is off-limits even under `shutdownKeys`, which is an *idle*
+        // filter, not a licence to evict somebody mid-run. Only the caller's own exclusive lease
+        // survives that, and only for the devices it named.
+        if (heldSet.has(entry.id)) {
+          decided.kept.push({
+            key: entry.key,
+            reason: 'lease-held',
+            idleMinutes: Math.round(
+              Math.max(
+                0,
+                nowMs -
+                  Math.max(entry?.bootedAtMs ?? nowMs, entry?.lastUsedMs ?? 0)
+              ) / 60_000
+            ),
+          });
+          continue;
+        }
         // An explicit `--idle-minutes` is the caller overriding devices.json for this one call -
         // `reap --idle-minutes 0` is "power the pool off now", the cleanup command a machine's
         // operator reaches for. It never reaches a pair a live lease holds (X11 review M3): the
@@ -1083,18 +1505,7 @@ export class DevicePool {
             this.idleShutdownMinutesFor(entry.kind) ?? idleMinutes,
           overrideIdleMinutes: idleMinutes,
           isPidAlive: this.isPidAlive,
-          exceptLeaseId,
         });
-        // A pair another task holds under a live lease is off-limits even under `shutdownKeys`,
-        // which is an *idle* filter, not a licence to evict somebody mid-run.
-        if (held.has(entry.id)) {
-          decided.kept.push({
-            key: entry.key,
-            reason: 'lease-held',
-            idleMinutes: Math.round(decision.idleMs / 60_000),
-          });
-          continue;
-        }
         if (!forced && decision.action === 'keep') {
           decided.kept.push({
             key: entry.key,
@@ -1103,12 +1514,26 @@ export class DevicePool {
           });
           continue;
         }
-        planned.push({ entry, decision, forced });
+        planned.push({ entry, decision, forced, heldSet });
       }
-      return { held, planned, decided, keys: state.devices.map((x) => x.key) };
+      return {
+        planned,
+        decided,
+        held: heldForced,
+        keys: state.devices.map((x) => x.key),
+      };
     });
+    if (plan.aborted != null) {
+      return {
+        reaped: [],
+        kept: [],
+        alreadyOff: [],
+        failed: [],
+        refused: [],
+        skipped: plan.aborted,
+      };
+    }
 
-    // Pass 2: the device I/O, outside the lock.
     const done = {
       reaped: [],
       alreadyOff: [],
@@ -1116,11 +1541,27 @@ export class DevicePool {
       refused: [],
       ...plan.decided,
     };
+
+    // Pass 2: the device I/O, outside the lock, each device preceded by its own brief re-read. The
+    // record used for the kill is the fresh one, so a claim or lease that appeared since pass 1 is
+    // seen; `plan.held` never reaches a kill.
     const offKeys = [];
     for (const { entry, decision, forced } of plan.planned) {
-      const outcome = this.shutdownDevice(entry, {
+      const live = this.canActOnKey(entry.key, { forced, exceptLeaseId });
+      if (!live.allowed) {
+        this.log(
+          `  ${entry.key}: ${live.why} since the reap started - left up`
+        );
+        done.kept.push({
+          key: entry.key,
+          reason: live.why,
+          idleMinutes: Math.round(decision.idleMs / 60_000),
+        });
+        continue;
+      }
+      const outcome = this.shutdownDevice(live.entry ?? entry, {
         reason: forced ? reason : decision.reason,
-        held: plan.held,
+        held: live.held,
       });
       if (outcome === 'off' || outcome === 'already') {
         offKeys.push(entry.key);
@@ -1151,10 +1592,19 @@ export class DevicePool {
       if (seen.has(key)) continue;
       const declared = this.declaredEntry(key);
       if (declared == null) continue;
-      if (plan.held.has(declared.id)) continue;
+      const live = this.canActOnKey(key, { forced: true, exceptLeaseId });
+      if (live.held.has(declared.id)) {
+        done.kept.push({ key, reason: 'lease-held', idleMinutes: 0 });
+        continue;
+      }
+      if (!live.allowed) {
+        this.log(`  ${key}: ${live.why} - left up`);
+        done.kept.push({ key, reason: live.why, idleMinutes: 0 });
+        continue;
+      }
       const outcome = this.shutdownDevice(declared, {
         reason,
-        held: plan.held,
+        held: live.held,
       });
       if (outcome === 'off') done.reaped.push({ key, reason });
       else if (outcome === 'already') done.alreadyOff.push({ key });
@@ -1163,16 +1613,18 @@ export class DevicePool {
       else done.failed.push({ key, reason });
     }
 
-    // Pass 3: forget the records that are genuinely off - re-locked, and re-checked, because the
-    // window above is long enough for a run to have claimed the device. A device that is off (or
-    // was never on) stops being the pool's business; one that refused to die stays listed so the
-    // next `list` still shows it, and `reap` retries.
+    // Pass 3: forget the records this pass shut down or found off. Re-locked, because the window
+    // above is long enough for anything to have written the file; and the device was just confirmed
+    // off (or not there) by its own answers, so the record goes. A device that refused to die, or
+    // that turned out to be in use, keeps its record - the next `list` still shows it, and a re-run
+    // re-decides from scratch.
     if (offKeys.length > 0) {
       this.withPool((state) => {
-        state.devices = state.devices.filter((x) => {
-          if (!offKeys.includes(x.key)) return true;
-          return deviceIsBusy(x, this.now(), this.isPidAlive);
-        });
+        state.devices = state.devices.filter(
+          (x) =>
+            !offKeys.includes(x.key) ||
+            deviceIsBusy(x, this.now(), this.isPidAlive)
+        );
         return true;
       });
     }
@@ -1240,13 +1692,16 @@ export class DevicePool {
    * `leaseId` would happily kill a bench's emulator: the bench's lease names the pair, but no pool
    * record names the bench.
    *
-   * `exceptLeaseId` is the caller's own lease: your hold does not stop *your* reap - if it did, an
-   * exclusive lease could not power the machine down at all, since it holds every pair.
+   * `exceptLeaseId` exempts one lease from its own protection, and exactly one caller uses it: the
+   * exclusive power-off, which holds every pair by design and would otherwise reap nothing. A task's
+   * own live lease protects its devices everywhere else (X11 re-review M3) — before this, a task's
+   * own `lease.mjs reap`, or any reap that read `NITRO_UI_LEASE_ID` from the sourced env, could
+   * power off a run that had no in-flight claim (a build, Metro, a direct real-input run).
    */
   heldIdentifiers({
     leases = this.leases(),
     nowMs = this.now(),
-    exceptLeaseId = this.leaseId ?? null,
+    exceptLeaseId = null,
   } = {}) {
     const held = new Set();
     for (const lease of leases ?? []) {
@@ -1298,7 +1753,17 @@ export class DevicePool {
         this.log(`  refused ${entry.key}: a live lease holds that simulator`);
         return 'refused';
       }
-      if (!this.ops.bootedSimulators().includes(udid)) return 'already';
+      // "Not in the booted list" and "simctl would not answer" are different answers (X11 re-review
+      // N2). The first is `already`, which drops the record; the second is `failed`, which keeps it,
+      // because a simulator the pool could not ask about is not one it has proved is off.
+      const booted = this.ops.bootedSimulatorsOrNull();
+      if (booted == null) {
+        this.log(
+          `  ${entry.key}: simctl did not answer, so the simulator's state is unknown - left alone`
+        );
+        return 'failed';
+      }
+      if (!booted.includes(udid)) return 'already';
       this.log(`  shutting down simulator ${udid} (${reason})`);
       return this.ops.shutdownSimulator(udid) ? 'off' : 'failed';
     }
@@ -1321,8 +1786,16 @@ export class DevicePool {
       this.log(`  refused ${entry.key}: a live lease holds that pair`);
       return 'refused';
     }
-    if (!this.ops.attachedSerials(expected.adbPort).includes(serial))
-      return 'already';
+    // An adb that did not answer is not an emulator that is off (X11 re-review N2): `already` drops
+    // the record, and a wedged server would have leaked a live boot out of the pool's memory.
+    const attached = this.ops.attachedSerialsResult(expected.adbPort);
+    if (!attached.ok) {
+      this.log(
+        `  ${entry.key}: adb did not answer (${attached.answer}), so the emulator's state is unknown - left alone`
+      );
+      return 'failed';
+    }
+    if (!attached.serials.includes(serial)) return 'already';
     const who = this.ops.emulatorAvdName(serial, expected.adbPort);
     if (who !== entry.id) {
       this.log(
