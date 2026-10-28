@@ -103,6 +103,31 @@ row's 744 tests / 35 suites is this branch's own total: 665 / 33 with the two fi
 added here removed, plus `check-runner` 38 and `gate-check` 41. The log's *second* Jest
 summary is the perf run's 7 / 7, which is the one `counts` must not quote; X2's M3.)
 
+## Live proofs
+
+- **Merge reuse, in the checkout where it matters.** A second worktree at `main`
+  (`x10-merge-proof`, no `.gates/` of its own), merging `task/X10-check-throughput`:
+  `need --for merge` printed `✓ check — green, reused from
+  \`task/X10-check-throughput\`'s ledger` with the note naming
+  `docs/tasks/X10/gates.jsonl`, tree `1dbe8b4dc4f3`, commit `67d9af5`; `table --for
+  merge` showed `**PASS** *(reused)*`; `--no-reuse` went back to `✗ check — never run
+  on this tree` and 5 missing. Adding one commit to that branch and re-running refused
+  the reuse (0 mentions, `✗ check`) — the merged tree was no longer the tree that
+  passed. Proof worktree and branch removed afterwards.
+- **Incident, reported not hidden.** The first attempt at that proof had a `cd` that
+  silently failed, so its `git merge` ran in the **human's main checkout** and left a
+  merge commit on `main`. Undone with `git reset --keep b943a3f` within the minute —
+  nothing was pushed, nothing else was on `main` (the pre-merge commit `b943a3f` and its
+  tree are intact, `git status` clean, no hooks ran). The redo used a quoted absolute
+  path and checked `pwd` before merging. Also caught: `git worktree add` from inside
+  another worktree resolves relative paths against the *repository*, not the cwd, so it
+  had created a nested `nitro-ui-worktrees/nitro-ui-worktrees/` directory; removed.
+- **The 4 jobs are real.** The recorded run's step durations sum to 176.1 s against a
+  150.9 s wall, and `test` (139.6 s) is 92% of it — the visible overlap is
+  `typecheck`/`lint`/`format`/`test:native`/`nitrogen:check` running beside it.
+- 29 mutations, each applied alone to the committed tree, jest run, file restored —
+  **28 went red**, and the 1 that stayed green is listed as such below with why.
+
 ## Red proofs
 
 29 mutations, each applied alone to the final tree, jest run, file restored
