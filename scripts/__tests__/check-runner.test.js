@@ -949,7 +949,10 @@ describe('check.mjs, spawning real steps', () => {
     );
     const job = /\n {2}checks:\n([\s\S]*?)\n {2}\S/.exec(ci);
     expect(job).not.toBeNull();
-    expect(job[1]).toContain('name: Checks');
+    // The exact name, not a substring: this is the required status the release path
+    // waits on, so `Checks (parallel)` would be a new check name with the old one
+    // reported as expected-but-never-run.
+    expect(job[1]).toMatch(/^ {4}name: Checks\n/);
     expect(job[1]).toContain('run: bun run check');
     // Not a chain of steps, and not forced to a job count: a pinned `--jobs` would
     // make CI's evidence a different experiment from the local one.
