@@ -90,6 +90,11 @@ final class RealInputTests: XCTestCase {
     static let spikeSize = "spike-size-echo"
     static let spikeFrozen = "spike-frozen-echo"
     static let rnTarget = "rn-type-target-echo"
+    // T18b. The `maxLength` typing field and the P5b latency pair, both driven by
+    // `scripts/real-input/{android.mjs,ios.mjs}` rather than by the harness.
+    static let spikeMaxLength = "spike-maxlength-echo"
+    static let spikeLatencyA = "spike-latency-echo"
+    static let rnLatency = "rn-latency-echo"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -1347,6 +1352,293 @@ final class RealInputTests: XCTestCase {
     let sorted = values.sorted()
     let index = min(sorted.count - 1, max(0, Int((Double(sorted.count) * p).rounded(.up)) - 1))
     return sorted[index]
+  }
+
+  /// T18b — **first keystroke into an idle field → JS told**, spike against RN's `TextInput`, in one run.
+  ///
+  /// Android's twin is `spike-latency-first`, and this exists because `testRealInputSpikeLatency` above is not
+  /// that quantity: as T18's review says, its number is `stamps[i] − stamps[i−1]` inside one injected burst
+  /// with n=7, so its "p95" was its maximum and no keystroke send time was inside it. That is throughput.
+  /// Q2 §7's go line names latency — a keystroke to the commit that follows it — so this check drives one
+  /// character at a time, with the field idle between them, and every sample is a first keystroke.
+  ///
+  /// The arms are the P5b pair (`example/src/SpikeTextFieldScreen.tsx`), which exists because T18's pair was
+  /// not equivalent work: its spike arm also called `nuiTestState()` inside `onValueChange`. Both fields here
+  /// are controlled, both do three state updates per keystroke, neither reads the mirror, and both stamp
+  /// `Date.now()` on the first line of the callback.
+  ///
+  /// The clocks need no pairing here, which is the one respect in which iOS has the easier measurement: the
+  /// simulator is a host process, so the runner's `Date` and the app's `Date.now()` read one wall clock,
+  /// where Android injects from the host and stamps on the emulated device. The injector's own cost is still
+  /// inside every sample, so the per-key call time is printed beside the samples rather than subtracted on
+  /// faith. The ratio is printed rather than asserted (D21: a duration threshold is not a verdict).
+  func testRealInputSpikeLatencyFirst() throws {
+    let samples = 30
+    let chars = Array("abcdefghijklmnopqrstuvwxyz0123")
+    XCTAssertEqual(chars.count, samples, "the sample alphabet must hold one character per sample")
+    // Each case gets a fresh launch on the example's first tab, and the example mounts one screen at a time,
+    // so without this the spike screen is not in the tree at all.
+    try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
+
+    func nowMs() -> Double { Date().timeIntervalSince1970 * 1000.0 }
+
+    /// Type `chars` into one field one keystroke at a time, and return the send stamps with the commits the
+    /// app recorded for them.
+    func measure(_ identifier: String, _ echo: String, _ what: String) throws
+      -> (sent: [Double], returned: [Double], commits: [Double])
+    {
+      try scrollIntoView(identifier, as: what, hittableIsEnough: true)
+      let beforeEvents = Int(echoField(try read(echo), "events")) ?? 0
+      // The tap helper proves the field is editable; the echo's own counter proves *this* field holds focus.
+      // That distinction is the whole precondition on the second arm: arm A's keyboard is still up (iOS keeps
+      // it up across a focus transfer), so the helper alone would be satisfied by a keyboard belonging to the
+      // other field, and a burst typed into a field that is not focused answers with a clean-looking zero
+      // samples.
+      let field = try tapToType(identifier, as: what)
+      _ = try readField(echo, "focus", "1", "\(what) to hold focus before anything is typed")
+      var sent: [Double] = []
+      var returned: [Double] = []
+      for character in chars {
+        let before = nowMs()
+        field.typeText(String(character))
+        sent.append(before)
+        returned.append(nowMs())
+        // Longer than the thing measured, so the next character really does find an idle field.
+        Thread.sleep(forTimeInterval: 0.15)
+      }
+      let final = readUntil(echo, timeout: 20) { text in
+        Int(echoField(text, "events")).map { $0 >= beforeEvents + samples } ?? false
+      }
+      let commits = echoField(final, "ats")
+        .split(separator: ",")
+        .compactMap { Double($0) }
+      return (sent, returned, Array(commits.suffix(samples)))
+    }
+
+    let spike = try measure("spike-latency-field", Echo.spikeLatencyA, "the latency spike field")
+    let rn = try measure("rn-latency-field", Echo.rnLatency, "the latency RN TextInput control")
+
+    /// Print one arm's distribution rather than a single number: on an emulator the median is what a reader
+    /// should trust, and the raw bound is printed so the arithmetic can be redone elsewhere.
+    func describe(
+      _ name: String,
+      _ arm: (sent: [Double], returned: [Double], commits: [Double]),
+      _ raw: [Double]
+    ) {
+      guard raw.count >= 5 else {
+        print("real-input spike: \(name) produced only \(raw.count) samples, too few to print a distribution")
+        return
+      }
+      let callCost = zip(arm.returned, arm.sent).map { $0.0 - $0.1 }
+      let afterInjector = zip(arm.commits, arm.returned).map { $0.0 - $0.1 }
+      print(
+        "real-input spike: \(name) first-keystroke→commit n=\(raw.count) "
+          + "min/median/p95/max \(Int(raw.min() ?? 0))/\(Int(nearestRankPercentile(raw, 0.5)))/"
+          + "\(Int(nearestRankPercentile(raw, 0.95)))/\(Int(raw.max() ?? 0))ms · "
+          + "one-key send call median \(Int(nearestRankPercentile(callCost, 0.5)))ms · "
+          + "commit−after-send \(Int(afterInjector.min() ?? 0))…\(Int(afterInjector.max() ?? 0))ms "
+          + "(negative = the key went in before the injector returned)"
+      )
+    }
+
+    let spikeRaw = zip(spike.commits, spike.sent).map { $0.0 - $0.1 }
+    let rnRaw = zip(rn.commits, rn.sent).map { $0.0 - $0.1 }
+    describe("spike", spike, spikeRaw)
+    describe("rn", rn, rnRaw)
+
+    XCTAssertGreaterThanOrEqual(
+      spike.commits.count,
+      samples,
+      "the spike field recorded \(spike.commits.count) commits for \(samples) keystrokes, which is too few "
+        + "samples for a p95 to mean anything (the echo line is the record of what it committed)"
+    )
+    XCTAssertGreaterThanOrEqual(
+      rn.commits.count,
+      samples,
+      "RN's TextInput recorded \(rn.commits.count) commits for \(samples) keystrokes — the control arm, so "
+        + "the ratio below has nothing to be divided by"
+    )
+    XCTAssertFalse(
+      spikeRaw.contains { $0 < 0 } || rnRaw.contains { $0 < 0 },
+      "a negative sample means the two clocks are not the same clock (spike min "
+        + "\(Int(spikeRaw.min() ?? 0))ms, rn min \(Int(rnRaw.min() ?? 0))ms)"
+    )
+    let spikeP95 = nearestRankPercentile(spikeRaw, 0.95)
+    let rnP95 = nearestRankPercentile(rnRaw, 0.95)
+    let spikeMedian = nearestRankPercentile(spikeRaw, 0.5)
+    let rnMedian = nearestRankPercentile(rnRaw, 0.5)
+    print(
+      "real-input spike: first-keystroke→commit ratio spike ÷ RN = "
+        + "\(String(format: "%.2f", rnP95 > 0 ? spikeP95 / rnP95 : .greatestFiniteMagnitude))× at p95, "
+        + "\(String(format: "%.2f", rnMedian > 0 ? spikeMedian / rnMedian : .greatestFiniteMagnitude))× at "
+        + "the median (go line: p95 ≤ RN × 1.5, no-go above 2× — reported, not gated)"
+    )
+  }
+
+  /// T18b — **a rejected edit at a measured 10 keys/s**, with an attribution for anything lost.
+  ///
+  /// Q2 §7's line is "a rejected change reverts with no lost character at 10 keys/s". `testRealInputSpikeTextReject`
+  /// above drives one `typeText` per character 100 ms apart and measured about 1.6 keys/s, because a single
+  /// `typeText` call costs more than the interval it is asked to respect — so that check proves the revert and
+  /// never proves the rate. This one puts the whole burst in one call, which is both the only way past the
+  /// named rate and the harder test, and proves the rate from the injector's own wall clock: `typeText` does
+  /// not return before the last character is queued.
+  ///
+  /// The second half is why this is not just the revert check again. Burst keystrokes that go missing have two
+  /// candidate causes — XCUITest dropped them, or the handshake did — and only one of them is the library's.
+  /// So RN's own `TextInput` takes the same burst with nothing rejected, and how many of the ten it *lands* is
+  /// the injector's fidelity. The frozen field is judged against that number, not against ten.
+  func testRealInputSpikeTextRejectRate() throws {
+    let keys = 10
+    let rateMs = (1000.0 * Double(keys)) / 10.0
+
+    /// Wall clock of one injector call, which is the only evidence there is that a rate was driven.
+    func milliseconds(_ work: () -> Void) -> Double {
+      let started = Date().timeIntervalSince1970 * 1000.0
+      work()
+      return Date().timeIntervalSince1970 * 1000.0 - started
+    }
+
+    try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
+    try scrollIntoView("spike-frozen", as: "the frozen field", hittableIsEnough: true)
+    let field = try tapToType("spike-frozen", as: "the frozen field")
+    let started = try read(Echo.spikeFrozen)
+    XCTAssertEqual(
+      echoField(started, "displayed"),
+      "frozen",
+      "the frozen field should start at the value JS holds. Line was: \(started)"
+    )
+
+    // One throwaway key before the burst that carries the claim: the first synthesized burst of a session is
+    // the keyboard coming up, not the field, and a rate measured across it measures the keyboard.
+    let warmMs = milliseconds { field.typeText("z") }
+    Thread.sleep(forTimeInterval: 0.3)
+    print("real-input spike: injector warm-up call \(Int(warmMs))ms (one key, not part of the rate claim)")
+
+    let burstMs = milliseconds { field.typeText(String(repeating: "q", count: keys)) }
+    print(
+      "real-input spike: \(keys) keys injected in one call of \(Int(burstMs))ms — at least "
+        + "\(String(format: "%.1f", (1000.0 * Double(keys)) / max(burstMs, 1))) keys/s "
+        + "(the injector cannot return before the last key is queued)"
+    )
+    XCTAssertLessThanOrEqual(
+      burstMs,
+      rateMs,
+      "the burst was meant to be driven at 10 keys/s or faster and took \(Int(burstMs))ms for \(keys) keys"
+    )
+
+    // Read rather than wait-and-abort: how many keystrokes the field took *is* the measurement, and a check
+    // that aborts on the interesting answer cannot report the attribution below.
+    Thread.sleep(forTimeInterval: 1.5)
+    let counted = try read(Echo.spikeFrozen)
+    let spikeEvents = Int(echoField(counted, "nativeEvents")) ?? -1
+    let reverted = echoField(counted, "displayed") == "frozen"
+      ? counted
+      : try readField(
+        Echo.spikeFrozen,
+        "displayed",
+        "frozen",
+        "the rejected run to revert to what JS kept"
+      )
+    XCTAssertEqual(
+      echoField(reverted, "typed"),
+      "frozen",
+      "JS never adopted the rejected text. Line was: \(reverted)"
+    )
+    XCTAssertEqual(
+      echoField(reverted, "unreported"),
+      "0",
+      "no keystroke may mark the field unreported (Q2 §2.4) — a fast typist's writes would go permanently "
+        + "stale. Line was: \(reverted)"
+    )
+
+    // The calibration arm, second: iOS keeps the keyboard up when focus transfers, so the frozen field's
+    // session is what makes this tap land at all.
+    try scrollIntoView("rn-type-target", as: "the RN TextInput control", hittableIsEnough: true)
+    let rnField = try tapToType("rn-type-target", as: "the RN TextInput control")
+    let focused = try readField(
+      Echo.rnTarget,
+      "focused",
+      "1",
+      "RN's field to hold focus before the calibration burst"
+    )
+    let typedBefore = echoField(focused, "typed").count
+    let rnBurstMs = milliseconds { rnField.typeText(String(repeating: "q", count: keys)) }
+    Thread.sleep(forTimeInterval: 1.5)
+    let rnLanded = echoField(try read(Echo.rnTarget), "typed").count - typedBefore
+    print(
+      "real-input spike: injector fidelity — RN TextInput landed \(rnLanded) of \(keys) keys from one "
+        + "\(Int(rnBurstMs))ms burst at the same field; the frozen field counted \(spikeEvents) edits of its "
+        + "own from the same-shaped burst"
+    )
+    XCTAssertGreaterThan(
+      rnLanded,
+      0,
+      "the calibration arm landed nothing, so the frozen field's \(spikeEvents) cannot be attributed to "
+        + "anything — the burst went nowhere"
+    )
+    XCTAssertGreaterThanOrEqual(
+      spikeEvents,
+      rnLanded,
+      "attribution: the injector delivered \(rnLanded) keystrokes to RN's field with nothing rejected, and "
+        + "the frozen field accounted for \(spikeEvents) of them — the "
+        + "\(rnLanded - spikeEvents) missing keystroke(s) are the handshake's, not the driver's (Q2 §7's "
+        + "no-lost-character line)"
+    )
+  }
+
+  /// T18b — **`maxLength` on the typing path**, the half of Q2 §7's P3 line this oracle can reach.
+  ///
+  /// T18 measured the cap on the *write* path (`spike-write`), and named the missing control. Eight keystrokes
+  /// into a field capped at five is the rule an app hits on every comment box, and `cps` is the cap's own
+  /// unit — so a cap that truncated by UTF-16 units would disagree with it. What stays unmeasured is named
+  /// rather than assumed away: XCUITest's `typeText` cannot be made to send a non-ASCII character, so the
+  /// emoji vector that would show a cap splitting a composed character cannot be typed, and nothing here opens
+  /// a composition at all.
+  func testRealInputSpikeTextMaxlength() throws {
+    let cap = 5
+    let typed = "abcdefgh"
+    try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
+    try scrollIntoView("spike-maxlength", as: "the capped field", hittableIsEnough: true)
+    let field = try tapToType("spike-maxlength", as: "the capped field")
+    let started = try read(Echo.spikeMaxLength)
+    XCTAssertFalse(
+      echoField(started, "impl").isEmpty,
+      "the capped field should be hosted at all, or a cap is being reported for a field that never mounted. "
+        + "Line was: \(started)"
+    )
+
+    field.typeText(typed)
+    let shown = try readField(
+      Echo.spikeMaxLength,
+      "displayed",
+      String(typed.prefix(cap)),
+      "the cap to hold while the user typed"
+    )
+    XCTAssertEqual(
+      echoField(shown, "typed"),
+      String(typed.prefix(cap)),
+      "JS should be told the capped text, not the eight characters. Line was: \(shown)"
+    )
+    XCTAssertEqual(
+      echoField(shown, "cps"),
+      String(cap),
+      "the cap is counted in code points, not UTF-16 units. Line was: \(shown)"
+    )
+    XCTAssertEqual(
+      echoField(shown, "equal"),
+      "1",
+      "JS saw the same text native displays. Line was: \(shown)"
+    )
+    XCTAssertEqual(
+      echoField(shown, "unreported"),
+      "0",
+      "the keystrokes the cap refused marked nothing unreported. Line was: \(shown)"
+    )
+    print(
+      "real-input spike: maxLength unmeasured by this control — an emoji or composed character at the "
+        + "boundary (`typeText` cannot inject a non-ASCII character) and composition itself"
+    )
   }
 
   // MARK: - Reading the screen
