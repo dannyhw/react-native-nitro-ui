@@ -1,3 +1,4 @@
+/* global Atomics, SharedArrayBuffer */
 /**
  * Failure evidence that outlives the thing that produced it (X12).
  *
@@ -772,9 +773,9 @@ describe('logs survive git worktree remove', () => {
     ]);
     // Both have pre-X12 logs, and one of them has a *same-named* log with different
     // bytes - the collision a per-clone marker used to hide by never migrating B.
-    for (const [worktree, branch, content] of [
-      [wtA, 'task/wt-a', 'A wrote this\n'],
-      [wtB, 'task/wt-b', 'B wrote this, and it is a different size\n'],
+    for (const [worktree, content] of [
+      [wtA, 'A wrote this\n'],
+      [wtB, 'B wrote this, and it is a different size\n'],
     ]) {
       const legacy = path.join(worktree, '.gates', 'logs');
       fs.mkdirSync(legacy, { recursive: true });

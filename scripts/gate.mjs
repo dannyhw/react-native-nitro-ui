@@ -94,7 +94,6 @@ import {
   platformTreesFromEntries,
   platformsOwningFile,
   platformsTouchedByPaths,
-  redactLocalPaths,
   renderFailureExcerpt,
   renderGateTable,
   renderStepTimings,
