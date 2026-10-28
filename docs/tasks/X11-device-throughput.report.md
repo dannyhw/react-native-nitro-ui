@@ -66,15 +66,30 @@ precedence and its two tests, plus docs — nothing on the harness path. See Que
 
 ### Item 1 — `-gpu swiftshader_indirect` vs `-gpu host`
 
-Same code tree (`de2e62c20e78`), same device (`emulator-5574`), one lease, both legs full suite.
+Two full suites, both on the tree `de2e62c20e78`, but **not** on one device and not both under the
+lease — see the correction below.
 
-| GPU mode | Wall | load1 median | load1 max | Differing results |
-| --- | --- | --- | --- | --- |
-| `swiftshader_indirect` (upstream default) | 398.7 s | 6.97 | 18.91 | none — 214/214 |
-| `host` (now the default) | 378.5 s | 3.42 | 11.86 | none — 214/214 |
+| GPU mode | Wall | load1 median | load1 max | Differing results | Ledger |
+| --- | --- | --- | --- | --- | --- |
+| `swiftshader_indirect` (upstream default) | 398.7 s | 6.97 | 18.91 | none — 214/214 | `10:38:19Z`, lease `X11-ubeub`, `emulator-5574` |
+| `host` (now the default) | 378.5 s | 3.42 | 11.86 | none — 214/214 | `10:47:10Z`, **no lease, no device recorded** |
 
-5.1 % off the wall and half the median load, with identical results, so no test was re-baselined.
-The CPU the emulator stops spending on rendering is the point.
+**Correction (review M5a).** Round 1 described this as "same device (`emulator-5574`), one lease".
+The `host` leg's ledger line carries `device: null, lease: null`, and its log says `Creating Android
+emulator nitroui...` … `Shutting down Android emulator nitroui...`: the harness created a **new AVD
+`nitroui`** (the default in `example/rn-harness.config.mjs`), booted it with no `-port` on the
+default adb server, and shut it down. That is an **unreported device-hygiene incident** — a device
+gate outside the lease, on an AVD `devices.json` does not declare — and the A/B is therefore not a
+controlled comparison: a warm pooled AVD against a freshly created one, snapshot generation
+included. The 5.1 % / half-the-load numbers are the direction the mechanism predicts and the same
+214 results, not a clean measurement. I did not re-run the `host` leg in this fix round because
+`A4`'s exclusive lease covered the window; the claim is withdrawn rather than re-established.
+
+The AVD is gone: `avdmanager delete avd -n nitroui` (613 MB, created 10:47 the day of the incident,
+nothing in `devices.json` and no process naming it). Round 1 did not remove it because it had not
+been identified as mine. The two iOS gates at 11:08Z and 11:54Z have the same defect — ledger
+`device: null, lease: null`, and logs that boot an `iPhone 17` **by name** and then shut it down,
+which is what `scripts/real-input` and the harness do with no lease in the environment.
 
 The false acceleration warning, measured rather than asserted: this machine's
 `emulator -accel-check` prints `accel:` / `0` / `Hypervisor.Framework OS X Version 26.6`, which does
@@ -87,7 +102,7 @@ the device was using HVF. The patched version returns `true` for the same text.
 `harness:android` on the final tree, from the plugin: 360.6 s run, 351.0 s inside files, 9.6 s
 outside any file (boot, Metro handshake, hand-off).
 
-| Suite | File | Test bodies | Restart + handshake | Tests |
+| Suite | File | In test cases | Restart + handshake | Tests |
 | --- | --- | --- | --- | --- |
 | `__tests__/Host.harness.tsx` | 113.4 s | 112.6 s | 0.8 s | 21 |
 | `__tests__/HostControls.harness.tsx` | 87.1 s | 86.1 s | 1.1 s | 24 |
@@ -95,35 +110,48 @@ outside any file (boot, Metro handshake, hand-off).
 | `__tests__/HostPopups.harness.tsx` | 34.5 s | 33.6 s | 0.9 s | 24 |
 | `__tests__/Picker.harness.tsx` | 13.2 s | 12.5 s | 0.8 s | 24 |
 
-Answer to the brief's question: **test bodies, not restarts and not waits** — five files are 82 %
-of the suite and each one's app restart is about a second. `Host` and `HostControls` alone are
-200 s, which is why the suite reads 6 minutes. iOS for comparison: 112.5 s run, 106.4 s in files,
-96.8 s bodies, slowest file `Host` at 17.0 s. Report only; the suites are out of scope.
+Answer to the brief's question: the suite is **file time, not restart time** — five files are 82 %
+of it, and each file's app restart plus Metro handshake is about a second. `Host` and `HostControls`
+alone are 200 s, which is why the suite reads 6 minutes. The "bodies" column is the harness's own
+per-test `durationMs` summed per file, so it is *time inside test cases* — anything a test awaits is
+in it, and the data cannot separate a test's work from a wait it sits in (review N3); "not waits"
+was more than this table can support. iOS for comparison: 112.5 s run, 106.4 s in files, 96.8 s in
+test cases, slowest file `Host` at 17.0 s. Report only; the suites are out of scope.
 
 ### Item 5 — concurrent harnesses, measured
 
-Same lease, same warm pair, same tree, four runs:
+One pair, warm, four runs — but on two different code trees, which round 1 did not say:
 
-| Shape | `harness:android` | `harness:ios` |
-| --- | --- | --- |
-| one after the other | 365.3 s PASS, load1 med 2.14 / max 3.0 | 118.9 s PASS, med 5.5 / max 7.1 |
-| at the same time | 362.3 s PASS, load1 med 3.54 / max 4.8 | **123.8 s FAIL** (4 tests), med 4.2 / max 4.8 |
+| Shape | Tree | `harness:android` | `harness:ios` | Both results in |
+| --- | --- | --- | --- | --- |
+| one after the other | `9d9ce869206a` | 365.3 s PASS, load1 med 2.14 / max 3.0 | 118.9 s PASS, med 5.5 / max 7.1 | 484.2 s |
+| at the same time | `de2e62c20e78` | 362.3 s PASS, load1 med 3.54 / max 4.8 | **123.8 s FAIL** (4 tests), med 4.2 / max 4.8 | 362.3 s |
 
-No throughput gain — Android's wall is unchanged and iOS's is not shorter — and the iOS leg loses
-four tests. The failures are not load: all four are
+**Correction (review M5b).** "No throughput gain" misread the numbers. Wall clock for both results
+is **484.2 s sequential against 362.3 s concurrent — about 25 % less**, which is a real gain even
+though the iOS leg lost four tests. The two rows are also from different trees (the sequential pair
+ran 2.5 h later, on the tree above), so the comparison is suggestive rather than clean, and I did
+not re-run it on one tree in this fix round for the same reason as item 1: `A4`'s exclusive lease.
+
+**The recommendation still stands, on the other evidence.** Concurrency is not worth turning on
+because the two runs collide: all four iOS failures are
 `timing gate for "…" cannot be trusted: http://localhost:8296/harness-timing/state.json was
-published for Metro port 8295, not this run's 8296`. The timing gate's machine-state file is one
-path per project, so two runs in flight poison each other and the gate correctly refuses to judge
-them. **Recommendation: against concurrency**, as a default and as an invitation — it costs a red
-gate until `harness-timing/state.json` is per run (Follow-ups). Not changed here; the brief says
-report.
+published for Metro port 8295, not this run's 8296`. The harness-timing plugin's machine-state file
+is one path per project, so a second run in flight makes the first one's timing gate unusable and
+the gate correctly refuses to judge them. That is a correctness argument that does not depend on the
+wall clock; the wall clock, if anything, argues for fixing the collision (Follow-ups).
 
 ### Item 6 — quieter iOS simulators (one attempt, bounded)
 
-Four cold boots of the pool simulator: `load1` peaks of **58.5 / 64.6 / 72.2 / 74.3**, back to
-16–21 after 150 s and still above the bench's settle ceiling of 5 — not the 100–165 the brief's
-background assumed, and not four to six minutes either. (AGENTS.md and CONTRIBUTING.md now say
-this instead of the assumed numbers.)
+Four cold boots of the pool simulator put `load1` between **58 and 75**: two early runs peaked at
+58.5 and 64.6 read off the sampler's console and were not saved to a file, the matched pair below
+recorded **72.24** and **74.25** in `/tmp/x11-profile/{on,off}.json`, and a separate 420-second
+baseline run recorded a max of **70.35** (`baseline-summary.json`). All four traces are in the
+appendix. After 150 s the traces were at 16–21: still above the bench's settle ceiling of 5, and
+**no later sample exists**, so round 1's and AGENTS.md's "takes about 3 minutes to fall back under
+the settle ceiling" was not supported by any measurement and is gone from both files (`lease.mjs`
+now prints the wait it actually did). Nor is it the 100–165 the brief's background assumed, or four
+to six minutes of booting.
 
 An ownership probe during a boot put **68 %** of top-process CPU inside the device
 (`MercuryPosterExtension`, `GradientPosterExtension`, `WidgetRenderer_Default`, a device-side
@@ -147,8 +175,12 @@ again, so the pool simulator is left exactly as found.
 
 ## Red proofs
 
-All of these were re-run against `da0b31f` (the code tree above), each one a single edit reverted
-after the ✕; a case whose mutation could not be applied is marked as not claimed.
+Round 1's list below was re-run at `da0b31f` (code tree `9d9ce869206a`), one edit reverted after
+each ✕; a case whose mutation could not be applied is marked as not claimed. Review N9 is right that
+this disagreed with the table, whose tree is `86bbaae359c3` at `05528f5` — the proofs were run one
+commit behind the table, on the same device-path code (the two commits between are a report wording
+fix and the reset retry). The fix round's own proofs are the block at the end, run at this round's
+tree; the tests it adds did not exist before it.
 
 - `boots on host GPU rendering` -> `HARNESS_GPU_MODE = 'swiftshader_indirect'` -> `✕ boots on host GPU rendering, not the software default`
 - `honours the gpu override` -> `gpuMode ?? HARNESS_GPU_MODE` (env read dropped) -> `✕ honours the gpu override an A/B run or a bench host uses`
@@ -219,17 +251,27 @@ after the ✕; a case whose mutation could not be applied is marked as not claim
 
 ## Questions for orchestrator
 
-**1. `real-input:ios` is red at merge bar and I cannot turn it green honestly.** Every one of the
-eleven runs today failed the same assertion
-(`("off") is not equal to ("on") - one real tap should flip the Switch`): the three
-`real-input:ios` gates, and eight single-control runs of `--control switch`, two of which tested
-**`main`'s own build** (a throwaway checkout at `20b4069`, app built there) on the same simulator
-with the XCUITest source byte-identical and no iOS, `src/` or example-app file differing between
-the checkouts. The other twelve controls pass every time (12 PASS / 1 FAIL in the last gate),
-including `hosted-switch`, so it is one tap path on one platform. Prior task ledgers say
-`real-input:ios` has been in this state for a while: 11 red, 5 green across X6, H2b and X3, and X6
-wrote up the same message as a flake that it then beat by re-rolling. It is not this branch, and
-fixing it is a touch-delivery investigation in code this brief must not touch.
+**1. `real-input:ios` is red at merge bar and I cannot turn it green honestly.** The `switch`
+control fails on this machine today, deterministically, and it is not this branch: the three
+`real-input:ios` gates here failed, and eight single-control runs of `--control switch` failed
+8/8 — including two against **`main`'s own build** (a throwaway checkout at `20b4069`, app built
+there) on the same simulator with the XCUITest source byte-identical and no iOS, `src/` or
+example-app file differing between the checkouts. The other twelve controls pass every time
+(12 PASS / 1 FAIL in the last gate), including `hosted-switch`, so it is one tap path on one
+platform. Prior task ledgers say `real-input:ios` has been in this state for a while: 11 red,
+5 green across X6, H2b and X3, and X6 wrote up the same message as a flake that it then beat by
+re-rolling. It is not this branch, and fixing it is a touch-delivery investigation in code this
+brief must not touch.
+
+**Correction (review M5c).** Round 1 said "every one of the eleven runs failed *the same*
+assertion". It is the same control, not the same assertion, and the difference matters to whoever
+investigates: the gate logs at 12:35Z and 12:47Z fail `RealInputTests.swift:142` —
+`("off") is not equal to ("on") - one real tap should flip the Switch` — while 13:57Z fails
+`RealInputTests.swift:155` — `("on") is not equal to ("off") - a second real tap should flip it
+back`, i.e. the first tap worked there. The main-vs-branch A/B also lived only in
+`/tmp/x11-profile/switch-ab.log`, which kept three lines and no assertion text; it is in the
+appendix now, and what it establishes is "main's build fails `testRealInputSwitch` too", not that
+it fails at the same line.
 
 - **Option A (recommended): merge with the row red, plus a task for the `switch` check.** The row
   and its log are in the exported ledger, and the two harnesses plus `real-input:android` are green
@@ -252,3 +294,101 @@ choice is mine to make but not to settle alone:
   with two PASS rows at this tree.
 - Option B: review on the rows as they stand. Honest — the table says `stale` and why — but it is
   review of `da0b31f`, not of `05528f5`.
+
+## Appendix — the raw evidence behind items 1, 5 and 6 (review N9)
+
+Round 1 left this in `/tmp/x11-profile` and pointed at it. It is copied in here because a
+report whose evidence is a `/tmp` path has no evidence the day someone reboots.
+
+### Item 6 — the boot traces, verbatim
+
+| Leg | before | peak | at 150 s | samples ≥ 5 | sampler `node` peak | file |
+| --- | --- | --- | --- | --- | --- | --- |
+| all enabled | 3.9 | 72.24 | 21.16 | 14 / 15 | 201.3 % | `/tmp/x11-profile/on.json` |
+| five labels disabled | 8.38 | 74.25 | 17.48 | 15 / 15 | 215.3 % | `/tmp/x11-profile/off.json` |
+
+The traces (one `sysctl vm.loadavg` sample every 10 s):
+
+```
+enabled : 3.9 30.83 72.24 71.07 64.39 59.33 52.03 49.64 44.16 37.96 35.42 31.94 28.68 24.73 21.16
+disabled: 8.38 28.17 70.1 74.25 67.42 62.04 54.96 48.64 43.72 37.3 31.88 27.43 23.52 20.21 17.48
+```
+
+A separate 420 s profile of one cold boot (`baseline-summary.json`, 81 samples) saw `load1`
+max **70.35**, median 23.62. Its busiest processes were
+`node` (the sampler itself), `diagnosticd`, `MercuryPosterExtension`, `EmojiPosterExtension`, `corespotlightd`.
+Neither trace has a sample past 150 s, which is why "back under the settle ceiling in about
+3 minutes" is gone from the docs.
+
+### Item 1 / item 5 — the ledger lines the tables read
+
+```
+ts        gate               result tree          lease      device         wall
+08:38:45  harness:android    fail  cf896f89db0f  X11-ubeub  emulator-557…  0.3s
+10:24:49  harness:android    pass  b41cd13d72c5  X11-ubeub  emulator-557…  382.6s
+10:38:19  harness:android    pass  de2e62c20e78  X11-ubeub  emulator-557…  398.7s
+10:47:10  harness:android    pass  de2e62c20e78  -          -              378.5s
+11:08:11  harness:ios        pass  de2e62c20e78  -          -              173.5s
+11:14:25  harness:ios        fail  de2e62c20e78  X11-ubeub  49D5024D-967…  123.8s
+11:14:25  harness:android    pass  de2e62c20e78  X11-ubeub  emulator-557…  362.3s
+11:54:46  harness:ios        pass  4b2b435f4f3c  -          -              140.1s
+12:07:45  harness:android    pass  9523a7cbe79e  X11-ubeub  emulator-557…  467.2s
+12:15:44  harness:ios        pass  9523a7cbe79e  X11-ubeub  49D5024D-967…  245.6s
+12:23:28  real-input:android pass  9523a7cbe79e  X11-ubeub  emulator-557…  723.4s
+12:35:43  real-input:ios     fail  9523a7cbe79e  X11-ubeub  49D5024D-967…  654.3s
+12:47:02  real-input:ios     fail  9523a7cbe79e  X11-ubeub  49D5024D-967…  550.7s
+13:33:33  harness:android    pass  9d9ce869206a  X11-ubeub  emulator-557…  365.3s
+13:39:45  harness:ios        pass  9d9ce869206a  X11-ubeub  49D5024D-967…  118.9s
+13:44:52  real-input:android pass  9d9ce869206a  X11-ubeub  emulator-557…  722.4s
+13:57:01  real-input:ios     fail  9d9ce869206a  X11-ubeub  49D5024D-967…  646.9s
+```
+
+Rows 10:47:10Z, 11:08:11Z and 11:54:46Z are the three unleased runs M5a names: `lease` and
+`device` are empty because the environment named no lease, and their logs show the harness
+creating/booting/shutting down its own device (`Creating Android emulator nitroui...`,
+`Booting iOS simulator iPhone 17...`). The 13:57:01Z `real-input:ios` row is the
+second-tap failure M5c is about.
+
+### The `main`-vs-branch `switch` A/B, verbatim
+
+```
+XCUITest source identical on both checkouts: true
+iOS/app sources differing between the two checkouts:
+(none)
+installing main's dependencies (bun install, detached checkout)…
+install:
+1369 packages installed [4.57s]
+
+===== leg main: /tmp/x11-main-checkout @ 20b4069
+build:
+  export HARNESS_APP_PATH="/private/tmp/x11-main-checkout/example/ios/build/Build/Products/Debug-iph
+run:
+failed: XCUITest reported "failed" for testRealInputSwitch in 24.907s |  | real-input (ios): 0/1 controls passed
+
+===== leg main: /tmp/x11-main-checkout @ 20b4069
+build:
+Rebuild anyway with --force, or --clean.
+run:
+failed: XCUITest reported "failed" for testRealInputSwitch in 22.778s |  | real-input (ios): 0/1 controls passed
+
+===== leg mine: /Users/danielwilliams/Workspace/oss/nitro-ui-worktrees/X11 @ 0d7fde6
+build:
+Rebuild anyway with --force, or --clean.
+run:
+failed: XCUITest reported "failed" for testRealInputSwitch in 22.616s |  | real-input (ios): 0/1 controls passed
+```
+
+What this log keeps and does not: it records the control (`testRealInputSwitch`), the wall
+time of each leg and the fact that main's build fails it too, and it proves the XCUITest
+source and iOS/app sources were identical between the two checkouts. It does not keep the
+XCUITest assertion line, which is why the claim about "the same assertion" had to be
+withdrawn — the assertion text only survives in the gate logs, and they disagree (142 vs 155).
+
+### Device hygiene: the leftover AVD
+
+`~/.android/avd/nitroui.{ini,avd}` (613 MB, created 10:47:15 the day of the incident, target
+android-35, `emu-launch-params.txt` naming `example` and `@nitroui`) was deleted in the fix
+round with `avdmanager delete avd -n nitroui`. `avdmanager list avd` before that showed four
+AVDs: `nitroui` (this one), `nitroui_a`, `nitroui_b` (both in `devices.json`) and
+`Pixel_9`. Nothing else references the name: the string `nitroui` outside the pool AVDs
+appears only as the example app's bundle id and as the Kotlin package name.
