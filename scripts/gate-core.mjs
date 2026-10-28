@@ -2491,8 +2491,9 @@ function identityRules(paths) {
   const hostname =
     typeof paths.hostname === 'string' ? paths.hostname.trim() : '';
   const labels = hostname.split('.').filter((label) => label !== '');
+  // The whole name and its first label: a Set, because a name with no dot makes the
+  // two identical and a rule that fires twice reports two replacements for one word.
   const forms = new Set([hostname, labels[0] ?? '']);
-  if (labels.length > 1) forms.add(labels[0]);
   for (const form of forms) {
     if (worthMatching(form)) rules.push(wordRule(form, '<host>', 'gi'));
   }
@@ -2555,14 +2556,10 @@ export function localPathRedactions(paths = {}) {
     )
     .sort((a, b) => b[0].length - a[0].length);
 
-  // …and the folder the scratch directory sits *in*, which is the half that is
-  // hashed. Round 1 redacted `…/T` only, so Xcode's `…/C/com.apple.Xcode/…` and
-  // CoreSimulator's `…/0/…` still published `<3 hex>/<32 base36>` - the same
-  // machine fingerprint by another name (review N5).
-  // This machine's own scratch folder, in *every* subdirectory of it. Round 1
-  // redacted `…/T` only, so Xcode's `…/C/com.apple.Xcode/…` and CoreSimulator's
-  // `…/0/…` went out carrying the same `<3 hex>/<32 base36>` fingerprint by another
-  // name (review N5).
+  // …and this machine's own scratch folder in *every* subdirectory of it, which is
+  // the half that is hashed. Round 1 redacted `…/T` only, so Xcode's
+  // `…/C/com.apple.Xcode/…` and CoreSimulator's `…/0/…` went out carrying the same
+  // `<3 hex>/<32 base36>` fingerprint by another name (review N5).
   const shapeRules = [];
   for (const dir of new Set(
     tmpDirs.map((value) => scratchFolderParent(value))
