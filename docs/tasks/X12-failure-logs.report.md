@@ -65,6 +65,7 @@ Each mutation applied, the suite run, then reverted. Batch 1 (`gate-logs.test.js
 - `copies the other lines byte-for-byte` -> export re-serialises the pass-through lines -> corrupt line came back `{"corrupt":true,…}` red
 - `applies retention to the store without touching a young log` -> age predicate `return false` -> `retention removed 1 file(s)` red
 - `applies the size cap only after the age rule` -> `if (total > maxBytes)` -> `if (false)` -> victims `["stale","mid"]` red
+- `says so, rather than writing an empty file, when the log cannot be found` -> the missing-log branch invents a `failureLogPath` -> `expect(committed.failureLogPath).toBeNull()` red
 - `--failed lists the runs the ledger says failed` -> filter `false &&` -> `1 log file(s) … that the ledger says failed` red
 - `bounds itself, and says it was bounded` -> `clampToBytes` removed -> `expect(<=131072)`, received 152269
 - `takes the gate tools' own failure bullets` -> the `FAIL|●|✕|✗|not ok` test -> `if (false)` -> failure section empty (3 lines expected, 0)
@@ -75,9 +76,10 @@ Each mutation applied, the suite run, then reverted. Batch 1 (`gate-logs.test.js
 - `does not feed a failed probe's error text to the next command` -> `pidAnswer?.ok === true ? text : ''` -> `pidAnswer?.text ?? ''` -> `logcat` was called with the error text
 - `reports the last sample it measured` -> `end: null` -> `expect(summarizeLoad(…).end).toBe(30)` red
 
-Two of these needed the test to be fixed first (each was green under the mutation, i.e. not a proof):
-the excerpt's failure section (short log ⇒ the tail also contains the strings — now asserted by
-section header) and `Full log:` (label-only match). Both fixed in `test(gates):` commits and then red.
+Three of these needed the test strengthened first (each was green under its mutation, i.e. not a
+proof): the excerpt's failure section (short log ⇒ the tail also contains the same strings — now
+asserted by section header), `Full log:` (label-only match), and the missing-log case (the committed
+line was never read). All three fixed in the `test(gates):` commits, then red under the same mutation.
 
 Also proven in `gate.test.js`: `listBackgroundRecords` stops recursing -> 7 background/`wait` tests
 red, including `ghost-check.log` (a record written at store-root level is a fixture that no longer
