@@ -86,6 +86,26 @@ function Field(props: {
   const [focusEvents, setFocusEvents] = useState(0);
   const [blurEvents, setBlurEvents] = useState(0);
   const [submits, setSubmits] = useState(0);
+  /*
+   * Wall-clock of the last `onValueChange`, rendered into the echo line.
+   *
+   * P5's keystroke→commit number needs a timestamp from the app's own clock: the runner types from the device
+   * shell, so host time and device time are two clocks and the difference between them is not a latency. The
+   * echo is the only thing the runner can read, so the timestamp has to be in it — and the same number is
+   * rendered for RN's `TextInput` below, which is what makes the two fields' numbers comparable.
+   */
+  const [lastChangeAt, setLastChangeAt] = useState(0);
+  /*
+   * The last few `onValueChange` timestamps, in one comma-joined list.
+   *
+   * P5's keystroke→commit number is per keystroke, and a runner that dumped the accessibility tree after every
+   * character would spend longer in `uiautomator dump` (~300 ms on this emulator) than the thing it measures.
+   * So the screen keeps the list and the runner types a whole burst, waits once, and dumps once. The timestamps
+   * are the app's own clock, which on an emulator is the host's clock — the number is therefore
+   * "keystroke sent → JS told", with the `adb shell input text` round trip inside it (the runner measures that
+   * floor and prints it next to the result).
+   */
+  const [changeTimes, setChangeTimes] = useState<number[]>([]);
 
   const refresh = useCallback(() => {
     const view = ref.current;
@@ -127,8 +147,11 @@ function Field(props: {
         keyboardHints={props.keyboardHints ?? 0}
         layoutWidth={props.width ?? null}
         onValueChange={(next) => {
+          const at = Date.now();
           setText(next);
           setEvents((count) => count + 1);
+          setLastChangeAt(at);
+          setChangeTimes((previous) => [...previous.slice(-7), at]);
           refresh();
         }}
         onFocus={() => {
@@ -149,7 +172,81 @@ function Field(props: {
         }}
       />
       <Text testID={props.echoID} style={styles.mono} numberOfLines={4}>
-        {`${props.testID} typed=${text} events=${String(events)} focus=${String(focusEvents)} blur=${String(blurEvents)} submits=${String(submits)} ${mirror}`}
+        {`${props.testID} typed=${text} events=${String(events)} focus=${String(focusEvents)} blur=${String(blurEvents)} submits=${String(submits)} at=${String(lastChangeAt)} ats=${changeTimes.join(',')} ${mirror}`}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * A controlled field whose `value` JS never changes — the reject case, drivable by a keyboard.
+ *
+ * Q2 §2.1's "a rejected change reverts" is the handshake's central promise and the one case this harness
+ * cannot create: a *programmatic* write is not an edit the control made, so applying one against a frozen
+ * `value` exercises the control rule, not the revert. The revert needs an edit the field made itself, and the
+ * only thing that makes one is a keystroke. So this field exists for the real-input runner to type into, and
+ * it renders every counter the check reads: what JS was told, what native displays, and both event counters.
+ * The revert is visible as `displayed` returning to `frozen` while `typed` stays what JS last accepted.
+ */
+function FrozenField() {
+  const ref = useRef<SpikeTextFieldHandle | null>(null);
+  const [mirror, setMirror] = useState('');
+  const [text, setText] = useState('frozen');
+  const [rejects, setRejects] = useState(0);
+
+  const refresh = useCallback(() => {
+    const view = ref.current;
+    if (view != null) {
+      setMirror(view.nuiTestState());
+    }
+  }, []);
+
+  /*
+   * Re-read the mirror a few times after an edit, because the thing the reject check waits for does not exist
+   * yet at the moment the edit's own callback runs.
+   *
+   * `refresh()` inside `onValueChange` reads native's mirror *during* the callback: React has not committed,
+   * so the line it caches still says `jsEvents=1` and `displayed=frozenq` — the pre-revert state — and nothing
+   * else ever re-reads it. The revert happens in the commit that callback triggers, and a check watching the
+   * echo would wait forever on a snapshot that can only get staler. Polling for a moment after each edit is
+   * how the screen already handles the same thing on mount, and it is example-screen plumbing, not a native
+   * seam.
+   */
+  const refreshSoon = useCallback(() => {
+    for (const delay of [80, 200, 500, 1000]) {
+      setTimeout(refresh, delay);
+    }
+  }, [refresh]);
+
+  useEffect(() => {
+    const timer = setTimeout(refresh, 120);
+    return () => clearTimeout(timer);
+  }, [refresh]);
+
+  return (
+    <View style={styles.field}>
+      <SpikeTextField
+        testID="spike-frozen"
+        iosImplementation={iOS ? 'textfield' : 'swiftui'}
+        accessibilityLabel="frozen field"
+        value="frozen"
+        onValueChange={() => {
+          // The reject: state does not move, so React's next commit carries the same `value` plus a new
+          // `mostRecentEventCount`, which is what tells native to put its own text back.
+          setRejects((count) => count + 1);
+          setText('frozen');
+          refresh();
+          refreshSoon();
+        }}
+        onFocus={refresh}
+        onBlur={refresh}
+        hybridRef={(view) => {
+          ref.current = view;
+          refresh();
+        }}
+      />
+      <Text testID="spike-frozen-echo" style={styles.mono} numberOfLines={4}>
+        {`spike-frozen typed=${text} events=${String(rejects)} ${mirror}`}
       </Text>
     </View>
   );
@@ -158,6 +255,12 @@ function Field(props: {
 export default function SpikeTextFieldScreen() {
   const ink = useInk();
   const topInset = useTopInset();
+
+  const [rnText, setRnText] = useState('');
+  const [rnEvents, setRnEvents] = useState(0);
+  const [rnLastAt, setRnLastAt] = useState(0);
+  const [rnChangeTimes, setRnChangeTimes] = useState<number[]>([]);
+  const [rnFocused, setRnFocused] = useState(0);
 
   const writeRef = useRef<SpikeTextFieldHandle | null>(null);
   const [writeEcho, setWriteEcho] = useState('write=');
@@ -230,7 +333,7 @@ export default function SpikeTextFieldScreen() {
           P3 — write + maxLength
         </Text>
         <View
-          style={[styles.field, { borderColor: ink.border, borderWidth: 1 }]}
+          style={[styles.field, styles.bordered, { borderColor: ink.border }]}
         >
           <SpikeTextField
             testID="spike-write"
@@ -263,6 +366,15 @@ export default function SpikeTextFieldScreen() {
         >
           {writeEcho}
         </Text>
+
+        {/* ---- 2b. P3 §2.1: a rejected user edit, driven by the keyboard --------------------------- */}
+        <Text style={[styles.section, { color: ink.ink }]}>
+          P3 — rejected edit
+        </Text>
+        {/* Controlled with a value JS never changes, so anything the keyboard produces is an edit React
+            rejects. The revert cannot be driven from JS (a programmatic write is not an edit the control made),
+            so the real-input runner types into it with OS key events and reads the echo line. */}
+        <FrozenField />
 
         {/* ---- 3. return key and secure entry ------------------------------------------------------ */}
         <Text style={[styles.section, { color: ink.ink }]}>Return key</Text>
@@ -325,12 +437,31 @@ export default function SpikeTextFieldScreen() {
         <Text style={[styles.section, { color: ink.ink }]}>
           P5 — RN TextInput control
         </Text>
+        {/* Controlled, with its own echo, so the latency check can measure the same thing on both fields: the
+            moment JS learned about a keystroke. RN's `TextInput` does not carry a native mirror, so `last=` is
+            JS's own clock at the callback — which is exactly the number the spike field's `onValueChange`
+            records, and why the two are comparable while a programmatic write would not be. */}
         <TextInput
           testID="rn-type-target"
           accessibilityLabel="rn typing target"
           style={[styles.rn, { color: ink.ink, borderColor: ink.border }]}
-          defaultValue=""
+          value={rnText}
+          onFocus={() => setRnFocused(1)}
+          onBlur={() => setRnFocused(0)}
+          onChangeText={(next) => {
+            const at = Date.now();
+            setRnText(next);
+            setRnEvents((count) => count + 1);
+            setRnLastAt(at);
+            setRnChangeTimes((previous) => [...previous.slice(-7), at]);
+          }}
         />
+        <Text
+          testID="rn-type-target-echo"
+          style={[styles.mono, { color: ink.muted }]}
+        >
+          {`rn-type-target typed=${rnText} events=${String(rnEvents)} focused=${String(rnFocused)} at=${String(rnLastAt)} ats=${rnChangeTimes.join(',')}`}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -342,6 +473,7 @@ const styles = StyleSheet.create({
   content: { padding: 12, gap: 8, paddingBottom: 320 },
   section: { fontSize: 12, fontWeight: '600', marginTop: 8 },
   field: { minHeight: 40 },
+  bordered: { borderWidth: 1 },
   button: { padding: 8, fontSize: 14 },
   mono: { fontSize: 11 },
   rn: { borderWidth: 1, paddingHorizontal: 8, minHeight: 40, fontSize: 16 },

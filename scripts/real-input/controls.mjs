@@ -145,6 +145,18 @@ const HOST_CONTROL_ROWS = Object.freeze([
     screen: 'spike',
   },
   {
+    id: 'spike-text-reject',
+    title: 'a rejected edit reverts to what JS kept, driven by real key events',
+    // Same reason as the typing rows: Q2 §2.1's revert needs an edit the control made itself.
+    screen: 'spike',
+  },
+  {
+    id: 'spike-latency',
+    name: 'keystroke to commit, against RN TextInput in the same run',
+    // P5's number with a multiplier on it, and it is reported rather than gated (D21).
+    screen: 'spike',
+  },
+  {
     id: 'spike-text-coexist',
     title:
       'a second field in the same screen types the same way, whatever the arm prop says',
