@@ -60,6 +60,11 @@ Commit on your branch, don't push. End with a short version of the report and
 the final SHA.
 ```
 
+**Cleanup without losing evidence.** Until X12 lands, archive a worktree's gate logs
+before removing it: `mkdir -p ~/.nitro-ui/gate-archive && cp -R <worktree>/.gates
+~/.nitro-ui/gate-archive/<branch>` (machine-local, never committed). The orchestrator's own scripts
+log under `~/.nitro-ui/orchestrator-logs/`, not `/tmp`.
+
 If an implementer's turn ends early (for example a tool call printed as text
 instead of run), check its worktree and resume the same thread with what is and
 isn't applied. Don't start a new session.
