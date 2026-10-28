@@ -393,10 +393,12 @@ task means one task's `adb` never queues behind another's, and it is what makes
 ### The lease owns device lifecycle (X11)
 
 Booting costs 54 s on Android and about 200 s on an iOS 27 simulator - which
-additionally drives `load1` past 100 for four to six minutes - and every task
-used to pay it twice, once for the harness and once for real-input, then shut
-its devices down so the next task paid it too. So the lease now keeps the pair
-it hands out **warm**, and a task stops powering devices off.
+additionally sends `load1` to 56-78, still above the bench's settle ceiling of 5
+after 150 seconds (X11 measured four cold boots of the same device: peaks of
+58.5, 64.6, 72.2 and 74.3) - and every task used to pay it twice, once for the
+harness and once for real-input, then shut its devices down so the next task paid
+it too. So the lease now keeps the pair it hands out **warm**, and a task stops
+powering devices off.
 
 ```sh
 node scripts/lease.mjs acquire --task X11 --boot        # boots the pair, waits until settled
