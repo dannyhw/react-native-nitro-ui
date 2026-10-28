@@ -240,24 +240,36 @@ drops the now-wrong cached sizes.
   `.accentColor`). The iOS implementation still applies `.tint()` (harmless, and the
   right call if SwiftUI ever honours it), and the prop simply changes nothing there.
   A tinted row looks like the default one on iOS.
-  - **Why not reach into the hosted control?** F3 measured the obvious workaround and
-    rejected it on evidence, not on principle. The row *is* reachable — the harness
-    probe walks the hosted subtree and finds a real `UISegmentedControl`, and writing
-    its `selectedSegmentTintColor` does paint the segment (9253 pixels of the requested
-    colour in a 102×31 pt control, against zero untinted). It does not *stay* painted:
-    iOS 27's selection lens re-configures on the first tap and the colour is gone from
-    the screen while the property still reads back what was written, and re-writing the
-    same value does not bring it back. Nor is it cleanly undone: in the version that
-    tried it, the view doing the pushing only existed while a tint was asked for, so
-    taking `tintColor` back to `undefined` left 9290 pixels of the old colour on screen.
-    So the result
-    would be a control whose colour depends on whether the user has tapped it yet, and
-    on which OS release is compositing, kept true only by re-writing a private view
-    hierarchy on every interaction. `UISegmentedControl.appearance()` remains out for
-    the reason it was always out: it restyles every segmented `Picker` in the app,
-    including the ones the app does not own. The prop is therefore documented as
-    Android-only and **asserted** that way — the harness probes pixels on both
-    platforms, so neither platform can drift from this sentence without failing.
+  - **Why not reach into the hosted control?** F3 measured the obvious workaround
+    rather than repeating the earlier claim that the knob is unreachable — it isn't.
+    On iOS 27 (the only OS this was measured on; the pre-liquid-glass releases the
+    brief also named, iOS 15.1–25, were not), the harness probe walks this control's
+    own hosted subtree and finds a real `UISegmentedControl`, and writing its
+    `selectedSegmentTintColor` does paint the segment: 9253 pixels of the requested
+    colour in a 102×31 pt control, against zero for the untinted look.
+  - It does not *stay* painted. On the first change of selection the colour is gone
+    from the screen while the property still reads back what was written (`hits=0`,
+    the knob reporting the colour). Writing the same value again does not put it back,
+    neither inline on the control's own value-change nor in a `CATransaction`
+    completion block after the animation — those two timings were the fix that
+    produced these numbers, so this is not "we did not try re-writing", it is "no
+    re-writing we tried worked". A per-instance tint bought this way would show on the
+    first frame and vanish on the first tap, and its truth would depend on which OS
+    release is compositing. That is worse for an app than a prop that has never done
+    anything, so the prop stays Android-only.
+  - Two things this does **not** claim, because they were defects in the throwaway
+    version that tried the push and not facts about iOS: that iOS cannot *undo* a tint
+    (it can — the prototype kept the colour only because its pushing view stopped
+    existing when `tintColor` went back to `undefined`, and the code is not in this
+    repo), and that a recycled host would hand one app's colour to the next.
+  - `UISegmentedControl.appearance()` remains out for the reason it was always out: it
+    restyles every segmented `Picker` in the app, including the ones the app does not
+    own.
+  - What is asserted: the harness probes drawn pixels on both platforms, so neither
+    can drift from this sentence without failing. The iOS half asserting *absence* is
+    the guard — if a future OS makes a per-instance tint real, that test goes red and
+    the prop and these docs change together. See `OptionalSegmentedTint` in
+    `HybridNitroUiSegmentedControl.swift` for the same measurements with the numbers.
 - The platforms do not agree on how a segment gets its width (equal shares on
   Android, SwiftUI's own distribution on iOS), so a row of unequal labels looks
   different on each. Both grow with the labels, which is all the sizing key
