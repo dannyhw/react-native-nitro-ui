@@ -5,9 +5,10 @@
 
 ## Summary
 
-Everything here is device plumbing. No shipped code and no example-app source changed — the only
-file outside `scripts/` and `docs/` is `example/rn-harness.config.mjs`, which registers a plugin
-when an env var names a file.
+Everything here is device plumbing. No shipped code or example-app source changed: outside
+`scripts/` and `docs/` the branch touches two markdown files, `example/rn-harness.config.mjs`
+(a plugin registered when an env var names a file) and the `react-native-harness` Android patch —
+both runner-side, neither compiled into an app.
 
 **One launch configuration** (`scripts/emulator-launch.mjs`): the harness patch, the lease pool and
 real-input all take their emulator argv from it, so GPU mode and `-port` no longer depend on which
@@ -28,28 +29,39 @@ down, waits for the load to settle, resets the app; `release` leaves devices up;
 `idleShutdownMinutes`) runs from the lease commands people already type, with no daemon. A gate
 claims its lease's devices for the duration of the run, so a reap cannot power off an emulator
 mid-suite and a second gate aimed at the same device is refused before it starts. A claim is a pid,
-so a killed gate wedges nothing. Three bugs came out of running it rather than faking it: a claim
-record with no serial made a live emulator read as "already off" and dropped it from the pool;
-`pm clear` answers `Failed` for a few seconds on an emulator that has just attached, so the reset
-now retries and quotes the device's own answer; and `reap --idle-minutes 0` lost the comparison
-against the limit stamped in devices.json, answering "keeping it up (idle, under the limit)" about
-the very number it had been told to override.
+so a killed gate wedges nothing. Three bugs came from running it, not faking it: a claim record
+with no serial made a live emulator read as "already off" and dropped it from the pool; `pm clear`
+answers `Failed` for a few seconds on an emulator that has just attached, so the reset now retries
+and quotes the device's own answer; and `reap --idle-minutes 0` lost the comparison against the
+limit in devices.json, answering "keeping it up" about the number it had been told to override.
 
 Benches are deliberately unchanged and say why (`BENCH_GPU_MODE_NOTE`). Concurrent harnesses are
 measured and **not recommended** — see item 5.
 
 ## Gates
 
+<!-- `node scripts/gate.mjs table` at HEAD 05528f5, code tree 86bbaae359c3. -->
+
+```
+ledger: code tree 86bbaae359c3 at HEAD 05528f5 (branch task/X11-device-throughput, 542 files)
+ledger: platform trees ios 75cef8436a00 android 346faf0806c9
+```
+
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 766 tests / 37 suites | `9d9ce869206a` | 2 m 54 s | start 4.6 / med 2.9 / max 4.6 |
-| `harness:ios` | **PASS** | 165 tests / 13 suites | `9d9ce869206a` (ios tree) | 1 m 59 s | start 3.3 / med 5.5 / max 7.1 |
-| `harness:android` | **PASS** | 214 tests / 13 suites | `9d9ce869206a` (android tree) | 6 m 05 s | start 2.4 / med 2.1 / max 3.0 |
-| `real-input:ios` | **FAIL** | — | `9d9ce869206a` (ios tree) | 10 m 47 s | start 2.1 / med 3.8 / max 15.7 |
-| `real-input:android` | **PASS** | — | `9d9ce869206a` (android tree) | 12 m 02 s | start 2.3 / med 2.1 / max 3.6 |
+| `check` | **PASS** | 769 tests / 37 suites | `86bbaae359c3` | 3 m 09 s | start 58.0 / med 38.7 / max 105.2 |
+| `harness:ios` | stale | 165 tests / 13 suites | 9d9ce869206a (not this tree) | 1 m 59 s | start 3.3 / med 5.5 / max 7.1 |
+| `harness:android` | stale | 214 tests / 13 suites | 9d9ce869206a (not this tree) | 6 m 05 s | start 2.4 / med 2.1 / max 3.0 |
+| `real-input:ios` | stale | — | 9d9ce869206a (not this tree) | 10 m 47 s | start 2.1 / med 3.8 / max 15.7 |
+| `real-input:android` | stale | — | 9d9ce869206a (not this tree) | 12 m 02 s | start 2.3 / med 2.1 / max 3.6 |
 
-`need --for review`: `need: review is satisfied on this code tree.`
-`need --for merge`: `need: 1 gate(s) missing for merge: real-input:ios` — see Questions.
+`need --for review` against this tree asks for `harness:ios` and `harness:android`; both apps are
+built and stamped at `86bbaae359c3` and the devices are warm, but **the re-runs are blocked, not
+skipped**: `A4` took an exclusive lease on `pair-a` + `pair-b` at 14:14 and still holds it (92 min
+so far, 868 min of TTL left), so nothing can boot a pair. A waiter is parked on the lease. The
+stale rows above are the same gates on the previous tree (`9d9ce869206a`, `da0b31f`), where they
+were green; the only code that has moved since is `poolReapDecision`'s idle-limit precedence and its
+two tests, plus a docs/usage fix — nothing on the harness path.
 
 ## Measurements
 
@@ -160,11 +172,11 @@ after the ✕; a case whose mutation could not be applied is marked as not claim
 - `ignores a claim whose process is gone` -> dead claims never dropped (in `claim()` and `pruneClaims()`) -> `✕ ignores a claim whose process is gone`
 - `starts a device that is down, and records the boot on the lease` -> pool boots `swiftshader_indirect`, ignoring the shared default -> `✕ starts a device that is down, and records the boot on the lease` (the stub `emulator` records argv, and `-gpu host` is missing)
 - `retries a reset on a device that is still settling` -> `attempts = 1` -> `✕ retries a reset on a device that is still settling, and reports the tries`; and -> retry `sleep` removed -> same ✕ (the loop must wait, not busy-poll)
-- `honours \`reap --idle-minutes 0\` over devices.json` -> the pool stops passing the override into the decision (the shipped bug, at the CLI boundary) -> `✕ honours \`reap --idle-minutes 0\` over devices.json, as power-off now`
-- `lets an explicit override outrank the record, including a zero` -> the record's limit moved ahead of the override -> `✕ lets an explicit override outrank the record, including a zero`; and -> `(overrideIdleMinutes || null)` so `0` is not an override -> same ✕
 - `reports a pm clear that never succeeded as a failed reset` -> `ok: true` -> `✕ reports a pm clear that never succeeded as a failed reset, with the answer`; and -> `answer: null` -> same ✕
 - CLI `retries a reset on a device still settling` -> the lease's `row.ok` test replaced by `true` -> `✕ says so, in the device's own words, when the reset never succeeds`
 - CLI `says so, in the device's own words` -> the reset line stops quoting `pm clear` -> `✕ says so, in the device's own words, when the reset never succeeds`
+- `honours \`reap --idle-minutes 0\` over devices.json` -> the pool stops passing the override into the decision (the shipped bug, at the CLI boundary) -> `✕ honours \`reap --idle-minutes 0\` over devices.json, as power-off now`
+- `lets an explicit override outrank the record, including a zero` -> the record's limit moved ahead of the override -> `✕ lets an explicit override outrank the record, including a zero`; and -> the override wrapped as `(overrideIdleMinutes || null)` so `0` stops being an override -> same ✕
 - four gate-claim cases (`claims the platform it runs on`, `refuses a device another live run holds`, `runs anyway under NITRO_UI_GATE_DEVICE_FORCE=1`, `claims nothing when the environment names no lease`) were shown red when introduced at `ac4fa4b` and pass unchanged on this tree; their assertions were re-run green after the claim-message wording fix.
 - `flattenTests` (item 3's fix) was additionally shown red by the same `result.testResults` mutation above, which is the proof that the real-run bug cannot come back silently.
 
@@ -189,9 +201,9 @@ after the ✕; a case whose mutation could not be applied is marked as not claim
 - harness-timing: `harness-timing/state.json` is one path per project, so two runs in flight make
   each other's timing gate unusable — key it by Metro port and concurrency becomes worth measuring
   again.
-- real-input:ios: the `switch` control fails deterministically today on this machine (5/5), on
-  `main`'s app as well as this branch's; 11 of 16 `real-input:ios` rows in the exported task
-  ledgers are red. Its own task, not a device-throughput one.
+- real-input:ios: the `switch` control fails deterministically today on this machine (8/8
+  single-control runs, on `main`'s app as well as this branch's); 11 of 16 `real-input:ios` rows in
+  the exported task ledgers are red. Its own task, not a device-throughput one.
 - ios-boot-noise: the spike is CoreSimulator's own bring-up plus host-side per-device daemons, not
   a disable-list target (measured above) — the answer is not paying it, which item 4 does.
 - gate.mjs: `harness:android -- ColdSizing --background` puts `--background` in the recorded gate
@@ -201,24 +213,44 @@ after the ✕; a case whose mutation could not be applied is marked as not claim
   and then waits on a child that has already exited); `kill -9` is needed today.
 - lease pool: `pm clear` retried until PackageManager wakes works, but waiting on `pm path` would
   say *why* it is waiting rather than trying four times.
+- lease list: a queued `acquire --wait-minutes` is invisible in `lease.mjs list`, so a blocked task
+  looks idle from outside and nobody can tell waiting from stuck. One `waiting` row naming the
+  holder would settle that without asking the human.
 
 ## Questions for orchestrator
 
-`real-input:ios` is red at merge bar and I cannot turn it green honestly. Every one of the eleven
-runs today failed the same assertion (`("off") is not equal to ("on") - one real tap should flip
-the Switch`): the three `real-input:ios` gates, and eight single-control runs of
-`--control switch`, two of which tested **`main`'s own build** (a throwaway checkout at `20b4069`,
-app built there) on the same simulator with the XCUITest source byte-identical and no iOS, `src/`
-or example-app file differing between the checkouts. The other twelve controls pass every time
-(12 PASS / 1 FAIL in the last gate), including `hosted-switch`, so it is one tap path on one
-platform. Prior task ledgers say `real-input:ios` has been in this state for a while: 11 red, 5
-green across X6, H2b and X3, and X6 wrote up the same message as a flake that it then beat by
-re-rolling. It is not this branch, and fixing it is a touch-delivery investigation in code this
-brief must not touch.
+**1. `real-input:ios` is red at merge bar and I cannot turn it green honestly.** Every one of the
+eleven runs today failed the same assertion
+(`("off") is not equal to ("on") - one real tap should flip the Switch`): the three
+`real-input:ios` gates, and eight single-control runs of `--control switch`, two of which tested
+**`main`'s own build** (a throwaway checkout at `20b4069`, app built there) on the same simulator
+with the XCUITest source byte-identical and no iOS, `src/` or example-app file differing between
+the checkouts. The other twelve controls pass every time (12 PASS / 1 FAIL in the last gate),
+including `hosted-switch`, so it is one tap path on one platform. Prior task ledgers say
+`real-input:ios` has been in this state for a while: 11 red, 5 green across X6, H2b and X3, and X6
+wrote up the same message as a flake that it then beat by re-rolling. It is not this branch, and
+fixing it is a touch-delivery investigation in code this brief must not touch.
 
-1. **Merge with the row red, plus a task for the `switch` check (recommended).** The row and its
-   log are in the exported ledger, and the two harnesses plus `real-input:android` are green here.
-2. Round 2 chases the flake. Against this round's brief, and the D19 cap makes it expensive.
-3. Re-run `real-input:ios` hoping for a green roll. X6 logged exactly this (three reds, then a
-   pass) and called it a flake; it is now deterministic on this machine, so a green roll would be
-   a worse record than the honest red.
+- **Option A (recommended): merge with the row red, plus a task for the `switch` check.** The row
+  and its log are in the exported ledger, and the two harnesses plus `real-input:android` are green
+  on this tree.
+- Option B: round 2 chases it. Against this round's brief, and the D19 cap makes it expensive.
+- Option C: re-run and hope for a green roll. X6 did exactly that; it is deterministic now, so a
+  green roll would be a worse record than the honest red.
+
+**2. The device re-runs `need --for review` asks for are blocked by another task, not skipped.**
+`A4` took an exclusive lease on both pairs at 14:14 and holds it with 14+ hours of TTL; my waiter is
+parked on the queue (and `lease.mjs list` does not show waiters — see below). Everything else is
+ready: both apps are built and stamped at `86bbaae359c3`, the tree's only device-path change since
+the green runs is `poolReapDecision`'s idle-limit precedence plus its tests. Either I run the two
+harnesses as soon as the pair frees (and append a `## Fix round` note with a fresh table), or the
+review proceeds on the previous tree's rows, which the table already labels stale. Recommendation:
+wait for the pair — it is minutes of queue, not a design question — and treat the report as final
+once those two rows print PASS at this tree.
+
+## Follow-ups (lease behaviour seen while blocked)
+
+- lease list: only a *waiting exclusive* request is persisted (an earlier `--exclusive --wait` of
+  mine showed as a `waiting` row); an ordinary `acquire --wait-minutes` is not, so a blocked task
+  looks idle from outside and nobody can tell waiting from stuck. Persisting the wait, or a
+  `--json` line for it, would settle that.
