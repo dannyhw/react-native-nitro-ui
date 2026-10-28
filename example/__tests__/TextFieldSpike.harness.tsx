@@ -336,6 +336,101 @@ function makeSiblingField() {
   };
 }
 
+/**
+ * Whether this environment lets a field take focus *on command* at all, measured once per run.
+ *
+ * The first iOS run of this file found the spike field's `focus()` producing no `onFocus` and a mirror that
+ * stayed at `focused=0`. On its own that fact has two readings, and they want opposite responses: either the
+ * spike's imperative focus path is broken, or nothing can take focus here because `becomeFirstResponder`
+ * needs a key window and the harness drives the app without XCUITest owning the screen (real-input, which
+ * *does* see the field focused, delivers a tap — UIKit gives first responder to a touched field without
+ * anyone asking the window).
+ *
+ * So the question goes to the reference implementation: RN's own `TextInput`, asked the same way, in the same
+ * app, on the same clock. If its field takes focus and the spike field does not, that is the spike's bug and
+ * the scenarios stay red. If neither does, focus latency is not measurable in this environment, and a
+ * scenario that measured it would be comparing two zeroes — so it says so instead.
+ */
+let focusCapability: {
+  rnTakesFocus: boolean;
+  spikeTakesFocus: boolean;
+} | null = null;
+
+/** Ask for focus and report whether the event arrived, without failing when it does not. */
+async function focusLands(
+  ask: () => void,
+  count: () => number,
+  timeoutMs = 1500
+): Promise<boolean> {
+  const before = count();
+  ask();
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (count() > before) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return false;
+}
+
+async function resolveFocusCapability(): Promise<{
+  rnTakesFocus: boolean;
+  spikeTakesFocus: boolean;
+}> {
+  if (focusCapability != null) {
+    return focusCapability;
+  }
+  const rnInput: { current: { focus(): void; blur(): void } | null } = {
+    current: null,
+  };
+  let rnFocusEvents = 0;
+  const field = await mountSpike(
+    { arm: focusableArm, defaultValue: '' },
+    () => (
+      <TextInput
+        testID="spike-focus-probe-rn"
+        ref={(node) => {
+          rnInput.current = node as unknown as {
+            focus(): void;
+            blur(): void;
+          } | null;
+        }}
+        defaultValue=""
+        onFocus={() => {
+          rnFocusEvents += 1;
+        }}
+      />
+    )
+  );
+  await waitFor(
+    () => {
+      expect(field.handle()).not.toBeNull();
+      expect(rnInput.current).not.toBeNull();
+    },
+    { timeout: 10000, interval: 50 }
+  );
+  const spikeTakesFocus = await focusLands(
+    () => field.handle()?.focus(),
+    () => field.log.focus
+  );
+  const rnTakesFocus = await focusLands(
+    () => rnInput.current?.focus(),
+    () => rnFocusEvents
+  );
+  // Leave nothing holding the keyboard for the scenarios that run after this one.
+  field.handle()?.blur();
+  rnInput.current?.blur();
+  field.unmount();
+  focusCapability = { rnTakesFocus, spikeTakesFocus };
+  console.log(
+    `nui-spike focus_capability platform=${Platform.OS} rn_takes_focus=${
+      rnTakesFocus ? 1 : 0
+    } spike_takes_focus=${spikeTakesFocus ? 1 : 0}`
+  );
+  return focusCapability;
+}
+
 describe('T18 spike — TextField', () => {
   afterEach(cleanup);
 
@@ -893,6 +988,29 @@ describe('T18 spike — TextField', () => {
       { timeout: 10000, interval: 50 }
     );
 
+    /*
+     * Focus latency is a comparison of two timings, so it needs two timings. Where an imperative focus ask
+     * produces no event at all, the loop below would measure nothing and the budget would compare a zero with
+     * a zero; the probe says which world this is, and the spike's own bug stays red in the one world where it
+     * is one.
+     */
+    const capability = await resolveFocusCapability();
+    if (!capability.spikeTakesFocus) {
+      evidence('p5_focus', {
+        platform: Platform.OS,
+        samples: 0,
+        spike_p95_ms: 'unmeasured',
+        rn_p95_ms: 'unmeasured',
+        ratio: 'unmeasured',
+        swiftui_imperative_focus: iOS ? 'noop' : 'same arm',
+        reason: capability.rnTakesFocus
+          ? 'RN TextInput took focus on command and the spike field did not'
+          : 'nothing takes focus on command in this environment',
+      });
+      expect(capability.rnTakesFocus).toBe(false);
+      return;
+    }
+
     const SAMPLES = 6;
     const spikeFocus: number[] = [];
     const rnFocus: number[] = [];
@@ -1006,8 +1124,13 @@ describe('T18 spike — TextField', () => {
     field.handle()?.nuiTestApplyWrite('abcdef');
     await mirrorReads(field, 'lastWrite', 'applied');
     const beforeImpl = field.mirror().impl;
-    field.handle()?.focus();
-    await mirrorReads(field, 'focused', '1');
+    // Focus is the observable only where a focus ask lands at all (see `resolveFocusCapability`). Where it
+    // does not, the claim is reported unobserved rather than being dropped quietly.
+    const focusObservable = (await resolveFocusCapability()).spikeTakesFocus;
+    if (focusObservable) {
+      field.handle()?.focus();
+      await mirrorReads(field, 'focused', '1');
+    }
     await field.set({ placeholder: 'a placeholder nobody reads' });
     await new Promise((resolve) => setTimeout(resolve, 400));
     // A write *after* the prop change, so the mirror we read was published after it: if the prop change had
@@ -1016,7 +1139,9 @@ describe('T18 spike — TextField', () => {
     await mirrorReads(field, 'displayed', 'abcdefg');
     const afterProp = field.mirror();
     expect(afterProp.impl).toBe(beforeImpl);
-    mirrorIs(field, 'focused', '1');
+    if (focusObservable) {
+      mirrorIs(field, 'focused', '1');
+    }
     mirrorIs(field, 'lastWrite', 'applied');
 
     field.unmount();
@@ -1036,8 +1161,8 @@ describe('T18 spike — TextField', () => {
       platform: Platform.OS,
       height: (size?.height ?? 0).toFixed(1),
       width: (size?.width ?? 0).toFixed(1),
-      rebuild_on_prop: 0,
-      rebuild_on_text: 0,
+      rebuild_on_prop: focusObservable ? 0 : 'unobserved',
+      rebuild_on_text: focusObservable ? 0 : 'unobserved',
       churn,
       ledger_delta: after.ledgerEntries - before.ledgerEntries,
       registry_delta: after.registryEntries - before.registryEntries,
