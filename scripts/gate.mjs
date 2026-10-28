@@ -61,6 +61,7 @@ import {
   decideWait,
   deviceFromEnv,
   explainNeedRow,
+  findReusableCheck,
   lastLogLine,
   ledgerLineFromRun,
   ledgerRelativePath,
@@ -72,6 +73,7 @@ import {
   platformsOwningFile,
   platformsTouchedByPaths,
   renderGateTable,
+  renderStepTimings,
   resolveGate,
   runningBackgroundGates,
   summarizeGates,
@@ -86,8 +88,8 @@ const USAGE =
   'usage: node scripts/gate.mjs <gate> [-- <args>] [--background]\n' +
   '       node scripts/gate.mjs wait [--gate <name>] [--timeout-minutes N]\n' +
   '       node scripts/gate.mjs status [--for review|merge]\n' +
-  '       node scripts/gate.mjs need --for review|merge [--base <ref>]\n' +
-  '       node scripts/gate.mjs table [--for review|merge] [--full]\n' +
+  '       node scripts/gate.mjs need --for review|merge [--base <ref>] [--no-reuse]\n' +
+  '       node scripts/gate.mjs table [--for review|merge] [--full] [--no-reuse]\n' +
   '       node scripts/gate.mjs export --task <ID> [--out <file>]\n' +
   '\n' +
   'gates: check | harness:<ios|android>[:suite] | real-input:<ios|android> |\n' +
@@ -105,7 +107,12 @@ const USAGE =
   '        "still running" - at the --timeout-minutes budget, or on a runner that\n' +
   '        died without recording a result. The ledger line is written by the same\n' +
   '        code either way, so a backgrounded gate is evidence exactly as a\n' +
-  '        foreground one is)\n';
+  '        foreground one is)\n' +
+  '\n' +
+  "       (at merge, `check` may be satisfied by another branch's ledger when it\n" +
+  '        passed on this exact code tree and its commit is merged here - the merge\n' +
+  '        changed no code, so it is not re-owed. `check` only: a device gate is\n' +
+  '        evidence about a binary. `--no-reuse` asks the strict question instead)\n';
 
 /**
  * How often a running gate samples the load average. R4's lesson is that one
@@ -165,6 +172,42 @@ function appendLedgerLine(branch, line) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
   return file;
+}
+
+/**
+ * The per-step timings `check.mjs` left behind, or null.
+ *
+ * Null on every problem - no file, unreadable, wrong shape - because the breakdown
+ * is a report on the run, not evidence about it: the gate's own exit code decided
+ * pass or fail, and a missing timing file must never turn a green `check` red or
+ * invent durations for steps that did not run.
+ *
+ * @param {string | null} file
+ * @returns {object | null}
+ */
+function readStepTimings(file) {
+  if (file == null) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+  if (
+    parsed == null ||
+    typeof parsed !== 'object' ||
+    !Array.isArray(parsed.steps) ||
+    parsed.steps.some((step) => typeof step?.name !== 'string')
+  ) {
+    return null;
+  }
+  return {
+    version: typeof parsed.version === 'number' ? parsed.version : 1,
+    jobs: typeof parsed.jobs === 'number' ? parsed.jobs : null,
+    wallMs:
+      typeof parsed.wallMs === 'number' ? Math.round(parsed.wallMs) : null,
+    steps: parsed.steps,
+  };
 }
 
 /* ---------------------------- backgrounded gates --------------------------- */
@@ -560,6 +603,15 @@ async function runGate(name, resolved, options = {}) {
 
   const cwd =
     resolved.cwd === 'example' ? path.join(repoRoot, 'example') : repoRoot;
+  // `check` is the one gate long enough that its total is not an actionable
+  // number, so the runner is asked to leave its per-step timings somewhere this
+  // process can read back (X10). Named from the log so one run cannot read another
+  // run's breakdown, and removed from the child env by `check.mjs` itself so a
+  // nested check cannot answer for its parent.
+  const stepTimingsPath =
+    resolved.gate === 'check'
+      ? path.join(repoRoot, `${logPath}.steps.json`)
+      : null;
   process.stderr.write(
     `gate: ${name}\n` +
       `gate: ${resolved.argv.join(' ')} (cwd ${path.relative(repoRoot, cwd) || '.'})\n` +
@@ -578,6 +630,9 @@ async function runGate(name, resolved, options = {}) {
       env: (() => {
         const childEnv = { ...process.env };
         delete childEnv.NITRO_UI_GATE_LOG;
+        if (stepTimingsPath != null) {
+          childEnv.NITRO_UI_CHECK_STEPS_FILE = stepTimingsPath;
+        }
         return childEnv;
       })(),
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -655,6 +710,7 @@ async function runGate(name, resolved, options = {}) {
     // perf step that happened to print last (M3).
     counts: parseTestCounts(logText) ?? summaries[0] ?? null,
     summaries,
+    stepTimings: readStepTimings(stepTimingsPath),
     logPath,
     startedAt,
     exitCode: exit.code ?? (exit.signal != null ? null : 1),
@@ -763,7 +819,89 @@ function formatMaybe(ms) {
   return typeof ms === 'number' ? ` ${(ms / 1000).toFixed(1)}s` : '';
 }
 
-function commandNeed({ stage, base }) {
+/**
+ * Every branch ledger in `.gates/` except one, for merge reuse.
+ *
+ * A merge's evidence usually lives on the branch that was merged, so `need --for
+ * merge` on `main` has to look outside `main`'s own ledger. Branch names nest
+ * (`task/X10-check-throughput` becomes `.gates/task/X10-….jsonl`), which is why
+ * this walks rather than globs a flat directory; the name it returns is the branch,
+ * recovered from the path, because that is what the note has to cite.
+ *
+ * @param {string} exceptBranch the branch whose own ledger is not "other"
+ * @returns {Array<{branch: string, entries: object[]}>}
+ */
+function otherBranchLedgers(exceptBranch) {
+  const found = [];
+  const walk = (dir, prefix) => {
+    let names;
+    try {
+      names = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of names) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolute, `${prefix}${entry.name}/`);
+        continue;
+      }
+      if (!entry.name.endsWith('.jsonl')) continue;
+      const branch = `${prefix}${entry.name.slice(0, -'.jsonl'.length)}`;
+      if (branch === exceptBranch) continue;
+      let text;
+      try {
+        text = fs.readFileSync(absolute, 'utf8');
+      } catch {
+        continue;
+      }
+      found.push({ branch, entries: parseLedger(text) });
+    }
+  };
+  walk(path.join(repoRoot, LEDGER_DIR), '');
+  return found;
+}
+
+/**
+ * Whether `commit` is in the history of the tree being asked about.
+ *
+ * This is the difference between "some branch once had this code" and "this
+ * evidence came from the work that produced it". A line whose head cannot be
+ * resolved here (a squash-merged branch, a different machine) is not evidence, so
+ * an unreadable commit is a `false`, not a guess.
+ */
+function commitIsAncestorOfHead(commit) {
+  const sha = String(commit ?? '').trim();
+  if (!/^[0-9a-f]{7,40}$/i.test(sha)) return false;
+  if (git(['cat-file', '-e', `${sha}^{commit}`], null) == null) return false;
+  const result = spawnSync(
+    'git',
+    ['merge-base', '--is-ancestor', sha, 'HEAD'],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }
+  );
+  return result.status === 0;
+}
+
+/**
+ * The `check` reuse available for this tree, or null. `--no-reuse` turns it off,
+ * which is how a reviewer re-derives the strict answer when they do not believe
+ * the reuse.
+ *
+ * @param {string} branch the branch whose own ledger is already being read
+ * @param {string | null} tree
+ */
+function reusableCheckFor(branch, tree) {
+  return findReusableCheck({
+    ledgers: otherBranchLedgers(branch),
+    tree,
+    headIsAncestor: commitIsAncestorOfHead,
+  });
+}
+
+function commandNeed({ stage, base, reuse = true }) {
   const branch = currentBranch();
   const read = readTrees();
   const { entries, exists } = readLedger(branch);
@@ -781,6 +919,8 @@ function commandNeed({ stage, base }) {
     unmappedPaths: touched.unmapped,
     toolingPaths: touched.tooling,
     diffUnknown: diff.unknown,
+    reusedCheck:
+      stage === 'merge' && reuse ? reusableCheckFor(branch, read.tree) : null,
   });
 
   printCodeTree(read);
@@ -807,28 +947,43 @@ function commandNeed({ stage, base }) {
   return 1;
 }
 
-function commandTable({ stage, full }) {
+function commandTable({ stage, full, reuse = true }) {
   const branch = currentBranch();
   const read = readTrees();
   const { entries, exists } = readLedger(branch);
   printCodeTree(read);
-  if (!exists) {
+  const reusedCheck =
+    stage === 'merge' && reuse ? reusableCheckFor(branch, read.tree) : null;
+  if (!exists && reusedCheck == null) {
+    // "Nothing recorded yet" is only the whole answer when no other branch's ledger
+    // can account for this tree either - on `main` right after a merge, the merge
+    // bar is exactly what this table has to show.
     process.stderr.write('table: nothing recorded yet - run a gate first.\n');
     return 1;
   }
-  process.stdout.write(
-    `${renderGateTable({
+  const table = renderGateTable({
+    entries,
+    tree: read.tree,
+    trees: read.trees,
+    stage,
+    required: MERGE_GATES,
+    reusedCheck,
+    evidence:
+      full === true
+        ? (entry) => `log \`${String(entry.logPath ?? '')}\``
+        : null,
+  });
+  process.stdout.write(`${table}\n`);
+  if (full === true) {
+    // Per-step durations, for the one gate where the total is not the useful
+    // number. Under `--full`, because a report's gate table is five device rows and
+    // sixteen step rows would bury them.
+    const steps = renderStepTimings({
       entries,
-      tree: read.tree,
-      trees: read.trees,
-      stage,
-      required: MERGE_GATES,
-      evidence:
-        full === true
-          ? (entry) => `log \`${String(entry.logPath ?? '')}\``
-          : null,
-    })}\n`
-  );
+      gates: MERGE_GATES.filter((gate) => gate !== 'bench'),
+    });
+    if (steps !== '') process.stdout.write(`\n${steps}\n`);
+  }
   return 0;
 }
 
@@ -879,6 +1034,8 @@ function parseStageOption({ rest, command }) {
       stage = argument.slice('--for='.length);
     } else if (argument === '--full' && command === 'table') {
       continue; // read by the caller
+    } else if (argument === '--no-reuse' && command === 'table') {
+      continue; // read by the caller
     } else {
       process.stderr.write(
         `${command}: unknown argument ${argument}\n${USAGE}`
@@ -906,11 +1063,16 @@ async function main(argv) {
     if (stage == null) return 2;
     return command === 'status'
       ? commandStatus({ stage })
-      : commandTable({ stage, full: rest.includes('--full') });
+      : commandTable({
+          stage,
+          full: rest.includes('--full'),
+          reuse: !rest.includes('--no-reuse'),
+        });
   }
   if (command === 'need') {
     let stage = null;
     let base = process.env.NITRO_UI_GATE_BASE ?? 'main';
+    let reuse = true;
     for (let index = 0; index < rest.length; index += 1) {
       const argument = rest[index];
       if (argument === '--for' || argument === '--stage') {
@@ -923,6 +1085,8 @@ async function main(argv) {
         index += 1;
       } else if (argument.startsWith('--base=')) {
         base = argument.slice('--base='.length);
+      } else if (argument === '--no-reuse') {
+        reuse = false;
       } else {
         process.stderr.write(`need: unknown argument ${argument}\n${USAGE}`);
         return 2;
@@ -934,7 +1098,7 @@ async function main(argv) {
       );
       return 2;
     }
-    return commandNeed({ stage, base });
+    return commandNeed({ stage, base, reuse });
   }
   if (command === 'wait') {
     let gate = null;
