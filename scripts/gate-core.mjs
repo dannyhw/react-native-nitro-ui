@@ -2326,6 +2326,45 @@ export function splitDeviceContext(text) {
   };
 }
 
+/** A simulator's UDID, as `simctl` and `xcrun` print it. */
+const SIMULATOR_UDID_SHAPE =
+  /\b[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}\b/gi;
+
+/** An emulator serial, which is what an adb error line leads with. */
+const EMULATOR_SERIAL_SHAPE = /\bemulator-\d{2,5}\b/gi;
+
+/**
+ * Replaces every device identifier in `text` except the ones this run owns.
+ *
+ * Why (review N6): the device block answers some host-wide questions - which
+ * simulators are booted on this Mac, what an adb error said - and their answers name
+ * every device on the machine, not just the pair this task leased. Another task's
+ * simulator and the maintainer's own device therefore used to be copied into a
+ * committed excerpt, one identifier per line. The brief asked for the probe, so the
+ * probe stays; what it must not carry home is a name it has no business publishing.
+ *
+ * A device's *name and state* survive ("iPhone 16 (Booted)" is the half that tells
+ * you a second simulator stole focus); only the identifier - the part you type back
+ * into a tool - is replaced.
+ *
+ * @param {string} text
+ * @param {{udid?: string | null, serial?: string | null, device?: string | null}} own
+ *   the identifiers this run's lease names
+ * @returns {string}
+ */
+export function redactForeignDeviceIds(text, own = {}) {
+  const allowed = new Set(
+    [own.udid, own.serial, own.device]
+      .filter((value) => typeof value === 'string' && value !== '')
+      .map((value) => value.toLowerCase())
+  );
+  const keepOwn = (whole) =>
+    allowed.has(whole.toLowerCase()) ? whole : '<other device>';
+  return String(text ?? '')
+    .replace(SIMULATOR_UDID_SHAPE, keepOwn)
+    .replace(EMULATOR_SERIAL_SHAPE, keepOwn);
+}
+
 /**
  * The failing test names and assertion messages in a log, in the shapes the gates
  * actually print (jest, and the real-input suites' own `✗`/`FAIL` lines).
@@ -2670,7 +2709,7 @@ export function renderFailureExcerpt({
     // The line that makes the difference between "we lost the log" (Q3) and
     // "we know where to look": the excerpt is a copy, the store has the original.
     `- Full log: \`${String(entry?.logPath ?? 'not recorded')}\`${logLocation == null ? '' : ` (${String(logLocation)})`}`,
-    `- Scrubbed: ${String(replaced)} credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as \`<repo>\`/\`<store>\`/\`~\`/\`<user>\`/\`<host>\`/\`<tmp>\`, before this file was written. Device identifiers appear only when the run recorded its own lease.`,
+    `- Scrubbed: ${String(replaced)} credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as \`<repo>\`/\`<store>\`/\`~\`/\`<user>\`/\`<host>\`/\`<tmp>\`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as \`<other device>\`.`,
     '',
     '## Failing tests and assertion messages',
     '',

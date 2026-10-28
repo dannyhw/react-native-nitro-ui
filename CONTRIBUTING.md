@@ -489,7 +489,9 @@ writes a scrubbed excerpt of every **failed** run into
 `docs/tasks/<ID>/failures/<run>-<n>.log` — the failing test names, the assertion
 messages, the last 150 lines, the load at both ends and, for a failed device gate,
 the booted simulators, the leased emulator's `adb get-state`, the lease list, load1
-and the app's last `logcat` lines — and names that file in the ledger line's
+and the app's last `logcat` lines. Any device identifier in that block that is not
+this run's own lease becomes `<other device>`, so another task's simulator or the
+maintainer's emulator is never committed. It names that file in the ledger line's
 `failureLogPath`. Passing runs get no file. A committed excerpt holds no credential
 and no machine identity: tokens, `Authorization:`/`Cookie:` headers (whole, any
 scheme), `.npmrc` `_auth=` lines, `curl -u user:pass`, `user:pass@host`, a config
