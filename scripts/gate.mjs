@@ -831,6 +831,18 @@ function formatMaybe(ms) {
  * @param {string} exceptBranch the branch whose own ledger is not "other"
  * @returns {Array<{branch: string, entries: object[]}>}
  */
+/**
+ * Every branch ledger in `.gates/` except one, for merge reuse.
+ *
+ * A merge's evidence usually lives on the branch that was merged, so `need --for
+ * merge` on `main` has to look outside `main`'s own ledger. Branch names nest
+ * (`task/X10-check-throughput` becomes `.gates/task/X10-….jsonl`), which is why
+ * this walks rather than globs a flat directory; the name it returns is the branch,
+ * recovered from the path, because that is what the note has to cite.
+ *
+ * @param {string} exceptBranch the branch whose own ledger is not "other"
+ * @returns {Array<{branch: string, entries: object[], source: string}>}
+ */
 function otherBranchLedgers(exceptBranch) {
   const found = [];
   const walk = (dir, prefix) => {
@@ -855,10 +867,67 @@ function otherBranchLedgers(exceptBranch) {
       } catch {
         continue;
       }
-      found.push({ branch, entries: parseLedger(text) });
+      found.push({
+        branch,
+        source: path.relative(repoRoot, absolute),
+        entries: parseLedger(text),
+      });
     }
   };
   walk(path.join(repoRoot, LEDGER_DIR), '');
+  return found;
+}
+
+/**
+ * The ledgers committed beside task reports: `docs/tasks/<ID>/gates.jsonl`.
+ *
+ * These are the evidence that actually travels. `.gates/` is gitignored, so in the
+ * checkout where a merge is confirmed - `main`, often a different worktree
+ * altogether - no branch's `.gates/` lines exist; the export from
+ * `gate.mjs export --task <ID>` is the copy that arrived with the merge commit. A
+ * reuse rule that read only `.gates/` would be right in a test and useless in the
+ * flow it was written for.
+ *
+ * A committed ledger is weaker evidence than a live one in exactly one way, and the
+ * rule already checks it: the line's `head` must be an ancestor of this HEAD, which
+ * is what makes it *this* merge's proof rather than some branch that once had
+ * similar code.
+ *
+ * @param {string} exceptBranch the branch whose own ledger is not "other"
+ * @returns {Array<{branch: string, entries: object[], source: string}>}
+ */
+function committedTaskLedgers(exceptBranch) {
+  const found = [];
+  const tasksDir = path.join(repoRoot, 'docs', 'tasks');
+  let names;
+  try {
+    names = fs.readdirSync(tasksDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  for (const entry of names) {
+    if (!entry.isDirectory()) continue;
+    const file = path.join(tasksDir, entry.name, 'gates.jsonl');
+    let text;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    const entries = parseLedger(text).filter((line) => !line.corrupt);
+    if (entries.length === 0) continue;
+    // `export` copies one branch's ledger verbatim, so the lines carry their own
+    // branch name; the path is the fallback and is also what the note cites.
+    const branch =
+      entries.find((line) => typeof line.branch === 'string')?.branch ??
+      `docs/tasks/${entry.name}/gates.jsonl`;
+    if (branch === exceptBranch) continue;
+    found.push({
+      branch,
+      source: path.relative(repoRoot, file),
+      entries,
+    });
+  }
   return found;
 }
 
@@ -895,7 +964,7 @@ function commitIsAncestorOfHead(commit) {
  */
 function reusableCheckFor(branch, tree) {
   return findReusableCheck({
-    ledgers: otherBranchLedgers(branch),
+    ledgers: [...otherBranchLedgers(branch), ...committedTaskLedgers(branch)],
     tree,
     headIsAncestor: commitIsAncestorOfHead,
   });
