@@ -157,6 +157,32 @@ const HOST_CONTROL_ROWS = Object.freeze([
     screen: 'spike',
   },
   {
+    id: 'spike-latency-first',
+    title:
+      'first keystroke into an idle field, timed to the JS commit, against an equivalent RN TextInput',
+    // T18b: what Q2 §7's line actually names. T18's row above measures the gap between commits inside one
+    // burst. Reported rather than gated (D21), and Android-only this round: the iOS side would need a new
+    // XCUITest with per-keystroke send stamps, which this round did not reach.
+    screen: 'spike',
+  },
+  {
+    id: 'spike-text-reject-rate',
+    title:
+      'a rejected change reverts with no keystroke lost, driven at a measured 10 keys/s',
+    // Q2 §7's rate line. T18's `spike-text-reject` types two keys in one burst and iOS's loop ran at about
+    // 1.6 keys/s, so the rate itself is what this row adds — and it asserts the spacing it claims.
+    screen: 'spike',
+  },
+  {
+    id: 'spike-text-maxlength',
+    title:
+      'maxLength caps the typing path at its own code-point count, with nothing split',
+    // Q2 §7's `maxLength` half. T18 measured the cap on the *write* path only, and named the missing control
+    // (`docs/tasks/T18-textfield-spike.report.md`, follow-ups). The emoji vector is still unmeasured: this
+    // oracle cannot inject a non-ASCII character, so the row says which half ran.
+    screen: 'spike',
+  },
+  {
     id: 'spike-text-coexist',
     title:
       'a second field in the same screen types the same way, whatever the arm prop says',

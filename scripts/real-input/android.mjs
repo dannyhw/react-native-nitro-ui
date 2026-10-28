@@ -98,10 +98,15 @@ const ECHO = {
   spikeTargetA: 'spike-type-target-echo',
   spikeTargetB: 'spike-type-target-b-echo',
   spikeWrite: 'spike-write-echo',
+  spikeMaxLen: 'spike-maxlength-echo',
   spikeSize: 'spike-size-echo',
   // P3 §2.1 (a rejected edit reverting) and P5 (keystroke→commit) read these two.
   spikeFrozen: 'spike-frozen-echo',
   rnTarget: 'rn-type-target-echo',
+  // T18b's "P5b" pair: two controlled fields that do identical work, one Nitro and one RN, driven one
+  // keystroke at a time by `spike-latency-first`.
+  spikeLatencyA: 'spike-latency-echo',
+  rnLatency: 'rn-latency-echo',
 };
 
 /** The system Back key, which is how a person dismisses an open popup. */
@@ -1974,6 +1979,342 @@ const CHECKS = {
       `go line: p95 ≤ RN × 1.5, no-go above 2× — reported, not gated (D21)`
     );
   },
+
+  /**
+   * T18b — **first keystroke → commit**, the quantity Q2 §7 actually names.
+   *
+   * `spike-latency` above is T18's control, and its review (T18 M2) is right about what it measures:
+   * `stamps[i] − stamps[i−1]` inside one injected burst, n=7, so its "p95" was its maximum and no keystroke
+   * send time was in it. That is per-keystroke throughput, a fair cost proxy, not latency. This control asks
+   * the harder question instead — one keystroke into an *idle* field, timed from the moment the injector was
+   * invoked to the moment JS was told — with enough samples that a p95 is a p95 and a median printed beside
+   * it, because on an emulator the median is the number a reader should trust.
+   *
+   * The two arms are the "P5b" pair on the spike screen (`LatencyField` in `SpikeTextFieldScreen.tsx`), which
+   * exists because T18's pair was not equivalent work: its spike arm also called `nuiTestState()` inside
+   * `onValueChange`. Both fields here are controlled, both do three state updates per keystroke, neither
+   * reads the mirror, and both stamp `Date.now()` on the first line of the callback.
+   *
+   * The injector's own cost is inside every sample, and it is printed with the samples rather than subtracted
+   * on faith: the first run also took `commit − t1` (the moment after `input text` returned), got **negative**
+   * values for nearly every keystroke, and thereby answered the question the bound framing assumed — the key is
+   * dispatched early, and the injector's wall clock is mostly its own exit. What remains common to both arms
+   * is a few milliseconds of dispatch, so the ratio is the part of the number worth reading, and the raw
+   * samples are printed so a reader can redo the arithmetic.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'spike-latency-first': async (t) => {
+    const SAMPLES = Math.min(
+      36,
+      Math.max(6, Number(process.env.NITROUI_LATENCY_SAMPLES ?? 36))
+    );
+    // Longer than the thing measured, so each keystroke really is the first one after an idle field.
+    const GAP_MS = 150;
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'.slice(0, SAMPLES);
+
+    /**
+     * @param {string} description the field's `accessibilityLabel`
+     * @param {string} echoID the field's own echo line
+     */
+    const measure = async (description, echoID) => {
+      const control = await t.requireControlOnScreen(description);
+      /*
+       * The echo, not just the field, has to be on screen.
+       *
+       * `requireControlOnScreen` scrolls the *field* in, and this pair sits at the bottom of the screen, so
+       * the line under it can land below the fold — the driver reads only what the accessibility tree has,
+       * and the failing run said "no on-screen text with testID rn-latency-echo" while the field above it was
+       * found at y=2381. The other spike controls open with the same call for the same reason.
+       */
+      await t.scrollToShowEcho(echoID);
+      const before = t.requireEcho(echoID);
+      const beforeEvents = Number(echoField(before, 'events') || '0');
+      await t.tapNode(control);
+      await t.waitForEchoField(
+        echoID,
+        'focus',
+        '1',
+        `${description} to hold focus before anything is typed`
+      );
+      const injected = t.injectKeyedText(chars, GAP_MS);
+      /*
+       * Everything that needed the keyboard open has happened: the burst is in, so the keyboard goes away and
+       * the page is scrolled to the echo before the final read. After the samples were taken, never before —
+       * a scroll aimed at the echo *while* typing would be the thing measured rather than the field.
+       */
+      await t.pressBack();
+      await t.scrollToShowEcho(echoID);
+      const line = t.waitForEchoField(
+        echoID,
+        'events',
+        String(beforeEvents + SAMPLES),
+        `${description} to commit all ${String(SAMPLES)} keystrokes`
+      );
+      const stamps = echoField(line, 'ats')
+        .split(',')
+        .filter((entry) => entry !== '')
+        .map(Number)
+        .filter((entry) => Number.isFinite(entry));
+      return { ...injected, commits: stamps.slice(-SAMPLES) };
+    };
+
+    // Each arm closes its own keyboard, so one `pressBack` belongs to `measure` and none here: a second one
+    // with no keyboard open leaves the screen instead, and the next arm then has no field to tap.
+    const spike = await measure('latency spike field', ECHO.spikeLatencyA);
+    const rn = await measure('latency rn field', ECHO.rnLatency);
+
+    t.log.check(
+      `both fields committed all ${String(SAMPLES)} keystrokes (nothing was dropped on the way)`,
+      spike.commits.length === SAMPLES && rn.commits.length === SAMPLES
+    );
+
+    /**
+     * @param {{ commits: number[], keys: { t0: number, t1: number }[], floorMs: number }} arm
+     */
+    const report = (arm) => {
+      const raw = arm.commits.map((at, index) => at - arm.keys[index].t0);
+      const corrected = arm.commits.map((at, index) => at - arm.keys[index].t1);
+      return {
+        raw,
+        corrected,
+        rawMedian: percentile(raw, 0.5),
+        rawP95: percentile(raw, 0.95),
+        floorMs: arm.floorMs,
+      };
+    };
+    const spikeNumbers = report(spike);
+    const rnNumbers = report(rn);
+
+    for (const [name, numbers] of [
+      ['spike', spikeNumbers],
+      ['rn', rnNumbers],
+    ]) {
+      t.log.note(
+        `${name}: n=${String(SAMPLES)} first-keystroke→commit ` +
+          `min/median/p95/max ${String(Math.min(...numbers.raw))}/` +
+          `${String(numbers.rawMedian)}/${String(numbers.rawP95)}/` +
+          `${String(Math.max(...numbers.raw))}ms · injector wall clock ` +
+          `${String(numbers.floorMs)}ms · commit−after-injector ` +
+          `${String(Math.min(...numbers.corrected))}…${String(
+            Math.max(...numbers.corrected)
+          )}ms (negative = the key went in while the injector was still running)`
+      );
+      t.log.note(`${name} raw samples ${JSON.stringify(numbers.raw)}`);
+    }
+
+    const ratio = (/** @type {number} */ a, /** @type {number} */ b) =>
+      b > 0 ? a / b : Number.POSITIVE_INFINITY;
+    t.log.note(
+      `ratio spike ÷ RN: p95 ` +
+        `${ratio(spikeNumbers.rawP95, rnNumbers.rawP95).toFixed(2)}× ` +
+        `(median ${ratio(spikeNumbers.rawMedian, rnNumbers.rawMedian).toFixed(2)}×)`
+    );
+    t.log.check(
+      'every sample is a positive duration (a negative one means the clocks are not the same clock)',
+      spikeNumbers.raw.every((value) => value >= 0) &&
+        rnNumbers.raw.every((value) => value >= 0)
+    );
+    // Reported, not gated: a multiplier on a duration is a decision input, not a verdict (D21). Q2 §7's line
+    // is p95 ≤ RN × 1.5, with no-go above 2×.
+    t.log.note(
+      'go line: first-keystroke→commit p95 ≤ RN × 1.5 — reported, not gated (D21)'
+    );
+  },
+
+  /**
+   * **A rejected edit, driven faster than 10 keys/s — and an attribution for anything lost.**
+   *
+   * Q2 §7's line is "a rejected change reverts with no lost character at 10 keys/s". T18 never drove that
+   * rate: its iOS loop landed about 1.6 keys/s and its Android control typed two keys. Driving *exactly*
+   * 10 keys/s turned out to be impossible with the accepted oracle — one `input text` per keystroke costs
+   * 116–240 ms of device time (measured: the keys landed 241 ms apart, 4.1 keys/s), and the emulator exposes
+   * no evdev keyboard device to inject underneath it. A burst inside one injection is therefore both the
+   * only way past the named rate and the harder test, and its rate is proven from the injector's own wall
+   * clock: the injector cannot return before the last key is queued.
+   *
+   * The second half is the reason this control exists. A burst that loses keystrokes has two candidate
+   * causes — the injector dropped them, or the field dropped them — and only one of them is ours. So RN's
+   * own `TextInput` takes the same burst first, with nothing rejected, and how many of the ten keys it
+   * *lands* is the injector's fidelity. The spike field is then judged against that number rather than
+   * against ten.
+   */
+  'spike-text-reject-rate': async (t) => {
+    const KEYS = 10;
+    const RATE_MS = (1000 * KEYS) / 10;
+
+    // ---- the field that rejects every edit, under a burst faster than the named rate ---------------
+    await t.scrollToShowEcho(ECHO.spikeFrozen);
+    const control = await t.requireControlOnScreen('frozen field');
+    await t.tapNode(control);
+    await t.waitForEchoField(
+      ECHO.spikeFrozen,
+      'focused',
+      '1',
+      'the frozen field to take focus'
+    );
+    /*
+     * One throwaway key before the burst that carries the claim. The first `input text` of a session costs
+     * far more than the ones after it — measured on this round's device: 1938 ms for ten keys, then 557 ms
+     * for the same ten — and the difference is the input pipeline waking, not the field. A rate asserted
+     * across a wake-up measures the wake-up.
+     */
+    const warmupMs = t.burstType('z');
+    await t.settle(300);
+    t.log.note(
+      `injector warm-up call ${String(warmupMs)}ms (one key, not part of the rate claim)`
+    );
+
+    const burstMs = t.burstType('q'.repeat(KEYS));
+    t.log.note(
+      `${String(KEYS)} keys injected in one call of ${String(burstMs)}ms — ` +
+        `at least ${((1000 * KEYS) / Math.max(burstMs, 1)).toFixed(1)} keys/s ` +
+        `(the injector cannot return before the last key is queued)`
+    );
+    t.log.check(
+      'the burst was driven at 10 keys/s or faster (proved from the injector’s wall clock)',
+      burstMs <= RATE_MS
+    );
+    // Read rather than wait-and-abort: how many keystrokes the field took *is* the measurement, and a
+    // control that aborts on the interesting answer cannot report the attribution below.
+    await t.settle(1500);
+    const counted = t.echo(ECHO.spikeFrozen) ?? '';
+    const spikeEvents = Number(echoField(counted, 'nativeEvents') ?? '-1');
+    const revertedNow = echoField(counted, 'displayed');
+    /*
+     * Everything about the rejected run is read *here*, while its echo is on screen. The next section
+     * scrolls the page to reach RN's field, and an echo that has scrolled away reads as nothing — which is
+     * how an earlier draft of this control lost its own answer.
+     */
+    const reverted =
+      revertedNow === 'frozen'
+        ? counted
+        : t.waitForEchoField(
+            ECHO.spikeFrozen,
+            'displayed',
+            'frozen',
+            'the rejected run to revert'
+          );
+    t.log.checkEquals(
+      'the rejected run reverted to what JS kept',
+      echoField(reverted, 'displayed'),
+      'frozen'
+    );
+    t.log.checkEquals(
+      'JS never adopted the rejected text',
+      echoField(reverted, 'typed'),
+      'frozen'
+    );
+    t.log.checkEquals(
+      'the keystrokes that were taken left nothing unreported',
+      echoField(reverted, 'unreported'),
+      '0'
+    );
+
+    // ---- the injector's own fidelity, on RN's field, with nothing rejected -------------------------
+    // Second, not first: tapping RN's field leaves its keyboard up, and the frozen field then does not
+    // take the tap — the first attempt at this order failed exactly there, with `focused=0` and no event.
+    await t.pressBack();
+    await t.scrollToShowEcho(ECHO.rnTarget);
+    const rnControl = await t.requireControlOnScreen('rn typing target');
+    await t.tapNode(rnControl);
+    /*
+     * The same precondition the spike half asks for, and for the same reason: `input text` has no target
+     * argument, so the burst goes to whatever holds focus. A blind tap plus a settle was measured landing
+     * **0 of 10** keys on this round's device with the field low on the page — the calibration arm was
+     * typing into nothing, which is the one reading that makes the attribution below meaningless. Waiting
+     * for RN's own `focused=1` also makes the burst safe when the field sits under the keyboard, because
+     * only the tap needs the node to be visible.
+     */
+    await t.waitForEchoField(
+      ECHO.rnTarget,
+      'focused',
+      '1',
+      "RN's field to hold focus before the calibration burst"
+    );
+    const rnTypedBefore = (
+      echoField(t.echo(ECHO.rnTarget) ?? '', 'typed') ?? ''
+    ).length;
+    const rnBurstMs = t.burstType('q'.repeat(KEYS));
+    await t.settle(1500);
+    const rnLanded =
+      (echoField(t.echo(ECHO.rnTarget) ?? '', 'typed') ?? '').length -
+      rnTypedBefore;
+    t.log.note(
+      `injector fidelity — RN TextInput landed ${String(rnLanded)} of ${String(KEYS)} keys ` +
+        `from one ${String(rnBurstMs)}ms burst at the same field`
+    );
+
+    t.log.check(
+      `the spike field counted every keystroke the injector delivered — it took ` +
+        `${String(spikeEvents)}, RN's field landed ${String(rnLanded)} of ${String(KEYS)}`,
+      spikeEvents >= rnLanded && rnLanded > 0
+    );
+    if (spikeEvents >= 0 && spikeEvents < rnLanded) {
+      t.log.note(
+        `attribution: the injector delivered ${String(rnLanded)} keys to RN's field and the ` +
+          `rejected edit accounted for only ${String(spikeEvents)} — the ${String(rnLanded - spikeEvents)} ` +
+          `missing keystroke(s) are the field's, not the driver's`
+      );
+    }
+    await t.pressBack();
+  },
+
+  /**
+   * **`maxLength` on the typing path** — the half of Q2 §7's composition line this oracle can reach.
+   *
+   * T18 measured the cap on the *write* path (`spike-write` + `nuiTestApplyWrite`) and named the missing
+   * control. What is still out of reach is named too: `input text` refuses anything outside
+   * `[A-Za-z0-9._-@:/]`, so the emoji vector that would show a cap splitting a composed character cannot be
+   * typed, and nothing in adb opens a composition at all. What *is* measured is the rule an app hits on
+   * every comment box — eight keystrokes into a field capped at five — and `cps`, the spike's code-point
+   * count, is the cap's own unit, so a cap truncating by UTF-16 units would disagree with it.
+   */
+  'spike-text-maxlength': async (t) => {
+    const CAP = 5;
+    const TYPED = 'abcdefgh';
+    await t.scrollToShowEcho(ECHO.spikeMaxLen);
+    const control = await t.requireControlOnScreen('capped field');
+    await t.tapNode(control);
+    await t.waitForEchoField(
+      ECHO.spikeMaxLen,
+      'focused',
+      '1',
+      'the capped field to take focus'
+    );
+    t.type(TYPED);
+    const shown = t.waitForEchoField(
+      ECHO.spikeMaxLen,
+      'displayed',
+      TYPED.slice(0, CAP),
+      'the cap to hold while the user typed'
+    );
+    t.log.checkEquals(
+      `the cap held at ${String(CAP)} characters of ${String(TYPED.length)} typed`,
+      echoField(shown, 'displayed'),
+      TYPED.slice(0, CAP)
+    );
+    t.log.checkEquals(
+      'the cap is counted in code points, not UTF-16 units',
+      echoField(shown, 'cps'),
+      String(CAP)
+    );
+    t.log.checkEquals(
+      'JS saw the same text native displays',
+      echoField(shown, 'equal'),
+      '1'
+    );
+    t.log.checkEquals(
+      'the keystrokes the cap refused marked nothing unreported',
+      echoField(shown, 'unreported'),
+      '0'
+    );
+    t.log.note(
+      `unmeasured by this control: an emoji or composed character at the boundary ` +
+        `(\`input text\` cannot inject one) and composition itself`
+    );
+    await t.pressBack();
+  },
 };
 
 /**
@@ -2408,10 +2749,23 @@ async function main() {
     return suite.finish();
   }
 
-  const stopMetro = await ensureMetro({
-    port: metroPort,
-    logFile: path.join(out, 'metro.log'),
-  });
+  /*
+   * A **release** artifact carries its own JS bundle, and a debuggable one does not: a debug app asks
+   * `debug_http_host` where to fetch the bundle, which is the question the runner answers for it. T18b times
+   * keystroke→commit in a release build precisely because the debug build's interpreter, dev tools and
+   * Metro-fetched bundle are part of what a debug number measures, so the same runner has to be able to stand
+   * both up. Which one is being run is printed, never inferred by the reader.
+   *
+   * `run-as` — how the preference is written *and* read back — is refused on a non-debuggable build, so the
+   * prefs step is not merely useless here: the only way to confirm it is to break the run.
+   */
+  const embeddedBundle = apk.includes(`${path.sep}release${path.sep}`);
+  const stopMetro = embeddedBundle
+    ? () => {}
+    : await ensureMetro({
+        port: metroPort,
+        logFile: path.join(out, 'metro.log'),
+      });
   const harness = new DeviceHarness({
     serial: device.serial,
     bundleId: BUNDLE_ID,
@@ -2421,7 +2775,11 @@ async function main() {
 
   try {
     harness.install(apk);
-    harness.prepareLaunch();
+    if (embeddedBundle) {
+      console.log('  bundle: embedded in the APK (release build — no Metro)');
+    } else {
+      harness.prepareLaunch();
+    }
     harness.launch();
     await harness.waitForReady(READY_TIMEOUT);
 
@@ -3114,6 +3472,40 @@ function makeContext(harness, log) {
     },
 
     /**
+     * One `input text` call, timed on the host, without the 300 ms settle `type()` adds.
+     *
+     * A control that claims a keystroke *rate* has to prove it, and on Android the only honest proof available
+     * is the injector's own wall clock: ten `KeyCharacterMap` events dispatched back to back cannot have
+     * arrived more slowly than the call that sent them.
+     *
+     * @param {string} text
+     * @returns {number} how long the injection took, in ms
+     */
+    burstType(text) {
+      const startedAt = Date.now();
+      harness.typeText(text);
+      return Date.now() - startedAt;
+    },
+
+    /**
+     * Scroll towards the top of the page until an echo line is on screen, so its control can be pressed.
+     *
+     * `requireControlOnScreen` only ever scrolls *down*, and a control clipped against the window's top edge
+     * still reports a box — 23 px of frozen field, centre inside the 142 px status bar, where SystemUI eats the
+     * tap and the field never focuses. A control that starts from wherever the previous one left the page has
+     * to ask for the top by name, which is what T18's ordering hid: `spike-text-reject` only ever worked
+     * because it ran first.
+     *
+     * @param {string} testID an echo that lives beside the control being aimed at
+     */
+    async scrollToShowEcho(testID) {
+      for (let attempt = 0; attempt < 8 && echo(testID) == null; attempt += 1) {
+        await this.scrollPage(-800);
+        await sleep(300);
+      }
+    },
+
+    /**
      * Focus a control by tapping it, then type. Returns the focus count the echo
      * reported, which is the half of the proof a bare `typeText` cannot give: that
      * the *tap* put the field in an edit session.
@@ -3132,6 +3524,70 @@ function makeContext(harness, log) {
       );
       await this.type(text);
       return focused;
+    },
+
+    /**
+     * Type one keystroke at a time, with the *device's* own clock wrapped around each injection.
+     *
+     * `spike-latency` types a whole burst in one `input text` call, so what it can time is the gap between
+     * the JS callbacks that follow — throughput under a burst, with no keystroke send time in it. Q2 §7's
+     * line is about the first keystroke on an idle field, which needs a send timestamp per key. This is that:
+     * one `input text` per character, inside a single loop that runs on the device, printing
+     * `<t0> <t1> <char>` per key, where `t0` is `date +%s%3N` taken before the injector and `t1` after it.
+     *
+     * Why the clock is trusted: an emulator's app clock *is* the device clock, so a commit stamp read out of
+     * the app's own echo and `t0`/`t1` are the same clock — no pairing, no NTP, no host-side estimate. What
+     * the injector's own cost does to the number is handled by keeping both `t0` and `t1`. The intended
+     * reading was "upper bound / lower bound"; the first run corrected it, because `commit − t1` came back
+     * negative for nearly every keystroke. `input text` dispatches the key early and spends the rest of its
+     * wall clock leaving, so `t1 − t0` is printed as the injector's cost — a few milliseconds of which are
+     * inside every sample, equally in both arms — rather than treated as a floor that can be subtracted.
+     *
+     * One shell call rather than one per key, because each `adb shell` spawn is itself tens of milliseconds
+     * of jitter that would land *between* keystrokes and set the cadence the control then claims to have
+     * driven.
+     *
+     * @param {string} chars one injectable character per sample
+     * @param {number} gapMs idle time to leave between keystrokes
+     * @returns {{ keys: { t0: number, t1: number, char: string }[], floorMs: number }}
+     */
+    injectKeyedText(chars, gapMs) {
+      const script =
+        `for c in ${[...chars].join(' ')}; do t0=$(date +%s%3N); input text $c; ` +
+        `t1=$(date +%s%3N); echo "$t0 $t1 $c"; sleep ${(gapMs / 1000).toFixed(2)}; done`;
+      const ran = harness.shell(script);
+      if (ran.status !== 0) {
+        log.abort(`the per-keystroke injector failed: ${ran.stderr.trim()}`);
+      }
+      /** @type {{ t0: number, t1: number, char: string }[]} */
+      const keys = [];
+      for (const line of ran.stdout.split('\n')) {
+        const parts = line.trim().split(/\s+/);
+        if (
+          parts.length === 3 &&
+          /^\d+$/.test(parts[0]) &&
+          /^\d+$/.test(parts[1])
+        ) {
+          keys.push({
+            t0: Number(parts[0]),
+            t1: Number(parts[1]),
+            char: parts[2],
+          });
+        }
+      }
+      if (keys.length !== [...chars].length) {
+        log.abort(
+          `the injector reported ${String(keys.length)} of ` +
+            `${String([...chars].length)} keystrokes — the cadence is unknown`
+        );
+      }
+      return {
+        keys,
+        floorMs: percentile(
+          keys.map((key) => key.t1 - key.t0),
+          0.5
+        ),
+      };
     },
 
     /**

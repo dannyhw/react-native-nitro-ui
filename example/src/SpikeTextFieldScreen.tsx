@@ -41,6 +41,16 @@ import { SpikeTextField } from '../../src/spike/TextField/SpikeTextField';
 
 const iOS = Platform.OS === 'ios';
 
+/*
+ * How many `Date.now()` stamps the latency pair keeps.
+ *
+ * The driver needs the whole burst in one echo line — it types one keystroke per command and reads the screen
+ * once at the end — so the list is sized above the 30 samples/arm the re-measure asks for, and the two echoes
+ * carry `numberOfLines={0}` rather than the `4` the other echoes use, so the list is never truncated before it
+ * reaches the accessibility tree.
+ */
+const LATENCY_STAMPS = 64;
+
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -252,6 +262,74 @@ function FrozenField() {
   );
 }
 
+/**
+ * One arm of the **latency pair** — the two fields the `spike-latency-first` real-input control times.
+ *
+ * Q2 §7's latency line is a *ratio*, and a ratio is only worth reading if both arms did the same work and were
+ * told about the keystroke the same way. T18's pair was not a pair in that sense: its spike field's
+ * `onValueChange` also called `refresh()` (a synchronous `nuiTestState()` read) while RN's `onChangeText` did
+ * not, and its number was the gap between consecutive commits inside one injected burst. So this component is
+ * the same code path for both kinds — controlled, three state updates per keystroke, no mirror read, and a
+ * wall-clock stamp taken at the top of the callback — and the driver drives one keystroke at a time, so every
+ * sample is a *first* keystroke after an idle field rather than a throughput gap.
+ *
+ * The stamp list is kept whole (`LATENCY_STAMPS`) and echoed in order, because the driver reads the app's
+ * clock out of this line: `adb shell date` and the app's `Date.now()` are the same device clock, so
+ * "keystroke injected → JS told" needs no clock pairing and no per-keystroke `uiautomator dump`.
+ */
+function LatencyField(props: { kind: 'spike' | 'rn' }) {
+  const spike = props.kind === 'spike';
+  const [text, setText] = useState('');
+  const [events, setEvents] = useState(0);
+  const [stamps, setStamps] = useState<number[]>([]);
+  /*
+   * The driver's precondition, on screen: it taps the field and waits for this counter to move before it
+   * types, because `adb shell input text` has no target argument — keystrokes go to whatever holds focus, and
+   * a burst typed into an unfocused field produces a clean-looking zero samples.
+   */
+  const [focusEvents, setFocusEvents] = useState(0);
+
+  const record = useCallback((next: string) => {
+    // Stamped before any state update: this is the moment JS learned about the keystroke, which is the
+    // quantity, and a stamp taken after a render would measure React as well.
+    const at = Date.now();
+    setText(next);
+    setEvents((count) => count + 1);
+    setStamps((previous) => [...previous, at].slice(-LATENCY_STAMPS));
+  }, []);
+
+  return (
+    <>
+      {spike ? (
+        <SpikeTextField
+          testID="spike-latency-field"
+          iosImplementation={iOS ? 'textfield' : 'swiftui'}
+          accessibilityLabel="latency spike field"
+          value={text}
+          onValueChange={record}
+          onFocus={() => setFocusEvents((count) => count + 1)}
+        />
+      ) : (
+        <TextInput
+          testID="rn-latency-field"
+          accessibilityLabel="latency rn field"
+          style={styles.rn}
+          value={text}
+          onChangeText={record}
+          onFocus={() => setFocusEvents((count) => count + 1)}
+        />
+      )}
+      <Text
+        testID={`${props.kind}-latency-echo`}
+        style={styles.mono}
+        numberOfLines={0}
+      >
+        {`${props.kind}-latency events=${String(events)} focus=${String(focusEvents)} typed=${text} ats=${stamps.join(',')}`}
+      </Text>
+    </>
+  );
+}
+
 export default function SpikeTextFieldScreen() {
   const ink = useInk();
   const topInset = useTopInset();
@@ -367,6 +445,21 @@ export default function SpikeTextFieldScreen() {
           {writeEcho}
         </Text>
 
+        {/* ---- 2a. Q2 §7's other half: `maxLength` on the *typing* path --------------------------- */}
+        {/* `spike-write` asks the cap of the *write* path, and its echo is only refreshed by the button, so
+            nothing T18 ran could type past a cap and read the result. Q2 §7 P3 asks for `maxLength` with an
+            emoji; `adb shell input text` cannot inject a non-ASCII character, so the emoji half stays
+            unmeasured and this field measures the half the oracle can reach: the cap holds while the user
+            types, and the code-point count is the cap's own unit. */}
+        <Field
+          testID="spike-maxlength"
+          echoID="spike-maxlength-echo"
+          label="capped field"
+          arm={iOS ? 'textfield' : 'swiftui'}
+          maxLength={5}
+          defaultValue=""
+        />
+
         {/* ---- 2b. P3 §2.1: a rejected user edit, driven by the keyboard --------------------------- */}
         <Text style={[styles.section, { color: ink.ink }]}>
           P3 — rejected edit
@@ -462,6 +555,17 @@ export default function SpikeTextFieldScreen() {
         >
           {`rn-type-target typed=${rnText} events=${String(rnEvents)} focused=${String(rnFocused)} at=${String(rnLastAt)} ats=${rnChangeTimes.join(',')}`}
         </Text>
+
+        {/* ---- 6. P5b: the latency pair — driven one keystroke at a time by the real-input runner ------- */}
+        <Text style={[styles.section, { color: ink.ink }]}>
+          P5b — latency pair (same work, same run)
+        </Text>
+        <View style={styles.bordered}>
+          <LatencyField kind="spike" />
+        </View>
+        <View style={styles.bordered}>
+          <LatencyField kind="rn" />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

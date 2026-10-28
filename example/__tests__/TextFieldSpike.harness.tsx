@@ -68,6 +68,18 @@ const EMOJI_32 = '\u{1F600}\u{1F601}\u{1F602}\u{1F603}';
  */
 const focusableArm: 'swiftui' | 'textfield' = iOS ? 'textfield' : 'swiftui';
 
+/*
+ * The arm `P5` times focus on, which is not the same question as "which arm can be focused at all".
+ *
+ * `focusableArm` is what T18 *read* out of the source, and the iOS measurement came back the other way: the
+ * hosted `UITextField` arm answers an imperative ask with `lastWrite=focus:no-field` and `live=0` — SwiftUI
+ * has not built its representable in that instance — while the SwiftUI arm is the one with a handle now
+ * (`SpikeSwiftUITextField.focusBinding`). Timing focus on the arm that cannot take it produced a red that
+ * measured the arm choice rather than the method, so `P5` runs the loop on the arm that has an imperative
+ * path on both platforms and records what the other arm did as its own row.
+ */
+const latencyArm: 'swiftui' | 'textfield' = 'swiftui';
+
 /**
  * The mirror line, parsed.
  *
@@ -1027,7 +1039,7 @@ describe('T18 spike — TextField', () => {
       );
     }
 
-    const parsed = heights.map((entry) => Number(entry.split(':')[1]));
+    const parsed = heights.map((entry) => Number(entry.split(':')[1] ?? '0'));
     const maxCorrections = Math.max(...corrections);
     evidence('p4_auto_grow', {
       platform: Platform.OS,
@@ -1041,7 +1053,7 @@ describe('T18 spike — TextField', () => {
     });
 
     // The field has to be growing at all, or "≤1 correction" would be measuring an idle control.
-    expect(parsed[parsed.length - 1]).toBeGreaterThan(parsed[0]);
+    expect(parsed[parsed.length - 1] ?? 0).toBeGreaterThan(parsed[0] ?? 0);
     // D17's line, per step: three new lines of content cost no more than one correction each.
     expect(maxCorrections).toBeLessThanOrEqual(1);
   });
@@ -1173,8 +1185,9 @@ describe('T18 spike — TextField', () => {
     const field = await mountSpike(
       // Boxed, like the `TextInput` mounted beside it: `resolveFocusCapability` reports focus capability
       // per box shape, and a latency comparison against a field that always has a height has to ask in a
-      // box too.
-      { arm: focusableArm, defaultValue: '', width: 320, height: 44 },
+      // box too. On `latencyArm`, for the reason named there — the iOS arm B answer is measured separately,
+      // below, rather than standing in for the method's cost.
+      { arm: latencyArm, defaultValue: '', width: 320, height: 44 },
       () => (
         <TextInput
           testID="rn-harness-input"
@@ -1311,7 +1324,7 @@ describe('T18 spike — TextField', () => {
      * and the row says `same arm`.
      */
     const swiftUIArm = await mountSpike({
-      arm: 'swiftui',
+      arm: iOS ? 'textfield' : 'swiftui',
       defaultValue: '',
     });
     await waitFor(
@@ -1353,13 +1366,16 @@ describe('T18 spike — TextField', () => {
       late_blur_ask2: lateBlurAsk2 ? 1 : 0,
       late_mirror_after_blur1: lateMirrorAfterAsk1,
       late_mirror_after_blur2: lateMirrorAfterAsk2,
-      swiftui_imperative_focus: iOS
+      other_arm: iOS ? 'textfield' : 'swiftui',
+      other_arm_focus: iOS
         ? swiftUIFocused
           ? 'lands'
-          : 'no-op'
-        : 'same arm',
-      swiftui_focus_events: swiftUIArm.log.focus - armAFocusBefore,
-      swiftui_mirror_focused: armAMirrorFocused,
+          : 'does not land'
+        : 'same arm as the loop',
+      other_arm_focus_events: swiftUIArm.log.focus - armAFocusBefore,
+      other_arm_mirror_focused: armAMirrorFocused,
+      other_arm_last_write: swiftUIArm.mirror().lastWrite ?? '',
+      latency_arm: latencyArm,
     });
 
     // `blur()` is a shipped method, so its observable is asserted, not inferred from the next focus working.
@@ -1370,8 +1386,9 @@ describe('T18 spike — TextField', () => {
     // Recorded, not asserted, and reported: on Android `blur()` does not answer a field mounted later in the
     // same suite, while it answers the first field on every sample. See the report's focus row.
     if (iOS) {
-      // Asserted so it cannot rot into a silent behaviour change, whichever way it lands.
-      expect(swiftUIArm.log.focus - armAFocusBefore).toBeGreaterThan(0);
+      // The finding, asserted so it cannot rot either way: on the hosted-UITextField arm an imperative
+      // `focus()` does not land in this shape (`focus:no-field`, `live=0`). G8's cost of choosing that arm.
+      expect(swiftUIArm.mirror().lastWrite ?? '').toBe('focus:no-field');
     }
     await expectTimingBudget({
       label: 'focus() → onFocus p95, spike field vs RN TextInput',
@@ -1423,17 +1440,38 @@ describe('T18 spike — TextField', () => {
     await mirrorReads(field, 'lastWrite', 'applied');
     const beforeImpl = field.mirror().impl;
     /*
-     * Focus is the observable only where a focus ask lands at all (see `resolveFocusCapability`). Where it
-     * does not, the claim is reported unobserved rather than being dropped quietly. The answer has to be the
-     * one for *this* field's shape: the boxed answer belongs to P5's field, and borrowing it would make this
-     * scenario assert a capability it never asked for.
+     * Focus is the observable only where an ask can land at all, and that needs two things, each measured
+     * here rather than assumed:
+     *
+     * 1. this instance's hosted control exists. On iOS the `UITextField` is built by a later SwiftUI pass
+     *    than the Fabric node, and this scenario mounts the *unboxed* shape — the shape the first run of
+     *    this round found still at `live=0` / `lastWrite=focus:no-field` four seconds after mount. An ask
+     *    aimed at a control that was never built measures the shape, not the rebuild it is here to watch, so
+     *    `awaitHostedField` is asked and its answer recorded as `attached_by`;
+     * 2. the arm this scenario mounts can take focus on command — `resolveFocusCapability`, whose field is
+     *    the same unboxed shape and the same arm as this one.
+     *
+     * Where either is missing the claim is reported `unobserved`, which is a sentence about X4's rule and not
+     * a green light for focus.
      */
-    const focusObservable = (await resolveFocusCapability())
-      .spikePlainTakesFocus;
-    if (focusObservable) {
+    const attached = await awaitHostedField(field);
+    const canAskForFocus =
+      attached && (await resolveFocusCapability()).spikePlainTakesFocus;
+    /*
+     * The ask is made, and its *answer* decides whether focus can serve as the observable here — it is not
+     * itself asserted, because whether this arm takes focus on command is `P5`'s subject, not X4's. Asserting
+     * it inside X4 turned an arm-B finding (`focus:no-field`, `live=0` on iOS) into a red on a rule about
+     * rebuilding, which is how a scenario ends up reporting the wrong thing.
+     */
+    let focusAsk = 'not asked';
+    let focusBeforeProp = '';
+    if (canAskForFocus) {
       field.handle()?.focus();
-      await mirrorReads(field, 'focused', '1');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      focusBeforeProp = field.mirror().focused ?? '';
+      focusAsk = `${field.mirror().lastWrite ?? 'none'} live=${field.mirror().live ?? ''}`;
     }
+    const focusObservable = canAskForFocus && focusBeforeProp === '1';
     await field.set({ placeholder: 'a placeholder nobody reads' });
     await new Promise((resolve) => setTimeout(resolve, 400));
     // A write *after* the prop change, so the mirror we read was published after it: if the prop change had
@@ -1464,6 +1502,12 @@ describe('T18 spike — TextField', () => {
       platform: Platform.OS,
       height: (size?.height ?? 0).toFixed(1),
       width: (size?.width ?? 0).toFixed(1),
+      // Whether this instance ever had a hosted control that could hold focus. `never attached` is the
+      // finding that made this scenario red: the ask reached a model with nothing behind it.
+      attached_by: attached ? 'mounted' : 'never attached',
+      // What the focus ask answered, so an `unobserved` rebuild row says *why* it could not be watched.
+      focus_ask: focusAsk,
+      focus_before_prop: focusBeforeProp || 'not asked',
       rebuild_on_prop: focusObservable ? 0 : 'unobserved',
       rebuild_on_text: focusObservable ? 0 : 'unobserved',
       churn,
