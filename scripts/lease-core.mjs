@@ -183,6 +183,7 @@ export function poolReapDecision(
     leases,
     defaultIdleMinutes = IDLE_SHUTDOWN_DEFAULT_MINUTES,
     isPidAlive = pidIsAlive,
+    overrideIdleMinutes = null,
   }
 ) {
   const started = entry?.bootedAtMs ?? nowMs;
@@ -191,7 +192,11 @@ export function poolReapDecision(
   const lease = entry?.leaseId
     ? (leases ?? []).find((x) => x.id === entry.leaseId)
     : undefined;
+  // An explicit override (the CLI's `--idle-minutes`) outranks what the record carries, because
+  // the record's value came from devices.json in the first place and the flag exists to say
+  // "not that number, this one, right now". `0` is a real override, so this is a null check.
   const idleMinutes =
+    overrideIdleMinutes ??
     entry?.idleShutdownMinutes ??
     defaultIdleMinutes ??
     IDLE_SHUTDOWN_DEFAULT_MINUTES;
