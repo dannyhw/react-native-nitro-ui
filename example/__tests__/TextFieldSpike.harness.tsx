@@ -364,7 +364,41 @@ let focusCapability: {
   rnTakesFocus: boolean;
   spikeBoxedTakesFocus: boolean;
   spikePlainTakesFocus: boolean;
+  /** What the control said about the ask (`HybridNitroUiSpikeTextField.focus`). */
+  plainWrite: string;
+  boxedWrite: string;
 } | null = null;
+
+/**
+ * Wait until the hosted control behind an instance actually exists.
+ *
+ * `handle()` arrives with the Fabric node. On iOS the `UITextField` is built later — SwiftUI has to run a
+ * pass over the body that chooses the arm — so an imperative ask sent in between reaches a model with no
+ * control behind it, and `focus()` finds nothing to focus. Reporting "this field cannot be focused on
+ * command" about a field that was never built would be a measurement of the test. `live=` is the mirror's
+ * own answer to "is the control attached" (`NitroSpikeTextMirror`), and Android has no such gap to wait
+ * for: its single shape builds the Compose field with the host.
+ *
+ * It answers instead of failing. A control that never got built is the finding, and an ask aimed at it
+ * proves nothing about focus; the scenario that has to say which of the two happened is `P1`'s
+ * `attached_by`, so the answer here is evidence, not a gate.
+ */
+async function awaitHostedField(field: MirrorReader): Promise<boolean> {
+  if (!iOS) {
+    return true;
+  }
+  try {
+    await waitFor(
+      () => {
+        expect(field.mirror().live).toBe('1');
+      },
+      { timeout: 4000, interval: 50 }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Ask for focus and report whether the event arrived, without failing when it does not. */
 async function focusLands(
@@ -405,6 +439,8 @@ async function resolveFocusCapability(): Promise<{
   rnTakesFocus: boolean;
   spikeBoxedTakesFocus: boolean;
   spikePlainTakesFocus: boolean;
+  plainWrite: string;
+  boxedWrite: string;
 }> {
   if (focusCapability != null) {
     return focusCapability;
@@ -438,10 +474,14 @@ async function resolveFocusCapability(): Promise<{
     },
     { timeout: 10000, interval: 50 }
   );
+  const plainIsLive = await awaitHostedField(plain);
   const spikePlainTakesFocus = await focusLands(
     () => plain.handle()?.focus(),
     () => plain.log.focus
   );
+  const plainWrite = plainIsLive
+    ? (plain.mirror().lastWrite ?? 'none')
+    : 'no-control';
   const rnTakesFocus = await focusLands(
     () => rnInput.current?.focus(),
     () => rnFocusEvents
@@ -462,10 +502,14 @@ async function resolveFocusCapability(): Promise<{
     },
     { timeout: 10000, interval: 50 }
   );
+  const boxedIsLive = await awaitHostedField(boxed);
   const spikeBoxedTakesFocus = await focusLands(
     () => boxed.handle()?.focus(),
     () => boxed.log.focus
   );
+  const boxedWrite = boxedIsLive
+    ? (boxed.mirror().lastWrite ?? 'none')
+    : 'no-control';
   boxed.handle()?.blur();
   boxed.unmount();
 
@@ -473,13 +517,15 @@ async function resolveFocusCapability(): Promise<{
     rnTakesFocus,
     spikeBoxedTakesFocus,
     spikePlainTakesFocus,
+    plainWrite,
+    boxedWrite,
   };
   console.log(
     `nui-spike focus_capability platform=${Platform.OS} rn=${
       rnTakesFocus ? 1 : 0
     } spike_plain=${spikePlainTakesFocus ? 1 : 0} spike_boxed=${
       spikeBoxedTakesFocus ? 1 : 0
-    }`
+    } plain_write=${plainWrite} boxed_write=${boxedWrite}`
   );
   return focusCapability;
 }
@@ -1050,6 +1096,7 @@ describe('T18 spike — TextField', () => {
      * a zero; the probe says which world this is, and the spike's own bug stays red in the one world where it
      * is one.
      */
+    await awaitHostedField(field);
     const capability = await resolveFocusCapability();
     if (!capability.spikeBoxedTakesFocus) {
       evidence('p5_focus', {
@@ -1060,6 +1107,8 @@ describe('T18 spike — TextField', () => {
         ratio: 'unmeasured',
         rn_takes_focus: capability.rnTakesFocus ? 1 : 0,
         spike_plain_takes_focus: capability.spikePlainTakesFocus ? 1 : 0,
+        plain_write: capability.plainWrite,
+        boxed_write: capability.boxedWrite,
         swiftui_imperative_focus: iOS ? 'noop' : 'same arm',
         reason: capability.rnTakesFocus
           ? 'RN TextInput took focus on command and the spike field did not'

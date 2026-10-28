@@ -1018,12 +1018,31 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
   func focus() throws {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
-      if let field = self.model.hostedField {
-        _ = field.becomeFirstResponder()
+      guard let field = self.model.hostedField else {
+        // Arm A has nothing to call: `@FocusState` is private to the SwiftUI
+        // subtree, so an imperative `focus()` on that arm is a no-op. P1 reports
+        // that, and the harness asserts `focused` did not move. A *frozen*
+        // textfield arm with no field is a different thing — recorded below.
+        if self.model.frozenImplementation == SpikeTextFieldShapes.textfield {
+          self.model.lastWrite = "focus:no-field"
+          self.publishMirror()
+        }
+        return
       }
-      // Arm A has nothing to call: `@FocusState` is private to the SwiftUI
-      // subtree, so an imperative `focus()` on that arm is a no-op. P1 reports
-      // that, and the harness asserts `focused` did not move.
+      if !field.becomeFirstResponder() {
+        /*
+         * A refused first-responder ask is otherwise invisible: `focused` stays `0`, no `onFocus` fires, and
+         * the JS caller cannot tell "the control said no" from "the ask never arrived". `lastWrite` carries it
+         * because it is the mirror's outcome slot and because a *successful* ask leaves it alone, so the
+         * handshake assertions around it keep their meaning.
+         */
+        let frame = field.frame
+        self.model.lastWrite =
+          "focus:refused window=\(field.window == nil ? 0 : 1) "
+          + "frame=\(Int(frame.width))x\(Int(frame.height)) "
+          + "hidden=\(field.isHidden ? 1 : 0)"
+        self.publishMirror()
+      }
     }
   }
 
