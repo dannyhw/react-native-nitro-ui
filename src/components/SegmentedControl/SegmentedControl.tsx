@@ -94,6 +94,8 @@ export interface SegmentedControlProps extends ViewProps {
         readonly tintColor: number | null;
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
       }) => void)
     | undefined;
   /**

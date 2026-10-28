@@ -877,14 +877,18 @@ namespace {
 
   /**
    * The box a `fillWidth` node is laid out with: the height the engine answered
-   * with, and the width Yoga gave it. This mirrors the last three lines of
+   * with, and the width Yoga gave it. This mirrors the last lines of
    * `IntrinsicShadowNode::measureContent` (cpp/NitroUiIntrinsic.hpp:205-212) -
    * the engine cannot see the constraints, so the shadow node applies the policy
    * after `measure` returns, and a test of the policy has to apply it too.
+   *
+   * Including its guard: an infinite constraint width is not a box width, so
+   * `INFINITY` means "there is no box width" and the cached width is what draws.
    */
   NitroUiMeasuredSize layoutAt(const NitroUiMeasuredSize& measured, float boxWidth) {
     NitroUiMeasuredSize laidOut = measured;
-    if ((measured.flags & NitroUiSizingEngine::kFlagFillWidth) != 0) {
+    if ((measured.flags & NitroUiSizingEngine::kFlagFillWidth) != 0 &&
+        std::isfinite(boxWidth)) {
       laidOut.width = boxWidth;
     }
     return laidOut;
@@ -920,7 +924,7 @@ namespace {
     // of a *different* width - which is the ordinary case, not an edge one.
     bind(72, 72);
     auto second = measure(72, "");
-    checkSize(second, 300, 40, "the cached answer is what the cache learned");
+    checkSize(second, 328, 40, "the cached answer is the height the control measured, at the declared width");
     checkSize(layoutAt(second, 200), 200, 40, "and the box still owns the width");
     engine().report(72, 200, 40, NitroUiSizingEngine::kFlagFillWidth);
     check(!engine().flush(), "the 200-wide Slider's report is not a change either");
@@ -929,7 +933,64 @@ namespace {
     // And the cache did not become this instance's box width.
     bind(73, 73);
     auto third = measure(73, "");
-    checkSize(third, 300, 40, "a third Slider reads an answer, not the last box");
+    checkSize(third, 328, 40, "a third Slider reads the control's answer, not the last box");
+  }
+
+  /**
+   * Row 10 of `docs/tasks/FOLLOWUPS.md`: a `fillWidth` control in a parent with no
+   * finite width (a horizontal scroller) kept the last cached width, forever.
+   *
+   * The policy says such a control's width is not its own - `measureContent`
+   * replaces it with the box's - so filing a report's width into the cache looked
+   * free. It was not free in exactly one case: that replacement is guarded on the
+   * constraint width being *finite*, so under an infinite parent the cached width
+   * is what draws. Filing the report's width therefore left whichever box a
+   * bounded instance had last been measured at, on a control in a different
+   * parent, with nothing left that could notice: the report agrees with the cache
+   * by height - all the policy allows it to compare - so it is confirmed rather
+   * than queued, and no later measure can differ either.
+   *
+   * What a `fillWidth` entry holds now is the width the component *declared* for
+   * this case (328 here, deliberately none of the box widths this test measures,
+   * and the number `docs/components/slider.md` already documents as "used only
+   * when a parent gives no finite width").
+   */
+  void testFillWidthUnderAnInfiniteParentUsesTheDeclaredWidth() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 328, 40, NitroUiSizingEngine::kFlagFillWidth);
+
+    // A bounded Slider is measured first: the ordinary shape of a real screen,
+    // where a horizontal scroller is not the only `fillWidth` control in the app.
+    bind(76, 76);
+    measure(76, "");
+    engine().report(76, 200, 40, NitroUiSizingEngine::kFlagFillWidth);
+    check(!engine().flush(), "the bounded instance's report is not a correction");
+    checkEquals(pushes.size(), size_t{0}, "which costs nothing");
+
+    // The scroller's instance: same configuration, so the engine is warm, and Yoga
+    // has no width to give it. This is the frame row 10 is about.
+    bind(77, 77);
+    auto underInfinity = measure(77, "");
+    checkSize(layoutAt(underInfinity, INFINITY), 328, 40,
+              "an unbounded parent draws the declared width, not the 200 dp of someone else's box");
+
+    // The unbounded instance then measures its own content at the box it was given
+    // and reports 328: a confirmation, not a correction, so the width it draws is
+    // the width it agreed to and nothing further moves.
+    engine().report(77, 328, 40, NitroUiSizingEngine::kFlagFillWidth);
+    check(!engine().flush(), "which the unbounded instance confirms rather than corrects");
+    checkEquals(pushes.size(), size_t{0}, "and that costs no commit");
+
+    // A control that declared nothing keeps what it measured (there is no honest
+    // replacement to offer), so the filing has to be tested against the *other*
+    // half the report writes: the configuration's own history, which outlives an
+    // environment change while `cache_` does not. A fresh cold mount after a text
+    // size change guesses from that history, and a guess is the number an
+    // unbounded parent draws just as much as a cache hit is.
+    engine().invalidateEnvironment();
+    bind(78, 78);
+    checkSize(measure(78, ""), 328, 40,
+              "the configuration's history carries the declared width too");
   }
 
   /**
@@ -1243,6 +1304,7 @@ int main() {
   testKeyChangeReMeasuresAndCorrects();
   testFillWidthKeepsTheFlag();
   testFillWidthInstancesOfDifferentWidthsCostNothing();
+  testFillWidthUnderAnInfiniteParentUsesTheDeclaredWidth();
   testFillWidthStillCorrectsAWrongHeight();
   testUnboundReporterKeepsItsCorrection();
   testUnboundTargetKeepsTheCorrection();

@@ -88,10 +88,11 @@ namespace margelo::nitro::nitroui {
      *   the answer a cold mount got depended on the last parent that happened to
      *   be measured.
      *
-     * A `fillWidth` width can only ever be a restatement of the box, so it says
-     * nothing a push could change; the height still decides. The cached width for
-     * such a configuration is therefore the last box width seen, and only the
-     * height is meaningful - see `docs/architecture/sizing.md` SS5.
+     * A `fillWidth` width can only ever restate the box the instance was measured
+     * at, so the only number such a configuration owns is the height. Hence the
+     * comparison above takes the height alone, and what gets filed beside it is the
+     * component's own declared width rather than the reported one (see
+     * `filedSizeLocked`) - `docs/architecture/sizing.md` SS5.
      *
      * An `intrinsic` control's width *is* its own answer, so nothing is ignored
      * there: Switch behaves exactly as before.
@@ -201,6 +202,21 @@ namespace margelo::nitro::nitroui {
     // Epoch 0 is not a real epoch (`environmentEpoch_` starts at 1), so this can
     // never collide with a live `NitroUiSizeKey`.
     return keyFor(componentName, sizingKey, 0).hash;
+  }
+
+  NitroUiMeasuredSize NitroUiSizingEngine::filedSizeLocked(const NitroUiMeasuredSize& reported, const std::string& componentName) const {
+    if ((reported.flags & kFlagFillWidth) == 0) {
+      return reported;
+    }
+    auto fallback = fallbacks_.find(componentHash(componentName.c_str()));
+    if (fallback == fallbacks_.end()) {
+      // Nothing declared: no honest replacement for the width exists, so the
+      // reported number is the only one on offer.
+      return reported;
+    }
+    NitroUiMeasuredSize filed = reported;
+    filed.width = fallback->second.width;
+    return filed;
   }
 
   void NitroUiSizingEngine::dropGuessesForLocked(uint32_t hash, const char* /*componentName*/) {
@@ -550,18 +566,20 @@ namespace margelo::nitro::nitroui {
           // happens to match by luck, or nothing at all. Filling the entry here is
           // what keeps the next mount from falling back to the component's declared
           // guess again; only the guess being *wrong* may cost a correction (B2).
+          const NitroUiMeasuredSize confirmed =
+              filedSizeLocked(measured, ledger->second.componentName);
           guesses_[guessHash(ledger->second.componentName.c_str(), ledger->second.sizingKey)] =
               GuessEntry{ledger->second.componentName, ledger->second.sizingKey,
-                         NitroUiMeasuredSize{width, height, NitroUiSizeKey{}, flags}};
+                         NitroUiMeasuredSize{confirmed.width, confirmed.height, NitroUiSizeKey{}, flags}};
           auto cached = cache_.find(key.hash);
           if (cached != cache_.end() && cached->second.key == key && !cached->second.provisional) {
             // Already authoritative: leave the recorded size alone.
           } else if (cached == cache_.end() || cached->second.key != key) {
-            cache_[key.hash] = SizeEntry{key, measured, false};
+            cache_[key.hash] = SizeEntry{key, confirmed, false};
             stats_.cachedSizes = static_cast<int64_t>(cache_.size());
           } else {
             cached->second.provisional = false;
-            cached->second.size = measured;
+            cached->second.size = confirmed;
           }
           return;
         }
@@ -682,7 +700,18 @@ namespace margelo::nitro::nitroui {
           continue;
         }
         const NitroUiSizeKey key = ledger->second.key;
-        const NitroUiMeasuredSize measured{report.width, report.height, key, report.flags};
+        /**
+         * What this report becomes: the height the control measured, plus the width
+         * the component declared when the policy says the width is not the control's
+         * own. `measured` is what goes in the cache, in the configuration's history,
+         * in the ledger and in the pushed state, so filing happens once here rather
+         * than at each of those four writes - and every one of them then agrees,
+         * including `laidOut`, which is meant to be the size the engine actually
+         * told Yoga to lay the node out with.
+         */
+        const NitroUiMeasuredSize measured =
+            filedSizeLocked({ report.width, report.height, key, report.flags },
+                            ledger->second.componentName);
 
         auto instance = registry_.find(report.instanceId);
         if (instance == registry_.end()) {
@@ -715,7 +744,7 @@ namespace margelo::nitro::nitroui {
         const std::string& sizingKey = ledger->second.sizingKey;
         guesses_[guessHash(ledger->second.componentName.c_str(), sizingKey)] =
             GuessEntry{ledger->second.componentName, sizingKey,
-                       NitroUiMeasuredSize{report.width, report.height, NitroUiSizeKey{}, report.flags}};
+                       NitroUiMeasuredSize{measured.width, measured.height, NitroUiSizeKey{}, report.flags}};
 /**
          * The measured size deliberately does **not** become the component's
          * fallback. `fallbacks_` is keyed by component alone, so writing the last
