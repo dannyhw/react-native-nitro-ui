@@ -43,6 +43,8 @@ import {
   loadBlocker,
   loadCeiling,
   narrowingProblem,
+  parseTimeoutFlags,
+  timeoutRuleProblem,
 } from './lib.mjs';
 
 /**
@@ -348,6 +350,27 @@ export function dryRunReport(input) {
     }
     // The same narrowing guard `run.mjs` applies before it boots anything, so a dry
     // run cannot print "would start" for a mint the run would refuse.
+    if (minting && !forced) {
+      // The waiting rule is knowable from the flags, so the dry run answers the same
+      // question the runner asks at startup (review N1): a mint under a non-default
+      // wait is a diagnostic, and "would start" here would be wrong.
+      const timeouts = parseTimeoutFlags(
+        argv,
+        (name) => {
+          const at = argv.indexOf(name);
+          return at === -1 ? null : (argv[at + 1] ?? null);
+        },
+        platform
+      );
+      const waiting = timeoutRuleProblem({
+        platform,
+        mountTimeoutMs: timeouts.mountTimeoutMs,
+        presentedTimeoutMs: timeouts.presentedTimeoutMs,
+      });
+      if (waiting != null) {
+        problems.push(`--update-baseline: ${waiting}`);
+      }
+    }
     if (minting && !forced) {
       const narrowed = narrowingProblem({
         scheduled: schedule.length,

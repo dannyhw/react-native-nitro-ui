@@ -46,6 +46,7 @@ import {
   launchPlanString,
   parseTimeoutFlags,
   requestedTimeouts,
+  timeoutRuleProblem,
   skippedCellNotes,
   summarizeMissingReasons,
 } from '../bench/lib.mjs';
@@ -577,7 +578,7 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     expect(lines.at(-1)).toContain('cells -> `missing`');
   });
 
-  it('refuses a run that waited longer than the rule the baseline records', () => {
+  it('refuses a run that did not wait by the rule the baseline records', () => {
     const runWith = (presentedTimeoutMs) => {
       const run = mintableRun();
       for (const cell of Object.values(run.cells)) {
@@ -597,6 +598,17 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     expect(reasons[0]).toContain('waited longer for a signal than a baseline');
     expect(reasons[0]).toContain(`${String(justOver)} ms presented`);
     expect(baselineBlockers(runWith(IOS_RULE.presentedTimeoutMs))).toEqual([]);
+    // And the same *under* the rule (review N1). A 1 000 ms wait drops samples a
+    // baseline keeps, so it is exactly as non-comparable as a 40 s one - and `run.mjs`
+    // tells the operator any `--timeout-*` run is diagnostic, so minting here would
+    // contradict the runner's own message. A guard that only looked upward let this
+    // through, turning the DatePicker comparison cells into `skippedCells` silently.
+    const justUnder = IOS_RULE.presentedTimeoutMs - 1;
+    const short = baselineBlockers(runWith(justUnder));
+    expect(short).toHaveLength(1);
+    expect(short[0]).toContain('waited less time for a signal than a baseline');
+    expect(short[0]).toContain(`${String(justUnder)} ms presented`);
+    expect(baselineBlockers(runWith(1_000))[0]).toContain('1000 ms presented');
     // Same on the mount side, and the diagnostic flag is what reaches here.
     const mounted = mintableRun();
     for (const cell of Object.values(mounted.cells)) {
@@ -607,6 +619,28 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
     }
     expect(baselineBlockers(mounted)[0]).toContain(
       `${String(IOS_RULE.mountTimeoutMs + 1)} ms mount`
+    );
+  });
+
+  it('refuses a run that recorded no waiting rule at all', () => {
+    // A results file from an app built before the launch flag records nothing, and the
+    // pre-A4 app waited 2 000 ms. Stamping the current default onto that file would be a
+    // claim about a wait nobody made (review N1), so refuse rather than guess: the same
+    // survivorship question, only unverifiable.
+    const before = mintableRun();
+    for (const cell of Object.values(before.cells)) {
+      delete cell.timeouts;
+    }
+    const reasons = baselineBlockers(before);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toContain('no launch recorded the waiting rule');
+    // A file that half-reported (a mount rule and no presented one) is the same problem.
+    const half = mintableRun();
+    for (const cell of Object.values(half.cells)) {
+      cell.timeouts = { mountTimeoutMs: IOS_RULE.mountTimeoutMs };
+    }
+    expect(baselineBlockers(half)[0]).toContain(
+      'no launch recorded the waiting rule'
     );
   });
 
@@ -642,17 +676,6 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
   });
 
   it('records the rule it was minted under in the file', () => {
-    // 1000 ms is *under* the rule, so the run may mint - and the file has to say which
-    // rule its `presented` column was measured under, rather than the default.
-    const run = mintableRun();
-    for (const cell of Object.values(run.cells)) {
-      cell.timeouts = { mountTimeoutMs: 1500, presentedTimeoutMs: 1000 };
-    }
-    expect(baselineBlockers(run)).toEqual([]);
-    expect(buildBaseline(run).timeouts).toEqual({
-      mountTimeoutMs: 1500,
-      presentedTimeoutMs: 1000,
-    });
     // Minting at the rule records the rule.
     const atRule = mintableRun();
     for (const cell of Object.values(atRule.cells)) {
@@ -665,15 +688,26 @@ describe("the comparison-cell rule (D9's A4 amendment)", () => {
       mountTimeoutMs: IOS_RULE.mountTimeoutMs,
       presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
     });
-    // A results file from before the flag recorded nothing, and gets the default.
+    // A run that asked for something else is refused (above), so the only rule a forced
+    // file can carry is the one the app *reported* - reported, never filled in.
+    const forced = mintableRun();
+    for (const cell of Object.values(forced.cells)) {
+      cell.timeouts = { mountTimeoutMs: 1_500, presentedTimeoutMs: 1_000 };
+    }
+    expect(buildBaseline(forced).timeouts).toEqual({
+      mountTimeoutMs: 1_500,
+      presentedTimeoutMs: 1_000,
+    });
+    // A results file from before the flag recorded nothing, and says so rather than
+    // borrowing today's default (review N1: that app waited 2 000 ms, and stamping 8 000
+    // onto the table is the false claim this field exists to prevent).
     const before = mintableRun();
     for (const cell of Object.values(before.cells)) {
       delete cell.timeouts;
     }
-    expect(baselineBlockers(before)).toEqual([]);
     expect(buildBaseline(before).timeouts).toEqual({
-      mountTimeoutMs: IOS_RULE.mountTimeoutMs,
-      presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
+      mountTimeoutMs: null,
+      presentedTimeoutMs: null,
     });
   });
 });
@@ -1041,6 +1075,46 @@ describe('the app really records the reasons the aggregator reads', () => {
     expect(app).toMatch(/awaitMountNs\(target\.plan\.mountTimeoutMs\)/);
     expect(types).toMatch(/mountTimeoutMs: number/);
     expect(types).toMatch(/presentedTimeoutMs: number/);
+  });
+});
+
+describe('an --update-baseline run refuses a waiting rule it did not ask for', () => {
+  /**
+   * The startup half of review N1. `run.mjs` calls every `--timeout-*` run DIAGNOSTIC, so
+   * a mint that asked for a non-default wait had to be refused, and the minting guard
+   * below is the last chance to notice - after the run. This is the same question answered
+   * in the second the command starts, the way the load and narrowing guards work.
+   */
+  it('says nothing when the flags are absent or ask for the default', () => {
+    expect(timeoutRuleProblem({ platform: 'ios' })).toBeNull();
+    expect(
+      timeoutRuleProblem({ platform: 'ios', presentedTimeoutMs: 8_000 })
+    ).toBeNull();
+    expect(
+      timeoutRuleProblem({
+        platform: 'android',
+        mountTimeoutMs: 1_500,
+        presentedTimeoutMs: 2_000,
+      })
+    ).toBeNull();
+  });
+
+  it('refuses a shorter or longer wait, per platform', () => {
+    const short = timeoutRuleProblem({
+      platform: 'ios',
+      presentedTimeoutMs: 1_000,
+    });
+    expect(short).toContain('1000 ms for a presenting frame');
+    expect(short).toContain('ios baselines are recorded at 1500/8000');
+    expect(short).toContain('Drop the `--timeout-*` flags to mint');
+    expect(
+      timeoutRuleProblem({ platform: 'ios', presentedTimeoutMs: 40_000 })
+    ).toContain('40000 ms for a presenting frame');
+    // 8 000 ms is iOS's rule and an Android diagnostic, which is the M1 asymmetry
+    // expressed as a refusal: one shared number would get both wrong.
+    expect(
+      timeoutRuleProblem({ platform: 'android', presentedTimeoutMs: 8_000 })
+    ).toContain('android baselines are recorded at 1500/2000');
   });
 });
 
