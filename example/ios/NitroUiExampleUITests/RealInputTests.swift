@@ -1189,13 +1189,13 @@ final class RealInputTests: XCTestCase {
   /// Both halves are asserted in order on purpose: first that the control *took* the keystrokes as its own
   /// edits (otherwise "it reverted" would describe a field that never accepted input, which every broken field
   /// passes), then that it gave them back with no character lost. The order also matters for the second
-  /// assertion — the mirror is republished on the edit, so by the time `nativeEvents=2` was read the line
-  /// already said `displayed=frozenqq`, and `displayed=frozen` afterwards is the revert rather than a stale
-  /// snapshot that never moved.
+  /// assertion — the mirror is republished on the edit, so by the time the ten keystrokes were
+  /// counted the line already said `displayed=frozenqqqq…`, and `displayed=frozen` afterwards is the
+  /// revert rather than a stale snapshot that never moved.
   func testRealInputSpikeTextReject() throws {
     try goToTab(Tab.spikeTab, showing: Echo.spikeScreen)
     try scrollIntoView("spike-frozen", as: "the frozen field", hittableIsEnough: true)
-    let field = try required("spike-frozen", as: "the frozen field")
+    let field = try focusByTap("spike-frozen", as: "the frozen field")
     let before = try read(Echo.spikeFrozen)
     XCTAssertEqual(
       echoField(before, "displayed"),
@@ -1209,24 +1209,30 @@ final class RealInputTests: XCTestCase {
     )
 
     /*
-     * Type, then ask about focus — not the other way round.
+     * Ten keystrokes at the rate the go line names, one `typeText` per character.
      *
-     * The precondition order this check shipped with (wait for `focused=1`, then type) turned out to be
-     * unmeasurable on this arm for a reason worth stating: after a real tap the hosted `UITextField` reports
-     * UIKit's "Keyboard Focused" accessibility trait while the spike's own mirror still answers
-     * `focused=0`, so waiting on the mirror blocks forever on a field UIKit considers in an edit session.
-     * A burst that lands is the stronger evidence of a session anyway — no keystroke is counted without one —
-     * so the burst comes first and `focused` is asserted *after* it, where a field that really is editing has
-     * republished. If that last line is red, the finding is the mirror's, not the typing's.
+     * This check shipped typing one `typeText("qq")` and waiting for `nativeEvents` to read `2`. It never
+     * got there, and the reason is the finding rather than the flake: the burst is typed faster than one
+     * round trip, so the *first* rejected edit is reverted while the second character is still in flight,
+     * and the field answers `nativeEvents=1` — UIKit drops the keystroke whose pending insert a programmatic
+     * `text =` cancels. Q2 §7's line is stated at ten keys per second, so the control is driven at that
+     * rate: one character per call, 100 ms apart. Whether a revert racing ten of them loses any is then
+     * measured rather than assumed, and `10` is the answer this control needs.
+     *
+     * The order of assertions is deliberate: first that the control took the keystrokes as its own edits
+     * (otherwise "it reverted" would describe a field that never accepted input, which every broken field
+     * passes), then that it handed them back with nothing lost from the string JS holds.
      */
-    field.centre.tap()
-    field.typeText("qq")
+    for _ in 0 ..< 10 {
+      field.typeText("q")
+      Thread.sleep(forTimeInterval: 0.1)
+    }
 
     let accepted = try readField(
       Echo.spikeFrozen,
       "nativeEvents",
-      "2",
-      "the control to count two edits of its own"
+      "10",
+      "the control to count all ten keystrokes as its own edits"
     )
     XCTAssertEqual(
       echoField(accepted, "unreported"),
@@ -1275,14 +1281,12 @@ final class RealInputTests: XCTestCase {
     /// Type one burst into the field `identifier` and return the commit stamps its echo recorded.
     func measure(_ identifier: String, _ echo: String, _ what: String) throws -> [Double] {
       try scrollIntoView(identifier, as: what, hittableIsEnough: true)
-      let field = try required(identifier, as: what)
+      let field = try focusByTap(identifier, as: what)
       let beforeEvents = Int(echoField(try read(echo), "events")) ?? 0
-      /*
-       * Tap, burst, then read. A focus precondition is not what the measurement needs (a counted keystroke
-       * already proves an edit session, and the iOS arm's mirror was seen answering `focused=0` for a field
-       * UIKit reports as first responder), and it is the thing that broke when a target sat below the fold.
-       */
-      field.centre.tap()
+      // Burst, then read. Focus is settled by the tap helper rather than by the app's mirror: the spike
+      // arm's mirror was seen answering `focused=0` for a field UIKit reports as first responder, so the
+      // system's own trait is the precondition that can be waited on — and the burst is what the
+      // measurement is, so nothing between the tap and it should cost time.
       field.typeText(burst)
       let line = readUntil(echo, timeout: 12) { text in
         Int(echoField(text, "events")).map { $0 >= beforeEvents + burst.count } ?? false
@@ -1959,6 +1963,58 @@ final class RealInputTests: XCTestCase {
   }
 
 
+  /// Drag the scrolling content by `delta` points, from `anchorDy` of the window height.
+  ///
+  /// The anchor is a parameter because on a screen with the keyboard up, the bottom of the window *is* the
+  /// keyboard: a drag started there drags the keyboard, which moves no content behind it.
+  private func scrollScreen(by delta: CGFloat, anchorDy: CGFloat = 0.6) {
+    let anchor = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: anchorDy))
+    anchor.press(
+      forDuration: 0.05,
+      thenDragTo: anchor.withOffset(CGVector(dx: 0, dy: delta))
+    )
+  }
+
+  /// Tap a field until the system itself says the field holds keyboard focus.
+  ///
+  /// The tap needs verifying because whatever is in front of it may not be the field. Measured on the spike
+  /// screen: `typeText` aimed at RN's `TextInput` control failed with "Neither element nor any descendant has
+  /// keyboard focus" for a field whose centre sat at midY=623 of an 874 pt window - inside the window,
+  /// reported `isHittable`, and underneath the keyboard the *previous* field had left open (iOS keeps the
+  /// keyboard up when focus moves between fields, which is what the typing check above relies on). The
+  /// synthesised tap went to the keyboard, so the burst would have gone there too, and the check would have
+  /// measured a keyboard.
+  ///
+  /// `hasKeyboardFocus` is the property keystrokes actually need, and unlike the spike's mirror it is UIKit's
+  /// own answer: the checks above learned that the mirror can lag a field UIKit already considers first
+  /// responder. When focus does not move the field is scrolled up and tapped again, because the ordinary
+  /// reason is that it sits under the keyboard.
+  private func focusByTap(
+    _ identifier: String,
+    as what: String,
+    maxTaps: Int = 4
+  ) throws -> XCUIElement {
+    let node = try required(identifier, as: what)
+    for _ in 1 ... maxTaps {
+      node.centre.tap()
+      let deadline = Date().addingTimeInterval(1.0)
+      var focused = node.hasKeyboardFocus
+      while !focused && Date() < deadline {
+        Thread.sleep(forTimeInterval: 0.1)
+        focused = node.hasKeyboardFocus
+      }
+      if focused {
+        return node
+      }
+      scrollScreen(by: -160, anchorDy: 0.42)
+    }
+    XCTFail(
+      "\(what) (\(identifier)) never took keyboard focus after \(maxTaps) taps - no burst typed into it "
+        + "could be read as its edits"
+    )
+    throw RealInputCheckAborted(identifier: identifier)
+  }
+
   /// Scroll until this element sits in the band a tap can land in.
   ///
   /// XCUITest taps an element's frame and does not scroll an ordinary view to reach
@@ -2027,11 +2083,7 @@ final class RealInputTests: XCTestCase {
     }
 
     func scroll(by delta: CGFloat) {
-      let anchor = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
-      anchor.press(
-        forDuration: 0.05,
-        thenDragTo: anchor.withOffset(CGVector(dx: 0, dy: delta))
-      )
+      scrollScreen(by: delta)
     }
 
     // Shorter than the band itself, so one step cannot jump across it.
