@@ -733,9 +733,15 @@ function poolHandoff({ pool, result, options, paths, log }) {
     }
     if (options.reset) {
       for (const row of pool.resetPair(pair)) {
-        log(
-          `lease: reset ${row.key}: ${row.action}${row.ok ? '' : ' (FAILED - the next run inherits its data)'}`
-        );
+        // The device's own answer, and how many tries it took: a reset that failed after four
+        // attempts is a different problem from one that failed once and settled, and the reader
+        // cannot tell the two apart without it.
+        const detail = row.ok
+          ? row.attempts > 1
+            ? ` (${row.attempts} tries)`
+            : ''
+          : ` FAILED (${row.answer}) - the next run inherits its data`;
+        log(`lease: reset ${row.key}: ${row.action}${detail}`);
       }
     }
   }

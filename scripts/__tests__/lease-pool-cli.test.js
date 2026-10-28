@@ -53,7 +53,24 @@ describe('the lease owns the device lifecycle', () => {
    *
    * @param {{androidUp?: boolean, iosUp?: boolean}} options
    */
-  const tools = ({ androidUp = false, iosUp = false } = {}) => {
+  /** What `pm clear` answers, in order, with the last one repeating. */
+  const pmClearLines = {
+    success: [`  *'pm clear'*) printf 'Success' ;;`],
+    settle: [
+      // The counter file lives next to the calls file, so a test run in a fresh home starts clean.
+      `  *'pm clear'*)`,
+      `      n=$(cat "$NITRO_UI_FAKE_CALLS.count" 2>/dev/null || echo 0)`,
+      `      n=$((n+1)); printf '%s' "$n" > "$NITRO_UI_FAKE_CALLS.count"`,
+      `      if [ "$n" -lt 3 ]; then printf 'Failed'; else printf 'Success'; fi ;;`,
+    ],
+    fail: [`  *'pm clear'*) printf 'Failed' ;;`],
+  };
+
+  const tools = ({
+    androidUp = false,
+    iosUp = false,
+    pmClear = 'success',
+  } = {}) => {
     const listing = {
       devices: {
         'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [
@@ -83,7 +100,10 @@ describe('the lease owns the device lifecycle', () => {
       // the emulator?" case answer no and still pass.
       `  *devices*) printf '%b\\n' ${shellQuote(adbDeviceText(androidUp))} ;;`,
       "  *boot_completed*) printf '1' ;;",
-      "  *'pm clear'*) printf 'Success' ;;",
+      // A device that answers `Failed` twice and then `Success`, counted in a file: that is what
+      // an emulator whose `sys.boot_completed` is already 1 really does while PackageManager
+      // settles, and it is what the first real boot of this code reported as a failed reset.
+      ...(pmClearLines[pmClear] ?? pmClearLines.success),
       "  *'emu kill'*) printf 'OK' ;;",
       'esac',
       'exit 0',
@@ -325,6 +345,31 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.status).toBe(0);
     expect(log()).toBe('');
     expect(poolDevices()).toHaveLength(1);
+  });
+
+  it('retries a reset on a device still settling, instead of reporting it failed', () => {
+    // The pool resets a device it has just booted, and such a device can answer `Failed` for a
+    // few seconds. A single attempt made the lease say "FAILED - the next run inherits its data"
+    // about a device that was fine, which is the opposite of what the reset is for.
+    tools({ androidUp: true, iosUp: true, pmClear: 'settle' });
+    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
+    expect(acquired.status).toBe(0);
+    expect(acquired.stderr).toContain(
+      'reset avd:nitro-ui-a: pm clear (3 tries)'
+    );
+    expect(acquired.stderr).not.toContain('FAILED');
+  });
+
+  it("says so, in the device's own words, when the reset never succeeds", () => {
+    tools({ androidUp: true, iosUp: true, pmClear: 'fail' });
+    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
+    expect(acquired.status).toBe(0);
+    // Still a successful lease: a device that cannot be cleared is worth using, and the warning
+    // is the honest part. But it quotes `pm clear` rather than inventing a reason.
+    expect(acquired.stderr).toContain(
+      'reset avd:nitro-ui-a: pm clear FAILED (Failed)'
+    );
+    expect(acquired.stderr).toContain('the next run inherits its data');
   });
 
   it('never powers off a device the config does not name', () => {

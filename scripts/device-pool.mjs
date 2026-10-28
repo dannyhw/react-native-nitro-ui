@@ -260,11 +260,15 @@ export function deviceOperations({
       );
     },
 
-    /** The cheapest reset that reports what it did: `pm clear` answers `Success`, or `Failed`. */
+    /**
+     * The cheapest reset that reports what it did. `pm clear` answers `Success` or `Failed`, and
+     * the answer is returned rather than reduced to a boolean: a reset that failed on a device
+     * still coming up has to say which, because "Failed" and "no such package" need different
+     * things from whoever reads the line.
+     */
     clearAppData(serial, appId, adbPort = null) {
-      return /Success/i.test(
-        out(adb(['-s', serial, 'pm', 'clear', appId], adbPort))
-      );
+      const answer = out(adb(['-s', serial, 'pm', 'clear', appId], adbPort));
+      return { ok: /Success/i.test(answer), answer: answer || '(no answer)' };
     },
 
     shutdownAndroid(serial, adbPort = null) {
@@ -757,7 +761,23 @@ export class DevicePool {
    * neither - `simctl install` of a new build replaces the app container, and the harness resets
    * the app per test - so the iOS row says so out loud instead of pretending a no-op was a reset.
    */
-  resetPair(pair, { appId = EXAMPLE_APP_ID } = {}) {
+  /**
+   * The cheapest reset that reports what it did, per device of the pair.
+   *
+   * Android gets `pm clear`, retried: the pool resets a device *it has just booted*, and an
+   * emulator whose `sys.boot_completed` is already `1` can still answer `Failed` for a few seconds
+   * while PackageManager settles - which is exactly what the first real boot of this code did, and
+   * what a single attempt reported as a permanent failure. The retries are bounded and use the
+   * injected clock, so a test drives them without waiting.
+   *
+   * iOS says what actually happens instead of reporting a reset: `simctl install` replaces the app
+   * container, so there is no data left behind by the previous task to clear, and a row claiming a
+   * reset that was never performed would be a lie about the one thing this is here to guarantee.
+   *
+   * @param {object} pair
+   * @param {{appId?: {android: string, ios: string}, attempts?: number}} [options]
+   */
+  resetPair(pair, { appId = EXAMPLE_APP_ID, attempts = 4 } = {}) {
     const results = [];
     if (pair?.android?.avd) {
       const serial =
@@ -765,16 +785,27 @@ export class DevicePool {
         (pair.android.emulatorPort != null
           ? emulatorSerial(pair.android.emulatorPort)
           : null);
+      let ok = false;
+      let answer = 'no serial to address';
+      let tries = 0;
+      while (!ok && tries < attempts) {
+        tries += 1;
+        if (!serial) break;
+        const clear = this.ops.clearAppData(
+          serial,
+          appId.android,
+          pair.android?.adbPort ?? null
+        );
+        ok = !!clear?.ok;
+        answer = clear?.answer ?? '(no answer)';
+        if (!ok && tries < attempts) this.sleep(this.pollMs);
+      }
       results.push({
         key: `avd:${pair.android.avd}`,
         action: 'pm clear',
-        ok: serial
-          ? this.ops.clearAppData(
-              serial,
-              appId.android,
-              pair.android?.adbPort ?? null
-            )
-          : false,
+        ok,
+        attempts: tries,
+        answer,
       });
     }
     if (pair?.ios?.udid) {
@@ -782,6 +813,8 @@ export class DevicePool {
         key: `ios:${pair.ios.udid}`,
         action: 'none needed (simctl install replaces the app container)',
         ok: true,
+        attempts: 0,
+        answer: 'nothing to run',
       });
     }
     return results;
