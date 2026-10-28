@@ -135,24 +135,28 @@ export const BASELINE_PRESENTED_TIMEOUT_MS = 8000;
  * The per-launch wall-clock budgets, by scenario action, that `run.mjs` starts from.
  * Restated here so `launchBudgetMs` can be tested without importing the runner (which
  * cannot be imported under jest: `import.meta`).
+ *
+ * Each must exceed what a launch can spend waiting under the default rule - see the
+ * comment on `TIMEOUTS` in `run.mjs` and the test that keeps the two honest.
  */
 export const DEFAULT_SCENARIO_BUDGETS = {
-  mount: 180_000,
-  update: 180_000,
-  memory: 180_000,
-  leak: 300_000,
+  mount: 300_000,
+  update: 300_000,
+  memory: 300_000,
+  leak: 420_000,
 };
 
 /**
- * The wall-clock budget for one launch, widened by whatever signal waits that launch was
- * asked to make.
+ * The wall-clock budget for one launch: the scenario's allowance, widened by any extra
+ * waiting this launch was asked to do.
  *
- * The budgets above assume the default waits: an iteration of `mount` waits up to
+ * The base already covers waiting at the defaults (see `DEFAULT_SCENARIO_BUDGETS`). What
+ * it cannot know is a run that asks for longer: an iteration of `mount` waits up to
  * `mount` + `presented` for its own two signals and again `mount` in the teardown that
- * follows, so 25 iterations already contain ~87 s of waiting. Ask for a 40 s presenting
- * wait and the same launch would be killed as *stalled* for a reason the runner itself
- * introduced - and a killed launch becomes a `problem`, a worse record than the slow
- * sample it was chasing.
+ * follows, so asking for a 40 s presenting wait adds 32 s per iteration - 800 s across a
+ * launch. Left alone, that launch would be killed as *stalled* for a reason the runner
+ * itself introduced, and a killed launch becomes a `problem` (and a mint refusal) instead
+ * of 20 iterations each recording a `probe-timeout` reason.
  *
  * `overrideSeconds` is the `BENCH_LAUNCH_TIMEOUT_S` escape hatch and wins outright: that
  * override exists precisely to set the budget by hand.

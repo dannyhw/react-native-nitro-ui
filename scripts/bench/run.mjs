@@ -97,11 +97,25 @@ import {
  * Wall-clock budget per launch, by scenario. Generous on an idle machine, so
  * hitting it means something is wrong, not that the component is slow.
  */
+/**
+ * The wall-clock budget for one launch, by scenario action.
+ *
+ * A budget has to exceed the most a launch can *legitimately* spend waiting for signals,
+ * or a slow arm is killed as "stalled" for a reason the runner itself chose - and a killed
+ * launch loses all 20 of its iterations' data, which is strictly worse than the 20 recorded
+ * `probe-timeout` reasons it replaces. That ceiling is the default waits times the
+ * iterations of a launch: `mount` waits twice per iteration (its own signal, then the
+ * teardown's) and once for the presenting frame, so 25 iterations at 1 500/8 000 ms is
+ * 275 000 ms of possible waiting (A4 raised the presented wait from 2 000 ms, at which
+ * point 180 000 was still comfortably above the 87 500 ms it allowed). The `leak` scenario
+ * allocates 200 instances per iteration and does not wait for signals at all, so it keeps
+ * its own larger allowance for the work rather than the waiting.
+ */
 const TIMEOUTS = {
-  mount: 180_000,
-  update: 180_000,
-  memory: 180_000,
-  leak: 300_000,
+  mount: 300_000,
+  update: 300_000,
+  memory: 300_000,
+  leak: 420_000,
 };
 
 // A machine shared with other emulators or another agent's build can starve a
