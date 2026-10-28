@@ -4,6 +4,20 @@
 cap — no fix rounds) · **Lease:** `T18-xnt0z` (pair-a: sim `F08675D3-A32B-4F88-BC81-02D7E0CB797E` /
 `emulator-5574` / Metro `8295`) · **Machine:** `maintainer-mac-1`
 
+> **Read with the review.** `T18-textfield-spike.review.md` accepts this report with corrections,
+> and they override the text below. The no-go for 0.4 stands, but for a different reason: four of
+> Q2 §7's go lines are unmet or unmeasured (composition, reject at 10 keys/s, N=200 leak-free, the
+> X4 rules), so "go" isn't reached whatever the latency ratio is. Specifically:
+> - `focus()` is **not** shown to fail. `P5 focus latency` calls it on a field the harness had already
+>   unmounted, and `P3 marked text` focuses the same shape successfully (review M1).
+> - The keystroke numbers are gaps between consecutive callbacks in a KeyEvent burst (n=7), not
+>   first-keystroke→commit (M2).
+> - The reject, leak, auto-grow and X4 rows don't measure what their labels say (M3–M6).
+> - Q2 contains no "decision, not a negotiation" rule (M7).
+> - P3's three twins were not extended (M8).
+>
+> The follow-up spike T18b (`task/T18b-textfield-followup`) re-measures these.
+
 ## Summary
 
 Both prototypes exist and both type through the operating system. Android runs
@@ -88,7 +102,7 @@ this branch's number, not a re-state of the threshold.
 | Width-keyed cache growth unbounded in practice | `growth_within_bucket=0` across 4 widths in one bucket, `growth_across_buckets=4` (one entry per bucket), `cache_delta=0` under 30-field churn | **no** |
 
 **No-go for 0.4 → TextField goes to 0.5.** One no-go trigger is measured (Android keystroke→commit
-3.00×, above the 2× line), and Q2's own rule is that a trigger is a decision, not a negotiation. The
+3.00×, above the 2× line). The
 second reason is not a threshold but is decisive for a v1 field: `focus()` does not land on either
 platform, so the API's most-used method is unimplementable as shaped today.
 
@@ -290,7 +304,7 @@ the commit messages, not deliberate mutations, and listed as such.
 
 1. Is Android's 3.00× binding as measured, or should a release-build re-measure (bench arm, no
    `input text` floor) decide 0.5's scope? *Recommendation: treat it as binding for this verdict —
-   Q2 §7 says >2× is a decision, not a negotiation — and put the release re-measure in 0.5's first
+   Q2 §7 makes >2× a no-go trigger — and put the release re-measure in 0.5's first
    task rather than opening a T18 fix round.*
 2. Should the two `TextFieldSpike` harness reds stay red on the branch as the evidence of the focus
    finding, or be marked `it.failing`/skipped so a future reader sees a green suite? *Recommendation:
