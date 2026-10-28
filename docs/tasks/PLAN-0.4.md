@@ -14,8 +14,8 @@ menu that wraps arbitrary RN children.
 | --- | --- | --- | --- |
 | 0 | **X3** component registry and codegen — merged | both | — |
 | 0 | **X9** tooling: dry runs, warm caches, build slot, gate wait — merged | both | — |
-| 0 | **A3** this machine's bench baselines (exclusive) — running | both | X8, X3/X9 off the devices |
-| 1 | **X10** `check` throughput | tooling | X3 |
+| 0 | **A3** this machine's bench baselines (exclusive) — Android minted, iOS refused (A4 follows up) | both | X8, X3/X9 off the devices |
+| 1 | **X10** `check` throughput — merged | tooling | X3 |
 | 1 | **X11** device throughput (emulator GPU, warm device pool) | both | X9, A3 |
 | 1b | **X4** conformance suite and `task-ready.mjs` (adds the report-path check), after X11 so two device tasks can overlap again | both | X3, X11 |
 | 2 | **G7a** Menu: API, iOS SwiftUI `Menu`, Android Compose `DropdownMenu` anchored to a button, harness, sizing, a11y, Host support (Android), conformance | both | X4, X11 |

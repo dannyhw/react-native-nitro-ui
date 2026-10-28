@@ -33,6 +33,17 @@ import { codeTreeDigest, contentHash, isCodeFile } from './app-stamp-core.mjs';
 export const LEDGER_DIR = '.gates';
 
 /**
+ * The name of the gate **log store** inside a clone's git common directory.
+ *
+ * Chosen over moving the ledger too: `.gates/<branch>.jsonl` is read by path in
+ * reuse and export code, it is small, and it is re-created by the next run in a
+ * fresh checkout anyway - whereas the logs are the evidence nothing re-creates.
+ * So the brief's "keep `.gates/<branch>.jsonl` where it is" is what this does, and
+ * only the logs move (X12 item 1 says to keep it unless moving is simpler).
+ */
+export const LOG_STORE_BASENAME = 'nitro-ui-gates';
+
+/**
  * The shape of the JSON lines this version writes (see `ledgerLineFromRun`).
  *
  * v2 adds three fields, all of them from the X2 round-1 review:
@@ -46,18 +57,59 @@ export const LEDGER_DIR = '.gates';
  *   - `summaries`: every test summary the gate printed, in order. `check` runs
  *     jest, then perf, then more, and "the last summary wins" made its row report
  *     the 7-test perf step instead of the 391-test unit run (M3).
- *   - `suiteTimings`: the per-suite timings a harness run recorded, in the shape
- *     `scripts/harness-suite-timing.mjs` writes them (X11). It is what turns "the
- *     Android harness costs 455 s" into "these five files cost 200 s of it, and
- *     255 s of the run was outside any file", which is the difference between
- *     fixing a suite and fixing the runner. Absent on every non-harness gate and
- *     on any run where the plugin was not asked for.
+ *
+ * v3 adds `stepTimings` for `check` (X10): what each of the sixteen steps did, with
+ * its own duration. `check` is the one gate long enough that "3 m 04 s" is not an
+ * actionable number - the thing a reader wants is which step got slower. It is a
+ * record, not a rule: no decision in this file reads `stepTimings`, so a v2 line and
+ * a v3 line mean the same thing to `need` and `table`.
+ *
+ * v5 (X12) changes no rule and adds three things:
+ *
+ *   - `logPath` is now relative to the clone's **gate log store** (the git common
+ *     directory) rather than to the worktree, because a run's evidence must outlive
+ *     `git worktree remove`. Old `.gates/logs/...` paths are still read (see
+ *     `ledgerLogCandidates`), and a worktree's own `logs/` directory is migrated into
+ *     the store on the next run.
+ *   - `load.end`: the last sample, so an excerpt can show the load a run started and
+ *     finished under. `median`/`max` are what judge a run; `start`/`end` are context.
+ *   - `failureLogPath`, written by `export` on a **failed** line only: the committed
+ *     excerpt beside `gates.jsonl` that carries the failing test names, the assertion
+ *     messages, the tail of the log and the device context.
+ *
+ * v4 adds `fullTree` and `worktreeClean`, and they are the only fields reuse reads.
+ *
+ *   - `fullTree` is `git rev-parse HEAD^{tree}`: git's own hash of the *entire*
+ *     tracked tree, `docs/` and `bench/` and every `*.md` included. `tree` is a
+ *     digest of the build inputs, deliberately blind to those paths so a docs
+ *     commit never re-owns a build; that is the wrong blindness for "has this been
+ *     checked", which is a question about the files `check` reads. Reuse compares
+ *     `fullTree` and nothing else (X10 review round 2, M1-M3), so there is no list
+ *     of paths reuse is permitted to be blind to - an exact hash cannot be fooled by
+ *     a rename, a new test file, or a path nobody thought to list.
+ *   - `worktreeClean` records that the working tree matched that commit when the run
+ *     started. Without it a pass would name a tree that never existed: the run saw
+ *     the tree *plus* uncommitted edits, and only the commit's hash is written down.
+ *     A line with `worktreeClean: false` is kept as evidence for `tree`/`trees`
+ *     matching (a build really did get tested) but is never reusable.
+ *
+ * v6 (X11) adds `suiteTimings` and changes no rule: the per-suite timings a harness
+ * run recorded, in the shape `scripts/harness-suite-timing.mjs` writes them. It is
+ * what turns "the Android harness costs 455 s" into "these five files cost 200 s of
+ * it, and 255 s of the run was outside any file", which is the difference between
+ * fixing a suite and fixing the runner. Absent on every non-harness gate and on any
+ * run where the plugin was not asked for, which reads as "no per-suite timings" -
+ * what it means for a v5 line or a run without the plugin. The sidecar file it is
+ * read from lives in the gate log store like every other log (v5), never in the
+ * worktree, so a run's timings outlive `git worktree remove` for the same reason its
+ * transcript does.
  *
  * v1 lines are still read: with no `trees` they compare on the full digest, and
- * with no `treeAfter` they are taken at their word. v3 only adds `suiteTimings`,
- * and an old line reads as "no per-suite timings", which is what it means.
+ * with no `treeAfter` they are taken at their word. A line with no `fullTree` -
+ * anything written before v4 - cannot be reused, because there is nothing exact to
+ * compare: falling back to `tree` would be the old unsound rule under a new name.
  */
-export const LEDGER_VERSION = 3;
+export const LEDGER_VERSION = 6;
 
 /** The platforms a device gate can be keyed to. */
 export const PLATFORMS = ['ios', 'android'];
@@ -125,6 +177,24 @@ export const TOOLING_FILES = [
   // consumes `example/ios/Podfile.lock` itself, which is mapped as iOS.
   'scripts/sync-example-lock.mjs',
   'scripts/example-lock-core.mjs',
+  // X10. The runner and its step graph schedule `bun run <step>` and write only the
+  // timing file under `.gates/` (gitignored); they touch no source the app builds.
+  'scripts/check.mjs',
+  'scripts/check-steps.mjs',
+  // Writes `src/components/**`/`example/src/App.tsx` regions when asked to (`--write`),
+  // and `registry:check` - the half `check` runs - writes nothing at all. A broken
+  // version of either is a wrong *gate*, caught by its own unit test in
+  // `scripts/__tests__/registry.test.js`, never a different binary.
+  'scripts/gen-registry.mjs',
+  'scripts/registry-core.mjs',
+  // The build-slot lock in `~/.nitro-ui/builds.json`: it decides *when* a build may
+  // start, never what goes into it. `build-app.mjs` (which is mapped, and stays so)
+  // fails loudly if this misbehaves, and `scripts/__tests__/build-slot.test.js`
+  // proves it in `check`.
+  'scripts/build-slot-core.mjs',
+  // The template `doctor.mjs --setup` copies to `~/.nitro-ui/devices.json`. A device
+  // run reads that copy, never this file, and neither is in the app.
+  'scripts/devices.example.json',
   '.gitignore',
   '.prettierignore',
 ];
@@ -316,6 +386,19 @@ export function changedPathsGitArgs(mergeBase) {
  * gates anything, for the reason given in `codeTreeDigest`: a docs commit must
  * not invalidate a device run.
  *
+ * `fullTree` and `worktreeClean` are the pair merge reuse reads, and both are
+ * supplied by the caller rather than derived here, because only the caller knows
+ * whether it measured them at the moment the gate actually started. Both default to
+ * `null`, and reuse demands `worktreeClean === true` rather than "not false", so a
+ * caller that did not measure cleanliness writes a line that is honest about
+ * everything except reuse.
+ *
+ * `stepTimings` (v3) and `suiteTimings` (v6) are the two timing attachments, and
+ * they are not the same measurement: one step of `check` runs many jest suites, and
+ * one harness gate runs one runner over many suites. Both are records, not rules —
+ * nothing in this file reads either, so a line without them decides exactly as it
+ * used to. Neither is defaulted here: the caller passes what it read from the run.
+ *
  * @returns {object} a JSON-ready line
  */
 export function ledgerLineFromRun({
@@ -324,6 +407,8 @@ export function ledgerLineFromRun({
   tree,
   trees = null,
   treeAfter = null,
+  fullTree = null,
+  worktreeClean = null,
   head,
   branch,
   platform = null,
@@ -334,8 +419,10 @@ export function ledgerLineFromRun({
   result,
   counts = null,
   summaries = null,
+  stepTimings = null,
   suiteTimings = null,
   logPath = null,
+  failureLogPath = null,
   startedAt,
   exitCode = null,
   signal = null,
@@ -348,6 +435,8 @@ export function ledgerLineFromRun({
     tree,
     trees,
     treeAfter,
+    fullTree,
+    worktreeClean,
     head: head ?? null,
     branch: branch ?? null,
     platform,
@@ -358,11 +447,99 @@ export function ledgerLineFromRun({
     result,
     counts,
     summaries,
+    stepTimings,
     suiteTimings,
     logPath,
+    // Set by `gate.mjs export`, not by a run: the committed excerpt beside
+    // `gates.jsonl` for this failed line. Carried on the line so a red row in the
+    // ledger points at its own evidence (X12 item 2).
+    failureLogPath,
     exitCode,
     signal,
   };
+}
+
+/**
+ * The per-step records on a ledger line, or `[]` for a gate that has none.
+ *
+ * Tolerant by shape rather than by version: a line written before X10 has no
+ * `stepTimings`, and a hand-edited or half-written one must not make `table`
+ * throw. Anything that is not an object with a `name` is dropped rather than
+ * rendered as an empty row, because a blank duration reads like a zero-length step.
+ *
+ * @param {object | undefined} entry a ledger line
+ * @returns {Array<{name: string, status: string, durationMs: number, exitCode: number | null, signal: string | null, reason: string | null}>}
+ */
+export function stepTimingsOf(entry) {
+  const steps = entry?.stepTimings?.steps;
+  if (!Array.isArray(steps)) return [];
+  return steps.filter(
+    (step) =>
+      step != null && typeof step === 'object' && typeof step.name === 'string'
+  );
+}
+
+const STEP_STATUS_LABELS = {
+  pass: '**PASS**',
+  fail: '**FAIL**',
+  skipped: 'not started',
+};
+
+/**
+ * The per-step table `gate.mjs table --full` prints under the gate rows.
+ *
+ * It is a second table rather than extra cells on the first because it belongs to
+ * one gate: `check` is the only run long enough to need it, and its row's duration
+ * is the sum of this column's interesting parts. `--full` is the switch because
+ * the report's gate table is the one a reviewer reads, and sixteen rows under it
+ * would bury the five device rows.
+ *
+ * @param {object} options
+ * @param {object[]} options.entries ledger lines
+ * @param {string[]} [options.gates] which gates to render, in order
+ * @returns {string} Markdown, or `''` when no line has step timings
+ */
+export function renderStepTimings({ entries, gates = null }) {
+  const lists = listByGate(entries);
+  const names = gates ?? Object.keys(lists);
+  const blocks = [];
+  for (const gate of names) {
+    const list = lists[gate] ?? [];
+    // The newest line that has them, which is the run the gate row above reports.
+    const entry = [...list]
+      .reverse()
+      .find((line) => stepTimingsOf(line).length > 0);
+    const steps = stepTimingsOf(entry);
+    if (steps.length === 0) continue;
+    const jobs = entry?.stepTimings?.jobs;
+    const rows = steps.map((step) => {
+      // A passing step's detail is nothing. For the rest, the runner's `reason`
+      // already spells out the exit code and signal (`exit 2`, `exit null (signal
+      // SIGTERM)`, `not started - prepare failed`), so it is shown as-is and the
+      // numbers are not repeated beside it; they are the fallback when no reason
+      // arrived. Pipes are escaped because a reason is a sentence and a table cell
+      // is not a paragraph.
+      const detail =
+        step.reason != null
+          ? String(step.reason)
+          : step.signal != null
+            ? `signal ${step.signal}`
+            : typeof step.exitCode === 'number' && step.exitCode !== 0
+              ? `exit ${step.exitCode}`
+              : '';
+      return `| \`${step.name}\` | ${STEP_STATUS_LABELS[step.status] ?? step.status} | ${formatDuration(step.durationMs)} | ${detail.replaceAll('|', '\\|') || '—'} |`;
+    });
+    blocks.push(
+      [
+        `### \`${gate}\` steps${jobs == null ? '' : ` - ${String(jobs)} job(s)`}`,
+        '',
+        '| Step | Result | Duration | Detail |',
+        '| --- | --- | --- | --- |',
+        ...rows,
+      ].join('\n')
+    );
+  }
+  return blocks.join('\n\n');
 }
 
 /**
@@ -634,6 +811,208 @@ export function summarizeGates({
 }
 
 /**
+ * The exact-tree test merge reuse rests on (X10 review round 2, orchestrator decision).
+ *
+ * Two git trees are the same tree when their hashes are equal, so the whole rule is one string
+ * comparison - and the reason it can be that short is that a git tree hash is computed over
+ * *everything tracked*, `docs/` and `bench/` and every `*.md` included. The earlier version of reuse
+ * compared `tree`, a digest of the build inputs, and then tried to patch the gap with an allowlist of
+ * paths "no step reads". That list was always going to lose: it missed a rename out of `bench/` into
+ * `docs/` (git reports only the destination), and it missed a new test file landing under `docs/`
+ * where jest will find it. A hash has no such blind spot, because there is nothing it does not see.
+ *
+ * Both sides are normalised only by trimming: no prefix matching, no case folding, no partial
+ * compare. Two hashes that differ in one character are different trees, which is the entire point.
+ *
+ * @param {string | null | undefined} recorded `fullTree` from a ledger line
+ * @param {string | null | undefined} current `fullTree` of the tree being asked about
+ * @returns {boolean} true only when both are present and identical
+ */
+export function fullTreesMatch(recorded, current) {
+  const a = typeof recorded === 'string' ? recorded.trim() : '';
+  const b = typeof current === 'string' ? current.trim() : '';
+  if (a === '' || b === '') return false;
+  return a === b;
+}
+
+/**
+ * A `check` line from another branch's ledger that may stand in for a run on this
+ * tree at merge, or `null`.
+ *
+ * The question `need --for merge` asks after a merge is "has *this tree* been
+ * checked?" - and the answer is one string comparison: a ledger line whose `fullTree`
+ * equals the merge result's. The merge result's tree is the tree a run on the merged
+ * branch would have recorded, so a match is not an analogy, it is the same bytes.
+ * Six things have to hold, and all six are checked here rather than assumed:
+ *
+ *   - the line passed on that exact tree, with its `treeAfter` agreeing - a run whose
+ *     tree moved under it proved neither tree (N1);
+ *   - it was run with a **clean worktree** (`worktreeClean === true`). A line recorded
+ *     over uncommitted edits names a tree that was never checked on its own: the run
+ *     saw that tree *plus* those edits, and only the commit's hash is written down.
+ *     (M3, in the shape the second review showed it: the earlier "the diff shows no
+ *     code files" rescue could not tell a dirty worktree from an unstaged docs commit,
+ *     and both excuses were live at once);
+ *   - it is the **newest decisive line on that tree** in its own ledger, and the newest
+ *     across all of them (M2). A ledger with a pass at 10:00 and a fail at 11:00 on the
+ *     same tree is a branch that stopped passing, and reusing its earlier green would
+ *     contradict what `gateRowFor` says about the very same lines. So each ledger
+ *     contributes its latest pass-or-fail line on the tree, those are compared by
+ *     timestamp, and a fail at the top ends the question;
+ *   - the caller's own worktree is clean. Asking about a tree that is not committed is
+ *     asking about a tree no hash names;
+ *   - it names a `head` commit, and the caller can prove that commit is an ancestor of
+ *     the tree being asked about, so the evidence is *this* merge's rather than some
+ *     branch that happened to share a digest. A line with no `head` cannot be placed;
+ *   - it is a `check`, and only a `check`. Device gates are keyed to a binary built on
+ *     the branch's own machine and lease, and the brief leaves them to the tree rules
+ *     X11 works with.
+ *
+ * What this deliberately does *not* carry: an allowlist of paths reuse may ignore. An
+ * earlier version compared the code-tree digest - blind to `docs/`, `bench/`,
+ * `.github/` and `*.md`, three of which `check` does read - and patched the gap with
+ * `docs/**` plus an exclusion list, and still got both a rename out of `bench/` into
+ * `docs/` and a new jest test under `docs/` wrong, because git reports only a rename's
+ * destination and no list can be told about files that do not exist yet. Exact trees
+ * have no such blind spot, and the cost is that a docs-only merge re-runs check. That
+ * is the 2 m 33 s the review said is worth paying for a rule that cannot be fooled.
+ *
+ * Where a ledger came from is carried through as `source`: `.gates/<branch>.jsonl` is
+ * the machine that ran it, and `docs/tasks/<ID>/gates.jsonl` is that file's committed
+ * copy - the only version that exists in the checkout where a merge gets confirmed. The
+ * ancestor condition is what makes the copy strong enough for this question.
+ *
+ * Ties on timestamp are broken toward the fail (N2), then by branch name, so the choice
+ * never depends on directory order.
+ *
+ * @param {object} options
+ * @param {Array<{branch: string, entries: object[], source?: string}>} options.ledgers
+ *   other branches' ledgers, in any order
+ * @param {string | null} options.fullTree git's hash of the whole tree being asked about
+ *   (`git rev-parse HEAD^{tree}`), or null when it cannot be read
+ * @param {boolean} [options.worktreeClean] whether the caller's own working tree matches
+ *   that commit; anything but `true` refuses reuse
+ * @param {(commit: string) => boolean} options.headIsAncestor proves `commit` is
+ *   in the history of the tree being asked about (git, in `gate.mjs`)
+ * @param {string} [options.gate] which gate may be reused
+ * @returns {{branch: string, entry: object, source: string} | null}
+ */
+export function findReusableCheck({
+  ledgers = [],
+  fullTree,
+  worktreeClean = true,
+  headIsAncestor,
+  gate = 'check',
+  diagnostics = null,
+}) {
+  if (typeof fullTree !== 'string' || fullTree === '') return null;
+  if (typeof headIsAncestor !== 'function') return null;
+  const note = (text) => {
+    if (Array.isArray(diagnostics)) diagnostics.push(text);
+  };
+  if (worktreeClean !== true) {
+    note(
+      'this worktree has uncommitted changes, so nothing here is a committed tree an ' +
+        'earlier run can have checked - commit or stash them and ask again'
+    );
+    return null;
+  }
+  const latestPerLedger = [];
+  for (const ledger of ledgers) {
+    if (ledger?.branch == null || !Array.isArray(ledger.entries)) continue;
+    // One ledger's own answer about this tree, by the rule `gateRowFor` uses: the
+    // latest line that is pass or fail on it. A stale line is not decisive.
+    let decisive = null;
+    for (const entry of ledger.entries) {
+      if (entry?.gate !== gate) continue;
+      // Exact tree, exact run. A line with no `fullTree` - anything written before
+      // ledger v4 - has nothing exact to compare, which is not a reason to guess.
+      if (!fullTreesMatch(entry.fullTree, fullTree)) continue;
+      if (
+        entry.treeAfter != null &&
+        entry.tree != null &&
+        entry.treeAfter !== entry.tree
+      ) {
+        continue;
+      }
+      if (entry.result !== 'pass' && entry.result !== 'fail') continue;
+      decisive = entry;
+    }
+    if (decisive == null) continue;
+    latestPerLedger.push({
+      branch: ledger.branch,
+      entry: decisive,
+      source: ledger.source ?? `.gates/${ledger.branch}.jsonl`,
+    });
+  }
+  if (latestPerLedger.length === 0) {
+    note(
+      `no other ledger has a ${gate} line on tree ${shortTreeHash(fullTree)}`
+    );
+    return null;
+  }
+  // Newest wins. On an exact timestamp tie the fail is the decisive line (N2): the
+  // result is compared *ascending*, and "fail" sorts before "pass", so contradictory
+  // evidence about the same tree resolves against reuse instead of for it.
+  const newest = [...latestPerLedger].sort(
+    (a, b) =>
+      String(b.entry.ts ?? '').localeCompare(String(a.entry.ts ?? '')) ||
+      String(a.entry.result).localeCompare(String(b.entry.result)) ||
+      a.branch.localeCompare(b.branch)
+  )[0];
+  if (newest.entry.result !== 'pass') {
+    note(
+      `${newest.branch}'s newest ${gate} line on this tree (${newest.source}) is a ` +
+        `fail at ${String(newest.entry.ts ?? '?')} - reuse would override it, so ` +
+        'nothing else is asked'
+    );
+    return null;
+  }
+  const candidates = [];
+  for (const candidate of latestPerLedger) {
+    if (candidate.entry.result !== 'pass') continue;
+    if (candidate !== newest) {
+      note(
+        `${candidate.branch}'s pass is older than ${newest.branch}'s evidence on the ` +
+          'same tree, and only the newest line counts'
+      );
+      continue;
+    }
+    if (candidate.entry.worktreeClean !== true) {
+      note(
+        `${candidate.branch} ran ${gate} on this tree with a dirty worktree (` +
+          `${String(candidate.entry.ts ?? '?')}), so that pass covers the tree plus ` +
+          "unrecorded edits - it doesn't say this tree was checked on its own"
+      );
+      continue;
+    }
+    if (
+      typeof candidate.entry.head !== 'string' ||
+      candidate.entry.head === ''
+    ) {
+      note(
+        `${candidate.branch}: its line names no head commit, so it cannot be placed in this history`
+      );
+      continue;
+    }
+    if (!headIsAncestor(candidate.entry.head)) {
+      note(
+        `${candidate.branch}: its head ${String(candidate.entry.head).slice(0, 7)} is not an ancestor of this tree`
+      );
+      continue;
+    }
+    candidates.push(candidate);
+  }
+  if (candidates.length === 0) return null;
+  candidates.sort(
+    (a, b) =>
+      String(b.entry.ts ?? '').localeCompare(String(a.entry.ts ?? '')) ||
+      a.branch.localeCompare(b.branch)
+  );
+  return candidates[0];
+}
+
+/**
  * What `need` decides.
  *
  * @param {object} options
@@ -645,6 +1024,10 @@ export function summarizeGates({
  * @param {string[]} [options.unmappedPaths] code paths outside the known prefixes
  * @param {string[]} [options.toolingPaths] check-only paths the diff touched
  * @param {boolean} [options.diffUnknown] when the diff could not be read
+ * @param {{branch: string, entry: object} | null} [options.reusedCheck] a `check`
+ *   from another branch's ledger that `findReusableCheck` accepted for this tree
+ * @param {string[]} [options.reuseRefusals] why `findReusableCheck` declined, for the
+ *   notes: a refusal a reader cannot interrogate is indistinguishable from a bug
  * @returns {{ok: boolean, stage: string, required: object[], missing: string[],
  *   notes: string[]}}
  */
@@ -657,17 +1040,50 @@ export function decideNeed({
   unmappedPaths = [],
   toolingPaths = [],
   diffUnknown = false,
+  reusedCheck = null,
+  reuseRefusals = [],
 }) {
   const requiredGates = requiredGatesFor({ stage, touchedPlatforms });
   const lists = listByGate(entries);
-  const required = requiredGates.map((gate) =>
+  const scheduled = requiredGates.map((gate) =>
     gateRowFor({ gate, list: lists[gate] ?? [], stage, tree, trees })
   );
+  // Merge reuse (X10): `check` may be satisfied by another branch's line for *this
+  // exact git tree*, because an equal tree hash means the run would read the same
+  // bytes. `applyReusedCheckRow` is where the rule lives, shared with `table` so the
+  // two cannot disagree.
+  const { rows: required, reused: reusedRow } = applyReusedCheckRow({
+    rows: scheduled,
+    reusedCheck,
+    stage,
+    tree,
+    trees,
+  });
+
   const missing = required
     .filter((row) => row.state !== 'green')
     .map((row) => row.gate);
 
   const notes = [];
+  if (reusedRow != null) {
+    notes.push(
+      `check was satisfied by \`${reusedRow.reused.branch}\`'s ledger ` +
+        `(${reusedRow.reused.source}): it passed on this exact tree ` +
+        `(${shortTreeHash(reusedRow.entry.fullTree)}) with a clean worktree at ` +
+        `${String(reusedRow.entry.head ?? 'unknown HEAD').slice(0, 7)}, and that ` +
+        'commit is merged into this tree. An equal tree hash means a run here would ' +
+        'read the same files, so `check` is not re-owed (see ORCHESTRATOR.md, ' +
+        '"The loop" step 5)'
+    );
+  } else if (stage === 'merge' && reuseRefusals.length > 0) {
+    // A refusal with no reason reads like a bug. The M1 rule in particular asks a
+    // question with an answer a person can check, so the answer goes on the page.
+    // Wording matters here: "not reused" would contain the word the *accepting* note
+    // uses, and a test that asserts "did not reuse" by string would match both.
+    notes.push(
+      `no check line was borrowed for this tree: ${reuseRefusals.join('; ')}`
+    );
+  }
   if (stage === 'review' && touchedPlatforms.length === 0) {
     notes.push(
       toolingPaths.length > 0
@@ -695,6 +1111,90 @@ export function decideNeed({
     );
   }
   return { ok: missing.length === 0, stage, required, missing, notes };
+}
+
+/**
+ * Swap a `check` row that has no verdict on this tree for one proved by another
+ * branch's ledger.
+ *
+ * Shared by `decideNeed` and `renderGateTable` so the two can never disagree about
+ * what reuse means - a report whose table says `missing` while `need` says satisfied
+ * is exactly the kind of contradiction this ledger exists to remove.
+ *
+ * Only at merge, only for `check`, and only when this branch's own row says nothing
+ * about this tree (M2):
+ *
+ *   - `green` - nothing to do;
+ *   - `red` - **never** overridden. This checkout ran `check` on this exact code tree
+ *     and it failed. Another branch's older pass on the same digest cannot un-fail
+ *     it; that machine, or this one, has an answer that the merge has to see;
+ *   - `stale` with `why: 'moved'` - refused for the same reason in the other
+ *     direction: the row here is a run whose tree moved under it, which is not a
+ *     verdict either, but it *is* the most recent thing this branch knows, and
+ *     silently preferring someone else's older green would hide a run nobody looked
+ *     at;
+ *   - `missing`, or `stale` with `why: 'tree'` - this branch has no evidence about
+ *     this code, which is precisely when borrowing one is the honest answer.
+ *
+ * @param {object} options
+ * @param {object[]} options.rows rows from `summarizeGates` / `gateRowFor`
+ * @param {{branch: string, entry: object} | null} options.reusedCheck
+ * @param {'review'|'merge'} options.stage
+ * @param {string | null} options.tree
+ * @param {Record<string, string> | null} [options.trees]
+ * @returns {{rows: object[], reused: object | null}}
+ */
+export function applyReusedCheckRow({
+  rows,
+  reusedCheck = null,
+  stage = 'merge',
+  tree = null,
+  trees = null,
+}) {
+  if (
+    stage !== 'merge' ||
+    reusedCheck?.entry == null ||
+    reusedCheck?.branch == null
+  ) {
+    return { rows, reused: null };
+  }
+  const current = rows.find((row) => row.gate === 'check');
+  if (current == null) return { rows, reused: null };
+  if (current.state === 'green' || current.state === 'red')
+    return { rows, reused: null };
+  if (current.state === 'stale' && current.why === 'moved')
+    return { rows, reused: null };
+  const candidate = gateRowFor({
+    gate: 'check',
+    list: [reusedCheck.entry],
+    stage,
+    tree,
+    trees,
+  });
+  if (candidate.state !== 'green') return { rows, reused: null };
+  const reused = {
+    ...candidate,
+    reused: {
+      branch: reusedCheck.branch,
+      source: reusedCheck.source ?? `.gates/${reusedCheck.branch}.jsonl`,
+    },
+  };
+  return {
+    rows: rows.map((row) => (row.gate === 'check' ? reused : row)),
+    reused,
+  };
+}
+
+/**
+ * A hash short enough to print. Both the tree digest and a git tree hash are hex, and
+ * twelve characters is far past any collision anyone could stumble into by accident.
+ *
+ * @param {string | null | undefined} hash
+ * @returns {string}
+ */
+export function shortTreeHash(hash) {
+  const text = String(hash ?? '').trim();
+  return text === '' ? '?' : text.slice(0, 12);
 }
 
 /** `1234 ms` -> `1.2 s`, `95300` -> `1 m 35 s`. Compact enough for a table cell. */
@@ -836,6 +1336,8 @@ function formatTreeCell(row) {
  * @param {'review'|'merge'} [options.stage]
  * @param {string[]} [options.required]
  * @param {(entry: object) => string} [options.evidence] how to cite a run
+ * @param {{branch: string, entry: object} | null} [options.reusedCheck] the same
+ *   reuse `need` accepted, so the table and the decision cannot disagree
  * @returns {string}
  */
 export function renderGateTable({
@@ -845,8 +1347,15 @@ export function renderGateTable({
   stage = 'review',
   required = MERGE_GATES,
   evidence = null,
+  reusedCheck = null,
 }) {
-  const rows = summarizeGates({ entries, tree, trees, stage, required });
+  const rows = applyReusedCheckRow({
+    rows: summarizeGates({ entries, tree, trees, stage, required }),
+    reusedCheck,
+    stage,
+    tree,
+    trees,
+  }).rows;
   const header =
     '| Gate | Result | Counts | Code tree | Duration | Load |' +
     '\n| --- | --- | --- | --- | --- | --- |';
@@ -854,8 +1363,11 @@ export function renderGateTable({
     const entry = row.entry;
     const evidenceText =
       evidence != null && entry != null ? ` ${evidence(entry)}` : '';
+    // A `check` carried across a merge is still a pass on this code, but a reader
+    // has to be able to see it did not run here.
+    const label = `${STATE_LABELS[row.state] ?? row.state}${row.reused != null ? ' *(reused)*' : ''}`;
     return (
-      `| \`${row.gate}\` | ${STATE_LABELS[row.state] ?? row.state} | ` +
+      `| \`${row.gate}\` | ${label} | ` +
       `${formatCounts(countsForDisplay(entry))} | ${formatTreeCell(row)} | ` +
       `${entry == null ? '—' : formatDuration(entry.durationMs)} | ` +
       `${entry == null ? '—' : formatLoad(entry.load)}${evidenceText} |`
@@ -876,8 +1388,14 @@ export function renderGateTable({
  * All three are rounded: `os.loadavg()` returns a float, and an unrounded `start`
  * was writing `"start":13.54443359375` into the committed ledger (N5).
  *
+ * v5 adds `end` (X12). It is not a fourth judgement - `median` and `max` are what
+ * make a row trustworthy - but a failure excerpt wants "this run started under a
+ * load of 3 and finished under 40", and that is two of the three numbers a reader
+ * of a red harness run asks for. It is the last sample rather than a fresh read so
+ * it is the same measurement the median was computed from.
+ *
  * @param {{start: number | null, samples: number[]}} options
- * @returns {{start: number | null, median: number | null, max: number | null, count: number}}
+ * @returns {{start: number | null, median: number | null, max: number | null, count: number, end: number | null}}
  */
 export function summarizeLoad({ start = null, samples = [] }) {
   const round = (value) =>
@@ -886,7 +1404,13 @@ export function summarizeLoad({ start = null, samples = [] }) {
       : null;
   const values = samples.filter((value) => Number.isFinite(value));
   if (values.length === 0) {
-    return { start: round(start), median: null, max: null, count: 0 };
+    return {
+      start: round(start),
+      median: null,
+      max: null,
+      count: 0,
+      end: null,
+    };
   }
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
@@ -899,6 +1423,7 @@ export function summarizeLoad({ start = null, samples = [] }) {
     median: round(median),
     max: round(Math.max(...values)),
     count: values.length,
+    end: round(values[values.length - 1]),
   };
 }
 
@@ -982,6 +1507,1378 @@ export function ledgerFileName(branch) {
 /** @returns {string} repo-relative, so it can be printed and gitignored */
 export function ledgerRelativePath(branch) {
   return `${LEDGER_DIR}/${ledgerFileName(branch)}`;
+}
+
+/* --------------------------- gate log store (X12) --------------------------- */
+
+/**
+ * The directory of one clone's gate logs, beside the git directory the worktrees
+ * of this clone share.
+ *
+ * `git rev-parse --git-common-dir` is the answer to "where does evidence go so
+ * that removing a worktree cannot delete it": a linked worktree's own `.git`
+ * directory is deleted *with* the checkout, and the common directory is not. That
+ * is precisely the X12 bug — Q3 could not read the logs of the failing X3 runs
+ * because the X3 worktree was already gone.
+ *
+ * The store lives under the common directory rather than in `~/.nitro-ui`, so it
+ * is scoped to the clone (two checkouts of two forks do not mix logs) and a
+ * developer who deletes the clone deletes their own logs with it, which is what
+ * they expect.
+ *
+ * @param {string} commonDir the output of `git rev-parse --git-common-dir`
+ * @returns {string}
+ */
+export function gateLogStoreDir(commonDir) {
+  return `${String(commonDir).replace(/\/+$/, '')}/${LOG_STORE_BASENAME}`;
+}
+
+/**
+ * Where one run's log goes, relative to whatever root the caller prints it from.
+ *
+ * `<branch>/<gate>-<started-at>.log`: keyed by branch because that is the question
+ * a reader asks ("the logs of that X3 run"), and it cannot collide with another
+ * branch's run of the same name at the same instant. `ledgerFileName` is reused so
+ * the same guard against a branch string that is not a git ref applies here too —
+ * a `../` in a branch name would otherwise write outside the store.
+ *
+ * @param {string} branch
+ * @param {string} logName e.g. `harness+android-2026-10-28T12-00-00.000Z.log`
+ * @returns {string}
+ */
+export function logRelativePath(branch, logName) {
+  return `${ledgerFileName(branch).replace(/\.jsonl$/, '')}/${String(logName).replace(/^\/+/, '')}`;
+}
+
+/**
+ * The name of one run's log file.
+ *
+ * Same shape as before X12 (`<gate>-<iso-time>.log`, `:` folded to `-`) so a log
+ * path from an old ledger line looks like a log path, and so a reader who has used
+ * this tool for a week recognises the file at a glance.
+ *
+ * @param {string} gate
+ * @param {number} startedAt
+ * @returns {string}
+ */
+export function logNameFor(gate, startedAt) {
+  return `${String(gate).replaceAll(/[^\w.-]+/g, '+')}-${new Date(startedAt).toISOString().replaceAll(':', '-')}.log`;
+}
+
+/**
+ * Where a ledger line's log actually is, oldest-format first.
+ *
+ * Three shapes have to resolve (the brief's "old relative paths still resolve, or
+ * are migrated"):
+ *
+ *   1. an absolute path — a line whose store was renamed or moved, and a path
+ *      `export` or a test wrote deliberately;
+ *   2. `.gates/logs/<name>` — everything written before X12. This checkout's own
+ *      copy if it is still on disk, then the store's copy under
+ *      `.gates/logs/<branch>/` (where the migration put it, keyed by the branch the
+ *      line carries — see `migrateWorktreeLogs`), then the flat spelling an earlier
+ *      migration used;
+ *   3. `<branch>/<name>` — the current format, relative to the store.
+ *
+ * Resolution order is *worktree first, store second*. A `.gates/logs/` file that
+ * still exists was written by the run that wrote the line, in this checkout: it is
+ * the original, and the copy in the store is at best the same bytes. Preferring the
+ * store would mean the copy silently wins over the original, which is the wrong
+ * order for evidence.
+ *
+ * `logBranch` is what makes a migrated line findable once its worktree is gone. A
+ * pre-X12 path carries no branch, and once the worktree is removed there is no
+ * checkout left to ask which branch wrote it — so the caller passes the branch from
+ * the line or the record that closed the run, and a `task/a/b` name keeps its
+ * slashes rather than being guessed at from the path's first segment.
+ *
+ * @param {object | null | undefined} entry a ledger line
+ * @param {{storeDir?: string | null, repoRoot?: string | null, logBranch?: string | null, extraCandidates?: string | string[] | null, existsSync?: (file: string) => boolean}} options
+ * @returns {{file: string | null, candidates: string[]}} the first existing
+ *   candidate, and every path that was asked — so a caller can say *where* it
+ *   looked when the answer is "nowhere".
+ */
+export function ledgerLogCandidates(entry, options) {
+  const logPath = typeof entry?.logPath === 'string' ? entry.logPath : null;
+  const candidates = [];
+  const join = (root, relative) =>
+    `${String(root).replace(/\/+$/, '')}/${relative.replace(/^\/+/, '')}`;
+  if (logPath != null && logPath !== '') {
+    if (logPath.startsWith('/')) candidates.push(logPath);
+    const storeDir = options.storeDir ?? null;
+    if (logPath.startsWith(`${LEDGER_DIR}/logs/`)) {
+      // Legacy spelling: this checkout's own copy first (it is the original, if it
+      // is still there), then the store's copy — keyed by the branch that wrote it,
+      // then the flat spelling an older migration used.
+      const legacy = logPath.slice(`${LEDGER_DIR}/logs/`.length);
+      if (options.repoRoot != null) {
+        candidates.push(join(options.repoRoot, logPath));
+      }
+      if (storeDir != null) {
+        const inStore = (worktree) =>
+          join(storeDir, `${LEDGER_DIR}/logs/${worktree}${legacy}`);
+        const logBranch = options.logBranch ?? null;
+        if (logBranch != null && logBranch !== '') {
+          candidates.push(inStore(`${String(logBranch).replace(/^\/+/, '')}/`));
+        }
+        candidates.push(inStore(''));
+      }
+    } else {
+      for (const root of [options.repoRoot ?? null, storeDir]) {
+        if (root == null) continue;
+        candidates.push(join(root, logPath));
+      }
+    }
+  }
+  // Anything the caller wants offered last: a line whose `logPath` was derived by
+  // older code may name a file that was never written, and the canonical path for
+  // that run is worth one more stat before the export says "no log".
+  for (const extra of [options.extraCandidates ?? []].flat()) {
+    if (
+      typeof extra === 'string' &&
+      extra !== '' &&
+      !candidates.includes(extra)
+    )
+      candidates.push(extra);
+  }
+  const exists = options.existsSync ?? ((file) => file != null && false);
+  return {
+    candidates,
+    file: candidates.find((candidate) => exists(candidate)) ?? null,
+  };
+}
+
+/**
+ * How many days a gate log is kept, and how much of it.
+ *
+ * The rule, stated because the brief asks for one and because a retention rule
+ * nobody can read is a rule that gets bypassed:
+ *
+ *   - **35 days by mtime** — five working weeks of branches, which is longer than
+ *     any task in this repo has lived, and short enough that a machine does not
+ *     accumulate a year of harness transcripts;
+ *   - **64 MiB total**, oldest-first, and only *after* the age rule — so a machine
+ *     that ran 200 gates a day for a week loses the week's tail, not a month's worth
+ *     of everything;
+ *   - a log whose `startedAt` is inside `protectNewerThan` is never deleted: a run
+ *     in progress is writing it, and a `wait` that loses its log mid-run is a worse
+ *     bug than an over-full directory.
+ *
+ * Failure logs get no exemption: an export copies what matters into `docs/tasks/`
+ * first, which is the point of item 2.
+ */
+export const LOG_RETENTION_DAYS = 35;
+export const LOG_RETENTION_MAX_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Which stored logs a retention sweep deletes.
+ *
+ * Age and size, in that order, with a floor for "just started writing": a file
+ * whose mtime is inside `protectNewerThan` is not a candidate at all, because the
+ * run that made it may still be appending to it.
+ *
+ * @param {Array<{file: string, bytes: number, mtimeMs: number, startedAt?: number | null}>} logs
+ *   every stored log, with the store's own bookkeeping merged in where available
+ * @param {object} [options]
+ * @param {number} [options.now]
+ * @param {number} [options.days]
+ * @param {number} [options.maxBytes]
+ * @param {number} [options.protectNewerThan] ms; anything touched more recently
+ *   than this survives both rules
+ * @returns {{victims: Array<{file: string, reason: string}>, keptBytes: number, kept: number}}
+ */
+export function planLogRetention(
+  logs,
+  {
+    now = Date.now(),
+    days = LOG_RETENTION_DAYS,
+    maxBytes = LOG_RETENTION_MAX_BYTES,
+    protectNewerThan = LOG_RETENTION_MIN_AGE_MS,
+  } = {}
+) {
+  const ageMs = days * 86_400_000;
+  const byAge = (logs ?? []).filter((log) => {
+    const touchedAt = Number(log?.mtimeMs ?? Number.NaN);
+    if (!Number.isFinite(touchedAt)) return false;
+    return now - touchedAt > ageMs && now - touchedAt > protectNewerThan;
+  });
+  const victims = new Map(
+    [...byAge]
+      .sort((a, b) => Number(a.mtimeMs) - Number(b.mtimeMs))
+      .map((log) => [log.file, { file: log.file, reason: 'age' }])
+  );
+  // Size is measured over what survives the age rule: deleting stale files first is
+  // what makes the cap a backstop rather than a second way to lose a young log.
+  const survivors = (logs ?? []).filter((log) => !victims.has(log.file));
+  let total = survivors.reduce((sum, log) => sum + Number(log?.bytes ?? 0), 0);
+  if (total > maxBytes) {
+    for (const log of [...survivors].sort(
+      (a, b) => Number(a.mtimeMs) - Number(b.mtimeMs)
+    )) {
+      if (total <= maxBytes) break;
+      if (now - Number(log.mtimeMs) <= protectNewerThan) continue;
+      victims.set(log.file, { file: log.file, reason: 'size' });
+      total -= Number(log.bytes ?? 0);
+    }
+  }
+  const kept = (logs ?? []).filter((log) => !victims.has(log.file));
+  return {
+    victims: [...victims.values()],
+    kept: kept.length,
+    keptBytes: kept.reduce((sum, log) => sum + Number(log?.bytes ?? 0), 0),
+  };
+}
+
+/** Never sweep a log touched in the last two hours, whatever the other rules say. */
+export const LOG_RETENTION_MIN_AGE_MS = 2 * 60 * 60_000;
+
+/* ------------------------ failure excerpts (X12 item 2) --------------------- */
+
+/** How many trailing lines an excerpt carries. The brief's "~150". */
+export const EXCERPT_TAIL_LINES = 150;
+
+/** How many failure blocks an excerpt carries before it says "and N more". */
+export const EXCERPT_MAX_FAILURES = 20;
+
+/** Cap on the excerpt as a whole, so one pathological log cannot bloat a commit. */
+export const EXCERPT_MAX_BYTES = 128 * 1024;
+
+/**
+ * How much of one kept line an excerpt carries.
+ *
+ * The excerpt scrubs only the lines it keeps (review N3), so this is also the
+ * bound on what the scrubber is asked to read: ~170 kept lines at most, so
+ * scrubbing an excerpt's content costs a few milliseconds whatever the log's
+ * size. A line past the cap keeps its head - the failure message is at the
+ * front of a jest line, and the part past the cap is a data blob nobody reads -
+ * and says so. The tail past the cap is *dropped*, not passed through, so a
+ * credential can only ever appear here as an unusable fragment of a longer one.
+ */
+export const EXCERPT_MAX_LINE_CHARS = 64 * 1024;
+
+/**
+ * The characters a key may contain, in `KEY=value`, `"KEY": "value"` or `--key`
+ * spelling. `/`, space and quote are not key characters, which is what bounds a
+ * run's start in a URL or a shell line.
+ */
+const KEY_CHAR = /[A-Za-z0-9_.-]/;
+
+/**
+ * How far back from a `:`/`=` a key may reach. Every credential key a build log
+ * prints is far shorter than this, and the bound is what makes the scan's cost
+ * depend on the size of the file rather than on the length of its longest line
+ * (review N3).
+ */
+const MAX_KEY_SCAN = 128;
+
+/**
+ * The keys whose *whole* value is a header, scheme included.
+ *
+ * The generic assignment rule takes one word, which for `Authorization: Bearer
+ * abc…` replaces the word `Bearer` and publishes the credential beside a
+ * `[scrubbed]` marker that reads as if it had worked - the first version's bug
+ * (review M5). `Cookie` is the same case: its value is a whole session.
+ */
+const HEADER_KEY =
+  /^(?:(?:[\w.-]*[-_.]?)?authorization|[\w.-]*proxy[-_.]?authorization|[\w.-]*set[-_.]cookie|[\w.-]*cookie)$/i;
+
+/** Characters that end a bare (unquoted) value. Same set the rule has always used. */
+const BARE_VALUE_END = new Set([
+  ' ',
+  '\t',
+  '"',
+  "'",
+  ',',
+  ';',
+  '&',
+  '<',
+  '>',
+  '|',
+  '\\',
+  '\r',
+]);
+
+/**
+ * The machine-identifying *shapes* a log can carry that no caller could list.
+ *
+ * `localPathRedactions` is the exact-string half: this checkout's repo, store,
+ * lease file, `$HOME`, scratch folder and hostname. It is precise - it cannot
+ * mangle anything - and it is blind by construction, because it can only name
+ * folders on the machine running the gate. A gate log carries other people's: a CI
+ * artifact's `/home/jenkins/…`, a stack trace pasted from a teammate's
+ * `/Users/janesmith/…`, a CoreSimulator line repeating its own hashed per-user
+ * folder. Round 1 could not see any of these by construction: an exact-string list
+ * can only name the folders on the machine that ran the gate.
+ *
+ * Each rule replaces the part that names a *person or a box* and leaves the rest
+ * of the path alone, because the path is the half that explains a failure. The
+ * exclusions are the other half of the design: `Shared` and the CI service
+ * accounts are roles, not people, and redacting them would shred a CI log while
+ * hiding nobody.
+ */
+const MACHINE_PATH_RULES = [
+  {
+    // A home directory under a known root.
+    re: /\/(?:Users|home)\/([A-Za-z0-9._-]{1,63})(?=\/|$)/g,
+    named: true,
+    out: (root) => `${root}<user>`,
+    root: /\/(?:Users|home)\//,
+  },
+  {
+    // The per-user scratch folder macOS builds (`/var/folders/<3 hex>/<32 base36>`),
+    // and every subdirectory of it. Xcode, SwiftPM and CoreSimulator write beside
+    // the temp dir - `…/C/com.apple.Xcode/…`, `…/0/com.apple.CoreSimulator…` - so
+    // redacting only `…/T`, as round 1 did, still published the hash.
+    re: /(?:\/private)?\/var\/folders\/[A-Za-z0-9]{1,4}\/[A-Za-z0-9_-]{10,}(?=\/|$)/g,
+    out: () => '<tmp>',
+  },
+];
+
+/**
+ * Account names that are roles rather than people, so redacting them would shred a
+ * log to hide nobody. `AMBIGUOUS_USERNAMES` covers the ordinary-word case; these
+ * are the CI and system accounts a container's paths are full of.
+ */
+const SERVICE_ACCOUNTS =
+  /^(?:Shared|runner|jenkins|vagrant|vsts|container|system|shared)$/i;
+
+/**
+ * Replaces the machine-identifying shapes in `text`.
+ *
+ * @param {string} text
+ * @param {(count: number) => void} [onReplace] told how many replacements were made
+ * @returns {string}
+ */
+export function scrubMachinePaths(text, onReplace = null) {
+  let out = String(text ?? '');
+  let count = 0;
+  for (const rule of MACHINE_PATH_RULES) {
+    out = out.replace(rule.re, (whole, ...rest) => {
+      // Only the home rule captures a name, so it says so: with no capture group
+      // the callback's second argument is the match offset, and testing `412`
+      // against the account list is not a question — which is how the first draft
+      // of this crashed `export` outright.
+      const name = rule.named ? String(rest[0]) : null;
+      if (
+        (name != null && SERVICE_ACCOUNTS.test(name)) ||
+        (name != null && AMBIGUOUS_USERNAMES.has(name.toLowerCase()))
+      ) {
+        return whole;
+      }
+      count += 1;
+      return rule.out(whole.match(rule.root ?? /^$/)?.[0] ?? '');
+    });
+  }
+  if (onReplace != null && count > 0) onReplace(count);
+  return out;
+}
+
+/**
+ * Rewrites every credential assignment in `text` in one left-to-right pass.
+ *
+ * This replaces the two regexes that did the job before, and it exists because of
+ * what they cost (review N3): `(^|[^A-Za-z0-9-])(?:[\w.-]*[-_.]?)?authorization…`
+ * and `\b[\w.-]{3,}` restart an unbounded scan at every `.`/`_`/`-` boundary, so a
+ * line that is one long dotted or base64url run - a Metro bundle graph, an
+ * xcodebuild `-showBuildSettings` dump, a SwiftPM manifest - measured 12.6 s at
+ * 40 KB and 199 s at 160 KB under Node 24. `export` of a log like that did not
+ * finish: the measurement ran past twenty minutes and was killed.
+ *
+ * The pass works the other way round. It looks for the *separators*, which are
+ * rare, and reads back a bounded distance for the key, so cost is a function of
+ * the file rather than of its longest line.
+ *
+ * Which candidates it considers, and why that is the same set the `\b` anchor
+ * could reach: at a `:` or `=`, the key run ending there (up to `MAX_KEY_SCAN`
+ * back), then every suffix of it that begins at a word boundary - i.e. after a
+ * `.` or a `-`. Leftmost first, as `String.replace` matches leftmost first. So
+ * `systemProp.foo.password=x` and `//registry.npmjs.org/:_auth=…` still match,
+ * and `sort_key`, `monkey`, `keyframes` and `session_count` still do not, which
+ * is the assertion that makes this rewrite safe to land.
+ *
+ * A rejected candidate consumes the value it examined rather than just the
+ * separator, because that is what a `/g` replace's `lastIndex` did: `return all`
+ * in the old code skipped the *match*, and the match included the value. The
+ * `i = valueEnd` below is that behaviour, and it is why `password=[scrubbed]`
+ * is not offered to the next candidate as a fresh key.
+ *
+ * @param {string} text
+ * @param {(replacement: string) => string} scrub counts one replacement and returns its argument
+ * @returns {string}
+ */
+function scrubAssignments(text, scrub) {
+  let out = '';
+  // Start of the region still known to be copied out verbatim.
+  let chunkStart = 0;
+  let i = 0;
+  const n = text.length;
+
+  while (i < n) {
+    const separator = text[i];
+    if (separator !== ':' && separator !== '=') {
+      i += 1;
+      continue;
+    }
+
+    // What sits just before the separator. The old rules allowed the key's own
+    // closing quote and whitespace there - `["']?(\s*[:=]\s*)` - so the run is
+    // looked for from there, not from the separator, or `"password": "x"` reads
+    // `"password"` as a run of nothing and is skipped.
+    let before = i;
+    const trimSpaces = () => {
+      while (
+        before > chunkStart &&
+        (text[before - 1] === ' ' || text[before - 1] === '\t')
+      )
+        before -= 1;
+    };
+    trimSpaces();
+    if (
+      before > chunkStart &&
+      (text[before - 1] === '"' || text[before - 1] === "'")
+    ) {
+      before -= 1;
+      trimSpaces();
+    }
+
+    // The key run ending there, bounded, with any trailing `_`/`-`/`.` dropped:
+    // those are separators in their own right, not the end of a key.
+    let runStart = before;
+    const earliest = Math.max(chunkStart, before - MAX_KEY_SCAN);
+    while (runStart > earliest && KEY_CHAR.test(text[runStart - 1]))
+      runStart -= 1;
+    const run = text.slice(runStart, before).replace(/[-_.]+$/, '');
+    if (run === '') {
+      i += 1;
+      continue;
+    }
+    const runEnd = runStart + run.length;
+    // A separator the run does not reach even with that allowance (`foo - : x`)
+    // was not matchable by the old rules either.
+    if (runEnd !== before) {
+      i += 1;
+      continue;
+    }
+
+    // A time like `16:18:47`, which the header rule could otherwise reach through
+    // its `[\w.-]*` prefix. Only digits before, and digits right after.
+    if (
+      separator === ':' &&
+      /^\d+$/.test(run) &&
+      /^\d/.test(text.slice(i + 1, i + 3))
+    ) {
+      i += 1;
+      continue;
+    }
+    // A URL's authority (`https://user:pass@host`) belongs to the userinfo rule,
+    // which has already run over this text. Both rules were `/g` scans over the
+    // same string and left this shape to userinfo; skipping the separator keeps
+    // that division of labour.
+    if (
+      separator === ':' &&
+      text.startsWith('//', i + 1) &&
+      text.lastIndexOf('\n', i) < text.lastIndexOf('/', i)
+    ) {
+      i += 3;
+      continue;
+    }
+
+    // The key: for a header-shaped run, all of it (the old header rule's prefix
+    // class absorbed anything before `cookie`/`authorization`). Otherwise the
+    // leftmost word-boundary suffix the old `\b[\w.-]{3,}` could match.
+    let keyStart = runStart;
+    const wholeIsHeader = HEADER_KEY.test(run);
+    if (!wholeIsHeader) {
+      keyStart = -1;
+      for (let k = runStart; k < runEnd; k += 1) {
+        if (!/[A-Za-z0-9_]/.test(text[k])) continue;
+        if (k > runStart && /[A-Za-z0-9_]/.test(text[k - 1])) continue;
+        const candidate = text.slice(k, runEnd);
+        if (candidate.length >= 3 && CREDENTIAL_KEY.test(candidate)) {
+          keyStart = k;
+          break;
+        }
+      }
+      if (keyStart < 0) {
+        i += 1;
+        continue;
+      }
+    }
+
+    // Whitespace after the separator. Any quote here belongs to the *value*: in
+    // the old pattern the key's optional quote came before the separator, and the
+    // one after it opened the value (`"key": "value"`).
+    let j = i + 1;
+    while (j < n && (text[j] === ' ' || text[j] === '\t')) j += 1;
+
+    const endOfLine = text.indexOf('\n', i);
+    const lineEnd = endOfLine === -1 ? n : endOfLine;
+    const openQuote = text[j] === '"' || text[j] === "'" ? text[j] : '';
+
+    // Values are *not* bounded the way the key scan is. Both scans are single
+    // passes over what they read, so a long value costs its own length and
+    // nothing else; capping one would only leave the tail of a real credential
+    // in a committed file, which is the whole thing this is for.
+    /** Where a quoted value opened at `j` ends, or -1 when it is never closed. */
+    const closingQuote = () => {
+      const close = text.indexOf(openQuote, j + 1);
+      return close === -1 || close > lineEnd ? -1 : close;
+    };
+    /** The end of a bare value, which stops at the first delimiter. */
+    const bareEnd = (from) => {
+      let k = from;
+      while (k < lineEnd && !BARE_VALUE_END.has(text[k])) k += 1;
+      return k;
+    };
+
+    // Where the value begins and ends, and the two characters that wrap it. The
+    // emit below is `text.slice(keyStart, j)` plus `open` plus the marker plus
+    // `close`, so each character in the line is accounted for exactly once - the
+    // bug this avoids is emitting the value's own opening quote twice, which is
+    // what the first draft of this pass did to `"key": "value"`.
+    let valueEnd = j;
+    let open = '';
+    let close = '';
+    let trailing = '';
+
+    if (openQuote !== '') {
+      const closing = closingQuote();
+      if (closing === -1) {
+        // An unclosed quote: there is no value to replace inside, so read the
+        // bare run from the quote itself, which is what the old alternation fell
+        // through to.
+        valueEnd = bareEnd(j);
+      } else {
+        open = openQuote;
+        close = openQuote;
+        valueEnd = closing;
+      }
+    } else {
+      valueEnd = bareEnd(j);
+      // In a config file the value is the *rest of the line*, and a passphrase is
+      // words: `password: correct horse battery` is one secret, not four tokens of
+      // which the first is redacted (review N5). A config-style separator is a `:`,
+      // or an `=` with spaces around it (`pass = hunter2`); a tight `key=value` is
+      // shell, env or CLI spelling, where a space ends the argument - which is why
+      // `NPM_TOKEN=a GITHUB_TOKEN=b` still reports two replacements, not one.
+      const configStyle =
+        !'[{'.includes(text[j]) &&
+        (separator === ':' ||
+          (separator === '=' &&
+            (text[i - 1] === ' ' ||
+              text[i - 1] === '\t' ||
+              text[i + 1] === ' ')));
+      if (configStyle) {
+        valueEnd = lineEnd;
+        while (
+          valueEnd > j &&
+          (text[valueEnd - 1] === ' ' || text[valueEnd - 1] === '\t')
+        )
+          valueEnd -= 1;
+      }
+    }
+
+    if (wholeIsHeader && open === '') {
+      // A header's value is the whole rest of the line, scheme included, and
+      // stops early only at the closing quote of the shell argument that holds it
+      // (`-H 'Authorization: token abc…'`) - keeping that quote so the line still
+      // reads as the command that ran.
+      valueEnd = lineEnd;
+      const quoted = /^(.*?)(["'])$/.exec(text.slice(j, valueEnd));
+      if (quoted != null && quoted[1].trim() !== '') {
+        valueEnd = j + quoted[1].length;
+        trailing = quoted[2];
+      }
+    }
+
+    // Where this candidate's match ends, which is also where scanning resumes -
+    // `valueEnd` points *at* the closing quote, and `close` has already emitted
+    // it. Skipping that is how the first draft printed `[scrubbed]''`.
+    const consumed = valueEnd + close.length + trailing.length;
+    const value = text.slice(j + open.length, valueEnd);
+    if (value.trim() === '' || value.trim() === '[scrubbed]') {
+      // Nothing to hide - and the region up to the value's end is consumed, the
+      // way the old rule's `lastIndex` did after a match it returned unchanged.
+      out += text.slice(chunkStart, consumed);
+      i = Math.max(i + 1, consumed);
+      chunkStart = i;
+      continue;
+    }
+
+    out += text.slice(chunkStart, keyStart);
+    out += scrub(
+      `${text.slice(keyStart, j)}${open}[scrubbed]${close}${trailing}`
+    );
+    i = consumed;
+    chunkStart = i;
+  }
+
+  return out + text.slice(chunkStart);
+}
+
+/**
+ * Which key names count as credentials. Matched against the whole key, so
+ * `sort_key`, `monkey` and `keyframes` are not credentials.
+ *
+ * `[_-]?auth` is here because `.npmrc` writes `_auth=` (base64 `user:password`) for a
+ * registry, and that line is exactly what a failing `npm publish` prints.
+ */
+const CREDENTIAL_KEY =
+  /^(?:[\w.-]*(?:token|secret|password|passwd|passfile|passphrase|credential|authorization|bearer|cookie|dsn|npm[-_.]?config)[\w.-]*|[\w.-]*(?:api|access|secret|private|auth|session|encryption|signing|deploy)[-_.]?key[\w.-]*|[\w.-]*session[-_.]?(?:id|key|token)[\w.-]*|[_-]?auth|auth[-_.]?(?:token|key|header)|x[-_.]?sc[-_.]?auth|aws[-_.]?access[-_.]?key[-_.]?(?:id|secret))$/i;
+
+/** Values that are credentials by *shape* alone, wherever they appear. */
+/**
+ * Values that are credentials by *shape* alone, wherever they appear.
+ *
+ * Each prefix is a vendor's own, so the rule cannot guess at "random-looking
+ * strings" and shred a stack trace. `sk-ant-`, `sk_live_`/`sk_test_`, `glpat-`
+ * and `AIza` are the four the re-review found missing; a build that installs a
+ * publishing or deploy plugin prints them the same way it prints a `ghp_`.
+ */
+const CREDENTIAL_SHAPE =
+  /\b(gh[pousr]_[A-Za-z0-9]{20,}|npm_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|sk-ant-[A-Za-z0-9_-]{20,}|sk_(?:live|test)_[A-Za-z0-9]{16,}|glpat-[A-Za-z0-9_-]{15,}|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/g;
+
+/**
+ * An email address. D25 lists these, and a build log prints them constantly:
+ * `git log`, `.npmrc`'s `email=`, a podspec's or pom's author, a CocoaPods or
+ * Gradle publication failure echoing the identity it tried to publish as.
+ *
+ * The first domain label has to start with a letter, which is what keeps
+ * `logo@2x.png` and `icon@3x.png` - the shape that would otherwise be mangled in
+ * every React Native build log - as the filenames they are.
+ */
+const EMAIL =
+  /(^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,64})@([A-Za-z][A-Za-z0-9-]{0,62}(?:\.[A-Za-z0-9-]{0,62})*\.[A-Za-z]{2,24})(?=$|[^A-Za-z0-9-])/g;
+
+/**
+ * Addresses that are a protocol's own, not a person's.
+ *
+ * `git@github.com:owner/repo.git` is how a clone's remote prints in a release
+ * job's log, and redacting it would hide the one line that says which repository
+ * the job was pushing to while naming exactly nobody.
+ */
+const PROTOCOL_ACCOUNTS = /^git@(?:github|gitlab|bitbucket)\.com$/i;
+
+/**
+ * `curl -u user:pass`, `--user=user:pass`, and a bare `user:pass@host`.
+ *
+ * The URL rule above only fires on a `scheme://` authority, so these two shapes -
+ * the flag a build script passes and the authority a curl error echoes back -
+ * went out whole (review N5).
+ */
+const FLAG_USERINFO =
+  /(^|[^A-Za-z0-9-])(-{1,2}u(?:ser)?)([= ]+)([A-Za-z0-9._%+@-]{1,64}:)(?:"([^"\n]*)"|'([^'\n]*)'|([^\s"']{1,4096}))/gi;
+
+const BARE_USERINFO =
+  /(^|[\s/"'`([{@=])([A-Za-z0-9._%+@-]{1,64}:)([^\s@"'`\])}]{1,4096})(?=@[A-Za-z0-9-.])/g;
+
+/**
+ * Scrubs the secret shapes from a log before it is committed.
+ *
+ * What is scrubbed, stated because the brief asks what the rule is and because a
+ * committed file is a *published* one (D25):
+ *
+ *   - a PEM private-key block, whole;
+ *   - a URL's userinfo (`https://user:***@host/`);
+ *   - `Authorization:` / `Proxy-Authorization:` / `Cookie:` / `Set-Cookie:`, whose
+ *     **whole** value goes — scheme included. Replacing only the first token would
+ *     scrub the word `Bearer` and publish the credential beside a marker that reads
+ *     as if it had worked, which is what the first version of this did;
+ *   - the value of any assignment whose key looks like a credential —
+ *     token/secret/password/passwd/passfile/credential/authorization/bearer/cookie/
+ *     dsn/`NPM_CONFIG_*`, or `<something>_key` where the something is api/access/
+ *     secret/private/auth/session/encryption/signing/deploy, plus `.npmrc`'s `_auth`
+ *     /`_authToken`/`_password`, `auth`, `SESSION_ID` and `X_SC_AUTH` — in any of
+ *     `KEY=value`, `"KEY": "value"`, `KEY: value`, `--key value` or `<token>…</token>`;
+ *   - a bare credential *shape*: `ghp_…`, `npm_…`, `github_pat_…`, a Slack
+ *     `xox…-…`, an AWS access-key id, a JWT.
+ *
+ * Two deliberate biases. It scrubs by *shape*, not by entropy: guessing at
+ * "random-looking strings" would shred stack traces and still miss a short
+ * password. And it errs toward scrubbing — `--monkey-key value` loses its value —
+ * because the cost of hiding a build flag's argument is a reader's mild confusion,
+ * and the cost of missing a token is a rotated credential.
+ *
+ * **Paths and hostnames are not this function's business, and are still scrubbed** —
+ * by `redactLocalPaths`, which `renderFailureExcerpt` applies to everything it writes
+ * (review M4, D25). The split is by mechanism, not by policy: a credential's shape is
+ * recognisable anywhere, whereas only the caller knows where its own repo, store and
+ * home directory are. Together the two mean an excerpt commits no token and no home
+ * path; neither alone does.
+ *
+ * @param {string} text
+ * @returns {{text: string, replaced: number}}
+ */
+export function scrubSecrets(text) {
+  let replaced = 0;
+  const scrub = (value) => {
+    replaced += 1;
+    return value;
+  };
+  let out = String(text ?? '');
+
+  // A PEM block first and wholesale: its body is base64, so the assignment rules
+  // would match inside it and leave a plausible-looking fragment behind.
+  out = out.replace(
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+    () => scrub('[scrubbed: private key]')
+  );
+
+  // URL userinfo, including a percent-encoded password.
+  //
+  // Bounded, and anchored at a non-word character rather than `\b`, for the same
+  // reason as `scrubAssignments` (review N3): `[^\s/@]+:` then `[^\s@]+(@)` is a
+  // scan that fails only after reading the rest of the line, at every colon, so
+  // 64 KB of `a.` cost 3.4 s and a megabyte cost over ten minutes. The bounds also
+  // mean a username longer than 256 characters or a password longer than 64 KiB
+  // keeps its tail, which is a data blob rather than a credential by then.
+  out = out.replace(
+    /(^|[^A-Za-z0-9])([a-z][a-z0-9+.-]{0,32}:\/\/)([^\s/@:]{1,256}:)([^\s@]{1,65536})(@)/gi,
+    (_all, before, scheme, user, _password, at) =>
+      scrub(`${before}${scheme}${user}[scrubbed]${at}`)
+  );
+
+  // `Authorization: <scheme> <credential>`, `Cookie: …`, `Set-Cookie: …` and every
+  // `KEY = value` whose key looks like a credential, in shell, JSON, YAML, INI,
+  // PHP-array and plain-log spelling. One pass, for the reason in
+  // `scrubAssignments`: as two regexes these were quadratic in a long line, which
+  // is how a Metro bundle graph hung `export` (review N3).
+  //
+  // A header's *whole* value goes, scheme included. The generic rule on its own
+  // would replace the first token after the colon - the word `Bearer` - and
+  // publish the credential next to a `[scrubbed]` marker that reads as if it
+  // worked. A quoted value keeps its quotes so the JSON or YAML around it
+  // survives; an unquoted one runs to the end of the line, because that is where
+  // a header ends.
+  out = scrubAssignments(out, scrub);
+
+  // `--token value`, `--token=value` (the assignment rule above takes the second
+  // form, so this only has to handle the spaced one). Bounded for the same reason
+  // as the two rules above.
+  out = out.replace(
+    /(--[\w-]{0,128}(?:token|secret|password|passwd|key|auth|cookie|credential)[\w-]{0,128})(\s+)([^\s]{4,65536})/gi,
+    (all, flag, sep, value) =>
+      CREDENTIAL_KEY.test(flag.replace(/^-+/, '')) ||
+      /(?:token|secret|password|passwd|api[-_]?key|auth)/i.test(flag)
+        ? scrub(`${flag}${sep}[scrubbed]`)
+        : all
+  );
+
+  // `<token>value</token>` / `<auth>value</auth>`: the XML shapes a Maven `settings.xml`
+  // or a plist leaves in a build log. (`.npmrc` is INI, not XML — its `_auth=` and
+  // `_authToken=` are covered by the assignment rule above.)
+  out = out.replace(
+    /<([A-Za-z][\w.-]{0,128})>([^<\n]{0,65536})<\/\1>/g,
+    (all, name, value) =>
+      CREDENTIAL_KEY.test(name) && value.trim() !== ''
+        ? scrub(`<${name}>[scrubbed]</${name}>`)
+        : all
+  );
+
+  // Bare shapes.
+  out = out.replace(CREDENTIAL_SHAPE, () => scrub('[scrubbed: credential]'));
+
+  // `curl -u user:pass` and `user:pass@host`, which are not URL authorities and so
+  // never reached the rule above (review N5). The host stays: it is the half that
+  // tells a reader *which* service leaked.
+  out = out.replace(
+    FLAG_USERINFO,
+    (all, before, flag, sep, user, dq, sq, bareValue) => {
+      const value = dq ?? sq ?? bareValue ?? '';
+      if (value === '' || value === '[scrubbed]') return all;
+      const quote = dq != null ? '"' : sq != null ? "'" : '';
+      return scrub(`${before}${flag}${sep}${user}${quote}[scrubbed]${quote}`);
+    }
+  );
+  out = out.replace(BARE_USERINFO, (all, before, user, password) =>
+    // The `@host` sits in the lookahead, so it is not part of the match and the
+    // host survives by dropping the password alone.
+    password === '[scrubbed]' ? all : scrub(`${before}${user}[scrubbed]`)
+  );
+
+  // Email addresses (D25). After everything else, so an address inside a credential
+  // value is already gone and this only handles the plain kind.
+  out = out.replace(EMAIL, (all, before, user, domain) =>
+    PROTOCOL_ACCOUNTS.test(`${user}@${domain}`)
+      ? all
+      : scrub(`${before}<email>`)
+  );
+
+  // And the paths that name *someone else's* machine, which no caller can list:
+  // `localPathRedactions` knows this checkout's folders, and nothing knows a
+  // teammate's username or a CI runner's hashed scratch folder until a log carries
+  // one (review N5).
+  out = scrubMachinePaths(out, (count) => {
+    replaced += count;
+  });
+
+  return { text: out, replaced };
+}
+
+/** The markers `gate.mjs` writes around the device context block it appends. */
+export const DEVICE_CONTEXT_START =
+  'gate: ---- device context (recorded on failure, X12) ----';
+export const DEVICE_CONTEXT_END = 'gate: ---- end device context ----';
+
+/**
+ * Splits a log into its run output and the device-context block appended to it.
+ *
+ * An excerpt wants both, but not mixed: "the last 150 lines" of a log whose last
+ * 500 are logcat would show no failure at all. So the block is lifted out, shown as
+ * its own section, and the tail is taken from the run's own output.
+ *
+ * @param {string} text
+ * @returns {{body: string, context: string | null}}
+ */
+export function splitDeviceContext(text) {
+  const haystack = String(text ?? '');
+  const start = haystack.indexOf(DEVICE_CONTEXT_START);
+  if (start === -1) return { body: haystack, context: null };
+  const end = haystack.indexOf(DEVICE_CONTEXT_END, start);
+  const block = haystack.slice(
+    start,
+    end === -1 ? undefined : end + DEVICE_CONTEXT_END.length
+  );
+  return {
+    body: `${haystack.slice(0, start)}${haystack.slice(end === -1 ? haystack.length : end + DEVICE_CONTEXT_END.length)}`,
+    context: block,
+  };
+}
+
+/** A simulator's UDID, as `simctl` and `xcrun` print it. */
+const SIMULATOR_UDID_SHAPE =
+  /\b[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}\b/gi;
+
+/** An emulator serial, which is what an adb error line leads with. */
+const EMULATOR_SERIAL_SHAPE = /\bemulator-\d{2,5}\b/gi;
+
+/**
+ * Replaces every device identifier in `text` except the ones this run owns.
+ *
+ * Why (review N6): the device block answers some host-wide questions - which
+ * simulators are booted on this Mac, what an adb error said - and their answers name
+ * every device on the machine, not just the pair this task leased. Another task's
+ * simulator and the maintainer's own device therefore used to be copied into a
+ * committed excerpt, one identifier per line. The brief asked for the probe, so the
+ * probe stays; what it must not carry home is a name it has no business publishing.
+ *
+ * A device's *name and state* survive ("iPhone 16 (Booted)" is the half that tells
+ * you a second simulator stole focus); only the identifier - the part you type back
+ * into a tool - is replaced.
+ *
+ * @param {string} text
+ * @param {{udid?: string | null, serial?: string | null, device?: string | null}} own
+ *   the identifiers this run's lease names
+ * @returns {string}
+ */
+export function redactForeignDeviceIds(text, own = {}) {
+  const allowed = new Set(
+    [own.udid, own.serial, own.device]
+      .filter((value) => typeof value === 'string' && value !== '')
+      .map((value) => value.toLowerCase())
+  );
+  const keepOwn = (whole) =>
+    allowed.has(whole.toLowerCase()) ? whole : '<other device>';
+  return String(text ?? '')
+    .replace(SIMULATOR_UDID_SHAPE, keepOwn)
+    .replace(EMULATOR_SERIAL_SHAPE, keepOwn);
+}
+
+/**
+ * The failing test names and assertion messages in a log, in the shapes the gates
+ * actually print (jest, and the real-input suites' own `✗`/`FAIL` lines).
+ *
+ * Capped, because a run where every suite failed has a log whose *whole* content is
+ * failures, and the point of an excerpt is to be shorter than the log.
+ *
+ * @param {string} text
+ * @param {number} [max]
+ * @returns {string[]}
+ */
+export function failureLinesFrom(text, max = EXCERPT_MAX_FAILURES) {
+  const lines = String(text ?? '')
+    .split('\n')
+    .map((line) => line.replace(/\r$/, ''));
+  const found = [];
+  const push = (line) => {
+    const trimmed = line.trim();
+    if (trimmed !== '' && !found.includes(trimmed)) found.push(trimmed);
+  };
+  for (const line of lines) {
+    if (found.length >= max) break;
+    // The bullets and headers the gates themselves print: jest's `FAIL <file>` and
+    // `● Suite › test`, the harness/real-input `✕`/`✗` check lines, and the
+    // assertion noise that follows them. A passing test's name only ever appears
+    // beside `✓`/`PASS`, so it cannot match here.
+    if (/^\s*(FAIL(ED)?|●|✕|✗|not ok)\s+\S/.test(line)) {
+      push(line);
+      continue;
+    }
+    if (
+      /^\s*(Error|AssertionError|Expected|Received|expect\(|Unable to |Timed out)/i.test(
+        line
+      )
+    ) {
+      push(line);
+    }
+  }
+  return found;
+}
+
+/**
+ * Words a username could plausibly be that are far more likely to appear in a log
+ * as something else. Redacting these wherever they occur would turn every branch
+ * name, package name and log level into a placeholder, which is an unreadable
+ * excerpt rather than a private one: the path-shaped rules in
+ * `MACHINE_PATH_RULES` still catch the cases where they really are an account.
+ */
+const AMBIGUOUS_USERNAMES = new Set([
+  'main',
+  'master',
+  'dev',
+  'develop',
+  'test',
+  'tests',
+  'demo',
+  'sample',
+  'admin',
+  'guest',
+  'user',
+  'root',
+  'owner',
+  'staff',
+  'ci',
+  'bot',
+  'node',
+  'npm',
+  'bun',
+  'react',
+  'ios',
+  'android',
+  'mac',
+  'localhost',
+  'unknown',
+  'nobody',
+  'shared',
+]);
+
+/**
+ * Escapes a literal for use inside a RegExp.
+ *
+ * @param {string} value
+ */
+function escapeForRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Rules for the two strings that name a machine and the person on it: the bare
+ * username and the hostname.
+ *
+ * Both have to be matched as whole words and in every spelling a log happens to
+ * print, because the exact-string rule they replace only ever caught the one form
+ * the caller happened to pass (`os.hostname()` returns the FQDN; `ping` prints the
+ * short form, `git` prints the lowercased one, and a stack trace prints the bare
+ * name). Review N5: matching only the spelling `os.hostname()` happens to return
+ * catches one variant out of three.
+ *
+ * @param {{username?: string | null, hostname?: string | null}} paths
+ * @returns {Array<[string | RegExp, string]>}
+ */
+function identityRules(paths) {
+  const rules = [];
+  const wordRule = (literal, replacement, flags = 'g') => [
+    new RegExp(
+      `(^|[^A-Za-z0-9._-])${escapeForRegExp(literal)}(?![A-Za-z0-9._-])`,
+      flags
+    ),
+    `$1${replacement}`,
+  ];
+  const worthMatching = (value) =>
+    value.length >= 3 &&
+    /^[A-Za-z0-9._-]+$/.test(value) &&
+    !AMBIGUOUS_USERNAMES.has(value.toLowerCase());
+
+  const username =
+    typeof paths.username === 'string' ? paths.username.trim() : '';
+  if (worthMatching(username)) rules.push(wordRule(username, '<user>'));
+
+  // `host`, `host.local`, `host.example.com`: `os.hostname()` gives one of them and
+  // a log prints any of the others - `ping` the short form, `git` the lowercased
+  // one, a mount point the bare label. Review N5: a log carries several, and the
+  // caller only ever had the one `os.hostname()` returned.
+  const hostname =
+    typeof paths.hostname === 'string' ? paths.hostname.trim() : '';
+  const labels = hostname.split('.').filter((label) => label !== '');
+  // The whole name and its first label: a Set, because a name with no dot makes the
+  // two identical and a rule that fires twice reports two replacements for one word.
+  const forms = new Set([hostname, labels[0] ?? '']);
+  for (const form of forms) {
+    if (worthMatching(form)) rules.push(wordRule(form, '<host>', 'gi'));
+  }
+  return rules;
+}
+
+/**
+ * Local paths and identity strings that must not survive into a committed file,
+ * and what replaces them.
+ *
+ * Why (review M4, D25): this repo is public, and an excerpt is written *into* it.
+ * The old header printed `Full log: … (/Users/<name>/…)` in every excerpt, by
+ * construction - so the rule "never write home paths into a committed file" was
+ * broken by the tool that produced the file, and the only defence was a comment
+ * telling the reader to look first. A store or lease path is still useful to that
+ * reader as a placeholder: `<store>/task/X3/check-….log` says where to look on the
+ * machine that ran it, without saying who that machine belongs to.
+ *
+ * Entries are applied in order: the exact strings first, longest first, so the
+ * more specific path wins (`/Users/name/repo` before `/Users/name`), and the
+ * word-shaped identity rules last, once the paths that *contain* a name are
+ * already placeholders. Anything shorter than three characters is dropped: a home
+ * of `/` or a user called `a` would shred every path in a stack trace, which is
+ * the opposite of useful evidence.
+ *
+ * @param {{repoRoot?: string | null, storeDir?: string | null, leaseFile?: string | null,
+ *   home?: string | null, hostname?: string | null, username?: string | null,
+ *   tmpDir?: string | string[] | null}} [paths]
+ * @returns {Array<[string | RegExp, string]>}
+ */
+export function localPathRedactions(paths = {}) {
+  // The scratch directory is per user and per machine (`/var/folders/<3 hex>/<32
+  // base36>/T` on macOS) and jest prints it in every temp fixture path, so it
+  // identifies the machine exactly like `$HOME` does. Both spellings are passed:
+  // `os.tmpdir()` and its realpath differ on macOS (`/var/...` vs `/private/var/...`)
+  // and logs contain the resolved one. A plain `/tmp` is left alone - it names no
+  // machine, and redacting it would mangle every unrelated `/tmp/...` in a log.
+  const tmpDirs = (
+    Array.isArray(paths.tmpDir) ? paths.tmpDir : [paths.tmpDir]
+  ).filter(
+    (value) => typeof value === 'string' && value.length > '/tmp'.length
+  );
+  const wanted = [
+    [paths.storeDir, '<store>'],
+    [paths.repoRoot, '<repo>'],
+    [paths.leaseFile, '<lease file>'],
+    // `~` is what a human types, so the redaction stays readable.
+    [paths.home, '~'],
+    [paths.hostname, '<host>'],
+    ...tmpDirs.map((value) => [value, '<tmp>']),
+  ];
+  const exact = wanted
+    .filter(
+      ([value, replacement]) =>
+        typeof value === 'string' &&
+        value.length >= 3 &&
+        !value.includes('\0') &&
+        !value.startsWith('<') &&
+        value !== replacement
+    )
+    .sort((a, b) => b[0].length - a[0].length);
+
+  // …and this machine's own scratch folder in *every* subdirectory of it, which is
+  // the half that is hashed. Round 1 redacted `…/T` only, so Xcode's
+  // `…/C/com.apple.Xcode/…` and CoreSimulator's `…/0/…` went out carrying the same
+  // `<3 hex>/<32 base36>` fingerprint by another name (review N5).
+  const shapeRules = [];
+  for (const dir of new Set(
+    tmpDirs.map((value) => scratchFolderParent(value))
+  )) {
+    if (dir == null) continue;
+    const literal = escapeForRegExp(dir.replace(/^\/private(?=\/var\/)/, ''));
+    shapeRules.push([
+      new RegExp(`(?:/private)?${literal}(?=/|$)`, 'g'),
+      '<tmp>',
+    ]);
+  }
+
+  // Applied last: these match a bare *word*, so they have to run after the paths
+  // that contain the same word are already placeholders.
+  return [...exact, ...shapeRules, ...identityRules(paths)];
+}
+
+/**
+ * The hashed per-user scratch folder a temp path sits under, or null.
+ *
+ * `/private/var/folders/<3 hex>/<32 base36>/T` is what `os.tmpdir()` returns on
+ * macOS; the parent of the `T` is the part that names the machine, and `C`, `0`
+ * and `X` beside it hold Xcode's, CoreSimulator's and CoreUI's caches.
+ *
+ * @param {string} dir
+ * @returns {string | null}
+ */
+function scratchFolderParent(dir) {
+  const match = /(?:^|\/)(?:private\/)?var\/folders\/[^/]+\/[^/]+(?=\/|$)/.exec(
+    dir
+  );
+  if (match == null) return null;
+  return match[0].startsWith('/') ? match[0] : `/${match[0]}`;
+}
+
+/** Applies `localPathRedactions` pairs to a piece of text. */
+export function redactLocalPaths(text, redactions) {
+  let out = String(text ?? '');
+  for (const [needle, replacement] of redactions ?? []) {
+    // A pair is either a literal path or a whole-word rule; a regex's replacement
+    // may refer to its guard group, which `split`/`join` could not honour.
+    out =
+      needle instanceof RegExp
+        ? out.replace(needle, replacement)
+        : out.split(needle).join(replacement);
+  }
+  return out;
+}
+
+/**
+ * The failure excerpt `gate.mjs export` commits beside the ledger for one red run.
+ *
+ * Contents, in the order a reader wants them: what ran and how it ended, the
+ * scrubbed device/run context, the failing test names and assertion messages, the
+ * last ~150 lines, and the load at the start and end. The full log stays on the
+ * machine; this is the part that has to survive the worktree, and the part that is
+ * safe to commit.
+ *
+ * @param {object} options
+ * @param {object} options.entry the ledger line (a failed one)
+ * @param {string} options.logText the log's text, unscrubbed
+ * @param {string} [options.logLocation] where the full log is now, for the header
+ * @param {number} [options.tailLines]
+ * @param {Array<[string, string]>} [options.redactions] local paths to replace,
+ *   from `localPathRedactions`. Applied to the whole excerpt - header, device
+ *   block and tail - because a jest stack trace carries the same home path the
+ *   header would, and scrubbing only the header would be theatre.
+ * @returns {{content: string, scrubbed: number, truncated: boolean}}
+ */
+export function renderFailureExcerpt({
+  entry,
+  logText,
+  logLocation = null,
+  tailLines = EXCERPT_TAIL_LINES,
+  redactions = [],
+}) {
+  // Select first, scrub second (review N3). The old order scrubbed the *whole*
+  // log - up to `EXCERPT_MAX_LOG_BYTES`, 200 MiB - to keep its failure lines and
+  // its 150-line tail, so the cost of an excerpt was the cost of the largest log
+  // in the repo, and one pathological line made it unbounded. Selection is a
+  // line scan and cannot be fooled by an unscrubbed line: it matches on `FAIL`,
+  // `●` and `✕`, which no secret contains.
+  const raw = String(logText ?? '');
+  // The device block is the *tail* of a failing device run's log, so taking "the
+  // last 150 lines" without splitting would spend the whole excerpt on `simctl`
+  // output and show none of the failure (X12 item 3 fed straight into item 2).
+  const { body, context } = splitDeviceContext(raw);
+  const lines = body.split('\n');
+  // `slice(-0)` is `slice(0)`, so a requested tail of zero silently means *every*
+  // line — which is the opposite of what a caller asking for no tail means, and the
+  // difference is the whole cost of the function. Guarded rather than assumed away,
+  // because `tailLines` is a parameter and the default is not the only value it takes.
+  const wantedTail =
+    tailLines == null
+      ? EXCERPT_TAIL_LINES
+      : Math.max(0, Math.trunc(Number(tailLines)));
+  const tail = wantedTail === 0 ? [] : lines.slice(-wantedTail);
+  const truncated = lines.length > tail.length;
+
+  // One place that trims, redacts and scrubs a kept line, so no section can be
+  // added to an excerpt later without going through both. The order matters:
+  // `redactLocalPaths` first, because its exact-string rules know that
+  // `<this repo>/example/index.js` is *this* checkout and become `<repo>/…`, while
+  // the shape rules below would stop at `<tmp>/…/example/index.js` and lose the
+  // more useful placeholder.
+  let replaced = 0;
+  const keep = (line) => {
+    const redacted = redactLocalPaths(String(line ?? ''), redactions);
+    const capped =
+      redacted.length > EXCERPT_MAX_LINE_CHARS
+        ? `${redacted.slice(0, EXCERPT_MAX_LINE_CHARS)} …[line truncated]`
+        : redacted;
+    const result = scrubSecrets(capped);
+    replaced += result.replaced;
+    return result.text;
+  };
+
+  const keptTail = tail.map((line) => keep(line));
+  const keptContext =
+    context == null
+      ? null
+      : context
+          .split('\n')
+          .filter((line) => line.trim() !== '')
+          .map((line) => keep(line));
+
+  const load = entry?.load ?? null;
+  const failures = failureLinesFrom(body);
+  const failureSection =
+    failures.length === 0
+      ? ['_(none matched — the log had no jest/real-input failure lines)_']
+      : failures.map((line) => `- \`${escapeMarkdown(keep(line))}\``);
+  const contextSection =
+    keptContext == null
+      ? []
+      : [
+          '',
+          '## Device and run context (captured when the gate failed)',
+          '',
+          '```',
+          ...keptContext,
+          '```',
+        ];
+  // Built last, because it reports `replaced`, which every `keep` above counts.
+  const header = [
+    `# Failure excerpt — ${String(entry?.gate ?? '?')}`,
+    '',
+    `- Ran: ${String(entry?.ts ?? '?')} on code tree \`${String(entry?.tree ?? '?').slice(0, 12)}\` at HEAD \`${String(entry?.head ?? '?').slice(0, 7)}\` (branch \`${String(entry?.branch ?? '?')}\`)`,
+    `- Command: \`${String(entry?.command ?? '?')}\``,
+    `- Result: ${String(entry?.result ?? '?')}, exit ${String(entry?.exitCode ?? 'null')}${entry?.signal == null ? '' : ` signal ${String(entry.signal)}`}, ${String(entry?.durationMs ?? '?')} ms`,
+    `- Load: start ${formatLoadValue(load?.start)}, end ${formatLoadValue(load?.end)}, median ${formatLoadValue(load?.median)}, max ${formatLoadValue(load?.max)}`,
+    `- Device: ${describeDeviceForExcerpt(entry)}`,
+    // The line that makes the difference between "we lost the log" (Q3) and
+    // "we know where to look": the excerpt is a copy, the store has the original.
+    `- Full log: \`${String(entry?.logPath ?? 'not recorded')}\`${logLocation == null ? '' : ` (${String(logLocation)})`}`,
+    `- Scrubbed: ${String(replaced)} credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as \`<repo>\`/\`<store>\`/\`~\`/\`<user>\`/\`<host>\`/\`<tmp>\`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as \`<other device>\`.`,
+    '',
+    '## Failing tests and assertion messages',
+    '',
+  ];
+  const body2 = [
+    ...header,
+    ...failureSection,
+    ...contextSection,
+    '',
+    `## Last ${String(tail.length)} log line(s)${truncated ? ` (of ${String(lines.length)} — the rest is in the full log above)` : ''}`,
+    '',
+    '```',
+    ...keptTail,
+    '```',
+    '',
+  ];
+  return {
+    content: clampToBytes(
+      redactLocalPaths(body2.join('\n'), redactions),
+      EXCERPT_MAX_BYTES
+    ),
+    scrubbed: replaced,
+    truncated,
+  };
+}
+
+/**
+ * Keeps the excerpt bounded. The header is prose and the tail is the evidence, so
+ * when it does not fit this keeps the header, drops from the *front* of the tail,
+ * and says so — a reader looking at a truncated excerpt has to be able to tell.
+ */
+function clampToBytes(text, max = EXCERPT_MAX_BYTES) {
+  if (Buffer.byteLength(text, 'utf8') <= max) return text;
+  const marker = '\n… excerpt truncated: the rest is in the full log …\n';
+  const budget = Math.max(0, max - Buffer.byteLength(marker, 'utf8'));
+  const bytes = Buffer.from(text, 'utf8');
+  // Keep the first 4 KiB (the header and the failure list), then the newest bytes.
+  const headBytes = bytes.subarray(0, Math.min(4096, bytes.length));
+  const tailBudget = Math.max(0, budget - headBytes.length);
+  const tailBytes = bytes.subarray(
+    Math.max(headBytes.length, bytes.length - tailBudget)
+  );
+  return `${headBytes.toString('utf8')}${marker}${tailBytes.toString('utf8')}`;
+}
+
+function escapeMarkdown(text) {
+  return String(text).replaceAll('`', "'");
+}
+
+function formatLoadValue(value) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toFixed(2)
+    : '?';
+}
+
+/**
+ * The device a failed run had, in the form safe to commit.
+ *
+ * Identifiers only when the ledger recorded them — the ledger records the lease id
+ * and the serial (X1), which are machine-local strings. They are already in the
+ * committed `gates.jsonl` lines, so repeating them in the excerpt adds no exposure,
+ * but a reader should see that they came from the line rather than from this
+ * function inventing them.
+ */
+function describeDeviceForExcerpt(entry) {
+  const parts = [];
+  if (entry?.platform != null) parts.push(String(entry.platform));
+  if (entry?.device != null) parts.push(`device \`${String(entry.device)}\``);
+  if (entry?.lease != null) parts.push(`lease \`${String(entry.lease)}\``);
+  return parts.length === 0
+    ? 'none recorded (not a device gate)'
+    : parts.join(' / ');
+}
+
+/**
+ * A short id for one ledger line, used as the excerpt's file name.
+ *
+ * Timestamp + gate + a sequence number, sanitised the same way log names are, so the
+ * excerpt for a run is recognisable from `gates.jsonl` without reading either file.
+ * Not the log path: slashes in a branch-qualified log path would turn a file name
+ * into a directory.
+ *
+ * The sequence is not decoration. `ts` is second-granular and two failed runs of one
+ * gate inside the same second are a thing that happens (a re-run after a typo in a
+ * command), so a name made of the timestamp and gate alone would have the second
+ * export overwrite the first excerpt while both ledger lines pointed at it.
+ *
+ * @param {object} entry a failed ledger line
+ * @param {number} [sequence] 1-based position of this run among the exported failures
+ */
+export function failureExcerptName(entry, sequence = 1) {
+  const ts = String(entry?.ts ?? 'unknown')
+    .replaceAll(':', '-')
+    .replace(/\.\d+Z$/, 'Z');
+  const gate = String(entry?.gate ?? 'gate').replaceAll(/[^\w.-]+/g, '+');
+  const n = Math.max(1, Math.trunc(Number(sequence) || 1));
+  return `${ts}--${gate}--${String(n).padStart(2, '0')}.log`;
+}
+
+/**
+ * Does this ledger line describe a failed run that owes an excerpt?
+ *
+ * Only `result: 'fail'`, and only a line that actually has a log to excerpt: a
+ * corrupt line, or a pass, gets nothing — the brief's "never copies a passing run's
+ * log" — and a fail with no log has no evidence to attach, which the export says
+ * out loud rather than writing an empty file.
+ *
+ * `storedLogFailed` is the other half of the question, for a caller that is looking
+ * at a *log in the store* rather than a line in a ledger.
+ */
+export function isFailedRunWithLog(entry) {
+  return (
+    entry != null &&
+    entry.corrupt !== true &&
+    entry.result === 'fail' &&
+    typeof entry.logPath === 'string' &&
+    entry.logPath !== ''
+  );
+}
+
+/**
+ * Did this stored log belong to a run that failed?
+ *
+ * One place for the answer, because two callers need it and must not disagree: the
+ * record that closed the run (`result`, `exitCode`), and, for a run whose record is
+ * older than that field or missing altogether, the ledger line, if the caller has one.
+ *
+ * @param {object | null | undefined} record the store's record for the log
+ * @param {object | null | undefined} entry the ledger line for the same run
+ * @returns {boolean | null} null when neither source can say
+ */
+export function storedLogFailed(record, entry = null) {
+  if (record?.done === true) {
+    if (typeof record.result === 'string') return record.result === 'fail';
+    if (record.exitCode != null) return Number(record.exitCode) !== 0;
+  }
+  if (record?.done !== true && record?.result != null) {
+    return String(record.result) === 'fail';
+  }
+  if (entry != null && entry.corrupt !== true) {
+    if (entry.result === 'fail') return true;
+    if (entry.result === 'pass') return false;
+  }
+  return null;
 }
 
 /**
@@ -1157,6 +3054,13 @@ export function resolveGate(name, extraArgs = []) {
  */
 export function explainNeedRow(row, codeTree) {
   if (row.state === 'green') {
+    if (row.reused != null) {
+      return (
+        `${row.gate} — green, reused from \`${row.reused.branch}\`'s ledger: it passed ` +
+        'on this exact tree with a clean worktree and its commit is merged here, so ' +
+        'the merge owes no re-run'
+      );
+    }
     return row.matched != null && row.matched !== 'full'
       ? `${row.gate} — green on the ${row.matched} code tree`
       : `${row.gate} — green`;
@@ -1219,6 +3123,44 @@ export const WAIT_PROGRESS_INTERVAL_MS = 60_000;
  */
 export function backgroundRecordPath(logPath) {
   return String(logPath).replace(/\.log$/, '.gate.json');
+}
+
+/**
+ * Which background records belong to *this* checkout, newest first.
+ *
+ * The store is one directory shared by every worktree of the clone, so "the newest
+ * record for `check`" is a question with the wrong subject once two tasks run gates
+ * at the same time - which is the normal case here, not an edge one (review M1: a
+ * passing run in worktree C reported worktree B's exit 7 and exited 7). Both halves
+ * are compared, and for a reason: the branch alone would still let two worktrees on
+ * one branch (a `git worktree add --force`, a detached pair) adopt each other's
+ * runs, and the directory alone would not tell a re-run of this branch from another
+ * task's run of a different one.
+ *
+ * A record with neither field is from before this scoping existed and matches: the
+ * alternative is that `wait` loses a run that is happening right now, which is a
+ * worse failure than the one being fixed.
+ *
+ * @param {object[]} records every record in the store
+ * @param {{branch: string | null, worktree: string | null}} own this checkout
+ * @returns {object[]}
+ */
+export function ownBackgroundRecords(records, { branch, worktree }) {
+  return (records ?? []).filter((record) => {
+    if (record == null || typeof record !== 'object') return false;
+    const recordBranch =
+      typeof record.branch === 'string' && record.branch !== ''
+        ? record.branch
+        : null;
+    const recordWorktree =
+      typeof record.worktree === 'string' && record.worktree !== ''
+        ? record.worktree
+        : null;
+    if (recordBranch == null && recordWorktree == null) return true;
+    if (recordWorktree != null && recordWorktree !== worktree) return false;
+    if (recordBranch != null && recordBranch !== branch) return false;
+    return true;
+  });
 }
 
 /**

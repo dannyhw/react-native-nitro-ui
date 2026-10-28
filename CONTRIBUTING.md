@@ -94,6 +94,7 @@ Run from the repo root.
 | Command                       | What it does                                                                |
 | ----------------------------- | --------------------------------------------------------------------------- |
 | `bun run check`               | **All static gates.** Run this before pushing.                              |
+| `bun run check:serial`        | The same steps as one `&&` chain, for timing the runner against it          |
 | `bun run typecheck`           | `tsc` over the library and example                                          |
 | `bun run bench:typecheck`     | `tsc` over `bench/` for each platform                                       |
 | `bun run lint`                | ESLint, including the local perf-contract rules                             |
@@ -134,10 +135,18 @@ Run from the repo root.
 | `bun run hooks:uninstall`     | Remove them again                                                           |
 | `bun run clean`               | Delete build outputs (`lib/`, native build dirs)                            |
 
-`bun run check` = typecheck → bench:typecheck → lint → format → test →
-test:native → perf:renders → nitrogen:check → registry:check → autolinking:check → prepare →
-api-extractor:check → publint → manifest:check → readme:check. `perf:renders` is part of `check` on purpose: render
-counts are deterministic, so they can block, unlike anything measured on a device.
+`bun run check` is sixteen steps — typecheck, lock:check, bench:typecheck, lint,
+format, test, test:native, perf:renders, nitrogen:check, registry:check,
+autolinking:check, prepare, api-extractor:check, publint, manifest:check,
+readme:check — run through a small scheduler (`scripts/check.mjs` + the step graph in
+`scripts/check-steps.mjs`), so independent ones overlap: up to half the machine's
+cores at once, capped at 4 (`--jobs N` to override — the heavy steps already fan out
+internally, so more slots cost context-switching, not time). The _steps_ and their
+order are unchanged, and
+`scripts/__tests__/check-runner.test.js` fails if the graph and `check:serial` ever
+disagree. `bun run check:serial` is the plain `&&` chain, for comparing the two.
+`perf:renders` is part of `check` on purpose: render counts are deterministic, so they
+can block, unlike anything measured on a device.
 
 ### Changing a README example
 
@@ -554,10 +563,38 @@ node scripts/lease.mjs release <id>
 ```
 
 The merge bar is `check`, both full harness runs and both real-input runs; a
-filtered harness run satisfies nothing. A task report starts from
+filtered harness run satisfies nothing. `table --full` adds the log path to every
+row and, under it, the per-step durations of the `check` run — `check` is the one
+gate long enough that its total is not an actionable number, so the ledger keeps
+what each of the sixteen steps cost. At merge, `need` may accept a `check` from
+another branch's ledger when it passed on this exact code tree and its commit is
+merged here (see `docs/tasks/ORCHESTRATOR.md`, "The loop" step 5); `--no-reuse`
+asks the strict question. A task report starts from
 `docs/tasks/REPORT-TEMPLATE.md`, and `gate.mjs export --task <id>` commits the
 ledger beside it. The rules are in the header of `scripts/gate.mjs` and in
 `scripts/gate-core.mjs`.
+
+A run's **log** is not in the worktree: it goes to the clone's gate log store,
+`<git-common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`, which every
+worktree of the clone shares and `git worktree remove` leaves alone, so removing a
+merged worktree cannot lose the evidence (`gate.mjs logs [--branch b] [--failed]
+[--all]` lists it; 35 days, then 64 MiB, oldest first). Each run's record also names
+the worktree that started it, so `wait` and `status` follow _your_ background gate
+when several worktrees are running one at the same time. `export --task <id>` also
+writes a scrubbed excerpt of every **failed** run into
+`docs/tasks/<ID>/failures/<run>-<n>.log` — the failing test names, the assertion
+messages, the last 150 lines, the load at both ends and, for a failed device gate,
+the booted simulators, the leased emulator's `adb get-state`, the lease list, load1
+and the app's last `logcat` lines. Any device identifier in that block that is not
+this run's own lease becomes `<other device>`, so another task's simulator or the
+maintainer's emulator is never committed. It names that file in the ledger line's
+`failureLogPath`. Passing runs get no file. A committed excerpt holds no credential
+and no machine identity: tokens, `Authorization:`/`Cookie:` headers (whole, any
+scheme), `.npmrc` `_auth=` lines, `curl -u user:pass`, `user:pass@host`, a config
+file's whole `password: some phrase`, email addresses and Stripe/Anthropic/GitLab
+token shapes are replaced, and your home, scratch directory, username, hostname,
+repo and store paths — and anyone else's `/Users/<name>` or `/var/folders/<hash>`
+— are written as `~`, `<tmp>`, `<user>`, `<host>`, `<repo>` and `<store>`.
 
 ### Build speed
 

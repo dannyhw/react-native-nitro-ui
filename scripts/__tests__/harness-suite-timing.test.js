@@ -33,6 +33,7 @@ import {
 } from '../gate-core.mjs';
 import {
   SUITE_TIMING_ENV,
+  SUITE_TIMING_GATE_ENV,
   SUITE_TIMING_VERSION,
   createSuiteTimingPlugin,
   formatSuiteTimings,
@@ -319,35 +320,97 @@ describe('the env switch', () => {
     expect(suiteTimingPluginFromEnv({})).toBeNull();
   });
 
-  it('names the gate that asked, from the hand-off file', () => {
-    const file = suiteTimingPath({
-      repoRoot: '/repo',
-      gate: 'harness:android',
-      pid: 4242,
-      startedAt: 1730000000000,
-    });
-    expect(file).toBe(
-      '/repo/.gates/suite-timing/harness+android-1730000000000-4242.json'
+  it('names the hand-off from the run log, and only that log', () => {
+    // The name is the log's plus a suffix: X10's review N7 is the precedent, one
+    // function naming one run's file, derived from a name the launcher and the runner
+    // already share. A second namer is how a reader ends up sent to a file that was
+    // never written.
+    const log = '/store/task/X11/harness+android-2026-10-28T09-00-00.000Z.log';
+    expect(suiteTimingPath(log)).toBe(`${log}.suites.json`);
+    // Empty in, null out: a caller that has no log must not get `undefined.suites.json`.
+    expect(suiteTimingPath('')).toBeNull();
+    expect(suiteTimingPath(null)).toBeNull();
+  });
+
+  it('recovers the gate from the log-named file, and from an old one', () => {
+    const file = suiteTimingPath(
+      '/store/task/X11/harness+android-2026-10-28T09-00-00.000Z.log'
     );
     expect(gateFromTimingFile(file)).toBe('harness:android');
-    // A filter is part of the gate name and must survive the round trip.
+    // A filtered run is a different gate name and must survive the round trip. The
+    // `+` is what `logNameFor` folds a `:` into, so expanding it is the inverse.
     expect(
       gateFromTimingFile(
-        suiteTimingPath({
-          repoRoot: '/repo',
-          gate: 'harness:android:ColdSizing',
-          pid: 7,
-          startedAt: 1,
-        })
+        suiteTimingPath(
+          '/store/task/X11/harness+android+ColdSizing-2026-10-28T09-00-00.000Z.log'
+        )
       )
     ).toBe('harness:android:ColdSizing');
+    // Pre-X12 files (`<gate>-<ms>-<pid>.json`) can still be on disk in a worktree that
+    // has not been cleaned up, and reading them is still useful.
+    expect(
+      gateFromTimingFile(
+        '/repo/.gates/suite-timing/harness+ios-1730000000000-4242.json'
+      )
+    ).toBe('harness:ios');
     expect(gateFromTimingFile('nothing-like-a-timing-file.json')).toBeNull();
+    // Not a timing file at all, even though it ends in `.json`.
+    expect(gateFromTimingFile('check-2026-10-28T09-00-00.000Z.log')).toBeNull();
+    // The reconstruction's limit, stated rather than hidden. `canonicalGateName`
+    // percent-encodes each filter argument, so a real gate name never carries a
+    // folded character and the round trip above is exact for it. A hand-written name
+    // that does (a literal `+`) cannot survive a lossy fold, and comes back with that
+    // character turned into `:`. This is why the stated name wins.
+    expect(
+      gateFromTimingFile(
+        suiteTimingPath(
+          '/store/task/X11/harness+ios+A+B-2026-10-28T09-00-00.000Z.log'
+        )
+      )
+    ).toBe('harness:ios:A:B');
+  });
+
+  it('prefers the gate name the caller states over the one it can guess', () => {
+    // The file's name is a folded spelling (`[^\w.-]` -> `+`), so a gate name that
+    // already contained a folded character cannot round-trip through it. `gate.mjs`
+    // therefore passes the real name alongside, and the reconstruction is the fallback.
+    const dir = mkdtempSync(join(tmpdir(), 'suite-timing-gate-'));
+    try {
+      const write = (env) => {
+        const file = join(dir, `${env.tag}.suites.json`);
+        const plugin = suiteTimingPluginFromEnv({
+          [SUITE_TIMING_ENV]: file,
+          ...(env.gate == null ? {} : { [SUITE_TIMING_GATE_ENV]: env.gate }),
+        });
+        plugin.hooks.testFile.finished(switchContext);
+        return readSuiteTiming(file).gate;
+      };
+      expect(
+        write({
+          tag: 'stated',
+          gate: 'harness:ios:ColdSizing',
+        })
+      ).toBe('harness:ios:ColdSizing');
+      // With no stated name, the reconstruction from the file's name is used, and a
+      // `+` in it is expanded to `:` - the inverse of the folding, not the truth.
+      expect(
+        write({
+          tag: 'harness+ios+ColdSizing-2026-10-28T09-00-00.000Z.log',
+          gate: null,
+        })
+      ).toBe('harness:ios:ColdSizing');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('writes the file the gate then reads back', () => {
     const dir = mkdtempSync(join(tmpdir(), 'suite-timing-env-'));
     try {
-      const file = join(dir, 'harness+ios-1-2.json');
+      const file = join(
+        dir,
+        'harness+ios-2026-10-28T09-00-00.000Z.log.suites.json'
+      );
       const plugin = suiteTimingPluginFromEnv({ [SUITE_TIMING_ENV]: file });
       plugin.hooks.testFile.finished(switchContext);
       const read = readSuiteTiming(file);
