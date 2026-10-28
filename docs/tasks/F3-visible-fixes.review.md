@@ -1,188 +1,168 @@
-# F3 — review
+# F3 — review (re-review after fix round 1)
 
-**Branch:** `task/F3-visible-fixes` at `461e21e` (base `b943a3f`) · **Round reviewed:** 1 of up to 3 (D19)
-**Inputs:** the brief, Q4 triage rows 10/27/46 and their `FOLLOWUPS.md` lines, the diff, the report,
-`docs/tasks/F3/gates.jsonl`, and the worktree's local `.gates/` logs. No devices used; `bun run check`
-not re-run (the ledger's green `check` is on `c047fa692f33`, which `gate.mjs need` confirms is this tree).
+**Branch:** `task/F3-visible-fixes` at `d596410` (base `b943a3f`; this round `432b2ad..d596410`) ·
+**Round reviewed:** fix round 1 (round 2 of up to 3, D19)
+**Inputs:** the brief, the round 1 review, the report (including `## Fix round 1`), both diffs,
+`docs/tasks/F3/gates.jsonl`, `docs/tasks/F3/base-race-gates.jsonl` and the worktree's local
+`.gates/logs/`. No devices used. `bun run check` was not re-run: `gate.mjs need --for merge`
+(Node 24, `NITRO_UI_MACHINE_LABEL=maintainer-mac-1`) prints `merge is satisfied on this code tree`
+for code tree `18da47b86583` at HEAD, with `check`, both full harnesses and both real-input gates green.
 
-## Verdict: FIX ROUND
+## Verdict: MERGE WITH FIXES
 
-The sizing fix is right and well proven. The DatePicker fix is right in mechanism, but the claim its
-changeset makes is not asserted on iOS, the platform the bug is on, and two comments now contradict
-the new test. The SegmentedControl outcome (iOS stays documented as a no-op) is a defensible decision,
-but the public docs and changeset support it partly with a defect in a prototype that is not in the
-repo. M1 needs a device run, so this is a fix round rather than merge-with-fixes.
+All five round 1 M findings are resolved in the code, not just in the report. Each new assertion
+has a red run in the local logs that matches the report. The new `controlIdentity` suppression is
+crash-safe. When it drops the suffix, the granular part differs from the on-screen control's, so
+the identity still changes and the control is still replaced. The remaining findings are about
+wording.
+- M1 touches only docs and a changeset. Neither is in the code-tree digest
+  (`isCodeFile('.changeset/a.md') === false`), so fixing it keeps every gate green.
+- M2 is two stale code comments. Fixing them changes the code tree and re-owes the whole merge bar,
+  so the orchestrator can choose to record them instead (see M2).
 
-## Per item
+## Round 1 findings: status
 
-**Row 10 (`fillWidth`, engine).** Correct. `filedSizeLocked` (`cpp/NitroUiSizingEngine.cpp:206`)
-changes only the *width* filed for a `fillWidth` report. The only consumer that reads that width is
-`measureContent` under an infinite constraint (`cpp/NitroUiIntrinsic.hpp:208`). Everywhere else the
-box replaces it, and `sameSizeForPush` (`:99-107`) compares heights only for `fillWidth`, so no push,
-confirmation or correction count changes. The old "last box width wins" behaviour was relied on only
-by `testFillWidthInstancesOfDifferentWidthsCostNothing` (the 300→328 edits). Nothing on the hosted
-path files a size; only `NitroSwiftUIHost.swift:429` and `NitroComposeHost.kt:1198` report. Progress
-declares its *linear* numbers with `fillWidth` (`HybridNitroUiProgress.swift:261`, `.kt:396`), so
-circular (intrinsic) is untouched and linear gets 320. Red proofs are confirmed in the local logs: the
-C++ test, and `harness:android:Slider` at tree `de54e77` → `never became 240 wide (last=200.00x923.43…)`.
-The brief pointed at `NitroComposeHost.kt:1537` (`Constraints()`). The implementer instead located the
-cause in the engine and proved it on a device. That is a better fix, but the report never says why
-the host branch was left alone (N1).
+| # | Status | Evidence at HEAD |
+| --- | --- | --- |
+| M1 | **Resolved** | Real second rebuild, fixed in `controlIdentity` (`HybridNitroUiDatePicker.swift:291-303`). `afterFlips === widened` is asserted on both platforms (`DatePicker.harness.tsx:1336`). Red with the suppression removed: log `14-12-03`, `expected 9 to be 8`. The probe run `13-56-42` reads `built0=8 widened=9 afterFlips=10`. The changeset is reworded to match. |
+| M2 | **Mostly resolved** | Both named comments are corrected. The iOS half of `keeps the live control…` is enabled (`:1166-1186`). Red with `.onAppear` back outside the identity: log `14-14-49`, `still reports 2 builds, want more than 2`. Two sibling comments still say the old thing (new M2). |
+| M3 | **Resolved** | iOS 27 only is stated in the docs, the Swift comment and the changeset. The prototype claims are disowned explicitly. The re-write contradiction is gone. |
+| M4 | **Resolved, with one overreach** | The changeset now cites `slider.md`. `progress.md`, the Progress/Slider comments and `sizing.md` §5 are aligned. The new Progress text claims more than was measured and gives app authors an instruction they cannot follow (new M1). |
+| M5 | **Resolved** | `real-input:ios` and `real-input:android` are green on `18da47b86583`. The report sentence is corrected. |
+| N1 | Resolved | One line in the report (`## Fix round 1`, "N1"). |
+| N2 | Resolved | `docs/tasks/F3/base-race-gates.jsonl` is committed. Its five lines match the report's base row (4 full runs: 1 fail, 3 pass). |
+| N3 | Resolved | Swift `mean` no longer weights by alpha (`HybridNitroUiSegmentedControl.swift:602-629`) and matches Android (`.kt:779`). A shape guard was added (`SegmentedControl.harness.tsx:362-367`). Red: log `14-25-08`, `not six hex digits … mean=#8FAFB6EB`. |
+| N4 | Resolved | `NitroUiSizingEngine.cpp:91-95` reads correctly. |
+| N5 | Resolved | Progress and Slider comments on both platforms. |
+| N6 | Resolved | Every citation now names `Q4-followups-triage.md` (rows 10 and 46 exist there). |
+| N7 | Resolved, one leftover | `try/finally` (`Slider.harness.tsx:533-652`). See N4 below. |
+| N8 | Resolved, one miscount | Stale rows explained, and the Slider flake added as a follow-up. See N5 below. |
+| N9 | Resolved | `clearPixelReport()` on recycle (`HybridNitroUiSegmentedControl.swift:82, :470`). |
+| N10 | Resolved | `builtMinimum`/`builtMaximum` are written under `reportLock` (`HybridNitroUiDatePicker.kt:314-322`). |
 
-**Row 46 (DatePicker `builtBounds`).** The move is right, and both red proofs are confirmed in logs
-(`11-42-54`: `expected 4 to be greater than 4`; `11-44-14`: `expected 1766232000000 to be
-1768910400000`). What is not proven is the user-visible claim. See M1 and M2.
+## Native changes this round
 
-**Row 27 (SegmentedControl `tintColor`).** The Android half is asserted end to end (paint, tap,
-retint, removal, neighbour). On iOS the test asserts the no-op three times. The spec addition
-(`nuiTestPixelProbe` / `nuiTestPixelReport`) is `@internal` in `.nitro.ts`. It surfaces in
-`etc/react-native-nitro-ui.api.md:275-276` inside the `hybridRef` callback type, which is the same
-precedent as DatePicker/Picker/Progress/Slider (`:74-76, :200-201, :236-237, :304`). It is additive
-to a type the app *receives*, so patch is fine. The docs need fixing; see M3.
+**iOS DatePicker `controlIdentity`.** The suffix is added only when `granular == builtGranular`.
+- **Safety.** When it is suppressed, `granular != builtGranular`. The on-screen identity was
+  `builtGranular` or `builtGranular|outside`, so the new identity differs and SwiftUI replaces the
+  control. No path keeps a live control while dropping the clause.
+- **Remaining rebuild.** The bounce left behind (a sub-granular bound move) is stated in the
+  comment and listed as a follow-up.
+- **Mode switch.** A mode change alters the granular format, so it is suppressed and rebuilds,
+  which is correct.
+- **What the safety argument rests on.** `builtGranular` has to describe the control on screen.
+  The two points below (N1, N2) are where that could slip. Neither is a demonstrated defect.
 
-**Ledger.** The review bar is met on this tree (`check`, `harness:ios`, `harness:android` green on
-`c047fa692f33`). The merge bar is not; see M5. The race attribution is **partly supported**:
-- `.gates/detached.jsonl` (machine-local, not exported) has a base run at `b943a3f`,
-  `harness:ios:Button|HostPopups`, that fails on the same test with the same message (`No hybrid
-  handle for "segmented row"`).
-- The base full run failed a *sibling* (`HostControls` › `log.sliders['slide-0']`), not this test.
-- On the F3 tree, 3 of 4 full iOS runs failed, all on the hosted **SegmentedControl** handle, which is
-  the control this branch changed. Against that, the base has one full run.
+**Android DatePicker.** The lock change is correct and matches `readReport`'s guard.
 
-The mechanism is plausibly pre-existing: adding methods to a spec does not delay `hybridRef`. The
-evidence for it lives only on this machine, though, and the frequency comparison is 3/4 against 1/1
-on a different test (N2).
+**SegmentedControl (both platforms).** The arithmetic is now identical on both platforms. `area`
+is guarded upstream by the "sampled nothing" check. The recycle clear is symmetric.
 
-**Hygiene.** No home paths, emails or hostnames in the diff. The only serial is `emulator-5570` (the
-lease's), and `emulator-5560` does not appear. `maintainer-mac-1` is the brief's public label.
+**Slider / Progress.** These are comment-only changes on both platforms.
+
+## Premises
+
+- Every file the report and the new comments cite is in `git ls-files` at HEAD:
+  - `docs/tasks/Q4-followups-triage.md` (rows 10, 27 and 46)
+  - `docs/tasks/F3/base-race-gates.jsonl`
+  - `example/__tests__/ColdSizing.harness.tsx`
+  - `cpp/HybridNitroUiCore.cpp:76` (`seedSize(…, 0u)`)
+  - `docs/research/core-architecture.md` ("the controller is kept across recycles")
+- The test names the comments cite exist.
+- Exceptions: `/tmp/f3b.env` and the `git log -S` instruction (N3, N5).
+
+## Hygiene
+
+No home paths, emails or hostnames in the branch diff or the two JSONL files. Their `logPath`s
+are repo-relative. The serials and labels that do appear are the lease's (`emulator-5570`,
+`nitroui_t01`, a simulator UDID) and the brief's public `maintainer-mac-1`. `emulator-5560` appears
+only in the round 1 review's hygiene note.
 
 ## M — must fix
 
-**M1. The DatePicker changeset's headline claim is not asserted on iOS, and the code suggests it is
-only partly true.** The changeset (`.changeset/date-picker-built-bounds.md:5`) says a value crossing
-the bound the picker widened away from no longer replaces the calendar. The test that would show it
-is Android-only: `example/__tests__/DatePicker.harness.tsx:1305-1306`
-(`if (isAndroid) { expect(afterFlips).toBe(widened) }`), with no comment saying why iOS is exempt.
+**M1. The Progress page and the `fillWidth` changeset tell app authors to choose a number they
+cannot set, and label an unmeasured claim as measured.**
+- **The instruction.** `docs/components/progress.md:111` says "Declare the width you would want
+  that bar to be". `.changeset/fillwidth-infinite-parent-width.md:5` says the declared width "is a
+  number to choose deliberately rather than a placeholder". The declaration is the library's
+  `NitroUiSizing.setFallback(…320…)` at startup. Nothing in `src/` or the API report exposes it
+  (`grep setFallback src etc/*.api.md` finds nothing). An app author's only lever is an explicit
+  `width` style. `sizing.md` §5's version (`:334-337`) is fine, because it addresses component
+  authors.
+- **The "measured" label.** `progress.md:102` introduces the list with "both measured rather than
+  argued". For Progress, though, the unbounded-parent width is inferred from the shared engine. Only
+  the Slider has a device case for it (`Slider.harness.tsx` › `hands an unbounded parent its
+  declared width…`), and `Progress.harness.tsx` has no unbounded-parent test.
+- **Failure scenario.** An app author reads the CHANGELOG or the Progress page, looks for a way to
+  "declare" the width, and finds none. The page also presents an inference as a measurement.
+- **Fix.** Tell the app what to do: give the bar an explicit `width` if 320 is wrong for the
+  layout. Say that the Progress half follows from the shared engine change and is asserted on
+  Slider. Both edits are docs-only and gate-free.
 
-Reading `controlIdentity` (`ios/components/DatePicker/HybridNitroUiDatePicker.swift:243-253`) with
-the new `.onAppear` (`:623`) suggests why:
-1. The render that widens `maximumDate` and moves the value adds `|outside`, because `builtBounds` is
-   still the old control's at that moment.
-2. The new control appears and records the wider bounds. `builtBounds` is not published, so nothing
-   re-renders.
-3. The *next* render, from any prop, drops `|outside`, changes the identity again, and rebuilds once
-   more. That resets the page and scroll position, which is the cost the changeset says is gone.
-
-So `afterFlips` on iOS is probably `widened + 1`.
-
-Failure scenario: an app widens `maximumDate` and moves the value in one batch. On the next parent
-render the inline calendar jumps back to its default page.
-
-Fix: assert the iOS number (measure it). If it is `widened + 1`, either remove the bounce (for example,
-skip the `|outside` suffix when the granular part already changed, or compare against the bounds the
-new identity will build with), or document it and word the changeset accordingly.
-
-**M2. Comments touched or written by F3 now contradict the new test.**
-- `HybridNitroUiDatePicker.swift:163-168`, written in this diff, says "an `.id(_:)` change on a
-  control that is already on screen does not move that count".
-- `DatePicker.harness.tsx:1137-1144` keeps "iOS gets no rebuild assertion… was measured not to move
-  it".
-
-Meanwhile the new test asserts on iOS that it *does* move (`:1283`, `expect(widened).toBeGreaterThan(built0)`,
-red before the fix). Its own comment at `:1279-1280` even names the old comment as the blindness that
-F3 removed.
-
-The `FOLLOWUPS.md` line behind row 46 says the move "likely makes the iOS rebuild assertion provable".
-That refers to *this* test's missing iOS assertion, which is still `if (isAndroid)` at `:1158`.
-
-Failure scenario: the next reader trusts either comment and gets the other platform wrong. The iOS
-rebuild contract of `keeps the live control…` stays unguarded.
-
-Fix: correct both comments. Then either enable the iOS half of the rebuild assertion at `:1158`, or
-state the measured reason it still cannot be made.
-
-**M3. The public SegmentedControl docs and changeset give a prototype's defect as a platform
-reason, citing code that is not in the repo.**
-- `docs/components/segmented-control.md:250-252` ("Nor is it cleanly undone… 9290 pixels"), the
-  matching Swift comment at `HybridNitroUiSegmentedControl.swift:173-177`, and the changeset
-  (`.changeset/segmented-tint-ios-documented.md:5`, "taking it back off leaves the old colour behind")
-  describe a version in which "the view doing the pushing only existed while a tint was asked for".
-  `git log --all -S "selectedSegmentTintColor ="` finds no such code. Not resetting a property on
-  removal is a bug in that prototype, not something iOS does. The recycled-host claim at `:175-177` is
-  the same kind of claim.
-- The measurement is iOS 27 only. The brief's bar was "no per-instance approach on iOS 15.1+", and
-  pre-glass iOS (≤ 25) was not measured. The docs say "iOS 27" in one place and read as general
-  elsewhere.
-- The docs contradict themselves: `:250` says "re-writing the same value does not bring it back", and
-  `:255` says it would be "kept true only by re-writing… on every interaction".
-
-Failure scenario: a contributor or app author reads that iOS can't un-tint a `UISegmentedControl`,
-which is false. The decision then rests on a reason nobody can reproduce from the repo.
-
-Fix: keep the measured iOS 27 reason (the colour leaves the screen on the first selection change and
-does not return when re-written). Drop or qualify the undo/recycle claims as prototype defects. Say
-which OS versions were measured. Resolve the re-write contradiction.
-
-**M4. The `fillWidth` changeset and report misstate what the docs said, and `progress.md` is stale.**
-- `.changeset/fillwidth-infinite-parent-width.md:5` says the declared width "is the number
-  `docs/architecture/sizing.md` already said it stored". The report repeats this at
-  `F3-visible-fixes.report.md:14` ("what `sizing.md` §5 already described"). Base `sizing.md` said the
-  opposite: "The width in the entry is the last box width some instance was measured at". The doc that
-  did describe the declared width's purpose was `slider.md`.
-- The changeset names linear Progress, but `docs/components/progress.md:106` still says "For a
-  `fillWidth` fallback the width barely matters (the box's width replaces it)". Under an unbounded
-  parent, 320 is now what a linear Progress draws permanently.
-
-Failure scenario: the published CHANGELOG cites a doc for a claim that doc never made. The Progress
-page tells an author the declared width is irrelevant when it is now the width on screen.
-
-Fix: reword the changeset, pointing at `slider.md` or dropping the clause. Bring `progress.md:104-107`
-in line with `sizing.md` §5's new third bullet.
-
-**M5. The merge bar is not met, and the report says it does not apply.** `gate.mjs need --for merge`
-on this tree prints `2 gate(s) missing for merge: real-input:ios, real-input:android`. The report
-(`:89`) says "`real-input:*` is not required for this branch". That holds for review only. `AGENTS.md`
-says "the full harness plus real-input runs once, at merge".
-
-Failure scenario: the branch merges with the merge bar unmet, on a report that says otherwise.
-
-Fix: record both real-input gates on the final tree before merging (in the fix round or the
-orchestrator's merge step), and correct the sentence.
+**M2. Two comments still say what M2 asked to stop saying.** The round corrected the comments
+round 1 named, but two siblings still contradict the new iOS assertions:
+- `example/__tests__/DatePicker.harness.tsx:1283-1289` says the blindness "is `keeps the live
+  control…`'s reason for saying iOS gets no rebuild assertion at all". That test now has its iOS
+  rebuild assertion (`:1166-1186`), and its comment (`:1134-1153`) says the opposite.
+- `ios/components/DatePicker/HybridNitroUiDatePicker.swift:208-211` (the `noteControlBuilt`
+  docstring, untouched since base) says "changing an `.id(_:)` on a control that is already on
+  screen can update the live one in place". The report's own M2 red proof attributes that
+  observation to the pre-F3 instrument. With the handler inside the identity, the count moves on
+  every re-identification, and `readReport`'s rewritten comment (`:163-170`) says exactly that.
+- **Failure scenario.** The same as round 1's M2. A reader trusts the old sentence and drops or
+  doubts the iOS rebuild assertion.
+- **Fix.** Correct both. Both files are code-tree files, so the edit re-owes `check`, both full
+  harnesses and both real-input runs. If the orchestrator would rather not pay that for comments,
+  add one `FOLLOWUPS.md` line naming both locations, to land with the next DatePicker code change.
+  That also satisfies this item.
 
 ## N — nice to have
 
-- **N1.** The report should say in one line why `NitroComposeHost.kt:1537-1538` (the brief's pointer)
-  is not the cause and was left alone. Under Fabric the Compose `Layout` always gets a bounded width,
-  so that branch is a theoretical last resort.
-- **N2.** Export or cite the base runs (`.gates/detached.jsonl`, `b943a3f`, 13:20:40 and 13:21:08).
-  They are the only evidence for the race attribution and will be lost with the worktree. One more
-  full `harness:ios` at the base would turn "3/4 vs 1/1" into a comparison.
-- **N3.** The iOS probe's `mean` is wrong. `redSum += red * area` uses the per-pixel alpha, which is
-  always 255 after the grey backdrop (`HybridNitroUiSegmentedControl.swift:583`). It is then divided by
-  the pixel count (`:597-601`), so each channel is ×255 and overflows into its neighbours. The report's
-  own `mean=#8FAFB6EB` has eight hex digits. Android's version (`.kt`) is correct. Either fix it or drop
-  `mean` before the follow-up suggests asserting on it.
-- **N4.** The comment at `cpp/NitroUiSizingEngine.cpp:91-94` was garbled by the edit ("so it says such
-  a configuration is only the height").
-- **N5.** Stale code comments repeat what M4 fixes in docs:
-  - `HybridNitroUiProgress.swift:253-259` and `.kt:369`: "barely matters… overwrites with the box's".
-  - `HybridNitroUiSlider.swift:641-643` and `.kt:633-636`: "lays out at this width until its own
-    measurement arrives". The measurement no longer replaces it.
-- **N6.** New comments cite "`docs/tasks/FOLLOWUPS.md` row 10/46" (`NitroUiSizingEngine.hpp:497`,
-  `HybridNitroUiDatePicker.swift:236, :618`, `DatePicker.harness.tsx:199, :1198`,
-  `Slider.harness.tsx:503`). `FOLLOWUPS.md` has no row numbers: line 10 is F6 and line 46 is an H1
-  item. The numbering is `Q4-followups-triage.md`'s, so cite that file.
-- **N7.** `Slider.harness.tsx` restores the real declaration at the end of the test body (`:634-640`),
-  not in a `finally`. A failure mid-test leaves `NitroUiSlider` declared as 240×12 with intrinsic
-  flags (`seedSizingSize` passes `0u`, `HybridNitroUiCore.cpp:76`) for every later Slider test, which
-  makes the first red cascade.
-- **N8.** The report's gate notes (`:85`) say "the three `stale` rows are the per-suite green runs".
-  The table has five stale rows, and `harness:ios:DatePicker` is the red-proof *fail*. Separately,
-  `harness:android:Slider` failed once at tree `e381a792` (12:43:53, `The accessibility step probe
-  never reported`) between two greens on the same tree. That is an unreported flake. Add it as a
-  follow-up line.
-- **N9.** The iOS `SegmentedControlModel` does not clear `pixelReport` on recycle, though Android's
-  does (`.kt` `reset`). The `n=` counter keeps tests honest, but the asymmetry is unexplained.
-- **N10.** Android `builtMinimum` / `builtMaximum` are written on the UI thread outside `reportLock`
-  and read under it. The race is benign for the test (polling), but an `@Volatile`, or writing them
-  under the lock, would match how the rest of `readReport` is guarded.
+- **N1. `clearBuiltBounds()` rests on a premise the host contradicts, and nothing tests it.**
+  - The docstring (`HybridNitroUiDatePicker.swift:218-226`) calls recycling "the one path that
+    tears [the control] down … keeps this model but not the control".
+  - `NitroSwiftUIHost.prepareForRecycle()` (`ios/core/NitroSwiftUIHost.swift:301`) says "Keeps the
+    hosting controller and its SwiftUI state". The new comment at `:1401-1402` says the same.
+  - That leaves two cases:
+    - If SwiftUI fires `.onAppear` again when the recycled host re-enters a window, the clear is
+      redundant. The new mount records afresh anyway, and `controlBuilds` counts the remount as a
+      build.
+    - If it does not, the still-live control has `builtBounds == nil` until its next
+      re-identification. In that window `controlIdentity` never adds the suffix, and the
+      sub-granular crash case loses its escape.
+  - The only recycle test (`starts a remount from its own default…`, `:1814`) uses a bounds-free
+    `compact` picker, so it cannot tell the two apart.
+  - Fix: state which case holds, measured with a bounded `inline` remount reading
+    `builtMaximum`/`controlBuilds`, or drop the clear and fix the docstring.
+- **N2. The record is read at appearance time, not at build time.**
+  - `.onAppear { model.noteControlBuilt(minimum: model.minimum, maximum: model.maximum) }` (`:671`)
+    and `builtGranular = granularBoundsIdentity` (`:215`) read the model when the handler fires.
+    They do not read the values the `.id(_:)` was computed from.
+  - A prop batch landing between that body evaluation and the appearance would make `builtGranular`
+    describe bounds the on-screen control was not built with. That is the one input the
+    suppression's safety argument depends on.
+  - This is the pre-existing pattern extended to a new field, and probably unreachable on one main
+    thread. Capturing the identity's own inputs in `body` and passing them to the handler would make
+    "in the same breath" literally true.
+- **N3.** `HybridNitroUiSegmentedControl.swift:196-197` tells the reader
+  that `git log --all -S "selectedSegmentTintColor ="` "finds no such code". Now that this comment
+  contains the string, that command finds `9ec044d` (this comment) and `432b2ad` (the review).
+  Say "finds only this comment and the review", or drop the command.
+- **N4.** The `finally` (`Slider.harness.tsx:640-651`) restores the declaration through
+  `seedSizingSize`, which always writes flags `0u` (`HybridNitroUiCore.cpp:76`). So the "real
+  declaration" it puts back is 351×h with **intrinsic** flags, not the `fillWidth` one
+  `HybridNitroUiSlider` registers. The new comment at `:527-534` names exactly that as the poison.
+  This predates the round (as does `ColdSizing`'s identical exit), and later Slider tests pass.
+  Still, the comment and the code now disagree. Either say the restore is numbers-only, or add a
+  flags argument to the test seam in a later task (one `FOLLOWUPS.md` line).
+- **N5. Report accuracy.**
+  - The fix-round race table says "5 runs: 4 pass, 1 fail" for paired runs on `18da47b8`
+    (`report.md:278`). The ledger has six: `Button|HostPopups` ×4, `DatePicker|HostPopups` and
+    `SegmentedControl|HostPopups`, so 5 pass and 1 fail.
+  - The quoted command (`:281`) sources `/tmp/f3b.env`, a machine-local file that is not in the repo.
+  - "Both are re-runnable from the committed JSONL" (`:285`) overstates the evidence. The JSONL
+    records the results, but their `logPath`s point at the uncommitted `.gates/logs/`.
+  - Two of the three real-input failures in the ledger are setup errors that the report does not mention:
+    - `14:28:44`, simulator shut down.
+    - `14:42:20`, `emulator-5570` not on adb 5041.
+    They are harmless, but a reader of the table will wonder.
