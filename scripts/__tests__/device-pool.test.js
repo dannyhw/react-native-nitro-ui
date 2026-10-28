@@ -330,6 +330,7 @@ function fakePool({
     ...state,
   };
   const calls = [];
+  let clearTries = 0;
   const clock = { at: start };
   const ops = {
     attachedSerials: (port) => {
@@ -342,10 +343,16 @@ function fakePool({
     },
     clearAppData: (serial, appId, port) => {
       calls.push(['pm', 'clear', serial, appId, port ?? null]);
-      // `pm clear` answers `Success` or `Failed`, and the second one is the interesting
-      // fixture: a reset that reports itself done on a device it never cleared is how a
-      // task starts on the previous task's stored state.
-      return deviceState.appDataCleared;
+      // The shape the real op returns: the device's own answer, not a bool. `appDataClearAnswers`
+      // is a list so a fixture can be a device that settles - `pm clear` really does answer
+      // `Failed` for a few seconds on an emulator that has just attached - and the last entry
+      // repeats when the list runs out, so "keeps failing" is one fixture, not a special case.
+      const answers = deviceState.appDataClearAnswers ?? [
+        deviceState.appDataCleared ? 'Success' : 'Failed',
+      ];
+      const answer = answers[Math.min(clearTries, answers.length - 1)];
+      clearTries += 1;
+      return { ok: /Success/i.test(answer), answer };
     },
     shutdownAndroid: (serial, port) => {
       calls.push(['emu-kill', serial, port ?? null]);
@@ -382,6 +389,9 @@ function fakePool({
     readLoad: load,
     cores,
     sleep: (ms) => {
+      // Recorded as well as advanced: "it waited twice between three attempts" is the assertion
+      // that separates a retry loop from a busy-poll, and it needs the waits to be visible.
+      calls.push(['sleep', ms]);
       clock.at += ms;
     },
     isPidAlive,
@@ -968,16 +978,35 @@ describe('the between-task reset', () => {
     expect(calls.filter((c) => c[0] === 'pm')).toHaveLength(1);
   });
 
-  it('reports a `pm clear` that failed as a failed reset', () => {
+  it('reports a `pm clear` that never succeeded as a failed reset, with the answer', () => {
     const { pool, calls } = fakePool({
       home,
       state: { appDataCleared: false },
     });
-    const results = pool.resetPair(PAIR_A);
-    expect(results.find((r) => r.key === 'avd:nitro-ui-a').ok).toBe(false);
-    // Asked, and refused: the difference between "no reset needed" and "the reset did not work"
-    // is only visible if the attempt is recorded as well as its answer.
-    expect(calls.filter((c) => c[0] === 'pm')).toHaveLength(1);
+    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    expect(row.ok).toBe(false);
+    // The device's own word, not just "FAILED": `Failed` and `Error: unknown package` are
+    // different problems to whoever reads the line, and both arrive as a nonzero pm clear.
+    expect(row.answer).toContain('Failed');
+    // Retried, and bounded: four asks is the ceiling, so a device that will never clear costs
+    // three polls rather than hanging the lease.
+    expect(calls.filter((c) => c[0] === 'pm')).toHaveLength(4);
+    expect(row.attempts).toBe(4);
+  });
+
+  it('retries a reset on a device that is still settling, and reports the tries', () => {
+    // The shape the first real boot of this code actually produced: `sys.boot_completed` is 1,
+    // PackageManager is still waking, and `pm clear` answers Failed then Success. A single attempt
+    // reported that as a failed reset on a device that was fine.
+    const { pool, calls } = fakePool({
+      home,
+      state: { appDataClearAnswers: ['Failed', 'Failed', 'Success'] },
+    });
+    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    expect(row).toMatchObject({ ok: true, attempts: 3, answer: 'Success' });
+    expect(calls.filter((c) => c[0] === 'pm')).toHaveLength(3);
+    // The waits between them are the injected clock, not a wall: three polls, and no real sleeping.
+    expect(calls.filter((c) => c[0] === 'sleep')).toHaveLength(2);
   });
 
   it('fails the reset rather than reporting one on a device with no serial', () => {
