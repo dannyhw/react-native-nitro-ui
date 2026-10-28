@@ -47,10 +47,16 @@ export const LEDGER_DIR = '.gates';
  *     jest, then perf, then more, and "the last summary wins" made its row report
  *     the 7-test perf step instead of the 391-test unit run (M3).
  *
+ * v3 adds `steps` for `check` (X10): what each of the sixteen steps did, with its
+ * own duration. `check` is the one gate long enough that "3 m 04 s" is not an
+ * actionable number - the thing a reader wants is which step got slower. It is a
+ * record, not a rule: no decision in this file reads `steps`, so a v2 line and a
+ * v3 line mean the same thing to `need` and `table`.
+ *
  * v1 lines are still read: with no `trees` they compare on the full digest, and
  * with no `treeAfter` they are taken at their word.
  */
-export const LEDGER_VERSION = 2;
+export const LEDGER_VERSION = 3;
 
 /** The platforms a device gate can be keyed to. */
 export const PLATFORMS = ['ios', 'android'];
@@ -118,6 +124,24 @@ export const TOOLING_FILES = [
   // consumes `example/ios/Podfile.lock` itself, which is mapped as iOS.
   'scripts/sync-example-lock.mjs',
   'scripts/example-lock-core.mjs',
+  // X10. The runner and its step graph schedule `bun run <step>` and write only the
+  // timing file under `.gates/` (gitignored); they touch no source the app builds.
+  'scripts/check.mjs',
+  'scripts/check-steps.mjs',
+  // Writes `src/components/**`/`example/src/App.tsx` regions when asked to (`--write`),
+  // and `registry:check` - the half `check` runs - writes nothing at all. A broken
+  // version of either is a wrong *gate*, caught by its own unit test in
+  // `scripts/__tests__/registry.test.js`, never a different binary.
+  'scripts/gen-registry.mjs',
+  'scripts/registry-core.mjs',
+  // The build-slot lock in `~/.nitro-ui/builds.json`: it decides *when* a build may
+  // start, never what goes into it. `build-app.mjs` (which is mapped, and stays so)
+  // fails loudly if this misbehaves, and `scripts/__tests__/build-slot.test.js`
+  // proves it in `check`.
+  'scripts/build-slot-core.mjs',
+  // The template `doctor.mjs --setup` copies to `~/.nitro-ui/devices.json`. A device
+  // run reads that copy, never this file, and neither is in the app.
+  'scripts/devices.example.json',
   '.gitignore',
   '.prettierignore',
 ];
@@ -327,6 +351,7 @@ export function ledgerLineFromRun({
   result,
   counts = null,
   summaries = null,
+  stepTimings = null,
   logPath = null,
   startedAt,
   exitCode = null,
@@ -350,10 +375,94 @@ export function ledgerLineFromRun({
     result,
     counts,
     summaries,
+    stepTimings,
     logPath,
     exitCode,
     signal,
   };
+}
+
+/**
+ * The per-step records on a ledger line, or `[]` for a gate that has none.
+ *
+ * Tolerant by shape rather than by version: a line written before X10 has no
+ * `stepTimings`, and a hand-edited or half-written one must not make `table`
+ * throw. Anything that is not an object with a `name` is dropped rather than
+ * rendered as an empty row, because a blank duration reads like a zero-length step.
+ *
+ * @param {object | undefined} entry a ledger line
+ * @returns {Array<{name: string, status: string, durationMs: number, exitCode: number | null, signal: string | null, reason: string | null}>}
+ */
+export function stepTimingsOf(entry) {
+  const steps = entry?.stepTimings?.steps;
+  if (!Array.isArray(steps)) return [];
+  return steps.filter(
+    (step) =>
+      step != null && typeof step === 'object' && typeof step.name === 'string'
+  );
+}
+
+const STEP_STATUS_LABELS = {
+  pass: '**PASS**',
+  fail: '**FAIL**',
+  skipped: 'not started',
+};
+
+/**
+ * The per-step table `gate.mjs table --full` prints under the gate rows.
+ *
+ * It is a second table rather than extra cells on the first because it belongs to
+ * one gate: `check` is the only run long enough to need it, and its row's duration
+ * is the sum of this column's interesting parts. `--full` is the switch because
+ * the report's gate table is the one a reviewer reads, and sixteen rows under it
+ * would bury the five device rows.
+ *
+ * @param {object} options
+ * @param {object[]} options.entries ledger lines
+ * @param {string[]} [options.gates] which gates to render, in order
+ * @returns {string} Markdown, or `''` when no line has step timings
+ */
+export function renderStepTimings({ entries, gates = null }) {
+  const lists = listByGate(entries);
+  const names = gates ?? Object.keys(lists);
+  const blocks = [];
+  for (const gate of names) {
+    const list = lists[gate] ?? [];
+    // The newest line that has them, which is the run the gate row above reports.
+    const entry = [...list]
+      .reverse()
+      .find((line) => stepTimingsOf(line).length > 0);
+    const steps = stepTimingsOf(entry);
+    if (steps.length === 0) continue;
+    const jobs = entry?.stepTimings?.jobs;
+    const rows = steps.map((step) => {
+      // A passing step's detail is nothing. For the rest, the runner's `reason`
+      // already spells out the exit code and signal (`exit 2`, `exit null (signal
+      // SIGTERM)`, `not started - prepare failed`), so it is shown as-is and the
+      // numbers are not repeated beside it; they are the fallback when no reason
+      // arrived. Pipes are escaped because a reason is a sentence and a table cell
+      // is not a paragraph.
+      const detail =
+        step.reason != null
+          ? String(step.reason)
+          : step.signal != null
+            ? `signal ${step.signal}`
+            : typeof step.exitCode === 'number' && step.exitCode !== 0
+              ? `exit ${step.exitCode}`
+              : '';
+      return `| \`${step.name}\` | ${STEP_STATUS_LABELS[step.status] ?? step.status} | ${formatDuration(step.durationMs)} | ${detail.replaceAll('|', '\\|') || '—'} |`;
+    });
+    blocks.push(
+      [
+        `### \`${gate}\` steps${jobs == null ? '' : ` - ${String(jobs)} job(s)`}`,
+        '',
+        '| Step | Result | Duration | Detail |',
+        '| --- | --- | --- | --- |',
+        ...rows,
+      ].join('\n')
+    );
+  }
+  return blocks.join('\n\n');
 }
 
 /**
@@ -625,6 +734,76 @@ export function summarizeGates({
 }
 
 /**
+ * A `check` line from another branch's ledger that may stand in for a run on this
+ * tree at merge, or `null`.
+ *
+ * The question `need --for merge` asks after a merge is "has *this code* been
+ * checked?", and the honest answer can come from a branch's ledger: the merge
+ * commit's code tree is the branch tip's code tree whenever `main` gained nothing
+ * since the branch point, and the tree digest is exactly the thing being asked
+ * about. Four things have to hold, and all four are checked here rather than
+ * assumed:
+ *
+ *   - the line passed, on *this* full code tree (`tree`), with its `treeAfter`
+ *     agreeing - a run whose tree moved under it proved neither tree (N1);
+ *   - it names a `head` commit, and the caller can prove that commit is an
+ *     ancestor of the tree being asked about. That is what makes the evidence
+ *     *this* merge's rather than some branch that happened to share a digest; a
+ *     line with no `head` cannot be placed, so it cannot be reused;
+ *   - it is a `check`, and only a `check`. Device gates are keyed to a binary
+ *     built on the branch's own machine and lease, and the brief leaves them to
+ *     the tree rules X11 works with;
+ *   - the current branch's own ledger is passed separately (it is `entries`), so a
+ *     gate is never reused from a ledger nobody is standing on.
+ *
+ * Several branches can hold a line on the same tree; the newest wins, with the
+ * branch name as a tie-break so the choice does not depend on directory order.
+ *
+ * @param {object} options
+ * @param {Array<{branch: string, entries: object[]}>} options.ledgers other
+ *   branches' ledgers, in any order
+ * @param {string | null} options.tree the full code tree being asked about
+ * @param {(commit: string) => boolean} options.headIsAncestor proves `commit` is
+ *   in the history of the tree being asked about (git, in `gate.mjs`)
+ * @param {string} [options.gate] which gate may be reused
+ * @returns {{branch: string, entry: object} | null}
+ */
+export function findReusableCheck({
+  ledgers = [],
+  tree,
+  headIsAncestor,
+  gate = 'check',
+}) {
+  if (tree == null || typeof headIsAncestor !== 'function') return null;
+  const candidates = [];
+  for (const ledger of ledgers) {
+    if (ledger?.branch == null || !Array.isArray(ledger.entries)) continue;
+    for (const entry of [...ledger.entries].reverse()) {
+      if (entry?.gate !== gate || entry.result !== 'pass') continue;
+      if (entry.tree !== tree) continue;
+      if (
+        entry.treeAfter != null &&
+        entry.tree != null &&
+        entry.treeAfter !== entry.tree
+      ) {
+        continue;
+      }
+      if (typeof entry.head !== 'string' || entry.head === '') continue;
+      if (!headIsAncestor(entry.head)) continue;
+      candidates.push({ branch: ledger.branch, entry });
+      break;
+    }
+  }
+  if (candidates.length === 0) return null;
+  candidates.sort(
+    (a, b) =>
+      String(b.entry.ts ?? '').localeCompare(String(a.entry.ts ?? '')) ||
+      a.branch.localeCompare(b.branch)
+  );
+  return candidates[0];
+}
+
+/**
  * What `need` decides.
  *
  * @param {object} options
@@ -636,6 +815,8 @@ export function summarizeGates({
  * @param {string[]} [options.unmappedPaths] code paths outside the known prefixes
  * @param {string[]} [options.toolingPaths] check-only paths the diff touched
  * @param {boolean} [options.diffUnknown] when the diff could not be read
+ * @param {{branch: string, entry: object} | null} [options.reusedCheck] a `check`
+ *   from another branch's ledger that `findReusableCheck` accepted for this tree
  * @returns {{ok: boolean, stage: string, required: object[], missing: string[],
  *   notes: string[]}}
  */
@@ -648,17 +829,39 @@ export function decideNeed({
   unmappedPaths = [],
   toolingPaths = [],
   diffUnknown = false,
+  reusedCheck = null,
 }) {
   const requiredGates = requiredGatesFor({ stage, touchedPlatforms });
   const lists = listByGate(entries);
-  const required = requiredGates.map((gate) =>
+  const scheduled = requiredGates.map((gate) =>
     gateRowFor({ gate, list: lists[gate] ?? [], stage, tree, trees })
   );
+  // Merge reuse (X10): `check` may be satisfied by another branch's line for this
+  // exact code tree, because when the merge changes no code the merged tree *is*
+  // the tree that passed. `applyReusedCheckRow` is where the rule lives, shared
+  // with `table` so the two cannot disagree.
+  const { rows: required, reused: reusedRow } = applyReusedCheckRow({
+    rows: scheduled,
+    reusedCheck,
+    stage,
+    tree,
+    trees,
+  });
+
   const missing = required
     .filter((row) => row.state !== 'green')
     .map((row) => row.gate);
 
   const notes = [];
+  if (reusedRow != null) {
+    notes.push(
+      `check was satisfied by \`${reusedRow.reused.branch}\`'s ledger: it passed on ` +
+        `this exact code tree (${String(reusedRow.entry.tree ?? '?').slice(0, 12)}) ` +
+        `at ${String(reusedRow.entry.head ?? 'unknown HEAD').slice(0, 7)}, and that ` +
+        'commit is merged into this tree - the merge changed no code, so `check` is ' +
+        'not re-owed (see ORCHESTRATOR.md, "The loop" step 5)'
+    );
+  }
   if (stage === 'review' && touchedPlatforms.length === 0) {
     notes.push(
       toolingPaths.length > 0
@@ -686,6 +889,56 @@ export function decideNeed({
     );
   }
   return { ok: missing.length === 0, stage, required, missing, notes };
+}
+
+/**
+ * Swap a not-green `check` row for one proved by another branch's ledger.
+ *
+ * Shared by `decideNeed` and `renderGateTable` so the two can never disagree about
+ * what reuse means - a report whose table says `missing` while `need` says satisfied
+ * is exactly the kind of contradiction this ledger exists to remove.
+ *
+ * Only at merge, and only for `check`: a review round is evidence about its own
+ * diff, and a device gate is evidence about a binary someone else built.
+ *
+ * @param {object} options
+ * @param {object[]} options.rows rows from `summarizeGates` / `gateRowFor`
+ * @param {{branch: string, entry: object} | null} options.reusedCheck
+ * @param {'review'|'merge'} options.stage
+ * @param {string | null} options.tree
+ * @param {Record<string, string> | null} [options.trees]
+ * @returns {{rows: object[], reused: object | null}}
+ */
+export function applyReusedCheckRow({
+  rows,
+  reusedCheck = null,
+  stage = 'merge',
+  tree = null,
+  trees = null,
+}) {
+  if (
+    stage !== 'merge' ||
+    reusedCheck?.entry == null ||
+    reusedCheck?.branch == null
+  ) {
+    return { rows, reused: null };
+  }
+  const current = rows.find((row) => row.gate === 'check');
+  if (current != null && current.state === 'green')
+    return { rows, reused: null };
+  const candidate = gateRowFor({
+    gate: 'check',
+    list: [reusedCheck.entry],
+    stage,
+    tree,
+    trees,
+  });
+  if (candidate.state !== 'green') return { rows, reused: null };
+  const reused = { ...candidate, reused: { branch: reusedCheck.branch } };
+  return {
+    rows: rows.map((row) => (row.gate === 'check' ? reused : row)),
+    reused,
+  };
 }
 
 /** `1234 ms` -> `1.2 s`, `95300` -> `1 m 35 s`. Compact enough for a table cell. */
@@ -827,6 +1080,8 @@ function formatTreeCell(row) {
  * @param {'review'|'merge'} [options.stage]
  * @param {string[]} [options.required]
  * @param {(entry: object) => string} [options.evidence] how to cite a run
+ * @param {{branch: string, entry: object} | null} [options.reusedCheck] the same
+ *   reuse `need` accepted, so the table and the decision cannot disagree
  * @returns {string}
  */
 export function renderGateTable({
@@ -836,8 +1091,15 @@ export function renderGateTable({
   stage = 'review',
   required = MERGE_GATES,
   evidence = null,
+  reusedCheck = null,
 }) {
-  const rows = summarizeGates({ entries, tree, trees, stage, required });
+  const rows = applyReusedCheckRow({
+    rows: summarizeGates({ entries, tree, trees, stage, required }),
+    reusedCheck,
+    stage,
+    tree,
+    trees,
+  }).rows;
   const header =
     '| Gate | Result | Counts | Code tree | Duration | Load |' +
     '\n| --- | --- | --- | --- | --- | --- |';
@@ -845,8 +1107,11 @@ export function renderGateTable({
     const entry = row.entry;
     const evidenceText =
       evidence != null && entry != null ? ` ${evidence(entry)}` : '';
+    // A `check` carried across a merge is still a pass on this code, but a reader
+    // has to be able to see it did not run here.
+    const label = `${STATE_LABELS[row.state] ?? row.state}${row.reused != null ? ' *(reused)*' : ''}`;
     return (
-      `| \`${row.gate}\` | ${STATE_LABELS[row.state] ?? row.state} | ` +
+      `| \`${row.gate}\` | ${label} | ` +
       `${formatCounts(countsForDisplay(entry))} | ${formatTreeCell(row)} | ` +
       `${entry == null ? '—' : formatDuration(entry.durationMs)} | ` +
       `${entry == null ? '—' : formatLoad(entry.load)}${evidenceText} |`
@@ -1148,6 +1413,12 @@ export function resolveGate(name, extraArgs = []) {
  */
 export function explainNeedRow(row, codeTree) {
   if (row.state === 'green') {
+    if (row.reused != null) {
+      return (
+        `${row.gate} — green, reused from \`${row.reused.branch}\`'s ledger: it passed ` +
+        `on this code tree and its commit is merged here, so the merge owes no re-run`
+      );
+    }
     return row.matched != null && row.matched !== 'full'
       ? `${row.gate} — green on the ${row.matched} code tree`
       : `${row.gate} — green`;
