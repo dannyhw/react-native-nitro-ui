@@ -13,28 +13,39 @@ the clone, untouched by `git worktree remove`. **The ledger stayed where it was*
 the brief allowed either, and moving it would have churned the reuse and export code that reads it
 by path, for a file that is small and re-created by the next run. Only the logs, which nothing
 re-creates, moved. `logPath` on a line is store-relative; `ledgerLogCandidates` still resolves a
-pre-X12 `.gates/logs/...` line, and the first run in a worktree **copies** (not moves — a backgrounded
-run may hold the file) its legacy directory into the store under `.gates/logs/`, so old lines resolve
-unchanged. `NITRO_UI_GATE_LOG` accepts either root and `listBackgroundRecords` walks the store, so
-`wait`/`status`/`table`/`need` behave as before from any worktree. Retention, stated: **35 days by
-mtime, then a 64 MiB cap, oldest first, never a log touched in the last two hours** or belonging to a
-running background gate; applied on every run and by the new `gate.mjs logs [--branch b] [--failed]
-[--all] [--prune]`.
+pre-X12 `.gates/logs/...` line, and every run **copies** (not moves — a backgrounded run may hold the
+file) its worktree's legacy directory into the store under `.gates/logs/<branch>/`, so old lines resolve
+unchanged and no worktree's copy is skipped because another one migrated first. `logPathsFor` derives
+the file it opens and the path the record and ledger name from one call, and validates an inherited
+`NITRO_UI_GATE_LOG` before honouring it. Each record carries the branch *and the worktree* that started
+it, so `wait`/`status` follow this checkout's background run even when several worktrees share the
+store; `table` and `need` read it as before. Retention, stated: **35 days by mtime, then a 64 MiB cap,
+oldest first, never a log touched in the last two hours** or belonging to a running gate; applied on
+every run (foreground or a backgrounded launch) and by the new `gate.mjs logs [--branch b] [--failed]
+[--all] [--prune]`. A stored log's branch is read from its whole path and its pass or fail from the
+store's own record, so `logs --branch <b> --failed` still answers after the worktree and its ledger are
+gone; a log neither can judge is reported as unknown.
 
-**2. Export carries evidence.** `export --task <ID>` writes `docs/tasks/<ID>/failures/<run>.log` for
-every **failed** line — failing test names and assertion messages in their own section, the last 150
-lines, load at both ends (`summarizeLoad` gained `end`) — and records it as that line's
+**2. Export carries evidence.** `export --task <ID>` writes `docs/tasks/<ID>/failures/<run>-<n>.log`
+(the run's timestamp, gate and a sequence number, so two same-second failures both survive) for every
+**failed** line the store can judge — failing test names and assertion messages in their own section,
+the last 150 lines, load at both ends (`summarizeLoad` gained `end`) — and records it as that line's
 `failureLogPath`. Passing lines are copied **byte-for-byte** (a corrupt line stays corrupt) and get no
 file; a failed line whose log is gone exports with a note naming where it looked and no pointer.
 Scrubbed before writing: PEM blocks whole, URL userinfo, credential-shaped assignments (`TOKEN=`,
-`"secret":`, `--api-key`, `<auth>…</auth>`) and bare shapes (`ghp_`, `npm_`, `github_pat_`, `xox*`,
-AWS ids, JWTs). Not scrubbed: paths and hostnames — the header says the file is committed, so read it
-before you push.
+`"secret":`, `--api-key`, `.npmrc` `_auth=`) and bare shapes (`ghp_`, `npm_`, `github_pat_`, `xox*`,
+AWS ids, JWTs), plus `Authorization:`/`Cookie:` headers **whole, whatever the scheme** — the value, not
+the word `Bearer`. Local paths are redacted too: the store, this repo, the lease file, `$HOME` and the
+hostname become `<store>`, `<repo>`, `<lease file>`, `~` and `<host>`, so a committed excerpt carries no
+absolute path by construction.
 
 **3. Device context on failure.** A failed gate that names a platform appends booted `simctl`
-devices, `adb -s <leased serial> devices`, the lease list, load1 and (Android) the last 500 `logcat`
-lines for the app pid. Both adb commands name the leased serial; a reserved or missing serial is
-refused in the block. `splitDeviceContext` keeps that block out of the excerpt's tail.
+devices, `adb -s <serial> get-state` (one device's own state — never a device *list*, which is how the
+first version read a neighbouring task's emulator), the lease list, load1 and (Android) the last 500
+`logcat` lines for the app pid. The serial comes from this run's **lease record** plus `devices.json`,
+never from `ANDROID_SERIAL`; a run with no lease, an expired lease or a reserved serial probes no
+device at all and says which in the block. `splitDeviceContext` keeps that block out of the excerpt's
+tail.
 
 ## Gates
 
@@ -111,3 +122,6 @@ the recursive-walk mutation above is the proof).
   no device state, which is the Q3 question one step earlier.
 - `scripts/real-input/*.mjs` keep their own `tailAppLog()`; gate's logcat probe duplicates ~10 lines
   of it rather than importing a device class out of a suite script.
+- `logcat` is captured for the app's pid, so on a crash — the case where it matters most — `pidof`
+  is empty and nothing is captured. The brief scopes the probe to the app's pid; the fix would be a
+  `--pid`-less buffer dump bounded by line count, which is a different amount of evidence.

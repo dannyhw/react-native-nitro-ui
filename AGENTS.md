@@ -99,12 +99,13 @@ Run gates through `node scripts/gate.mjs <gate>` (see its header for the names) 
   clone shares and `git worktree remove` never deletes; `gate.mjs logs [--branch b] [--failed]
   [--all]` lists it. The store is kept to 35 days by mtime and then 64 MiB, oldest first, and never
   touches a log written in the last two hours. `gate.mjs export --task <ID>` also writes a scrubbed
-  excerpt of every **failed** run to `docs/tasks/<ID>/failures/<run>.log` — the failing test names,
+  excerpt of every **failed** run to `docs/tasks/<ID>/failures/<run>-<n>.log` — the failing test names,
   the assertion messages, the last 150 lines, the load at both ends and, for a device gate, the
   device context — and records its path in that line's `failureLogPath`. Passing runs get no file.
-  What is scrubbed: PEM blocks, URL userinfo, credential-shaped assignments (`TOKEN=`, `"secret":`,
-  `--api-key`, `<auth>…</auth>`) and bare token shapes (`ghp_`, `npm_`, `xox`, AWS ids, JWTs);
-  paths and hostnames are not, so read an excerpt before you push one.
+  A committed excerpt holds no secret and no absolute path (D25): scrubbed are PEM blocks, URL
+  userinfo, credential-shaped assignments (`.npmrc` `_auth=`/`_authToken=`, `TOKEN=`, `"secret":`,
+  `--api-key`), `Authorization:`/`Cookie:` **whole** (any scheme), bare token shapes (`ghp_`, `npm_`,
+  `xox`, AWS ids, JWTs), and your `$HOME`, hostname, repo and store paths (written as `<store>/…`).
 
 Do not write a gate result into a report that the table does not print, and do not write a device
 hygiene section. Leases and the scripts enforce that now (X1): a device gate runs under

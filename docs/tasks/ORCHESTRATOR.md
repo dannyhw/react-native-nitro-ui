@@ -103,12 +103,17 @@ the final SHA.
 **Cleanup needs no archiving (X12).** Gate logs and the background-gate records live in the clone's
 gate log store — `<git-common-dir>/nitro-ui-gates/<branch>/` — which `git worktree remove` does not
 touch, so removing a merged worktree no longer loses the evidence a later diagnosis needs. Read them
-from any surviving worktree with `node scripts/gate.mjs logs --all` (or `--branch <b> --failed`);
-they are kept for 35 days, then capped at 64 MiB. The per-branch ledger `.gates/<branch>.jsonl` *is*
-removed with its worktree, so export it before cleanup (`gate.mjs export --task <ID>` commits the
-ledger plus a scrubbed excerpt of each failed run under `docs/tasks/<ID>/failures/`). Deleting the
-*clone* deletes its store: archive a store only when you are about to do that. The orchestrator's own
-scripts log under `~/.nitro-ui/orchestrator-logs/`, not `/tmp`.
+from any surviving worktree with `node scripts/gate.mjs logs --all` (or `--branch <b> --failed` —
+the branch is read from the log's whole path, and pass or fail from the store's own record, so both
+work once the worktree and its ledger are gone); they are kept for 35 days, then capped at 64 MiB.
+Each record also names the worktree that started the run, so `wait` and `status` follow *your*
+background gate rather than the newest run of that gate somewhere else in the store — which matters
+because several tasks run `check --background` at once. The per-branch ledger `.gates/<branch>.jsonl`
+*is* removed with its worktree, so export it before cleanup (`gate.mjs export --task <ID>` commits
+the ledger plus a scrubbed excerpt of each failed run under `docs/tasks/<ID>/failures/`; an excerpt
+carries no home path and no credential). Deleting the *clone* deletes its store: archive a store only
+when you are about to do that. The orchestrator's own scripts log under `~/.nitro-ui/orchestrator-logs/`,
+not `/tmp`.
 
 If an implementer's turn ends early (for example a tool call printed as text
 instead of run), check its worktree and resume the same thread with what is and
