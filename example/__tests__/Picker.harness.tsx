@@ -265,6 +265,49 @@ async function waitForMeasured(testId: string, what: string) {
   );
 }
 
+/**
+ * Poll until *this* mount reports a size, after one that replaced it.
+ *
+ * `waitForRemeasure` asks only that the number differ from the one before the
+ * change, and a variant change is a remount (`Picker.tsx` keys the native view on
+ * `variantKey`), so three answers that all mean "not done" can satisfy it: the new
+ * host has not measured yet (`measureContent()` is the host cache, 0 when empty),
+ * the old host was dropped (`drop()` nils the cached size) while `handles` still
+ * points at it - `hybridRef` fires only on the new view's first props batch - or
+ * no handle is there at all. Zero then *ends* the wait, because 0x0 is not the
+ * previous size, and the box assertion below it compares a real box with nothing:
+ * that is the `wheel=0.00x0.00` red X3 saw at load 35.6-57.2.
+ *
+ * So this wait is one only the live mount can answer - a handle that is neither
+ * missing nor the one from before the rerender - and it refuses a zero, which is
+ * absence and never a verdict. `waitForMeasured` already refused zero; it had just
+ * never learned about the mount.
+ */
+async function waitForFreshMeasure(
+  testId: string,
+  stale: PickerHandle | undefined,
+  what: string,
+  timeoutMs = 12000
+): Promise<Size> {
+  return await pollUntil(
+    () => {
+      const handle = handles.get(testId);
+      if (handle == null || handle === stale) {
+        return null; // only the live mount may answer
+      }
+      const size = handle.measureContent();
+      return size.width > 0 && size.height > 0 ? size : null; // 0x0 is absence
+    },
+    () =>
+      new Error(
+        `"${testId}" (${what}) never measured on its new mount - ` +
+          `measureContent() says ${describeSize(measured(testId))}, box ` +
+          `${describeSize(sizeOf(testId))}.`
+      ),
+    timeoutMs
+  );
+}
+
 /*
  * No `waitForEvents` helper here, unlike the G2/G4 suites: every positive change
  * event this control makes comes from a popup row the harness cannot press, so the
@@ -1688,6 +1731,9 @@ describe('Picker · G6', () => {
     expect(asMenu.width).not.toBeCloseTo(BOX.width, 0);
     await settle(200);
 
+    // The handle this mount leaves behind, so the wait after the rerender can
+    // refuse to let the dead one answer for the new one.
+    const staleWheel = handles.get('var-w');
     await rerender(
       <Picker
         options={OPTIONS}
@@ -1698,10 +1744,10 @@ describe('Picker · G6', () => {
         hybridRef={captureHybrid('var-w')}
       />
     );
-    const asWheel = await waitForRemeasure(
+    const asWheel = await waitForFreshMeasure(
       'var-w',
-      asMenu,
-      'a wheel, which fills the box'
+      staleWheel,
+      'the wheel after the remount'
     );
     await settle(300);
     console.log(
@@ -1737,6 +1783,9 @@ describe('Picker · G6', () => {
     expect(Math.abs(asWheel.width - BOX.width) < 1).toBe(true);
     await settle(200);
 
+    // The handle this mount leaves behind, so the wait after the rerender can
+    // refuse to let the dead one answer for the new one.
+    const staleMenu = handles.get('var-m');
     await rerender(
       <Picker
         options={OPTIONS}
@@ -1747,10 +1796,10 @@ describe('Picker · G6', () => {
         hybridRef={captureHybrid('var-m')}
       />
     );
-    const asMenu = await waitForRemeasure(
+    const asMenu = await waitForFreshMeasure(
       'var-m',
-      asWheel,
-      'a menu, which measures the long title unbounded'
+      staleMenu,
+      'the menu after the remount'
     );
     await settle(300);
     console.log(
