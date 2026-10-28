@@ -1326,6 +1326,11 @@ function writeFakeRunner(dir) {
     // fails with a code that is not 1, so "exits with the gate\'s code" is a claim
     // a test can actually falsify.
     'if [ -n "$FAKE_PROGRESS" ]; then echo "$FAKE_PROGRESS"; fi\n' +
+    // For the "is the device claimed *while* the run is in flight" case (X11 review M7): the
+    // stand-in for four minutes of XCUITest reads the state file the reaper reads, from inside the
+    // run. A claim that was taken after the run started, or released before it ended, is invisible
+    // to every assertion made on the parent's side of the process boundary.
+    'if [ -n "$FAKE_SHOW_CLAIMS" ]; then echo "claims-during-run:"; cat "$NITRO_UI_HOME/pool.json"; fi\n' +
     // For the `NITRO_UI_GATE_LOG` leak case (N6): a gate's own child processes must
     // not inherit the launcher's log path, so a nested `gate.mjs` cannot write into
     // its parent's log and mark its parent's record done.
@@ -2042,6 +2047,34 @@ describe('gate.mjs claims the device it runs on', () => {
     expect(run.status).toBe(0);
     expect(run.stderr).toContain('NITRO_UI_GATE_DEVICE_FORCE=1');
     expect(ledgerLines(dir)).toHaveLength(1);
+  }, 90_000);
+
+  /**
+   * The claim has to be in the state file *during* the run, not merely before or after it: that
+   * window is the only thing the reaper reads, and a claim taken after the run started, or released
+   * when the wrapper exited but before the child finished, both look identical to a parent that
+   * only asserts at the end (X11 review M7). So the stand-in for the run reads `pool.json` itself.
+   */
+  it('has the claim live while the run is in flight', async () => {
+    const { dir, env } = leasedCheckout();
+    const run = runCli(dir, ['harness:android'], {
+      ...env,
+      FAKE_SHOW_CLAIMS: '1',
+    });
+    expect(run.status).toBe(0);
+    const during = run.stdout.slice(run.stdout.indexOf('claims-during-run:'));
+    const claimed = JSON.parse(during.slice(during.indexOf('{')));
+    expect(claimed.devices.map((d) => d.key)).toEqual(['avd:nitro-ui-a']);
+    const claims = claimed.devices[0].claims;
+    expect(claims).toHaveLength(1);
+    expect(claims[0].gate).toBe('harness:android');
+    // The claim names a pid, which is the whole protocol: a record whose pid has died is read as
+    // no claim, so this line is what makes a killed task unable to wedge a device. (That the pool
+    // treats a dead pid that way is `device-pool.test.js`'s, with an injected liveness check.)
+    expect(typeof claims[0].pid).toBe('number');
+    expect(claims[0].pid).toBeGreaterThan(0);
+    // And it is gone again once the run is over.
+    expect(readPool(path.join(dir, 'state')).devices[0].claims).toEqual([]);
   }, 90_000);
 
   it('claims nothing when the environment names no lease', async () => {
