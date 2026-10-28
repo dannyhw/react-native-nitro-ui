@@ -1920,3 +1920,140 @@ describe('gate.mjs --background and wait', () => {
     expect(log).toContain('ColdSizing');
   }, 90_000);
 });
+
+/**
+ * A device gate holds a claim on its lease's devices for the duration of the run (X11), which is
+ * what lets the warm pool keep them booted without ever powering one off mid-suite.
+ *
+ * Checked through the real CLI, because the wiring is the risk: a claim that is never released
+ * wedges a device until its pid is noticed as gone, and a claim that is never taken leaves the
+ * reaper guessing from timestamps alone. The assertions are on `pool.json` - the file the reaper
+ * reads - not on the run's output.
+ */
+describe('gate.mjs claims the device it runs on', () => {
+  const IOS_ONLY = {
+    'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
+  };
+
+  const cleanup = [];
+
+  /** A checkout plus a `NITRO_UI_HOME` holding a lease for one pair of devices. */
+  function leasedCheckout({ claimedBy = null } = {}) {
+    const dir = makeCheckout(IOS_ONLY);
+    const home = path.join(dir, 'state');
+    fs.mkdirSync(home, { recursive: true });
+    if (claimedBy != null) {
+      fs.writeFileSync(
+        path.join(home, 'pool.json'),
+        JSON.stringify(
+          {
+            version: 1,
+            devices: [
+              {
+                key: 'avd:nitro-ui-a',
+                kind: 'android',
+                id: 'nitro-ui-a',
+                leaseId: 'X11-1',
+                serial: 'emulator-5574',
+                adbPort: 5043,
+                bootedAtMs: Date.now(),
+                lastUsedMs: Date.now(),
+                idleShutdownMinutes: 30,
+                claims: [
+                  {
+                    // This test process is the one pid a child can be certain is alive.
+                    pid: process.pid,
+                    id: 'other',
+                    gate: claimedBy,
+                    at: Date.now(),
+                  },
+                ],
+              },
+            ],
+          },
+          null,
+          2
+        )
+      );
+    }
+    cleanup.push(dir);
+    return {
+      dir,
+      home,
+      env: {
+        NITRO_UI_HOME: home,
+        NITRO_UI_LEASE_ID: 'X11-1',
+        NITRO_UI_LEASE_TASK: 'X11',
+        NITRO_UI_LEASE_PLATFORM: 'both',
+        IOS_SIM_UDID: 'UDID-A',
+        ANDROID_AVD: 'nitro-ui-a',
+        EMULATOR_PORT: '5574',
+        ANDROID_SERIAL: 'emulator-5574',
+        ANDROID_ADB_SERVER_PORT: '5043',
+      },
+    };
+  }
+
+  afterAll(() => {
+    for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const readPool = (home) => {
+    const file = path.join(home, 'pool.json');
+    if (!fs.existsSync(file)) return { devices: [] };
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  };
+
+  it('claims the platform it runs on, and releases it when the run ends', async () => {
+    const { dir, home, env } = leasedCheckout();
+    const run = runCli(dir, ['harness:android'], env);
+    expect(run.status).toBe(0);
+    expect(run.stderr).toContain('claimed avd:nitro-ui-a');
+    // An Android gate claims the emulator only: the simulator behind the same lease stays free
+    // for the next task's iOS run.
+    const devices = readPool(home).devices;
+    expect(devices.map((x) => x.key)).toEqual(['avd:nitro-ui-a']);
+    expect(devices[0].serial).toBe('emulator-5574');
+    // Released, not merely "the process ended": a claim left behind by a wrapper that exits
+    // normally would block the next gate until a reaper noticed the pid was gone.
+    expect(devices[0].claims).toEqual([]);
+  }, 90_000);
+
+  it('refuses a device another live run holds, before the run starts', async () => {
+    const { dir, home, env } = leasedCheckout({
+      claimedBy: 'real-input:android',
+    });
+    const run = runCli(dir, ['harness:android'], env);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('real-input:android');
+    expect(run.stderr).toContain('--device-force');
+    // Nothing recorded: refused *before* the four-minute build, not after it fought over the
+    // device, which is the difference between a fast no and a corrupt maybe.
+    expect(ledgerLines(dir)).toEqual([]);
+    expect(readPool(home).devices[0].claims).toHaveLength(1);
+  }, 90_000);
+
+  it('runs anyway under NITRO_UI_GATE_DEVICE_FORCE=1', async () => {
+    const { dir, env } = leasedCheckout({ claimedBy: 'real-input:android' });
+    const run = runCli(dir, ['harness:android'], {
+      ...env,
+      NITRO_UI_GATE_DEVICE_FORCE: '1',
+    });
+    expect(run.status).toBe(0);
+    expect(run.stderr).toContain('--device-force');
+    expect(ledgerLines(dir)).toHaveLength(1);
+  }, 90_000);
+
+  it('claims nothing when the environment names no lease', async () => {
+    // A plain `bun run check` or a CI runner has no lease in its environment, and the claim path
+    // must be invisible there rather than half-working off a stale `ANDROID_SERIAL`.
+    const dir = makeCheckout(IOS_ONLY);
+    cleanup.push(dir);
+    const run = runCli(dir, ['check'], {
+      NITRO_UI_HOME: path.join(dir, 'state'),
+    });
+    expect(run.status).toBe(0);
+    expect(run.stderr).not.toContain('claimed');
+    expect(fs.existsSync(path.join(dir, 'state', 'pool.json'))).toBe(false);
+  }, 90_000);
+});

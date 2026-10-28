@@ -366,6 +366,41 @@ export function deviceOperations({
  * their outcome logged rather than thrown - a device that will not shut down is a warning, not a
  * failed command.
  */
+/**
+ * What a pool key *is* on this machine, from the pair that names it: the serial to address an
+ * emulator with, the adb server that can see it, the UDID of a simulator. The boot hand-off and a
+ * bare claim both write these, because a record without them is a device the pool can see and not
+ * touch - `shutdownDevice` answers "already off" for an entry with no serial, and the record is
+ * then dropped while the emulator keeps running.
+ *
+ * @param {{ios?: {udid?: string | null}, android?: {emulatorPort?: number | null, adbPort?: number | null, serial?: string | null}}} pair
+ * @param {string} key
+ * @returns {Record<string, unknown>}
+ */
+function identityFor(pair, key) {
+  const [kind, id] = splitKey(key);
+  if (kind === 'android') {
+    return {
+      kind,
+      id,
+      udid: null,
+      serial:
+        pair?.android?.serial ??
+        (pair?.android?.emulatorPort != null
+          ? emulatorSerial(pair.android.emulatorPort)
+          : null),
+      adbPort: pair?.android?.adbPort ?? null,
+    };
+  }
+  return {
+    kind,
+    id,
+    udid: kind === 'ios' ? id : null,
+    serial: null,
+    adbPort: null,
+  };
+}
+
 export class DevicePool {
   constructor({
     home = stateHome(),
@@ -508,7 +543,7 @@ export class DevicePool {
     this.withPool((state) => {
       const nowMs = this.now();
       for (const key of keys) {
-        const entry = upsertDevice(state, key, {});
+        const entry = upsertDevice(state, key, identityFor(pair, key));
         entry.claims = (entry.claims ?? []).filter((c) =>
           this.isPidAlive(c?.pid)
         );
@@ -912,6 +947,12 @@ export function pairFromEnv(env = process.env) {
       ? {
           avd: env.ANDROID_AVD,
           emulatorPort: Number.isInteger(port) ? port : null,
+          // The serial the lease exported (or the one its port implies), so a claim records the
+          // device it holds: a pool entry with no serial cannot be powered off, and `reap` would
+          // read it as "already off" and forget an emulator that is running.
+          serial:
+            env.ANDROID_SERIAL ??
+            (Number.isInteger(port) ? emulatorSerial(port) : null),
           // The adb server that can see this device. Without it a claim or a reset asks the
           // default server about an emulator it has never heard of, and gets "not found".
           adbPort: Number.isInteger(adbPort) ? adbPort : null,
@@ -923,20 +964,41 @@ export function pairFromEnv(env = process.env) {
 /**
  * Claims the current lease's devices for one command, or returns null when the environment names no
  * devices at all (a plain `bun run check`, a unit test, a CI runner).
+ *
+ * `platform` is the *caller's* (the gate being run), and it is intersected with what the
+ * environment names: an iOS harness run under a `both` lease claims the simulator only, so the
+ * Android device behind the same lease stays free for the next task's Android run. Claiming more
+ * than a run touches is how a warm pool turns into a queue.
  */
 export function claimDevicesFromEnv({
   pool,
   env = process.env,
   gate = null,
   force = false,
+  platform = null,
 } = {}) {
   const pair = pairFromEnv(env);
   if (pair.ios == null && pair.android == null) return null;
   const instance = pool ?? new DevicePool({ env });
-  return instance.claim({
+  const claim = instance.claim({
     pair,
     gate,
-    platform: env.NITRO_UI_LEASE_PLATFORM ?? 'both',
+    platform: intersectPlatforms(
+      platform ?? env.NITRO_UI_LEASE_PLATFORM ?? 'both',
+      env.NITRO_UI_LEASE_PLATFORM ?? 'both'
+    ),
     force,
   });
+  // The pool travels with the claim so the caller can release it without keeping a second object
+  // alive to remember which state file it wrote.
+  return claim == null ? null : { ...claim, pool: instance };
+}
+
+/** `both` ∩ `ios` is `ios`; two `both`s stay `both`. */
+function intersectPlatforms(a, b) {
+  if (a === b) return a;
+  if (a === 'both') return b;
+  if (b === 'both') return a;
+  // Two different platforms asked for: honour the narrower caller (the claim is for `a`).
+  return a;
 }

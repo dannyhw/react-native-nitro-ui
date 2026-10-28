@@ -40,6 +40,7 @@ import {
 import {
   DevicePool,
   EXAMPLE_APP_ID,
+  claimDevicesFromEnv,
   identifiersForPair,
   pairFromEnv,
   poolKeysForPair,
@@ -284,10 +285,13 @@ describe('pool keys', () => {
       ANDROID_ADB_SERVER_PORT: '5043',
       IOS_SIM_UDID: 'UDID-A',
     });
+    // The serial comes with it (from the port when the env does not name one), because a claim
+    // that records no serial is a device the pool cannot power off.
     expect(pair.android).toEqual({
       avd: 'nitro-ui-a',
       emulatorPort: 5574,
       adbPort: 5043,
+      serial: 'emulator-5574',
     });
     // An env with no lease in it names nothing, so a claim from a unit test is a no-op.
     expect(poolKeysForPair(pairFromEnv({}))).toEqual([]);
@@ -735,6 +739,99 @@ describe('claims', () => {
   it('does nothing when the environment names no devices', () => {
     const { pool } = fakePool({ home });
     expect(pool.claim({ pair: pairFromEnv({}), platform: 'both' })).toBeNull();
+  });
+});
+
+/**
+ * The gate's side of the protocol: `gate.mjs` claims through this helper, so the platform it
+ * passes - not just the lease - decides which device ends up marked in use.
+ */
+describe('claiming from the lease environment', () => {
+  let home;
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), 'nitro-ui-envclaim-'));
+  });
+
+  afterEach(() => {
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  const leaseEnv = {
+    NITRO_UI_LEASE_ID: 'X11-1',
+    NITRO_UI_LEASE_PLATFORM: 'both',
+    IOS_SIM_UDID: 'UDID-A',
+    ANDROID_AVD: 'nitro-ui-a',
+    EMULATOR_PORT: '5574',
+    ANDROID_ADB_SERVER_PORT: '5043',
+  };
+
+  const build = (over = {}) =>
+    new DevicePool({
+      home,
+      env: {},
+      devices: DEVICES,
+      // The pool a claim goes through; ops are irrelevant here (a claim writes state, it never
+      // touches a device), so an empty one keeps the case about the keys.
+      ops: {},
+      log: () => {},
+      now: () => NOW,
+      isPidAlive: () => false,
+      ...over,
+    });
+
+  it('claims only the platform the gate is running', () => {
+    const claim = claimDevicesFromEnv({
+      pool: build(),
+      env: leaseEnv,
+      platform: 'ios',
+      gate: 'harness:ios',
+    });
+    // An iOS harness run under a `both` lease must not mark the emulator busy: the next task's
+    // Android run would be refused a device nobody is using.
+    expect(claim.keys).toEqual(['ios:UDID-A']);
+    expect(claim.pool).toBeDefined();
+    expect(() => claim.pool.releaseClaim(claim)).not.toThrow();
+    expect(
+      readPool(home).devices.find((x) => x.key === 'ios:UDID-A').claims
+    ).toEqual([]);
+  });
+
+  it('claims both when the gate runs both', () => {
+    const claim = claimDevicesFromEnv({ pool: build(), env: leaseEnv });
+    expect(claim.keys.sort()).toEqual(['avd:nitro-ui-a', 'ios:UDID-A']);
+  });
+
+  it('claims nothing when the environment names no lease', () => {
+    // `bun run check`, a unit test, a CI runner: no lease in the environment, so the whole
+    // claim/release path must be a no-op rather than a half-named pair.
+    expect(claimDevicesFromEnv({ pool: build(), env: {} })).toBeNull();
+  });
+
+  it('refuses a device a live run already holds, and names the gate', () => {
+    const pool = build({ isPidAlive: (pid) => pid === 4242 });
+    claimDevicesFromEnv({
+      pool,
+      env: leaseEnv,
+      platform: 'android',
+      gate: 'harness:android',
+      force: false,
+      ...{},
+    });
+    pool.claim({
+      pair: pairFromEnv(leaseEnv),
+      platform: 'android',
+      pid: 4242,
+      gate: 'real-input:android',
+    });
+    expect(() =>
+      claimDevicesFromEnv({
+        pool,
+        env: leaseEnv,
+        platform: 'android',
+        gate: 'harness:android',
+      })
+    ).toThrow(/real-input:android/);
   });
 });
 
