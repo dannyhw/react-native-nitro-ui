@@ -756,17 +756,25 @@ export function summarizeGates({
  *   - the current branch's own ledger is passed separately (it is `entries`), so a
  *     gate is never reused from a ledger nobody is standing on.
  *
+ * Where a ledger came from is carried through as `source`, because the two kinds
+ * are not equally strong: `.gates/<branch>.jsonl` is the machine that ran it, and
+ * `docs/tasks/<ID>/gates.jsonl` is that file's committed copy - which is the only
+ * version that exists in the checkout where a merge gets confirmed. The fourth
+ * condition above is what makes the copy as good as the original for this
+ * question: a line whose commit is not in this history is refused whichever file
+ * it came from.
+ *
  * Several branches can hold a line on the same tree; the newest wins, with the
  * branch name as a tie-break so the choice does not depend on directory order.
  *
  * @param {object} options
- * @param {Array<{branch: string, entries: object[]}>} options.ledgers other
- *   branches' ledgers, in any order
+ * @param {Array<{branch: string, entries: object[], source?: string}>} options.ledgers
+ *   other branches' ledgers, in any order
  * @param {string | null} options.tree the full code tree being asked about
  * @param {(commit: string) => boolean} options.headIsAncestor proves `commit` is
  *   in the history of the tree being asked about (git, in `gate.mjs`)
  * @param {string} [options.gate] which gate may be reused
- * @returns {{branch: string, entry: object} | null}
+ * @returns {{branch: string, entry: object, source: string} | null}
  */
 export function findReusableCheck({
   ledgers = [],
@@ -790,7 +798,11 @@ export function findReusableCheck({
       }
       if (typeof entry.head !== 'string' || entry.head === '') continue;
       if (!headIsAncestor(entry.head)) continue;
-      candidates.push({ branch: ledger.branch, entry });
+      candidates.push({
+        branch: ledger.branch,
+        entry,
+        source: ledger.source ?? `.gates/${ledger.branch}.jsonl`,
+      });
       break;
     }
   }
@@ -855,11 +867,12 @@ export function decideNeed({
   const notes = [];
   if (reusedRow != null) {
     notes.push(
-      `check was satisfied by \`${reusedRow.reused.branch}\`'s ledger: it passed on ` +
-        `this exact code tree (${String(reusedRow.entry.tree ?? '?').slice(0, 12)}) ` +
-        `at ${String(reusedRow.entry.head ?? 'unknown HEAD').slice(0, 7)}, and that ` +
-        'commit is merged into this tree - the merge changed no code, so `check` is ' +
-        'not re-owed (see ORCHESTRATOR.md, "The loop" step 5)'
+      `check was satisfied by \`${reusedRow.reused.branch}\`'s ledger ` +
+        `(${reusedRow.reused.source}): it passed on this exact code tree ` +
+        `(${String(reusedRow.entry.tree ?? '?').slice(0, 12)}) at ` +
+        `${String(reusedRow.entry.head ?? 'unknown HEAD').slice(0, 7)}, and that ` +
+        'commit is merged into this tree - the merge changed no code, so `check` ' +
+        'is not re-owed (see ORCHESTRATOR.md, "The loop" step 5)'
     );
   }
   if (stage === 'review' && touchedPlatforms.length === 0) {
@@ -934,7 +947,13 @@ export function applyReusedCheckRow({
     trees,
   });
   if (candidate.state !== 'green') return { rows, reused: null };
-  const reused = { ...candidate, reused: { branch: reusedCheck.branch } };
+  const reused = {
+    ...candidate,
+    reused: {
+      branch: reusedCheck.branch,
+      source: reusedCheck.source ?? `.gates/${reusedCheck.branch}.jsonl`,
+    },
+  };
   return {
     rows: rows.map((row) => (row.gate === 'check' ? reused : row)),
     reused,

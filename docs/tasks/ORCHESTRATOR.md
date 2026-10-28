@@ -44,14 +44,20 @@ any machine. The live state is in `STATUS.md` (task table) and `RECOVERY.md`
 5. Merge (`git merge --no-ff task/<ID>-…`), confirm `bun run check` on the
    merged tree, push, and update `STATUS.md` / `RECOVERY.md` in the same push.
    "Confirm" is usually a look, not a re-run (X10): `need --for merge` accepts a
-   `check` that passed on an **identical code tree** from any branch ledger in
-   `.gates/`, provided that line's commit is an ancestor of the merged `HEAD`
-   (`git merge-base --is-ancestor`). A merge that brought in nothing but the
-   branch's own work produces a tree whose digest *is* the one that passed, so
-   re-running the sixteen steps would prove nothing new. The row then reads
-   `PASS (reused)` in `gate.mjs table`, and `need` names the branch and the
-   commit it borrowed. When `main` moved as well, the digests differ and the run
-   is owed as before. `check` only: a device gate is evidence about a binary
+   `check` that passed on an **identical code tree**, provided that line's commit
+   is an ancestor of the merged `HEAD` (`git merge-base --is-ancestor`). A merge
+   that brought in nothing but the branch's own work produces a tree whose digest
+   *is* the one that passed, so re-running the sixteen steps would prove nothing
+   new. It reads two places, and the note says which: the other branches'
+   `.gates/*.jsonl` in this checkout, and the `docs/tasks/<ID>/gates.jsonl`
+   committed by `gate.mjs export`. The second one is what actually applies here —
+   `.gates/` is gitignored, so the checkout where you confirm a merge has never
+   seen the worktree's ledger, while the export arrived with the merge commit.
+   The line is marked `PASS (reused)` in `gate.mjs table` with the branch and the
+   file named, so the borrow is visible rather than implied. When `main` moved as
+   well the digests differ and the run is owed as before, and a **squash** merge
+   is refused even though the code matches, because the commit the line names is
+   not in this history. `check` only: a device gate is evidence about a binary
    built on a particular machine and lease, and a review round is evidence about
    its own diff. `--no-reuse` asks the strict question when you do not want to
    take the rule's word for it.

@@ -212,14 +212,33 @@ describe('findReusableCheck (may a merge borrow this check?)', () => {
 
   it('accepts a pass on this exact tree whose commit is merged', () => {
     const found = findReusableCheck({
-      ledgers: [{ branch: 'task/x10', entries: [checkLine()] }],
+      ledgers: [
+        {
+          branch: 'task/x10',
+          source: '.gates/task/x10.jsonl',
+          entries: [checkLine()],
+        },
+      ],
       tree: TREE_A,
       headIsAncestor: ancestor,
     });
     expect(found).toEqual({
       branch: 'task/x10',
+      source: '.gates/task/x10.jsonl',
       entry: expect.objectContaining({ head: 'commit-1' }),
     });
+  });
+
+  it('carries the file a reused line came from, defaulting to its ledger path', () => {
+    // The note has to say which file the evidence is in: a committed task export
+    // is a copy, and a reviewer reading `task/x10`'s name should not have to work
+    // out which of the two they are looking at.
+    const found = findReusableCheck({
+      ledgers: [{ branch: 'task/x10', entries: [checkLine()] }],
+      tree: TREE_A,
+      headIsAncestor: ancestor,
+    });
+    expect(found.source).toBe('.gates/task/x10.jsonl');
   });
 
   it('refuses a red line', () => {
@@ -709,6 +728,52 @@ describe('gate.mjs need --for merge reuses a merged branch check', () => {
     expect(after.stdout).not.toContain('reused');
     expect(after.stdout).toContain('check — never run on this tree');
     expect(after.status).toBe(1);
+  }, 120_000);
+
+  it('reuses from the committed task export when no branch ledger survives', () => {
+    // The real flow: `main` is a different checkout, so `.gates/` holds nothing
+    // for the branch. `docs/tasks/<ID>/gates.jsonl` is the copy that arrived with
+    // the merge, and the ancestor proof is what makes it evidence rather than a
+    // claim copied from a report.
+    const dir = makeRepo();
+    branchThatPassedChecks(dir);
+    // Export, commit the export, wipe the working ledger, then merge.
+    const exported = runCli(dir, ['export', '--task', 'X10']);
+    expect(exported.status).toBe(0);
+    expect(
+      fs.existsSync(path.join(dir, 'docs', 'tasks', 'X10', 'gates.jsonl'))
+    ).toBe(true);
+    gitIn(dir, ['add', '-A']);
+    gitIn(dir, ['commit', '-qm', 'docs: X10 gate ledger']);
+    gitIn(dir, ['checkout', '-q', 'main']);
+    gitIn(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
+    fs.rmSync(path.join(dir, '.gates', `${BRANCH}.jsonl`), { force: true });
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).toContain(`reused from \`${BRANCH}\``);
+    expect(after.stdout).toContain('docs/tasks/X10/gates.jsonl');
+  }, 120_000);
+
+  it('will not reuse an exported check whose commit is not in this history', () => {
+    // The committed copy, on the merge that is not a merge: `--squash` produces
+    // the same code, so the export's tree digest matches this tree exactly, but
+    // the commit the line names is not an ancestor of HEAD. `--no-reuse` is not
+    // involved here - this is the rule refusing, not the escape hatch.
+    const dir = makeRepo();
+    branchThatPassedChecks(dir);
+    expect(runCli(dir, ['export', '--task', 'X10']).status).toBe(0);
+    gitIn(dir, ['add', '-A']);
+    gitIn(dir, ['commit', '-qm', 'docs: X10 gate ledger']);
+    gitIn(dir, ['checkout', '-q', 'main']);
+    gitIn(dir, ['merge', '-q', '--squash', BRANCH]);
+    gitIn(dir, ['commit', '-qm', 'feat: branch work (squashed)']);
+    // The export came in with the squash, and the tree really does match - the
+    // refusal below is the ancestry alone, which is what this proves.
+    const status = runCli(dir, ['status']);
+    expect(status.stderr).toContain(
+      `code tree ${ledgerIn(dir, BRANCH)[0].tree.slice(0, 12)}`
+    );
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).not.toContain('reused');
   }, 120_000);
 
   it('does not reuse across a squash merge, where the tree matches and the commit does not', () => {
