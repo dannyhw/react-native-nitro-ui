@@ -53,17 +53,29 @@ describe('the lease owns the device lifecycle', () => {
    *
    * @param {{androidUp?: boolean, iosUp?: boolean}} options
    */
-  /** What `pm clear` answers, in order, with the last one repeating. */
+  /**
+   * What `pm clear` answers, in order, with the last one repeating.
+   *
+   * Every pattern requires the word `shell`, because that is the whole of M1: `adb -s X pm clear Y`
+   * is not a command — adb answers `unknown command pm` on stderr with empty stdout and exit 1,
+   * which this table would happily have reported as "the device refused to clear". Requiring
+   * `shell` in the match means a reset that drops it matches nothing, prints nothing, and the
+   * cases that assert a successful reset go red instead of quietly passing.
+   */
   const pmClearLines = {
-    success: [`  *'pm clear'*) printf 'Success' ;;`],
+    success: [`  *'shell pm clear'*) printf 'Success' ;;`],
     settle: [
       // The counter file lives next to the calls file, so a test run in a fresh home starts clean.
-      `  *'pm clear'*)`,
+      `  *'shell pm clear'*)`,
       `      n=$(cat "$NITRO_UI_FAKE_CALLS.count" 2>/dev/null || echo 0)`,
       `      n=$((n+1)); printf '%s' "$n" > "$NITRO_UI_FAKE_CALLS.count"`,
       `      if [ "$n" -lt 3 ]; then printf 'Failed'; else printf 'Success'; fi ;;`,
     ],
-    fail: [`  *'pm clear'*) printf 'Failed' ;;`],
+    fail: [`  *'shell pm clear'*) printf 'Failed' ;;`],
+    // The device-side command refusing, as it does for a package that is not installed.
+    unknownPackage: [
+      `  *'shell pm clear'*) printf 'Error: unknown package\\n' ; exit 1 ;;`,
+    ],
   };
 
   const tools = ({
@@ -242,7 +254,7 @@ describe('the lease owns the device lifecycle', () => {
       'avd:nitro-ui-a',
       `ios:${UDID_A}`,
     ]);
-    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} pm clear`);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} shell pm clear`);
   });
 
   it('starts a device that is down, and records the boot on the lease', () => {
