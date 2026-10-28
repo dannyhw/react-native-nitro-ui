@@ -10,6 +10,7 @@ import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { findImplementation } from './implementations';
 import { parsePlan } from './plan';
+import type { BenchPlatform } from './plan';
 import { probe, probeClock } from './probe';
 import {
   LAUNCH_SETTLE_MS,
@@ -35,7 +36,10 @@ type Phase = 'idle' | 'running' | 'done' | 'skipped';
  * the next launch. Release build, so there is no Metro and no dev menu.
  */
 export function BenchApp() {
-  const plan = useMemo(() => parsePlan(probe.launchPlan()), []);
+  const plan = useMemo(
+    () => parsePlan(probe.launchPlan(), Platform.OS as BenchPlatform),
+    []
+  );
   const implementation = useMemo(
     () => (plan === null ? null : findImplementation(plan.implementation)),
     [plan]
@@ -127,6 +131,8 @@ function BenchRunner({
         platform: `${Platform.OS} ${String(Platform.Version)}`,
         probeClock,
         mountSignal: plan.mountSignal,
+        mountTimeoutMs: plan.mountTimeoutMs,
+        presentedTimeoutMs: plan.presentedTimeoutMs,
       });
 
       const emit = (record: BenchRecord) => {

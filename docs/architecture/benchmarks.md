@@ -65,6 +65,8 @@ Useful flags:
 | --------------------- | --------------------------------------------------------------- |
 | `--only <impl,impl>`  | Restrict the implementation dimension                           |
 | `--component <name>`  | Restrict the run to one component's cells                       |
+| `--scenario <name>`   | Restrict it to one scenario's cells, e.g. `mount.date-picker`    |
+| `--n <value>`         | Restrict it to cells measured at that instance count             |
 | `--launches N`        | Overrides the launches per cell (for a fast smoke test)         |
 | `--skip-build`        | Reuse the installed release artifact instead of rebuilding       |
 | `--prebuild`          | Force `expo prebuild --clean` first                              |
@@ -74,10 +76,93 @@ Useful flags:
 | `--force`             | Override a `--update-baseline` refusal (local experiments only)  |
 | `--shutdown`          | Shut down a device the runner itself booted when it finishes     |
 | `--perf-marks`        | Diagnostic run: turn on the library's own native perf marks    |
+| `--timeout-mount <ms>` | How long each iteration waits for the mount signal (default 1500) |
+| `--timeout-presented <ms>` | …and for the presenting frame (default 8 000 on iOS, 2 000 on Android) |
+
+The two `--timeout-*` flags exist to answer one question a results file otherwise cannot:
+**did that arm's frame never come, or did it come later than we were willing to wait?**
+A4 needed it - `@expo/ui`'s DatePicker at N=200 on one machine arrived on 55 of 160 and 87
+of 160 iterations at the 2 000 ms wait of the time (66 % and 46 % lost), and a count of nulls
+cannot tell a slow arm from a dead probe. Three things make that work, and all three are
+load-bearing:
+
+- the value rides the **launch string** (`…:presentedTimeout=40000`), not an env var: a
+  release build has no env, and one launch must be fully described by the string the
+  runner passed it;
+- each platform's native "this window never drew" backstop is a **ceiling**, not the wait:
+  90 s on iOS, 2 s on Android. It used to be a hardcoded 2 s on both, so raising only the JS
+  timeout changed nothing - every long wait was answered `-1` by the ceiling at 2 s. Which
+  is also why the two platforms cap a requested wait differently (80 s on iOS, 1 900 ms on
+  Android): a request at or above the ceiling would be recorded as a timeout the run never
+  asked for;
+- a run that asks for anything other than its platform's default timeout **cannot mint a
+  baseline**, in either direction: a sample that arrives keeps its value, but *which*
+  samples arrive moves the median. It is a diagnostic like `--perf-marks`, and says so at
+  startup. Every baseline records the rule it was minted under in its own `timeouts` block,
+  read back from what the app reported - a run whose app reported nothing is refused rather
+  than stamped with today's default.
+
+The defaults themselves are a measured rule, not a habit, and they are **per platform**
+(`BENCH_DEFAULT_TIMEOUTS` in `bench/src/plan.ts` is the one place either number is written).
+On iOS `presented` waits 8 000 ms because A4 measured the same cell's first frame at p50
+2.7-3.0 s on the canonical iPhone 17 simulator - above the 2 000 ms it used to wait - with
+the slowest iOS frame measured anywhere at 3 565 ms (3 850 ms in the 40 s diagnostic);
+`mounted` stays at 1 500 ms on both because the slowest mount measured was 226 ms. **Android
+keeps 2 000 ms**, because the evidence for 8 s is iOS evidence and the Android cells that
+lose presenting samples do not have a frame between 2 s and 8 s: the 8 affected
+`update.progress`/`update.picker` `@expo/ui` cells await both signals and time out on every
+iteration, because those arms never produce a Fabric transaction there at all (A3, "never
+mounted"). On that shape a longer wait cannot recover a sample; it only inflates the CPU
+rows bracketing the wait and adds ~2.7 h to a full Android run.
+
+Raising a wait is **value-neutral for every cell that was already complete**: a sample that
+arrived inside 2 s arrives with the identical stamp under 8 s, so its median cannot move.
+Only cells that were losing samples change, and they change towards the truth, since the
+dropped iterations are the slow ones. That is why iOS's raise does not invalidate the iOS
+tables minted under the old wait: a committed baseline has no incomplete cells in the rows
+that gate (the mint refuses or records them), and the iOS cells that were losing samples are
+the two `mount.date-picker` reference cells that the completeness rule keeps out of the file.
+Android needs no such argument - nothing on Android changed.
+
+The per-launch wall-clock budget follows that platform's defaults and any longer wait a run
+asks for (`launchBudgetMs`, and `DEFAULT_SCENARIO_BUDGETS` / `TIMEOUTS` per platform): an
+iteration of `mount` waits for two mount signals and one presenting frame, so a default iOS
+launch can spend 25 x (2 x 1 500 + 8 000) = 275 s waiting - which is why iOS's budget went
+180 s -> 300 s (420 s for `leak`) - and a 40 s presented wait adds ~800 s more on top.
+Android's table is the pre-A4 one (180 s, 300 s for `leak`) because its worst default wait is
+25 x (2 x 1 500 + 2 000) = 125 s; a launch that asks for longer widens it the same way.
+
+### When a signal does not arrive
+
+Every iteration that gets no `mountedNs`/`presentedNs` records **why**, in that
+iteration's `missing` array: `probe-timeout` (with the timeout in force and how long the
+wait actually ran), `not-awaited` (the cell declares `mountSignal: false`, so the null is
+by construction, not a lost signal), or `probe-error` (the probe threw or answered
+unparseably, with its message). Those reasons are tallied per cell (`cell.missing`),
+printed per launch in the progress line (`80 iterations, 80 presented probe-timeout
+(2000 ms)`) and per cell in the report, and quoted by a baseline refusal. A cell key never
+carries a timeout, so a diagnostic run lands in the same rows as a normal one - only its
+*values* are not comparable, and `baselineBlockers()` is what enforces that.
 
 The runner restores Android animation scales it reset, and `--shutdown` covers
 the "I booted it, I clean it up" case; a device that was already up is left
 alone.
+
+`--scenario` and `--n` exist for exactly the run above: once the reasons say
+`probe-timeout`, the next question is "how long would that frame have taken?", and that
+needs one cell, four arms and a long wait - not three hours of plan:
+
+```sh
+node scripts/bench/run.mjs --platform ios --plan full --component date-picker \
+  --scenario mount.date-picker --n 200 --launches 8 --timeout-presented 40000
+```
+
+`--plan full` still supplies the cell list (so an unmeasured cell cannot sneak in), the
+three filters cut it to one cell, and the reported numbers land in the same cell keys as a
+normal run - they are simply not mintable. `--update-baseline` refuses a narrowed schedule
+before booting anything: a baseline file *is* the whole table `--check` gates against, and
+minting one from one cell would leave the other 41 reading `not measured in base` - which
+looks like a passing gate. `--force` overrides that too, for a local experiment.
 
 `--check` and `--update-baseline` need `NITRO_UI_MACHINE_LABEL`: baselines are keyed
 by machine as well as device, so without a usable label both refuse before the run
@@ -264,9 +349,19 @@ run, so `--check` gates on that machine, on both platforms. On iOS more of the c
 are noise-suppressed (their own within-run spread is over 10 %) than on Android, so the
 iOS gate is real but narrower. Neither baseline records a leak slope — no arm climbed
 monotonically in either run — so the leak cells read `new arm` under `--check`.
-`maintainer-mac-2` has none yet, so there `--check` refuses until that machine mints
-its own. The `renders.json` gate is separate, live, and committed - it counts JS
-renders, so it needs no machine directory.
+`maintainer-mac-2` has both files too: its iOS one was refused at first, over two `@expo/ui`
+DatePicker cells, which is what A4's completeness amendment and the probe investigation are
+about — the mint rule was the symptom and a wait shorter than the frame was the cause. The
+`renders.json` gate is separate, live, and committed - it counts JS renders, so it needs no
+machine directory.
+
+Completeness is judged **per arm** (D9, A4 amendment): an incomplete metric on the gated
+`nitro-ui` arm or on the `rn-core` control refuses a mint, because those carry verdicts,
+while the same defect on a comparison arm (the two `expo-ui-*` references - not our code)
+costs that one
+cell its row and is recorded in the file's `skippedCells` with its metric, sample counts
+and recorded reasons. A comparison arm informs review and gates nothing, so its lost
+frames are not a reason a machine ends up with no baseline at all.
 
 The gate exists once (`gate()` in `scripts/bench/lib.mjs`) and is used identically
 by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:
@@ -501,7 +596,7 @@ Raw results are uploaded as artifacts instead of going into git.
 | `new com.margelo.nitro.nitroui.<word>()` in `PackageList.java` | autolinking regex-matches the ReactPackage declaration in `android/src/main/.../NitroUiPackage.kt`; prose that reads like a class declaration gets picked up. Delete the generated `bench/android` (`--prebuild`) after fixing the wording. `bun run autolinking:check` covers it. |
 | `cmd: Can't find service: settings` right after boot | The runner retries; if it persists, the emulator is still booting. |
 | `mount` crashes on iOS with a promise mutex abort | A freed frame-context; contexts are `shared_ptr` captured by both the display-link and fallback timers. |
-| `presented` missing on most samples (`missingPresented` high) | A metric over 10 % missing prints `n/a` and is ungated, so this row means "go look", not "read the survivors". Until T02 round 4 the dominant cause was the Android probe itself: its vsync filter rejected the very frame that presents a Fabric mount, and only cells whose screen invalidated *again* (the Switch's thumb animation on `update`) ever produced a sample - static `mount` cells timed out at ~80/80 on every arm, which is deterministic, not selective. Check the build predates that fix before chasing machine causes: the listener needs a focused window, and both platforms give up after 2 s (`FRAME_TIMEOUT_MS`) and answer `-1`, so confirm the app was in the foreground and re-run. |
+| `presented` missing on most samples (`missingPresented` high) | A metric over 10 % missing prints `n/a` and is ungated, so this row means "go look", not "read the survivors". Until T02 round 4 the dominant cause was the Android probe itself: its vsync filter rejected the very frame that presents a Fabric mount, and only cells whose screen invalidated *again* (the Switch's thumb animation on `update`) ever produced a sample - static `mount` cells timed out at ~80/80 on every arm, which is deterministic, not selective. Check the build predates that fix before chasing machine causes: the listener needs a focused window, and each platform gives up at its own presentation ceiling (`PRESENTATION_CEILING_MS` on Android, `kBenchPresentationCeilingSeconds` on iOS - 2 s and 90 s respectively) and answers `-1`, so confirm the app was in the foreground and re-run. |
 | Android launch ~5-10x slower than usual, frame signals missing | The AVD may be booting without a host GPU (`hw.gpu.enabled=no` in `~/.android/avd/<name>.avd/config.ini` - `avdmanager create` can leave it, and the runner does not boot Android devices, so nothing corrects it). Boot it yourself with `emulator -avd <name> -port <port> -gpu host`. |
 | `--update-baseline` refused | The tree was dirty, the run had `problems`, or the machine was busy: more than 10 % of the run's load samples over 0.5 x the core count (R4). The refusal prints the median, the count and the share, so you can tell a busy run from one noisy minute. When it refuses *before* the run starts, the machine was already over the ceiling - wait for it to settle; `--force` is for experiments only. |
 | `--check` says no baseline | Baselines are per machine *and* canonical device (`bench/baselines/README.md`). A machine that has not minted one yet has nothing to gate against: use `--compare <ref>`, or mint it with `--update-baseline`. |

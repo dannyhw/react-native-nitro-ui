@@ -91,15 +91,147 @@ const NO_MOUNT_SIGNAL: readonly string[] = [
 ];
 
 /**
- * Parse the `scenario:implementation:N[:marks]` launch argument.
- * Returns null for an unconfigured launch, which renders the idle screen.
+ * The launch-flag names the parser accepts, and the defaults they override.
  *
- * The optional 4th token asks for the runtime's own native perf marks
- * (`bun bench --perf-marks`). It is deliberately part of the launch argument
- * rather than an env var: a release build has no env, and one launch must be
- * fully described by the string the runner passed it.
+ * All four live here, and `probe.ts` imports the defaults from here, because this
+ * file must stay free of the probe: `probe.ts` creates the native hybrid object at
+ * import time, and a plan string has to parse - and reject a bad flag loudly - before
+ * anything touches Nitro.
  */
-export function parsePlan(raw: string): BenchPlan | null {
+export const MOUNT_TIMEOUT_FLAG = 'mountTimeout';
+export const PRESENTED_TIMEOUT_FLAG = 'presentedTimeout';
+
+/** A launch plan is parsed for one platform, because its defaults are per platform. */
+export type BenchPlatform = 'ios' | 'android';
+
+/**
+ * How long a launch waits for each native signal before calling it missing, **per
+ * platform** (A4).
+ *
+ * These are the only place the defaults live: the runner's launch-budget table
+ * (`DEFAULT_SCENARIO_BUDGETS` in `scripts/bench/lib.mjs`), the rule a baseline is
+ * recorded under, and the ceiling on a requested timeout all follow them, so changing
+ * a number here is answered by a red test rather than by a table that means something
+ * else. `scripts/bench/lib.mjs` restates them because `scripts/` cannot import the
+ * app's TypeScript, and a test pins the two together.
+ *
+ * Both are overridable per launch (`scenario:impl:N:presentedTimeout=40000`) because
+ * "is the sample missing because it never happened, or because we stopped asking?" can
+ * only be answered by asking for longer. A run that asks for anything other than the
+ * platform's default is stamped `presentedTimeoutMs` in its results file and is
+ * diagnostic, not baseline material: a sample that arrives keeps its value, but *which*
+ * samples arrive moves the median.
+ *
+ * The native side also refuses to wait forever for a presenting frame (iOS: the safety
+ * timer in `BenchProbeArmPresentation`; Android: `PRESENTATION_CEILING_MS`), so a wait
+ * above that ceiling is answered `-1` by the ceiling instead - which is why the cap
+ * below is per platform too. Both are documented next to their
+ * `dispatch_after`/`postDelayed`.
+ */
+export interface BenchTimeouts {
+  /** Default wait for the mount signal. */
+  mountTimeoutMs: number;
+  /** Default wait for the presenting frame. */
+  presentedTimeoutMs: number;
+  /** The native presentation backstop, so a requested wait can stay below it. */
+  presentationCeilingMs: number;
+  /** The longest wait this platform may be asked for, one tick below its backstop. */
+  maxRequestedTimeoutMs: number;
+}
+
+export const BENCH_DEFAULT_TIMEOUTS: Record<BenchPlatform, BenchTimeouts> = {
+  ios: {
+    mountTimeoutMs: 1500,
+    /*
+     * 8 000 ms, raised from 2 000 by A4 on measured data (`docs/tasks/
+     * A4-ios-baseline-mac2.report.md`): on the canonical iPhone 17 simulator, 200
+     * `@expo/ui` DatePickers present their first frame at p50 ~2.7-3.0 s - *above* the
+     * old 2 s - so only 56 of 160 and 69 of 160 measured iterations produced a
+     * presenting sample, and two reference cells were unusable. The worst frame in
+     * A4's iOS runs was 3 565 ms (3 850 ms in the 40 s diagnostic run), so 8 s leaves
+     * roughly a doubling of the slowest measurement before samples drop again.
+     *
+     * The raise is value-neutral for every iOS cell that was already complete: an
+     * iteration that answered inside 2 s answers with the identical stamp under 8 s, so
+     * the median cannot move. It changes only cells that were losing samples - which is
+     * the point, and why mac-1's committed iOS table stays comparable.
+     */
+    presentedTimeoutMs: 8000,
+    presentationCeilingMs: 90_000,
+    /*
+     * 80 s: below the platform's 90 s backstop, and long enough to be 10x the default
+     * wait - which is what the time-to-present diagnostic needs. A wall-clock `mount`
+     * launch is 25 iterations x (mount + presented) plus pacing, so a caller that asks
+     * near the cap also widens the runner's per-launch budget (`launchBudgetMs`) -
+     * exactly what the A4 diagnostic run does.
+     */
+    maxRequestedTimeoutMs: 80_000,
+  },
+  android: {
+    mountTimeoutMs: 1500,
+    /*
+     * 2 000 ms - **unchanged from before A4**, deliberately (review M1, the
+     * orchestrator's call): the longer wait is scoped to iOS.
+     *
+     * The 8 000 ms figure is iOS evidence only. On Android the cells that lose
+     * presenting samples are 8 `update.progress`/`update.picker` cells on the two
+     * `@expo/ui` arms (A3: "never mounted" - no Fabric transaction at all) plus the 4
+     * `rn-core` cells that are not awaited; waiting 6 s longer per iteration does not
+     * make a frame that never comes, it only inflates the CPU rows that bracket the
+     * wait (`opBatch` in `bench/src/runner.ts`, ~2.7x on those rows) and adds ~2.7 h to
+     * an Android full run at ~80 % of the per-launch budget. Android's table and run
+     * times therefore stay exactly as minted, and the native backstop stays at 2 s so
+     * it cannot silently replace a wait the runner did not ask for.
+     */
+    presentedTimeoutMs: 2000,
+    presentationCeilingMs: 2_000,
+    /*
+     * One tick below the backstop: a requested wait at or above it would be answered
+     * `-1` by the native timer and recorded as a timeout the run never asked for. That
+     * is precisely the A4 root cause on this platform, so the app-side parser refuses
+     * it rather than measuring the wrong thing.
+     */
+    maxRequestedTimeoutMs: 1_900,
+  },
+};
+
+/** The defaults for one platform, or an error naming the platforms that have any. */
+export function defaultTimeoutsFor(platform: BenchPlatform): BenchTimeouts {
+  const defaults = BENCH_DEFAULT_TIMEOUTS[platform];
+  if (defaults == null) {
+    throw new Error(
+      `no default signal timeouts for platform "${String(platform)}" (known: ${Object.keys(
+        BENCH_DEFAULT_TIMEOUTS
+      ).join(', ')})`
+    );
+  }
+  return defaults;
+}
+
+/**
+ * Parse the `scenario:implementation:N[:flags]` launch argument, where `flags` is a
+ * comma-separated list of:
+ *
+ * - `marks` - ask the runtime for its own native perf marks (`bun bench --perf-marks`);
+ * - `presentedTimeout=<ms>` - how long to wait for the presenting frame;
+ * - `mountTimeout=<ms>` - how long to wait for the mount signal.
+ *
+ * They are part of the launch argument rather than an env var because a release build
+ * has no env, and one launch must be fully described by the string the runner passed
+ * it. The timeouts are here at all because "this arm never draws" and "this arm draws
+ * slower than we wait" are the same null in the results file otherwise (A4).
+ *
+ * `platform` is required rather than sniffed here: the defaults and the cap on a
+ * requested wait are per platform (A4/M1), and this file stays free of `react-native`
+ * so that parsing - and rejecting a bad flag loudly - does not pull in the native
+ * module. A caller that cannot name its platform gets an error, not iOS's numbers.
+ *
+ * Returns null for an unconfigured launch, which renders the idle screen.
+ */
+export function parsePlan(
+  raw: string,
+  platform: BenchPlatform
+): BenchPlan | null {
   if (raw.length === 0) {
     return null;
   }
@@ -129,10 +261,48 @@ export function parsePlan(raw: string): BenchPlan | null {
       `NITRO_BENCH plan "${raw}" has a non-negative integer count`
     );
   }
-  if (flags != null && flags !== 'marks') {
-    throw new Error(
-      `NITRO_BENCH plan "${raw}" has an unknown flag "${flags}" (known: marks)`
-    );
+  const {
+    mountTimeoutMs: defaultMount,
+    presentedTimeoutMs: defaultPresented,
+    maxRequestedTimeoutMs: maxMs,
+  } = defaultTimeoutsFor(platform);
+  let perfMarks = false;
+  let mountTimeoutMs = defaultMount;
+  let presentedTimeoutMs = defaultPresented;
+  for (const flag of (flags ?? '').split(',').map((part) => part.trim())) {
+    if (flag === '') {
+      continue;
+    }
+    if (flag === 'marks') {
+      perfMarks = true;
+      continue;
+    }
+    const [name, value, extra] = flag.split('=');
+    const ms = Number(value);
+    if (
+      extra != null ||
+      value == null ||
+      value === '' ||
+      !Number.isFinite(ms) ||
+      ms < 1 ||
+      ms > maxMs
+    ) {
+      throw new Error(
+        `NITRO_BENCH plan "${raw}" has an unknown or malformed flag "${flag}" ` +
+          `(known: marks, ${MOUNT_TIMEOUT_FLAG}=<1..${String(maxMs)}>, ` +
+          `${PRESENTED_TIMEOUT_FLAG}=<1..${String(maxMs)}>)`
+      );
+    }
+    if (name === MOUNT_TIMEOUT_FLAG) {
+      mountTimeoutMs = ms;
+    } else if (name === PRESENTED_TIMEOUT_FLAG) {
+      presentedTimeoutMs = ms;
+    } else {
+      throw new Error(
+        `NITRO_BENCH plan "${raw}" has an unknown flag "${name}" ` +
+          `(known: marks, ${MOUNT_TIMEOUT_FLAG}, ${PRESENTED_TIMEOUT_FLAG})`
+      );
+    }
   }
   const [action, component] = halves;
   return {
@@ -142,6 +312,8 @@ export function parsePlan(raw: string): BenchPlan | null {
     implementation,
     n,
     mountSignal: !NO_MOUNT_SIGNAL.includes(`${scenario}:${implementation}`),
-    perfMarks: flags === 'marks',
+    perfMarks,
+    mountTimeoutMs,
+    presentedTimeoutMs,
   };
 }

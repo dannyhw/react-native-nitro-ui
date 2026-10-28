@@ -53,6 +53,7 @@ import {
 } from './devices.mjs';
 import {
   ARMS_WITHOUT_COMPONENT,
+  baselineTimeoutsFor,
   LAUNCHES_PER_CELL,
   MARK_CAPABLE_IMPLEMENTATIONS,
   PLANS,
@@ -64,11 +65,16 @@ import {
   buildSchedule,
   createLoadSampler,
   isCompatibleBaseline,
+  launchBudgetMs,
   launchPlanString,
   loadBlocker,
+  narrowingProblem,
+  parseTimeoutFlags,
+  timeoutRuleProblem,
+  requestedTimeouts,
   resultsFileName,
+  summarizeMissingReasons,
   componentOf,
-  scenarioActionOf,
 } from './lib.mjs';
 import {
   labelPreFlightProblem,
@@ -91,11 +97,34 @@ import {
  * Wall-clock budget per launch, by scenario. Generous on an idle machine, so
  * hitting it means something is wrong, not that the component is slow.
  */
+/**
+ * The wall-clock budget for one launch, by platform and scenario action.
+ *
+ * A budget has to exceed the most a launch can *legitimately* spend waiting for signals,
+ * or a slow arm is killed as "stalled" for a reason the runner itself chose - and a killed
+ * launch loses all 20 of its iterations' data, which is strictly worse than the 20 recorded
+ * `probe-timeout` reasons it replaces. That ceiling is the platform's default waits times
+ * the iterations of a launch: `mount` waits twice per iteration (its own signal, then the
+ * teardown's) and once for the presenting frame, so 25 iterations at iOS's 1 500/8 000 ms
+ * is 275 000 ms of possible waiting (A4 raised iOS's presented wait from 2 000 ms, at which
+ * point 180 000 was no longer enough). Android keeps the pre-A4 table because its waits
+ * never changed (review M1): 25 iterations at 1 500/2 000 ms is 125 000 ms, inside 180 000.
+ * The `leak` scenario allocates 200 instances per iteration and does not wait for signals at
+ * all, so it keeps its own larger allowance for the work rather than the waiting.
+ */
 const TIMEOUTS = {
-  mount: 180_000,
-  update: 180_000,
-  memory: 180_000,
-  leak: 300_000,
+  ios: {
+    mount: 300_000,
+    update: 300_000,
+    memory: 300_000,
+    leak: 420_000,
+  },
+  android: {
+    mount: 180_000,
+    update: 180_000,
+    memory: 180_000,
+    leak: 300_000,
+  },
 };
 
 // A machine shared with other emulators or another agent's build can starve a
@@ -103,8 +132,10 @@ const TIMEOUTS = {
 // laptop turn a bench run into a wall of timeouts.
 const overrideSeconds = Number(process.env.BENCH_LAUNCH_TIMEOUT_S);
 if (Number.isFinite(overrideSeconds) && overrideSeconds > 0) {
-  for (const scenario of Object.keys(TIMEOUTS)) {
-    TIMEOUTS[scenario] = overrideSeconds * 1000;
+  for (const platformBudgets of Object.values(TIMEOUTS)) {
+    for (const scenario of Object.keys(platformBudgets)) {
+      platformBudgets[scenario] = overrideSeconds * 1000;
+    }
   }
 }
 
@@ -404,15 +435,15 @@ function parseNdjson(text) {
   return records;
 }
 
-async function runLaunch(target, entry) {
+async function runLaunch(target, entry, platform) {
   const started = Date.now();
   let deadChecks = 0;
   const handle = await target.run(entry);
   const expected = launchPlanString(entry);
   // Keyed by the *action*, because a scenario cell carries its component
   // (`mount.slider`): the budget belongs to what the launch does, not to which
-  // control it mounts.
-  const budget = TIMEOUTS[scenarioActionOf(entry.scenario)] ?? 180_000;
+  // control it mounts - plus any longer signal waits this launch was asked for.
+  const budget = launchBudget(entry, platform);
   for (;;) {
     const text = target.read(handle);
     if (text.includes('"kind":"end"')) {
@@ -471,6 +502,26 @@ async function runLaunch(target, entry) {
   }
 }
 
+/**
+ * The wall-clock budget for one launch, widened by whatever signal waits that launch
+ * was asked to make.
+ *
+ * The budgets above assume that platform's default waits: an iteration of `mount` waits
+ * up to `mount` + `presented` for its own two signals and again `mount` in the teardown
+ * that follows, so 25 iterations already contain 125 s of waiting on Android and 275 s on
+ * iOS. Ask for a 40 s presenting wait and the same launch would be killed as *stalled*
+ * for a reason the runner itself introduced - and a killed launch becomes a `problem`, a
+ * worse record than the slow sample it was chasing. An explicit `BENCH_LAUNCH_TIMEOUT_S`
+ * still wins: that override exists precisely to set the budget by hand.
+ */
+function launchBudget(entry, platform) {
+  return launchBudgetMs(entry, {
+    platform,
+    scenarioBudgets: TIMEOUTS,
+    overrideSeconds,
+  });
+}
+
 function summarize(records) {
   const skipped = records.find((record) => record.kind === 'skip');
   if (skipped != null) {
@@ -479,10 +530,10 @@ function summarize(records) {
   const iterations = records.filter(
     (record) => record.kind === 'iter' && !record.warmup
   ).length;
-  const blind = records.filter(
-    (record) => record.kind === 'iter' && record.mountedNs == null
-  ).length;
-  return `${String(iterations)} iterations${blind > 0 ? `, ${String(blind)} without a mount signal` : ''}`;
+  // Missing signals with their reason codes, so a slow arm shows up in the run's own
+  // progress line as it happens instead of four hours later in the mint's refusal.
+  const notes = summarizeMissingReasons(records);
+  return `${String(iterations)} iterations${notes === '' ? '' : `, ${notes}`}`;
 }
 
 /**
@@ -493,7 +544,7 @@ function summarize(records) {
  * whose launches each outlast the sampling interval it is the only sampling there
  * is.
  */
-async function drive({ target, schedule, sample = () => {} }) {
+async function drive({ target, schedule, platform, sample = () => {} }) {
   const records = [];
   const problems = [];
   for (let index = 0; index < schedule.length; index++) {
@@ -504,7 +555,7 @@ async function drive({ target, schedule, sample = () => {} }) {
       `[${String(index + 1)}/${String(schedule.length)}] ${label} ... `
     );
     try {
-      const result = await runLaunch(target, entry);
+      const result = await runLaunch(target, entry, platform);
       records.push(
         ...result.records.map((record) => ({ ...record, launch: entry.launch }))
       );
@@ -562,6 +613,17 @@ export async function main(argv) {
     return;
   }
 
+  const timeouts = parseTimeoutFlags(
+    argv,
+    (name) => flag(argv, name),
+    platform
+  );
+  if (timeouts.problem != null) {
+    log(timeouts.problem);
+    process.exitCode = 2;
+    return;
+  }
+
   // Print what this run would resolve and whether it would be refused, then stop:
   // no boot, no build, no measurement (`scripts/bench/dry-run.mjs`). Placed before
   // the label and load refusals below because answering those questions *is* the
@@ -598,13 +660,60 @@ export async function main(argv) {
   // their ratios are same-run pairs, and a busy machine is information there, not
   // a disqualification.
   if (argv.includes('--update-baseline') && !argv.includes('--force')) {
+    const preflight = [];
     const blocker = loadBlocker({
       loadavg1: os.loadavg()[0] ?? null,
       cpuCount: os.cpus().length,
     });
     if (blocker != null) {
+      preflight.push(blocker);
+    }
+    // Same fail-fast reasoning for a narrowed schedule: a filtered run cannot mint the
+    // table `--check` gates against, and finding that out after three hours of device
+    // time is the same waste. Both numbers come from the real builder so arm scopes and
+    // any filter added later are counted, not re-derived here.
+    const filters = {
+      only: flag(argv, '--only'),
+      component: flag(argv, '--component'),
+      scenario: flag(argv, '--scenario'),
+      n: argv.includes('--n') ? Number(flag(argv, '--n')) : null,
+    };
+    const narrowed = narrowingProblem({
+      scheduled: buildSchedule({
+        plan,
+        launches,
+        perfMarks: argv.includes('--perf-marks'),
+        platform,
+        ...filters,
+      }).length,
+      wholePlan: buildSchedule({
+        plan,
+        launches,
+        perfMarks: argv.includes('--perf-marks'),
+        platform,
+      }).length,
+      filters,
+    });
+    if (narrowed != null) {
+      preflight.push(narrowed);
+    }
+    // Same for the waiting rule: the runner's own startup line calls any `--timeout-*`
+    // run a diagnostic that "cannot mint a baseline", so a mint that asks for a
+    // non-default wait has to be refused - and refusing it after four hours of device
+    // time is the waste this preflight exists to prevent (review N1).
+    const waitingProblem = timeoutRuleProblem({
+      platform,
+      mountTimeoutMs: timeouts.mountTimeoutMs,
+      presentedTimeoutMs: timeouts.presentedTimeoutMs,
+    });
+    if (waitingProblem != null) {
+      preflight.push(waitingProblem);
+    }
+    if (preflight.length > 0) {
       log(
-        `--update-baseline refused before the run started (pass --force to override):\n  - ${blocker}`
+        `--update-baseline refused before the run started (pass --force to override):\n${preflight
+          .map((reason) => `  - ${reason}`)
+          .join('\n')}`
       );
       process.exitCode = 2;
       return;
@@ -664,8 +773,22 @@ export async function main(argv) {
     only: flag(argv, '--only'),
     perfMarks,
     component,
+    scenario: flag(argv, '--scenario'),
+    n: argv.includes('--n') ? Number(flag(argv, '--n')) : null,
     platform,
+    mountTimeoutMs: timeouts.mountTimeoutMs,
+    presentedTimeoutMs: timeouts.presentedTimeoutMs,
   });
+  if (timeouts.mountTimeoutMs != null || timeouts.presentedTimeoutMs != null) {
+    const rule = baselineTimeoutsFor(platform);
+    log(
+      `Timeouts:  mount ${String(
+        timeouts.mountTimeoutMs ?? rule.mountTimeoutMs
+      )} ms, presented ${String(
+        timeouts.presentedTimeoutMs ?? rule.presentedTimeoutMs
+      )} ms - DIAGNOSTIC: which samples arrive depends on this rule, so the run cannot mint a baseline (launchBudget widens each launch's budget by the extra wait)`
+    );
+  }
 
   // An arm with no cell for this platform's version of the component is a
   // missing row in the table, not a slow one, so say which rows to expect.
@@ -713,6 +836,7 @@ export async function main(argv) {
     ({ records, problems } = await drive({
       target,
       schedule,
+      platform,
       sample: () => load.sample(),
     }));
   } finally {
@@ -741,6 +865,14 @@ export async function main(argv) {
     launches,
     perfMarks,
     art,
+    /**
+     * The waiting rule this run measured under (A4). Read back from the cells rather
+     * than echoed from the flags, so a run whose app binary predates the launch flag
+     * cannot claim a timeout it never applied - the problem below compares the two and
+     * says so. Zero means "nothing recorded", which is what a run of an app built
+     * before the flag looks like, and `baselineBlockers()` refuses to mint from it.
+     */
+    timeouts: requestedTimeouts({ cells }),
     clock: Object.values(cells)[0]?.clock ?? null,
     createdAt: new Date().toISOString(),
     durationMs: Date.now() - started,
@@ -748,6 +880,24 @@ export async function main(argv) {
     problems,
     cells,
   };
+
+  /**
+   * The runner asked the app to wait longer than the default and no launch reported a
+   * timeout, which means the installed binary predates the launch flag: the JS-side
+   * parser is what reads `presentedTimeout=`, so an app built before A4 ignores it and
+   * every sample would be recorded as a 2 s timeout while the run's own header claimed
+   * otherwise. Say so as a problem rather than produce a diagnostic that lies about
+   * itself (`--skip-build` is how this happens).
+   */
+  if (
+    (timeouts.mountTimeoutMs != null || timeouts.presentedTimeoutMs != null) &&
+    run.timeouts.mountTimeoutMs === 0 &&
+    run.timeouts.presentedTimeoutMs === 0
+  ) {
+    problems.push(
+      'the run asked for a signal timeout (--timeout-mount/--timeout-presented) and no launch recorded one, so the installed app does not understand the flag - rebuild the bench app (drop --skip-build) and run it again'
+    );
+  }
 
   const written = writeReportFiles({
     run,
@@ -807,6 +957,9 @@ export async function main(argv) {
         }
         if (force) {
           log('  (written with --force; review the guards below)');
+        }
+        for (const line of outcome.skippedCellNotes) {
+          log(line);
         }
       } else {
         log(
