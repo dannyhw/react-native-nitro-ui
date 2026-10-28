@@ -1,7 +1,8 @@
 # A4 — Why the iOS mint lost frames, the comparison-cell rule, and the iOS re-mint
 
-**Branch:** `task/A4-ios-baseline-mac2` (from `main` at `db9619f`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** `A4-297ow` (exclusive; iOS `49D5024D-967B-4B93-ACF6-F73BA0A19E9F`, no Metro port)
+**Branch:** `task/A4-ios-baseline-mac2` (from `main` at `db9619f`) · **Round:** 1, plus a fix
+round (D19 cap 3) · **Lease:** `A4-297ow` (exclusive; iOS `49D5024D-967B-4B93-ACF6-F73BA0A19E9F`,
+no Metro port) — round 1 only; the fix round leased no device (tooling, proven by `check`).
 
 ## Summary
 
@@ -10,17 +11,16 @@ On this machine's canonical iPhone 17 simulator, `mount.date-picker` at N=200 on
 `@expo/ui` arms presents its first frame at **p50 2 950 ms** (`expo-ui-host-per-control`) and
 **2 702 ms** (`expo-ui-shared-host`), both *above* the 2 000 ms the runner waited. Nothing was
 hung: at a 40 s ceiling the same cell completes **40/40** iterations, p90 3 049 ms. Worse and
-invisible: the probe's native "no frame" backstop was a **hardcoded 2 s on both platforms**, so
-it *was* the timeout however long JS waited. On iOS it is a named 90 s ceiling now; Android's
-stays 2 s, with the requested-wait cap below it (round 1, M1). Recorded reasons show
-that timer firing late too (`waited up to 2 920 ms` when asked for 2 000) — it is queued on a
-main thread still laying out 200 pickers, a second reason a 2 s rule could never hold.
+Worse: the probe's native "no frame" backstop was a **hardcoded 2 s**, so it *was* the timeout
+however long JS waited. iOS's is a named 90 s ceiling now; Android's stays 2 s (round 1, M1).
+Recorded reasons show it firing late too (`waited up to 2 920 ms` when asked for 2 000): it is
+queued on a main thread still laying out 200 pickers.
 
 **Our own cells were nowhere near the limit: no gate was biased.** In the mint, the slowest
 `nitro-ui` frame is **302.8 ms** (`mount.segmented-control:200`) — **3.8 %** of the 8 000 ms
 rule — and the slowest anywhere in 1 568 launches is **3 565 ms** on `expo-ui-host-per-control`
-(44.6 %). A 2-launch sweep of all seven components at N=200 put our worst at 234.5 ms: 11.7 %
-of the *old* rule, the brief's question. Nothing is within 25 % of its rule.
+(44.6 %). A 2-launch sweep of all seven components at N=200 put our worst at 234.5 ms — 11.7 %
+of the *old* rule, the brief's question.
 
 **What shipped.** (1) D9 amended: an incomplete metric costs **its own cell** on a comparison
 arm (`expo-ui-*`) — left out, recorded in `skippedCells` with counts and reasons — while
@@ -30,9 +30,8 @@ per iteration, tallied per cell, printed in the progress line, quoted by a refus
 (3) `presented` waits **8 000 ms on iOS**; `mounted` stays at 1 500 on both (measured max 226
 ms). Android keeps 2 000 ms (round 1, M1 — see the Question). Asking for anything but the
 platform's default is a diagnostic that cannot mint, capped at 80 s on iOS and 1 900 ms on
-Android. The raise is value-neutral for any iOS cell already complete — an arriving sample
-keeps its stamp — so mac-1's iOS file stays valid, and mac-2's Android file is untouched by
-the change. (4) `--scenario`/`--n` narrow a run; `--update-baseline` refuses a narrowed schedule
+Android. The raise is value-neutral for any iOS cell already complete (an arriving sample keeps
+its stamp), so mac-1's iOS file stays valid. (4) `--scenario`/`--n` narrow a run; `--update-baseline` refuses a narrowed schedule
 before booting, because a baseline *is* the table `--check` gates.
 
 **Re-mint:** `bench/baselines/maintainer-mac-2/ios27-sim-iphone17.json` — 196 cells, none
@@ -212,3 +211,50 @@ adds ~2.7 h per Android run without recovering one sample — and the one 1-of-1
 inside the completeness allowance. Nothing about Android's numbers, budgets or run times
 changed, so its baseline stays valid as minted. If Android is ever re-minted for another
 reason, its `timeouts` block will then record 1 500/2 000.
+
+## Fix round 1
+
+Review verdict **merge with fixes**; M1 and N1–N7, five commits.
+
+**M1 (orchestrator: option c).** The 8 s wait is iOS-only. `BENCH_DEFAULT_TIMEOUTS`
+(`bench/src/plan.ts`) is the one source, per platform; the budget table, mint rule and
+requested-wait cap follow it. Android is back to 1 500/2 000 ms, a 2 s backstop and 180 s/300 s
+budgets — pre-A4 — so its baseline and run times are as minted; its probe change is a rename and
+the unexercised `stopFrameCapture` was dropped (N7). iOS keeps 8 s + 90 s (N6, Follow-ups).
+**N1:** a mint is refused for any wait but the platform's, either direction, or none recorded;
+`timeouts` reports what the app said or `null` — at startup and by `--dry-run` too. **N2:** the
+test reads each armed timer's delay argument. **N3–N5:** numbers and stale comments corrected
+(1 of 160; 4 un-awaited + 8 timing out). The never-mounting Android cells: `FOLLOWUPS.md`.
+
+Red proofs (`test -> mutation -> red`; reverted, all green after):
+
+- Android's effective waits -> app default to 8 000 (3 red), mint rule to 8 000 (5), ceiling
+  constant to 90 s (2), either copy of the budget table (2 / 1), a shared 80 s flag cap (1),
+  `launchBudgetMs` defaulting to iOS (1).
+- N2's own mutation -> `}, PRESENTATION_CEILING_MS)` to `}, FRAME_TIMEOUT_MS)`, and iOS's
+  `kBenchPresentationCeilingSeconds * NSEC_PER_SEC` to a literal `2.0` -> `arms each platform's
+  measured presenting capture…` red (1 each); the reverse pairing (pacing onto 90 s) too.
+- N1 -> upward-only guard, accepting a no-rule run, stamping today's default into a forced file
+  -> the three mint-rule tests red (1 each); the dry-run CLI refusal red with the first.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 722 tests / 34 suites | `1ead5a49307f` | 2 m 57 s | start 2.5 / med 3.5 / max 6.4 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `bench:--platform:ios:--plan:full:--launches:8:--update-baseline` | stale | — | 27419b695217 (not this tree) | 266 m 07 s | start 1.8 / med 3.1 / max 8.8 |
+
+`need --for review`: **satisfied on this code tree** — "the code diff is tooling (check-only)
+only: `scripts/bench/*`, `scripts/__tests__/*` … no device gate is asked for beyond `check`".
+The round's `check` is on `1ead5a49307f`. The mint row reads stale because a `bench:` gate is
+keyed on the whole code tree at review (only `harness:`/`real-input:` use the per-platform
+halves), and this round edited `scripts/`; `trees.ios` is byte-identical to the mint's run, and
+`need` does not ask for it. No device was leased this round, so nothing was re-minted.
+
+`need --for review`: **satisfied on this tree** — "the code diff is tooling (check-only) only:
+`scripts/bench/*`, `scripts/__tests__/*` … no device gate is asked for beyond `check`". The mint
+row is stale only because a `bench:` gate keys on the whole tree at review (`harness:` /
+`real-input:` use the platform halves) and this round edited `scripts/`; `trees.ios` is identical
+to the mint's run. No device leased this round, so nothing was re-minted.
