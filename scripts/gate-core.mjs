@@ -2648,7 +2648,15 @@ export function renderFailureExcerpt({
   // output and show none of the failure (X12 item 3 fed straight into item 2).
   const { body, context } = splitDeviceContext(raw);
   const lines = body.split('\n');
-  const tail = lines.slice(-Math.max(0, tailLines));
+  // `slice(-0)` is `slice(0)`, so a requested tail of zero silently means *every*
+  // line — which is the opposite of what a caller asking for no tail means, and the
+  // difference is the whole cost of the function. Guarded rather than assumed away,
+  // because `tailLines` is a parameter and the default is not the only value it takes.
+  const wantedTail =
+    tailLines == null
+      ? EXCERPT_TAIL_LINES
+      : Math.max(0, Math.trunc(Number(tailLines)));
+  const tail = wantedTail === 0 ? [] : lines.slice(-wantedTail);
   const truncated = lines.length > tail.length;
 
   // One place that trims, redacts and scrubs a kept line, so no section can be

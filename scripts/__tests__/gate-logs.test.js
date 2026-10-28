@@ -2318,6 +2318,59 @@ describe('renderFailureExcerpt', () => {
     expect(content).toContain('(none matched');
   });
 
+  it('scrubs only the lines it keeps, so a big log costs what it keeps (N3)', () => {
+    // The second half of N3. `renderFailureExcerpt` used to scrub the *whole* log —
+    // up to 200 MiB — before choosing the failure lines and the 150-line tail, so one
+    // 40 KB data URI in a Metro bundle graph cost seconds and a 160 KB one cost
+    // minutes, all of it for text that was never going to be in the file.
+    //
+    // Asserted by the scrub counter rather than the clock: a credential sitting in a
+    // line that is neither a failure line nor in the tail must not be counted, because
+    // it must not be *read*. Timing is asserted too, in the sibling tests above, but a
+    // counter is the property and a stopwatch is only a symptom.
+    // 300 lines of 100 KiB, each carrying a token, and no tail kept at all: the only
+    // line the excerpt keeps is the failure line, which has no credential in it. So
+    // the count of replacements is the observable — under the old whole-log scrub it
+    // was 300, because 300 discarded lines had been read and rewritten first.
+    const noise = Array.from(
+      { length: 300 },
+      (unused, index) =>
+        `TOKEN=ghp_${'a'.repeat(36)} line ${index} ${'z'.repeat(100 * 1024)}`
+    ).join('\n');
+    const started = Date.now();
+    const { content, scrubbed } = renderFailureExcerpt({
+      entry,
+      logText: `${noise}\nFAIL the thing that broke\n`,
+      tailLines: 0,
+    });
+    const elapsed = Date.now() - started;
+    expect(scrubbed).toBe(0);
+    expect(content).toContain('FAIL the thing that broke');
+    expect(content).not.toContain('ghp_');
+    // …and the whole call is milliseconds, not the minutes a whole-log scrub of a
+    // 30 MB file with this shape took.
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  it('caps one absurd line, and says so, instead of shipping it whole', () => {
+    // An excerpt's whole size is capped, but the cap is applied to the assembled
+    // file: one line longer than the cap left the reader with a truncated line whose
+    // tail — the half that would have carried a credential's remainder — was simply
+    // gone with no note. Kept lines are capped where they are kept, and marked.
+    const { content } = renderFailureExcerpt({
+      entry,
+      logText: `a\n${'x'.repeat(70 * 1024)}\n`,
+    });
+    expect(content).toContain('[line truncated]');
+    // The cap is the constant, not an accident of the total clamp. The slack is the
+    // marker's own width, left loose on purpose: this asserts the cap, not the
+    // wording of the note beside it.
+    const longest = content
+      .split('\n')
+      .reduce((longestSoFar, line) => Math.max(longestSoFar, line.length), 0);
+    expect(longest).toBeLessThanOrEqual(64 * 1024 + 32);
+  });
+
   it('bounds itself, and says it was bounded', () => {
     // Long enough lines that 150 of them exceed the cap: the clamp is about the
     // excerpt's total size, not the number of lines, and a reader of a truncated
