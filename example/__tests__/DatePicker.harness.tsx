@@ -1235,10 +1235,9 @@ describe('DatePicker · G5', () => {
       />
     );
 
-    const { rerender, unmount } = await render(
-      tree(FIRST_MAX, INSIDE_FIRST),
-      { timeout: 20000 }
-    );
+    const { rerender, unmount } = await render(tree(FIRST_MAX, INSIDE_FIRST), {
+      timeout: 20000,
+    });
     await waitForTestId('built-bounds');
     await waitForDisplayed('built-bounds', INSIDE_FIRST, 'the seed');
     // The bounds arrive after the first commit, so the control may well be built once
