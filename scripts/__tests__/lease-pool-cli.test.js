@@ -34,6 +34,7 @@ const EXAMPLE_CONFIG = join(REPO_ROOT, 'scripts', 'devices.example.json');
 /** devices.example.json's pair-a, so the fixtures name what the config really says. */
 const UDID_A = '00000000-0000-4000-8000-00000000000A';
 const SERIAL_A = 'emulator-5574';
+const AVD_A = 'nitro-ui-a';
 
 const MINUTE = 60_000;
 
@@ -96,10 +97,20 @@ describe('the lease owns the device lifecycle', () => {
     };
     // One `printf` of a pre-built string per stub: the JSON goes in through JSON.stringify, so
     // neither the shell nor the JS parser has to agree about quotes.
+    //
+    // `simctl` answers by subcommand, because the pool now asks it three different questions: which
+    // devices exist, "remove this app" (M2's reset), and "where is its data container?". The last
+    // one has to fail after an uninstall - a stub that printed the same JSON for every call made the
+    // reset read "the data container survived" on a device that had just had the app removed.
     const simctlLines = [
       '#!/bin/sh',
       'echo "simctl $*" >> "$NITRO_UI_FAKE_CALLS"',
-      `printf '%s' ${shellQuote(JSON.stringify(listing))}`,
+      'case "$*" in',
+      "  *'get_app_container'*) exit 1 ;;",
+      "  *'uninstall'*) exit 0 ;;",
+      "  *'install'*) exit 0 ;;",
+      `  *) printf '%s' ${shellQuote(JSON.stringify(listing))} ;;`,
+      'esac',
       '',
     ];
     const adbLines = [
@@ -117,6 +128,21 @@ describe('the lease owns the device lifecycle', () => {
       // settles, and it is what the first real boot of this code reported as a failed reset.
       ...(pmClearLines[pmClear] ?? pmClearLines.success),
       "  *'emu kill'*) printf 'OK' ;;",
+      // Which AVD is behind a serial (`adb -s X emu avd name`), answered the way a real emulator
+      // does it - name, then `OK`. This is the identity check in front of every `emu kill` (X11
+      // review M4), so a stub that stayed silent about it would make every shutdown answer
+      // "unidentified" and the reaper would look like it worked by never doing anything. The table
+      // mirrors devices.example.json; `NITRO_UI_FAKE_AVD_NAME` is what a device that disagrees with
+      // it answers.
+      "  *'emu avd name'*)",
+      `      name="\${NITRO_UI_FAKE_AVD_NAME-}"`,
+      '      if [ -z "$name" ]; then',
+      '        case "$*" in',
+      `          *${shellQuote(SERIAL_A)}*) name=${shellQuote(AVD_A)} ;;`,
+      "          *emulator-5576*) name='nitro-ui-b' ;;",
+      '        esac',
+      '      fi',
+      '      printf \'%s\\nOK\\n\' "$name" ;;',
       'esac',
       'exit 0',
       '',
@@ -255,6 +281,29 @@ describe('the lease owns the device lifecycle', () => {
       `ios:${UDID_A}`,
     ]);
     expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} shell pm clear`);
+    // And on iOS, a reset that is actually a reset (M2): the app is removed, which takes its data
+    // container with it, and the pool checks the container is gone rather than trusting `install`.
+    expect(log()).toContain(`simctl uninstall ${UDID_A} nitroui.example`);
+    expect(log()).toContain(
+      `simctl get_app_container ${UDID_A} nitroui.example data`
+    );
+  });
+
+  it('reinstalls the app after an iOS reset when HARNESS_APP_PATH is set', () => {
+    // Uninstall is only safe because every consumer installs first. When the pool can see the
+    // build, it puts the app back so a device never leaves the pool empty for something that does
+    // not (and the row says it did).
+    const app = join(home, 'NitroUiExample.app');
+    writeFileSync(app, 'not really an app bundle');
+    tools({ androidUp: true, iosUp: true });
+    const acquired = cli(['acquire', '--task', 'T15', '--boot'], {
+      HARNESS_APP_PATH: app,
+    });
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`simctl uninstall ${UDID_A} nitroui.example`);
+    expect(log()).toContain(`simctl install ${UDID_A} ${app}`);
+    expect(acquired.stderr).toContain('reset ios:');
+    expect(acquired.stderr).not.toContain('FAILED');
   });
 
   it('starts a device that is down, and records the boot on the lease', () => {
@@ -279,7 +328,7 @@ describe('the lease owns the device lifecycle', () => {
     expect(log()).not.toContain('open');
   });
 
-  it('reaps an idle device even when it was told not to boot', () => {
+  it('leaves a leased device alone while it was told not to boot', () => {
     tools({ androidUp: true });
     warmDevice(idleEntry({ leaseId: 'T3-aaaa' }));
     writeFileSync(
@@ -304,8 +353,186 @@ describe('the lease owns the device lifecycle', () => {
     );
     const acquired = cli(['acquire', '--task', 'T1', '--no-boot']);
     expect(acquired.status).toBe(0);
-    // Booting is opt-in; reaping is not, and must not be tied to it. Without this half, the only
-    // way to get a warm device is to also accept an unbounded pile of idle ones.
+    // Booting is opt-in; reaping is not, and must not be tied to it - but what the reaper may
+    // reach is a device *nobody leases* (X11 review M3). T3 holds pair-a under a live lease and 120
+    // idle minutes is a debugging session, not an abandoned boot. The automatic reap on `acquire`
+    // stays quiet about devices it is keeping, so the load-bearing check is that it never touched
+    // the device.
+    expect(acquired.stderr).not.toContain('shutting down emulator');
+    expect(log()).not.toContain(`${SERIAL_A} emu kill`);
+    expect(poolDevices().map((x) => x.key)).toEqual([`avd:${AVD_A}`]);
+    // Asked directly, the answer names the reason rather than the clock.
+    const asked = cli(['reap']);
+    expect(asked.stderr).toContain(
+      `keeping avd:${AVD_A} up (a live lease holds it)`
+    );
+  });
+
+  it('lets an operator override reach only devices nobody leases', () => {
+    // The other half of M3's alternative: `reap --idle-minutes 0` is "power the pool off now", and
+    // a person who wants their machine back gets every *unheld* device off. A leased one is not
+    // silently evicted on a flag from somebody else's shell; they are told whose it is, and
+    // releasing it is what changes the answer.
+    tools({ androidUp: true });
+    warmDevice(idleEntry({ leaseId: 'T3-aaaa', idleMinutes: 5 }));
+    writeFileSync(
+      join(home, 'leases.json'),
+      `${JSON.stringify(
+        {
+          leases: [
+            {
+              id: 'T3-aaaa',
+              task: 'T3',
+              platform: 'both',
+              exclusive: false,
+              holds: ['pair-a'],
+              acquiredAt: Date.now() - 5 * MINUTE,
+              ttlMinutes: 240,
+            },
+          ],
+        },
+        null,
+        2
+      )}\n`
+    );
+    const reaped = cli(['reap', '--idle-minutes', '0']);
+    expect(reaped.status).toBe(0);
+    expect(reaped.stderr).toContain('a live lease holds it');
+    expect(log()).not.toContain('emu kill');
+    // Release the lease, and the same command powers it off.
+    expect(cli(['release', 'T3-aaaa']).status).toBe(0);
+    expect(cli(['reap', '--idle-minutes', '0']).status).toBe(0);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+    expect(poolDevices()).toEqual([]);
+  });
+
+  it('never reaches for a serial that belongs to another pair under a lease', () => {
+    // X11 review M4, through the real CLI against stub devices. The record for pair-a names pair-b's
+    // serial while a live lease holds pair-b: the old code killed what the record said, which was
+    // the *leased* emulator. Now the address comes from the pair, so the only device this command
+    // can reach is pair-a's own, and pair-b is never even asked who it is.
+    tools({ androidUp: true });
+    warmDevice(idleEntry({ serial: 'emulator-5576' }));
+    writeFileSync(
+      join(home, 'leases.json'),
+      `${JSON.stringify(
+        {
+          leases: [
+            {
+              id: 'B7-zzzz',
+              task: 'B7',
+              platform: 'both',
+              exclusive: false,
+              holds: ['pair-b'],
+              acquiredAt: Date.now() - 5 * MINUTE,
+              ttlMinutes: 240,
+            },
+          ],
+        },
+        null,
+        2
+      )}\n`
+    );
+    const reaped = cli(['reap', '--idle-minutes', '0']);
+    expect(reaped.status).toBe(0);
+    // Nothing at all was addressed on pair-b's adb server or its serial: the kill is aimed at the
+    // device the *pair* says this record is, and the disagreement is printed instead of obeyed.
+    expect(log()).not.toContain('emulator-5576');
+    expect(log()).not.toContain('-P 5045');
+    expect(reaped.stderr).toContain(
+      `the record says emulator-5576, devices.json says ${SERIAL_A}`
+    );
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+    expect(poolDevices()).toEqual([]);
+  });
+
+  it('refuses to power a device off when it will not identify itself', () => {
+    // The live check in front of every kill: an emulator that is attached but does not answer
+    // `adb emu avd name` with the AVD the pool means stays up. Nothing here proves pair-a's
+    // emulator is pair-a's, so nothing is powered off, and the record survives to be asked again.
+    tools({ androidUp: true });
+    warmDevice(idleEntry());
+    const reaped = cli(['reap', '--idle-minutes', '0'], {
+      NITRO_UI_FAKE_AVD_NAME: 'somebody-elses-avd',
+    });
+    expect(reaped.status).toBe(0);
+    expect(log()).not.toContain('emu kill');
+    expect(reaped.stderr).toContain('answers to AVD somebody-elses-avd');
+    expect(poolDevices().map((x) => x.key)).toEqual([`avd:${AVD_A}`]);
+  });
+
+  it('powers a device off once it identifies itself', () => {
+    // The same command with a device that answers correctly, so the case above cannot pass by the
+    // identity check being absent, mis-parsed, or never reached.
+    tools({ androidUp: true });
+    warmDevice(idleEntry());
+    expect(cli(['reap', '--idle-minutes', '0']).status).toBe(0);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu avd name`);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+    expect(poolDevices()).toEqual([]);
+  });
+
+  it('keeps a device whose lease date it cannot read', () => {
+    // `~/.nitro-ui/leases.json` is a file a person edits. An unreadable `acquiredAt` used to make
+    // `now - acquiredAt` NaN, every comparison false, and a live lease read as expired - so the
+    // reaper powered off a device mid-suite on the strength of a date format. A lease the pool
+    // cannot date is kept: a wedged lease is visible in `list` and removable, a killed device is
+    // neither.
+    tools({ androidUp: true });
+    warmDevice(idleEntry({ leaseId: 'H5-iso0' }));
+    writeFileSync(
+      join(home, 'leases.json'),
+      `${JSON.stringify(
+        {
+          leases: [
+            {
+              id: 'H5-iso0',
+              task: 'H5',
+              platform: 'both',
+              exclusive: false,
+              holds: ['pair-a'],
+              acquiredAt: 'not a date at all',
+              ttlMinutes: 240,
+            },
+          ],
+        },
+        null,
+        2
+      )}\n`
+    );
+    const reaped = cli(['reap', '--idle-minutes', '0']);
+    expect(reaped.status).toBe(0);
+    expect(log()).not.toContain('emu kill');
+    expect(reaped.stderr).toContain('a live lease holds it');
+  });
+
+  it('reaps an idle device no live lease holds, without being told to boot', () => {
+    // The other half of the same rule: protection is for a *live* lease, and this one has run out
+    // its TTL, which is what `list` calls an abandoned boot.
+    tools({ androidUp: true });
+    warmDevice(idleEntry({ leaseId: 'T3-aaaa' }));
+    writeFileSync(
+      join(home, 'leases.json'),
+      `${JSON.stringify(
+        {
+          leases: [
+            {
+              id: 'T3-aaaa',
+              task: 'T3',
+              platform: 'both',
+              exclusive: false,
+              holds: ['pair-a'],
+              acquiredAt: new Date(Date.now() - 3000 * MINUTE).toISOString(),
+              ttlMinutes: 240,
+            },
+          ],
+        },
+        null,
+        2
+      )}\n`
+    );
+    const acquired = cli(['acquire', '--task', 'T1', '--no-boot']);
+    expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('shutting down emulator');
     expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
     expect(poolDevices()).toEqual([]);
@@ -486,6 +713,74 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.stderr).toContain('exclusive');
     expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
     expect(poolDevices()).toEqual([]);
+  });
+
+  it('powers the pool off for an exclusive lease that did not ask for a boot', () => {
+    // X11 review M6. CONTRIBUTING tells a bench host to lease *without* `--boot` (the bench boots
+    // its own device, slowly, on purpose) and separately promises that `--exclusive` powers the
+    // machine down. The power-off used to live on the boot path only, so the documented invocation
+    // left every other task's emulator running under the baseline.
+    tools({ androidUp: true });
+    warmDevice(idleEntry({ idleMinutes: 4 }));
+    const acquired = cli(['acquire', '--task', 'BENCH', '--exclusive']);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+    expect(poolDevices()).toEqual([]);
+    // And it boots nothing: that part of the promise is unchanged.
+    expect(log()).not.toContain('emulator @');
+    expect(log()).not.toContain('simctl boot');
+  });
+
+  it('powers off a pool device that was booted outside the pool, for an exclusive lease', () => {
+    // The exclusive power-off is enumerated from devices.json, not from the records, because the
+    // harness boots a cold device itself and a person can start one by hand: no `pool.json` record
+    // means nothing to a reaper that only reads records, and the machine is not quiet.
+    tools({ androidUp: true });
+    const acquired = cli(['acquire', '--task', 'BENCH', '--exclusive']);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+  });
+
+  it("leaves another task's device up under an exclusive lease, and says so", () => {
+    // An exclusive lease means "give me a quiet machine", not "evict whoever is running": the bench
+    // is refused while any lease is live, so reaching this point already means nobody else holds a
+    // lease - but a device whose lease expired mid-flight is another matter, and the honest answer
+    // has to name what it left alone rather than claim the machine is off.
+    tools({ androidUp: true });
+    warmDevice(idleEntry({ idleMinutes: 4 }));
+    writeFileSync(
+      join(home, 'leases.json'),
+      `${JSON.stringify(
+        {
+          leases: [
+            {
+              id: 'T7-live',
+              task: 'T7',
+              platform: 'both',
+              exclusive: false,
+              holds: ['pair-a'],
+              acquiredAt: Date.now() - 2 * MINUTE,
+              ttlMinutes: 240,
+            },
+          ],
+        },
+        null,
+        2
+      )}\n`
+    );
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--wait-minutes',
+      '0',
+    ]);
+    // Refused outright: an exclusive lease waits for every other lease to end.
+    expect(acquired.status).toBe(1);
+    expect(acquired.stderr).toContain('T7');
+    expect(log()).not.toContain('emu kill');
+    expect(poolDevices().map((x) => x.key)).toEqual([`avd:${AVD_A}`]);
   });
 
   it('keeps a corrupt pool.json as evidence and carries on leasing', () => {

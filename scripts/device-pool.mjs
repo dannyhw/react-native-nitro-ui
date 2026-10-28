@@ -54,7 +54,9 @@ import {
   POOL_STATE_VERSION,
   deviceIsBusy,
   emulatorSerial,
+  identifiersFor,
   isReservedSerial,
+  leaseIsLive,
   loadSettleCeiling,
   pidIsAlive,
   poolReapDecision,
@@ -235,6 +237,22 @@ export function deviceOperations({
 
   const out = (res) => (res?.stdout ?? '').trim();
 
+  /** A simctl mutation's outcome: it prints nothing on success and the problem on stderr. */
+  function simctlResult(res, onOk) {
+    const answer =
+      out(res) ||
+      String(res?.stderr ?? '')
+        .split('\n')
+        .find(Boolean)
+        ?.trim() ||
+      '';
+    return {
+      ok: res?.status === 0,
+      answer:
+        answer || (res?.status === 0 ? onOk : `exit ${String(res.status)}`),
+    };
+  }
+
   return {
     adb,
     simctl,
@@ -250,6 +268,63 @@ export function deviceOperations({
             serial?.startsWith('emulator-') && state === 'device'
         )
         .map(([serial]) => serial);
+    },
+
+    /**
+     * Which AVD is actually sitting behind this serial, answered by the device itself
+     * (`adb -s <serial> emu avd name`).
+     *
+     * This is the last gate before `emu kill` (X11 review M4). Everything else the reaper knows
+     * about a device is a record of what somebody *said* about it — `pool.json`, or devices.json's
+     * port table, which gets renumbered. This is the one thing it can ask the emulator, and a
+     * device that will not answer to the AVD the pool means is never killed on the pool's say-so.
+     *
+     * `emulator-5554\tDevice\n` is the answer on a device whose console is not ready yet, and no
+     * AVD is named, which is a refusal too: an emulator you cannot identify is not one you get to
+     * power off.
+     *
+     * @returns {string | null}
+     */
+    emulatorAvdName(serial, adbPort = null) {
+      const answer = out(adb(['-s', serial, 'emu', 'avd', 'name'], adbPort));
+      const first = answer.split('\n')[0]?.trim();
+      return first && first !== 'OK' && !/^emulator-|offline|error/i.test(first)
+        ? first
+        : null;
+    },
+
+    /**
+     * Removes the app from a simulator, which takes its data container with it.
+     *
+     * This is the iOS reset (X11 review M2). What the pool used to report instead — "none needed,
+     * `simctl install` replaces the app container" — is false, and the repo's own patch to
+     * `platform-apple` says so in its installed code: "`simctl install` is fast and keeps the app
+     * container". So a task's `NSUserDefaults` and Documents survived into the next task's run on
+     * the same pooled simulator, while `lease` printed a row saying the reset was satisfied.
+     *
+     * `simctl` prints nothing on success and the problem on stderr, so the answer is read from both.
+     */
+    uninstallSimulatorApp(udid, appId) {
+      return simctlResult(simctl(['uninstall', udid, appId]), 'uninstalled');
+    },
+
+    /** Re-installs a bundle the reset just removed, so a device leaves the pool ready, not empty. */
+    installSimulatorApp(udid, appPath) {
+      return simctlResult(simctl(['install', udid, appPath]), 'installed');
+    },
+
+    /**
+     * Where a simulator keeps an installed app's data, or null when it has none
+     * (`simctl get_app_container <udid> <bundle> data`).
+     *
+     * This is what makes the iOS reset *provable* rather than promised: an uninstall that worked
+     * leaves no container to find, so the reset checks the device after the fact instead of trusting
+     * an exit code. It is also the hook the completeness proof writes its marker through.
+     */
+    simulatorDataContainer(udid, appId) {
+      const res = simctl(['get_app_container', udid, appId, 'data']);
+      const found = out(res);
+      return res?.status === 0 && found !== '' ? found : null;
     },
 
     bootComplete(serial, adbPort = null) {
@@ -386,12 +461,17 @@ export function deviceOperations({
  */
 /**
  * What a pool key *is* on this machine, from the pair that names it: the serial to address an
- * emulator with, the adb server that can see it, the UDID of a simulator. The boot hand-off and a
- * bare claim both write these, because a record without them is a device the pool can see and not
- * touch - `shutdownDevice` answers "already off" for an entry with no serial, and the record is
- * then dropped while the emulator keeps running.
+ * emulator with, the adb server that can see it, the UDID of a simulator.
  *
- * @param {{ios?: {udid?: string | null}, android?: {emulatorPort?: number | null, adbPort?: number | null, serial?: string | null}}} pair
+ * The serial is *derived* from the pair's console port, never copied from whoever's shell is
+ * writing the record (X11 review M4). `claim()` runs in a gate's process, where `ANDROID_SERIAL` is
+ * whatever that process had in its environment — and a record whose serial belongs to a different
+ * pair is a reaper's `emu kill` aimed at somebody else's emulator. `shutdownDevice` now re-derives
+ * identity from devices.json before it acts, so a record with no serial is workable again (it used
+ * to be read as "already off"), which means the env's version has no job here. A disagreement is
+ * worth printing, not worth trusting.
+ *
+ * @param {{ios?: {udid?: string | null}, android?: {emulatorPort?: number | null, adbPort?: number | null, avd?: string | null}}} pair
  * @param {string} key
  * @returns {Record<string, unknown>}
  */
@@ -403,10 +483,9 @@ function identityFor(pair, key) {
       id,
       udid: null,
       serial:
-        pair?.android?.serial ??
-        (pair?.android?.emulatorPort != null
+        pair?.android?.emulatorPort != null
           ? emulatorSerial(pair.android.emulatorPort)
-          : null),
+          : null,
       adbPort: pair?.android?.adbPort ?? null,
     };
   }
@@ -481,6 +560,47 @@ export class DevicePool {
   }
 
   /**
+   * Writes the pair's records with `phase: 'booting'` *before* a boot starts, so the minutes it
+   * spends coming up are covered (X11 review M3).
+   *
+   * The field existed and was read by `deviceIsBusy` but never written, which made it a comment: a
+   * warm reuse of a record whose timestamps were already past the idle limit could be powered off
+   * by another task's reap during the up-to-`settleTimeoutMs` wait, because `notePair` only refreshes
+   * those timestamps once the wait is over. The phase is cleared by `notePair` on the way out.
+   *
+   * Identity comes from the pair, exactly as `notePair` will write it, so the record this leaves
+   * behind on a failed boot is a record the reaper can still reason about.
+   */
+  markBooting(pair, lease, { platform = lease?.platform ?? 'both' } = {}) {
+    const keys = poolKeysForPair(pair).filter((key) => {
+      const kind = splitKey(key)[0];
+      return platform === 'both' || platform === kind;
+    });
+    const nowMs = this.now();
+    return this.withPool((state) => {
+      for (const key of keys) {
+        const prev = state.devices.find((x) => x.key === key);
+        upsertDevice(state, key, {
+          ...identityFor(pair, key),
+          leaseId: lease?.id ?? prev?.leaseId ?? null,
+          bootedAtMs: prev?.bootedAtMs ?? nowMs,
+          lastUsedMs: prev?.lastUsedMs ?? nowMs,
+          idleShutdownMinutes:
+            this.idleShutdownMinutesFor(splitKey(key)[0]) ??
+            prev?.idleShutdownMinutes ??
+            IDLE_SHUTDOWN_DEFAULT_MINUTES,
+          claims: prev?.claims ?? [],
+          phase: 'booting',
+          // The clock the protection is measured against (`deviceIsBusy`): a boot that outlives its
+          // own timeout is a crashed task, not a boot in progress.
+          phaseAtMs: nowMs,
+        });
+      }
+      return keys;
+    });
+  }
+
+  /**
    * Records that the pair's devices are warm and associated with `lease`.
    *
    * `booted` names the devices this call actually started: only those get a fresh `bootedAtMs`. A
@@ -531,6 +651,9 @@ export class DevicePool {
           adbPort,
           udid: kind === 'ios' ? id : (prev?.udid ?? null),
           platform,
+          // The boot is over: this is the line that ends the `markBooting` window above, so a
+          // device that came up is never stuck being "booting" (and off the idle clock) forever.
+          phase: null,
           claims: prev?.claims ?? [],
         });
       }
@@ -708,6 +831,12 @@ export class DevicePool {
 
     const deadline = startedAt + timeoutMs;
     const degraded = [...refused];
+    // The wait below is minutes, and a record that is already past its idle limit is reapable by
+    // another task the whole time (`notePair` only stamps the new lease and clock when the wait
+    // ends), so the devices actually coming up are marked as booting first (M3).
+    if (wanted.some((w) => !already.has(w.key) && !refused.has(w.key))) {
+      this.markBooting(pair, lease, { platform });
+    }
     for (const w of wanted) {
       if (already.has(w.key) || refused.has(w.key)) continue;
       let ok = false;
@@ -768,37 +897,45 @@ export class DevicePool {
   }
 
   /**
-   * Clears the example app's state so the next task does not inherit the last one's storage.
+   * Clears the example app's data on each device of the pair, so the next task does not inherit the
+   * last one's storage, and reports what was actually done on each.
    *
-   * `pm clear` is the reset, not an uninstall: it is the cheapest operation that reports what it
-   * did, and the build stamp already decides whether the binary itself is reinstalled. iOS needs
-   * neither - `simctl install` of a new build replaces the app container, and the harness resets
-   * the app per test - so the iOS row says so out loud instead of pretending a no-op was a reset.
-   */
-  /**
-   * The cheapest reset that reports what it did, per device of the pair.
+   * Android: `adb -s <serial> shell pm clear <appId>`, retried. The pool resets a device *it has
+   * just booted*, and an emulator whose `sys.boot_completed` is already `1` can still answer
+   * `Failed` for a few seconds while PackageManager settles — which is what the first real boot of
+   * this code did, and what a single attempt reported as a permanent failure. The retries are
+   * bounded and use the injected clock, so a test drives them without waiting.
    *
-   * Android gets `pm clear`, retried: the pool resets a device *it has just booted*, and an
-   * emulator whose `sys.boot_completed` is already `1` can still answer `Failed` for a few seconds
-   * while PackageManager settles - which is exactly what the first real boot of this code did, and
-   * what a single attempt reported as a permanent failure. The retries are bounded and use the
-   * injected clock, so a test drives them without waiting.
+   * iOS: `simctl uninstall`, verified by asking for the data container afterwards. The row used to
+   * read "none needed (simctl install replaces the app container)", which the repo's own
+   * platform-apple patch contradicts — `simctl install` *keeps* the container — so the pool was
+   * printing a satisfied reset while a task's defaults and Documents sat there for the next task.
+   * Uninstall is the cheapest thing that is provably complete: `get_app_container … data` then has
+   * nothing to return, and that check, not the exit code, is what the row reports.
    *
-   * iOS says what actually happens instead of reporting a reset: `simctl install` replaces the app
-   * container, so there is no data left behind by the previous task to clear, and a row claiming a
-   * reset that was never performed would be a lie about the one thing this is here to guarantee.
+   * Removing the app is only safe because everything that runs on a pooled device installs it
+   * first: the harness's patched iOS path installs `HARNESS_APP_PATH` on every run, and real-input
+   * installs its own `.app`. When `HARNESS_APP_PATH` is set we reinstall here too, so a device never
+   * leaves the pool empty for a consumer that does not install (and the reinstall failure is
+   * reported, not swallowed).
    *
    * @param {object} pair
-   * @param {{appId?: {android: string, ios: string}, attempts?: number}} [options]
+   * @param {{appId?: {android: string, ios: string}, attempts?: number, reinstallApp?: string | null}} [options]
    */
-  resetPair(pair, { appId = EXAMPLE_APP_ID, attempts = 4 } = {}) {
+  resetPair(
+    pair,
+    {
+      appId = EXAMPLE_APP_ID,
+      attempts = 4,
+      reinstallApp = process.env.HARNESS_APP_PATH ?? null,
+    } = {}
+  ) {
     const results = [];
     if (pair?.android?.avd) {
       const serial =
-        pair?.android?.serial ??
-        (pair.android.emulatorPort != null
+        pair?.android?.emulatorPort != null
           ? emulatorSerial(pair.android.emulatorPort)
-          : null);
+          : (pair?.android?.serial ?? null);
       let ok = false;
       let answer = 'no serial to address';
       let tries = 0;
@@ -823,12 +960,37 @@ export class DevicePool {
       });
     }
     if (pair?.ios?.udid) {
+      const udid = pair.ios.udid;
+      const un = this.ops.uninstallSimulatorApp(udid, appId.ios);
+      // Believe the device, not the exit code: the thing a reset promises is that the data is
+      // gone, and `simctl` answers that directly.
+      const container = this.ops.simulatorDataContainer(udid, appId.ios);
+      let ok = !!un?.ok && container == null;
+      // Both answers, when both went wrong: "simctl refused" and "the container is still there" are
+      // different failures to whoever has to fix them, and reporting only one of them sends them to
+      // the wrong tool.
+      const parts = [un?.answer ?? '(no answer)'];
+      if (container != null)
+        parts.push(`data container survived: ${container}`);
+      let answer = parts.join('; ');
+      let tries = 1;
+      if (ok && reinstallApp != null) {
+        tries += 1;
+        const re = this.ops.installSimulatorApp(udid, reinstallApp);
+        // A device left without an app is worse than one with stale data, so a failed reinstall is
+        // a failed reset: the next run installs anyway, and whoever read the line should know the
+        // device is not ready.
+        ok = ok && !!re?.ok;
+        answer = re?.ok
+          ? `${answer}; reinstalled ${reinstallApp}`
+          : `${answer}; reinstall FAILED (${re?.answer})`;
+      }
       results.push({
-        key: `ios:${pair.ios.udid}`,
-        action: 'none needed (simctl install replaces the app container)',
-        ok: true,
-        attempts: 0,
-        answer: 'nothing to run',
+        key: `ios:${udid}`,
+        action: 'simctl uninstall',
+        ok,
+        attempts: tries,
+        answer,
       });
     }
     return results;
@@ -836,14 +998,32 @@ export class DevicePool {
 
   /**
    * Powers off every pool device that has outlived its idle limit, and reports what it did.
-   * `shutdownKeys` (`release --exclusive`) is the caller's way of saying "these ones now".
+   * `shutdownKeys` (`acquire --exclusive`) is the caller's way of saying "these ones now".
+   *
+   * Three passes, in this order:
+   *
+   *  1. **decide**, under the lease lock, with no device I/O at all (X11 review N1);
+   *  2. **act** - `simctl shutdown`, `adb emu kill`, each of which can take seconds - with the lock
+   *     released;
+   *  3. **re-read and drop** the records for devices that are actually off, re-checking claims
+   *     first, so a run that started in the open window keeps its device.
+   *
+   * The split matters because the lock is the lease file's: it is held with a 10-second timeout and
+   * stolen from anyone who holds it 30 seconds, so an `adb emu kill` that stalls used to fail every
+   * other task's `acquire` and gate claim on this machine - and could lose the reaper its own lock
+   * mid-write.
    *
    * With no devices.json loaded nothing is reapable: the pool shuts down the devices the machine
    * *declared*, never one it merely observed booted, and a caller that cannot name its pool has no
    * such list. That is also what keeps a stray `lease.mjs list` in a scratch `NITRO_UI_HOME` from
    * powering off anything at all.
    */
-  reap({ idleMinutes, shutdownKeys = [], reason = 'handoff' } = {}) {
+  reap({
+    idleMinutes,
+    shutdownKeys = [],
+    reason = 'handoff',
+    exceptLeaseId = this.env?.NITRO_UI_LEASE_ID ?? null,
+  } = {}) {
     if (this.devices?.pairs == null) {
       return {
         reaped: [],
@@ -855,20 +1035,21 @@ export class DevicePool {
           "no devices.json loaded, so nothing is declared as this machine's pool",
       };
     }
-    const leases = this.leases();
     const nowMs = this.now();
     this.pruneClaims();
-    return this.withPool((state) => {
-      const done = {
-        reaped: [],
-        kept: [],
-        alreadyOff: [],
-        failed: [],
-        refused: [],
-      };
+    // Pass 1: the decision, read-only, holding the lock only for as long as reading JSON takes.
+    const plan = this.withPool((state) => {
+      const leasesNow = this.leases();
+      const held = this.heldIdentifiers({
+        leases: leasesNow,
+        nowMs,
+        exceptLeaseId,
+      });
+      const planned = [];
+      const decided = { kept: [], refused: [] };
       for (const entry of [...state.devices]) {
         if (isReservedSerial(entry.serial)) {
-          done.refused.push({
+          decided.refused.push({
             key: entry.key,
             serial: entry.serial,
             why: 'reserved serial',
@@ -876,51 +1057,204 @@ export class DevicePool {
           continue;
         }
         if (!this.isPoolDevice(entry)) {
-          done.refused.push({ key: entry.key, why: 'not in devices.json' });
+          decided.refused.push({ key: entry.key, why: 'not in devices.json' });
           continue;
         }
         const forced = shutdownKeys.includes(entry.key);
-        // An explicit `--idle-minutes` is the caller overriding devices.json for this one call —
+        // An explicit `--idle-minutes` is the caller overriding devices.json for this one call -
         // `reap --idle-minutes 0` is "power the pool off now", the cleanup command a machine's
-        // operator reaches for. The record's own limit (the config value stamped at boot) only
-        // applies when nobody asked.
+        // operator reaches for. It never reaches a pair a live lease holds (X11 review M3): the
+        // answer there is that somebody is using it, and `release` is the way to change that.
         const decision = poolReapDecision(entry, {
           nowMs,
-          leases,
+          leases: leasesNow,
           defaultIdleMinutes:
             this.idleShutdownMinutesFor(entry.kind) ?? idleMinutes,
           overrideIdleMinutes: idleMinutes,
           isPidAlive: this.isPidAlive,
+          exceptLeaseId,
         });
+        // A pair another task holds under a live lease is off-limits even under `shutdownKeys`,
+        // which is an *idle* filter, not a licence to evict somebody mid-run.
+        if (held.has(entry.id)) {
+          decided.kept.push({
+            key: entry.key,
+            reason: 'lease-held',
+            idleMinutes: Math.round(decision.idleMs / 60_000),
+          });
+          continue;
+        }
         if (!forced && decision.action === 'keep') {
-          done.kept.push({
+          decided.kept.push({
             key: entry.key,
             reason: decision.reason,
             idleMinutes: Math.round(decision.idleMs / 60_000),
           });
           continue;
         }
-        const off = this.shutdownDevice(entry, {
-          reason: forced ? reason : decision.reason,
-        });
-        if (off === 'off')
+        planned.push({ entry, decision, forced });
+      }
+      return { held, planned, decided, keys: state.devices.map((x) => x.key) };
+    });
+
+    // Pass 2: the device I/O, outside the lock.
+    const done = {
+      reaped: [],
+      alreadyOff: [],
+      failed: [],
+      refused: [],
+      ...plan.decided,
+    };
+    const offKeys = [];
+    for (const { entry, decision, forced } of plan.planned) {
+      const outcome = this.shutdownDevice(entry, {
+        reason: forced ? reason : decision.reason,
+        held: plan.held,
+      });
+      if (outcome === 'off' || outcome === 'already') {
+        offKeys.push(entry.key);
+        if (outcome === 'off')
           done.reaped.push({ key: entry.key, reason: decision.reason });
-        else if (off === 'already') done.alreadyOff.push({ key: entry.key });
-        else if (off === 'refused')
-          done.refused.push({ key: entry.key, why: 'not a pool device' });
-        else done.failed.push({ key: entry.key, reason: decision.reason });
-        // A device that is off (or was never on) stops being the pool's business; one that
-        // refused to die stays listed so the next `list` still shows it, and `reap` retries.
-        if (off === 'off' || off === 'already') {
-          state.devices = state.devices.filter((x) => x.key !== entry.key);
+        else done.alreadyOff.push({ key: entry.key });
+      } else if (outcome === 'refused') {
+        // The reason is on the log: `shutdownDevice` says which of its checks refused, because the
+        // difference between "not in devices.json" and "a live lease holds this pair" is the
+        // difference between a nuisance and another task's emulator going down.
+        done.refused.push({
+          key: entry.key,
+          why: 'refused (see the log above)',
+        });
+      } else {
+        done.failed.push({ key: entry.key, reason: decision.reason });
+      }
+    }
+
+    // A device that is up but has no record is still up. That happens whenever anything boots a
+    // pool device outside the pool - the harness's own boot path does it on a cold machine, and a
+    // person does it with `emulator @pair_a` - and an exclusive lease's whole point is that nothing
+    // is left running underneath the bench, so the list it hands in is answered from devices.json,
+    // not from the records. Identity here comes from the pair by construction, which is exactly what
+    // the checks below insist on for a record that has one.
+    const seen = new Set(plan.keys);
+    for (const key of shutdownKeys) {
+      if (seen.has(key)) continue;
+      const declared = this.declaredEntry(key);
+      if (declared == null) continue;
+      if (plan.held.has(declared.id)) continue;
+      const outcome = this.shutdownDevice(declared, {
+        reason,
+        held: plan.held,
+      });
+      if (outcome === 'off') done.reaped.push({ key, reason });
+      else if (outcome === 'already') done.alreadyOff.push({ key });
+      else if (outcome === 'refused')
+        done.refused.push({ key, why: 'refused (see the log above)' });
+      else done.failed.push({ key, reason });
+    }
+
+    // Pass 3: forget the records that are genuinely off - re-locked, and re-checked, because the
+    // window above is long enough for a run to have claimed the device. A device that is off (or
+    // was never on) stops being the pool's business; one that refused to die stays listed so the
+    // next `list` still shows it, and `reap` retries.
+    if (offKeys.length > 0) {
+      this.withPool((state) => {
+        state.devices = state.devices.filter((x) => {
+          if (!offKeys.includes(x.key)) return true;
+          return deviceIsBusy(x, this.now(), this.isPidAlive);
+        });
+        return true;
+      });
+    }
+    return done;
+  }
+
+  /** Every pool key devices.json declares, for a caller that wants the machine's whole pool. */
+  keysForPool() {
+    return (this.devices?.pairs ?? []).flatMap((pair) => poolKeysForPair(pair));
+  }
+
+  /**
+   * A pool record for a key devices.json declares but `pool.json` has never seen: a pool device
+   * that something else booted. Built from the pair alone, which is the only source of identity the
+   * reaper trusts anyway, and deliberately carrying no `leaseId` (nothing leased it as far as the
+   * pool knows) and no `bootedAtMs`/`lastUsedMs` (the pool does not know when it started, and
+   * guessing "recent" would hide it from the idle clock forever).
+   */
+  declaredEntry(key) {
+    const [kind, id] = splitKey(key);
+    const expected = this.pairFor({ kind, id });
+    if (expected == null) return null;
+    return {
+      key,
+      kind,
+      id,
+      leaseId: null,
+      claims: [],
+      serial: expected.serial ?? null,
+      adbPort: expected.adbPort ?? null,
+      udid: expected.udid ?? null,
+    };
+  }
+
+  /** `{serial, adbPort}` the machine's own `devices.json` says this pool key has - the only identity
+   * the reaper is willing to act on (X11 review M4).
+   */
+  pairFor(entry) {
+    if (entry?.kind === 'ios') {
+      const pair = (this.devices?.pairs ?? []).find(
+        (x) => x.ios?.udid === entry.id
+      );
+      return pair ? { udid: pair.ios.udid } : null;
+    }
+    const pair = (this.devices?.pairs ?? []).find(
+      (x) => x.android?.avd === entry.id
+    );
+    if (pair?.android?.avd == null) return null;
+    // Same rule as `identityFor`: the serial is *derived* from the pair's console port, so a
+    // devices.json that renumbers a pair cannot leave a record pointing at another pair's device.
+    return {
+      serial:
+        pair.android.serial ??
+        (pair.android.emulatorPort != null
+          ? emulatorSerial(pair.android.emulatorPort)
+          : null),
+      adbPort: pair.android.adbPort ?? null,
+    };
+  }
+
+  /**
+   * Every device identifier a live lease holds - AVD names, UDIDs, and the serials its console
+   * ports imply (X11 review M3). Identifier-level rather than pair-level because an exclusive lease
+   * holds every pair in `holds`, and a reap that only compared pair ids against its own record's
+   * `leaseId` would happily kill a bench's emulator: the bench's lease names the pair, but no pool
+   * record names the bench.
+   *
+   * `exceptLeaseId` is the caller's own lease: your hold does not stop *your* reap - if it did, an
+   * exclusive lease could not power the machine down at all, since it holds every pair.
+   */
+  heldIdentifiers({
+    leases = this.leases(),
+    nowMs = this.now(),
+    exceptLeaseId = this.leaseId ?? null,
+  } = {}) {
+    const held = new Set();
+    for (const lease of leases ?? []) {
+      if (exceptLeaseId != null && lease.id === exceptLeaseId) continue;
+      if (!leaseIsLive(lease, nowMs)) continue;
+      for (const pairId of lease.holds ?? []) {
+        const pair = (this.devices?.pairs ?? []).find((p) => p.id === pairId);
+        if (pair == null) continue;
+        for (const id of identifiersFor(pair, 'both')) held.add(id);
+        if (pair.android?.emulatorPort != null) {
+          held.add(emulatorSerial(pair.android.emulatorPort));
         }
       }
-      return done;
-    });
+    }
+    return held;
   }
 
   /** @returns {'off' | 'already' | 'failed' | 'refused'} */
-  shutdownDevice(entry, { reason = 'idle' } = {}) {
+  shutdownDevice(entry, { reason = 'idle', held = null } = {}) {
     if (!entry) return 'already';
     if (!this.isPoolDevice(entry)) return 'refused';
     if (isReservedSerial(entry.serial)) return 'refused';
@@ -928,23 +1262,70 @@ export class DevicePool {
       this.log(`  ${entry.key}: still claimed, leaving it up`);
       return 'failed';
     }
+    // Never act on a stored serial (X11 review M4). `pool.json` is a cache of what was true when a
+    // device was handed out: devices.json gets renumbered, and `claim()` records the
+    // `ANDROID_SERIAL` of the process that claimed it. A stale serial in a record whose AVD name
+    // still matches devices.json used to be enough to `emu kill` *another task's leased emulator*,
+    // because the AVD name is not what the kill is addressed to. So: the pair decides the identity,
+    // the record may not disagree with it, no other live lease may claim that identifier, and the
+    // device answers a live question about itself before anything is powered off.
+    const expected = this.pairFor(entry);
+    if (expected == null) {
+      this.log(`  refused ${entry.key}: devices.json does not name it`);
+      return 'refused';
+    }
+    const heldIds = held ?? this.heldIdentifiers();
     if (entry.kind === 'ios') {
       const udid = entry.udid ?? entry.id;
+      if (udid !== expected.udid) {
+        this.log(
+          `  refused ${entry.key}: the record says simulator ${udid}, devices.json says ${expected.udid}`
+        );
+        return 'refused';
+      }
+      if (heldIds.has(udid)) {
+        this.log(`  refused ${entry.key}: a live lease holds that simulator`);
+        return 'refused';
+      }
       if (!this.ops.bootedSimulators().includes(udid)) return 'already';
       this.log(`  shutting down simulator ${udid} (${reason})`);
       return this.ops.shutdownSimulator(udid) ? 'off' : 'failed';
     }
-    if (!entry.serial) return 'already';
-    if (!this.ops.attachedSerials(entry.adbPort).includes(entry.serial))
+    const serial = expected.serial;
+    if (serial == null) {
+      this.log(`  refused ${entry.key}: devices.json gives it no console port`);
+      return 'refused';
+    }
+    if (entry.serial != null && entry.serial !== serial) {
+      // The record and devices.json disagree. The kill is addressed to the *pair's* serial, and the
+      // live check below has to agree about who is behind it, so a disagreement is a warning rather
+      // than a device that can never be reaped again - which is what a refusal here would cause,
+      // since nothing rewrites a record until its device is next handed out.
+      this.log(
+        `  ${entry.key}: the record says ${entry.serial}, devices.json says ${serial} - using the pair's, and asking the device`
+      );
+    }
+    if (isReservedSerial(serial)) return 'refused';
+    if (heldIds.has(entry.id) || heldIds.has(serial)) {
+      this.log(`  refused ${entry.key}: a live lease holds that pair`);
+      return 'refused';
+    }
+    if (!this.ops.attachedSerials(expected.adbPort).includes(serial))
       return 'already';
-    this.log(`  shutting down emulator ${entry.serial} (${reason})`);
-    return this.ops.shutdownAndroid(entry.serial, entry.adbPort)
+    const who = this.ops.emulatorAvdName(serial, expected.adbPort);
+    if (who !== entry.id) {
+      this.log(
+        `  refused ${entry.key}: ${serial} answers to AVD ${who ?? '(no answer)'}, not ${entry.id}`
+      );
+      return 'refused';
+    }
+    this.log(`  shutting down emulator ${serial} (${reason})`);
+    return this.ops.shutdownAndroid(serial, expected.adbPort)
       ? 'off'
       : 'failed';
   }
 
-  /**
-   * Is this a device the pool may power off? When the caller loaded devices.json, it must be named
+  /** Is this a device the pool may power off? When the caller loaded devices.json, it must be named
    * there: the pool shuts down what the machine declared as its pool, and nothing it observed.
    */
   isPoolDevice(entry) {
