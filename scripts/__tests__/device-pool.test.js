@@ -912,6 +912,123 @@ describe('reaping', () => {
     ]);
   });
 
+  it('marks the pair booting from inside `ensureBooted`, so a reap in the wait cannot kill it', () => {
+    // X11 re-review N3's last surviving mutation, and the one the round-1 fix left open: the phase
+    // *writer* was tested by calling the writer. Nothing guarded the call site, so deleting
+    // `this.markBooting(...)` from `ensureBooted` kept every test green while the protection it is
+    // supposed to provide stopped existing. This goes through the real path and lets a second pool -
+    // another process, same state directory - try its reap inside the boot wait.
+    withLeases([]);
+    withDevice(
+      entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 90 * MINUTE })
+    );
+    const booter = fakePool({
+      home,
+      state: { serials: [], simulators: new Map() },
+    });
+    // A second pool over the same files, whose device *is* up: this is the reaper that runs while
+    // the boot below is still waiting, and the record it reads is already 90 minutes past its idle
+    // limit, which is exactly why the booting phase has to be there.
+    const reaper = fakePool({
+      home,
+      state: { serials: ['emulator-5574'], simulators: new Map() },
+    });
+    let probe = null;
+    let probing = false;
+    const realSleep = booter.pool.sleep;
+    booter.pool.sleep = (ms) => {
+      if (probe == null && !probing) {
+        probing = true;
+        probe = reaper.pool.reap({ idleMinutes: 0 });
+        // The emulator finishes coming up, so the wait ends instead of running to its timeout.
+        booter.state.serials.push('emulator-5574');
+        probing = false;
+      }
+      realSleep(ms);
+    };
+    // Android only: the fake simulator never comes up, and its boot is not the subject.
+    const result = booter.pool.ensureBooted(
+      PAIR_A,
+      lease('X9-1', { task: 'X9' }),
+      { platform: 'android' }
+    );
+    expect(result.booted).toEqual(['avd:nitro-ui-a']);
+    expect(probe).not.toBeNull();
+    expect(probe.kept[0]).toMatchObject({ reason: 'booting' });
+    expect(probe.reaped).toEqual([]);
+    expect(reaper.calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
+    // And the boot that finished is not stuck off the idle clock: the phase is cleared by the hand-off.
+    expect(readPool(home).devices[0].phase).toBe(null);
+  });
+
+  it('refuses to power a device off when a live lease holds it, asked directly', () => {
+    // X11 re-review N3: `reap` checks the hold-set before calling `shutdownDevice`, and
+    // `shutdownDevice` checks it again, so deleting either one left the suite green - they mask each
+    // other. The inner one is the one that matters when a *new* caller forgets the outer (it is also
+    // the only check `shutdownDevice` has when it is handed a `held` set from a stale plan), so it
+    // gets its own test rather than a comment saying "defence in depth".
+    withLeases([lease('B7-1', { task: 'B7', pairId: 'pair-a' })]);
+    const { pool, calls } = fakePool({
+      home,
+      state: { serials: ['emulator-5574'], simulators: new Map() },
+    });
+    const entry = entryOf({
+      key: 'avd:nitro-ui-a',
+      leaseId: null,
+      usedAgo: 40 * MINUTE,
+    });
+    // Both questions asked of the same live lease: by identifier from the caller's set, and by the
+    // pool's own read when no set is handed in.
+    expect(pool.shutdownDevice(entry, { held: new Set(['nitro-ui-a']) })).toBe(
+      'refused'
+    );
+    expect(pool.shutdownDevice(entry)).toBe('refused');
+    expect(
+      pool.shutdownDevice(entry, { held: new Set(['emulator-5574']) })
+    ).toBe('refused');
+    expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
+    const ios = entryOf({
+      key: 'ios:UDID-A',
+      kind: 'ios',
+      id: 'UDID-A',
+      leaseId: null,
+      usedAgo: 40 * MINUTE,
+    });
+    expect(pool.shutdownDevice(ios, { held: new Set(['UDID-A']) })).toBe(
+      'refused'
+    );
+    expect(pool.shutdownDevice(ios)).toBe('refused');
+    expect(calls.filter((c) => c[0] === 'shutdown-sim')).toEqual([]);
+  });
+
+  it('does not shut down an idle device the exclusive hand-off found untracked, under a lease', () => {
+    // The declared path (a pool device booted outside the pool, so it has no record), which is the
+    // one `--exclusive` uses and the one that masked the check above (`reap`'s pass 1 never sees a
+    // device with no record). B7 holds pair-a; the bench names pair-a's AVD in `shutdownKeys` and
+    // exempts its own lease, which is the only exemption it is allowed.
+    withLeases([lease('B7-1', { task: 'B7', pairId: 'pair-a' })]);
+    writeFileSync(
+      join(home, 'pool.json'),
+      JSON.stringify({ version: 1, devices: [] })
+    );
+    const { pool, calls } = fakePool({
+      home,
+      state: { serials: ['emulator-5574'], simulators: new Map() },
+    });
+    const done = pool.reap({
+      shutdownKeys: ['avd:nitro-ui-a', 'ios:UDID-A'],
+      reason: 'exclusive acquire',
+      exceptLeaseId: 'BENCH-1',
+    });
+    expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
+    expect(calls.filter((c) => c[0] === 'shutdown-sim')).toEqual([]);
+    expect(done.kept.map((x) => x.key)).toEqual([
+      'avd:nitro-ui-a',
+      'ios:UDID-A',
+    ]);
+    expect(done.reaped).toEqual([]);
+  });
+
   it('lets a live lease protect its own devices from its own reap', () => {
     // X11 re-review M3, the rule reversed. The old test here said "your hold does not stop your
     // reap", and the failure that claim produced: task A acquires, builds for 20 minutes, starts a
