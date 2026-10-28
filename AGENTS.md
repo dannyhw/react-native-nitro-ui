@@ -94,6 +94,21 @@ Run gates through `node scripts/gate.mjs <gate>` (see its header for the names) 
   `harness:android:ColdSizing`), and satisfies nothing else; `check` takes no arguments at all;
 - `gate.mjs table` renders the report's gate table, and `gate.mjs export --task <ID>` commits the
   ledger to `docs/tasks/<ID>/gates.jsonl` beside it.
+- **Every failure leaves evidence.** A run's log goes in the clone's gate log store —
+  `<git-common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log` — which every worktree of the
+  clone shares and `git worktree remove` never deletes; `gate.mjs logs [--branch b] [--failed]
+  [--all]` lists it. The store is kept to 35 days by mtime and then 64 MiB, oldest first, and never
+  touches a log written in the last two hours. `gate.mjs export --task <ID>` also writes a scrubbed
+  excerpt of every **failed** run to `docs/tasks/<ID>/failures/<run>-<n>.log` — the failing test names,
+  the assertion messages, the last 150 lines, the load at both ends and, for a device gate, the
+  device context — and records its path in that line's `failureLogPath`. Passing runs get no file.
+  A committed excerpt holds no secret and no machine identity (D25): scrubbed are PEM blocks, URL
+  userinfo, `curl -u user:pass` and `user:pass@host`, credential-shaped assignments (`.npmrc`
+  `_auth=`/`_authToken=`, `TOKEN=`, `"secret":`, `--api-key`, a config file's whole `password: some
+  phrase`), `Authorization:`/`Cookie:` **whole** (any scheme), bare token shapes (`ghp_`, `npm_`, `xox`,
+  AWS/Stripe/Anthropic/GitLab ids, JWTs) and email addresses; and your `$HOME`, scratch directory,
+  username, hostname and repo/store paths (written as `~`, `<tmp>`, `<user>`, `<host>`, `<repo>`
+  `<store>`) — including another person's `/Users/<name>` and a `/var/folders/<hash>` folder, by shape.
 
 Do not write a gate result into a report that the table does not print, and do not write a device
 hygiene section. Leases and the scripts enforce that now (X1): a device gate runs under
