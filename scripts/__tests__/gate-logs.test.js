@@ -1166,6 +1166,104 @@ describe('logs survive git worktree remove', () => {
     expect(status.stdout).not.toContain('4100');
   });
 
+  it('never reports a finished foreground run as the background gate it waits for (N4)', () => {
+    // `foreground: true` is what keeps a run that was never backgrounded out of
+    // `wait`. Review N4 removed the filter and the whole suite stayed green, so
+    // nothing guarded it: `wait` sorts by `startedAt` and takes the newest, so a
+    // foreground `check` that finished with exit 7 seconds ago — in this very
+    // worktree — becomes the answer to "what did my background gate do?", and the
+    // run actually in progress is never read.
+    const dir = makeRepo();
+    // The foreground run: real, failing with a distinctive code.
+    expect(runCli(dir, ['check'], { FAKE_EXIT: '7' }).status).toBe(7);
+    // …and an older *background* record for the same gate in this checkout, still
+    // open, owned by this test's pid, with a log line of its own to print. Older on
+    // purpose: "newest first" is the rule that picks the wrong one without the filter.
+    const logPath = 'task/x12-fixture/check-09.log';
+    const absolute = path.join(storeOf(dir), logPath);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(
+      absolute,
+      'gate: check\nmy background run is still going\n'
+    );
+    fs.writeFileSync(
+      absolute.replace(/\.log$/, '.gate.json'),
+      JSON.stringify({
+        version: 1,
+        gate: 'check',
+        pid: process.pid,
+        startedAt: Date.parse('2026-10-28T09:00:00.000Z'),
+        logPath,
+        done: false,
+        branch: 'task/x12-fixture',
+        worktree: fs.realpathSync(dir),
+      })
+    );
+
+    const wait = runCli(dir, [
+      'wait',
+      '--gate',
+      'check',
+      '--timeout-minutes',
+      '0.01',
+    ]);
+    expect(wait.status).toBe(13);
+    expect(wait.stderr).toContain('my background run is still going');
+    // The finished foreground run's exit code is never attributed to the run that is
+    // still going.
+    expect(wait.stderr).not.toContain('exit 7');
+  });
+
+  it('keeps another branch’s legacy migrated record out of wait (N4)', () => {
+    // The last scoping rule with no test on it. A pre-X12 record migrated from a
+    // worktree has `branch` and no `worktree`, so the worktree comparison cannot
+    // exclude it and the branch comparison is the only thing that does. Review N4:
+    // deleting that comparison left the suite green. The harm is concrete — such a
+    // record from another task's branch, still open and with a live-looking pid,
+    // becomes *my* gate: `wait` reports its log and its eventual exit code, and
+    // `status` lists another task's run as mine.
+    const dir = makeRepo();
+    const foreign = path.join(
+      storeOf(dir),
+      '.gates',
+      'logs',
+      'task',
+      'x12-other',
+      'check-2026-10-27T00-00-00.000Z.log'
+    );
+    fs.mkdirSync(path.dirname(foreign), { recursive: true });
+    fs.writeFileSync(foreign, 'another branch’s run, still going\n');
+    fs.writeFileSync(
+      foreign.replace(/\.log$/, '.gate.json'),
+      JSON.stringify({
+        version: 1,
+        gate: 'check',
+        pid: process.pid,
+        startedAt: Date.parse('2026-10-27T00:00:00.000Z'),
+        logPath: `.gates/logs/check-2026-10-27T00-00-00.000Z.log`,
+        done: false,
+        branch: 'task/x12-other',
+      })
+    );
+
+    // This checkout has no background run of its own, so the only honest answer is
+    // "there is none" — not a run that belongs to a different branch. The tiny budget
+    // is deliberate: with the comparison removed, `wait` adopted the foreign record
+    // and blocked for its full default budget, so a red run of this test has to be a
+    // fast one rather than a two-minute hang.
+    const wait = runCli(dir, [
+      'wait',
+      '--gate',
+      'check',
+      '--timeout-minutes',
+      '0.01',
+    ]);
+    expect(wait.status).toBe(2);
+    expect(wait.stderr).toContain('no background gate');
+    const status = runCli(dir, ['status']);
+    expect(status.stdout).not.toContain('another branch');
+  });
+
   it('records which worktree started a background run (M1)', () => {
     // The field the scoping above reads, asserted where it is written. A record
     // without it is a record no `wait` can attribute, and the "records predating this
@@ -2230,6 +2328,35 @@ describe('a failed device gate records its device context', () => {
     expect(context).toContain('emulator-5574');
     expect(context).not.toContain('emulator-5560');
     expect(context).toContain('<other device>');
+  });
+
+  it('asks adb nothing for a failed iOS gate whose lease holds an emulator (N4)', () => {
+    // A pair is an iOS simulator *and* an emulator, this run's lease is live, and the
+    // environment names that emulator — the exact setup under which a weaker check
+    // starts probing a device the gate never touched. Review N4: flipping
+    // `asksAdb = platform === 'android'` to `true` left every test in the repo green.
+    const dir = makeRepo();
+    const home = leaseHomeFor(dir);
+    const run = runCli(
+      dir,
+      ['harness:ios'],
+      {
+        ...leased,
+        IOS_SIM_UDID: 'CD670291-1111-1111-1111-111111111111',
+        NITRO_UI_HOME: home,
+        FAKE_EXIT: '1',
+      },
+      ''
+    );
+    expect(run.status).toBe(1);
+    const asked = fs.existsSync(run.calls)
+      ? fs.readFileSync(run.calls, 'utf8')
+      : '';
+    // simctl is a host-wide question and stays; adb is another platform's tool.
+    expect(asked).toContain('simctl');
+    expect(asked).not.toContain('adb');
+    // And the block says why, rather than printing nothing where an answer should be.
+    expect(logOf(dir)).toContain('not an Android gate');
   });
 
   it('asks the leased device its own state, and never lists devices', () => {
