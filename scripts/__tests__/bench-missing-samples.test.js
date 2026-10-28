@@ -1230,3 +1230,51 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
     );
   });
 });
+
+describe('the two copies of the launch budgets agree', () => {
+  /**
+   * `run.mjs` owns the table it hands to the launcher; `lib.mjs` restates it so the
+   * widening rule can be tested without importing a runner that cannot be imported under
+   * jest (`import.meta`). Two copies of a number drift, and the drift is silent in the
+   * worst way: tests would pass against one table while devices ran on the other, so a
+   * launch killed as "stalled" on a slow arm would look like a case the suite covers.
+   *
+   * This reads the runner's own source rather than a fixture, so editing a budget there
+   * moves the expectation here with it - or fails.
+   */
+  const runnerTable = () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'scripts/bench/run.mjs'),
+      'utf8'
+    );
+    const block = /const TIMEOUTS = \{([^}]*)\};/.exec(source);
+    expect(block).not.toBeNull();
+    return Object.fromEntries(
+      [...String(block[1]).matchAll(/(\w+):\s*([0-9_]+)/g)].map(
+        ([, key, value]) => [key, Number(value.replace(/_/g, ''))]
+      )
+    );
+  };
+
+  it('is the same table, read from the runner that uses it', () => {
+    expect(runnerTable()).toEqual(DEFAULT_SCENARIO_BUDGETS);
+  });
+
+  it('has an entry for every scenario the plans can schedule', () => {
+    // Otherwise `launchBudgetMs` falls back to its own default for a new action, and the
+    // fallback is the value A4 just found too small.
+    const actions = new Set();
+    for (const plan of ['quick', 'full']) {
+      for (const platform of ['ios', 'android']) {
+        for (const entry of buildSchedule({ plan, launches: 1, platform })) {
+          actions.add(String(entry.scenario).split('.')[0]);
+        }
+      }
+    }
+    const table = runnerTable();
+    for (const action of actions) {
+      expect(table).toHaveProperty(action);
+    }
+    expect([...actions].sort()).toEqual(['leak', 'memory', 'mount', 'update']);
+  });
+});
