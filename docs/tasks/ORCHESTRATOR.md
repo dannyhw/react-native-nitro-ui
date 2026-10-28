@@ -96,8 +96,10 @@ names, and `git ls-files <dir>` before you assume a file exists. Other task IDs
 exist only as far as `git log` shows them merged.
 Environment: bun install; Node 24 via `fnm exec --using 24 --`; Android env from
 AGENTS.md; devices only from `node scripts/lease.mjs acquire --task <ID>`.
-Commit on your branch, don't push. End with a short version of the report and
-the final SHA.
+Commit on your branch, don't push. Commit with the repo's git config as it is:
+never pass `-c user.name`/`-c user.email`, `--author`, or GIT_AUTHOR_*/
+GIT_COMMITTER_* variables. End with a short version of the report and the
+final SHA.
 ```
 
 **Cleanup without losing evidence.** Until X12 lands, archive a worktree's gate logs
@@ -121,6 +123,10 @@ isn't applied. Don't start a new session.
   `NITRO_UI_MACHINE_LABEL`, not a hostname.
 - Commit messages and PR descriptions describe the change, not who or what
   wrote it.
+- Commits use the repo's own `user.name`/`user.email`. An implementer once
+  invented an author email that belonged to a stranger's GitHub account, and
+  GitHub credited four merged commits to them. Before merging, check
+  `git log --format='%ae' main..<branch> | sort -u` shows only the repo's email.
 - Process and tooling changes must leave the published package byte-identical
   (`npm pack` file list = `etc/package-files.txt`, same contents).
 - Process speed is a priority (owner's call): schedule tooling/process work alongside product
