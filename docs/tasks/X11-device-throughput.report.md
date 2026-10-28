@@ -228,7 +228,7 @@ for the two identical `status !== 0` lines in different functions, a line addres
 that the line is what it claims), reverted from git before the next one. The count is the number of
 cases that went red, named below.
 
-- `leaves a device a lease and a claim took during its own act pass, up` and two more -> `canActOnKey` always answers `allowed` -> **3 red**: that case, `notices a live lease that appears mid-pass even with no claim on the record`, `does not shut down an idle device the exclusive hand-off found untracked, under a lease`
+- `leaves a device a lease and a claim took during its own act pass, up` and two more -> `canActOnKey` always answers `allowed` -> **3 red**: that case, `notices a live lease that appears mid-pass even with no claim on the record`, `does not shut down an idle device the exclusive hand-off found untracked, under a lease`. The same function always answering `refused` -> **32 red**, across both lease suites — the direction that proves the fresh read is not a check that simply keeps everything up. `still kills both devices when nothing arrives in that window` is in that second set: same fixture as the first case, no interleave, both devices die.
 - `refuses to reset a device a gate is running on, whoever owns the claim` -> `busyDevices` replaced by an empty map -> **2 red**: that case plus the CLI's `skips a reset on a device whose gate claim is live, even for a brand-new lease` (the two guards the M2 fix has, proven apart)
 - `does not reset a pair when the task already held the lease and nothing booted` -> `warmReacquire = false` -> **2 red**: that case and its no-claim twin, which is the only case the skip alone protects
 - `treats an app that is not installed as a reset that had nothing to do` -> the not-installed branch disabled -> **2 red**: that case and `still installs the app on an iOS simulator that had none, when one is available`
@@ -242,7 +242,8 @@ cases that went red, named below.
 
 One number this round does *not* claim: an earlier hand-run of the `canActOnKey` mutation showed 19
 red because the replacement did not compile (`entry` was not in scope), so 16 of those were a
-ReferenceError, not a caught bug. The sweep's version is valid JS and the honest count is 3.
+ReferenceError, not a caught bug. The sweep's valid mutation turns 3 red in one direction and 32 in
+the other.
 
 ## Files changed
 
