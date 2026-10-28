@@ -35,6 +35,7 @@ import {
   IDLE_SHUTDOWN_DEFAULT_MINUTES,
   EXCLUSIVE_TTL_MINUTES,
   assertLeasable,
+  leaseAcquiredAtMs,
   pruneExpired,
   decideAcquire,
   newLeaseId,
@@ -465,7 +466,8 @@ function refusalMessage(result, configPath) {
 }
 
 function formatAge(lease, now) {
-  const minutes = Math.round((now - lease.acquiredAt) / 60_000);
+  const acquiredAt = leaseAcquiredAtMs(lease) ?? now;
+  const minutes = Math.round((now - acquiredAt) / 60_000);
   const ttlMinutes = Number(lease.ttlMinutes) || DEFAULT_TTL_MINUTES;
   const left = ttlMinutes - minutes;
   return `${minutes}m held${left < 0 ? ' (ttl expired)' : `, ${left}m ttl left`}`;
@@ -665,27 +667,60 @@ function main(argv) {
     return 1;
   }
 
-  if (result.kind === 'acquired' && options.boot) {
-    const pool = poolFor({ devices, paths, options, log });
-    if (pool == null) {
-      log('lease: --boot needs a devices.json to boot from, and there is none');
-    } else {
-      poolHandoff({ pool, result, options, paths, log });
-    }
+  const { lease, pair } = result;
+  const pool = poolFor({ devices, paths, options, log });
+  if (lease.exclusive && pool != null) {
+    // A bench cannot mint a baseline next to somebody else's boot, idle or not - and this runs
+    // whether or not `--boot` was passed (X11 review M6). CONTRIBUTING tells a bench host to take a
+    // lease *without* `--boot` (the bench boots its own device, slowly, on purpose), and the promise
+    // that `--exclusive` powers the machine down is unconditional, so the power-off cannot live on
+    // the boot path only. A bench that asked for a quiet machine and got one device left running is
+    // the failure this fixes. The keys come from devices.json rather than `pool.json`, so a pool
+    // device booted outside the pool is included.
+    const reaped = pool.reap({
+      shutdownKeys: poolShutdownKeys(pool),
+      reason: 'exclusive acquire',
+      exceptLeaseId: lease.id,
+    });
+    reportReap(reaped, log);
+    log(
+      `lease: exclusive - every device no other lease holds is off ` +
+        `(${reaped.reaped.length} shut down, ${reaped.alreadyOff.length} already off` +
+        (reaped.kept.length > 0
+          ? `, ${reaped.kept.length} held by a lease`
+          : '') +
+        ')'
+    );
+  }
+
+  if (options.boot && pool != null) {
+    poolHandoff({ pool, result, options, log });
   } else {
     if (!options.boot) {
       log(
         'lease: devices not booted - pass --boot (or NITRO_UI_LEASE_BOOT=1) to warm the pair'
       );
     }
+    if (options.boot && pool == null) {
+      log('lease: --boot needs a devices.json to boot from, and there is none');
+    }
     // Reaping still runs: it is the cheap half, and it is what stops a boot somebody
     // abandoned from outliving its task without a daemon to notice.
     if (options.reap) {
-      reportReap(reapPool({ devices, paths, options, log }), log);
+      reportReap(
+        reapPool({
+          devices,
+          paths,
+          options,
+          log,
+          exceptLeaseId: lease.id,
+        }),
+        log
+      );
     }
   }
 
-  const envFile = renderEnvFile(result.lease, result.pair);
+  const envFile = renderEnvFile(lease, pair);
   if (options.out != null) {
     writeFileSync(options.out, envFile);
     log(`lease: ${result.lease.id} for ${result.lease.task} -> ${options.out}`);
@@ -705,17 +740,8 @@ function main(argv) {
  * happens before the reset: `pm clear` on a device that is still booting fails, and a failed reset
  * is a warning rather than a lost lease - the next run's harness reinstalls the app anyway.
  */
-function poolHandoff({ pool, result, options, paths, log }) {
+function poolHandoff({ pool, result, options, log }) {
   const { lease, pair } = result;
-  if (lease.exclusive) {
-    // A bench cannot mint a baseline next to somebody else's boot, idle or not.
-    const reaped = pool.reap({
-      shutdownKeys: unheldPoolKeys(paths),
-      reason: 'exclusive acquire',
-    });
-    reportReap(reaped, log);
-    log(`lease: exclusive - every device no lease holds is now off`);
-  }
 
   // `already` (the task held a lease before) still boots: that is how a retry that came back
   // without its devices gets them, and `ensureBooted` is a no-op when they are already up.
@@ -751,7 +777,10 @@ function poolHandoff({ pool, result, options, paths, log }) {
   // cleanup used to ride along here regardless.
   if (options.reap) {
     reportReap(
-      pool.reap({ idleMinutes: options.idleMinutes ?? undefined }),
+      pool.reap({
+        idleMinutes: options.idleMinutes ?? undefined,
+        exceptLeaseId: lease.id,
+      }),
       log
     );
   }
@@ -787,6 +816,7 @@ function reapPool({
   log,
   shutdownKeys = [],
   reason = 'idle',
+  exceptLeaseId = null,
 }) {
   const pool = poolFor({ devices, paths, options, log });
   if (pool == null) {
@@ -799,6 +829,7 @@ function reapPool({
       idleMinutes: options.idleMinutes ?? undefined,
       shutdownKeys,
       reason,
+      ...(exceptLeaseId != null ? { exceptLeaseId } : {}),
     });
   } catch (error) {
     log(`lease: reap failed (${String(error?.message ?? error)})`);
@@ -847,7 +878,9 @@ function poolRows(devices, paths) {
 /** How a keep reads to whoever asked: the reason code, in the order it matters. */
 const KEEP_REASONS = {
   'busy': 'a run is using it',
+  'booting': 'a boot is in progress',
   'idle-grace': `idle, under the limit`,
+  'lease-held': 'a live lease holds it',
   'unowned-grace': 'no lease holds it, under the idle limit',
 };
 
@@ -877,14 +910,20 @@ function reportReap(reaped, log, { reportKeeps = false } = {}) {
  * "Held" is the lease id the pool record carries, matched against the live lease file - the same
  * association `reap` reads, so the two cannot disagree about who owns a device.
  */
-function unheldPoolKeys(paths) {
+/**
+ * Every pool key devices.json declares: what an exclusive lease powers off before it starts
+ * measuring, because a boot it did not start is still load it has to share, and a bench cannot mint
+ * a baseline next to somebody's emulator (X11 review M6).
+ *
+ * Enumerated from devices.json rather than from `pool.json` on purpose: a pool device that was
+ * booted outside the pool - by the harness's own boot path, or by hand - has no record, and a
+ * reaper that only read records would call the machine quiet while an emulator hummed under it.
+ * Who may actually be powered off out of this list is the pool's decision (`reap` refuses any pair
+ * another live lease holds, and anything outside devices.json entirely).
+ */
+function poolShutdownKeys(pool) {
   try {
-    const live = new Set(
-      (readJson(paths.leases, { leases: [] }).leases ?? []).map((l) => l.id)
-    );
-    return readPool(paths.home)
-      .devices.filter((x) => x.leaseId == null || !live.has(x.leaseId))
-      .map((x) => x.key);
+    return pool.keysForPool();
   } catch {
     return [];
   }

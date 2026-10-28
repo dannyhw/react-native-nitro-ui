@@ -118,6 +118,12 @@ export const LOAD_SETTLE_TIMEOUT_MS = 180_000;
 export const DEVICE_SETTLE_TIMEOUT_MS = 420_000;
 
 /**
+ * How long a `phase: 'booting'` record keeps a device off the reaper: the same bound the boot wait
+ * itself has, because a boot that outlives its own timeout is no longer a boot in progress.
+ */
+export const BOOTING_PROTECTION_MS = DEVICE_SETTLE_TIMEOUT_MS;
+
+/**
  * One pool record per physical device: when it was booted, last handed to a run, and which runs
  * are holding it right now.
  */
@@ -152,7 +158,15 @@ export function newPoolEntry({
  */
 export function deviceIsBusy(entry, nowMs, isPidAlive = pidIsAlive) {
   if (!entry) return false;
-  if (entry.phase === 'booting') return true;
+  // A boot in flight is a claim on the device (X11 review M3), but only for as long as a boot can
+  // legitimately take: a task that died halfway through one would otherwise leave its device
+  // un-reapable for the rest of the day, which is the same leak the pool exists to clean up. And a
+  // record that says "booting" without a timestamp is not evidence of anything, so it protects
+  // nothing.
+  if (entry.phase === 'booting') {
+    const since = Number(entry.phaseAtMs);
+    return Number.isFinite(since) && nowMs - since < BOOTING_PROTECTION_MS;
+  }
   return (entry.claims ?? []).some((claim) => isPidAlive(claim?.pid));
 }
 
@@ -170,11 +184,22 @@ export function pidIsAlive(pid) {
 /**
  * Reaping decision for one pool record.
  *
- * One rule, from the brief: a device idle past `idleShutdownMinutes` is powered off, whether or
- * not a lease still names it, and a device with a run in flight never is. That covers both leaks
- * a warm pool can spring: the task that released and left a boot behind, and the one that
- * acquired, walked away, and let its lease expire mid-afternoon. The `lease-gone` reason exists
- * because those two read differently in `list` - an unused hand-off, versus an abandoned boot.
+ * Two rules, and only two: a device with a run in flight is never touched, and a device a *live*
+ * lease holds is never touched on a timer. Everything else — the boot a task released, the boot
+ * whose task walked away and let its lease expire — is fair game once `idleShutdownMinutes` has
+ * passed.
+ *
+ * The lease rule is the whole point of the second clause (X11 review M3). A warm pool protects a
+ * device it is *not* looking at by reading `pool.json`, and a live lease with no in-flight claim is
+ * the ordinary state of a working task: `build-app.mjs`, Metro, a direct real-input run, `bun run
+ * harness:*` under its own runner, or ten minutes of reading a stack trace between two commands.
+ * None of those write a claim, so a timestamp alone would power the device off underneath them —
+ * and a 31-minute debug session is past any configured idle limit.
+ *
+ * So `--idle-minutes` (the operator's "power the pool off now") only reaches devices no live lease
+ * holds; an agent that wants someone else's boot off releases their lease first. `reason` says
+ * which case the caller is looking at, because `list` has to distinguish an unused hand-off from an
+ * abandoned boot.
  */
 export function poolReapDecision(
   entry,
@@ -184,6 +209,7 @@ export function poolReapDecision(
     defaultIdleMinutes = IDLE_SHUTDOWN_DEFAULT_MINUTES,
     isPidAlive = pidIsAlive,
     overrideIdleMinutes = null,
+    exceptLeaseId = null,
   }
 ) {
   const started = entry?.bootedAtMs ?? nowMs;
@@ -192,6 +218,12 @@ export function poolReapDecision(
   const lease = entry?.leaseId
     ? (leases ?? []).find((x) => x.id === entry.leaseId)
     : undefined;
+  // Somebody else's live lease: off-limits on a timer, whatever the clock says (M3). Your *own*
+  // lease does not protect you from your own reaper - an idle hand-off is exactly what the idle
+  // clock exists to power off, and everybody leases, so treating your own hold as protection would
+  // stop the clock firing for anyone.
+  const leaseIsLiveNow = lease != null && leaseIsLive(lease, nowMs);
+  const held = leaseIsLiveNow && lease.id !== exceptLeaseId;
   // An explicit override (the CLI's `--idle-minutes`) outranks what the record carries, because
   // the record's value came from devices.json in the first place and the flag exists to say
   // "not that number, this one, right now". `0` is a real override, so this is a null check.
@@ -201,19 +233,38 @@ export function poolReapDecision(
     defaultIdleMinutes ??
     IDLE_SHUTDOWN_DEFAULT_MINUTES;
   if (deviceIsBusy(entry, nowMs, isPidAlive)) {
-    return { action: 'keep', reason: 'busy', idleMs, protected: true };
+    return {
+      action: 'keep',
+      reason: entry.phase === 'booting' ? 'booting' : 'busy',
+      idleMs,
+      protected: true,
+    };
+  }
+  if (held) {
+    // Past the limit the reason is `lease-held` rather than `idle-grace`: the same answer, but the
+    // honest one — this device is not "still in its grace period", it is somebody's, and the only
+    // thing that changes that is their `release`.
+    return {
+      action: 'keep',
+      reason: idleMs >= idleMinutes * 60_000 ? 'lease-held' : 'idle-grace',
+      idleMs,
+      protected: true,
+      leaseId: lease.id,
+    };
   }
   if (idleMs >= idleMinutes * 60_000) {
+    // `idle` for a boot a live lease still owns (the task is done with it), `lease-gone` for one
+    // nobody owns any more, because `list` has to tell an unused hand-off from an abandoned boot.
     return {
       action: 'reap',
-      reason: lease ? 'idle' : 'lease-gone',
+      reason: leaseIsLiveNow ? 'idle' : 'lease-gone',
       idleMs,
       protected: false,
     };
   }
   return {
     action: 'keep',
-    reason: lease ? 'idle-grace' : 'unowned-grace',
+    reason: 'unowned-grace',
     idleMs,
     protected: true,
   };
@@ -281,6 +332,14 @@ export function normalizeDevices(config) {
       }
       if (!Number.isInteger(android.emulatorPort)) {
         problems.push(`pair ${id}: android needs an integer emulatorPort`);
+      } else if (!isConsolePort(android.emulatorPort)) {
+        // Same rule the boot enforces (X11 review N2), caught where the mistake is actually made.
+        // A port the emulator cannot take used to pass here and be dropped at boot, so the AVD came
+        // up on any free console and the serial the lease exported did not exist.
+        problems.push(
+          `pair ${id}: android.emulatorPort ${android.emulatorPort} is not a console port the ` +
+            `emulator can take (even numbers ${EMULATOR_PORT_FLOOR}-${EMULATOR_PORT_CEILING})`
+        );
       }
     }
     if (!Number.isInteger(pair.metroPort)) {
@@ -394,6 +453,19 @@ export const EMULATOR_PORT_FLOOR = 5554;
 export const EMULATOR_PORT_CEILING = 5682;
 
 /**
+ * Can the emulator binary be told to take this console port? Even, in range. Kept next to the
+ * bounds it reads so config validation and the boot cannot drift apart.
+ */
+export function isConsolePort(port) {
+  return (
+    Number.isInteger(port) &&
+    port % 2 === 0 &&
+    port >= EMULATOR_PORT_FLOOR &&
+    port <= EMULATOR_PORT_CEILING
+  );
+}
+
+/**
  * Is this adb serial the one nobody may use? Compared on the serial rather than
  * the configuration, because by the time a script holds a serial the lease may
  * have come from anywhere.
@@ -486,17 +558,47 @@ export function checkEmulatorEnv(
 }
 
 /**
+ * When a lease was taken, as milliseconds, from whatever the state file holds.
+ *
+ * Our own writers use `Date.now()`, but this file is hand-editable and `~/.nitro-ui` is a person's
+ * home directory: an ISO timestamp in there used to make `now - acquiredAt` NaN, and every
+ * comparison against NaN is false — so a live lease read as *expired*, its devices as nobody's,
+ * and the reaper powered off a device another task was mid-suite on. Reading the two formats the
+ * file realistically holds costs nothing; getting it wrong is silent and destroys somebody's run.
+ *
+ * @returns {number | null}
+ */
+export function leaseAcquiredAtMs(lease) {
+  const raw = lease?.acquiredAt;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string') {
+    const parsed = Date.parse(raw);
+    if (!Number.isNaN(parsed)) return parsed;
+    const asNumber = Number(raw);
+    if (Number.isFinite(asNumber)) return asNumber;
+  }
+  return null;
+}
+
+/**
  * Is this lease still alive? Every lease is judged by **its own** ttl, never by
  * the ttl of whoever happens to be asking (review M1): a `--ttl-minutes 1`
  * probe must not evict the 16-hour exclusive lease a bench is running under, and
  * a bench must not evict a short one.
  *
- * @param {{acquiredAt: number, ttlMinutes?: number}} lease
+ * A lease whose date cannot be read counts as alive. Both directions have a failure mode and they
+ * are not equal: expiring it powers off a device somebody is using, quietly; keeping it wedges
+ * `maxDeviceLeases` until a person runs `lease.mjs list`, which shows the entry and names its task,
+ * and `release` removes it. A loud block beats a silent kill.
+ *
+ * @param {{acquiredAt: number | string, ttlMinutes?: number}} lease
  * @param {number} now
  */
 export function leaseIsLive(lease, now) {
   const ttlMinutes = Number(lease?.ttlMinutes) || DEFAULT_TTL_MINUTES;
-  return now - lease.acquiredAt < ttlMinutes * 60_000;
+  const acquiredAt = leaseAcquiredAtMs(lease);
+  if (acquiredAt == null) return true;
+  return now - acquiredAt < ttlMinutes * 60_000;
 }
 
 /** A waiting exclusive request that is still refreshing its marker? */
