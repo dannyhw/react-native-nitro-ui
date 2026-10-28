@@ -23,6 +23,10 @@ import {
   runnerFromArgv,
 } from '../scripts/app-stamp-core.mjs';
 import { checkEmulatorEnv, emulatorSerial } from '../scripts/lease-core.mjs';
+import {
+  suiteTimingPluginFromEnv,
+  SUITE_TIMING_ENV,
+} from '../scripts/harness-suite-timing.mjs';
 // CommonJS, because `example/metro.config.js` requires the same module to serve
 // the state this publishes.
 import harnessTimingGate from '../scripts/harness-timing-gate.js';
@@ -221,6 +225,23 @@ const stopTimingGate = publishTimingGate({
 });
 process.once('exit', stopTimingGate);
 
+/**
+ * Per-suite timings (X11), when `HARNESS_SUITE_TIMING` names a file.
+ *
+ * The ledger could say `harness:android` cost 455 s but not *where*, which is why "Android is
+ * three times iOS" stayed a mystery for a month. The harness's `test-file:finished` hook reports
+ * each file's duration alongside the durations its own tests report, so a slow file can be
+ * attributed to slow tests or to the app restart around it - the two need different fixes and only
+ * the pair of numbers tells them apart. `scripts/gate.mjs` sets the variable, reads the file after
+ * the run, and puts the result in the ledger line.
+ */
+const suiteTimingPlugin = suiteTimingPluginFromEnv(process.env);
+if (suiteTimingPlugin != null) {
+  console.log(
+    `suite-timing: writing per-suite durations to ${process.env[SUITE_TIMING_ENV]}`
+  );
+}
+
 export default {
   entryPoint: './index.js',
   appRegistryComponentName: 'NitroUiExample',
@@ -262,4 +283,5 @@ export default {
   maxAppRestarts: 4,
   detectNativeCrashes: true,
   forwardClientLogs: true,
+  plugins: suiteTimingPlugin == null ? [] : [suiteTimingPlugin],
 };

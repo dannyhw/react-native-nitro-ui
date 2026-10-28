@@ -134,10 +134,15 @@ async function resolveDevice(env) {
           .filter((device) => device.state === 'Booted')
           .map((device) => `${device.name} (${device.udid})`)
           .join(', ') || 'none';
+      // Deliberately not `&& open -a Simulator`: on Xcode 27 the app attaches to DeviceKit and
+      // boots a device of its own choosing, so the window this hint used to ask for becomes a
+      // second simulator nobody leased. A run needs the device booted, not visible; a human who
+      // wants to watch it can open the app by hand.
       throw new Error(
         `real-input: simulator ${udid} is ${state}, not booted (booted: ` +
           `${booted}). Boot it first — this script deliberately boots nothing:` +
-          `\n  xcrun simctl boot ${udid} && open -a Simulator`
+          `\n  node scripts/lease.mjs acquire --task <ID> --boot` +
+          `\n  xcrun simctl boot ${udid}`
       );
     }
     await sleep(2000);

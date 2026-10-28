@@ -93,12 +93,23 @@ export const LOG_STORE_BASENAME = 'nitro-ui-gates';
  *     A line with `worktreeClean: false` is kept as evidence for `tree`/`trees`
  *     matching (a build really did get tested) but is never reusable.
  *
+ * v6 (X11) adds `suiteTimings` and changes no rule: the per-suite timings a harness
+ * run recorded, in the shape `scripts/harness-suite-timing.mjs` writes them. It is
+ * what turns "the Android harness costs 455 s" into "these five files cost 200 s of
+ * it, and 255 s of the run was outside any file", which is the difference between
+ * fixing a suite and fixing the runner. Absent on every non-harness gate and on any
+ * run where the plugin was not asked for, which reads as "no per-suite timings" -
+ * what it means for a v5 line or a run without the plugin. The sidecar file it is
+ * read from lives in the gate log store like every other log (v5), never in the
+ * worktree, so a run's timings outlive `git worktree remove` for the same reason its
+ * transcript does.
+ *
  * v1 lines are still read: with no `trees` they compare on the full digest, and
  * with no `treeAfter` they are taken at their word. A line with no `fullTree` -
  * anything written before v4 - cannot be reused, because there is nothing exact to
  * compare: falling back to `tree` would be the old unsound rule under a new name.
  */
-export const LEDGER_VERSION = 5;
+export const LEDGER_VERSION = 6;
 
 /** The platforms a device gate can be keyed to. */
 export const PLATFORMS = ['ios', 'android'];
@@ -382,6 +393,12 @@ export function changedPathsGitArgs(mergeBase) {
  * caller that did not measure cleanliness writes a line that is honest about
  * everything except reuse.
  *
+ * `stepTimings` (v3) and `suiteTimings` (v6) are the two timing attachments, and
+ * they are not the same measurement: one step of `check` runs many jest suites, and
+ * one harness gate runs one runner over many suites. Both are records, not rules —
+ * nothing in this file reads either, so a line without them decides exactly as it
+ * used to. Neither is defaulted here: the caller passes what it read from the run.
+ *
  * @returns {object} a JSON-ready line
  */
 export function ledgerLineFromRun({
@@ -403,6 +420,7 @@ export function ledgerLineFromRun({
   counts = null,
   summaries = null,
   stepTimings = null,
+  suiteTimings = null,
   logPath = null,
   failureLogPath = null,
   startedAt,
@@ -430,6 +448,7 @@ export function ledgerLineFromRun({
     counts,
     summaries,
     stepTimings,
+    suiteTimings,
     logPath,
     // Set by `gate.mjs export`, not by a run: the committed excerpt beside
     // `gates.jsonl` for this failed line. Carried on the line so a red row in the

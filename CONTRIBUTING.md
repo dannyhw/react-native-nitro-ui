@@ -362,6 +362,7 @@ cp scripts/devices.example.json ~/.nitro-ui/devices.json   # then put your real 
 {
   "maxDeviceLeases": 2,
   "maxConcurrentBuilds": 1,
+  "idleShutdownMinutes": 30,
   "reservedEmulatorPorts": [5560],
   "reservedIdentifiers": [],
   "pairs": [
@@ -397,6 +398,101 @@ real one.
 `ANDROID_ADB_SERVER_PORT` is part of a lease on purpose: a private adb server per
 task means one task's `adb` never queues behind another's, and it is what makes
 `adb kill-server` on the default port somebody else's problem - so don't.
+
+### The lease owns device lifecycle (X11)
+
+What a boot costs is a property of the machine, so it is measured rather than
+quoted: `acquire --boot` prints the wait it just did (device attached plus the
+load settling). The one timed series on this box is iOS — four cold boots of the
+pool's simulator, `load1` peaking at 58.5, 64.6, 72.2 and 74.3, still 16-21 after
+150 seconds, above the bench's settle ceiling of 5 (X11 report item 6). No
+Android boot has been timed here, so no Android figure is quoted. Every task used
+to pay for a boot twice, once for the harness and once for real-input, then shut
+its devices down so the next task paid it too. So the lease now keeps the pair it
+hands out **warm**, and a task stops powering devices off.
+
+```sh
+node scripts/lease.mjs acquire --task X11 --boot        # boots the pair, waits until settled
+node scripts/lease.mjs list                             # what is booted, and who holds it
+node scripts/lease.mjs reap                             # powers off what is idle past the limit
+node scripts/lease.mjs reap --idle-minutes 0            # "power the pool off now", whatever the limit says
+node scripts/lease.mjs release X11                      # devices stay up, on purpose
+```
+
+What that means in practice:
+
+- **Booting is opt-in.** `--boot` (or `NITRO_UI_LEASE_BOOT=1`, which is what an
+  agent's shell should set) boots what is down, waits for `adb devices` /
+  `simctl list` rather than for the boot process, waits for the load average to
+  fall under the bench's settle ceiling, and resets the example app. Without it
+  a lease only reserves names - which is what a test, a CI runner or a bench
+  host wants.
+- **Nothing reaps passively.** `acquire`, `release` and `list` never power a
+  device off and never reset one, not even one that is idle past
+  `idleShutdownMinutes` (`devices.json`, default 30). Devices are powered off in
+  exactly two places: when you type `node scripts/lease.mjs reap`, and when an
+  `--exclusive` acquire promises its bench a quiet machine. There is no daemon,
+  and no lease command kills on your behalf, because `list` is the command every
+  task runs most often and a `list` that reaps is a reaper in every shell.
+  `--no-reap` opts out of even the explicit reap, and `NITRO_UI_LEASE_BOOT=0`
+  takes the whole device lifecycle offline for a machine that manages its own
+  devices. `reap --idle-minutes N` overrides the configured limit for that one
+  call - `0` is "off now", which is what you want when the machine is yours again
+  at the end of the day. An abandoned boot therefore waits for the next explicit
+  reap, and that is the trade: the alternative was a command that killed devices
+  nobody typed it for.
+- **A device under a live lease is never powered off on a timer**, whoever is
+  asking - including the task that holds the lease - and `--idle-minutes` does not
+  override that. The idle clock is for the boot somebody _left behind_: a task
+  that released, or one whose lease ran out its TTL. It is not a licence to evict
+  a running task, because most of what a task does makes no claim - building,
+  running Metro, a direct `real-input` run, or twenty minutes reading a stack
+  trace - and 31 idle minutes is ordinary work. The way to get a leased device
+  powered off is to release its lease, not to pass a flag in your own shell;
+  `list` names whose it is.
+- **What a reset does not cover.** The between-task reset clears the example
+  app's data (`pm clear`; `simctl uninstall` plus a check that the data container
+  is gone). It does not clear the iOS **keychain** or the **privacy-consent
+  (TCC) grants** - `simctl uninstall` leaves both. `simctl privacy` can reset the
+  second, but only per service: you have to know which ones a run touched, which
+  is not something the pool can know, so it is not run per hand-off. A warm
+  pooled device can therefore inherit a permission prompt somebody already
+  answered. The reset is storage-complete, not state-complete; a test that
+  asserts a permission prompt appears needs a freshly created device, not a
+  pooled one.
+- **A device is only ever powered off if `devices.json` names it**, and never
+  on a reserved serial. The pool shuts down what the machine _declared_, never
+  something it merely observed booted. And it never acts on the serial a state
+  file happens to hold: the address is derived from the pair, the record is not
+  allowed to disagree with it silently, and the emulator itself is asked (`adb
+-s <serial> emu avd name`) to confirm which AVD is behind that serial before
+  anything is powered off. A device that cannot identify itself stays up.
+- **A run in flight is never interrupted.** A gate claims the devices of the
+  lease it runs under for the duration of the run (`scripts/gate.mjs`), so a
+  reap cannot power off an emulator mid-suite, and a second gate aimed at the
+  same device is refused before it starts. Every kill re-checks that claim at the
+  moment it acts, so a lease and claim taken _while a reap is running_ are seen:
+  the decision is not allowed to be minutes old. The between-task reset does the
+  same and skips a device with a live claim, which is what stops a task
+  re-running `acquire --boot` in a second shell - the documented way to
+  regenerate its env file - from wiping its own running suite.
+  `NITRO_UI_GATE_DEVICE_FORCE=1` runs anyway; a bench that wants the machine to
+  itself uses `--exclusive`, which powers off every pool device no _other_ lease
+  holds - with or without `--boot`, because the bench host's documented
+  invocation is the one without it.
+- **Anything started outside `gate.mjs` runs unclaimed.** `bun run harness:*`,
+  a direct `node scripts/real-input/*.mjs --control …` and `build-app.mjs` take
+  no claim, so what protects them is the rule above: their pair is leased, and a
+  leased pair is off-limits to the reaper. If you need to run a device command
+  with no lease in the environment, take a lease - do not expect a claim, and do
+  not reach for `--idle-minutes`.
+- **A claim is a pid.** A gate that is killed leaves a claim that a reaper
+  treats as no claim at all, so nothing has to trust a clean exit - and a
+  device cannot be wedged "in use" by a process that no longer exists.
+- Nothing opens Simulator.app: a pooled simulator is booted with `simctl boot`
+  and stays headless. On Xcode 27 the app asks DeviceKit for a default device
+  and boots one no lease handed out, which is exactly the background load the
+  pool exists to remove. A human who wants to watch one opens it by hand.
 
 ## Running the on-device (Harness) tests
 

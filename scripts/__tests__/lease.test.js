@@ -689,6 +689,54 @@ describe('the reserved serial', () => {
     ]);
   });
 
+  it('refuses a console port the emulator cannot take, where the mistake is made', () => {
+    // X11 review N2. `Number.isInteger` accepted any integer, so an odd or out-of-range
+    // `emulatorPort` reached the pool boot, where `-port` used to be dropped and the emulator came
+    // up on whatever console was free: the AVD existed, the serial the lease exported did not. The
+    // boot refuses now, and so does the config, at the line someone actually edited.
+    for (const port of [5575, 5000, 6000, 5553]) {
+      expect(() =>
+        normalizeDevices({
+          pairs: [
+            {
+              id: 'mine',
+              ios: { udid: 'AAAA' },
+              android: { avd: 'avd_x', emulatorPort: port },
+              metroPort: 8081,
+            },
+          ],
+        })
+      ).toThrow(/is not a console port the emulator can take/);
+    }
+    // The legal range, both ends, and the odd console that belongs to a legal one.
+    for (const port of [5554, 5574, 5682]) {
+      expect(() =>
+        normalizeDevices({
+          pairs: [
+            {
+              id: 'mine',
+              ios: { udid: 'AAAA' },
+              android: { avd: 'avd_x', emulatorPort: port },
+              metroPort: 8081,
+            },
+          ],
+        })
+      ).not.toThrow();
+    }
+    expect(() =>
+      normalizeDevices({
+        pairs: [
+          {
+            id: 'mine',
+            ios: { udid: 'AAAA' },
+            android: { avd: 'avd_x', emulatorPort: 5555 },
+            metroPort: 8081,
+          },
+        ],
+      })
+    ).toThrow(/emulatorPort 5555/);
+  });
+
   it('rejects a half-usable pool with every problem listed', () => {
     expect(() =>
       normalizeDevices({
