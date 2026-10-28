@@ -9,34 +9,32 @@
 On this machine's canonical iPhone 17 simulator, `mount.date-picker` at N=200 on the two
 `@expo/ui` arms presents its first frame at **p50 2 950 ms** (`expo-ui-host-per-control`) and
 **2 702 ms** (`expo-ui-shared-host`), both *above* the 2 000 ms the runner waited. Nothing was
-hung: at a 40 s ceiling the same cell completes **40/40** iterations, p90 3 049 ms, max
-3 167 ms. The second half was worse and invisible — the probe's native "no frame" backstop was
-a **hardcoded 2 s on both platforms**, so it *was* the timeout however long JS waited. It is a
-90 s ceiling now. The recorded reasons show that timer also firing late (`waited up to
-2 920 ms` when asked for 2 000): it is queued on a main thread still laying out 200 pickers, a
-second reason a 2 s rule could never hold.
+hung: at a 40 s ceiling the same cell completes **40/40** iterations, p90 3 049 ms. Worse and
+invisible: the probe's native "no frame" backstop was a **hardcoded 2 s on both platforms**, so
+it *was* the timeout however long JS waited. It is a 90 s ceiling now. Recorded reasons show
+that timer firing late too (`waited up to 2 920 ms` when asked for 2 000) — it is queued on a
+main thread still laying out 200 pickers, a second reason a 2 s rule could never hold.
 
-**Our own cells were nowhere near the limit, so no gate was biased.** In the mint itself, the
-slowest frame on the `nitro-ui` arm is **302.8 ms** (`mount.segmented-control:200`) — **3.8 %**
-of the 8 000 ms rule — and the slowest anywhere in 1 568 launches is **3 565 ms** on
-`expo-ui-host-per-control` (44.6 %). A separate 2-launch sweep of all seven components at
-N=200 put our worst at 234.5 ms (11.7 % of the *old* 2 000 ms rule, the brief's question).
-Nothing is within 25 % of the rule it gates under, on either machine.
+**Our own cells were nowhere near the limit: no gate was biased.** In the mint, the slowest
+`nitro-ui` frame is **302.8 ms** (`mount.segmented-control:200`) — **3.8 %** of the 8 000 ms
+rule — and the slowest anywhere in 1 568 launches is **3 565 ms** on `expo-ui-host-per-control`
+(44.6 %). A 2-launch sweep of all seven components at N=200 put our worst at 234.5 ms: 11.7 %
+of the *old* rule, the brief's question. Nothing is within 25 % of its rule.
 
 **What shipped.** (1) D9 amended: an incomplete metric costs **its own cell** on a comparison
 arm (`expo-ui-*`) — left out, recorded in `skippedCells` with counts and reasons — while
 `nitro-ui`, `nitro-ui-host` and `rn-core` still refuse the mint. (2) Every missing sample
-records *why* (`probe-timeout` with the wait asked and the wait run, `not-awaited`,
-`probe-error`), per iteration, tallied per cell, printed in the progress line, quoted by a
-refusal. (3) `presented` waits **8 000 ms**; `mounted` stays at 1 500 (measured max 213 ms).
-Asking longer is a diagnostic that cannot mint, capped at 80 s against the 90 s backstop. The
-raise is value-neutral for any cell already complete — an arriving sample keeps its stamp — and
-a committed baseline has no incomplete cells, so mac-1's iOS and mac-2's Android files stay
+records *why* (`probe-timeout` with the wait asked and run, `not-awaited`, `probe-error`),
+per iteration, tallied per cell, printed in the progress line, quoted by a refusal.
+(3) `presented` waits **8 000 ms**; `mounted` stays at 1 500 (measured max 226 ms). Asking
+longer is a diagnostic that cannot mint, capped at 80 s against the 90 s backstop. The raise
+is value-neutral for any cell already complete — an arriving sample keeps its stamp — and a
+committed baseline has no incomplete cells, so mac-1's iOS and mac-2's Android files stay
 valid. (4) `--scenario`/`--n` narrow a run; `--update-baseline` refuses a narrowed schedule
 before booting, because a baseline *is* the table `--check` gates.
 
-**Re-mint:** `bench/baselines/maintainer-mac-2/ios27-sim-iphone17.json` — 196 cells, 0 skipped,
-the two DatePicker cells now 160/160.
+**Re-mint:** `bench/baselines/maintainer-mac-2/ios27-sim-iphone17.json` — 196 cells, none
+skipped, both DatePicker cells now 160/160.
 
 ## Gates
 
