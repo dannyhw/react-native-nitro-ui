@@ -6,7 +6,7 @@
 - Load: start 3.97, end 3.35, median 3.63, max 5.30
 - Device: none recorded (not a device gate)
 - Full log: `task/X12-failure-logs/check-2026-10-28T16-18-47.524Z.log` (<store>/task/X12-failure-logs/check-2026-10-28T16-18-47.524Z.log)
-- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's and your home paths are written as `<repo>`/`<store>`/`~`, before this file was written. Device identifiers appear only when the run recorded its own lease.
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
 
 ## Failing tests and assertion messages
 

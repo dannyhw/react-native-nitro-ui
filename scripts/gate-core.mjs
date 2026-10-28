@@ -1788,8 +1788,8 @@ const BARE_VALUE_END = new Set([
  * folders on the machine running the gate. A gate log carries other people's: a CI
  * artifact's `/home/jenkins/…`, a stack trace pasted from a teammate's
  * `/Users/janesmith/…`, a CoreSimulator line repeating its own hashed per-user
- * folder. Found by the re-review, which found them in an excerpt round 1 had
- * already committed.
+ * folder. Round 1 could not see any of these by construction: an exact-string list
+ * can only name the folders on the machine that ran the gate.
  *
  * Each rule replaces the part that names a *person or a box* and leaves the rest
  * of the path alone, because the path is the half that explains a failure. The
@@ -2460,7 +2460,8 @@ function escapeForRegExp(value) {
  * print, because the exact-string rule they replace only ever caught the one form
  * the caller happened to pass (`os.hostname()` returns the FQDN; `ping` prints the
  * short form, `git` prints the lowercased one, and a stack trace prints the bare
- * name). Review N5 found all three variants in one committed excerpt.
+ * name). Review N5: matching only the spelling `os.hostname()` happens to return
+ * catches one variant out of three.
  *
  * @param {{username?: string | null, hostname?: string | null}} paths
  * @returns {Array<[string | RegExp, string]>}
@@ -2485,8 +2486,8 @@ function identityRules(paths) {
 
   // `host`, `host.local`, `host.example.com`: `os.hostname()` gives one of them and
   // a log prints any of the others - `ping` the short form, `git` the lowercased
-  // one, a mount point the bare label. Review N5 found three spellings of the same
-  // machine in one excerpt, of which exactly one was redacted.
+  // one, a mount point the bare label. Review N5: a log carries several, and the
+  // caller only ever had the one `os.hostname()` returned.
   const hostname =
     typeof paths.hostname === 'string' ? paths.hostname.trim() : '';
   const labels = hostname.split('.').filter((label) => label !== '');
