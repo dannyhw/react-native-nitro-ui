@@ -2212,6 +2212,10 @@ function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
     leaseFile: path.join(statePaths(stateHome(process.env)).leases),
     home: os.homedir(),
     hostname: os.hostname(),
+    // Both spellings of the scratch dir: jest prints resolved paths (`/private/var/…`
+    // on macOS) while `os.tmpdir()` returns the symlink, and a log fixture lives
+    // under the resolved one.
+    tmpDir: [os.tmpdir(), fs.realpathSync(os.tmpdir())],
   });
   // Per-(ts, gate) counter: `ts` is second-granular, and two failed runs of one gate
   // in the same second would otherwise share one file name and the later export

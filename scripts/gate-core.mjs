@@ -1960,10 +1960,21 @@ export function failureLinesFrom(text, max = EXCERPT_MAX_FAILURES) {
  * of `/` or a user called `a` would shred every path in a stack trace, which is the
  * opposite of useful evidence.
  *
- * @param {{repoRoot?: string | null, storeDir?: string | null, leaseFile?: string | null, home?: string | null, hostname?: string | null}} [paths]
+ * @param {{repoRoot?: string | null, storeDir?: string | null, leaseFile?: string | null, home?: string | null, hostname?: string | null, tmpDir?: string | string[] | null}} [paths]
  * @returns {Array<[string, string]>}
  */
 export function localPathRedactions(paths = {}) {
+  // The scratch directory is per user and per machine (`/var/folders/<3 hex>/<32
+  // base36>/T` on macOS) and jest prints it in every temp fixture path, so it
+  // identifies the machine exactly like `$HOME` does. Both spellings are passed:
+  // `os.tmpdir()` and its realpath differ on macOS (`/var/...` vs `/private/var/...`)
+  // and logs contain the resolved one. A plain `/tmp` is left alone - it names no
+  // machine, and redacting it would mangle every unrelated `/tmp/...` in a log.
+  const tmpDirs = (
+    Array.isArray(paths.tmpDir) ? paths.tmpDir : [paths.tmpDir]
+  ).filter(
+    (value) => typeof value === 'string' && value.length > '/tmp'.length
+  );
   const wanted = [
     [paths.storeDir, '<store>'],
     [paths.repoRoot, '<repo>'],
@@ -1971,6 +1982,7 @@ export function localPathRedactions(paths = {}) {
     // `~` is what a human types, so the redaction stays readable.
     [paths.home, '~'],
     [paths.hostname, '<host>'],
+    ...tmpDirs.map((value) => [value, '<tmp>']),
   ];
   return wanted
     .filter(

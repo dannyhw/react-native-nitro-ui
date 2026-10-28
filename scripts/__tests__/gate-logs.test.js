@@ -193,6 +193,10 @@ function fakeBins(dir, hook = '') {
     // under the home directory (M4), the shape a jest stack trace leaves in a log.
     'echo "Authorization: Bearer abcdef0123456789secretvalue"\n' +
     'echo "    at Object.<anonymous> ($HOME/work/oss/repo/example/index.js:7:3)"\n' +
+    // The other machine-identifying path a real failure prints: jest names every
+    // temp fixture by its absolute scratch path, which on macOS carries the per-user
+    // folder hash. Round 1's own exported excerpt is what proved it still leaked.
+    `echo "  in ${fs.realpathSync(os.tmpdir())}/x12-jest-fixture"\n` +
     (hook === '' ? '' : `${hook}\n`) +
     'exit ${FAKE_EXIT:-0}\n';
   for (const name of ['bun', 'node']) {
@@ -1160,6 +1164,12 @@ describe('gate.mjs export attaches failure evidence', () => {
     expect(excerpt).not.toContain(home);
     expect(excerpt).not.toContain(os.hostname());
     expect(excerpt).not.toContain('/Users/');
+    // And the scratch directory, which is the leak round 1 found in *its own*
+    // exported excerpt: `/private/var/folders/x4/<32 chars>/T/...` names the machine
+    // as precisely as `$HOME`, and jest prints it for every temp fixture.
+    const tmp = fs.realpathSync(os.tmpdir());
+    expect(excerpt).not.toContain(tmp);
+    expect(excerpt).toContain('<tmp>/x12-jest-fixture');
     // The placeholders in their place, so the file is still useful: a reader on the
     // machine that ran the gate can find the log and knows which checkout ran it.
     // (The fake's HOME *is* the checkout here, so the stack frame reads as `<repo>`
