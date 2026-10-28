@@ -52,6 +52,17 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
     to discover that. Relatedly: the probe's native "no frame" backstop is a **ceiling**
     (90 s on both platforms), not the wait the runner asked for - it used to be a
     hardcoded 2 s on both, which silently *was* the timeout however long JS waited.
+  - **A4 amendment (2026-10-28) - the waiting rule is a measurement, and it is 8 s.**
+    `presented` waits 8 000 ms (was 2 000) and `mounted` 1 500 ms, on data from
+    `docs/tasks/A4-ios-baseline-mac2.report.md`: 200 `@expo/ui` DatePickers present their
+    first frame at p50 2.7-3.0 s on the canonical iPhone 17 simulator - above the old wait,
+    which is why those cells lost 40 % and 54 % of their samples - while the slowest frame
+    measured anywhere in the task's runs was 3.9 s and the slowest mount 213 ms. Raising
+    the wait is **value-neutral for any cell that already measured every iteration** (an
+    arriving sample keeps its stamp, so its median cannot move), and a committed baseline
+    has no incomplete cells - so this does not invalidate the tables minted under 2 s. Only
+    the cells that were losing samples change, and they change towards the truth, because
+    the iterations a short wait drops are exactly the slow ones.
   - **A4 amendment (2026-10-28) - the waiting rule is recorded, and a longer wait is a diagnostic.**
     `--timeout-mount` / `--timeout-presented` raise how long a launch waits for a signal
     (to ask "did that arm never draw, or did it draw later than we waited?"). A run that

@@ -177,11 +177,19 @@ overFraction }`. A run is refused when its **median** sample is over the ceiling
     timeout and how long the wait ran, `not-awaited`, `probe-error` with the message), so
     a refusal says "48 probe-timeout (asked 2000 ms, waited up to 2000.4 ms)" rather than
     "45 missing". See `docs/DECISIONS.md` D9 (A4 amendments).
-- **Minted under the default waiting rule.** `presented` waits 2 000 ms and `mounted`
+- **Minted under the default waiting rule.** `presented` waits 8 000 ms and `mounted`
   1 500 ms unless a run asks otherwise (`--timeout-presented`, `--timeout-mount`), and a
   run that asks for longer is a diagnostic: the samples that arrive keep their values,
   but _which_ arrive changes the median. Such a run is refused, and every baseline
   records the rule it was made under in its `timeouts` block.
+
+  The 8 s is A4's measurement, not a habit (`docs/tasks/A4-ios-baseline-mac2.report.md`).
+  It does not make the baselines minted under 2 s incomparable: a longer wait changes only
+  the cells that were losing samples, and a committed baseline has none of those — every
+  cell in it answered inside the shorter wait, so it answers identically under the longer
+  one. The cells that would have moved are the ones the completeness rule already kept out
+  of the file. `maintainer-mac-2`'s iOS file is the first minted under the new rule.
+
 - **Machine + device key** — the label rules are above, and `--force` does not get
   around them. The load ceiling belongs to the _measuring_ machine: 7.0 on
   `maintainer-mac-1` (14 cores), 5.0 on `maintainer-mac-2` (10). Two files can share a

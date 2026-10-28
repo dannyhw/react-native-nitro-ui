@@ -129,7 +129,7 @@ export const COMPARISON_IMPLEMENTATIONS = IMPLEMENTATIONS.filter(
  * redefine what `presented` means.
  */
 export const BASELINE_MOUNT_TIMEOUT_MS = 1500;
-export const BASELINE_PRESENTED_TIMEOUT_MS = 2000;
+export const BASELINE_PRESENTED_TIMEOUT_MS = 8000;
 
 /**
  * The per-launch wall-clock budgets, by scenario action, that `run.mjs` starts from.

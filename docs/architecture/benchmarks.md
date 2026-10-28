@@ -77,13 +77,13 @@ Useful flags:
 | `--shutdown`          | Shut down a device the runner itself booted when it finishes     |
 | `--perf-marks`        | Diagnostic run: turn on the library's own native perf marks    |
 | `--timeout-mount <ms>` | How long each iteration waits for the mount signal (default 1500) |
-| `--timeout-presented <ms>` | …and for the presenting frame (default 2000)                 |
+| `--timeout-presented <ms>` | …and for the presenting frame (default 8000)                 |
 
 The two `--timeout-*` flags exist to answer one question a results file otherwise cannot:
 **did that arm's frame never come, or did it come later than we were willing to wait?**
 A4 needed it - `@expo/ui`'s DatePicker at N=200 on one machine lost 40 % and 54 % of its
-presenting samples at the default 2 000 ms, and a count of nulls cannot tell a slow arm
-from a dead probe. Three things make that work, and all three are load-bearing:
+presenting samples at the 2 000 ms wait of the time, and a count of nulls cannot tell a
+slow arm from a dead probe. Three things make that work, and all three are load-bearing:
 
 - the value rides the **launch string** (`…:presentedTimeout=40000`), not an env var: a
   release build has no env, and one launch must be fully described by the string the
@@ -95,6 +95,22 @@ from a dead probe. Three things make that work, and all three are load-bearing:
   its value, but *which* samples arrive moves the median. It is a diagnostic like
   `--perf-marks`, and says so at startup. Every baseline records the rule it was minted
   under in its own `timeouts` block.
+
+The defaults themselves are a measured rule, not a habit. `presented` waits 8 000 ms
+because A4 measured the same cell's first frame at p50 2.7-3.0 s on the canonical iPhone 17
+simulator - above the 2 000 ms it used to wait - with the slowest frame seen anywhere at
+3.9 s; `mounted` stays at 1 500 ms because the slowest mount measured was 213 ms. Raising
+the presented wait is **value-neutral for every cell that was already complete**: a sample
+that arrived inside 2 s arrives with the identical stamp under 8 s, so its median cannot
+move. Only cells that were losing samples change, and they change towards the truth, since
+the dropped iterations are the slow ones. That is why the change does not invalidate the
+baselines minted under the old wait: a committed baseline has no incomplete cells (the mint
+refuses or records them), so every cell in it is one the longer wait leaves alone.
+
+The per-launch wall-clock budget follows the waits a run asks for
+(`launchBudgetMs`): an iteration of `mount` waits for two mount signals and one presenting
+frame, so 25 iterations at a 40 s presented wait is ~800 s of waiting that the default
+180 s budget would have killed as "stalled". A default run's budget is unchanged.
 
 ### When a signal does not arrive
 
