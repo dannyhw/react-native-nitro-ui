@@ -909,6 +909,60 @@ describe('logs survive git worktree remove', () => {
     expect(excerpt).toContain('FAIL old/Core.test.tsx');
   });
 
+  it('does not migrate a legacy log retention would delete at once (N7)', () => {
+    // Migration kept the source's mtime (rightly: retention queues by age), so a
+    // legacy log already past 35 days was copied into the store and removed again by
+    // the same run, three times over: every run printed "retention removed 1 stored
+    // log file(s) (age)" and appended two lines to `.migrated` about a copy that had
+    // just been undone. The comment above the note claimed the opposite.
+    const dir = makeRepo();
+    const legacy = path.join(dir, '.gates', 'logs');
+    fs.mkdirSync(legacy, { recursive: true });
+    const expired = path.join(legacy, 'check-2026-09-01T00-00-00.000Z.log');
+    fs.writeFileSync(expired, 'old evidence, already past retention\n');
+    const ancient = (Date.now() - 40 * 86_400_000) / 1000;
+    fs.utimesSync(expired, ancient, ancient);
+    // Ten days inside the window: the control, and the file that *should* migrate.
+    const keepable = path.join(legacy, 'check-2026-10-20T00-00-00.000Z.log');
+    fs.writeFileSync(keepable, 'still inside retention, so still evidence\n');
+    const fresh = (Date.now() - 10 * 86_400_000) / 1000;
+    fs.utimesSync(keepable, fresh, fresh);
+
+    let runs = '';
+    for (let index = 0; index < 3; index += 1) {
+      const result = runCli(dir, ['check']);
+      expect(result.status).toBe(0);
+      runs += result.stderr;
+    }
+    // Nothing to remove, three times: the expired log never entered the store.
+    expect(runs).not.toContain('retention removed');
+    // The note records one migration event, not three — and never names the expired
+    // file it left where it was.
+    const note = fs.existsSync(path.join(legacy, '.migrated'))
+      ? fs.readFileSync(path.join(legacy, '.migrated'), 'utf8')
+      : '';
+    expect(
+      note.split('\n').filter((line) => line.startsWith('# migrated'))
+    ).toHaveLength(1);
+    expect(note).toContain('check-2026-10-20T00-00-00.000Z.log');
+    expect(note).not.toContain('check-2026-09-01T00-00-00.000Z.log');
+    // And the control still migrated, so the skip is age, not a broken walk.
+    expect(
+      fs.existsSync(
+        path.join(
+          storeOf(dir),
+          '.gates',
+          'logs',
+          'task/x12-fixture',
+          'check-2026-10-20T00-00-00.000Z.log'
+        )
+      )
+    ).toBe(true);
+    // The expired source is left alone: the migration never deletes, and a file the
+    // tool refused to copy is not the tool's to remove.
+    expect(fs.existsSync(expired)).toBe(true);
+  });
+
   it('migrates each worktree’s legacy logs, not just the first one to run (M3)', () => {
     const dir = makeRepo({ branch: 'main' });
     const wtParent = scratch('x12-wt-');

@@ -399,14 +399,22 @@ function resolveLedgerLog(entry) {
  */
 function migrateWorktreeLogs() {
   const location = store();
-  if (!location.shared) return { copied: [], skipped: 0, conflicts: 0 };
+  if (!location.shared)
+    return { copied: [], skipped: 0, conflicts: 0, stale: 0 };
   const legacy = path.join(repoRoot, LEDGER_DIR, 'logs');
   if (!fs.existsSync(legacy) || !fs.statSync(legacy).isDirectory()) {
-    return { copied: [], skipped: 0, conflicts: 0 };
+    return { copied: [], skipped: 0, conflicts: 0, stale: 0 };
   }
   const copied = [];
   let skipped = 0;
   let conflicts = 0;
+  let stale = 0;
+  // Anything this old is deleted by retention the moment it lands in the store, so
+  // copying it achieves nothing except a delete: before this check, every run
+  // re-migrated an expired legacy log, watched retention remove it, and appended two
+  // more lines to `.migrated` about having done so (review N7). The age is measured
+  // against the same rule retention uses, not a copy of it.
+  const retentionCutoff = Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
   const destination = path.join(
     location.dir,
     LEDGER_DIR,
@@ -437,6 +445,15 @@ function migrateWorktreeLogs() {
       // reads the record from the same directory as the log, so migrating one
       // without the other loses a run mid-flight.
       if (!/\.(log|gate\.json|steps\.json)$/.test(entry.name)) continue;
+      try {
+        // Expired evidence does not become evidence by being copied.
+        if (fs.statSync(absolute).mtimeMs < retentionCutoff) {
+          stale += 1;
+          continue;
+        }
+      } catch {
+        continue;
+      }
       const target = path.join(destination, `${prefix}${entry.name}`);
       try {
         const [from, to] = [fs.statSync(absolute), fs.statSync(target)];
@@ -468,7 +485,9 @@ function migrateWorktreeLogs() {
   };
   walk(legacy, '');
   // Only a run that moved something has anything to report, so the note cannot grow
-  // one line per gate run on a worktree that settled long ago.
+  // one line per gate run on a worktree that settled long ago. Expired files counted
+  // as *moved* before, which is how `.migrated` grew by two lines per run on a
+  // worktree with a legacy log past retention (review N7).
   if (copied.length > 0 || conflicts > 0) {
     writeMigrationNote(
       path.join(legacy, MIGRATION_NOTE),
@@ -477,7 +496,7 @@ function migrateWorktreeLogs() {
       conflicts
     );
   }
-  return { copied, skipped, conflicts };
+  return { copied, skipped, conflicts, stale };
 }
 
 /** The name of the provenance note `migrateWorktreeLogs` leaves behind. */
