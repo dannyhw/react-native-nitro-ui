@@ -228,11 +228,57 @@ and exits non-zero for it.
 `2 gate(s) missing for review: harness:ios, harness:android`. `test` is 2 m 21 s of that wall
 at 4 jobs — the drift proof adds ~7 s of a ~150 s run.
 
+## Fix round 2
+
+**Reuse is now exact-tree.** `check` records `fullTree` (`git rev-parse HEAD^{tree}`) and
+`worktreeClean` on every line (ledger v4), and `need --for merge` accepts a line only when its
+`fullTree` equals the merge result's, it ran clean, the caller's worktree is clean, its commit is
+merged, and it is the newest decisive line on that tree. Any change since — a report, a rename —
+re-owns the run. The allowlist, the exclusions, `pathsChangedSince`, `check-docs-drift.mjs` and its
+tests are deleted, so N1's undeclared `@babel/parser` and N3's vacuous spec-glob check go with them;
+M1/M2/M3 close together, because an exact hash is not fooled by a rename or by a file nobody listed.
+N2 fixed (a fail now wins a timestamp tie); N4's two raw calls went with the tests that held them.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 772 tests / 35 suites | `44fe6b5d8ae6` | 2 m 38 s | start 4.9 / med 5.7 / max 8.1 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`gate.mjs check` green on tree `44fe6b5d8ae6` (git tree `8a972cc1ae8a`) at `16c6cec`;
+`need --for review` exits 1 with `2 gate(s) missing for review: harness:ios, harness:android`,
+`package.json` unmapped as in round 0. Red proofs in their own section below. `check` is 5 s
+slower than round 1 — deleting the drift proof is offset by nine new end-to-end cases.
+
+## Files changed (fix round 2)
+
+- `scripts/gate-core.mjs` — ledger v4 (`fullTree`, `worktreeClean`), `fullTreesMatch`, `shortTreeHash`; `CHECK_REUSE_ALLOWLIST`, `CHECK_REUSE_EXCLUDE`, `isReuseAllowlistedPath` and `pathsOutsideReuseExemption` deleted; `findReusableCheck` rewritten; N2 tie-break.
+- `scripts/gate.mjs` — `readTrees` reads the git tree and the worktree state, `runGate` records both ends of the run, `status` and the run banner print them; `pathsChangedSince` deleted.
+- `scripts/check-docs-drift.mjs`, `scripts/__tests__/check-allowlist.test.js` — deleted, with the undeclared `@babel/parser` import that only they used.
+- `scripts/__tests__/gate-check.test.js` — the reuse suites rewritten; the refusals are now also run end to end through the CLI.
+- `docs/tasks/ORCHESTRATOR.md` — step 5 states the exact-tree rule and what it costs.
+
+## Red proofs (fix round 2)
+
+- `` `fullTreesMatch` is exact `` -> `return false` -> 11 refusals-styled assertions red (the accept cases: `accepts a pass on this exact tree…`, both CLI reuse cases); -> `return true` -> 7 assertions red (`refuses a line about a different tree`, the docs-only merge, the rename, the export merge, `is exact, and nothing short of exact`).
+- `refuses a line recorded over a dirty worktree…` -> `worktreeClean` on the line ignored -> that assertion plus `says why it refused`; -> `gate.mjs` records `worktreeClean: true` -> `will not reuse a check recorded over uncommitted edits` red end to end.
+- `refuses when this worktree is dirty…` (both) -> the caller's `worktreeClean` ignored -> `expect(…diagnostics).toContain('uncommitted changes')` and the CLI's `check — never run on this tree`.
+- `will not reuse a check whose tree moved out from under it` -> `fullTree: before.fullTree` -> `expect(line.fullTree).toBeNull()` red on a mid-run docs commit.
+- `a ledger whose own newest line on the tree is a fail offers nothing` -> keep the *first* decisive line -> `expect(ask(…)).toBeNull()`; -> cross-ledger sort inverted -> 4 M2 assertions red.
+- `an exact timestamp tie resolves against reuse (N2)` -> the round-1 comparison back -> that test red, alone.
+- `prints the reuse pair in status…` -> the `git tree` line dropped -> `expect(clean.stderr).toContain('git tree')`; dirty half red on `'worktree clean'`.
+
 ## Follow-ups
 
-- check: `test` is 147 s of a ~180 s chain, so this work's ceiling is ~1.2×; a real win needs someone to split the Jest run, which the brief puts out of scope.
-- context-pack claim that is wrong: `manifest:check` does **not** re-run `prepare` — `scripts/package-files.mjs` passes `npm pack --dry-run --ignore-scripts`, so nothing is rebuilt and no tarball is written. The graph treats it as a `lib/` reader only.
+- check: `test` is 147 s of a ~180 s chain, so this work's ceiling is ~1.2x; a real win needs someone to split the Jest run, which the brief puts out of scope.
+- context-pack claim that is wrong: `manifest:check` does **not** re-run `prepare` - `scripts/package-files.mjs` passes `npm pack --dry-run --ignore-scripts`, so nothing is rebuilt and no tarball is written. The graph treats it as a `lib/` reader only.
 - gate: `gate.mjs wait`'s progress line shows the gate's own heartbeat, not the runner's step list; `table --full` only reports steps after the run. X9's territory.
 - gate: reuse takes the newest qualifying line across all task exports; on this machine `docs/tasks/*/gates.jsonl` is 6 files and reads in milliseconds, but a repo with hundreds of exports would want an index.
-- gate (fix round): `isReuseAllowlistedPath(file, CHECK_REUSE_EXCLUDE)` reads as "is this on the allowlist" while answering "is this taken back". The function is shared on purpose; the name now fits only one of its two callers.
-- gate (fix round): the reuse rule can never borrow from an export that arrives with the merge it certifies (an export is always younger than the line inside it). That is correct but surprising, and `gate.mjs export` could say so at the point of use rather than in ORCHESTRATOR.
+- gate (fix round): reuse can never borrow from an export that arrives with the merge it certifies (an export is always younger than the line inside it). That is correct but surprising, and `gate.mjs export` could say so at the point of use rather than in ORCHESTRATOR.
+- gate (fix round 2, flake): `scripts/__tests__/gate.test.js` > "starts detached, records the same line a foreground run would, and wait reports it" - `expect(wait.stderr).toContain('Compiling Switch.swift')` saw only the `gate: log …` line and then `gate: … passed`, i.e. `wait` printed no progress line carrying the fake heartbeat. Green 3/3 under `-t "starts detached"` and inside the round-2 `check`; load-sensitive, not reproduced on demand.
+
+## Questions for orchestrator
+
+None. Round 2 is the last under D19 and the brief was unambiguous once the exact-tree decision came down.
