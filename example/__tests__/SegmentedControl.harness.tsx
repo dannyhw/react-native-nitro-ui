@@ -351,6 +351,20 @@ async function pixelProbe(
       `the pixel probe for "${testId}" (${what}) sampled nothing: ${report}`
     );
   }
+  // The report's own shape, checked on every probe rather than trusted. Both
+  // platforms composite over a backdrop and average the whole control into `mean`, and
+  // an average is exactly where an arithmetic slip hides: iOS's first version weighted
+  // each channel by the pixel's alpha - always 255 once composited - and divided by the
+  // pixel count, so every channel came out 255x too large and the sum spilled out of
+  // the six digits it prints into (`mean=#8FAFB6EB`). A malformed `mean` is not only
+  // unreadable, it is a field a later round was invited to assert on, so a platform that
+  // starts overrunning it has to fail here rather than read as a colour nobody expected.
+  if (!/ mean=#[0-9A-F]{6}( |$)/.test(report)) {
+    throw new Error(
+      `the pixel probe for "${testId}" (${what}) reported a mean that is not six ` +
+        `hex digits: ${report}`
+    );
+  }
   return report;
 }
 
