@@ -229,6 +229,24 @@ describe('the lease owns the device lifecycle', () => {
     );
   };
 
+  /**
+   * A live gate claim, as `gate.mjs` writes it. The pid is this test process's: the CLI runs in a
+   * child and reads the record back with the real `process.kill`-based liveness check, so a made-up
+   * pid would be "a claim from a process that is gone" - which the pool is right to ignore.
+   */
+  const CLAIM = [
+    { pid: process.pid, id: 'gate-1', gate: 'harness:ios', at: Date.now() },
+  ];
+
+  /** A second record in `pool.json`, for a case that is about a *pair* rather than one device. */
+  const warmDeviceSecond = (entry) => {
+    const existing = poolDevices();
+    writeFileSync(
+      join(home, 'pool.json'),
+      `${JSON.stringify({ version: 1, devices: [...existing, entry] }, null, 2)}\n`
+    );
+  };
+
   /** A pool.json with one warm device, idle for `minutes`. */
   const warmDevice = (entry) => {
     writeFileSync(
@@ -295,6 +313,148 @@ describe('the lease owns the device lifecycle', () => {
     // 58-74 on this box (X11 report item 6), and a cold boot is the whole reason the pool exists.
     expect(log()).toBe('');
     expect(poolDevices()).toEqual([]);
+  });
+
+  it('does not reset a pair when the task already held the lease and nothing booted', () => {
+    // X11 re-review M2 at the CLI, which is where the failure was reachable. Re-running
+    // `acquire --boot` in a second shell is the documented way to regenerate an env file; it used
+    // to run `pm clear` and `simctl uninstall` on the devices the task is *already* using, under
+    // its own running suite. Two independent guards fire here, and the test says which: the CLI
+    // skips the reset because this is a warm re-acquire by the same task, and `resetPair` would
+    // have refused anyway because the records carry a live gate claim.
+    tools({ androidUp: true, iosUp: true });
+    warmDevice({
+      ...idleEntry({ leaseId: 'T1-aaaa', idleMinutes: 1 }),
+      claims: CLAIM,
+    });
+    warmDeviceSecond({
+      ...idleEntry({
+        key: `ios:${UDID_A}`,
+        kind: 'ios',
+        id: UDID_A,
+        leaseId: 'T1-aaaa',
+        idleMinutes: 1,
+        serial: null,
+      }),
+      claims: CLAIM,
+    });
+    withLeaseFile([
+      {
+        id: 'T1-aaaa',
+        task: 'T1',
+        platform: 'both',
+        exclusive: false,
+        holds: ['pair-a'],
+        acquiredAt: new Date().toISOString(),
+        ttlMinutes: 240,
+      },
+    ]);
+    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
+    expect(acquired.status).toBe(0);
+    expect(acquired.stderr).toContain('is already up - reusing it');
+    expect(acquired.stderr).toContain('not resetting the pair');
+    expect(log()).not.toContain('shell pm clear');
+    expect(log()).not.toContain('simctl uninstall');
+  });
+
+  it('skips a reset on a device whose gate claim is live, even for a brand-new lease', () => {
+    // The half the warm-re-acquire skip cannot cover: a *different* task taking a pair whose
+    // previous lease was released mid-run, or any hand-off that is not `already`. Here the CLI
+    // asks for the reset, and `resetPair`'s own check is the only thing between it and another
+    // task's running suite - so this case must not be satisfied by the skip above.
+    tools({ androidUp: true, iosUp: true });
+    warmDevice({
+      ...idleEntry({ leaseId: 'T2-aaaa', idleMinutes: 1 }),
+      claims: CLAIM,
+    });
+    warmDeviceSecond({
+      ...idleEntry({
+        key: `ios:${UDID_A}`,
+        kind: 'ios',
+        id: UDID_A,
+        leaseId: 'T2-aaaa',
+        idleMinutes: 1,
+        serial: null,
+      }),
+      claims: CLAIM,
+    });
+    withLeaseFile([]);
+    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
+    expect(acquired.status).toBe(0);
+    expect(acquired.stderr).not.toContain('not resetting the pair');
+    // The reset was asked for and each device answered "in use", which is reported rather than
+    // silently dropped - a task that sees no reset line cannot tell "skipped" from "broken".
+    expect(acquired.stderr).toMatch(
+      /reset avd:nitro-ui-a: pm clear SKIPPED \(in use by pid \d+ \(harness:ios\)\)/
+    );
+    expect(log()).not.toContain('shell pm clear');
+    expect(log()).not.toContain('simctl uninstall');
+  });
+
+  it('does not reset a pair when the task already held the lease and nothing booted, with no claim', () => {
+    // The skip is `already` *and* warm, not `already` alone: with no claim in the records, this is
+    // the only thing protecting the task's own storage, and the case above passes without it.
+    tools({ androidUp: true, iosUp: true });
+    warmDevice(idleEntry({ leaseId: 'T1-aaaa', idleMinutes: 1 }));
+    warmDeviceSecond({
+      ...idleEntry({
+        key: `ios:${UDID_A}`,
+        kind: 'ios',
+        id: UDID_A,
+        leaseId: 'T1-aaaa',
+        idleMinutes: 1,
+        serial: null,
+      }),
+    });
+    withLeaseFile([
+      {
+        id: 'T1-aaaa',
+        task: 'T1',
+        platform: 'both',
+        exclusive: false,
+        holds: ['pair-a'],
+        acquiredAt: new Date().toISOString(),
+        ttlMinutes: 240,
+      },
+    ]);
+    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
+    expect(acquired.stderr).toContain('not resetting the pair');
+    expect(log()).not.toContain('shell pm clear');
+    // And the storage on those devices is this task's own: the wipe the skip prevents.
+    expect(log()).not.toContain('simctl uninstall');
+  });
+
+  it('still resets a re-acquired lease that had to boot the pair', () => {
+    // The deliberately narrow version of the skip. A re-acquire that found the devices *down* is
+    // looking at machines that came up from a snapshot, which can be another task's data, so
+    // skipping there would reintroduce the inheritance the reset exists to prevent.
+    tools({ androidUp: false, iosUp: false });
+    withLeaseFile([
+      {
+        id: 'T1-aaaa',
+        task: 'T1',
+        platform: 'both',
+        exclusive: false,
+        holds: ['pair-a'],
+        acquiredAt: new Date().toISOString(),
+        ttlMinutes: 240,
+      },
+    ]);
+    // `--boot-timeout-minutes 0` so the wait for a device the stub never brings up costs nothing:
+    // the stub's `adb devices` answer is fixed, so a down device stays down for the whole poll
+    // loop. The boot still *starts*, which is all this case needs - `booted` is non-empty, so the
+    // hand-off is not warm, and that is the condition the skip turns on.
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'T1',
+      '--boot',
+      '--boot-timeout-minutes',
+      '0',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(acquired.stderr).not.toContain('not resetting the pair');
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} shell pm clear`);
   });
 
   it('boots the pair it hands out when told to, from the shared launch config', () => {

@@ -1519,6 +1519,59 @@ describe('reaping', () => {
     expect(done.alreadyOff).toEqual([{ key: 'avd:nitro-ui-b' }]);
   });
 
+  it('keeps the record of an emulator whose adb server did not answer', () => {
+    // X11 re-review N2, at the reap rather than the tool. `adb devices` on a wedged server is killed
+    // at its timeout with no stdout, which is character-for-character what "no emulator is attached"
+    // looks like - and the second answer means "it is already off", which drops the record. The pool
+    // then forgets a live emulator that is still burning a core, off every idle clock, until an
+    // exclusive acquire happens to look for it in devices.json.
+    withLeases([]);
+    withDevice(
+      entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 41 * MINUTE })
+    );
+    const { pool, calls, logs } = fakePool({
+      home,
+      state: {
+        serials: ['emulator-5574'],
+        simulators: new Map(),
+        adbFails: true,
+      },
+    });
+    const done = pool.reap();
+    expect(done.failed).toEqual([
+      { key: 'avd:nitro-ui-a', reason: 'lease-gone' },
+    ]);
+    expect(done.alreadyOff).toEqual([]);
+    expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
+    expect(readPool(home).devices).toHaveLength(1);
+    expect(logs.join('\n')).toContain('adb did not answer');
+  });
+
+  it('keeps the record of a simulator whose simctl did not answer', () => {
+    // Same rule, iOS side, and the same two ways to fail to answer: a nonzero exit and output that
+    // is not JSON (a truncated pipe). Both are "unknown", neither is "shut down".
+    withLeases([]);
+    withDevice(
+      entryOf({
+        key: 'ios:UDID-A',
+        kind: 'ios',
+        id: 'UDID-A',
+        leaseId: null,
+        usedAgo: 41 * MINUTE,
+      })
+    );
+    const { pool, calls, logs } = fakePool({
+      home,
+      state: { simulators: new Map(), simctlFails: true },
+    });
+    const done = pool.reap();
+    expect(done.failed).toEqual([{ key: 'ios:UDID-A', reason: 'lease-gone' }]);
+    expect(done.alreadyOff).toEqual([]);
+    expect(calls.filter((c) => c[0] === 'shutdown-sim')).toEqual([]);
+    expect(readPool(home).devices).toHaveLength(1);
+    expect(logs.join('\n')).toContain('simctl did not answer');
+  });
+
   it('does not hold the lease lock while it talks to devices', () => {
     // X11 review N1: `reap` used to run `simctl list`, `simctl shutdown` and `adb emu kill` inside
     // the same `withLock` everyone else needs to acquire a lease. That lock has a 10-second timeout
