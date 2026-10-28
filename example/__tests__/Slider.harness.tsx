@@ -574,13 +574,9 @@ describe('Slider', () => {
     // number the fix keeps out of the configuration.
     expect(Math.abs(seedBox.width - BOX_WIDTH)).toBeLessThan(1);
 
-    // Half two: the same configuration, in a parent with no width to give. The
-    // height is pinned because a horizontal scroller's cross axis *is* the height
-    // and `fillWidth`'s base style is `alignSelf: 'stretch'` (sizing.md §6) - the
-    // box's height would otherwise be the scroller's, which is a different rule
-    // than the one under test.
+    // Half two: the same configuration, in a parent with no width to give.
     await render(
-      <ScrollView horizontal style={{ height: EXPECTED_HEIGHT }}>
+      <ScrollView horizontal>
         <Slider
           defaultValue={0.4}
           testID="unbounded"
@@ -591,25 +587,31 @@ describe('Slider', () => {
     const unboundedContent = await pollUntil(
       () => {
         const size = handles.get('unbounded')!.measureContent();
-        return size.height > 0 ? size : null;
+        return size.width > 0 && size.height > 0 ? size : null;
       },
       () => new Error('the unbounded Slider never measured.')
     );
-    // The box follows the correction, and the width it settles on is the number
-    // this test declared - it never moves, so there is nothing to wait for beyond
-    // the height correction the same poll covers.
+    // The claim is only ever about the width, so the width is what is waited for;
+    // the height travels with it, and the box is polled to agree rather than being
+    // pinned. (Pinning it through the scroller's own style was tried first and does
+    // not pin the child on Android: a horizontal scroller stretches its children
+    // along the cross axis, and the box came back 923 tall - a true fact about
+    // `ScrollView`, and nothing to do with the engine.)
     const unboundedBox = await pollUntil(
       () => {
         const box = harnessUi.queryByTestId('unbounded');
-        return box !== null &&
-          Math.abs(box.height - unboundedContent.height) < 1
+        return box !== null && Math.abs(box.width - GUESSED_WIDTH) < 1
           ? box
           : null;
       },
       () =>
         new Error(
-          `the unbounded Slider's box never became ${EXPECTED_HEIGHT} tall ` +
-            `(last=${describeBox(harnessUi.queryByTestId('unbounded'))}).`
+          `the unbounded Slider's box never became ${String(
+            GUESSED_WIDTH
+          )} wide (last=${describeBox(
+            harnessUi.queryByTestId('unbounded')
+          )}, the other instance's box was ${String(BOX_WIDTH)}, the guess was ` +
+            `${String(GUESSED_WIDTH)}x12).`
         )
     );
     console.log(
@@ -618,12 +620,12 @@ describe('Slider', () => {
         `measured=${describeBox(unboundedContent)} declared=${String(GUESSED_WIDTH)}`
     );
 
-    // The height is still the control's own answer, in a parent that constrained
-    // nothing - the half the policy does own.
-    expect(Math.abs(unboundedContent.height - EXPECTED_HEIGHT)).toBeLessThan(1);
-    // And the width is the number this component declared for exactly this case.
-    // Against the pre-F3 engine this reads 200: the *other* Slider's box.
+    // The width is the number this component declared for exactly this case. Against
+    // the pre-F3 engine this reads 200: the *other* Slider's box, in a parent that
+    // never had a width to give it, with nothing in the policy able to notice.
     expect(Math.abs(unboundedBox.width - GUESSED_WIDTH)).toBeLessThan(1);
+    // Stated as the failure, because that is the sentence the bug is about.
+    expect(Math.abs(unboundedBox.width - BOX_WIDTH)).toBeGreaterThanOrEqual(1);
 
     // Seeding *is* the declaration for the rest of this process
     // (`seedSizingSize` writes `fallbacks_`), so the real one goes back on the way
