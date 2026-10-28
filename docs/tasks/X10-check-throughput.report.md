@@ -45,23 +45,63 @@ makes that copy as good as an original.
 
 ## Timings
 
-Tree `1dbe8b4dc4f3`, 10 logical cores, one machine, alternating serial/parallel after
-one discarded warm-up (`<load>`). `<median line>`.
+Tree `1dbe8b4dc4f3`, one 10-core box, alternating after one discarded warm-up. **Serial
+median 171.7 s, parallel median 152.0 s — 1.13×.** Spread within a kind was ≤ 0.6 s, so
+the difference is not noise.
 
-| Run | Wall | Load avg before → after |
-| --- | --- | --- |
-| `<rows>` | | |
+| Run | Kind | Wall | Load avg (1m) before → after |
+| --- | --- | --- | --- |
+| warm-up (discarded) | parallel | 152.2 s | 1.80 → 1.90 |
+| serial-1 | serial | 171.7 s | 1.90 → 2.11 |
+| parallel-1 | parallel | 152.0 s | 2.11 → 1.93 |
+| serial-2 | serial | 171.8 s | 1.93 → 1.57 |
+| parallel-2 | parallel | 152.3 s | 1.57 → 3.36 |
+| serial-3 | serial | 171.2 s | 3.36 → 3.04 |
+| parallel-3 | parallel | 151.4 s | 3.04 → 2.33 |
 
-Machine load: `<X11 was running device work on this box the whole time; state the
-numbers and whether they moved during the series>`.
+**The machine was close to idle, and the runs agree with each other.** The 1-minute load
+average stayed between 1.57 and 3.36 across all six runs (10 cores). X11's device work
+was on this box during the window and does show up in the tail of it, but not as
+sustained load, and the three serial runs agree to within 0.6 s against each other —
+which they would not have done under real contention — that agreement is the stronger
+of the two arguments. Two caveats, stated rather than papered over: macOS's load average
+runs lower than Linux's for the same work, so it is a trend indicator here and not an
+absolute; and the harness samples its `jest|gradle|swiftc` count *after* each run, where
+it read 1 every time, so it shows nothing heavy lingering between runs but says nothing
+about what else ran during one.
+
+1.13× is the honest number and it is close to the ceiling: `test` alone is 147 s of the
+171 s chain and nothing can overlap it (it must precede `prepare`, and `perf:renders`
+must not run beside it), so at most ~25 s of tail is available to hide. Default
+concurrency is 4 (`min(4, cores/2)`); I did not sweep other job counts on this tree, so
+the number above is what the default delivers rather than a tuned optimum.
 
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `<node scripts/gate.mjs table>` |
+| `check` | **PASS** | 744 tests / 35 suites | `1dbe8b4dc4f3` | 2 m 31 s | start 1.9 / med 2.2 / max 3.5 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
 
-`need --for review`: `<line>`
+`need --for review`: `need: 2 gate(s) missing for review: harness:ios, harness:android`
+— **review is not satisfied.** This round took no lease and touched no device, as the
+brief instructs, so it reports the gap rather than claiming the bar. The cause is the
+mapping, not the change: the only file in the diff that is neither tooling nor docs is
+`package.json`, which is unmapped → both platforms. Its diff is two lines inside
+`scripts` (`check` points at the runner; the old chain moves to `check:serial`) — no
+dependency, no bob target, nothing a binary reads. X9's report already lists
+`package.json`'s mapping as a follow-up.
+
+**Net of both effects, in the recorded run:** the step durations sum to 176.1 s against
+a 150.9 s wall, so 25.2 s of tail was hidden — but that sum is 4.4 s *above* the serial
+chain's 171.7 s, because Jest shared cores with `lint` and `test:native`. The 20.8 s
+saving is what is left after paying for that. The step table is in the appendix. (The
+row's 744 tests / 35 suites is this branch's own total: 665 / 33 with the two files
+added here removed, plus `check-runner` 38 and `gate-check` 41. The log's *second* Jest
+summary is the perf run's 7 / 7, which is the one `counts` must not quote; X2's M3.)
 
 ## Red proofs
 
