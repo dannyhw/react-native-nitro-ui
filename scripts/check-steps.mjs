@@ -59,9 +59,24 @@
  * - `api-extractor:check` writes `.turbo/api-extractor-temp/` (its report temp
  *   folder, per `etc/api-extractor.json`). Nothing in the chain reads `.turbo`
  *   (`ESLint` and Prettier both ignore it), so it needs no ordering.
+ * - **`nitrogen/` itself, not just `nitrogen/generated`, is shared** (X10 review
+ *   N5). ESLint and Prettier ignore only `nitrogen/generated`, so `lint` and
+ *   `format` walk the rest of that directory too, and `manifest:check`'s pack list
+ *   contains `nitrogen/`; all three now declare `reads: nitrogen` and `prepare`
+ *   declares writing it. Today the extra region holds nothing checked in (`nitrogen/`
+ *   is only `generated/` plus whatever a run leaves behind), so this is a declaration
+ *   about a directory that can gain files, not a bug being patched: a dropped `needs`
+ *   edge shows up in `findOutputConflicts` rather than in a build that intermittently
+ *   formats a half-deleted tree. `prepare` therefore waits on `lint` and `format` as
+ *   well as on the `generated/` readers, which costs no wall time - it already waits
+ *   behind the ~140 s `test` - and turns "the order happened to work" into the thing
+ *   the guard checks. Do not shorten `prepare`'s wait on the assumption that the
+ *   ordering is a race: the declaration is what keeps it checked.
  */
 export const FINDINGS = Object.freeze({
   generatedDir: 'nitrogen/generated',
+  /** Everything under `nitrogen/` that is not the generated tree (specs, config). */
+  nitrogenDir: 'nitrogen',
   lib: 'lib',
   jestCache: 'jest-cache',
 });
@@ -106,16 +121,16 @@ export const CHECK_STEPS = Object.freeze([
     needs: [],
     group: null,
     writes: [],
-    reads: [],
-    note: 'eslint over **/*.{js,mjs,ts,tsx}; ignores lib/ and nitrogen/generated/',
+    reads: [FINDINGS.nitrogenDir],
+    note: 'eslint over **/*.{js,mjs,ts,tsx}; ignores lib/ and nitrogen/generated/ but not the rest of nitrogen/',
   },
   {
     name: 'format',
     needs: [],
     group: null,
     writes: [],
-    reads: [],
-    note: 'prettier --check .; .prettierignore covers lib, nitrogen/generated, .turbo, and prettier 3 also reads .gitignore',
+    reads: [FINDINGS.nitrogenDir],
+    note: 'prettier --check .; .prettierignore covers lib, nitrogen/generated, .turbo, and prettier 3 also reads .gitignore - but not nitrogen/ as a whole',
   },
   {
     name: 'test',
@@ -167,11 +182,22 @@ export const CHECK_STEPS = Object.freeze([
   },
   {
     name: 'prepare',
-    needs: ['lock:check', 'nitrogen:check', 'test', 'perf:renders'],
+    needs: [
+      'lock:check',
+      'nitrogen:check',
+      'test',
+      'perf:renders',
+      // X10 review N5: these two read `nitrogen/` (they ignore only `nitrogen/generated`), and this
+      // step deletes the directory. Before the region was declared the safety came from `prepare`
+      // happening to queue behind the ~140 s `test`; a `needs` edge is the same order, and it is the
+      // kind that a change to the graph cannot quietly break.
+      'lint',
+      'format',
+    ],
     group: null,
-    writes: [FINDINGS.generatedDir, FINDINGS.lib],
+    writes: [FINDINGS.nitrogenDir, FINDINGS.generatedDir, FINDINGS.lib],
     reads: [],
-    note: "bob build: deletes and regenerates nitrogen/, then writes lib/. lock:check is a need to keep the old chain's intent (a stale lock costs a string compare, not a build); the other three read nitrogen/, which this step deletes",
+    note: "bob build: deletes and regenerates nitrogen/, then writes lib/. lock:check is a need to keep the old chain's intent (a stale lock costs a string compare, not a build); the other needs read nitrogen/, which this step deletes - lint and format included, because they only ignore nitrogen/generated",
   },
   {
     name: 'api-extractor:check',
@@ -194,8 +220,8 @@ export const CHECK_STEPS = Object.freeze([
     needs: ['prepare'],
     group: null,
     writes: [],
-    reads: [FINDINGS.lib],
-    note: 'npm pack --dry-run --ignore-scripts: lists the tarball without rebuilding or writing it',
+    reads: [FINDINGS.lib, FINDINGS.nitrogenDir],
+    note: 'npm pack --dry-run --ignore-scripts: lists the tarball without rebuilding or writing it; the list contains nitrogen/, so it is a reader of the region prepare rewrites',
   },
   {
     name: 'readme:check',
@@ -261,7 +287,7 @@ export function stepsFromSerialChain(chain) {
  * Why half the cores, capped at 4: the heavy steps already fan out internally -
  * Jest uses `maxWorkers` = cores-1, and `tsc`, ESLint, Reassure and nitrogen each
  * run their own multi-process work. The runner's parallelism only has to hide the
- * *tails* around the long pole (`test` measured 147 s of a ~184 s chain on a
+ * *tails* around the long pole (`test` measured 139.6 s of a 171.7 s chain on a
  * 10-core box, so nothing else can be the critical path), and stacking five
  * internally-parallel processes on ten cores trades that for context-switching
  * and a slower Jest. Half the cores reaches 4 by 8 cores and stops there, which
@@ -520,7 +546,13 @@ export function planProblems(steps = CHECK_STEPS, serialChain = '') {
  *     ends, so a long first step does not look like a hang.
  *   - **fail fast**: the first failure stops new starts; running steps finish so
  *     their logs are still evidence, and everything unstarted is reported as
- *     skipped rather than silently missing.
+ *     skipped rather than silently missing. `runCheckPlan` also takes
+ *     `haltOnFailure: false`, which keeps starting steps that do not depend on the
+ *     failed one while still never starting one whose `needs` did not pass. The CLI
+ *     does not expose it - `bun run check` halts, because that is the gate's
+ *     contract - but the scheduler has to be able to say what a `needs` edge means
+ *     when halting is not what saves it, so the rule is reachable and tested rather
+ *     than dead code with a claim on it (X10 review N3).
  *   - **groups**: at most one member of a group runs at a time, so `test` and
  *     `perf:renders` cannot both write Jest's haste-map cache.
  *
@@ -530,6 +562,8 @@ export function planProblems(steps = CHECK_STEPS, serialChain = '') {
  * @param {(step: object) => Promise<{ok: boolean, log?: string, exitCode?: number | null, signal?: string | null, error?: string}>} options.run
  * @param {(event: object) => void} [options.onEvent] `start`, `done`, `flush`, `skip`
  * @param {() => number} [options.now]
+ * @param {boolean} [options.haltOnFailure] stop starting anything after the first
+ *   failure (default true, which is what `scripts/check.mjs` runs with)
  * @returns {Promise<{ok: boolean, jobs: number, wallMs: number, results: object[], failures: string[]}>}
  */
 export async function runCheckPlan({
@@ -538,6 +572,7 @@ export async function runCheckPlan({
   run,
   onEvent = () => {},
   now = () => Date.now(),
+  haltOnFailure = true,
 }) {
   const problems = validateCheckSteps(steps);
   if (problems.length > 0) {
@@ -616,7 +651,7 @@ export async function runCheckPlan({
         groupsBusy.delete(record.step.group);
       }
       onEvent({ type: 'done', step: record.step, result: record.result });
-      if (result.status === 'fail' && halted == null) {
+      if (result.status === 'fail' && halted == null && haltOnFailure) {
         halted = record.step.name;
       }
       pump();
@@ -699,12 +734,15 @@ export async function runCheckPlan({
           (need) => byName.get(need)?.phase !== 'complete'
         );
         if (blocked.length > 0) continue;
+        // A step starts only when every need has *passed*. With the default
+        // fail-fast this branch is defence - `finish` halts the plan on any failure,
+        // so nothing is left to start - but `haltOnFailure: false` reaches it for
+        // real, and that is the mode where it matters: keep going to collect every
+        // failure, while a step that depends on a broken one still never runs.
         const failedNeeds = needs.filter(
           (need) => byName.get(need)?.result?.status !== 'pass'
         );
         if (failedNeeds.length > 0) {
-          // Unreachable while fail-fast halts the whole plan, but the graph is the
-          // thing under test, so a need that did not pass must never be walked past.
           record.phase = 'complete';
           record.result = {
             status: 'skipped',

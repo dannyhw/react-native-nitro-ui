@@ -686,7 +686,18 @@ async function runGate(name, resolved, options = {}) {
   // process: a ledger line pointing at a truncated log is half the evidence.
   await finished(logStream).catch(() => {});
 
-  const result = exit.code === 0 && exit.signal == null ? 'pass' : 'fail';
+  const stepTimings = readStepTimings(stepTimingsPath);
+  // `check` is the one gate whose own exit code can be a lie about doing work (M3).
+  // A runner that exits 0 without starting a step - the entry guard not matching, a
+  // plan that resolved to nothing - looks exactly like a green run from here, so for
+  // this gate a recorded step list is part of the evidence: no steps, no pass. Only
+  // when the breakdown exists at all: a runner that could not *write* the file (an
+  // unwritable log directory, an older runner) must stay green, which is what the
+  // null path below means.
+  const ranNothing =
+    name === 'check' && stepTimings != null && stepTimings.steps.length === 0;
+  const result =
+    exit.code === 0 && exit.signal == null && !ranNothing ? 'pass' : 'fail';
   const summaries = parseTestSummaries(logText);
   const line = ledgerLineFromRun({
     // The canonical name from `resolveGate`, never `argv[0]`: one harness suite
@@ -710,7 +721,7 @@ async function runGate(name, resolved, options = {}) {
     // perf step that happened to print last (M3).
     counts: parseTestCounts(logText) ?? summaries[0] ?? null,
     summaries,
-    stepTimings: readStepTimings(stepTimingsPath),
+    stepTimings,
     logPath,
     startedAt,
     exitCode: exit.code ?? (exit.signal != null ? null : 1),
@@ -742,6 +753,13 @@ async function runGate(name, resolved, options = {}) {
       `${exit.signal != null ? ` (signal ${exit.signal})` : ''}${suffix}\n` +
       `gate: recorded in ${path.relative(repoRoot, file)}\n`
   );
+  if (ranNothing) {
+    process.stderr.write(
+      'gate: check reported no steps, so nothing was checked - recording a fail ' +
+        'even though the runner exited 0. A check that runs no steps is not a pass;\n' +
+        '        run `bun run check` by hand and look for the step list header.\n'
+    );
+  }
   if (result === 'fail' && resolved.bench) {
     process.stderr.write(
       'gate: a bench never blocks `need` - benches go to the bench host (D15).\n'
@@ -754,7 +772,12 @@ async function runGate(name, resolved, options = {}) {
     process.kill(process.pid, exit.forwarded);
     return 1;
   }
-  return exit.signal != null ? 1 : (exit.code ?? 1);
+  if (exit.signal != null) return 1;
+  // The recorded result decides, not the child's status alone: `check` can exit 0
+  // having started no steps, and a caller that read that 0 would merge on the fail
+  // line written above (M3). A child that failed on its own still reports its code.
+  if (result === 'fail') return exit.code === 0 ? 1 : (exit.code ?? 1);
+  return exit.code ?? 0;
 }
 
 function printCodeTree({ tree, trees, head, files }) {
@@ -829,18 +852,6 @@ function formatMaybe(ms) {
  * recovered from the path, because that is what the note has to cite.
  *
  * @param {string} exceptBranch the branch whose own ledger is not "other"
- * @returns {Array<{branch: string, entries: object[]}>}
- */
-/**
- * Every branch ledger in `.gates/` except one, for merge reuse.
- *
- * A merge's evidence usually lives on the branch that was merged, so `need --for
- * merge` on `main` has to look outside `main`'s own ledger. Branch names nest
- * (`task/X10-check-throughput` becomes `.gates/task/X10-….jsonl`), which is why
- * this walks rather than globs a flat directory; the name it returns is the branch,
- * recovered from the path, because that is what the note has to cite.
- *
- * @param {string} exceptBranch the branch whose own ledger is not "other"
  * @returns {Array<{branch: string, entries: object[], source: string}>}
  */
 function otherBranchLedgers(exceptBranch) {
@@ -881,17 +892,21 @@ function otherBranchLedgers(exceptBranch) {
 /**
  * The ledgers committed beside task reports: `docs/tasks/<ID>/gates.jsonl`.
  *
- * These are the evidence that actually travels. `.gates/` is gitignored, so in the
- * checkout where a merge is confirmed - `main`, often a different worktree
- * altogether - no branch's `.gates/` lines exist; the export from
- * `gate.mjs export --task <ID>` is the copy that arrived with the merge commit. A
- * reuse rule that read only `.gates/` would be right in a test and useless in the
- * flow it was written for.
+ * A committed ledger travels; a live one does not, and that is the whole difference. `.gates/` is
+ * gitignored, so in the checkout where a merge is confirmed - `main`, often a different worktree
+ * altogether - no branch's `.gates/` lines exist; the export from `gate.mjs export --task <ID>` is
+ * the copy that arrived with the merge commit. A reuse rule that read only `.gates/` would be right
+ * in a test and useless in the flow it was written for.
  *
- * A committed ledger is weaker evidence than a live one in exactly one way, and the
- * rule already checks it: the line's `head` must be an ancestor of this HEAD, which
- * is what makes it *this* merge's proof rather than some branch that once had
- * similar code.
+ * What a committed line proves is narrower than its wording suggests, and the rules know it (X10
+ * review N4). Ancestry ties a line to *this history*, and tree equality is the actual evidence that
+ * the code was checked; neither of them authenticates the file - anyone who can commit can edit a
+ * `gates.jsonl` line, give it some ancestor `head` and today's tree, and be believed. Two things
+ * make that a poor attack: the same diff has to change what `check` does, or the claim was true
+ * anyway, and reuse now also demands that nothing else the merge adds is a file `check` reads (M1),
+ * which a forged line cannot arrange on its own. Trusting the committed ledger is the alternative to
+ * re-running `check` after every merge, which is the cost this rule exists to remove; it is stated
+ * plainly in ORCHESTRATOR rather than papered over.
  *
  * @param {string} exceptBranch the branch whose own ledger is not "other"
  * @returns {Array<{branch: string, entries: object[], source: string}>}
@@ -955,18 +970,82 @@ function commitIsAncestorOfHead(commit) {
 }
 
 /**
- * The `check` reuse available for this tree, or null. `--no-reuse` turns it off,
- * which is how a reviewer re-derives the strict answer when they do not believe
- * the reuse.
+ * The paths that differ between `commit` and the tree standing here now: the committed diff plus
+ * anything uncommitted or untracked in the working tree (M1).
+ *
+ * Reuse asks whether `check` would see anything new if it ran here instead of on that commit, so the
+ * answer has to be *everything* that differs, and `check` reads untracked files: jest, tsc and
+ * prettier take the directory as they find it, so an untracked `.ts` in `src/` is a file the next run
+ * compiles. That is also why this refuses to fall back to the committed diff when git cannot be
+ * asked - an unknown working tree is not a clean one, and `null` here means "do not reuse".
+ *
+ * Rename and delete entries come back as plain paths (`-z`, no rename detection), which is what the
+ * allowlist wants: both sides of a rename are asked about, and a path that stopped existing is a path
+ * `check` reads differently.
+ *
+ * @param {string} commit
+ * @returns {string[] | null}
+ */
+function pathsChangedSince(commit) {
+  const sha = String(commit ?? '').trim();
+  if (!/^[0-9a-f]{7,40}$/i.test(sha)) return null;
+  if (git(['cat-file', '-e', `${sha}^{commit}`], null) == null) return null;
+  const diff = spawnSync('git', ['diff', '--name-only', '-z', `${sha}..HEAD`], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (diff.status !== 0) return null;
+  const status = spawnSync(
+    'git',
+    ['status', '--porcelain=v1', '--untracked-files=all', '-z'],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    }
+  );
+  if (status.status !== 0) return null;
+  const found = new Set(
+    String(diff.stdout ?? '')
+      .split('\0')
+      .map((line) => line.trim())
+      .filter((line) => line !== '')
+  );
+  const fields = String(status.stdout ?? '').split('\0');
+  for (let i = 0; i < fields.length; i += 1) {
+    const field = fields[i];
+    if (field === '') continue;
+    if (field.startsWith('r') || field.startsWith('c')) {
+      // A rename/copy entry names its source here and its destination in the next field.
+      found.add(field.slice(3));
+      if (fields[i + 1] != null && fields[i + 1] !== '')
+        found.add(fields[i + 1]);
+      i += 1;
+      continue;
+    }
+    found.add(field.slice(3));
+  }
+  return [...found].sort();
+}
+
+/**
+ * The `check` reuse available for this tree, or null. `--no-reuse` turns it off, which is how a
+ * reviewer re-derives the strict answer when they do not believe the reuse.
  *
  * @param {string} branch the branch whose own ledger is already being read
  * @param {string | null} tree
+ * @param {string[]} [diagnostics] filled with why each candidate was refused, so `need` can print the
+ *   reason instead of a shrug
+ * @returns {{branch: string, entry: object, source: string, changedPaths: string[]} | null}
  */
-function reusableCheckFor(branch, tree) {
+function reusableCheckFor(branch, tree, diagnostics = null) {
   return findReusableCheck({
     ledgers: [...otherBranchLedgers(branch), ...committedTaskLedgers(branch)],
     tree,
     headIsAncestor: commitIsAncestorOfHead,
+    changedSince: pathsChangedSince,
+    diagnostics,
   });
 }
 
@@ -979,6 +1058,10 @@ function commandNeed({ stage, base, reuse = true }) {
     ? { platforms: [...PLATFORMS], unmapped: [], tooling: [] }
     : platformsTouchedByPaths(diff.paths);
 
+  // Why reuse was declined, kept to print: the M1 rule asks a question with an answer
+  // a reviewer can check ("the merge adds bench/src/Main.tsx, check reads that"), and
+  // silence would look like the reuse rule never fired.
+  const reuseRefusals = [];
   const decision = decideNeed({
     entries,
     tree: read.tree,
@@ -989,7 +1072,10 @@ function commandNeed({ stage, base, reuse = true }) {
     toolingPaths: touched.tooling,
     diffUnknown: diff.unknown,
     reusedCheck:
-      stage === 'merge' && reuse ? reusableCheckFor(branch, read.tree) : null,
+      stage === 'merge' && reuse
+        ? reusableCheckFor(branch, read.tree, reuseRefusals)
+        : null,
+    reuseRefusals: reuseRefusals,
   });
 
   printCodeTree(read);
