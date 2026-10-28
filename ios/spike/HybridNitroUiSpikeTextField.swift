@@ -968,6 +968,23 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
     // a *rejected* edit takes; a programmatic write takes `nuiTestApplyWrite`.
     if model.state.reconcile() {
       host.markDirty()
+      /*
+       * A field that can be N lines tall also changed *size* with its text, and iOS has to be told.
+       *
+       * `NitroSwiftUIHost.commit()` re-measures only when `contentSize` is missing or something has said
+       * `noteContentSizeMayHaveChanged()` (`ios/core/NitroSwiftUIHost.swift:259`), so without the note a
+       * `TextField(axis: .vertical)` that grew to four lines keeps reporting the one-line box it measured at
+       * mount. That is what `P4b` caught: three controlled writes, `measureContent()` flat at 22.0 on iOS
+       * while the same scenario grew on Android, where Compose reports the new size through its own layout
+       * pass. Q2 §6 names this pair as what auto-grow needs, and the setters for `multiline`, `maxLines` and
+       * `defaultValue` already make the note — the text itself was the one that did not.
+       *
+       * Scoped to `multiline` because that flag is what makes a height change possible: on a single-line
+       * field the note would buy one SwiftUI measure per keystroke and no extra information.
+       */
+      if model.multiline {
+        host.noteContentSizeMayHaveChanged()
+      }
     }
     host.commit()
     publishMirror()
