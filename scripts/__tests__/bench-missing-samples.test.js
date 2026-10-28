@@ -1191,6 +1191,75 @@ describe('the two ends of the timeout rule agree', () => {
       10 * IOS_RULE.presentedTimeoutMs
     );
   });
+
+  it("arms each platform's measured presenting capture with its ceiling constant", () => {
+    // Reading the *constant* is not enough: A4's root cause was a call site waiting 2 s
+    // while a constant said something else, and the review restored that call site with
+    // every constant untouched, green (N2). So read the delay argument of the timer each
+    // platform actually arms, inside the function that arms it - the names all coexist
+    // in these files, and the regression is which one the timer is handed.
+    const bodyOf = (source, header, what) => {
+      const at = source.indexOf(header);
+      if (at < 0) {
+        throw new Error(`no ${what} in the probe source`);
+      }
+      const rest = source.slice(at);
+      const end = rest.indexOf('\n  }\n');
+      if (end < 0) {
+        throw new Error(`${what} does not end where this test expects`);
+      }
+      return rest.slice(0, end);
+    };
+    const kotlinDelay = (body, what) => {
+      const found = /postDelayed\(([\s\S]*?)\}, ([A-Za-z_0-9.]+)\)/.exec(body);
+      if (found == null) {
+        throw new Error(`no ${what} postDelayed in that body`);
+      }
+      return String(found[2]);
+    };
+    const objcDelay = (body, what) => {
+      const found =
+        /dispatch_after\(\s*dispatch_time\(DISPATCH_TIME_NOW,\s*static_cast<int64_t>\(\s*([A-Za-z_0-9.]+)\s*\*\s*NSEC_PER_SEC\s*\)/.exec(
+          body
+        );
+      if (found == null) {
+        throw new Error(`no ${what} dispatch_after in that body`);
+      }
+      return String(found[1]);
+    };
+
+    // The measured presenting capture: iOS's `dispatch_after` in
+    // `BenchProbeArmPresentation`, Android's in `armFrameCapture`.
+    expect(
+      objcDelay(
+        bodyOf(ios(), 'void BenchProbeArmPresentation(', 'iOS presentation'),
+        'iOS presentation ceiling'
+      )
+    ).toBe('kBenchPresentationCeilingSeconds');
+    expect(
+      kotlinDelay(
+        bodyOf(android(), 'fun armFrameCapture(', 'Android presentation'),
+        'Android presentation ceiling'
+      )
+    ).toBe('PRESENTATION_CEILING_MS');
+
+    // The pacing waits keep their own constants, so the two waits cannot be merged by a
+    // rename in either direction: the measured capture must not end up on the pacing
+    // number (that substitution is the exact A4 regression), and a pacing timer must not
+    // inherit a 90 s ceiling that turns a missed frame into a 90 s stall.
+    expect(
+      kotlinDelay(
+        bodyOf(android(), 'fun nextFrameNs(', 'Android pacing'),
+        'Android pacing'
+      )
+    ).toBe('FRAME_TIMEOUT_MS');
+    expect(
+      objcDelay(
+        bodyOf(ios(), 'HybridBenchProbe::nextFrameNs(', 'iOS pacing'),
+        'iOS pacing'
+      )
+    ).toBe('kBenchPacingFrameCeilingSeconds');
+  });
 });
 
 describe('the completeness budget itself is unchanged', () => {

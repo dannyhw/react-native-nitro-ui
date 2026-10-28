@@ -84,6 +84,14 @@ namespace margelo::nitro::benchprobe {
    */
   static constexpr double kBenchPresentationCeilingSeconds = 90.0;
 
+  /**
+   * How long the **pacing** frame wait (`nextFrameNs`) waits before giving up and
+   * reporting "now". Pacing only, so a slow frame here costs nothing but a slightly short
+   * gap between iterations - which is why it stays at 2 s on both platforms while the
+   * measured ceiling above does not (Android's `FRAME_TIMEOUT_MS` is the same idea).
+   */
+  static constexpr double kBenchPacingFrameCeilingSeconds = 2.0;
+
   // ------------------------------------------------ transaction capture ---
 
   /**
@@ -527,7 +535,7 @@ namespace margelo::nitro::benchprobe {
 
       // Never let a missed frame (e.g. a suspended app) hang the runner. The
       // context outlives this block either way; see the comment above.
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(2.0 * NSEC_PER_SEC)),
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(kBenchPacingFrameCeilingSeconds * NSEC_PER_SEC)),
                      dispatch_get_main_queue(), ^{
         if (context->settled.load()) {
           return;
