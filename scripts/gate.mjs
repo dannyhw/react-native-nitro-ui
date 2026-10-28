@@ -69,6 +69,8 @@ import {
   decideNeed,
   decideWait,
   deviceFromEnv,
+  DEVICE_CONTEXT_END,
+  DEVICE_CONTEXT_START,
   explainNeedRow,
   failureExcerptName,
   findReusableCheck,
@@ -99,7 +101,14 @@ import {
   summarizeLoad,
 } from './gate-core.mjs';
 import { contentHash, isCodeFile } from './app-stamp-core.mjs';
-import { writeJsonAtomic } from './lease-core.mjs';
+import {
+  isReservedSerial,
+  pruneExpired,
+  readJson,
+  stateHome,
+  statePaths,
+  writeJsonAtomic,
+} from './lease-core.mjs';
 import { currentCodeTree, repoRootOf } from './app-stamp.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
@@ -138,8 +147,8 @@ const USAGE =
   '\n' +
   '       (`export --task <ID>` writes docs/tasks/<ID>/gates.jsonl and, for every\n' +
   '        FAILED run, a scrubbed excerpt in docs/tasks/<ID>/failures/ - the failing\n' +
-  '        test names, the assertion messages, the last 150 lines and the load at\n' +
-  '        both ends. Passing runs get no file)\n' +
+  '        test names, the assertion messages, the last 150 lines, the device\n' +
+  '        context and the load at both ends. Passing runs get no file)\n' +
   '\n' +
   "       (`logs` lists this clone's stored gate logs - they live in the git common\n" +
   '        directory, so removing a worktree cannot lose them; --failed limits the\n' +
@@ -475,6 +484,242 @@ function appendLedgerLine(branch, line) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
   return file;
+}
+
+/**
+ * What a failed device gate was sitting on top of (X12 item 3).
+ *
+ * Four probes, and a fifth on Android:
+ *
+ *   - `simctl list devices booted` — which simulators exist on this machine right
+ *     now, because "the harness timed out waiting for a boot" is only diagnosable
+ *     if you know whether it booted at all;
+ *   - `adb -s <leased serial> devices` — the same question for an emulator, asked
+ *     *of the leased serial* rather than of the adb server: an unqualified
+ *     `adb devices` reports the maintainer's `emulator-5560` as well, and the whole
+ *     discipline of X1 is that a script names its own device;
+ *   - the lease list, read from the lease file (no subprocess, no mutation) — which
+ *     task holds what, and whether this run's lease is even still live;
+ *   - `load1`, beside the samples the ledger already carries;
+ *   - Android only: the last ~500 lines of `logcat` for the app's pid, from the
+ *     leased serial. A Compose crash, a native exception and an ANR are all in that
+ *     buffer and in none of the harness's own output.
+ *
+ * Everything here is read-only, capped, and allowed to fail. A gate's verdict is
+ * already on disk before any of it runs.
+ *
+ * @param {{platform: 'ios'|'android', device: string | null, lease: string | null, env?: NodeJS.ProcessEnv, run?: (command: string, args: string[]) => string | null, leaseFile?: string | null, now?: number}} options
+ * @returns {Array<{label: string, ok: boolean, text: string}>}
+ */
+function collectDeviceContext({
+  platform,
+  device,
+  lease,
+  env = process.env,
+  run = runProbe,
+  leaseFile = null,
+  now = Date.now(),
+}) {
+  const probes = [];
+  const note = (label, text) => {
+    probes.push({ label, ok: false, text });
+  };
+  const add = (label, command, args, limit = 40) => {
+    if (command == null) {
+      note(label, `(no command configured for ${label})`);
+      return null;
+    }
+    const answer = run(command, args);
+    if (answer == null || answer.ok !== true) {
+      note(
+        label,
+        `(${command} ${args.join(' ')} gave no answer: ${String(
+          answer?.text ?? 'did not run or exited non-zero'
+        )})`
+      );
+      return null;
+    }
+    const lines = String(answer.text)
+      .split('\n')
+      .filter((line) => line.trim() !== '');
+    const kept = lines.slice(-limit);
+    probes.push({
+      label: `${label}${lines.length > kept.length ? ` (last ${String(kept.length)} of ${String(lines.length)} lines)` : ''}`,
+      ok: true,
+      text: kept.join('\n'),
+    });
+    return kept;
+  };
+
+  add(
+    'xcrun simctl list devices booted',
+    env.NITRO_UI_SIMCTL_BIN ?? 'xcrun',
+    ['simctl', 'list', 'devices', 'booted'],
+    40
+  );
+
+  // The serial this run was given, if any. `ANDROID_SERIAL` is what the lease
+  // exports; `device` is the same string, and both are checked so a hand-set
+  // environment cannot smuggle a different one in.
+  const serial = env.ANDROID_SERIAL ?? (platform === 'android' ? device : null);
+  const adb = env.NITRO_UI_ADB_BIN ?? adbFromSdk(env);
+  if (isReservedSerial(serial)) {
+    note(
+      `adb -s ${String(serial)} devices`,
+      '(refused: that serial is the maintainer’s reserved emulator, and no gate may address it)'
+    );
+  } else if (serial == null || serial === '') {
+    note(
+      'adb devices',
+      '(no serial from the lease, and an unqualified `adb devices` would list devices this task does not own)'
+    );
+  } else {
+    add('adb devices', adb, ['-s', String(serial), 'devices'], 10);
+  }
+
+  probes.push({
+    label: 'leases',
+    ok: true,
+    text: describeLeases({ lease, leaseFile, now }),
+  });
+  const load1 = os.loadavg()[0];
+  probes.push({
+    label: 'load',
+    ok: Number.isFinite(load1),
+    text: Number.isFinite(load1)
+      ? `  load1 at the moment of failure: ${load1.toFixed(2)} (the ledger line carries the samples across the whole run)`
+      : '  (os.loadavg() gave no answer)',
+  });
+
+  if (platform === 'android') {
+    const bundleId = env.NITRO_UI_EXAMPLE_BUNDLE_ID ?? 'nitroui.example';
+    if (serial == null || serial === '') {
+      note(
+        'logcat',
+        '(refused: no serial from the lease, and an unqualified logcat would read the maintainer’s emulator)'
+      );
+    } else if (isReservedSerial(serial)) {
+      // Checked again, before this second command: a lease can be released and
+      // re-handed between the probes, and the reserved serial must not be addressed
+      // by a log dump either.
+      note('logcat', '(refused: reserved serial)');
+    } else {
+      const pidAnswer = run(adb, [
+        '-s',
+        String(serial),
+        'shell',
+        'pidof',
+        bundleId,
+      ]);
+      const pid = String(pidAnswer?.ok === true ? pidAnswer.text : '')
+        .trim()
+        .split(/\s+/)[0];
+      if (pid == null || pid === '') {
+        note(
+          `logcat --pid ${bundleId}`,
+          `(no ${bundleId} process on ${String(serial)})`
+        );
+      } else {
+        add(
+          'logcat',
+          adb,
+          ['-s', String(serial), 'logcat', '-d', '--pid', pid],
+          LOGCAT_TAIL_LINES
+        );
+      }
+    }
+  }
+  return probes;
+}
+
+/** How many logcat lines a failure block carries. The brief's "~500". */
+const LOGCAT_TAIL_LINES = 500;
+
+/**
+ * Runs one probe: `{ok, text}`, where `ok: false` means "no answer".
+ *
+ * The distinction matters beyond cosmetics. `pidof` output becomes an argument to
+ * the *next* command, so a probe that failed and returned its own error text would
+ * hand `adb logcat --pid` a paragraph of shell error as a pid - which is how the
+ * first version of this function behaved until a test's fake adb tripped it. Every
+ * caller treats `ok: false` as a note in the block rather than as data.
+ */
+function runProbe(command, args) {
+  try {
+    const result = spawnSync(command, args, {
+      encoding: 'utf8',
+      timeout: 20_000,
+      maxBuffer: 16 * 1024 * 1024,
+      env: process.env,
+    });
+    if (result.status !== 0) {
+      const detail = String(result.stderr ?? '')
+        .trim()
+        .split('\n')
+        .slice(0, 3)
+        .join(' / ');
+      return {
+        ok: false,
+        text:
+          detail === ''
+            ? `exited ${String(result.status)}`
+            : `${detail} (exited ${String(result.status)})`,
+      };
+    }
+    return { ok: true, text: result.stdout ?? '' };
+  } catch (error) {
+    return { ok: false, text: String(error?.message ?? error) };
+  }
+}
+
+/** Where `adb` lives, or the bare name when no SDK root is set (as in `lease.mjs`). */
+function adbFromSdk(env) {
+  const sdk = env.ANDROID_HOME ?? env.ANDROID_SDK_ROOT;
+  return sdk != null && fs.existsSync(path.join(sdk, 'platform-tools/adb'))
+    ? path.join(sdk, 'platform-tools/adb')
+    : 'adb';
+}
+
+/**
+ * The lease list, from the lease file.
+ *
+ * Read rather than `lease.mjs list`, which would shell out to `simctl`/`adb` again
+ * and print warnings about devices nobody asked about; and read *without pruning*,
+ * because the run that just failed may have been pruned for a ttl it exceeded and
+ * that is exactly the fact worth recording.
+ */
+function describeLeases({ lease, leaseFile, now }) {
+  try {
+    const file =
+      leaseFile ?? path.join(statePaths(stateHome(process.env)).leases);
+    const state = readJson(file, { leases: [] });
+    const live = pruneExpired(state, now).leases ?? [];
+    const rows = live.map((entry) => {
+      const holds = Array.isArray(entry.holds) ? entry.holds.join(',') : '';
+      return `  ${String(entry.id ?? '?').padEnd(24)} ${String(entry.task ?? '?').padEnd(12)} ${String(entry.platform ?? '?').padEnd(8)}${entry.exclusive ? 'exclusive ' : ''.padEnd(10)}${holds}`;
+    });
+    const mine = live.some((entry) => entry.id === lease);
+    return [
+      `  lease file: ${file}`,
+      `  this run's lease: ${String(lease ?? 'none')}${lease == null ? '' : mine ? ' (still live)' : ' (no longer live)'}`,
+      ...(rows.length === 0 ? ['  (no live leases)'] : rows),
+    ].join('\n');
+  } catch (error) {
+    return `  (could not read the lease file: ${String(error?.message ?? error)})`;
+  }
+}
+
+/** The block appended to the log, framed by the markers `splitDeviceContext` finds. */
+function renderDeviceContext(probes) {
+  const lines = [DEVICE_CONTEXT_START];
+  for (const probe of probes) {
+    lines.push(`gate: ${probe.label}${probe.ok ? '' : ' [unavailable]'}`);
+    for (const line of String(probe.text).split('\n')) {
+      lines.push(`  | ${line}`);
+    }
+  }
+  lines.push(DEVICE_CONTEXT_END);
+  return lines.join('\n');
 }
 
 /**
@@ -1167,6 +1412,29 @@ async function runGate(name, resolved, options = {}) {
     );
   }
 
+  // Item 3 (X12): a failed *device* gate appends what the device was doing to the
+  // log it just wrote, so the red row arrives with its own context instead of with
+  // "re-run it and hope it prints something next time". Keyed on the gate's own
+  // platform, not on the environment: a `check` that happens to run with
+  // ANDROID_SERIAL set is still not a device gate, and probing a device it does not
+  // own would be wrong. Best-effort by design: the verdict is already recorded and
+  // flushed above, so every probe here is allowed to fail and say so in one line.
+  if (result === 'fail' && resolved.platform != null) {
+    const context = collectDeviceContext({
+      platform: resolved.platform,
+      device: device.device,
+      lease: device.lease,
+      env: process.env,
+    });
+    try {
+      fs.appendFileSync(absoluteLog, `\n${renderDeviceContext(context)}\n`);
+    } catch {
+      /* a log we cannot append to is still a log the run wrote */
+    }
+    process.stderr.write(
+      `gate: appended the device context to ${logPath} (${context.length} probe(s))\n`
+    );
+  }
   if (exit.forwarded != null) {
     // The line is written and the log is flushed, so the signal can now do its
     // default work and the caller's exit status still says "interrupted".

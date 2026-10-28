@@ -46,6 +46,7 @@ import {
   planLogRetention,
   renderFailureExcerpt,
   scrubSecrets,
+  splitDeviceContext,
   summarizeLoad,
 } from '../gate-core.mjs';
 
@@ -741,6 +742,28 @@ describe('renderFailureExcerpt', () => {
     lease: 'lease-7',
   };
 
+  it('lifts the device block out of the tail, so the tail is the failure', () => {
+    const log = [
+      'FAIL Switch renders',
+      ...Array.from(
+        { length: 400 },
+        (unused, index) => `harness output ${index}`
+      ),
+      'gate: ---- device context (recorded on failure, X12) ----',
+      'gate: adb devices',
+      '  | emulator-5574 device',
+      'gate: ---- end device context ----',
+    ].join('\n');
+    const { content } = renderFailureExcerpt({ entry, logText: log });
+    expect(content).toContain('## Device and run context');
+    expect(content).toContain('emulator-5574 device');
+    // The tail is run output, not the context block: without the split, the last
+    // 150 lines of this log would be nothing but `simctl` and lease output.
+    const tail = content.split('## Last')[1];
+    expect(tail).toContain('harness output 399');
+    expect(tail).not.toContain('emulator-5574 device');
+  });
+
   it('reports the load at both ends, from the line rather than invented', () => {
     const { content } = renderFailureExcerpt({ entry, logText: 'x\n' });
     expect(content).toContain(
@@ -788,6 +811,13 @@ describe('renderFailureExcerpt', () => {
     expect(isFailedRunWithLog({ ...entry, logPath: null })).toBe(false);
     expect(isFailedRunWithLog({ corrupt: true, result: 'fail' })).toBe(false);
   });
+
+  it('splitDeviceContext leaves a log with no block untouched', () => {
+    expect(splitDeviceContext('plain\n')).toEqual({
+      body: 'plain\n',
+      context: null,
+    });
+  });
 });
 
 describe('failureLinesFrom (what the excerpt leads with)', () => {
@@ -832,3 +862,175 @@ describe('summarizeLoad carries the end sample (X12)', () => {
 });
 
 /* ----------------------- device context on a failed run -------------------- */
+
+describe('a failed device gate records its device context', () => {
+  const leased = {
+    NITRO_UI_LEASE_ID: 'lease-x12',
+    ANDROID_SERIAL: 'emulator-5574',
+    NITRO_UI_HOME: null,
+  };
+
+  function leasesFileFor(dir) {
+    const home = path.join(dir, 'lease-home');
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(
+      path.join(home, 'leases.json'),
+      JSON.stringify({
+        leases: [
+          {
+            id: 'lease-x12',
+            task: 'X12',
+            platform: 'android',
+            holds: ['pair-2.android'],
+            acquiredAt: Date.now() - 60_000,
+            ttlMinutes: 120,
+            exclusive: false,
+          },
+        ],
+      })
+    );
+    return home;
+  }
+
+  function failedDeviceRun(dir, extraEnv = {}, hook = '') {
+    const home = leasesFileFor(dir);
+    const run = runCli(
+      dir,
+      ['harness:android'],
+      {
+        ...leased,
+        NITRO_UI_HOME: home,
+        FAKE_EXIT: '1',
+        ...extraEnv,
+      },
+      hook
+    );
+    return { run, home };
+  }
+
+  it('appends simctl, adb, the lease list and load1 to the log', () => {
+    const dir = makeRepo();
+    const { run } = failedDeviceRun(dir);
+    expect(run.status).toBe(1);
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    const log = fs.readFileSync(path.join(storeOf(dir), line.logPath), 'utf8');
+    expect(run.stderr).toContain('appended the device context');
+    expect(log).toContain('device context (recorded on failure, X12)');
+    expect(log).toContain('simctl list devices booted');
+    expect(log).toContain('iPhone 17');
+    expect(log).toContain('adb devices');
+    expect(log).toContain('lease file:');
+    expect(log).toContain('lease-x12');
+    expect(log).toContain('load1');
+    expect(log).toContain('---- end device context ----');
+  });
+
+  it('adds logcat for the app pid, addressed only to the leased serial', () => {
+    const dir = makeRepo();
+    const { run } = failedDeviceRun(dir);
+    const asked = fs.readFileSync(run.calls, 'utf8');
+    expect(asked).toContain('adb -s emulator-5574 devices');
+    expect(asked).toContain('adb -s emulator-5574 shell pidof nitroui.example');
+    expect(asked).toContain('adb -s emulator-5574 logcat -d --pid 4242');
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    const log = fs.readFileSync(path.join(storeOf(dir), line.logPath), 'utf8');
+    const context = splitDeviceContext(log).context;
+    // 500 of 600, and the label says so: the cap is real, and it is the newest
+    // lines that survive.
+    expect(context).toContain('last 500 of 600 lines');
+    expect(context).toContain('logcat line 600');
+    expect(context).not.toContain('logcat line 100\n');
+  });
+
+  it('never addresses the maintainer’s reserved emulator, and says why', () => {
+    const dir = makeRepo();
+    const { run } = failedDeviceRun(dir, { ANDROID_SERIAL: 'emulator-5560' });
+    expect(run.status).toBe(1);
+    // The fake adb was never invoked with the reserved serial, in either command.
+    const asked = fs.existsSync(run.calls)
+      ? fs.readFileSync(run.calls, 'utf8')
+      : '';
+    expect(asked).not.toContain('-s emulator-5560');
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    const log = fs.readFileSync(path.join(storeOf(dir), line.logPath), 'utf8');
+    expect(log).toContain('refused');
+    expect(log).toContain('reserved');
+  });
+
+  it('refuses an unqualified adb devices when the lease gave no serial', () => {
+    const dir = makeRepo();
+    const { run } = failedDeviceRun(dir, { ANDROID_SERIAL: undefined });
+    expect(run.status).toBe(1);
+    const asked = fs.existsSync(run.calls)
+      ? fs.readFileSync(run.calls, 'utf8')
+      : '';
+    // simctl is still fine to ask (it is host-wide, not another task's device), but
+    // adb without a serial would list the maintainer's emulator too.
+    expect(asked).toContain('simctl');
+    expect(asked).not.toContain('adb devices');
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    const log = fs.readFileSync(path.join(storeOf(dir), line.logPath), 'utf8');
+    expect(log).toContain('no serial from the lease');
+  });
+
+  it('still records the gate result when a probe itself fails', () => {
+    const dir = makeRepo();
+    const { run } = failedDeviceRun(dir, { FAKE_DEVICE_EXIT: '127' });
+    expect(run.status).toBe(1);
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    expect(line.result).toBe('fail');
+    expect(line.exitCode).toBe(1);
+    const log = fs.readFileSync(path.join(storeOf(dir), line.logPath), 'utf8');
+    expect(log).toContain('[unavailable]');
+    // And the excerpt is still worth committing.
+    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
+    const failures = fs.readdirSync(
+      path.join(dir, 'docs', 'tasks', 'X12', 'failures')
+    );
+    expect(failures).toHaveLength(1);
+  });
+
+  it('does not feed a failed probe’s error text to the next command', () => {
+    const dir = makeRepo();
+    // `pidof` fails here, and a probe that returns its error text as if it were the
+    // answer would hand `adb logcat --pid` a paragraph of shell error. Found by the
+    // first version of this function, when a test's own fake adb broke syntax.
+    const { run } = failedDeviceRun(dir, { FAKE_ADB_PIDOF_FAIL: '1' });
+    expect(run.status).toBe(1);
+    const asked = fs.readFileSync(run.calls, 'utf8');
+    expect(asked).toContain('pidof');
+    expect(asked).not.toContain('logcat');
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    const log = fs.readFileSync(path.join(storeOf(dir), line.logPath), 'utf8');
+    expect(log).toContain('no nitroui.example process on emulator-5574');
+    expect(log).not.toContain('device offline');
+  });
+
+  it('does not probe anything for a non-device gate', () => {
+    const dir = makeRepo();
+    const run = runCli(dir, ['check'], { ...leased, FAKE_EXIT: '1' });
+    expect(run.status).toBe(1);
+    expect(fs.existsSync(run.calls)).toBe(false);
+    const [line] = ledgerIn(dir, 'task/x12-fixture');
+    const log = fs.readFileSync(path.join(storeOf(dir), line.logPath), 'utf8');
+    expect(log).not.toContain('device context');
+  });
+
+  it('the excerpt separates the device block from the tail for real logs too', () => {
+    const dir = makeRepo();
+    const { run } = failedDeviceRun(dir);
+    expect(run.status).toBe(1);
+    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
+    const failures = fs.readdirSync(
+      path.join(dir, 'docs', 'tasks', 'X12', 'failures')
+    );
+    const excerpt = fs.readFileSync(
+      path.join(dir, 'docs', 'tasks', 'X12', 'failures', failures[0]),
+      'utf8'
+    );
+    expect(excerpt).toContain('## Device and run context');
+    expect(excerpt).toContain('FAIL ios/core/Core.test.tsx');
+    // The harness output, not the probes, is what fills the tail.
+    expect(excerpt.split('## Last')[1]).toContain('fake gate:');
+  });
+});

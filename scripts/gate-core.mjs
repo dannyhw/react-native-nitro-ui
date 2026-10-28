@@ -75,7 +75,7 @@ export const LOG_STORE_BASENAME = 'nitro-ui-gates';
  *     finished under. `median`/`max` are what judge a run; `start`/`end` are context.
  *   - `failureLogPath`, written by `export` on a **failed** line only: the committed
  *     excerpt beside `gates.jsonl` that carries the failing test names, the assertion
- *     messages and the tail of the log.
+ *     messages, the tail of the log and the device context.
  *
  * v4 adds `fullTree` and `worktreeClean`, and they are the only fields reuse reads.
  *
@@ -1795,6 +1795,36 @@ export function scrubSecrets(text) {
   return { text: out, replaced };
 }
 
+/** The markers `gate.mjs` writes around the device context block it appends. */
+export const DEVICE_CONTEXT_START =
+  'gate: ---- device context (recorded on failure, X12) ----';
+export const DEVICE_CONTEXT_END = 'gate: ---- end device context ----';
+
+/**
+ * Splits a log into its run output and the device-context block appended to it.
+ *
+ * An excerpt wants both, but not mixed: "the last 150 lines" of a log whose last
+ * 500 are logcat would show no failure at all. So the block is lifted out, shown as
+ * its own section, and the tail is taken from the run's own output.
+ *
+ * @param {string} text
+ * @returns {{body: string, context: string | null}}
+ */
+export function splitDeviceContext(text) {
+  const haystack = String(text ?? '');
+  const start = haystack.indexOf(DEVICE_CONTEXT_START);
+  if (start === -1) return { body: haystack, context: null };
+  const end = haystack.indexOf(DEVICE_CONTEXT_END, start);
+  const block = haystack.slice(
+    start,
+    end === -1 ? undefined : end + DEVICE_CONTEXT_END.length
+  );
+  return {
+    body: `${haystack.slice(0, start)}${haystack.slice(end === -1 ? haystack.length : end + DEVICE_CONTEXT_END.length)}`,
+    context: block,
+  };
+}
+
 /**
  * The failing test names and assertion messages in a log, in the shapes the gates
  * actually print (jest, and the real-input suites' own `✗`/`FAIL` lines).
@@ -1859,7 +1889,10 @@ export function renderFailureExcerpt({
   tailLines = EXCERPT_TAIL_LINES,
 }) {
   const { text: scrubbedText, replaced } = scrubSecrets(logText ?? '');
-  const body = scrubbedText;
+  // The device block is the *tail* of a failing device run's log, so taking "the
+  // last 150 lines" without splitting would spend the whole excerpt on `simctl`
+  // output and show none of the failure (X12 item 3 fed straight into item 2).
+  const { body, context } = splitDeviceContext(scrubbedText);
   const lines = body.split('\n');
   const tail = lines.slice(-Math.max(0, tailLines));
   const truncated = lines.length > tail.length;
@@ -1885,9 +1918,21 @@ export function renderFailureExcerpt({
     failures.length === 0
       ? ['_(none matched — the log had no jest/real-input failure lines)_']
       : failures.map((line) => `- \`${escapeMarkdown(line)}\``);
+  const contextSection =
+    context == null
+      ? []
+      : [
+          '',
+          '## Device and run context (captured when the gate failed)',
+          '',
+          '```',
+          ...context.split('\n').filter((line) => line.trim() !== ''),
+          '```',
+        ];
   const body2 = [
     ...header,
     ...failureSection,
+    ...contextSection,
     '',
     `## Last ${String(tail.length)} log line(s)${truncated ? ` (of ${String(lines.length)} — the rest is in the full log above)` : ''}`,
     '',
