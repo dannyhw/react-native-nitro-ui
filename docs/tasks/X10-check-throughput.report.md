@@ -40,8 +40,11 @@ tails. `--jobs N` overrides. `test` alone is 147 s of a ~180 s chain: the ceilin
 
 Merge reuse went wider than the brief: it also reads the **committed**
 `docs/tasks/<ID>/gates.jsonl`, because `.gates/` is gitignored and the checkout where a
-merge is confirmed has never seen the worktree's ledger. The ancestry proof is what
-makes that copy as good as an original.
+merge is confirmed has never seen the worktree's ledger. What that copy proves is
+narrower than "as good as an original" (fixed-round N4): ancestry ties a line to this
+history and tree equality ties it to content, but nothing in git signs the line, so a
+committed ledger is self-attested text. ORCHESTRATOR step 5 says so where a merge is
+decided, and fix round 1 is what makes the borrow sound enough to lean on.
 
 ## Timings
 
@@ -163,6 +166,28 @@ summary is the perf run's 7 / 7, which is the one `counts` must not quote; X2's 
 - `what a device run really depends on is still mapped` -> add `scripts/build-app.mjs` to `TOOLING_FILES` -> `expect(isToolingPath('scripts/build-app.mjs')).toBe(false)`
 - `--no-reuse asks the strict question` -> `reuse = true` on the flag -> the strict run still borrowed
 
+### Fix round 1
+
+Each applied alone, jest run, file restored:
+
+- `refuses when the merge adds bench/src/Main.tsx - M1` (and 10 siblings, incl. the CLI-level bench case) -> `const outside = pathsOutsideReuseExemption(...)` replaced by `[]` -> the pure-function cases and `need --for merge` both print `reused`
+- `takes the newest line when two branches both qualify` -> sort by `a.ts` before `b.ts` (oldest wins) -> `expect(found.branch).toBe('task/newer')`
+- `a newer fail on the tree beats an older pass, even from another branch - M2` -> same inversion -> the older pass wins and reuse is accepted
+- `a ledger whose own newest line on the tree is a fail offers nothing - M2` -> keep the *first* decisive line instead of the last -> the 10:00 pass is reused over the 11:00 fail
+- `a red local row is never overridden by another branch pass` -> drop `red` from `applyReusedCheckRow`'s refusal -> the borrowed green prints over this checkout's failure
+- `runs steps from a checkout whose path contains a space` / `…through a symlink to itself` / `a no-op runner is visible` -> entry guard back to `` `file://${path.resolve(argv[1])}` `` -> all three: exit 0 with no step-list header
+- `a check that reports zero steps is a fail` -> `ranNothing = false` -> exit 0 and `result: pass` for a run that started nothing
+- same test -> `if (result === 'fail') return …` removed from the CLI tail -> the ledger records the fail but `gate.mjs check` exits 0
+- `strips every environment variable that overrides cwd` (N1) -> `gitEnv` stops deleting the `GIT_*` overrides -> `--show-toplevel` answers about the second repo, exactly as in the review's incident
+- `a redirected git really does reach the victim, and gitEnv stops it` -> helper keeps `GIT_DIR` -> the victim's HEAD moves
+- `a step whose need failed is never started - and that guard has a mode that reaches it` (N3) -> `if (false && failedNeeds.length > 0)` -> `expect(startedWide.sort()).toEqual(['a','d'])`
+- `the CI job runs this same runner, under the same name` (N2) -> CI's step to `run: bun run check:serial` -> `/^ {8}run: bun run check\n/m`
+- `` `nitrogen/` as a whole is a region, and lint/format are its readers `` (N5) -> drop `lint`/`format` from `prepare.needs` -> `findOutputConflicts` names both pairs
+- `is red for source that will not parse` (M1 proof) -> unparseable `.mjs` falls through to the text branch -> `violations` is empty for a file the scan cannot read
+- `refuses the mkdtemp excuse for a path that exists in this checkout` -> the real-file check returns `false` -> the read is excused as fixture data
+- `an excluded read is recorded, and never smuggled through an exemption` + `passes: no step of check reads the reuse allowlist` -> exclude-awareness removed -> `ORCHESTRATOR.md` is reported as a violation, and the accounting test has no excluded reads
+
+
 ## Files changed
 
 - `scripts/check-steps.mjs` (new) — the step graph as data, the scheduler, `planProblems`, the default-jobs formula. No `import.meta`, so jest can import it.
@@ -172,9 +197,42 @@ summary is the perf run's 7 / 7, which is the one `counts` must not quote; X2's 
 - `scripts/__tests__/check-runner.test.js`, `scripts/__tests__/gate-check.test.js` (new); `registry.test.js`, `example-lock.test.js` — assert against `check:serial` and the graph.
 - `docs/tasks/ORCHESTRATOR.md`, `CONTRIBUTING.md` — the merge-reuse rule and the runner. CI needed no change: the `Checks` job already calls `bun run check`, so it inherits the runner with its name and required status intact, which a test now pins.
 
+## Fix round 1
+
+**M1.** Reuse now requires every path the merge adds (committed diff plus untracked) to be on
+`CHECK_REUSE_ALLOWLIST`, and `scripts/check-docs-drift.mjs` *proves* that list from each step's
+own inputs: script graphs, the jest run's real `--listTests`, prettier/eslint's ignore verdicts,
+the pack list. It runs inside `test`, so the step list is unchanged. It found two violations on
+its first runs — `gate.mjs` walking `docs/tasks`, and my own new test reading
+`docs/tasks/ORCHESTRATOR.md` — now excluded paths reuse refuses over, not exemptions I granted
+myself. The reviewer's `bench/` case is a CLI test; 28 proof tests, each shown red.
+
+**M2.** Newest decisive line per ledger, newest across ledgers, fail beats pass, a red local row
+never overridden — both directions red.
+
+**M3.** The entry guard realpaths its own path; `gate.mjs` fails a `check` reporting zero steps
+and exits non-zero for it.
+
+**N1–N6** done; N4 stated in ORCHESTRATOR. New files are tooling; the package is byte-identical.
+`need` still owes the two device gates — `package.json` is unmapped, as in round 0.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 804 tests / 36 suites | `28842f15a375` | 2 m 33 s | start 15.1 / med 5.6 / max 15.1 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`gate.mjs check` green on tree `28842f15a375` at `c0d97f6`; `need --for review` exits 1 with
+`2 gate(s) missing for review: harness:ios, harness:android`. `test` is 2 m 21 s of that wall
+at 4 jobs — the drift proof adds ~7 s of a ~150 s run.
+
 ## Follow-ups
 
 - check: `test` is 147 s of a ~180 s chain, so this work's ceiling is ~1.2×; a real win needs someone to split the Jest run, which the brief puts out of scope.
 - context-pack claim that is wrong: `manifest:check` does **not** re-run `prepare` — `scripts/package-files.mjs` passes `npm pack --dry-run --ignore-scripts`, so nothing is rebuilt and no tarball is written. The graph treats it as a `lib/` reader only.
 - gate: `gate.mjs wait`'s progress line shows the gate's own heartbeat, not the runner's step list; `table --full` only reports steps after the run. X9's territory.
 - gate: reuse takes the newest qualifying line across all task exports; on this machine `docs/tasks/*/gates.jsonl` is 6 files and reads in milliseconds, but a repo with hundreds of exports would want an index.
+- gate (fix round): `isReuseAllowlistedPath(file, CHECK_REUSE_EXCLUDE)` reads as "is this on the allowlist" while answering "is this taken back". The function is shared on purpose; the name now fits only one of its two callers.
+- gate (fix round): the reuse rule can never borrow from an export that arrives with the merge it certifies (an export is always younger than the line inside it). That is correct but surprising, and `gate.mjs export` could say so at the point of use rather than in ORCHESTRATOR.

@@ -48,7 +48,9 @@ any machine. The live state is in `STATUS.md` (task table) and `RECOVERY.md`
    commit is an ancestor of the merged `HEAD` (`git merge-base --is-ancestor`)
    *and* every path the merge adds beyond that commit is on a small allowlist of
    files no `check` step reads — which today is `docs/**`, minus
-   `docs/tasks/*/gates.jsonl`. The allowlist is load-bearing and is proved, not
+   `docs/tasks/*/gates.jsonl` (which `gate.mjs` opens) and
+   `docs/tasks/ORCHESTRATOR.md` (which a unit test reads to check this page says
+   what the code does). The allowlist is load-bearing and is proved, not
    asserted: `scripts/check-docs-drift.mjs` asks each of the sixteen steps what
    it reads (its own script graph, the jest run's real `--listTests` graph, and
    prettier/eslint's own ignore answers) and fails `bun run check` if anything
