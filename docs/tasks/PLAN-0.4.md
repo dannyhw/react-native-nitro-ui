@@ -1,4 +1,4 @@
-# 0.4 plan (owner's scope, 2026-10-27)
+# 0.4 plan (an ordering of work, not a scope promise: D31)
 
 Fixed scope: a button-anchored **Menu**. The TextField spikes (T18, T18b) ran; per **D30** 0.4 ships
 without TextField, and G8 moves to 0.5. New components start only after the groundwork below has merged (owner's

@@ -294,3 +294,12 @@ are ACCEPT WITH CORRECTIONS; each report opens with a "Read with the review" not
   - iOS reject is one key short;
   - iOS focus on the `UITextField` arm is flaky;
   - P1 fails in 3 of 10 iOS runs.
+
+## D31 — No release timeline; ship what is ready (2026-10-28)
+
+The owner has no timeline and no expected scope per release: releases go out through Changesets
+when merged work is ready. A plan like `PLAN-0.4.md` is an ordering of work, not a scope promise,
+and sequencing calls (such as how TextField restarts) are the orchestrator's to make. TextField
+restarts with a measurement task first (in-app iOS latency in a release build, alternating arm
+order on Android, the cause of the N=200 retention, the cause of the P1 failures). The component
+(G8) is built only if those clear Q2's go/no-go thresholds.
