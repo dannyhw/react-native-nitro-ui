@@ -2,6 +2,7 @@
 
 **Branch:** `task/X11-device-throughput` (from `main` at `20b4069`) · **Round:** 1 of up to 3 (D19) ·
 **Lease:** `X11-ubeub` (`pair-a`: `emulator-5574` / `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / Metro `8295`)
+· **Fix round 1:** no lease held — `A4`'s exclusive lease covered both pairs (see Questions, item 2)
 
 ## Summary
 
@@ -294,6 +295,44 @@ choice is mine to make but not to settle alone:
   with two PASS rows at this tree.
 - Option B: review on the rows as they stand. Honest — the table says `stale` and why — but it is
   review of `da0b31f`, not of `05528f5`.
+
+**Fix round 1, same question, still open.** Option A did not become available: `A4-297ow` held both
+pairs for the whole round (98 min by 18:13Z, 862 min of TTL left), and its worktree is writing a real
+iOS baseline run — `bench+--platform+ios+--plan+full+--launches+8+--update-baseline` started 16:03Z
+and its log was still growing at 18:12Z. That is exactly what an exclusive lease is for, so I did not
+wait on it or take anything from it: I ran nothing on a device this round, which is also why the live
+reset proofs for M1/M2 are unit-level against faked `adb`/`simctl` rather than on hardware. If the
+rows must be fresh before merge, they need a window when `A4` has released; `check` is green at this
+tree and the harness path itself has not moved since `9d9ce869206a`.
+
+
+## Fix round 1
+
+M1–M7 and N1–N9, at `04e027d`…`49c5f02`. M1: `pm clear` lacked `shell` — every Android reset
+answered nothing and passed. M2: the iOS reset uninstalls, requires the data container gone,
+reinstalls from `HARNESS_APP_PATH`. M3: a live lease protects its devices on the idle clock,
+`--idle-minutes` reaches only unleased ones, `phase: 'booting'` is written and bounded. M4: identity
+comes from the devices.json pair, never the stored serial; the device answers `emu avd name` before a
+kill; an unreadable `acquiredAt` counts as alive. M6: an exclusive lease powers the pool off with or
+without `--boot`, keyed from devices.json. N8: AVD `nitroui` deleted (613 MB). Files changed gains
+`scripts/__tests__/lease.test.js`. Device rows stay stale — `A4` held both pairs all round (item 2).
+
+21 mutations at tree `911d1ce1b9fd`, all red (`mutations-fix1.mjs`): M1 `pm clear` minus `shell`; M2
+uninstall, container check, reinstall each dropped; M3 decision `held`, loop `held`, override
+outranks a hold, `phase: null`, unbounded booting, own-lease skip; M4 stored serial used, `avd name`
+off, never asked, date unreadable; M6 boot-path only, keys from `pool.json`; M7 early release; N1
+I/O under the lock; N2 at module, patch, config. Two the sweep found, not the review: loop- and
+decision-level `held` mask each other, and nothing called `markBooting` (`49c5f02`).
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 799 tests / 37 suites | `911d1ce1b9fd` | 2 m 58 s | start 3.0 / med 3.6 / max 4.5 |
+| `harness:ios` | stale | 165 tests / 13 suites | 9d9ce869206a (not this tree) | 1 m 59 s | start 3.3 / med 5.5 / max 7.1 |
+| `harness:android` | stale | 214 tests / 13 suites | 9d9ce869206a (not this tree) | 6 m 05 s | start 2.4 / med 2.1 / max 3.0 |
+| `real-input:ios` | stale | — | 9d9ce869206a (not this tree) | 10 m 47 s | start 2.1 / med 3.8 / max 15.7 |
+| `real-input:android` | stale | — | 9d9ce869206a (not this tree) | 12 m 02 s | start 2.3 / med 2.1 / max 3.6 |
+
+`need --for review`: need: 2 gate(s) missing for review: harness:ios, harness:android
 
 ## Appendix — the raw evidence behind items 1, 5 and 6 (review N9)
 
