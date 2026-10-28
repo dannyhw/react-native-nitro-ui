@@ -612,6 +612,147 @@ describe('logs survive git worktree remove', () => {
     expect(failed.stdout.match(/check-/g)).toHaveLength(1);
   });
 
+  it('finds a migrated legacy log by branch, and judges it as long as evidence survives (N1)', () => {
+    // Review M2's silent zero, arriving again through the migration path. A
+    // pre-X12 worktree has `.gates/logs/check-….log`; `migrateWorktreeLogs` files it
+    // under `<store>/.gates/logs/<branch>/`, so the branch IS in the path — but
+    // `branchOfStoredLog` gave up on anything starting `.gates/`, and
+    // `outcomeOfStoredLogs` keyed judgements by the record's or line's own
+    // `.gates/logs/check-….log`, which is not the stored file's relative path. So
+    // `logs --branch task/a --failed` listed none of the logs that exist today on
+    // A4 and X11, and `--all --failed` called them unjudgeable while their own line
+    // said `fail`.
+    //
+    // Two legacy runs, because the honest answer differs and both matter:
+    //  - a *backgrounded* one, which left a `.gate.json` beside the log. That record
+    //    migrates too, so its verdict travels with the copy and survives even
+    //    `git worktree remove`.
+    //  - a *foreground* one, which left only a ledger line in the worktree. Once
+    //    the worktree is gone nothing in the store says how it ended, and the answer
+    //    has to stay "could not be judged" rather than "0 failed" (M2).
+    const dir = makeRepo({ branch: 'main' });
+    const wtParent = scratch('x12-wt-');
+    const worktree = path.join(wtParent, 'legacy');
+    gitInTempRepo(dir, [
+      'worktree',
+      'add',
+      '-q',
+      '-b',
+      'task/x12-legacy',
+      worktree,
+      'main',
+    ]);
+
+    // The pre-X12 state: two legacy logs ten days old, the backgrounded one's
+    // record, and a ledger line naming each.
+    const legacy = path.join(worktree, '.gates', 'logs');
+    fs.mkdirSync(legacy, { recursive: true });
+    const stale = (Date.now() - 10 * 86_400_000) / 1000;
+    const legacyRun = (name, withRecord) => {
+      const file = path.join(legacy, name);
+      fs.writeFileSync(file, `the old log\nFAIL ${name}\n`);
+      fs.utimesSync(file, stale, stale);
+      if (withRecord) {
+        fs.writeFileSync(
+          path.join(legacy, name.replace(/\.log$/, '.gate.json')),
+          `${JSON.stringify({
+            version: 1,
+            gate: 'check',
+            command: 'bun run check',
+            pid: 4242,
+            startedAt: Date.parse('2026-10-27T00:00:00.000Z'),
+            logPath: `.gates/logs/${name}`,
+            done: true,
+            finishedAt: Date.parse('2026-10-27T00:04:00.000Z'),
+            exitCode: 1,
+            result: 'fail',
+            branch: 'task/x12-legacy',
+          })}\n`
+        );
+      }
+    };
+    legacyRun('check-2026-10-27T00-00-00.000Z.log', true);
+    legacyRun('harness+ios-2026-10-27T01-00-00.000Z.log', false);
+    const legacyLedger = path.join(
+      worktree,
+      '.gates',
+      'task',
+      'x12-legacy.jsonl'
+    );
+    // The pre-X12 ledger, which a legacy gate would have created. It does not exist
+    // in a fresh worktree, so the fixture makes it: without the line there is no
+    // evidence the foreground run failed, and `--failed` would be right to skip it.
+    fs.mkdirSync(path.dirname(legacyLedger), { recursive: true });
+    for (const [gate, name] of [
+      ['check', 'check-2026-10-27T00-00-00.000Z.log'],
+      ['harness:ios', 'harness+ios-2026-10-27T01-00-00.000Z.log'],
+    ]) {
+      fs.appendFileSync(
+        legacyLedger,
+        `${JSON.stringify({
+          v: 5,
+          ts: '2026-10-27T00:00:00.000Z',
+          gate,
+          command: `bun run ${gate}`,
+          tree: 'b'.repeat(64),
+          head: 'dead000',
+          branch: 'task/x12-legacy',
+          result: 'fail',
+          exitCode: 1,
+          logPath: `.gates/logs/${name}`,
+        })}\n`
+      );
+    }
+    // And one ordinary failing run, so the two forms are listed together.
+    expect(runCli(worktree, ['check'], { FAKE_EXIT: '4' }).status).toBe(4);
+
+    const byBranch = runCli(worktree, ['logs', '--branch', 'task/x12-legacy']);
+    // Before the fix this printed `1 log file(s)`: the migration had already filed
+    // both legacy logs under this branch, and the listing could not see them.
+    expect(byBranch.stdout).toContain('3 log file(s) for task/x12-legacy');
+    expect(byBranch.stdout).toContain('check-2026-10-27T00-00-00.000Z.log');
+    expect(byBranch.stdout).toContain(
+      'harness+ios-2026-10-27T01-00-00.000Z.log'
+    );
+
+    const failed = runCli(worktree, [
+      'logs',
+      '--branch',
+      'task/x12-legacy',
+      '--failed',
+    ]);
+    // All three failed — the new run by its record, both legacy ones by the ledger
+    // line naming them at the migrated path.
+    expect(failed.stdout).toContain('3 log file(s)');
+    expect(failed.stdout).not.toContain('could not be judged');
+
+    // …and from a surviving checkout once the worktree is gone, which is the
+    // cleanup command ORCHESTRATOR.md tells the orchestrator to run. The
+    // backgrounded legacy run is still judged, because its record travelled with
+    // the copy into the store; the foreground one cannot be any more — its only
+    // evidence was the ledger line inside the worktree — and the honest answer for
+    // it stays "could not be judged" (M2) rather than a silent zero.
+    gitInTempRepo(dir, ['worktree', 'remove', '--force', worktree]);
+    expect(fs.existsSync(worktree)).toBe(false);
+    const afterRemoval = runCli(dir, [
+      'logs',
+      '--branch',
+      'task/x12-legacy',
+      '--failed',
+    ]);
+    expect(afterRemoval.stdout).toContain('check-2026-10-27T00-00-00.000Z.log');
+    expect(afterRemoval.stdout).toContain('could not be judged');
+    expect(afterRemoval.stdout).not.toContain(
+      'harness+ios-2026-10-27T01-00-00.000Z.log'
+    );
+    // All three are still *listed*, which is the half that was broken outright.
+    const unjudged = runCli(dir, ['logs', '--branch', 'task/x12-legacy']);
+    expect(unjudged.stdout).toContain('3 log file(s)');
+    expect(unjudged.stdout).toContain(
+      'harness+ios-2026-10-27T01-00-00.000Z.log'
+    );
+  });
+
   it('says it cannot tell, rather than "0 failed", when a stored log has no record (M2)', () => {
     // A log someone dropped into the store by hand (or one whose record was pruned):
     // the honest answer is "unknown", because "0 failed" reads as all-clear.
