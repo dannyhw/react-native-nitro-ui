@@ -18,6 +18,9 @@
 >
 > **Components:** 0.4 is a button-anchored Menu (G7a/G7b) plus a TextField spike (T18), starting
 > after X3 and X4 merge; see `PLAN-0.4.md`.
+> **Next device task after X11 merges: F1** (`F1-determinism.md`): `real-input:ios` fails the Switch
+> check 11/11 on `main` on this machine, so it blocks merges that owe real input.
+>
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
 > excerpts with the ledger.
