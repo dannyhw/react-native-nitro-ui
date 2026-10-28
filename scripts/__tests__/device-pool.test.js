@@ -759,6 +759,159 @@ describe('reaping', () => {
     expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
   });
 
+  /**
+   * Makes a second process appear *in the middle of* a reap: while the simulator shutdown runs, the
+   * pool files are rewritten as `acquire --boot` plus `gate.mjs` would rewrite them. This is the
+   * reviewer's race probe (`/tmp/x11-rereview/race-probe.mjs`) expressed against the real files,
+   * which is the only way a unit test can put a concurrent claim inside one lock hold.
+   */
+  const letTaskTake = (pool, { withClaim = true } = {}) => {
+    const original = pool.ops.shutdownSimulator.bind(pool.ops);
+    pool.ops.shutdownSimulator = (udid) => {
+      const outcome = original(udid);
+      writeFileSync(
+        join(home, 'leases.json'),
+        JSON.stringify(
+          {
+            leases: [
+              {
+                id: 'B7-1',
+                task: 'B7',
+                platform: 'both',
+                exclusive: false,
+                holds: ['pair-a'],
+                acquiredAt: new Date(NOW).toISOString(),
+                ttlMinutes: 240,
+              },
+            ],
+          },
+          null,
+          2
+        )
+      );
+      if (!withClaim) return outcome;
+      const state = readPool(home);
+      const entry = state.devices.find((x) => x.key === 'avd:nitro-ui-a');
+      entry.claims = [
+        { pid: 4242, id: 'gate-1', gate: 'harness:android', at: NOW },
+      ];
+      writeFileSync(join(home, 'pool.json'), JSON.stringify(state, null, 2));
+      return outcome;
+    };
+  };
+
+  const twoIdleDevices = () => {
+    withLeases([]);
+    writeFileSync(
+      join(home, 'pool.json'),
+      JSON.stringify(
+        {
+          version: 1,
+          devices: [
+            entryOf({
+              key: 'ios:UDID-B',
+              kind: 'ios',
+              id: 'UDID-B',
+              leaseId: null,
+              usedAgo: 40 * MINUTE,
+            }),
+            entryOf({
+              key: 'avd:nitro-ui-a',
+              leaseId: null,
+              usedAgo: 40 * MINUTE,
+            }),
+          ],
+        },
+        null,
+        2
+      )
+    );
+  };
+
+  it('leaves a device a lease and a claim took during its own act pass, up', () => {
+    // X11 re-review M1, the reviewer's probe in a test. The act pass runs outside the lock, so the
+    // decision it acts on used to be as old as the previous device's I/O - `simctl shutdown` waits
+    // up to five minutes, an `adb devices` up to two - and a task that took the pair inside that
+    // window had its emulator killed under it: the record survived (pass 3 re-checked claims before
+    // *forgetting* it) and the device did not, which is the worst combination because the log looks
+    // sane. Each kill now asks again, briefly, immediately before it picks up the phone.
+    twoIdleDevices();
+    const { pool, calls } = fakePool({
+      home,
+      isPidAlive: () => true,
+      state: {
+        simulators: new Map([['UDID-B', 'Booted']]),
+        serials: ['emulator-5574'],
+      },
+    });
+    // "Task B" arrives while the reaper is powering off the *other* device.
+    letTaskTake(pool);
+    const done = pool.reap();
+    expect(calls).toContainEqual(['shutdown-sim', 'UDID-B']);
+    expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
+    expect(done.reaped).toEqual([{ key: 'ios:UDID-B', reason: 'lease-gone' }]);
+    expect(done.kept).toEqual([
+      {
+        key: 'avd:nitro-ui-a',
+        reason: 'in use by pid 4242 (harness:android)',
+        idleMinutes: 40,
+      },
+    ]);
+    // And the record is still there for the next `list`, because the device is still there.
+    expect(readPool(home).devices.map((x) => x.key)).toEqual([
+      'avd:nitro-ui-a',
+    ]);
+  });
+
+  it('still kills both devices when nothing arrives in that window', () => {
+    // The control, from the same probe: the new re-read is not a reap that never reaps. Same
+    // fixture, no interleave, and both devices go down - so a mutation that makes the fresh check
+    // always refuse shows up here as well as in the case above.
+    twoIdleDevices();
+    const { pool, calls } = fakePool({
+      home,
+      isPidAlive: () => true,
+      state: {
+        simulators: new Map([['UDID-B', 'Booted']]),
+        serials: ['emulator-5574'],
+      },
+    });
+    const done = pool.reap();
+    expect(calls).toContainEqual(['shutdown-sim', 'UDID-B']);
+    expect(calls).toContainEqual(['emu-kill', 'emulator-5574', 5043]);
+    expect(done.reaped.map((x) => x.key)).toEqual([
+      'ios:UDID-B',
+      'avd:nitro-ui-a',
+    ]);
+    expect(readPool(home).devices).toEqual([]);
+  });
+
+  it('notices a live lease that appears mid-pass even with no claim on the record', () => {
+    // The other half of the fresh read. A warm `acquire --boot` writes the lease before its gate
+    // claims anything, and an unclaimed run - a build, Metro, a direct real-input run - never
+    // writes a claim at all, so `heldIdentifiers` is the only thing that can see either of them.
+    // Without the re-read of the *leases* (as opposed to the record) this device dies.
+    twoIdleDevices();
+    const { pool, calls } = fakePool({
+      home,
+      isPidAlive: () => true,
+      state: {
+        simulators: new Map([['UDID-B', 'Booted']]),
+        serials: ['emulator-5574'],
+      },
+    });
+    letTaskTake(pool, { withClaim: false });
+    const done = pool.reap();
+    expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
+    expect(done.kept).toEqual([
+      {
+        key: 'avd:nitro-ui-a',
+        reason: 'a live lease holds it',
+        idleMinutes: 40,
+      },
+    ]);
+  });
+
   it('lets a live lease protect its own devices from its own reap', () => {
     // X11 re-review M3, the rule reversed. The old test here said "your hold does not stop your
     // reap", and the failure that claim produced: task A acquires, builds for 20 minutes, starts a
@@ -1657,6 +1810,149 @@ describe('the between-task reset', () => {
     const uninstalled = calls.findIndex((c) => c[0] === 'uninstall-app');
     const installed = calls.findIndex((c) => c[0] === 'install-app');
     expect(installed).toBeGreaterThan(uninstalled);
+  });
+
+  /**
+   * Pool records for `keys`, each carrying a live gate claim - the state a running `gate.mjs` leaves
+   * behind. `pid` is a number rather than a real process because the pool is built with an injected
+   * `isPidAlive`; the fixture's job is to say "somebody is in there right now".
+   */
+  const withClaimedDevices = (
+    keys,
+    { gate = 'harness:ios', pid = 4242 } = {}
+  ) => {
+    writeFileSync(
+      join(home, 'pool.json'),
+      JSON.stringify(
+        {
+          version: 1,
+          devices: keys.map((key) => {
+            const kind = key.slice(0, key.indexOf(':'));
+            return {
+              key,
+              kind,
+              id: key.slice(kind.length + 1),
+              leaseId: 'X1-1',
+              bootedAtMs: Date.now() - 60_000,
+              lastUsedMs: Date.now() - 60_000,
+              idleShutdownMinutes: 30,
+              serial: kind === 'avd' ? 'emulator-5574' : null,
+              adbPort: kind === 'avd' ? 5043 : null,
+              udid: kind === 'ios' ? key.slice(4) : null,
+              claims: [{ pid, id: 'gate-1', gate, at: Date.now() }],
+            };
+          }),
+        },
+        null,
+        2
+      )
+    );
+  };
+
+  it('refuses to reset a device a gate is running on, whoever owns the claim', () => {
+    // X11 re-review M2. The reset exists to stop a task inheriting the *previous* task's storage,
+    // and it consulted nothing but the pair, so the idempotent `acquire --boot` a task runs in a
+    // second shell to regenerate its env file ran `pm clear` and `simctl uninstall` under its own
+    // running suite. The reviewer's probe P1: both records carry a live `harness:ios` claim and the
+    // output was the two commands. A reset that is not allowed to run is a skipped reset, not a
+    // failed one - the device is fine, it is just busy.
+    const { pool, calls } = fakePool({ home, isPidAlive: () => true });
+    withClaimedDevices(['avd:nitro-ui-a', 'ios:UDID-A']);
+    const rows = pool.resetPair(PAIR_A);
+    expect(calls.filter((c) => c[0] === 'pm')).toEqual([]);
+    expect(calls.filter((c) => c[0] === 'uninstall-app')).toEqual([]);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.ok).toBe(true);
+      expect(row.skipped).toBe('in use by pid 4242 (harness:ios)');
+      expect(row.attempts).toBe(0);
+    }
+  });
+
+  it('resets a device whose claim belongs to a process that is gone', () => {
+    // The other side of the check: a claim from a dead pid is a crash, not a run, and a pool that
+    // treated it as busy would never reset anything again - every device it handed out after a
+    // killed gate would carry the previous task's storage.
+    const { pool, calls } = fakePool({ home, isPidAlive: () => false });
+    withClaimedDevices(['avd:nitro-ui-a']);
+    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    expect(row.skipped).toBeUndefined();
+    expect(row.ok).toBe(true);
+    expect(calls.filter((c) => c[0] === 'pm')).toHaveLength(1);
+  });
+
+  it('treats an app that is not installed as a reset that had nothing to do', () => {
+    // X11 re-review N5. On a freshly minted AVD the example app has never been installed, so `pm
+    // clear` answered `Failed` four times - with three sleeps - and the line said "the next run
+    // inherits its data" when there was no data to inherit. One ask, and an honest no-op.
+    const { pool, calls } = fakePool({ home, state: { appInstalled: false } });
+    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    expect(row).toMatchObject({
+      ok: true,
+      noop: 'app not installed',
+      attempts: 1,
+    });
+    expect(row.answer).toContain('nothing to clear');
+    // One ask, not four: the retries are for a device still settling, which is not what "no such
+    // package" means.
+    expect(calls.filter((c) => c[0] === 'pm')).toEqual([]);
+    expect(calls).toContainEqual([
+      'app-installed',
+      'android',
+      'avd:nitro-ui-a',
+      EXAMPLE_APP_ID.android,
+    ]);
+  });
+
+  it('still installs the app on an iOS simulator that had none, when one is available', () => {
+    // The no-op must not become the round-1 bug in a new disguise: a device never leaves the pool
+    // empty for a consumer that does not install, so "not installed" is where the install belongs,
+    // not a reason to skip the whole half.
+    const { pool, calls } = fakePool({
+      home,
+      state: { iosInstalled: false },
+    });
+    const row = pool
+      .resetPair(PAIR_A, { reinstallApp: '/tmp/build/NitroUiExample.app' })
+      .find((r) => r.key === 'ios:UDID-A');
+    expect(row.ok).toBe(true);
+    expect(row.answer).toContain('installed /tmp/build/NitroUiExample.app');
+    expect(calls).toContainEqual([
+      'install-app',
+      'UDID-A',
+      '/tmp/build/NitroUiExample.app',
+    ]);
+    // And it never uninstalled anything: there was nothing to remove.
+    expect(calls.filter((c) => c[0] === 'uninstall-app')).toEqual([]);
+  });
+
+  it('reports a failed install on an empty simulator as a failed reset', () => {
+    // Otherwise the line reads "nothing to clear" and the next task's first action is a
+    // "scheme not found" from a device with no app on it.
+    const { pool } = fakePool({ home, state: { iosInstalled: false } });
+    pool.ops.installSimulatorApp = () => ({
+      ok: false,
+      answer: 'Unable to lookup in current state',
+    });
+    const row = pool
+      .resetPair(PAIR_A, { reinstallApp: '/tmp/build/NitroUiExample.app' })
+      .find((r) => r.key === 'ios:UDID-A');
+    expect(row.ok).toBe(false);
+    expect(row.answer).toContain('reinstall FAILED');
+  });
+
+  it('attempts the clear when the install probe could not answer', () => {
+    // Three answers to "is the app installed?", and only two of them authorise a no-op: an `adb`
+    // that timed out has no status, and reading that as "not installed" would let a reset claim a
+    // clean no-op because the tool never answered (X11 N5 + N2's same rule).
+    const { pool, calls } = fakePool({
+      home,
+      state: { installProbeFails: true },
+    });
+    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    expect(row.noop).toBeUndefined();
+    expect(row.ok).toBe(true);
+    expect(calls.filter((c) => c[0] === 'pm')).toHaveLength(1);
   });
 
   it('reports a `pm clear` that never succeeded as a failed reset, with the answer', () => {
