@@ -525,9 +525,9 @@ export class DevicePool {
    *
    * A device another live pid holds is refused, with the pid and gate in the message: two gates on
    * one device fight over the app, Metro and the screenshots, and both go red for a reason no log
-   * explains. `force` (a gate's `--device-force`) takes it anyway and warns - two commands of one
-   * task on one pair is legitimate (a build finishing while a run waits), and the pool should not
-   * be the thing that surprises you about it.
+   * explains. `force` (a gate's `NITRO_UI_GATE_DEVICE_FORCE=1`) takes it anyway and warns - two
+   * commands of one task on one pair is legitimate (a build finishing while a run waits), and the
+   * pool should not be the thing that surprises you about it.
    */
   claim({
     pair,
@@ -564,14 +564,14 @@ export class DevicePool {
             )
             .join(', ')}.\n` +
           '  two runs on one device fight over the app, Metro and the screenshots.\n' +
-          '  wait for it, or pass --device-force to run anyway.'
+          '  wait for it, or set NITRO_UI_GATE_DEVICE_FORCE=1 to claim anyway.'
       );
     }
     for (const x of conflicts) {
       this.log(
         `  WARN ${x.key} is also held by ${x.claims
           .map((c) => `pid ${c.pid}${c.gate ? ` (${c.gate})` : ''}`)
-          .join(', ')} - claimed anyway (--device-force)`
+          .join(', ')} - claimed anyway (NITRO_UI_GATE_DEVICE_FORCE=1)`
       );
     }
     return { id, keys, conflicts };

@@ -2026,7 +2026,7 @@ describe('gate.mjs claims the device it runs on', () => {
     const run = runCli(dir, ['harness:android'], env);
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('real-input:android');
-    expect(run.stderr).toContain('--device-force');
+    expect(run.stderr).toContain('NITRO_UI_GATE_DEVICE_FORCE=1');
     // Nothing recorded: refused *before* the four-minute build, not after it fought over the
     // device, which is the difference between a fast no and a corrupt maybe.
     expect(ledgerLines(dir)).toEqual([]);
@@ -2040,7 +2040,7 @@ describe('gate.mjs claims the device it runs on', () => {
       NITRO_UI_GATE_DEVICE_FORCE: '1',
     });
     expect(run.status).toBe(0);
-    expect(run.stderr).toContain('--device-force');
+    expect(run.stderr).toContain('NITRO_UI_GATE_DEVICE_FORCE=1');
     expect(ledgerLines(dir)).toHaveLength(1);
   }, 90_000);
 

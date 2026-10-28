@@ -27,9 +27,15 @@ Background (read the sections your brief points to):
 - Check the machine first: `node scripts/doctor.mjs` (exit 1 names what is missing; `--setup`
   creates the device pairs the lease pool hands out — CONTRIBUTING "Prerequisites").
 - Devices: use ONLY the devices and ports your lease hands you (`node scripts/lease.mjs acquire
-  --task <ID>`, CONTRIBUTING "Leasing a device or port"), or those your brief assigns. Never
+  --task <ID> --boot`, CONTRIBUTING "Leasing a device or port"), or those your brief assigns. Never
   shut down, wipe or kill devices you did not start. **Never touch the `emulator-5560` emulator —
-  it belongs to the human.** Shut down simulators/emulators you started when you finish.
+  it belongs to the human.**
+  **The lease owns device lifecycle, not you** (X11): `--boot` starts the pair and waits until it
+  is settled, `release` leaves it booted, and `lease.mjs reap` powers off anything idle past
+  `idleShutdownMinutes`. So do *not* power off your devices at the end of a round — an idle device
+  is the pool's business, and a warm one is the reason the next run does not pay 54 s (Android) or
+  200 s (iOS simulator, plus a 4–6 minute load-average spike) to boot. Only shut down a device you
+  started outside the lease.
 - Use unique Metro ports if your brief assigns one (`--port`), and kill Metro/Gradle daemons you
   started when done.
 
