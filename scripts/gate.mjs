@@ -110,9 +110,11 @@ const USAGE =
   '        foreground one is)\n' +
   '\n' +
   "       (at merge, `check` may be satisfied by another branch's ledger when it\n" +
-  '        passed on this exact code tree and its commit is merged here - the merge\n' +
-  '        changed no code, so it is not re-owed. `check` only: a device gate is\n' +
-  '        evidence about a binary. `--no-reuse` asks the strict question instead)\n';
+  '        passed on this exact git tree, with a clean worktree, and its commit is\n' +
+  '        merged here - the same tree hash means a run here would read the same\n' +
+  '        files. Docs included, so a merge that changes anything re-owns the run.\n' +
+  '        `check` only: a device gate is evidence about a binary. `--no-reuse` asks\n' +
+  '        the strict question instead)\n';
 
 /**
  * How often a running gate samples the load average. R4's lesson is that one
@@ -478,8 +480,9 @@ function listBackgroundRecords(logsDir) {
 }
 
 /**
- * The three digests a decision needs: the full code tree and the two platform
- * halves of it.
+ * The digests a decision needs: the full code tree, the two platform halves of it,
+ * and the two fields merge reuse reads (git's own hash of the tracked tree, and
+ * whether the worktree matches it).
  *
  * The halves are built here rather than in `app-stamp.mjs` so the stamp stays
  * what it is (one digest for one binary, X1) and `build-app.mjs` - which task X6
@@ -488,7 +491,18 @@ function listBackgroundRecords(logsDir) {
  * hash-the-link-target cases, so a platform digest is the same hash function over
  * a subset of the same file set and nothing else.
  *
- * @returns {{tree: string, head: string, files: number, trees: Record<string, string>}}
+ * `fullTree` is git's answer, not ours: `rev-parse HEAD^{tree}` hashes everything
+ * tracked, `docs/` and `bench/` included, which is the blindness `tree` deliberately
+ * has and reuse cannot afford. It is null in a repository with no commit, and reuse
+ * treats null as "not reusable" rather than as a wildcard.
+ *
+ * `worktreeClean` is `git status --porcelain --untracked-files=all` coming back empty
+ * at the moment this was read. Inside a gate that is genuinely true (every step's
+ * output lands in a gitignored path - `lib/`, `.turbo/`, `.reassure/`, `.gates/`), and
+ * it is false the moment someone has an unsaved edit, which is exactly when a recorded
+ * tree stops describing what was run.
+ *
+ * @returns {{tree: string, head: string, files: number, trees: Record<string, string>, fullTree: string | null, worktreeClean: boolean}}
  */
 function readTrees() {
   const full = currentCodeTree({ repoRoot });
@@ -523,7 +537,29 @@ function readTrees() {
       entries[file] = contentHash(fs.readFileSync(absolute));
     }
   }
-  return { ...full, trees: platformTreesFromEntries(entries) };
+  return {
+    ...full,
+    trees: platformTreesFromEntries(entries),
+    fullTree: git(['rev-parse', 'HEAD^{tree}'], null) || null,
+    worktreeClean: gitStatusIsClean(),
+  };
+}
+
+/**
+ * Whether the working tree matches HEAD, untracked files included.
+ *
+ * One `--porcelain=v1` call, and the answer is `false` whenever git could not be
+ * asked: an unknown worktree is not a clean one, and this gates a claim that a tree
+ * was checked on its own.
+ *
+ * @returns {boolean}
+ */
+function gitStatusIsClean() {
+  const status = git(
+    ['status', '--porcelain=v1', '--untracked-files=all'],
+    null
+  );
+  return status != null && status.trim() === '';
 }
 
 /**
@@ -616,6 +652,11 @@ async function runGate(name, resolved, options = {}) {
     `gate: ${name}\n` +
       `gate: ${resolved.argv.join(' ')} (cwd ${path.relative(repoRoot, cwd) || '.'})\n` +
       `gate: code tree ${before.tree.slice(0, 12)} at HEAD ${git(['rev-parse', '--short', 'HEAD'], '?')}\n` +
+      // Recorded on the line and the thing reuse compares, so "why was my pass not
+      // reusable" is answerable from the transcript rather than by reading the code.
+      `gate: git tree ${String(before.fullTree ?? '<no commit>').slice(0, 12)}${
+        before.worktreeClean ? '' : ' with a DIRTY worktree (not reusable)'
+      }\n` +
       `gate: log ${logPath}\n`
   );
 
@@ -708,6 +749,17 @@ async function runGate(name, resolved, options = {}) {
     tree: before.tree,
     trees: before.trees,
     treeAfter: after.tree,
+    // The pair merge reuse reads, measured at the *start* of the run, which is the
+    // tree the child actually began with. Two conservatisms here: if git's tree moved
+    // during the run - a docs commit landing mid-flight moves `fullTree` and nothing
+    // else - no tree is claimed, because the run spanned two of them; and cleanliness
+    // has to hold at both ends, so a line cannot certify a tree that was being edited
+    // underneath it (M3).
+    fullTree:
+      before.fullTree != null && after.fullTree === before.fullTree
+        ? before.fullTree
+        : null,
+    worktreeClean: before.worktreeClean && after.worktreeClean,
     head: before.head,
     branch,
     platform: device.platform,
@@ -780,12 +832,19 @@ async function runGate(name, resolved, options = {}) {
   return exit.code ?? 0;
 }
 
-function printCodeTree({ tree, trees, head, files }) {
+function printCodeTree({ tree, trees, head, files, fullTree, worktreeClean }) {
   process.stderr.write(
     `ledger: code tree ${tree.slice(0, 12)} at HEAD ${String(head ?? '?').slice(0, 7)} (branch ${currentBranch()}, ${String(files)} files)\n`
   );
   process.stderr.write(
     `ledger: platform trees ${PLATFORMS.map((platform) => `${platform} ${String(trees?.[platform] ?? '?').slice(0, 12)}`).join(' ')}\n`
+  );
+  // The two fields merge reuse reads, printed next to the digest they are not: a
+  // reader deciding whether a borrow is owed should see what the rule will see.
+  process.stderr.write(
+    `ledger: git tree ${String(fullTree ?? '<no commit>').slice(0, 12)} (what reuse compares), worktree ${
+      worktreeClean === true ? 'clean' : 'DIRTY - nothing here is reusable'
+    }\n`
   );
 }
 
@@ -899,14 +958,15 @@ function otherBranchLedgers(exceptBranch) {
  * in a test and useless in the flow it was written for.
  *
  * What a committed line proves is narrower than its wording suggests, and the rules know it (X10
- * review N4). Ancestry ties a line to *this history*, and tree equality is the actual evidence that
- * the code was checked; neither of them authenticates the file - anyone who can commit can edit a
- * `gates.jsonl` line, give it some ancestor `head` and today's tree, and be believed. Two things
- * make that a poor attack: the same diff has to change what `check` does, or the claim was true
- * anyway, and reuse now also demands that nothing else the merge adds is a file `check` reads (M1),
- * which a forged line cannot arrange on its own. Trusting the committed ledger is the alternative to
- * re-running `check` after every merge, which is the cost this rule exists to remove; it is stated
- * plainly in ORCHESTRATOR rather than papered over.
+ * review N4). Ancestry ties a line to *this history*, and an equal `fullTree` is the actual evidence
+ * that the code was checked; neither of them authenticates the file - anyone who can commit can edit
+ * a `gates.jsonl` line, give it some ancestor `head` and today's tree hash, and be believed. Two
+ * things make that a poor attack: the forger has to commit the same tree they are certifying, so
+ * anything they could have gained by lying was already checked by an honest run of the same bytes or
+ * not at all; and an export is written by the machine that ran the gate, so a false one is
+ * attributable in a way a stale claim in prose is not. Trusting the committed ledger is the
+ * alternative to re-running `check` after every merge, which is the cost this rule exists to remove;
+ * it is stated plainly in ORCHESTRATOR rather than papered over.
  *
  * @param {string} exceptBranch the branch whose own ledger is not "other"
  * @returns {Array<{branch: string, entries: object[], source: string}>}
@@ -970,81 +1030,26 @@ function commitIsAncestorOfHead(commit) {
 }
 
 /**
- * The paths that differ between `commit` and the tree standing here now: the committed diff plus
- * anything uncommitted or untracked in the working tree (M1).
- *
- * Reuse asks whether `check` would see anything new if it ran here instead of on that commit, so the
- * answer has to be *everything* that differs, and `check` reads untracked files: jest, tsc and
- * prettier take the directory as they find it, so an untracked `.ts` in `src/` is a file the next run
- * compiles. That is also why this refuses to fall back to the committed diff when git cannot be
- * asked - an unknown working tree is not a clean one, and `null` here means "do not reuse".
- *
- * Rename and delete entries come back as plain paths (`-z`, no rename detection), which is what the
- * allowlist wants: both sides of a rename are asked about, and a path that stopped existing is a path
- * `check` reads differently.
- *
- * @param {string} commit
- * @returns {string[] | null}
- */
-function pathsChangedSince(commit) {
-  const sha = String(commit ?? '').trim();
-  if (!/^[0-9a-f]{7,40}$/i.test(sha)) return null;
-  if (git(['cat-file', '-e', `${sha}^{commit}`], null) == null) return null;
-  const diff = spawnSync('git', ['diff', '--name-only', '-z', `${sha}..HEAD`], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (diff.status !== 0) return null;
-  const status = spawnSync(
-    'git',
-    ['status', '--porcelain=v1', '--untracked-files=all', '-z'],
-    {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-    }
-  );
-  if (status.status !== 0) return null;
-  const found = new Set(
-    String(diff.stdout ?? '')
-      .split('\0')
-      .map((line) => line.trim())
-      .filter((line) => line !== '')
-  );
-  const fields = String(status.stdout ?? '').split('\0');
-  for (let i = 0; i < fields.length; i += 1) {
-    const field = fields[i];
-    if (field === '') continue;
-    if (field.startsWith('r') || field.startsWith('c')) {
-      // A rename/copy entry names its source here and its destination in the next field.
-      found.add(field.slice(3));
-      if (fields[i + 1] != null && fields[i + 1] !== '')
-        found.add(fields[i + 1]);
-      i += 1;
-      continue;
-    }
-    found.add(field.slice(3));
-  }
-  return [...found].sort();
-}
-
-/**
  * The `check` reuse available for this tree, or null. `--no-reuse` turns it off, which is how a
  * reviewer re-derives the strict answer when they do not believe the reuse.
  *
+ * Everything git is asked here is a read: the tree hash and worktree state come from `readTrees`,
+ * and the only other question is ancestry. There is no diff, because comparing two hashes makes the
+ * question redundant - and that is the whole point of the rewrite (X10 round 2): the diff is where
+ * the allowlist lived, and the allowlist is what could be fooled.
+ *
  * @param {string} branch the branch whose own ledger is already being read
- * @param {string | null} tree
+ * @param {{fullTree: string | null, worktreeClean: boolean}} read the caller's `readTrees()` result
  * @param {string[]} [diagnostics] filled with why each candidate was refused, so `need` can print the
  *   reason instead of a shrug
- * @returns {{branch: string, entry: object, source: string, changedPaths: string[]} | null}
+ * @returns {{branch: string, entry: object, source: string} | null}
  */
-function reusableCheckFor(branch, tree, diagnostics = null) {
+function reusableCheckFor(branch, read, diagnostics = null) {
   return findReusableCheck({
     ledgers: [...otherBranchLedgers(branch), ...committedTaskLedgers(branch)],
-    tree,
+    fullTree: read.fullTree,
+    worktreeClean: read.worktreeClean,
     headIsAncestor: commitIsAncestorOfHead,
-    changedSince: pathsChangedSince,
     diagnostics,
   });
 }
@@ -1058,9 +1063,10 @@ function commandNeed({ stage, base, reuse = true }) {
     ? { platforms: [...PLATFORMS], unmapped: [], tooling: [] }
     : platformsTouchedByPaths(diff.paths);
 
-  // Why reuse was declined, kept to print: the M1 rule asks a question with an answer
-  // a reviewer can check ("the merge adds bench/src/Main.tsx, check reads that"), and
-  // silence would look like the reuse rule never fired.
+  // Why reuse was declined, kept to print: "this tree was never checked" is a claim a
+  // reviewer can only audit if the reason is on the page (the pass was recorded over a
+  // dirty worktree, its commit is not merged, a newer fail outranks it), and silence
+  // would look like the reuse rule never fired.
   const reuseRefusals = [];
   const decision = decideNeed({
     entries,
@@ -1073,7 +1079,7 @@ function commandNeed({ stage, base, reuse = true }) {
     diffUnknown: diff.unknown,
     reusedCheck:
       stage === 'merge' && reuse
-        ? reusableCheckFor(branch, read.tree, reuseRefusals)
+        ? reusableCheckFor(branch, read, reuseRefusals)
         : null,
     reuseRefusals: reuseRefusals,
   });
@@ -1108,7 +1114,7 @@ function commandTable({ stage, full, reuse = true }) {
   const { entries, exists } = readLedger(branch);
   printCodeTree(read);
   const reusedCheck =
-    stage === 'merge' && reuse ? reusableCheckFor(branch, read.tree) : null;
+    stage === 'merge' && reuse ? reusableCheckFor(branch, read) : null;
   if (!exists && reusedCheck == null) {
     // "Nothing recorded yet" is only the whole answer when no other branch's ledger
     // can account for this tree either - on `main` right after a merge, the merge

@@ -22,15 +22,13 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from '@jest/globals';
 
 import {
-  CHECK_REUSE_ALLOWLIST,
-  CHECK_REUSE_EXCLUDE,
+  LEDGER_VERSION,
   TOOLING_FILES,
   applyReusedCheckRow,
   decideNeed,
   findReusableCheck,
-  isReuseAllowlistedPath,
+  fullTreesMatch,
   isToolingPath,
-  pathsOutsideReuseExemption,
   ledgerLineFromRun,
   renderGateTable,
   renderStepTimings,
@@ -43,9 +41,19 @@ const CHECK_STEPS = path.join(process.cwd(), 'scripts', 'check-steps.mjs');
 const TREE_A = 'a'.repeat(64);
 const TREE_B = 'b'.repeat(64);
 
+/**
+ * A git tree hash, in the shape `git rev-parse HEAD^{tree}` prints. Two of these that
+ * differ by one character are different trees, which is the property reuse now rests
+ * on, so the fixture is hex rather than a word.
+ */
+const FULL_A = `${'c'.repeat(39)}1`;
+const FULL_B = `${'c'.repeat(39)}2`;
+
 /** A `check` line, with only the fields the reuse rule reads filled in. */
 function checkLine({
   tree = TREE_A,
+  fullTree = FULL_A,
+  worktreeClean = true,
   head = 'commit-1',
   result = 'pass',
   treeAfter = tree,
@@ -57,6 +65,8 @@ function checkLine({
     result,
     tree,
     treeAfter,
+    fullTree,
+    worktreeClean,
     head,
     ts,
     durationMs: 180_000,
@@ -110,6 +120,24 @@ describe('stepTimingsOf (what a ledger line carries)', () => {
     ]);
     expect(stepTimingsOf(withSteps).map((s) => s.name)).toEqual(['lint']);
     expect(ledgerLineFromRun(baseRun()).stepTimings).toBeNull();
+  });
+
+  it('carries the reuse pair, and is explicit when they were not measured', () => {
+    // `fullTree` and `worktreeClean` default to null rather than a plausible guess, so
+    // a caller that did not measure them writes a line reuse refuses instead of one it
+    // would wrongly accept.
+    const plain = ledgerLineFromRun(baseRun());
+    expect(plain.fullTree).toBeNull();
+    expect(plain.worktreeClean).toBeNull();
+    const measured = ledgerLineFromRun({
+      ...baseRun(),
+      fullTree: 'c'.repeat(40),
+      worktreeClean: true,
+    });
+    expect(measured.fullTree).toBe('c'.repeat(40));
+    expect(measured.worktreeClean).toBe(true);
+    // And the two fields are what a v4 line is expected to carry.
+    expect(measured.v).toBe(LEDGER_VERSION);
   });
 });
 
@@ -213,15 +241,12 @@ describe('renderStepTimings (what `table --full` prints)', () => {
 
 describe('findReusableCheck (may a merge borrow this check?)', () => {
   const ancestor = (commit) => commit === 'commit-1';
-  /** Nothing differs between the checked commit and here - the plain merge case. */
-  const unchanged = () => [];
 
   const ask = (ledgers, options = {}) =>
     findReusableCheck({
       ledgers,
-      tree: TREE_A,
+      fullTree: FULL_A,
       headIsAncestor: ancestor,
-      changedSince: unchanged,
       ...options,
     });
 
@@ -237,7 +262,6 @@ describe('findReusableCheck (may a merge borrow this check?)', () => {
       branch: 'task/x10',
       source: '.gates/task/x10.jsonl',
       entry: expect.objectContaining({ head: 'commit-1' }),
-      changedPaths: [],
     });
   });
 
@@ -256,10 +280,40 @@ describe('findReusableCheck (may a merge borrow this check?)', () => {
     ).toBeNull();
   });
 
-  it('refuses a line about a different code tree', () => {
+  it('refuses a line about a different tree', () => {
     expect(
-      ask([{ branch: 'task/x', entries: [checkLine({ tree: TREE_B })] }])
+      ask([{ branch: 'task/x', entries: [checkLine({ fullTree: FULL_B })] }])
     ).toBeNull();
+  });
+
+  it('refuses a line recorded over a dirty worktree, even on the right tree', () => {
+    // The M3 shape: the run saw this tree *plus* uncommitted edits, and only the
+    // commit's hash is written down, so the line cannot say this tree was checked on
+    // its own. `tree` is untouched here - the code digest really does match - which is
+    // what makes the flag the only thing refusing.
+    expect(
+      ask([
+        {
+          branch: 'task/x',
+          entries: [checkLine({ worktreeClean: false })],
+        },
+      ])
+    ).toBeNull();
+    // And "not measured" is not "clean": a line written before v4 is not reusable.
+    const unmeasured = checkLine();
+    delete unmeasured.worktreeClean;
+    expect(ask([{ branch: 'task/x', entries: [unmeasured] }])).toBeNull();
+  });
+
+  it('refuses when this worktree is dirty, because no hash names the tree in front of us', () => {
+    const diagnostics = [];
+    expect(
+      ask([{ branch: 'task/x', entries: [checkLine()] }], {
+        worktreeClean: false,
+        diagnostics,
+      })
+    ).toBeNull();
+    expect(diagnostics.join(' ')).toContain('uncommitted changes');
   });
 
   it('refuses a run whose tree moved under it (N1)', () => {
@@ -309,93 +363,30 @@ describe('findReusableCheck (may a merge borrow this check?)', () => {
   });
 
   it('needs a tree to match at all', () => {
+    for (const fullTree of [null, undefined, '', 42]) {
+      expect(
+        findReusableCheck({
+          ledgers: [{ branch: 'task/x', entries: [checkLine()] }],
+          fullTree,
+          headIsAncestor: ancestor,
+        })
+      ).toBeNull();
+    }
     expect(
       findReusableCheck({
         ledgers: [{ branch: 'task/x', entries: [checkLine()] }],
-        tree: null,
-        headIsAncestor: ancestor,
-        changedSince: unchanged,
-      })
-    ).toBeNull();
-    expect(
-      findReusableCheck({
-        ledgers: [{ branch: 'task/x', entries: [checkLine()] }],
-        tree: TREE_A,
+        fullTree: FULL_A,
         headIsAncestor: null,
-        changedSince: unchanged,
       })
     ).toBeNull();
   });
 
-  it('refuses when the caller cannot say what the merge added (M1)', () => {
-    // Tree equality excludes docs, bench, .github and every .md, so "I do not know
-    // what changed since that commit" is not a licence to reuse.
-    expect(
-      ask([{ branch: 'task/x', entries: [checkLine()] }], {
-        changedSince: null,
-      })
-    ).toBeNull();
-    expect(
-      findReusableCheck({
-        ledgers: [{ branch: 'task/x', entries: [checkLine()] }],
-        tree: TREE_A,
-        headIsAncestor: ancestor,
-      })
-    ).toBeNull();
-    expect(
-      ask([{ branch: 'task/x', entries: [checkLine()] }], {
-        changedSince: () => null,
-      })
-    ).toBeNull();
-  });
-
-  it.each([
-    ['bench/src/Main.tsx', 'bench:typecheck reads it'],
-    ['README.md', 'format and readme:check read it'],
-    ['.github/workflows/ci.yml', 'a test in the unit run reads it'],
-    ['ios/core/Main.swift', 'it is code, and not on the allowlist at all'],
-    ['CONTRIBUTING.md', 'format reads it'],
-    ['example/ios/Podfile.lock', 'lock:check reads it'],
-  ])('refuses when the merge adds %s (%s) - M1', (file) => {
-    expect(
-      ask([{ branch: 'task/x', entries: [checkLine()] }], {
-        changedSince: () => [file],
-      })
-    ).toBeNull();
-  });
-
-  it('accepts a merge that added only allowlisted paths, and reports them', () => {
-    // The common case the rule exists for: the merge brought in nothing but task prose.
-    const found = ask([{ branch: 'task/x', entries: [checkLine()] }], {
-      changedSince: () => ['docs/tasks/X9/report.md', 'docs/PLAN.md'],
-    });
-    expect(found).not.toBeNull();
-    expect(found.changedPaths).toEqual([
-      'docs/PLAN.md',
-      'docs/tasks/X9/report.md',
-    ]);
-  });
-
-  it('refuses a merge that adds a committed task ledger, because gate.mjs reads it', () => {
-    // The one path on the allowlist that is not inert data: `gate.mjs` lists `docs/tasks` and opens
-    // every entry's `gates.jsonl`, so a merge carrying one changes what `check` would say. Reuse
-    // refuses, and the branch has to run the gate (X10 review M1, found by the proof itself).
-    expect(
-      ask([{ branch: 'task/x', entries: [checkLine()] }], {
-        changedSince: () => [
-          'docs/tasks/X9/report.md',
-          'docs/tasks/X9/gates.jsonl',
-        ],
-      })
-    ).toBeNull();
-  });
-
-  it('refuses a single non-allowlisted path among many docs', () => {
-    expect(
-      ask([{ branch: 'task/x', entries: [checkLine()] }], {
-        changedSince: () => ['docs/PLAN.md', 'bench/src/App.tsx'],
-      })
-    ).toBeNull();
+  it('ignores a line with no `fullTree` at all - a pre-v4 ledger is not reusable', () => {
+    // The fallback reviewers would ask for is "compare `tree` instead", which is the
+    // old unsound rule under a new name, so this refuses rather than degrades.
+    const v3 = checkLine();
+    delete v3.fullTree;
+    expect(ask([{ branch: 'task/x', entries: [v3] }])).toBeNull();
   });
 
   it('a newer fail on the tree beats an older pass, even from another branch - M2', () => {
@@ -433,6 +424,38 @@ describe('findReusableCheck (may a merge borrow this check?)', () => {
     ]);
     expect(found).not.toBeNull();
     expect(found.branch).toBe('task/z');
+  });
+
+  it('an exact timestamp tie resolves against reuse - the fail is the decisive line (N2)', () => {
+    // Two ledgers, one pass and one fail, same second. Whichever file a directory
+    // listing happens to return first must not decide whether a merge is allowed, so
+    // the tie-break takes the answer that refuses.
+    const tie = '2026-10-28T09:00:00.000Z';
+    expect(
+      ask([
+        {
+          branch: 'task/a',
+          entries: [checkLine({ ts: tie })],
+        },
+        {
+          branch: 'task/b',
+          entries: [checkLine({ result: 'fail', ts: tie })],
+        },
+      ])
+    ).toBeNull();
+    // Same two lines, opposite ledger order: identical answer.
+    expect(
+      ask([
+        {
+          branch: 'task/b',
+          entries: [checkLine({ result: 'fail', ts: tie })],
+        },
+        {
+          branch: 'task/a',
+          entries: [checkLine({ ts: tie })],
+        },
+      ])
+    ).toBeNull();
   });
 
   it('a ledger whose own newest line on the tree is a fail offers nothing - M2', () => {
@@ -490,12 +513,24 @@ describe('findReusableCheck (may a merge borrow this check?)', () => {
 
   it('says why it refused, so a decline is not a shrug', () => {
     const diagnostics = [];
-    ask([{ branch: 'task/x', entries: [checkLine()] }], {
-      changedSince: () => ['bench/src/Main.tsx'],
+    ask([{ branch: 'task/x', entries: [checkLine({ fullTree: FULL_B })] }], {
       diagnostics,
     });
-    expect(diagnostics.join(' ')).toContain('outside the reuse allowlist');
-    expect(diagnostics.join(' ')).toContain('bench/src/Main.tsx');
+    expect(diagnostics.join(' ')).toContain(
+      `no other ledger has a check line on tree ${FULL_A.slice(0, 12)}`
+    );
+
+    const dirty = [];
+    ask(
+      [
+        {
+          branch: 'task/x',
+          entries: [checkLine({ worktreeClean: false })],
+        },
+      ],
+      { diagnostics: dirty }
+    );
+    expect(dirty.join(' ')).toContain('dirty worktree');
   });
 });
 
@@ -587,112 +622,39 @@ describe('applyReusedCheckRow (what a local verdict does to reuse) - M2', () => 
       tree: TREE_A,
       stage: 'merge',
       reusedCheck: null,
-      reuseRefusals: ['task/y: bench/src/Main.tsx is outside the allowlist'],
+      reuseRefusals: ['task/y: its line was recorded over a dirty worktree'],
     });
     expect(decision.notes.join(' ')).toContain('no check line was borrowed');
     expect(decision.notes.join(' ')).not.toContain('reused');
   });
 });
 
-describe('the reuse allowlist itself', () => {
-  it('is docs-only, and the docs say which paths it covers', () => {
-    expect(CHECK_REUSE_ALLOWLIST).toEqual(['docs/**']);
-    const orchestrator = fs.readFileSync(
-      path.join(process.cwd(), 'docs', 'tasks', 'ORCHESTRATOR.md'),
-      'utf8'
-    );
-    expect(orchestrator).toContain('docs/');
-    // The claim this rests on is stated where a merge is decided, not only in code.
-    expect(orchestrator).toContain('check-docs-drift');
-  });
-
-  it('is matched by path, not by substring', () => {
-    for (const file of [
-      'docs/PLAN.md',
-      'docs/tasks/X10/gates.jsonl',
-      'docs/research/nitro-patterns.md',
+describe('fullTreesMatch (the one comparison reuse rests on)', () => {
+  it('is exact, and nothing short of exact', () => {
+    expect(fullTreesMatch(FULL_A, FULL_A)).toBe(true);
+    expect(fullTreesMatch(`  ${FULL_A}  `, FULL_A)).toBe(true);
+    for (const other of [
+      FULL_B,
+      FULL_A.slice(0, 39),
+      `${FULL_A.slice(0, 39)}0`,
+      FULL_A.toUpperCase(),
+      '',
+      '   ',
+      null,
+      undefined,
+      42,
     ]) {
-      expect(isReuseAllowlistedPath(file)).toBe(true);
-    }
-    for (const file of [
-      'README.md',
-      'bench/src/App.tsx',
-      '.github/workflows/ci.yml',
-      'package/docs/PLAN.md',
-      'docsx/PLAN.md',
-      'src/docs.ts',
-      'bench/docs/notes.md',
-    ]) {
-      expect(isReuseAllowlistedPath(file)).toBe(false);
+      expect(fullTreesMatch(FULL_A, other)).toBe(false);
+      expect(fullTreesMatch(other, FULL_A)).toBe(false);
     }
   });
 
-  it('pathsOutsideReuseExemption sorts, dedupes and keeps the offending names', () => {
-    expect(
-      pathsOutsideReuseExemption([
-        'docs/a.md',
-        'bench/x.tsx',
-        'bench/x.tsx',
-        'docs/b.md',
-        'README.md',
-      ])
-    ).toEqual(['README.md', 'bench/x.tsx']);
-    expect(pathsOutsideReuseExemption(['docs/a.md'])).toEqual([]);
-  });
-
-  it('a committed task ledger is allowed and not exempt, because gate.mjs opens it', () => {
-    // The finding the drift proof made on its first run: `committedTaskLedgers()`
-    // enumerates `docs/tasks/<ID>/gates.jsonl`, and a test in the unit run spawns
-    // that CLI. A merge that edits one has changed something `check` reads.
-    expect(isReuseAllowlistedPath('docs/tasks/X10/gates.jsonl')).toBe(true);
-    expect(
-      isReuseAllowlistedPath('docs/tasks/X10/gates.jsonl', CHECK_REUSE_EXCLUDE)
-    ).toBe(true);
-    expect(pathsOutsideReuseExemption(['docs/tasks/X10/gates.jsonl'])).toEqual([
-      'docs/tasks/X10/gates.jsonl',
-    ]);
-    // A report, and any other file under docs/, stays exempt.
-    expect(pathsOutsideReuseExemption(['docs/tasks/X10/x.report.md'])).toEqual(
-      []
+  it('does not prefix-match, which is what makes a one-character difference a different tree', () => {
+    // A shared 39-character prefix is the case a sloppy compare would get wrong, and
+    // the whole rule is only as strong as this line.
+    expect(fullTreesMatch(`${'a'.repeat(39)}1`, `${'a'.repeat(39)}2`)).toBe(
+      false
     );
-    expect(pathsOutsideReuseExemption(['docs/tasks/gates.jsonl'])).toEqual([]);
-    expect(pathsOutsideReuseExemption(['bench/tasks/X/gates.jsonl'])).toEqual([
-      'bench/tasks/X/gates.jsonl',
-    ]);
-  });
-
-  it('the exclude is the pattern gate.mjs actually walks, and it is a glob', () => {
-    expect(CHECK_REUSE_EXCLUDE).toEqual([
-      'docs/tasks/*/gates.jsonl',
-      'docs/tasks/ORCHESTRATOR.md',
-    ]);
-    expect(
-      isReuseAllowlistedPath('docs/tasks/X10/gates.jsonl', CHECK_REUSE_EXCLUDE)
-    ).toBe(true);
-    expect(
-      isReuseAllowlistedPath('docs/tasks/X10/other.jsonl', CHECK_REUSE_EXCLUDE)
-    ).toBe(false);
-    // One segment, not a prefix: a deeper file must not be excluded by the glob.
-    expect(
-      isReuseAllowlistedPath(
-        'docs/tasks/X10/deep/gates.jsonl',
-        CHECK_REUSE_EXCLUDE
-      )
-    ).toBe(false);
-  });
-
-  it('a merge touching the orchestrator rules is not exempt either, because a test reads them', () => {
-    // `gate-check.test.js` opens `docs/tasks/ORCHESTRATOR.md` and asserts the reuse rule is written
-    // there, so that page is a real input to `test`. Round 0 of this proof excused exactly this read
-    // with a blanket "it is a fixture path" exemption; the tightened proof is what caught it.
-    expect(pathsOutsideReuseExemption(['docs/tasks/ORCHESTRATOR.md'])).toEqual([
-      'docs/tasks/ORCHESTRATOR.md',
-    ]);
-    // A sibling page nobody opens stays exempt, so the rule is still useful.
-    expect(pathsOutsideReuseExemption(['docs/tasks/X10-brief.md'])).toEqual([]);
-    expect(
-      isReuseAllowlistedPath('docs/tasks/ORCHESTRATOR.md', CHECK_REUSE_EXCLUDE)
-    ).toBe(true);
   });
 });
 
@@ -705,8 +667,6 @@ describe('TOOLING_FILES (X10 additions)', () => {
     // they run checks, schedule them, or describe a device pool the app never sees.
     'scripts/check.mjs',
     'scripts/check-steps.mjs',
-    // The proof behind the reuse rule. Run as a module by `test`, reads the repo, writes nothing.
-    'scripts/check-docs-drift.mjs',
     'scripts/gen-registry.mjs',
     'scripts/registry-core.mjs',
     'scripts/build-slot-core.mjs',
@@ -946,8 +906,12 @@ function makeRepo() {
  * ledger: it writes the per-step timings `NITRO_UI_CHECK_STEPS_FILE` names, and it
  * prints a Jest summary. `FAKE_CHECK_NO_STEPS_FILE=1` leaves it out, which is the
  * case that must stay green.
+ *
+ * `hook` is extra shell run before the exit, for the tests that need the tree to move
+ * *during* a run. It has to go here rather than in a script a test writes first,
+ * because `runCli` calls this function and would otherwise overwrite it.
  */
-function fakeBin(dir) {
+function fakeBin(dir, hook = '') {
   const bin = path.join(dir, 'fake-bin');
   fs.mkdirSync(bin, { recursive: true });
   const script =
@@ -959,6 +923,7 @@ function fakeBin(dir) {
     '  mkdir -p "$(dirname "$NITRO_UI_CHECK_STEPS_FILE")"\n' +
     '  printf \'%s\' "$FAKE_CHECK_STEPS_JSON" > "$NITRO_UI_CHECK_STEPS_FILE"\n' +
     'fi\n' +
+    (hook === '' ? '' : `${hook}\n`) +
     'exit ${FAKE_EXIT:-0}\n';
   for (const name of ['bun', 'node']) {
     fs.writeFileSync(path.join(bin, name), script);
@@ -967,8 +932,8 @@ function fakeBin(dir) {
   return bin;
 }
 
-function runCli(dir, args, extraEnv = {}) {
-  const bin = fakeBin(dir);
+function runCli(dir, args, extraEnv = {}, hook = '') {
+  const bin = fakeBin(dir, hook);
   return spawnSync(process.execPath, [CLI, ...args], {
     cwd: dir,
     encoding: 'utf8',
@@ -1109,9 +1074,16 @@ describe('gate.mjs need --for merge reuses a merged branch check', () => {
     return lines[0];
   }
 
+  /** The tree hash standing in front of us right now, from git itself. */
+  const treeOf = (dir) => gitIn(dir, ['rev-parse', 'HEAD^{tree}']);
+
   it('accepts it once the branch is merged, and refuses before', () => {
     const dir = makeRepo();
     const line = branchThatPassedChecks(dir);
+    // The run recorded git's own tree hash and a clean worktree, which is what makes
+    // it reusable at all.
+    expect(line.fullTree).toBe(treeOf(dir));
+    expect(line.worktreeClean).toBe(true);
 
     // Before the merge, on `main`, the branch's ledger is not this tree's evidence:
     // main's code does not contain the branch's commit, or its file.
@@ -1122,10 +1094,6 @@ describe('gate.mjs need --for merge reuses a merged branch check', () => {
     expect(before.stdout).not.toContain('reused');
 
     gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
-    expect(
-      spawnSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' })
-        .status
-    ).toBe(0);
     const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
     expect(after.stdout).toContain(`reused from \`${BRANCH}\``);
     // The line being reused is the one the branch wrote, not a lookalike.
@@ -1148,11 +1116,191 @@ describe('gate.mjs need --for merge reuses a merged branch check', () => {
         branch: BRANCH,
         entry: line,
         source: `.gates/${BRANCH}.jsonl`,
-        changedPaths: [],
       },
     });
     expect(rendered).toContain('**PASS** *(reused)*');
     expect(rendered).toContain(line.tree.slice(0, 12));
+  }, 120_000);
+
+  it('reuses when the merged tree is byte-identical, and prints the tree it matched', () => {
+    // The positive case stated as the rule itself: same tree hash, so a run here
+    // would read the same files. The assertion that makes this a test rather than a
+    // demo is that the note names the hash.
+    const dir = makeRepo();
+    const line = branchThatPassedChecks(dir);
+    gitInTempRepo(dir, ['checkout', '-q', 'main']);
+    gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).toContain(
+      `this exact tree (${line.fullTree.slice(0, 12)}) with a clean worktree`
+    );
+    expect(after.stdout).toContain('check — green, reused');
+  }, 120_000);
+
+  it('refuses a merge that changes only docs - a docs commit is a different tree', () => {
+    // This is the round-2 decision, tested from the side that loses: round 1 reused
+    // this exact merge, because the code digest did not move and `docs/**` was on the
+    // allowlist. A docs file is an input to `format`, to `readme:check` and to a jest
+    // test that reads ORCHESTRATOR.md, so the honest answer is that the tree is new.
+    const dir = makeRepo();
+    const line = branchThatPassedChecks(dir);
+    gitInTempRepo(dir, ['checkout', '-q', 'main']);
+    fs.mkdirSync(path.join(dir, 'docs', 'tasks'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'docs', 'tasks', 'X9-report.md'),
+      '# X9 report\n'
+    );
+    gitInTempRepo(dir, ['add', '-A']);
+    gitInTempRepo(dir, ['commit', '-qm', 'docs(tasks): X9 report']);
+    gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
+
+    // The precondition round 1 relied on, still true: the *code* digest never moved,
+    // so nothing but the full-tree comparison can see this merge at all.
+    const status = runCli(dir, ['status']);
+    expect(status.stderr).toContain(`code tree ${line.tree.slice(0, 12)}`);
+    expect(treeOf(dir)).not.toBe(line.fullTree);
+
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).not.toContain('reused');
+    expect(after.stdout).toContain('check — never run on this tree');
+    expect(after.status).toBe(1);
+  }, 120_000);
+
+  it('refuses a rename out of a read directory into docs - the case the allowlist got wrong', () => {
+    // The review's concrete counterexample, made a gate: a file moves from `bench/`
+    // (which `check` type-checks) to `docs/` (which the allowlist said was inert). The
+    // only path git reports is the destination, so an allowlist reads this as
+    // docs-only and marks a green the run never earned. An exact tree hash notices,
+    // because the tree changed.
+    const dir = makeRepo();
+    const line = branchThatPassedChecks(dir);
+    gitInTempRepo(dir, ['checkout', '-q', 'main']);
+    fs.mkdirSync(path.join(dir, 'bench'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'docs'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'bench', 'Main.tsx'),
+      'export const a = 1\n'
+    );
+    gitInTempRepo(dir, ['add', '-A']);
+    gitInTempRepo(dir, ['commit', '-qm', 'chore: a bench file']);
+    gitInTempRepo(dir, ['mv', 'bench/Main.tsx', 'docs/Main.tsx']);
+    gitInTempRepo(dir, ['add', '-A']);
+    gitInTempRepo(dir, ['commit', '-qm', 'docs: that file, moved']);
+    // Proof the rename is invisible the way round 1 read it: `diff --name-only` with
+    // git's default rename detection reports the *destination* only, so an allowlist
+    // that trusts that list sees a docs addition and nothing else.
+    expect(gitIn(dir, ['diff', '--name-only', 'HEAD~1..HEAD'])).toBe(
+      'docs/Main.tsx'
+    );
+    gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
+
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).not.toContain('reused');
+    expect(after.stdout).toContain('check — never run on this tree');
+    expect(line.fullTree).not.toBe(treeOf(dir));
+  }, 120_000);
+
+  it('will not reuse a check recorded over uncommitted edits', () => {
+    // The dirty-at-check-time case in the form where the flag is the *only* thing that
+    // can refuse: `check` passed with the tree plus an untracked file, the file then
+    // disappeared, and the merged tree is byte-identical to the hash the line names.
+    // Nothing proves this tree was ever checked on its own, so reuse declines.
+    const dir = makeRepo();
+    fs.mkdirSync(path.join(dir, 'android/src/main/java'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'android/src/main/java/Thing.kt'),
+      'class Thing\n'
+    );
+    gitInTempRepo(dir, ['add', '-A']);
+    gitInTempRepo(dir, ['commit', '-qm', 'feat: branch work']);
+    // An edit that is never committed and never gitignored, so `status` sees it.
+    const scratch = path.join(dir, 'ios', 'core', 'Scratch.swift');
+    fs.writeFileSync(scratch, 'uncommitted\n');
+    const run = runCli(dir, ['check'], { FAKE_CHECK_STEPS_JSON: STEPS_JSON });
+    expect(run.status).toBe(0);
+    const [line] = ledgerIn(dir, BRANCH);
+    expect(line.worktreeClean).toBe(false);
+    // The gap the flag describes: the line names the commit's tree, which has no
+    // Scratch.swift in it.
+    expect(line.fullTree).toBe(treeOf(dir));
+
+    // Take the edit away, so from here on the standing tree is exactly the recorded one.
+    fs.rmSync(scratch);
+    expect(gitIn(dir, ['status', '--porcelain'])).toBe('');
+
+    gitInTempRepo(dir, ['checkout', '-q', 'main']);
+    gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
+    expect(treeOf(dir)).toBe(line.fullTree);
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).not.toContain('reused');
+    expect(after.stdout).toContain('dirty worktree');
+    expect(after.stdout).toContain('check — never run on this tree');
+  }, 120_000);
+
+  it('will not reuse a check whose tree moved out from under it', () => {
+    // `fullTree` is only claimed when it is the same before and after the run: a docs
+    // commit landing mid-flight moves the git tree and nothing else, and the run
+    // spans two trees rather than proving one of them.
+    const dir = makeRepo();
+    fs.mkdirSync(path.join(dir, 'android/src/main/java'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'android/src/main/java/Thing.kt'),
+      'class Thing\n'
+    );
+    gitInTempRepo(dir, ['add', '-A']);
+    gitInTempRepo(dir, ['commit', '-qm', 'feat: branch work']);
+    // A child that commits docs halfway through, so the tree under `check` changes.
+    const run = runCli(
+      dir,
+      ['check'],
+      { FAKE_CHECK_STEPS_JSON: STEPS_JSON },
+      'mkdir -p docs\necho moved >> docs/moved.md\ngit add -A docs\ngit commit -qm "docs: moved under the run" >/dev/null'
+    );
+    expect(run.status).toBe(0);
+    const [line] = ledgerIn(dir, BRANCH);
+    expect(line.fullTree).toBeNull();
+    expect(line.worktreeClean).toBe(true);
+
+    gitInTempRepo(dir, ['checkout', '-q', 'main']);
+    gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).not.toContain('reused');
+  }, 120_000);
+
+  it('refuses when this worktree is dirty, even though the tree hash matches', () => {
+    // Asking about a tree that is not committed is asking about a tree no hash names,
+    // so `need` says so instead of borrowing an answer for a lookalike.
+    const dir = makeRepo();
+    const line = branchThatPassedChecks(dir);
+    gitInTempRepo(dir, ['checkout', '-q', 'main']);
+    gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
+    fs.writeFileSync(path.join(dir, 'ios', 'core', 'Wip.swift'), 'wip\n');
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).not.toContain('reused');
+    expect(after.stdout).toContain('uncommitted changes');
+    // And the refusal is the worktree, not the tree: it still matches.
+    expect(treeOf(dir)).toBe(line.fullTree);
+  }, 120_000);
+
+  it('the newest line on the tree decides, so a merge that failed after the pass is not reused', () => {
+    // Newest-wins under exact trees: `main` ran `check` on this very tree and it went
+    // red, and a branch's older green may not print over that.
+    const dir = makeRepo();
+    const line = branchThatPassedChecks(dir);
+    gitInTempRepo(dir, ['checkout', '-q', 'main']);
+    gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
+    const failed = runCli(dir, ['check'], {
+      FAKE_CHECK_STEPS_JSON: STEPS_JSON,
+      FAKE_EXIT: '1',
+    });
+    expect(failed.status).toBe(1);
+    const lines = ledgerIn(dir, 'main');
+    expect(lines[lines.length - 1].result).toBe('fail');
+    expect(lines[lines.length - 1].fullTree).toBe(line.fullTree);
+
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).not.toContain('reused');
+    expect(after.stdout).toContain('check — red');
   }, 120_000);
 
   it('--no-reuse asks the strict question', () => {
@@ -1193,45 +1341,11 @@ describe('gate.mjs need --for merge reuses a merged branch check', () => {
     expect(after.status).toBe(1);
   }, 120_000);
 
-  it('does not reuse when main gained only bench/ - the reviewer’s M1 scenario, end to end', () => {
-    // The exact failure the review reproduced, at the CLI rather than in the pure function: a bench
-    // task merges into `main`, the code digest does not move (bench/ is not code), and round 0
-    // printed `✓ check — green, reused` for a tree where `bench:typecheck` had never run. The tree
-    // check alone cannot see this; the allowlist is what refuses it.
-    const dir = makeRepo();
-    branchThatPassedChecks(dir);
-    gitInTempRepo(dir, ['checkout', '-q', 'main']);
-    fs.mkdirSync(path.join(dir, 'bench', 'src'), { recursive: true });
-    fs.writeFileSync(
-      path.join(dir, 'bench', 'src', 'Main.tsx'),
-      "import { Switch } from '../../src'\nexport default function Main() { return <Switch /> }\n"
-    );
-    gitInTempRepo(dir, ['add', '-A']);
-    gitInTempRepo(dir, [
-      'commit',
-      '-qm',
-      'perf(bench): main gained a bench screen',
-    ]);
-    gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
-
-    // The precondition that made round 0 wrong: same code tree before and after the bench commit.
-    const status = runCli(dir, ['status']);
-    expect(status.stderr).toContain(
-      `code tree ${ledgerIn(dir, BRANCH)[0].tree.slice(0, 12)}`
-    );
-
-    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
-    expect(after.stdout).not.toContain('reused');
-    expect(after.stdout).toContain('bench/src/Main.tsx');
-    expect(after.stdout).toContain('check — never run on this tree');
-    expect(after.status).toBe(1);
-  }, 120_000);
-
-  it('refuses to reuse a check from the export that arrived with this merge', () => {
-    // The real flow, and the answer is *no*: the export is written after the `check` line it carries,
-    // so the merge that brings it also adds `docs/tasks/X10/gates.jsonl` - a file `check` reads,
-    // because `gate.mjs` lists `docs/tasks` and opens each entry. A document delivered by a merge
-    // cannot certify that same merge, so the run is owed and the note says so in those words.
+  it('refuses an export that arrived with this merge, because the tree it names is not this one', () => {
+    // The real flow, and the answer is *no* for a simpler reason than round 1's: the
+    // export is committed after the `check` line it carries, so the merged tree
+    // contains a file the checked tree did not. No exclusion list is needed to say so,
+    // and the same reasoning covers any other file a merge brings.
     const dir = makeRepo();
     branchThatPassedChecks(dir);
     const exported = runCli(dir, ['export', '--task', 'X10']);
@@ -1247,83 +1361,72 @@ describe('gate.mjs need --for merge reuses a merged branch check', () => {
     fs.rmSync(path.join(dir, '.gates', `${BRANCH}.jsonl`), { force: true });
     const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
     expect(after.stdout).not.toContain('reused');
-    expect(after.stdout).toContain('outside the reuse allowlist');
-    expect(after.stdout).toContain(
-      'an export cannot certify the merge that carries it'
-    );
     expect(after.stdout).toContain('check — never run on this tree');
   }, 120_000);
 
-  it('cannot reuse from a committed export even when a later check postdates it', () => {
-    // Why `committedTaskLedgers` is a source the rule can never use, and why that is right rather
-    // than a gap. The escape tried here: commit the export, run `check` again on the same code (a
-    // docs commit does not move the code digest), so the newest line's head already contains an
-    // export. It still refuses, because the decisive line inside `docs/tasks/X10/gates.jsonl` is the
-    // one that file carries, and the file itself was written after that line - so the merge that
-    // delivers it adds a path the exclusion names. An export is always younger than the evidence it
-    // holds, which is another way of saying a merge cannot be certified by a document it brings.
-    const dir = makeRepo();
-    branchThatPassedChecks(dir);
-    expect(runCli(dir, ['export', '--task', 'X10']).status).toBe(0);
-    gitInTempRepo(dir, ['add', '-A']);
-    gitInTempRepo(dir, ['commit', '-qm', 'docs: X10 gate ledger']);
-    const second = runCli(dir, ['check'], {
-      FAKE_CHECK_STEPS_JSON: STEPS_JSON,
-    });
-    expect(second.status).toBe(0);
-    const lines = ledgerIn(dir, BRANCH);
-    expect(lines).toHaveLength(2);
-    // The precondition the whole attempt rests on: same code tree, newer commit.
-    expect(lines[1].tree).toBe(lines[0].tree);
-    expect(runCli(dir, ['export', '--task', 'X10']).status).toBe(0);
-    gitInTempRepo(dir, ['add', '-A']);
-    gitInTempRepo(dir, ['commit', '-qm', 'docs: X10 gate ledger (two lines)']);
-
-    gitInTempRepo(dir, ['checkout', '-q', 'main']);
-    gitInTempRepo(dir, ['merge', '-q', '--no-ff', BRANCH, '-m', 'merge: task']);
-    fs.rmSync(path.join(dir, '.gates', `${BRANCH}.jsonl`), { force: true });
-    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
-    expect(after.stdout).not.toContain('reused');
-    expect(after.stdout).toContain(
-      'an export cannot certify the merge that carries it'
-    );
-    // Tree equality and ancestry both hold here, so the exclusion is the only reason: the merged
-    // code tree is the one that passed, and the line's commit is in this history.
-    const status = runCli(dir, ['status']);
-    expect(status.stderr).toContain(`code tree ${lines[1].tree.slice(0, 12)}`);
-    expect(
-      spawnSync('git', ['merge-base', '--is-ancestor', lines[1].head, 'HEAD'], {
-        cwd: dir,
-        encoding: 'utf8',
-      }).status
-    ).toBe(0);
-  }, 120_000);
-
   it('will not reuse an exported check whose commit is not in this history', () => {
-    // The committed copy, on the merge that is not a merge: `--squash` produces
-    // the same code, so the export's tree digest matches this tree exactly, but
-    // the commit the line names is not an ancestor of HEAD. `--no-reuse` is not
-    // involved here - this is the rule refusing, not the escape hatch.
+    // The committed copy, on the merge that is not a merge: `--squash` produces the
+    // same *files*, and a fresh `check` would see identical content, but the commit the
+    // line names is not an ancestor of HEAD, so the evidence belongs to a branch nobody
+    // merged. `--no-reuse` is not involved here - this is the rule refusing.
     const dir = makeRepo();
-    branchThatPassedChecks(dir);
+    const line = branchThatPassedChecks(dir);
     expect(runCli(dir, ['export', '--task', 'X10']).status).toBe(0);
     gitInTempRepo(dir, ['add', '-A']);
     gitInTempRepo(dir, ['commit', '-qm', 'docs: X10 gate ledger']);
     gitInTempRepo(dir, ['checkout', '-q', 'main']);
     gitInTempRepo(dir, ['merge', '-q', '--squash', BRANCH]);
     gitInTempRepo(dir, ['commit', '-qm', 'feat: branch work (squashed)']);
-    // The export came in with the squash, and the tree really does match - the
-    // refusal below is the ancestry alone, which is what this proves.
-    const status = runCli(dir, ['status']);
-    expect(status.stderr).toContain(
-      `code tree ${ledgerIn(dir, BRANCH)[0].tree.slice(0, 12)}`
-    );
     const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
     expect(after.stdout).not.toContain('reused');
+    expect(after.stdout).toContain('check — never run on this tree');
+    // The line's commit really is absent from this history, which is the condition
+    // under test. Asked through `gitIn`/`gitEnv` rather than a bare spawn, so an
+    // inherited `GIT_DIR` cannot make this assert about somebody else's checkout (N4).
+    expect(
+      spawnSync('git', ['merge-base', '--is-ancestor', line.head, 'HEAD'], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: gitEnv(dir),
+      }).status
+    ).not.toBe(0);
+  }, 120_000);
+
+  it('refuses a squash merge on the tree too, when no export is involved', () => {
+    // The same squash without the export step: the merged files are byte-identical to
+    // the tree that passed, so this isolates the two conditions and shows the commit
+    // is the only thing refusing. Round 1 leaned on this to prove the exclusion list
+    // was the sole blocker; under exact trees it proves ancestry still bites.
+    const dir = makeRepo();
+    const line = branchThatPassedChecks(dir);
+    gitInTempRepo(dir, ['checkout', '-q', 'main']);
+    gitInTempRepo(dir, ['merge', '-q', '--squash', BRANCH]);
+    gitInTempRepo(dir, ['commit', '-qm', 'feat: branch work (squashed)']);
+    expect(treeOf(dir)).toBe(line.fullTree);
+    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
+    expect(after.stdout).not.toContain('reused');
+    expect(after.stdout).toContain('not an ancestor of this tree');
+  }, 120_000);
+
+  it('prints the reuse pair in `status`, because that is what a merge compares', () => {
+    // `status` is where a task decides whether it owes a run, so it has to show the two
+    // fields reuse reads - and say plainly when a dirty worktree has made the whole
+    // question unanswerable rather than printing a hash that will match and then not be
+    // used.
+    const dir = makeRepo();
+    branchThatPassedChecks(dir);
+    const clean = runCli(dir, ['status']);
+    expect(clean.stderr).toContain('git tree');
+    expect(clean.stderr).toContain('worktree clean');
+
+    fs.writeFileSync(path.join(dir, 'ios', 'core', 'Wip.swift'), 'wip\n');
+    const dirty = runCli(dir, ['status']);
+    expect(dirty.stderr).toContain('DIRTY');
+    expect(dirty.stderr).not.toContain('worktree clean');
   }, 120_000);
 
   it('does not reuse at review, even when another branch has a qualifying line', () => {
-    // The stage guard from the CLI's side. Two branches with *identical code* (B
+    // The stage guard from the CLI's side. Two branches with *identical* trees (B
     // starts at A's commit), so A's `check` line would satisfy every other
     // condition on B's tree, including the ancestry. A review round is evidence
     // about its own diff, so borrowing it here would let an unproven round read as
@@ -1332,7 +1435,6 @@ describe('gate.mjs need --for merge reuses a merged branch check', () => {
     branchThatPassedChecks(dir);
     gitInTempRepo(dir, ['branch', 'task/x10-copy', BRANCH]);
     gitInTempRepo(dir, ['checkout', '-q', 'task/x10-copy']);
-    // Same code as the branch that passed: the tree digest proves it.
     const review = runCli(dir, ['need', '--for', 'review', '--base', 'main']);
     expect(review.stdout).not.toContain('reused');
     expect(review.stdout).toContain('check — never run on this tree');
@@ -1340,24 +1442,6 @@ describe('gate.mjs need --for merge reuses a merged branch check', () => {
     // is the stage and nothing else.
     const merge = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
     expect(merge.stdout).toContain('reused from');
-  }, 120_000);
-
-  it('does not reuse across a squash merge, where the tree matches and the commit does not', () => {
-    // Isolates the ancestor test from the tree test: a squash merge produces the
-    // same code and a history that does not contain the branch's commit, so the
-    // evidence cannot be placed in this tree and is not borrowed.
-    const dir = makeRepo();
-    const line = branchThatPassedChecks(dir);
-    gitInTempRepo(dir, ['checkout', '-q', 'main']);
-    gitInTempRepo(dir, ['merge', '-q', '--squash', BRANCH]);
-    gitInTempRepo(dir, ['commit', '-qm', 'feat: branch work (squashed)']);
-    // And the tree really is the one that passed, so the refusal is the commit's
-    // fault alone - otherwise this test would prove nothing.
-    const status = runCli(dir, ['status']);
-    expect(status.stderr).toContain(`code tree ${line.tree.slice(0, 12)}`);
-    const after = runCli(dir, ['need', '--for', 'merge', '--base', 'main']);
-    expect(after.stdout).not.toContain('reused');
-    expect(after.stdout).toContain('check — never run on this tree');
   }, 120_000);
 });
 
