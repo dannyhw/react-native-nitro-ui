@@ -149,36 +149,46 @@ struct SegmentedControlContent: NitroUIContent {
 /// `.tint()` has no "unset" form, so the default keeps SwiftUI's accent colour.
 ///
 /// On a segmented `Picker` a per-instance `.tint(_:)` has **no visible effect** (G4 F1,
-/// and measured again for F3 on iOS 27), and `tintColor` is therefore an Android-only
-/// prop - see `docs/components/segmented-control.md`, Limits. What F3 established is
-/// *why* the obvious workaround is not taken, because it is not the reason the last
-/// round of docs gave.
+/// and measured again for F3), and `tintColor` is therefore an Android-only prop - see
+/// `docs/components/segmented-control.md`, Limits. This is what F3 measured, on iOS 27
+/// on the leased simulator and nowhere else: the brief's bar was "no per-instance
+/// approach on iOS 15.1+" and the pre-liquid-glass releases were not tested, so treat
+/// everything below as one OS's observation rather than UIKit's contract.
 ///
-/// The hosted row is reachable: this library's own pixel probe walks the subtree and
+/// The row is reachable. The pixel probe walks this control's own hosted subtree and
 /// finds a real `UISegmentedControl` inside it (`UIKitPlatformViewHost<
 /// PlatformViewRepresentableAdaptor<SystemSegmentedControl>>`), and writing its
-/// `selectedSegmentTintColor` does paint the segment - the probe counts 9253 pixels of
-/// the requested magenta in a 102x31 pt control where the untinted look has none.
+/// `selectedSegmentTintColor` paints the segment: 9253 pixels of the requested magenta
+/// in a 102x31 pt control, against zero for the untinted look. That is the opposite of
+/// what the previous round's docs said, which claimed the knob was unreachable.
 ///
-/// It does not stay painted. The moment the selection moves, iOS 27's liquid-glass lens
-/// re-configures and the colour is gone from the screen while the property still reads
-/// back what was written (`hits=0`, `knob=#FF00A0`), and re-writing the same value does
-/// not bring it back. So a tint applied this way would show on the first frame and
-/// vanish on the first tap - a control whose colour depends on whether the user has
-/// touched it yet, and on which release of iOS is doing the compositing. That is worse
-/// for an app than a prop that has never done anything, and the only thing that would
-/// keep it true is re-writing the property on every selection change inside a private
-/// view hierarchy, which is a contract this library cannot hold across OS releases.
+/// It does not stay painted. After the first change of selection the probe reads
+/// `hits=0` on that same control - the colour is off the screen - while the property
+/// itself still reports the colour that was written (seen through a temporary
+/// diagnostic since removed from this file; re-run the probe with a
+/// `selectedSegmentTintColor` read added to say it again). Re-writing the value did not
+/// put it back at either of the two points that were tried: inline on the control's own
+/// `.valueChanged`, and in a `CATransaction` completion block, which is the first moment
+/// after the selection animation is genuinely over. Those two pushes were in the build
+/// that produced `hits=0`, so this is not "re-writing was not attempted".
 ///
-/// A second measured reason to leave it: the push cannot be undone cleanly either. A
-/// view is only inserted for a control that asked for a tint, so the control that gave
-/// up its colour on a re-render kept it (`tintColor` back to `null`, 9290 magenta pixels
-/// still on screen), and a recycled host carried the previous owner's colour to the next
-/// one. Both are the kind of bug an app cannot see coming and cannot report.
+/// Which is why the workaround is not taken. A tint bought this way shows on the first
+/// frame and vanishes on the first tap, and whether it survives depends on which OS
+/// release is doing the compositing. That is worse for an app than a prop that has never
+/// done anything.
+///
+/// Two claims this deliberately does not make, because they came from the throwaway
+/// version that tried the push and are not facts about iOS. One: that iOS cannot *undo* a
+/// tint. It can - that version kept the colour only because the view doing the pushing
+/// existed solely while a tint was asked for, and it is not in this repo (`git log
+/// --all -S "selectedSegmentTintColor ="` finds no such code). Two: that a recycled host
+/// would hand one app's colour to the next. Both were prototype defects and saying them
+/// here would put a reason in print that no one can reproduce.
 ///
 /// The `.tint(_:)` call stays: it is the honest declarative statement, it costs nothing,
-/// and the pixel probe (`nuiTestPixelProbe`) is the instrument that says the day either
-/// SwiftUI or UIKit makes a per-instance tint actually work.
+/// and the probe is the instrument that says the day either SwiftUI or UIKit makes a
+/// per-instance tint real - which is the day the prop, the docs and the harness's iOS
+/// half change together.
 private struct OptionalSegmentedTint: ViewModifier {
   let color: UIColor?
 
