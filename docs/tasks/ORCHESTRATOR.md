@@ -131,6 +131,9 @@ isn't applied. Don't start a new session.
   Prefer it where the provider is enabled.
 - After each device run, read `node scripts/lease.mjs list`'s warnings: agents have released leases
   but left the iPhone simulator booted.
+- Before merging tooling that behaves per platform (paths, temp dirs, CocoaPods, CI workflows),
+  look at CI for the branch or push and watch `main`'s CI right after. X12's tests passed on macOS
+  and failed on Linux CI; X9's release lock refresh churned every pod on the runner (X13).
 - Tell reviewers to run `check` and tests in the **foreground**. An Opus reviewer ended its turn
   waiting on a background `check`.
 
