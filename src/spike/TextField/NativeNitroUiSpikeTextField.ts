@@ -22,6 +22,14 @@ export interface SpikeTextFieldHandle {
   readonly value: string | null;
   /** How many native changes JS has confirmed. */
   readonly mostRecentEventCount: number;
+  /**
+   * The shape native is holding, as opposed to `nuiTestState()`'s `impl=`, which is the shape that won.
+   *
+   * Readable because the first iOS run of P1 reported `swiftui` for an instance that had been asked for
+   * `textfield`, and the only way to tell "the prop never arrived" from "the branch never got built" is to
+   * ask the instance for both.
+   */
+  readonly iosImplementation: string;
   measureContent(): { width: number; height: number };
   focus(): void;
   blur(): void;

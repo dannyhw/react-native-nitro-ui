@@ -202,8 +202,8 @@ export interface NitroUiSpikeTextFieldMethods extends HybridViewMethods {
  * not match the key fails codegen rather than producing a view nobody can
  * register.
  *
- * @internal Spike only: not exported from `src/index.ts`, and `src/spike/**` is
- * excluded from the published package.
+ * @internal Spike only: not exported from `src/index.ts`, and `package.json`'s `files` list has no
+ * exclusion for this directory, so this spec would ride into the packed tarball if the branch merged.
  */
 export type NitroUiSpikeTextField = HybridView<
   NitroUiSpikeTextFieldProps,

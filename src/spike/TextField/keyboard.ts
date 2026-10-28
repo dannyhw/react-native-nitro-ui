@@ -14,7 +14,9 @@
  * map them natively; whether G8 keeps the bitfield is a G8 decision, and both
  * are priced in T18's report.
  *
- * @internal Spike only — `src/spike/**` is not published.
+ * @internal Spike only — not exported from `src/index.ts`. `package.json`'s `files` list has no
+ * exclusion for this directory, so this file *would* ride into the packed tarball if the spike
+ * branch merged; T18's report says so instead of pretending the exclusion exists.
  */
 
 /*

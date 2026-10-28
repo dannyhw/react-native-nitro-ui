@@ -23,8 +23,8 @@ function onSubmitEditingNotProvided(): void {}
 /**
  * T18 spike — the JS half of the spike field: props in, native view out.
  *
- * @internal Spike only. `src/spike/**` is not published and has no `component.json`, so nothing in
- * `src/index.ts` reaches this file. It exists because the shipped prop rules (D7/D7b: every prop always
+ * @internal Spike only. It has no `component.json` and no export from `src/index.ts`, so no app can
+ * import it. It exists because the shipped prop rules (D7/D7b: every prop always
  * sent) have to be followed *here* for the measurements to mean anything — a spike that sent props lazily
  * would be measuring a path nobody ships.
  */

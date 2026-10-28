@@ -4,8 +4,12 @@
 //
 //  T18 spike (`docs/tasks/T18-textfield-spike.md`): a text field on the real
 //  hosting path, to answer Q2 §7's P1 / P3 / P4 lines on a device. Not a
-//  component — nothing here is exported, and the published package excludes
-//  `ios/spike` (see `package.json`'s `!**/spike/**`).
+//  component — nothing here is exported, has no `component.json`, and reaches no docs page. What
+//  `package.json` does *not* do is exclude `ios/spike`: there is no `!**/spike/**` entry in its
+//  `files`, so on this evidence branch the spike's native sources ride along in the packed
+//  tarball (`etc/package-files.txt` lists them, and `manifest:check` holds that list). Merging
+//  this branch would ship them, which T18's report states rather than quietly fixing — the
+//  exclusion is a decision for whoever merges, not something to decide inside a spike.
 //
 //  ## Why it lives in the library
 //
@@ -100,6 +104,17 @@ final class SpikeTextFieldModel: NitroUiModel {
   /// The live `UITextField`, when this instance hosts one. Weak: the SwiftUI
   /// representable owns it, and it is gone once the subtree goes.
   weak var hostedField: SpikeHostedUITextField?
+
+  /*
+   * Installs the Hybrid View's own mirror renderer so the commit helpers can republish from anywhere.
+   *
+   * The helpers are a plain enum and cannot reach the host, and on the SwiftUI arm there is no other path that
+   * would publish: `@FocusState` is the representable's own view state, so a tap that only moves focus changes
+   * no text, invalidates no SwiftUI body, and leaves the cached line saying `focused=0` while JS got `onFocus`.
+   * Android's model carries the same closure for the same reason (`SpikeTextFieldModel.renderMirror`), and
+   * both arms' harness checks are what caught the omission on each platform independently.
+   */
+  var renderMirror: (() -> Void)?
 
   var onChange: ((_ value: String, _ eventCount: Double) -> Void)?
   var onFocus: (() -> Void)?
@@ -242,7 +257,10 @@ struct SpikeSwiftUITextField: View {
       // resolves `@FocusState` through its own update pass, which is the arm's
       // floor: it cannot promise the synchronous `becomeFirstResponder` arm B has.
       if model.autoFocus && !model.disabled {
-        focused.wrappedValue = true
+        // `$focused` is the projected `FocusState.Binding`; setting its `wrappedValue` is SwiftUI's
+        // imperative form. (`focused.wrappedValue` is a typo the compiler catches: the *property wrapper's*
+        // `wrappedValue` is not addressable through the projected name.)
+        $focused.wrappedValue = true
       }
     }
   }
@@ -279,8 +297,19 @@ private struct SpikeCapModifier: ViewModifier {
   let capitalization: UITextAutocapitalizationType?
 
   func body(content: Content) -> some View {
+    // The SwiftUI spelling is mapped with implicit members rather than by naming the type: the Swift name of
+    // `UITextInputTextCapitalization`'s SwiftUI twin is not importable in this SDK (`cannot find type
+    // 'AutocapitalizationType' in scope`), so a helper that returns it does not compile. The mapping is the
+    // same three cases, spelled at the call site.
     if let capitalization {
-      content.textInputAutocapitalization(capitalization.swiftUI)
+      switch capitalization {
+      case .allCharacters:
+        content.textInputAutocapitalization(.characters)
+      case .words:
+        content.textInputAutocapitalization(.words)
+      default:
+        content.textInputAutocapitalization(.sentences)
+      }
     } else {
       content
     }
@@ -307,17 +336,6 @@ private struct SpikeSubmitLabelModifier: ViewModifier {
       content.submitLabel(label)
     } else {
       content
-    }
-  }
-}
-
-private extension UITextAutocapitalizationType {
-  /// The SwiftUI spelling of the same three states.
-  var swiftUI: AutocapitalizationType {
-    switch self {
-    case .allCharacters: return .characters
-    case .words: return .words
-    default: return .sentences
     }
   }
 }
@@ -379,7 +397,7 @@ final class SpikeHostedUITextField: UITextField, UITextFieldDelegate {
     let hints = SpikeKeyboardHints(model.keyboardHints)
     keyboardType = hints.secure ? .default : hints.uiKeyboardType
     returnKeyType = hints.uiReturnKey
-    secureTextEntry = hints.secure
+    isSecureTextEntry = hints.secure
     if let capitalization = hints.autocapitalization {
       autocapitalizationType = capitalization
     }
@@ -464,14 +482,32 @@ final class SpikeHostedUITextField: UITextField, UITextFieldDelegate {
 
   // MARK: Mirror
 
+  /// The caret, read through the `UITextInput` protocol rather than `selectedRange`.
+  ///
+  /// Two reasons, both learned from the compiler: a `UITextField` subclass that is its own
+  /// `UITextInputDelegate` cannot see `selectedRange` at all (`value of type '…' has no member
+  /// 'selectedRange'`), and the protocol's offsets are measured in UTF-16 code units — which is the unit the
+  /// mirror documents for `selection=` and the one Android's `TextFieldState.selection` uses too. So the
+  /// protocol route is both the one that compiles and the one that agrees with the other platform.
+  var caretRange: NSRange {
+    guard let range = selectedTextRange,
+          let start = try? offset(from: beginningOfDocument, to: range.start),
+          let end = try? offset(from: beginningOfDocument, to: range.end)
+    else {
+      return NSRange(location: 0, length: 0)
+    }
+    return NSRange(location: start, length: max(0, end - start))
+  }
+
   /// Snapshot what only this shape can see.
   func publishMirror() {
     nitroUiAssertMainThread()
     let isComposing = markedTextRange != nil
     model.composing = isComposing
     model.focused = isFirstResponder
-    model.selectionStart = selectedRange.location
-    model.selectionLength = selectedRange.length
+    let caret = caretRange
+    model.selectionStart = caret.location
+    model.selectionLength = caret.length
     model.lines = -1
     var mirror = NitroSpikeTextMirror()
     SpikeTextFieldCommit.fill(model, &mirror)
@@ -479,8 +515,9 @@ final class SpikeHostedUITextField: UITextField, UITextFieldDelegate {
     mirror.composing = isComposing
     mirror.focused = isFirstResponder
     mirror.editable = isUserInteractionEnabled && isEnabled && !model.disabled
-    mirror.selectionStart = selectedRange.location
-    mirror.selectionLength = selectedRange.length
+    mirror.selectionStart = caret.location
+    mirror.selectionLength = caret.length
+    mirror.liveField = true
     model.publishMirror(mirror)
   }
 
@@ -512,9 +549,16 @@ enum SpikeTextFieldCommit {
 
   /// Focus moved, on both edges. P5 measures focus latency from the event, so an
   /// edge that quietly went missing would read as "fast".
+  ///
+  /// And it republishes the mirror, because on the SwiftUI arm nothing else does: `@FocusState` lives in the
+  /// representable's own view state, so a tap that only moves focus changes no text, invalidates no SwiftUI
+  /// body, and leaves the cached line saying `focused=0` — measured on the iOS coexist check, where the tap
+  /// fired `onFocus` (JS saw `focus=1`) while `nuiTestState()` still answered `focused=0`. Android needed the
+  /// same rule for the same reason (`SpikeTextFieldModel.focused`, `focusMoved`).
   static func focus(_ model: SpikeTextFieldModel, _ isFocused: Bool) {
     guard model.focused != isFocused else { return }
     model.focused = isFocused
+    model.renderMirror?()
     if isFocused {
       model.onFocus?()
     } else {
@@ -552,6 +596,7 @@ enum SpikeTextFieldCommit {
     mirror.unreported = model.state.unreported != nil
     mirror.lastWrite = model.lastWrite
     mirror.lines = model.lines
+    mirror.frozenImplementation = model.frozenImplementation ?? "none"
     // Same rule as Android's `mirrorLine` (`HybridNitroUiSpikeTextField.kt`): controlled compares against
     // React's `value`, uncontrolled against the last string the field handed JS.
     let js = model.state.js ?? model.emitted ?? ""
@@ -564,7 +609,7 @@ enum SpikeTextFieldCommit {
 
 /// The decoded `keyboardHints` bitfield.
 ///
-/// Mirrored in Kotlin (`NitroSpikeKeyboardHints.kt`) so the two platforms'
+/// Mirrored in Kotlin (`NitroSpikeHints`, in `NitroSpikeTextFieldCompose.kt`) so the two platforms'
 /// mapping tables can be read against each other;
 /// `src/spike/TextField/keyboard.ts` owns the numbers, and
 /// `src/spike/TextField/__tests__/keyboard.test.ts` pins them.
@@ -626,15 +671,6 @@ struct SpikeKeyboardHints {
     return nil
   }
 
-  @available(iOS 15.0, *)
-  var swiftUICapitalization: AutocapitalizationType? {
-    switch autocapitalization {
-    case .allCharacters: return .characters
-    case .words: return .words
-    case .sentences: return .sentences
-    case .none: return nil
-    }
-  }
 }
 
 // MARK: - Text limits
@@ -695,6 +731,11 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
     host.wantsContentSize = true
     host.sizingPolicy = .fillWidth
     Self.declareFallback()
+    // The commit helpers republish through this; see `SpikeTextFieldModel.renderMirror`. Weak, because the
+    // model is owned by the host which is owned by this instance — a strong closure here would be a cycle.
+    model.renderMirror = { [weak self] in
+      self?.publishMirror()
+    }
   }
 
   var view: NitroSwiftUIHost<SpikeTextFieldContent> {
@@ -731,16 +772,16 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
 
   var value: Variant_NullType_String {
     get {
-      guard let js = model.state.js else { return .second(.null) }
-      return .first(js)
+      guard let js = model.state.js else { return .first(.null) }
+      return .second(js)
     }
     set { model.state.js = newValue.asType(String.self) }
   }
 
   var defaultValue: Variant_NullType_String {
     get {
-      guard let value = model.defaultValue else { return .second(.null) }
-      return .first(value)
+      guard let value = model.defaultValue else { return .first(.null) }
+      return .second(value)
     }
     set {
       model.defaultValue = newValue.asType(String.self)
@@ -750,6 +791,14 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
       model.didApplyDefault = true
       guard `default` != model.state.displayed else { return }
       model.state.displayed = `default`
+      /*
+       * The default is the text JS built the field with, so it is what `equal=` / `cps=` compare an
+       * uncontrolled field against — Android seeds `lastEmitted` here too (`defaultValue` setter) and iOS did
+       * not, which is why the same uncontrolled field answered `equal=0` on iOS and `equal=1` on Android on the
+       * first iOS run. Same finding as the write path above, one property earlier: the mirror's `equal=` is a
+       * cross-platform invariant only if both platforms seed the JS side the same way.
+       */
+      model.emitted = `default`
       host.markDirty()
       host.noteContentSizeMayHaveChanged()
     }
@@ -918,6 +967,20 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
     model.autoFocus = false
     model.accessibilityLabel = nil
     model.sizingKey = ""
+    /*
+     * The branch resets too, or a recycled view serves the previous mount's shape forever.
+     *
+     * This is what the first iOS run of P5 and X4 caught: both ask for the `UITextField` arm, both got a view
+     * previously mounted as the SwiftUI arm, and both timed out waiting for `focus()` to do anything — because
+     * `frozenImplementation` still said `swiftui`, whose `focus()` is a no-op by design, and no `UITextField`
+     * was ever built for the new mount. The mirror said `impl=swiftui frozen=swiftui live=0` while JS had sent
+     * `iosImplementation=textfield`, which is the shape of the bug: the prop arrived, the control did not
+     * change. A shipped field has the same rule and the same trap — the shape is chosen at mount, and a
+     * recycled view is a new mount.
+     */
+    model.requestedImplementation = ""
+    model.frozenImplementation = nil
+    model.hostedField = nil
     model.composing = false
     model.focused = false
     model.selectionStart = -1
@@ -978,15 +1041,15 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
   /// A programmatic write, applied on main. The outcome lands in
   /// `nuiTestState()`'s `lastWrite`, because waiting for it here would be a
   /// JS → main *sync* hop, which `core.md` §5 forbids.
-  func nuiTestApplyWrite(_ text: String) throws {
+  func nuiTestApplyWrite(text: String) throws {
     model.pendingWrite = text
     DispatchQueue.main.async { [weak self] in
       self?.applyPendingWrite()
     }
   }
 
-  /// Main thread. The write path a shipped field would use: handshake first,
-  /// composition guard second, one commit, then the mirror.
+  /// Main thread. The write path a shipped field would use: control rule first,
+  /// handshake second, composition guard third, one commit, then the mirror.
   private func applyPendingWrite() {
     nitroUiAssertMainThread()
     guard let pending = model.pendingWrite else { return }
@@ -999,6 +1062,20 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
       return
     }
 
+    /*
+     * A controlled field's text belongs to React, so a write that contradicts `value` is refused — the same
+     * rule Android applies (`HybridNitroUiSpikeTextField.nuiTestApplyWrite` compares against `state.js`
+     * first). It is a finding rather than a detail that the two shapes disagreed until the P3 harness run:
+     * the iOS arm reconciled the write and answered `applied`, so the same user action on the same spec gave
+     * different answers per arm, and the arm that applied it was handing the caller a side channel around
+     * React — which is exactly what `nuiTestApplyWrite` documents that it is not.
+     */
+    if let js = model.state.js, js != pending {
+      model.lastWrite = "ignored"
+      publishMirror()
+      return
+    }
+
     // Same handshake as a prop write: a value JS has not been told about is
     // stale. `js` is restored afterwards so the method does not also become a
     // prop write — the model's `js` belongs to React.
@@ -1007,6 +1084,24 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
     let applied = model.state.reconcile()
     model.state.js = jsBefore
 
+    /*
+     * `emitted` moves with an accepted write, on every shape.
+     *
+     * The mirror's `equal=` / `cps=` compare the control's text with what JS believes the field says, and for
+     * an uncontrolled field that is `emitted` / `lastEmitted`. Android's composable seeds its counter before
+     * applying a write, so an uncontrolled field answers `equal=1` there; iOS's arm A left `emitted` at `nil`
+     * and the same field answered `equal=0 cps=0` — measured on the first iOS run of P1 and P3, where the two
+     * platforms disagreed about the same write. Strictly, JS was *not* told about a write (the commit callback
+     * is the only emit path, and a write that never changed the host's text produces no callback), so
+     * `equal=0` is the more literal answer. The spike keeps Android's rule because the mirror's job is the
+     * invariant "both halves of an uncontrolled field hold the same string", and because a per-shape
+     * difference in what the schema means makes the A/B unmeasurable. The literal answer is the finding, and
+     * it belongs to a shipped field: choose one and write it down.
+     */
+    if applied {
+      model.emitted = pending
+    }
+
     if field != nil {
       // Arm B: the control is the text storage, and the guard is inside it.
       field?.applyText(pending, write: applied)
@@ -1014,7 +1109,15 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
         host.markDirty()
       }
     } else if applied {
-      // Arm A: the model *is* the text storage, so a reconcile is the whole write.
+      /*
+       * Arm A: the model *is* the text storage, so a reconcile is the whole write.
+       *
+       * It also has to record the outcome, which is what the first iOS run of X4 caught: the `if !applied`
+       * branch below is the only place arm A ever wrote `lastWrite`, so every *successful* arm-A write left
+       * `lastWrite=none` in the mirror while the text changed underneath it. An outcome that is only reported
+       * for the failures is worse than no outcome — it reads as "nothing happened".
+       */
+      model.lastWrite = "applied"
       host.markDirty()
     }
     if !applied {
@@ -1032,7 +1135,18 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
     }
     var mirror = NitroSpikeTextMirror()
     SpikeTextFieldCommit.fill(model, &mirror)
-    mirror.implementation = SpikeTextFieldShapes.swiftui
+    /*
+     * The *frozen* arm, not "the field is absent so it must be arm A".
+     *
+     * `model.hostedField` is nil in two different situations: this instance really is arm A, and this instance
+     * is arm B before SwiftUI has built the `UIViewRepresentable`. Reporting `swiftui` for the second one is
+     * what made the first iOS run's P1 unreadable — an instance asked for `textfield` published
+     * `impl=swiftui selection=-1--1`, so the A/B could not tell the two apart. `impl=` is the branch; `live=0`
+     * is what says the numbers came from the model rather than from a `UITextField`.
+     */
+    mirror.implementation =
+      model.frozenImplementation ?? SpikeTextFieldShapes.swiftui
+    mirror.liveField = false
     // Unobservable on arm A, so unobserved rather than guessed: a `0` here would
     // read as "the composition closed", which is a different claim.
     mirror.composing = false
