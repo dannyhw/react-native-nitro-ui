@@ -366,14 +366,22 @@ class HybridNitroUiProgress(
      * one frame before its own measurement corrects it - D17's one-frame budget, and
      * the harness test that names it.
      *
-     * For a `fillWidth` fallback the width barely matters (the box's width replaces
-     * it) and the height is the number that has to be right (sizing.md §5). It is:
-     * on the API 35 / 420 dpi emulator this task measured on, M3's
+     * Both halves matter, for different parents (sizing.md §5). Under a finite
+     * parent the box owns the width, so the **height** is the number that has to be
+     * right: on the API 35 / 420 dpi emulator this task measured on, M3's
      * `LinearProgressIndicator` is 11 whole pixels - **4.19 dp** - and
      * `CircularProgressIndicator` is a **40 dp** square, the pair with iOS's in the
      * table in `docs/components/progress.md`. The declared 4 dp is 4.19 dp's
      * nearest whole dp, so a cold bar is one tenth of a dp off on its first frame
      * and the correction path has nothing to chase.
+     *
+     * Under a parent that gives no finite width - a bar in a horizontal
+     * `ScrollView` - there is no box width to substitute, and since F3 nothing files
+     * a measured width into a `fillWidth` entry either, so the **declared width is
+     * what draws**, on every frame and not just the first. [FALLBACK_WIDTH_DP] is
+     * therefore a decision about how long an unbounded bar looks rather than a
+     * placeholder; F3's own change is what made it so (before, such a bar drew at
+     * whichever width some other Progress had last been measured at).
      */
     private const val FALLBACK_WIDTH_DP = 320.0
     private const val FALLBACK_HEIGHT_DP = 4.0

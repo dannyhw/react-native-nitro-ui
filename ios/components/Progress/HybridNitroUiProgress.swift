@@ -250,13 +250,20 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
   /// for one frame before its own measurement corrects it - D17's one-frame
   /// budget, not a bug, and the harness test that names it.
   ///
-  /// The width of a `fillWidth` fallback barely matters (the box's width replaces
-  /// it); the height is the number that has to be right (sizing.md §5). It is: on
-  /// the iPhone 17 / iOS 27 this task measured on, a `.linear` `ProgressView` is
-  /// **4 pt** tall (`measureContent()` and the Yoga box agreed), and a `.circular`
-  /// one is a **20 pt** square - the pair, with Android's, is the table in
-  /// `docs/components/progress.md`. The 320 below is a plausible bar width, which a
-  /// `fillWidth` layout overwrites with the box's.
+  /// Both halves matter, for different parents (sizing.md §5). Under a finite
+  /// parent the box owns the width, so the **height** is the number that has to be
+  /// right: on the iPhone 17 / iOS 27 this task measured on, a `.linear`
+  /// `ProgressView` is **4 pt** tall (`measureContent()` and the Yoga box agreed),
+  /// and a `.circular` one is a **20 pt** square - the pair, with Android's, is the
+  /// table in `docs/components/progress.md`.
+  ///
+  /// Under a parent that gives no finite width - a bar in a horizontal `ScrollView` -
+  /// there is no box width to substitute, and since F3 nothing files a measured width
+  /// into a `fillWidth` entry either, so the **declared width is what draws**, on
+  /// every frame and not just the first. The 320 below is therefore a choice about
+  /// how long an unbounded bar looks, not a placeholder; F3's own change is what made
+  /// it so (before, such a bar drew at whichever width some other Progress had last
+  /// been measured at).
   private static let declaresFallback: Bool = {
     NitroUiSizing.setFallback(sizingComponentName, 320.0, 4.0, NitroUiSizingPolicy.fillWidth.rawValue)
     return true
