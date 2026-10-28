@@ -154,8 +154,8 @@ isn't applied. Don't start a new session.
   (`npm pack` file list = `etc/package-files.txt`, same contents).
 - Process speed is a priority (owner's call): schedule tooling/process work alongside product
   work, not after it, as long as the published package is unaffected.
-- Bounded iteration: keep to the round caps, give experiments a single round, and keep a
-  release's scope fixed once it is planned. Don't start open-ended loops.
+- Bounded iteration: keep to the round caps and give experiments a single round. Don't start
+  open-ended loops. Releases have no timeline or fixed scope (D31): ship merged work when it's ready.
 - Releases go through Changesets. Merging the Version Packages PR makes CI
   stage a publish, which the owner approves on npmjs.com (D27/D28). Never
   publish from a machine.
