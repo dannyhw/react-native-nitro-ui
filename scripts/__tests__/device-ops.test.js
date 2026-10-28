@@ -347,14 +347,22 @@ describe('is the app on the device (X11 re-review N5)', () => {
 
   it('keeps a device-side "not found" an answer, not a client error', () => {
     // The other side of the prefix rule, and the reason it is a list rather than "anything that
-    // looks like an error": some API levels answer an absent package from the device itself with
-    // `Error: Package 'x' is not installed`, which must remain a no-op. A loose `/error/i` test
-    // would send every fresh AVD back to four retries and a misleading line - the original N5 bug.
-    answer('pm_path', "Error: Package 'nitroui.example' is not installed\n", 1);
-    expect(ops().deviceAppInstalled(ANDROID, 'nitroui.example')).toMatchObject({
-      answered: true,
-      ok: false,
-    });
+    // looks like an error": `Error: Package 'x' not found` is the *device* answering that the app
+    // is absent, and must stay a clean no-op. Which stream carries it is not consistent across
+    // platform levels (API 35, measured above, prints nothing at all), so the rule is pinned for
+    // both placements. A parser that read any error-shaped line as "could not ask" would send
+    // every fresh AVD back through four retries with a misleading line - the original N5 bug.
+    for (const onStderr of [false, true]) {
+      answer(
+        'pm_path',
+        onStderr ? '' : "Error: Package 'nitroui.example' not found\n",
+        1,
+        onStderr ? "Error: Package 'nitroui.example' not found\n" : null
+      );
+      expect(
+        ops().deviceAppInstalled(ANDROID, 'nitroui.example')
+      ).toMatchObject({ answered: true, ok: false });
+    }
   });
 
   it('is unknown for an iOS simulator whose container lookup fails the same way', () => {
