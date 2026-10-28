@@ -1,8 +1,8 @@
 diff --git a/dist/emulator-startup.js b/dist/emulator-startup.js
-index 33621b6ae4025988e08d0618c27ccf7490341d61..25056d66e679e238be18cbaaf331ea095bd176a2 100644
+index 33621b6ae4025988e08d0618c27ccf7490341d61..67211db0963b63e147b45c95427c05471fe53fa4 100644
 --- a/dist/emulator-startup.js
 +++ b/dist/emulator-startup.js
-@@ -26,17 +26,58 @@ export const getEmulatorStartupArgs = (name, mode) => {
+@@ -26,17 +26,67 @@ export const getEmulatorStartupArgs = (name, mode) => {
          : mode === 'snapshot-reuse'
              ? ['-no-snapshot-save']
              : ['-no-snapshot-load', '-no-snapshot-save'];
@@ -24,10 +24,13 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..25056d66e679e238be18cbaaf331ea09
 +    // another task was told not to touch, and the serial the lease exported
 +    // (`emulator-5574`) is not the one that exists. When EMULATOR_PORT is set
 +    // the emulator either gets that port or fails to start - which is the
-+    // answer a lease needs. The GPU mode is `host` rather than upstream's
-+    // `swiftshader_indirect`: software rendering is most of why the Android
-+    // harness costs three times iOS. Set NITRO_UI_EMULATOR_GPU to override for
-+    // one shell (an A/B run, or a bench host pinning its baseline's mode).
++    // answer a lease needs; a port that cannot be a console port at all is a
++    // mistake in the environment, and dropping `-port` there would boot the AVD
++    // on any free serial, which is the very thing this patch prevents. The GPU
++    // mode is `host` rather than upstream's `swiftshader_indirect`: software
++    // rendering is most of why the Android harness costs three times iOS. Set
++    // NITRO_UI_EMULATOR_GPU to override for one shell (an A/B run, or a bench
++    // host pinning its baseline's mode).
 +    // Drop this patch once react-native-harness accepts a port and a GPU mode.
 +    //
 +    // nitro-ui: the block below is rendered verbatim by
@@ -35,9 +38,15 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..25056d66e679e238be18cbaaf331ea09
 +    // scripts/__tests__/emulator-launch.test.js fails if the patch and that
 +    // file disagree, or if this stops matching emulatorLaunchArgs().
 +    const nitroUiPort = process.env.EMULATOR_PORT ?? '';
-+    const nitroUiPortArgs = /^\d+$/.test(nitroUiPort) && Number(nitroUiPort) % 2 === 0 && Number(nitroUiPort) >= 5554 && Number(nitroUiPort) <= 5682
-+        ? ['-port', nitroUiPort]
-+        : [];
++    let nitroUiPortArgs = [];
++    if (nitroUiPort !== '') {
++        const nitroUiPortNumber = Number(nitroUiPort);
++        const nitroUiPortOk = /^\d+$/.test(nitroUiPort) && nitroUiPortNumber % 2 === 0 && nitroUiPortNumber >= 5554 && nitroUiPortNumber <= 5682;
++        if (!nitroUiPortOk) {
++            throw new Error(`EMULATOR_PORT="${nitroUiPort}" is not a console port the emulator can take (even numbers 5554-5682)`);
++        }
++        nitroUiPortArgs = ['-port', nitroUiPort];
++    }
 +    const nitroUiGpu = (process.env.NITRO_UI_EMULATOR_GPU ?? '').trim() || 'host';
 +    return [`@${name}`, ...nitroUiPortArgs, ...modeArgs, '-no-window', '-gpu', nitroUiGpu, '-noaudio', '-no-boot-anim', '-no-metrics'];
  };
@@ -71,7 +80,7 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..25056d66e679e238be18cbaaf331ea09
  /**
   * Runs `emulator -accel-check` and logs a non-fatal warning when hardware
   * acceleration (KVM/HVF) appears unavailable, in which case the emulator
-@@ -46,6 +87,7 @@ export const isAccelerationUsable = (accelCheckOutput) => {
+@@ -46,6 +96,7 @@ export const isAccelerationUsable = (accelCheckOutput) => {
   */
  export const warnIfEmulatorAccelerationUnavailable = async () => {
      let combinedOutput;
@@ -79,7 +88,7 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..25056d66e679e238be18cbaaf331ea09
      try {
          const emulatorBinaryPath = getEmulatorBinaryPath();
          const { stdout, stderr } = await spawn(emulatorBinaryPath, [
-@@ -59,6 +101,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
+@@ -59,6 +110,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
              // `-accel-check` reports that acceleration is unavailable, so treat
              // its output as a normal (non-fatal) result rather than swallowing it.
              combinedOutput = `${error.stdout}\n${error.stderr}`;
@@ -87,7 +96,7 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..25056d66e679e238be18cbaaf331ea09
          }
          else {
              // Failed to even run the check (e.g. binary missing). This must never
-@@ -67,7 +110,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
+@@ -67,7 +119,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
              return;
          }
      }
