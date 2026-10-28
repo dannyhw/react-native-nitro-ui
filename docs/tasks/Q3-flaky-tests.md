@@ -205,3 +205,10 @@ not the same information as a green that didn't.
 None blocking. One judgement call: patch 2(ii) turns a misplaced blame into a *refusal* when a window is
 genuinely stuck — right for a leak gate, but a real Android leak would then surface as `liveDateBaseline`
 failing rather than as this gate's own assertion.
+
+## Orchestrator note (2026-10-28)
+
+On the Switch, the record *does* include a second-tap drop. X3's merge-gate run on 2026-10-27 failed at
+`RealInputTests.swift:155` ("a second real tap should flip it back"). That log was outside the
+repo and not visible to this round. Either tap can drop. The proposed `tapUntilValue` applies to
+both taps, so the patch stands. These patches are task F1's starting point (`FOLLOWUPS.md` header).
