@@ -33,6 +33,17 @@ import { codeTreeDigest, contentHash, isCodeFile } from './app-stamp-core.mjs';
 export const LEDGER_DIR = '.gates';
 
 /**
+ * The name of the gate **log store** inside a clone's git common directory.
+ *
+ * Chosen over moving the ledger too: `.gates/<branch>.jsonl` is read by path in
+ * reuse and export code, it is small, and it is re-created by the next run in a
+ * fresh checkout anyway - whereas the logs are the evidence nothing re-creates.
+ * So the brief's "keep `.gates/<branch>.jsonl` where it is" is what this does, and
+ * only the logs move (X12 item 1 says to keep it unless moving is simpler).
+ */
+export const LOG_STORE_BASENAME = 'nitro-ui-gates';
+
+/**
  * The shape of the JSON lines this version writes (see `ledgerLineFromRun`).
  *
  * v2 adds three fields, all of them from the X2 round-1 review:
@@ -52,6 +63,19 @@ export const LEDGER_DIR = '.gates';
  * actionable number - the thing a reader wants is which step got slower. It is a
  * record, not a rule: no decision in this file reads `stepTimings`, so a v2 line and
  * a v3 line mean the same thing to `need` and `table`.
+ *
+ * v5 (X12) changes no rule and adds three things:
+ *
+ *   - `logPath` is now relative to the clone's **gate log store** (the git common
+ *     directory) rather than to the worktree, because a run's evidence must outlive
+ *     `git worktree remove`. Old `.gates/logs/...` paths are still read (see
+ *     `ledgerLogCandidates`), and a worktree's own `logs/` directory is migrated into
+ *     the store on the next run.
+ *   - `load.end`: the last sample, so an excerpt can show the load a run started and
+ *     finished under. `median`/`max` are what judge a run; `start`/`end` are context.
+ *   - `failureLogPath`, written by `export` on a **failed** line only: the committed
+ *     excerpt beside `gates.jsonl` that carries the failing test names, the assertion
+ *     messages and the tail of the log.
  *
  * v4 adds `fullTree` and `worktreeClean`, and they are the only fields reuse reads.
  *
@@ -74,7 +98,7 @@ export const LEDGER_DIR = '.gates';
  * anything written before v4 - cannot be reused, because there is nothing exact to
  * compare: falling back to `tree` would be the old unsound rule under a new name.
  */
-export const LEDGER_VERSION = 4;
+export const LEDGER_VERSION = 5;
 
 /** The platforms a device gate can be keyed to. */
 export const PLATFORMS = ['ios', 'android'];
@@ -380,6 +404,7 @@ export function ledgerLineFromRun({
   summaries = null,
   stepTimings = null,
   logPath = null,
+  failureLogPath = null,
   startedAt,
   exitCode = null,
   signal = null,
@@ -406,6 +431,10 @@ export function ledgerLineFromRun({
     summaries,
     stepTimings,
     logPath,
+    // Set by `gate.mjs export`, not by a run: the committed excerpt beside
+    // `gates.jsonl` for this failed line. Carried on the line so a red row in the
+    // ledger points at its own evidence (X12 item 2).
+    failureLogPath,
     exitCode,
     signal,
   };
@@ -1340,8 +1369,14 @@ export function renderGateTable({
  * All three are rounded: `os.loadavg()` returns a float, and an unrounded `start`
  * was writing `"start":13.54443359375` into the committed ledger (N5).
  *
+ * v5 adds `end` (X12). It is not a fourth judgement - `median` and `max` are what
+ * make a row trustworthy - but a failure excerpt wants "this run started under a
+ * load of 3 and finished under 40", and that is two of the three numbers a reader
+ * of a red harness run asks for. It is the last sample rather than a fresh read so
+ * it is the same measurement the median was computed from.
+ *
  * @param {{start: number | null, samples: number[]}} options
- * @returns {{start: number | null, median: number | null, max: number | null, count: number}}
+ * @returns {{start: number | null, median: number | null, max: number | null, count: number, end: number | null}}
  */
 export function summarizeLoad({ start = null, samples = [] }) {
   const round = (value) =>
@@ -1350,7 +1385,13 @@ export function summarizeLoad({ start = null, samples = [] }) {
       : null;
   const values = samples.filter((value) => Number.isFinite(value));
   if (values.length === 0) {
-    return { start: round(start), median: null, max: null, count: 0 };
+    return {
+      start: round(start),
+      median: null,
+      max: null,
+      count: 0,
+      end: null,
+    };
   }
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
@@ -1363,6 +1404,7 @@ export function summarizeLoad({ start = null, samples = [] }) {
     median: round(median),
     max: round(Math.max(...values)),
     count: values.length,
+    end: round(values[values.length - 1]),
   };
 }
 
@@ -1446,6 +1488,499 @@ export function ledgerFileName(branch) {
 /** @returns {string} repo-relative, so it can be printed and gitignored */
 export function ledgerRelativePath(branch) {
   return `${LEDGER_DIR}/${ledgerFileName(branch)}`;
+}
+
+/* --------------------------- gate log store (X12) --------------------------- */
+
+/**
+ * The directory of one clone's gate logs, beside the git directory the worktrees
+ * of this clone share.
+ *
+ * `git rev-parse --git-common-dir` is the answer to "where does evidence go so
+ * that removing a worktree cannot delete it": a linked worktree's own `.git`
+ * directory is deleted *with* the checkout, and the common directory is not. That
+ * is precisely the X12 bug — Q3 could not read the logs of the failing X3 runs
+ * because the X3 worktree was already gone.
+ *
+ * The store lives under the common directory rather than in `~/.nitro-ui`, so it
+ * is scoped to the clone (two checkouts of two forks do not mix logs) and a
+ * developer who deletes the clone deletes their own logs with it, which is what
+ * they expect.
+ *
+ * @param {string} commonDir the output of `git rev-parse --git-common-dir`
+ * @returns {string}
+ */
+export function gateLogStoreDir(commonDir) {
+  return `${String(commonDir).replace(/\/+$/, '')}/${LOG_STORE_BASENAME}`;
+}
+
+/**
+ * Where one run's log goes, relative to whatever root the caller prints it from.
+ *
+ * `<branch>/<gate>-<started-at>.log`: keyed by branch because that is the question
+ * a reader asks ("the logs of that X3 run"), and it cannot collide with another
+ * branch's run of the same name at the same instant. `ledgerFileName` is reused so
+ * the same guard against a branch string that is not a git ref applies here too —
+ * a `../` in a branch name would otherwise write outside the store.
+ *
+ * @param {string} branch
+ * @param {string} logName e.g. `harness+android-2026-10-28T12-00-00.000Z.log`
+ * @returns {string}
+ */
+export function logRelativePath(branch, logName) {
+  return `${ledgerFileName(branch).replace(/\.jsonl$/, '')}/${String(logName).replace(/^\/+/, '')}`;
+}
+
+/**
+ * The name of one run's log file.
+ *
+ * Same shape as before X12 (`<gate>-<iso-time>.log`, `:` folded to `-`) so a log
+ * path from an old ledger line looks like a log path, and so a reader who has used
+ * this tool for a week recognises the file at a glance.
+ *
+ * @param {string} gate
+ * @param {number} startedAt
+ * @returns {string}
+ */
+export function logNameFor(gate, startedAt) {
+  return `${String(gate).replaceAll(/[^\w.-]+/g, '+')}-${new Date(startedAt).toISOString().replaceAll(':', '-')}.log`;
+}
+
+/**
+ * Where a ledger line's log actually is, oldest-format first.
+ *
+ * Three shapes have to resolve (the brief's "old relative paths still resolve, or
+ * are migrated"):
+ *
+ *   1. an absolute path — a line whose store was renamed or moved, and a path
+ *      `export` or a test wrote deliberately;
+ *   2. `.gates/logs/<name>` — everything written before X12, in a worktree that is
+ *      still on disk, or in its leftover `.git/worktrees/<n>/` directory after
+ *      removal;
+ *   3. `<branch>/<name>` — the current format, relative to the store.
+ *
+ * Resolution order is *worktree first, store second*. A `.gates/logs/` file that
+ * still exists was written by the run that wrote the line, in this checkout: it is
+ * the original, and the copy in the store is at best the same bytes. Preferring the
+ * store would mean the copy silently wins over the original, which is the wrong
+ * order for evidence.
+ *
+ * @param {object | null | undefined} entry a ledger line
+ * @param {{storeDir?: string | null, repoRoot?: string | null, worktreeGitDir?: string | null, existsSync?: (file: string) => boolean}} options
+ * @returns {{file: string | null, candidates: string[]}} the first existing
+ *   candidate, and every path that was asked — so a caller can say *where* it
+ *   looked when the answer is "nowhere".
+ */
+export function ledgerLogCandidates(entry, options) {
+  const logPath = typeof entry?.logPath === 'string' ? entry.logPath : null;
+  const candidates = [];
+  if (logPath != null && logPath !== '') {
+    if (logPath.startsWith('/')) candidates.push(logPath);
+    for (const root of [
+      options.repoRoot ?? null,
+      options.worktreeGitDir ?? null,
+      options.storeDir ?? null,
+    ]) {
+      if (root == null) continue;
+      candidates.push(`${root.replace(/\/+$/, '')}/${logPath}`);
+    }
+  }
+  const exists = options.existsSync ?? ((file) => file != null && false);
+  return {
+    candidates,
+    file: candidates.find((candidate) => exists(candidate)) ?? null,
+  };
+}
+
+/**
+ * How many days a gate log is kept, and how much of it.
+ *
+ * The rule, stated because the brief asks for one and because a retention rule
+ * nobody can read is a rule that gets bypassed:
+ *
+ *   - **35 days by mtime** — five working weeks of branches, which is longer than
+ *     any task in this repo has lived, and short enough that a machine does not
+ *     accumulate a year of harness transcripts;
+ *   - **64 MiB total**, oldest-first, and only *after* the age rule — so a machine
+ *     that ran 200 gates a day for a week loses the week's tail, not a month's worth
+ *     of everything;
+ *   - a log whose `startedAt` is inside `protectNewerThan` is never deleted: a run
+ *     in progress is writing it, and a `wait` that loses its log mid-run is a worse
+ *     bug than an over-full directory.
+ *
+ * Failure logs get no exemption: an export copies what matters into `docs/tasks/`
+ * first, which is the point of item 2.
+ */
+export const LOG_RETENTION_DAYS = 35;
+export const LOG_RETENTION_MAX_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Which stored logs a retention sweep deletes.
+ *
+ * Age and size, in that order, with a floor for "just started writing": a file
+ * whose mtime is inside `protectNewerThan` is not a candidate at all, because the
+ * run that made it may still be appending to it.
+ *
+ * @param {Array<{file: string, bytes: number, mtimeMs: number, startedAt?: number | null}>} logs
+ *   every stored log, with the store's own bookkeeping merged in where available
+ * @param {object} [options]
+ * @param {number} [options.now]
+ * @param {number} [options.days]
+ * @param {number} [options.maxBytes]
+ * @param {number} [options.protectNewerThan] ms; anything touched more recently
+ *   than this survives both rules
+ * @returns {{victims: Array<{file: string, reason: string}>, keptBytes: number, kept: number}}
+ */
+export function planLogRetention(
+  logs,
+  {
+    now = Date.now(),
+    days = LOG_RETENTION_DAYS,
+    maxBytes = LOG_RETENTION_MAX_BYTES,
+    protectNewerThan = LOG_RETENTION_MIN_AGE_MS,
+  } = {}
+) {
+  const ageMs = days * 86_400_000;
+  const byAge = (logs ?? []).filter((log) => {
+    const touchedAt = Number(log?.mtimeMs ?? Number.NaN);
+    if (!Number.isFinite(touchedAt)) return false;
+    return now - touchedAt > ageMs && now - touchedAt > protectNewerThan;
+  });
+  const victims = new Map(
+    [...byAge]
+      .sort((a, b) => Number(a.mtimeMs) - Number(b.mtimeMs))
+      .map((log) => [log.file, { file: log.file, reason: 'age' }])
+  );
+  // Size is measured over what survives the age rule: deleting stale files first is
+  // what makes the cap a backstop rather than a second way to lose a young log.
+  const survivors = (logs ?? []).filter((log) => !victims.has(log.file));
+  let total = survivors.reduce((sum, log) => sum + Number(log?.bytes ?? 0), 0);
+  if (total > maxBytes) {
+    for (const log of [...survivors].sort(
+      (a, b) => Number(a.mtimeMs) - Number(b.mtimeMs)
+    )) {
+      if (total <= maxBytes) break;
+      if (now - Number(log.mtimeMs) <= protectNewerThan) continue;
+      victims.set(log.file, { file: log.file, reason: 'size' });
+      total -= Number(log.bytes ?? 0);
+    }
+  }
+  const kept = (logs ?? []).filter((log) => !victims.has(log.file));
+  return {
+    victims: [...victims.values()],
+    kept: kept.length,
+    keptBytes: kept.reduce((sum, log) => sum + Number(log?.bytes ?? 0), 0),
+  };
+}
+
+/** Never sweep a log touched in the last two hours, whatever the other rules say. */
+export const LOG_RETENTION_MIN_AGE_MS = 2 * 60 * 60_000;
+
+/* ------------------------ failure excerpts (X12 item 2) --------------------- */
+
+/** How many trailing lines an excerpt carries. The brief's "~150". */
+export const EXCERPT_TAIL_LINES = 150;
+
+/** How many failure blocks an excerpt carries before it says "and N more". */
+export const EXCERPT_MAX_FAILURES = 20;
+
+/** Cap on the excerpt as a whole, so one pathological log cannot bloat a commit. */
+export const EXCERPT_MAX_BYTES = 128 * 1024;
+
+/**
+ * Which key names count as credentials. Matched against the whole key, so
+ * `sort_key`, `monkey` and `keyframes` are not credentials.
+ */
+const CREDENTIAL_KEY =
+  /^(?:[\w.-]*(?:token|secret|password|passwd|passfile|credential|authorization|bearer|cookie|dsn|npm[-_.]?config)[\w.-]*|[\w.-]*(?:api|access|secret|private|auth|session|encryption|signing|deploy)[-_.]?key[\w.-]*|[\w.-]*session[-_.]?(?:id|key|token)[\w.-]*|auth|auth[-_.]?(?:token|key|header)|x[-_.]?sc[-_.]?auth|aws[-_.]?access[-_.]?key[-_.]?(?:id|secret))$/i;
+
+/** Values that are credentials by *shape* alone, wherever they appear. */
+const CREDENTIAL_SHAPE =
+  /\b(gh[pousr]_[A-Za-z0-9]{20,}|npm_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/g;
+
+/**
+ * Scrubs the secret shapes from a log before it is committed.
+ *
+ * What is scrubbed, stated because the brief asks what the rule is and because a
+ * committed file is a *published* one (D25):
+ *
+ *   - a PEM private-key block, whole;
+ *   - a URL's userinfo (`https://user:***@host/`);
+ *   - the value of any assignment whose key looks like a credential —
+ *     token/secret/password/passwd/passfile/credential/authorization/bearer/cookie/
+ *     dsn/`NPM_CONFIG_*`, or `<something>_key` where the something is api/access/
+ *     secret/private/auth/session/encryption/signing/deploy, plus `auth`,
+ *     `SESSION_ID` and `X_SC_AUTH` — in any of `KEY=value`, `"KEY": "value"`,
+ *     `KEY: value`, `--key value` or `<token>value</token>`;
+ *   - a bare credential *shape*: `ghp_…`, `npm_…`, `github_pat_…`, a Slack
+ *     `xox…-…`, an AWS access-key id, a JWT.
+ *
+ * Two deliberate biases. It scrubs by *shape*, not by entropy: guessing at
+ * "random-looking strings" would shred stack traces and still miss a short
+ * password. And it errs toward scrubbing — `--monkey-key value` loses its value —
+ * because the cost of hiding a build flag's argument is a reader's mild confusion,
+ * and the cost of missing a token is a rotated credential.
+ *
+ * Not scrubbed: absolute paths, usernames, hostnames. `ORCHESTRATOR.md` keeps those
+ * out of the repo by rule rather than by regex, and a scrubber that mangled a
+ * simulator path would make an excerpt unusable. An excerpt's own header says it is
+ * a committed file worth a look before it is pushed.
+ *
+ * @param {string} text
+ * @returns {{text: string, replaced: number}}
+ */
+export function scrubSecrets(text) {
+  let replaced = 0;
+  const scrub = (value) => {
+    replaced += 1;
+    return value;
+  };
+  let out = String(text ?? '');
+
+  // A PEM block first and wholesale: its body is base64, so the assignment rules
+  // would match inside it and leave a plausible-looking fragment behind.
+  out = out.replace(
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+    () => scrub('[scrubbed: private key]')
+  );
+
+  // URL userinfo, including a percent-encoded password.
+  out = out.replace(
+    /(\b[a-z][a-z0-9+.-]*:\/\/)([^\s/@]+:)[^\s@]+(@)/gi,
+    (_all, scheme, user, at) => scrub(`${scheme}${user}[scrubbed]${at}`)
+  );
+
+  // `KEY = value` in shell, JSON, YAML, PHP-array and plain-log spelling. The value
+  // is quoted or bare and only the value is replaced, so `--token` in a printed
+  // command line still shows which flag was involved.
+  const quoted = String.raw`(?:"([^"\n]*)"|'([^'\n]*)')`;
+  const bare = String.raw`([^\s"',;&<>|\\]+)`;
+  out = out.replace(
+    new RegExp(
+      String.raw`(\b[\w.-]{3,})(["']?)(\s*[:=]\s*)\s*(?:${quoted}|${bare})`,
+      'g'
+    ),
+    (all, key, quoteAfterKey, sep, dq, sq, bareValue) => {
+      if (!CREDENTIAL_KEY.test(key)) return all;
+      const value = dq ?? sq ?? bareValue;
+      if (value == null || value === '') return all;
+      const quote = dq != null ? '"' : sq != null ? "'" : '';
+      return scrub(`${key}${quoteAfterKey}${sep}${quote}[scrubbed]${quote}`);
+    }
+  );
+
+  // `--token value`, `--token=value` (the assignment rule above takes the second
+  // form, so this only has to handle the spaced one).
+  out = out.replace(
+    /(--[\w-]*(?:token|secret|password|passwd|key|auth|cookie|credential)[\w-]*)(\s+)([^\s]{4,})/gi,
+    (all, flag, sep, value) =>
+      CREDENTIAL_KEY.test(flag.replace(/^-+/, '')) ||
+      /(?:token|secret|password|passwd|api[-_]?key|auth)/i.test(flag)
+        ? scrub(`${flag}${sep}[scrubbed]`)
+        : all
+  );
+
+  // `<token>value</token>` / `<auth>value</auth>` (`.npmrc` writes the latter).
+  out = out.replace(
+    /<([A-Za-z][\w.-]*)>([^<\n]*)<\/\1>/g,
+    (all, name, value) =>
+      CREDENTIAL_KEY.test(name) && value.trim() !== ''
+        ? scrub(`<${name}>[scrubbed]</${name}>`)
+        : all
+  );
+
+  // Bare shapes.
+  out = out.replace(CREDENTIAL_SHAPE, () => scrub('[scrubbed: credential]'));
+
+  return { text: out, replaced };
+}
+
+/**
+ * The failing test names and assertion messages in a log, in the shapes the gates
+ * actually print (jest, and the real-input suites' own `✗`/`FAIL` lines).
+ *
+ * Capped, because a run where every suite failed has a log whose *whole* content is
+ * failures, and the point of an excerpt is to be shorter than the log.
+ *
+ * @param {string} text
+ * @param {number} [max]
+ * @returns {string[]}
+ */
+export function failureLinesFrom(text, max = EXCERPT_MAX_FAILURES) {
+  const lines = String(text ?? '')
+    .split('\n')
+    .map((line) => line.replace(/\r$/, ''));
+  const found = [];
+  const push = (line) => {
+    const trimmed = line.trim();
+    if (trimmed !== '' && !found.includes(trimmed)) found.push(trimmed);
+  };
+  for (const line of lines) {
+    if (found.length >= max) break;
+    // The bullets and headers the gates themselves print: jest's `FAIL <file>` and
+    // `● Suite › test`, the harness/real-input `✕`/`✗` check lines, and the
+    // assertion noise that follows them. A passing test's name only ever appears
+    // beside `✓`/`PASS`, so it cannot match here.
+    if (/^\s*(FAIL(ED)?|●|✕|✗|not ok)\s+\S/.test(line)) {
+      push(line);
+      continue;
+    }
+    if (
+      /^\s*(Error|AssertionError|Expected|Received|expect\(|Unable to |Timed out)/i.test(
+        line
+      )
+    ) {
+      push(line);
+    }
+  }
+  return found;
+}
+
+/**
+ * The failure excerpt `gate.mjs export` commits beside the ledger for one red run.
+ *
+ * Contents, in the order a reader wants them: what ran and how it ended, the
+ * scrubbed device/run context, the failing test names and assertion messages, the
+ * last ~150 lines, and the load at the start and end. The full log stays on the
+ * machine; this is the part that has to survive the worktree, and the part that is
+ * safe to commit.
+ *
+ * @param {object} options
+ * @param {object} options.entry the ledger line (a failed one)
+ * @param {string} options.logText the log's text, unscrubbed
+ * @param {string} [options.logLocation] where the full log is now, for the header
+ * @param {number} [options.tailLines]
+ * @returns {{content: string, scrubbed: number, truncated: boolean}}
+ */
+export function renderFailureExcerpt({
+  entry,
+  logText,
+  logLocation = null,
+  tailLines = EXCERPT_TAIL_LINES,
+}) {
+  const { text: scrubbedText, replaced } = scrubSecrets(logText ?? '');
+  const body = scrubbedText;
+  const lines = body.split('\n');
+  const tail = lines.slice(-Math.max(0, tailLines));
+  const truncated = lines.length > tail.length;
+  const load = entry?.load ?? null;
+  const header = [
+    `# Failure excerpt — ${String(entry?.gate ?? '?')}`,
+    '',
+    `- Ran: ${String(entry?.ts ?? '?')} on code tree \`${String(entry?.tree ?? '?').slice(0, 12)}\` at HEAD \`${String(entry?.head ?? '?').slice(0, 7)}\` (branch \`${String(entry?.branch ?? '?')}\`)`,
+    `- Command: \`${String(entry?.command ?? '?')}\``,
+    `- Result: ${String(entry?.result ?? '?')}, exit ${String(entry?.exitCode ?? 'null')}${entry?.signal == null ? '' : ` signal ${String(entry.signal)}`}, ${String(entry?.durationMs ?? '?')} ms`,
+    `- Load: start ${formatLoadValue(load?.start)}, end ${formatLoadValue(load?.end)}, median ${formatLoadValue(load?.median)}, max ${formatLoadValue(load?.max)}`,
+    `- Device: ${describeDeviceForExcerpt(entry)}`,
+    // The line that makes the difference between "we lost the log" (Q3) and
+    // "we know where to look": the excerpt is a copy, the store has the original.
+    `- Full log: \`${String(entry?.logPath ?? 'not recorded')}\`${logLocation == null ? '' : ` (${String(logLocation)})`}`,
+    `- Scrubbed: ${String(replaced)} credential-looking value(s) were replaced before this file was written. Device identifiers appear only when the run recorded them; this file is committed, so read it before pushing.`,
+    '',
+    '## Failing tests and assertion messages',
+    '',
+  ];
+  const failures = failureLinesFrom(body);
+  const failureSection =
+    failures.length === 0
+      ? ['_(none matched — the log had no jest/real-input failure lines)_']
+      : failures.map((line) => `- \`${escapeMarkdown(line)}\``);
+  const body2 = [
+    ...header,
+    ...failureSection,
+    '',
+    `## Last ${String(tail.length)} log line(s)${truncated ? ` (of ${String(lines.length)} — the rest is in the full log above)` : ''}`,
+    '',
+    '```',
+    ...tail,
+    '```',
+    '',
+  ];
+  return {
+    content: clampToBytes(body2.join('\n')),
+    scrubbed: replaced,
+    truncated,
+  };
+}
+
+/**
+ * Keeps the excerpt bounded. The header is prose and the tail is the evidence, so
+ * when it does not fit this keeps the header, drops from the *front* of the tail,
+ * and says so — a reader looking at a truncated excerpt has to be able to tell.
+ */
+function clampToBytes(text, max = EXCERPT_MAX_BYTES) {
+  if (Buffer.byteLength(text, 'utf8') <= max) return text;
+  const marker = '\n… excerpt truncated: the rest is in the full log …\n';
+  const budget = Math.max(0, max - Buffer.byteLength(marker, 'utf8'));
+  const bytes = Buffer.from(text, 'utf8');
+  // Keep the first 4 KiB (the header and the failure list), then the newest bytes.
+  const headBytes = bytes.subarray(0, Math.min(4096, bytes.length));
+  const tailBudget = Math.max(0, budget - headBytes.length);
+  const tailBytes = bytes.subarray(
+    Math.max(headBytes.length, bytes.length - tailBudget)
+  );
+  return `${headBytes.toString('utf8')}${marker}${tailBytes.toString('utf8')}`;
+}
+
+function escapeMarkdown(text) {
+  return String(text).replaceAll('`', "'");
+}
+
+function formatLoadValue(value) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toFixed(2)
+    : '?';
+}
+
+/**
+ * The device a failed run had, in the form safe to commit.
+ *
+ * Identifiers only when the ledger recorded them — the ledger records the lease id
+ * and the serial (X1), which are machine-local strings. They are already in the
+ * committed `gates.jsonl` lines, so repeating them in the excerpt adds no exposure,
+ * but a reader should see that they came from the line rather than from this
+ * function inventing them.
+ */
+function describeDeviceForExcerpt(entry) {
+  const parts = [];
+  if (entry?.platform != null) parts.push(String(entry.platform));
+  if (entry?.device != null) parts.push(`device \`${String(entry.device)}\``);
+  if (entry?.lease != null) parts.push(`lease \`${String(entry.lease)}\``);
+  return parts.length === 0
+    ? 'none recorded (not a device gate)'
+    : parts.join(' / ');
+}
+
+/**
+ * A short id for one ledger line, used as the excerpt's file name.
+ *
+ * Timestamp + gate, sanitised the same way log names are, so the excerpt for a run
+ * is recognisable from `gates.jsonl` without reading either file. Not the log path:
+ * slashes in a branch-qualified log path would turn a file name into a directory.
+ */
+export function failureExcerptName(entry) {
+  const ts = String(entry?.ts ?? 'unknown')
+    .replaceAll(':', '-')
+    .replace(/\.\d+Z$/, 'Z');
+  return `${ts}--${String(entry?.gate ?? 'gate').replaceAll(/[^\w.-]+/g, '+')}.log`;
+}
+
+/**
+ * Does this ledger line describe a failed run that owes an excerpt?
+ *
+ * Only `result: 'fail'`, and only a line that actually has a log to excerpt: a
+ * corrupt line, or a pass, gets nothing — the brief's "never copies a passing run's
+ * log" — and a fail with no log has no evidence to attach, which the export says
+ * out loud rather than writing an empty file.
+ */
+export function isFailedRunWithLog(entry) {
+  return (
+    entry != null &&
+    entry.corrupt !== true &&
+    entry.result === 'fail' &&
+    typeof entry.logPath === 'string' &&
+    entry.logPath !== ''
+  );
 }
 
 /**

@@ -13,6 +13,7 @@
  *   node scripts/gate.mjs need --for merge
  *   node scripts/gate.mjs table
  *   node scripts/gate.mjs export --task X2
+ *   node scripts/gate.mjs logs [--branch <b>] [--failed] [--all]
  *
  * Every run appends one JSON line to `.gates/<branch>.jsonl` (gitignored) keyed
  * to the **code tree**, not to HEAD - the digest `app.stamp` already uses
@@ -20,6 +21,14 @@
  * what removes the re-runs: a docs commit leaves the digest alone, so a green
  * gate is still green, and the process review's "re-ran on the final tree" pass
  * (11 reports) becomes a lookup. See `scripts/gate-core.mjs` for the rules.
+ *
+ * A run's **log** does not live next to the ledger: it goes in the clone's gate
+ * log store - `<git-common-dir>/nitro-ui-gates/<branch>/` - which every worktree
+ * of this clone shares and `git worktree remove` never deletes (X12). `.gates/`
+ * goes with the checkout, and Q3 could not read the failing runs of a merged
+ * branch for exactly that reason. `gate.mjs logs` lists the store; the ledger's
+ * `logPath` is relative to it, and old `.gates/logs/...` paths still resolve (and
+ * are copied in on the next run). The store is kept to 35 days and 64 MiB.
  *
  * Each line also carries `trees: {ios, android}` - that same digest restricted to
  * the files belonging to each platform. At `review` a device gate is accepted on
@@ -61,17 +70,27 @@ import {
   decideWait,
   deviceFromEnv,
   explainNeedRow,
+  failureExcerptName,
   findReusableCheck,
+  gateLogStoreDir,
+  isFailedRunWithLog,
   lastLogLine,
   ledgerLineFromRun,
+  ledgerLogCandidates,
   ledgerRelativePath,
+  logNameFor,
+  logRelativePath,
+  LOG_RETENTION_DAYS,
+  LOG_RETENTION_MAX_BYTES,
   parseLedger,
   parseTestCounts,
   parseTestSummaries,
   pidMayBeRunning,
+  planLogRetention,
   platformTreesFromEntries,
   platformsOwningFile,
   platformsTouchedByPaths,
+  renderFailureExcerpt,
   renderGateTable,
   renderStepTimings,
   resolveGate,
@@ -91,6 +110,7 @@ const USAGE =
   '       node scripts/gate.mjs need --for review|merge [--base <ref>] [--no-reuse]\n' +
   '       node scripts/gate.mjs table [--for review|merge] [--full] [--no-reuse]\n' +
   '       node scripts/gate.mjs export --task <ID> [--out <file>]\n' +
+  '       node scripts/gate.mjs logs [--branch <b>] [--failed] [--all] [--prune]\n' +
   '\n' +
   'gates: check | harness:<ios|android>[:suite] | real-input:<ios|android> |\n' +
   '       smoke:<pack|expo|rn-cli> | bench\n' +
@@ -114,7 +134,17 @@ const USAGE =
   '        merged here - the same tree hash means a run here would read the same\n' +
   '        files. Docs included, so a merge that changes anything re-owns the run.\n' +
   '        `check` only: a device gate is evidence about a binary. `--no-reuse` asks\n' +
-  '        the strict question instead)\n';
+  '        the strict question instead)\n' +
+  '\n' +
+  '       (`export --task <ID>` writes docs/tasks/<ID>/gates.jsonl and, for every\n' +
+  '        FAILED run, a scrubbed excerpt in docs/tasks/<ID>/failures/ - the failing\n' +
+  '        test names, the assertion messages, the last 150 lines and the load at\n' +
+  '        both ends. Passing runs get no file)\n' +
+  '\n' +
+  "       (`logs` lists this clone's stored gate logs - they live in the git common\n" +
+  '        directory, so removing a worktree cannot lose them; --failed limits the\n' +
+  '        list to runs the ledger says failed, --all shows every branch, --prune\n' +
+  '        applies the 35-day / 64-MiB retention without listing)\n';
 
 /**
  * How often a running gate samples the load average. R4's lesson is that one
@@ -157,6 +187,277 @@ function currentBranch() {
 
 function ledgerFile(branch) {
   return path.join(repoRoot, ledgerRelativePath(branch));
+}
+
+/* ------------------------- the clone's gate log store (X12) ------------------ */
+
+/**
+ * The directory that holds one run's log, and why it is not in the worktree.
+ *
+ * `git rev-parse --git-common-dir` is the shared half of a clone: every linked
+ * worktree points at the same one, and `git worktree remove` deletes the worktree's
+ * own `.git` file and directory but never this. That is the whole of X12 - logs
+ * written under `.gates/` in a worktree died with the worktree, so Q3 could not
+ * read the failing runs of the branch it was diagnosing.
+ *
+ * Layout: `<common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`, with a
+ * pre-X12 log migrated to `<common-dir>/nitro-ui-gates/.gates/logs/...` so an old
+ * ledger line's relative path resolves unchanged in the new home too.
+ *
+ * Falls back to the worktree's own `.gates/` when git cannot be asked (no git
+ * binary, a sandbox): losing the move is better than a gate that cannot run, and
+ * the fallback keeps the paths under a gitignored directory.
+ *
+ * `NITRO_UI_GATE_LOG_STORE` overrides the location, which is how a test aims the
+ * store at a scratch directory instead of a real clone's common dir. Production
+ * never sets it.
+ */
+function store(env = process.env) {
+  if (store.cached == null) {
+    const fromEnv = env.NITRO_UI_GATE_LOG_STORE;
+    const common =
+      fromEnv != null && fromEnv !== ''
+        ? path.resolve(fromEnv)
+        : git(['rev-parse', '--git-common-dir'], null);
+    const commonDir =
+      common == null || common === ''
+        ? null
+        : path.resolve(repoRoot, String(common).trim());
+    store.cached = {
+      dir:
+        commonDir == null
+          ? path.join(repoRoot, LEDGER_DIR, 'logs')
+          : gateLogStoreDir(commonDir),
+      // Whether that is a real shared store or the worktree fallback: the
+      // difference decides whether the migration below runs at all.
+      shared: commonDir != null,
+      commonDir,
+      // This worktree's own git directory, kept as a last-resort place a log could
+      // be (see `ledgerLogCandidates`).
+      worktreeGitDir:
+        git(['rev-parse', '--absolute-git-dir'], null)?.trim() ?? null,
+    };
+  }
+  return store.cached;
+}
+
+/** Where one run's log, its background record and its step timings live. */
+function storeLogsDir() {
+  return store().dir;
+}
+
+/**
+ * Where a run's log goes, relative to the store, and its absolute path.
+ *
+ * `<branch>/<gate>-<started-at>.log`. Branch-keyed because that is the question a
+ * reader arrives with ("the logs of that X3 run"), and because a flat directory of
+ * five thousand harness logs is unreadable once `logs` has to page through it.
+ */
+function logPathsFor(branch, gate, startedAt) {
+  const relative = logRelativePath(branch, logNameFor(gate, startedAt));
+  return {
+    logPath: relative,
+    absolute: path.join(storeLogsDir(), relative),
+  };
+}
+
+/**
+ * Every path a ledger line's log could be at, first existing first. Order and the
+ * reasoning behind it are in `ledgerLogCandidates`.
+ */
+function resolveLedgerLog(entry) {
+  return ledgerLogCandidates(entry, {
+    storeDir: storeLogsDir(),
+    repoRoot,
+    worktreeGitDir: store().worktreeGitDir,
+    existsSync: (file) => {
+      try {
+        return fs.statSync(file).isFile();
+      } catch {
+        return false;
+      }
+    },
+  });
+}
+
+/**
+ * Copies a worktree's pre-X12 `.gates/logs/` into the shared store, once.
+ *
+ * Migration rather than only fallback-resolution, and the brief lets me choose and
+ * say which: *copy*, not move. A run in flight may still hold one of these files
+ * open (a `--background` gate started by an older `gate.mjs`), and evidence that
+ * vanishes from under a reader is the failure this whole task is about. The copy is
+ * idempotent - an existing file of the same name and size is left alone - and the
+ * directory is remembered in `<store>/.migrated` so a normal run costs one stat
+ * rather than a walk.
+ *
+ * The original is left in place: it is gitignored, it is inside a worktree the
+ * owner will delete, and deleting someone's files as a side effect of running a
+ * gate is not this script's business.
+ *
+ * @returns {{copied: string[], skipped: number}}
+ */
+function migrateWorktreeLogs() {
+  const location = store();
+  if (!location.shared) return { copied: [], skipped: 0 };
+  const marker = path.join(location.dir, '.migrated');
+  const legacy = path.join(repoRoot, LEDGER_DIR, 'logs');
+  if (
+    fs.existsSync(marker) ||
+    !fs.existsSync(legacy) ||
+    !fs.statSync(legacy).isDirectory()
+  ) {
+    return { copied: [], skipped: 0 };
+  }
+  const copied = [];
+  let skipped = 0;
+  const walk = (dir, prefix) => {
+    let names;
+    try {
+      names = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of names) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolute, `${prefix}${entry.name}/`);
+        continue;
+      }
+      // Both the log and its `.gate.json` record: a `wait` on a backgrounded run
+      // reads the record from the same directory as the log, so migrating one
+      // without the other loses a run mid-flight.
+      if (!/\.(log|gate\.json|steps\.json)$/.test(entry.name)) continue;
+      const target = path.join(
+        location.dir,
+        LEDGER_DIR,
+        'logs',
+        `${prefix}${entry.name}`
+      );
+      try {
+        const [from, to] = [fs.statSync(absolute), fs.statSync(target)];
+        if (to.size === from.size) {
+          skipped += 1;
+          continue;
+        }
+      } catch {
+        /* not there yet - copy it */
+      }
+      try {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.copyFileSync(absolute, target);
+        copied.push(path.relative(location.dir, target));
+      } catch {
+        // A log we could not copy is still resolvable through the worktree
+        // fallback, so this is a note rather than a failure.
+        skipped += 1;
+      }
+    }
+  };
+  walk(legacy, '');
+  try {
+    fs.mkdirSync(path.dirname(marker), { recursive: true });
+    fs.writeFileSync(
+      marker,
+      `migrated ${new Date().toISOString()} from ${legacy}\n${copied.join('\n')}\n`
+    );
+  } catch {
+    /* no marker means next run tries again, which is harmless and idempotent */
+  }
+  return { copied, skipped };
+}
+
+/**
+ * Applies the retention rule (35 days, then 64 MiB) to the store.
+ *
+ * Runs before a gate writes another log, so the directory bounds itself without a
+ * cron job nobody sets up. Never touches a log touched in the last two hours - a
+ * `check` on a cold machine runs longer than that and a `wait` reading its log
+ * would find nothing - and never touches another worktree's in-flight run either,
+ * because that run's file is being appended to and is therefore young.
+ *
+ * @param {{dryRun?: boolean}} [options]
+ * @returns {{removed: Array<{file: string, reason: string}>, scanned: number, bytes: number}}
+ */
+function pruneLogStore(options = {}) {
+  const logs = listStoredLogs(storeLogsDir());
+  const plan = planLogRetention(logs, {
+    protectNewerThan: runningLogGraceMs(),
+  });
+  const removed = [];
+  for (const victim of plan.victims) {
+    if (options.dryRun !== true) {
+      try {
+        fs.rmSync(victim.file, { force: true });
+      } catch {
+        continue;
+      }
+    }
+    removed.push(victim);
+  }
+  return {
+    removed,
+    scanned: logs.length,
+    bytes: plan.keptBytes,
+    kept: plan.kept,
+  };
+}
+
+/**
+ * How long a log is untouchable.
+ *
+ * Two hours by default, extended to cover the *oldest running background gate*:
+ * a 20-minute harness run is inside the grace anyway, but a bench that has run
+ * for nine hours is not, and deleting the log of a run that is happening is not a
+ * retention win. Reads the records it is about to spare, which is why this is a
+ * function rather than a constant.
+ */
+function runningLogGraceMs() {
+  const base = 2 * 60 * 60_000;
+  let grace = base;
+  for (const record of runningBackgroundGates(
+    listBackgroundRecords(storeLogsDir())
+  )) {
+    if (record.startedAt == null) continue;
+    grace = Math.max(grace, Date.now() - record.startedAt + 30 * 60_000);
+  }
+  return grace;
+}
+
+/** Every stored log, with the size and mtime retention reads. */
+function listStoredLogs(dir) {
+  const found = [];
+  const walk = (current) => {
+    let names;
+    try {
+      names = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of names) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolute);
+        continue;
+      }
+      // The `.gate.json` records travel with their log, and `steps.json` with the
+      // run that wrote it, so all three are swept together - a directory of
+      // orphaned records is not evidence either.
+      if (!/\.(log|gate\.json|steps\.json)$/.test(entry.name)) continue;
+      try {
+        const stats = fs.statSync(absolute);
+        found.push({
+          file: absolute,
+          bytes: stats.size,
+          mtimeMs: stats.mtimeMs,
+        });
+      } catch {
+        /* raced with another prune; not on the list */
+      }
+    }
+  };
+  walk(dir);
+  return found;
 }
 
 function readLedger(branch) {
@@ -258,11 +559,21 @@ function readBackgroundRecord(file) {
  */
 async function startBackgroundGate(name, resolved) {
   const startedAt = Date.now();
-  const logsDir = path.join(repoRoot, LEDGER_DIR, 'logs');
+  // Both halves of the pair live in the clone's log store, so a `wait` from a
+  // *different worktree* of the same clone can follow a run, and so the log outlives
+  // `git worktree remove` of the one that started it (X12).
+  migrateWorktreeLogs();
+  pruneLogStore();
+  const logsDir = storeLogsDir();
   fs.mkdirSync(logsDir, { recursive: true });
-  const logName = `${name.replaceAll(/[^\w.-]+/g, '+')}-${new Date(startedAt).toISOString().replaceAll(':', '-')}.log`;
-  const logPath = path.join(LEDGER_DIR, 'logs', logName);
-  const absoluteLog = path.join(repoRoot, logPath);
+  const { logPath, absolute: absoluteLog } = logPathsFor(
+    currentBranch(),
+    name,
+    startedAt
+  );
+  // The branch subdirectory, not just the store root: this is the process that
+  // opens the file, and a first run on a new branch has no directory to write into.
+  fs.mkdirSync(path.dirname(absoluteLog), { recursive: true });
   const recordPath = backgroundRecordPath(absoluteLog);
   const logHandle = fs.openSync(absoluteLog, 'a');
 
@@ -399,13 +710,13 @@ async function startBackgroundGate(name, resolved) {
 async function commandWait({ gate, timeoutMinutes }) {
   const timeoutMs = timeoutMinutes * 60_000;
   const startedWaiting = Date.now();
-  const logsDir = path.join(repoRoot, LEDGER_DIR, 'logs');
+  const logsDir = storeLogsDir();
   const records = listBackgroundRecords(logsDir).filter(
     (record) => gate == null || record.gate === gate
   );
   if (records.length === 0) {
     process.stderr.write(
-      `wait: no background gate${gate == null ? '' : ` named ${gate}`} in ${path.relative(repoRoot, logsDir) || '.'}\n` +
+      `wait: no background gate${gate == null ? '' : ` named ${gate}`} in ${logsDir}\n` +
         'wait: start one with `node scripts/gate.mjs <gate> --background`\n'
     );
     return 2;
@@ -415,7 +726,10 @@ async function commandWait({ gate, timeoutMinutes }) {
   // fix), so "latest" has to be the tie-break.
   records.sort((a, b) => Number(b.startedAt ?? 0) - Number(a.startedAt ?? 0));
   const target = records[0];
-  const absoluteLog = path.join(repoRoot, target.logPath ?? 'dev/null');
+  // Resolved the same way a ledger line's log is: the record names the store-relative
+  // path, and this worktree may not be the one that started the run.
+  const absoluteLog =
+    resolveLedgerLog({ logPath: target.logPath }).file ?? 'dev/null';
   process.stderr.write(
     `wait: ${target.gate} (pid ${String(target.pid ?? '?')}) - budget ${String(timeoutMinutes)} min\n`
   );
@@ -425,7 +739,7 @@ async function commandWait({ gate, timeoutMinutes }) {
     const elapsedMs = Date.now() - startedWaiting;
     const record = readBackgroundRecord(target.recordPath) ?? target;
     // The ledger line for *this* run, matched on its log path - the one field that
-    // is unique per run (a gate name repeats across re-runs on the same tree). It
+    // is unique per run (a gate name repeats across re-runs on the same branch). It
     // is both the fallback answer when a runner dies and the proof that a
     // backgrounded gate recorded exactly what a foreground one would.
     const ledgerEntry = readLedger(currentBranch()).entries.find(
@@ -461,21 +775,48 @@ async function commandWait({ gate, timeoutMinutes }) {
 }
 
 /**
- * Every background record in the logs directory, newest files first.
+ * Every background record in the log store, newest files first.
  *
- * @param {string} logsDir
+ * Walks the store rather than reading one directory, because logs are keyed by
+ * branch (`<store>/task/X12-…/check-….log`), and a `wait` that only looked at the
+ * top level would report "no background gate" for every run anyone started after
+ * X12 - the exact wrong answer for a tool whose whole job is not polling.
+ *
+ * Also reads a worktree's own `.gates/logs/` when it still has one: a run started
+ * by an older `gate.mjs` writes its record there, and `wait` may be the next
+ * command anyone types after the upgrade.
+ *
+ * @param {string} logsDir the store root
  * @returns {object[]}
  */
 function listBackgroundRecords(logsDir) {
-  let names = [];
-  try {
-    names = fs.readdirSync(logsDir);
-  } catch {
-    return [];
-  }
-  return names
-    .filter((name) => name.endsWith('.gate.json'))
-    .map((name) => readBackgroundRecord(path.join(logsDir, name)))
+  const roots = [logsDir];
+  const legacy = path.join(repoRoot, LEDGER_DIR, 'logs');
+  if (logsDir !== legacy) roots.push(legacy);
+  const found = [];
+  const seen = new Set();
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolute);
+        continue;
+      }
+      if (!entry.name.endsWith('.gate.json')) continue;
+      if (seen.has(absolute)) continue;
+      seen.add(absolute);
+      found.push(absolute);
+    }
+  };
+  for (const root of roots) walk(root);
+  return found
+    .map((file) => readBackgroundRecord(file))
     .filter((record) => record != null);
 }
 
@@ -611,17 +952,23 @@ async function runGate(name, resolved, options = {}) {
     samples.push(os.loadavg()[0] ?? Number.NaN);
   }, LOAD_SAMPLE_INTERVAL_MS);
 
-  const logsDir = path.join(repoRoot, LEDGER_DIR, 'logs');
+  // Logs go in the clone's store, shared by every worktree and untouched by
+  // `git worktree remove` (X12). A backgrounded run's log path comes from the record
+  // the launcher wrote, so `wait` knows where to read progress from before this
+  // process has printed a thing; the path is store-relative either way, which is
+  // what the ledger records and what `logs`/`export` resolve it against.
+  migrateWorktreeLogs();
+  pruneLogStore();
+  const logsDir = storeLogsDir();
   fs.mkdirSync(logsDir, { recursive: true });
-  // A backgrounded run's log path comes from the record the launcher wrote, so
-  // `wait` knows where to read progress from before this process has printed a
-  // thing. Foreground runs still name their own log.
-  const logName = `${name.replaceAll(/[^\w.-]+/g, '+')}-${new Date(startedAt).toISOString().replaceAll(':', '-')}.log`;
-  const logPath = options.logPath ?? path.join(LEDGER_DIR, 'logs', logName);
+  const own = logPathsFor(branch, name, startedAt);
+  const logPath = options.logPath ?? own.logPath;
+  const absoluteLog = path.join(logsDir, logPath);
+  fs.mkdirSync(path.dirname(absoluteLog), { recursive: true });
   // Appending for a backgrounded run: the launcher already has that file open in
   // append mode for this process's own stdout/stderr, and truncating it here would
   // erase the lines that explain a crash.
-  const logStream = fs.createWriteStream(path.join(repoRoot, logPath), {
+  const logStream = fs.createWriteStream(absoluteLog, {
     flags: options.logPath == null ? 'w' : 'a',
   });
   let logText = '';
@@ -645,9 +992,7 @@ async function runGate(name, resolved, options = {}) {
   // run's breakdown, and removed from the child env by `check.mjs` itself so a
   // nested check cannot answer for its parent.
   const stepTimingsPath =
-    resolved.gate === 'check'
-      ? path.join(repoRoot, `${logPath}.steps.json`)
-      : null;
+    resolved.gate === 'check' ? `${absoluteLog}.steps.json` : null;
   process.stderr.write(
     `gate: ${name}\n` +
       `gate: ${resolved.argv.join(' ')} (cwd ${path.relative(repoRoot, cwd) || '.'})\n` +
@@ -657,7 +1002,11 @@ async function runGate(name, resolved, options = {}) {
       `gate: git tree ${String(before.fullTree ?? '<no commit>').slice(0, 12)}${
         before.worktreeClean ? '' : ' with a DIRTY worktree (not reusable)'
       }\n` +
-      `gate: log ${logPath}\n`
+      // Store-relative, and the absolute path beside it: `logPath` is what the
+      // ledger and `table --full` print, and the absolute one is what you actually
+      // open - which is no longer inside the worktree you are standing in.
+      `gate: log ${logPath}\n` +
+      `gate:       ${absoluteLog}\n`
   );
 
   const exit = await new Promise((resolvePromise) => {
@@ -817,6 +1166,7 @@ async function runGate(name, resolved, options = {}) {
       'gate: a bench never blocks `need` - benches go to the bench host (D15).\n'
     );
   }
+
   if (exit.forwarded != null) {
     // The line is written and the log is flushed, so the signal can now do its
     // default work and the caller's exit status still says "interrupted".
@@ -884,7 +1234,7 @@ function commandStatus({ stage }) {
   // says "missing" for it is the most misleading thing this command could print
   // while someone decides whether to start the gate they are already running.
   for (const entry of runningBackgroundGates(
-    listBackgroundRecords(path.join(repoRoot, LEDGER_DIR, 'logs'))
+    listBackgroundRecords(storeLogsDir())
   )) {
     const seconds =
       entry.startedAt == null
@@ -1166,13 +1516,311 @@ function commandExport({ task, out }) {
     ? target
     : path.join(repoRoot, target);
   fs.mkdirSync(path.dirname(absolute), { recursive: true });
-  // The evidence has to survive its author: copy the lines verbatim rather than
-  // re-serialise them, so a committed ledger is byte-identical to what ran.
-  fs.copyFileSync(file, absolute);
+
+  // The evidence has to survive its author: each line is copied **verbatim** rather
+  // than re-serialised, so a committed ledger is byte-identical to what ran - a
+  // corrupt line in particular stays exactly as corrupt as it was, rather than
+  // becoming a plausible-looking object.
+  const rawText = fs.readFileSync(file, 'utf8');
+  const rawLines = rawText.split('\n').filter((raw) => raw.trim() !== '');
+
+  // Item 2 (X12): a red row in the committed ledger used to arrive with no evidence
+  // attached, so the reader had to go to the machine that ran the gate - which is
+  // the thing X12 item 1 fixes for the owner and this fixes for everyone else.
+  // Written *before* the ledger, because the ledger is about to name these files.
+  const failuresDir =
+    task != null ? path.join('docs', 'tasks', task, 'failures') : null;
+  const { lines, written, missing } = exportFailureExcerpts({
+    rawLines,
+    entries,
+    failuresDir,
+  });
+  fs.writeFileSync(absolute, `${lines.join('\n')}\n`);
   process.stdout.write(
     `export: ${String(entries.filter((entry) => !entry.corrupt).length)} gate line(s) from ${path.relative(repoRoot, file)} -> ${path.relative(repoRoot, absolute)}\n`
   );
+  if (failuresDir != null) {
+    const failed = entries.filter(isFailedRunWithLog).length;
+    process.stdout.write(
+      `export: ${String(written.length)} failure excerpt(s) in ${failuresDir}${
+        written.length === 0 ? ' (no failed runs in this ledger)' : ''
+      }\n`
+    );
+    for (const w of written) {
+      process.stdout.write(
+        `export:   ${w.relative} (${String(w.scrubbed)} value(s) scrubbed${
+          w.truncated ? ', truncated' : ''
+        })\n`
+      );
+    }
+    for (const m of missing) {
+      // Loud, not silent: a red row whose log cannot be found is exactly the hole
+      // this feature exists to close, and the reader has to be able to tell "no
+      // failure happened" from "we could not find the evidence".
+      process.stdout.write(
+        `export:   NOTE no log for the failed \`${m.gate}\` run (${String(m.logPath)}); looked in:\n${m.candidates
+          .map((candidate) => `export:           ${candidate}`)
+          .join('\n')}\n`
+      );
+    }
+    if (failed > 0 && written.length === 0 && failuresDir != null) {
+      process.stdout.write(
+        `export:   full logs live in ${storeLogsDir()} of the clone that ran them\n`
+      );
+    }
+  }
   return 0;
+}
+
+/**
+ * Writes one excerpt per **failed** run in the exported ledger, and returns the
+ * ledger lines with `failureLogPath` filled in.
+ *
+ * Passing runs are passed through **byte-verbatim** and get no file (the brief's
+ * "never copies a passing run's log"): a directory of green logs is not evidence, it
+ * is a disk charge, and re-serialising the other lines would quietly rewrite a
+ * corrupt line into a plausible one. Only a failed line is re-emitted, and only to
+ * add `failureLogPath` - the run could not know the name of the file that would
+ * carry its excerpt.
+ *
+ * A failed line whose log cannot be found keeps its original text and produces a
+ * note instead of a file.
+ *
+ * @param {{rawLines: string[], entries: object[], failuresDir: string | null}} options
+ * @returns {{lines: string[], written: Array<{relative: string, scrubbed: number, truncated: boolean}>, missing: Array<{gate: string, logPath: string, candidates: string[]}>}}
+ */
+function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
+  const lines = [];
+  const written = [];
+  const missing = [];
+  rawLines.forEach((raw, index) => {
+    const entry = entries[index];
+    if (!isFailedRunWithLog(entry)) {
+      lines.push(raw);
+      return;
+    }
+    const found = resolveLedgerLog(entry);
+    if (found.file == null) {
+      lines.push(raw);
+      missing.push({
+        gate: String(entry.gate ?? '?'),
+        logPath: String(entry.logPath),
+        candidates: found.candidates,
+      });
+      return;
+    }
+    if (failuresDir == null) {
+      // `--out <file>` with no `--task`: nowhere to put an excerpt, and inventing a
+      // directory beside someone's chosen file name would be worse than saying so.
+      lines.push(raw);
+      missing.push({
+        gate: String(entry.gate ?? '?'),
+        logPath: String(entry.logPath),
+        candidates: [
+          'no --task, so there is no docs/tasks/<ID>/failures/ to write to',
+        ],
+      });
+      return;
+    }
+    let text;
+    try {
+      // Capped: a hung harness run's log can be enormous and an excerpt reads its
+      // head and tail, not all of it. See `readLogForExcerpt`.
+      text = readLogForExcerpt(found.file);
+    } catch (error) {
+      lines.push(raw);
+      missing.push({
+        gate: String(entry.gate ?? '?'),
+        logPath: String(entry.logPath),
+        candidates: [`unreadable: ${String(error?.message ?? error)}`],
+      });
+      return;
+    }
+    const relative = path
+      .join(failuresDir, failureExcerptName(entry))
+      .split(path.sep)
+      .join('/');
+    const excerpt = renderFailureExcerpt({
+      entry,
+      logText: text,
+      logLocation: found.file,
+    });
+    const absolute = path.join(repoRoot, relative);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, excerpt.content);
+    written.push({
+      relative,
+      scrubbed: excerpt.scrubbed,
+      truncated: excerpt.truncated,
+    });
+    lines.push(JSON.stringify({ ...entry, failureLogPath: relative }));
+  });
+  return { lines, written, missing };
+}
+
+/** The largest log an excerpt will read. 200 MiB; see the call site. */
+const EXCERPT_MAX_LOG_BYTES = 200 * 1024 * 1024;
+
+function readLogForExcerpt(file) {
+  const stats = fs.statSync(file);
+  if (stats.size <= EXCERPT_MAX_LOG_BYTES) return fs.readFileSync(file, 'utf8');
+  // Head and tail of an over-large log, so a scrubbed excerpt still shows the
+  // failure and the end rather than an arbitrary 200 MiB prefix.
+  const fd = fs.openSync(file, 'r');
+  try {
+    const head = Buffer.alloc(8 * 1024 * 1024);
+    fs.readSync(fd, head, 0, head.length, 0);
+    const tail = Buffer.alloc(64 * 1024 * 1024);
+    fs.readSync(fd, tail, 0, tail.length, stats.size - tail.length);
+    return `${head.toString('utf8')}\n… skipped ${String(
+      Math.round((stats.size - head.length - tail.length) / 1024 / 1024)
+    )} MiB of log …\n${tail.toString('utf8')}`;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
+ * `gate.mjs logs` — what is in this clone's log store, newest first.
+ *
+ * The command the brief asks for, and the answer to "where are my logs" now that
+ * they are not in the worktree: it prints the store's location in its header so a
+ * reader who has never seen this change is not left looking in `.gates/logs/`.
+ *
+ * Filtering by *failure* needs the ledgers, not the store: a log file's name says
+ * which branch and gate it was, but only the ledger line knows whether it passed.
+ *
+ * @param {{branch: string | null, failedOnly: boolean, all: boolean, prune: boolean}} options
+ */
+function commandLogs({ branch, failedOnly, all, prune }) {
+  const storeDir = storeLogsDir();
+  const location = store();
+  // Listing the store is the moment someone is thinking about disk, so the
+  // retention rule is applied here too (as it is on every gate run).
+  const pruning = pruneLogStore();
+  process.stdout.write(
+    `logs: store ${storeDir}${location.shared ? '' : ' (fallback: this checkout has no git common dir)'}\n`
+  );
+  if (pruning.removed.length > 0) {
+    process.stdout.write(
+      `logs: retention removed ${String(pruning.removed.length)} file(s) ` +
+        `(${pruning.removed.map((victim) => victim.reason).join(', ')}) — ` +
+        `${String(LOG_RETENTION_DAYS)} days, ${formatBytes(LOG_RETENTION_MAX_BYTES)} cap\n`
+    );
+  }
+  if (prune === true) {
+    process.stdout.write(
+      `logs: ${String(pruning.scanned)} file(s) scanned, ${String(pruning.removed.length)} removed, ${formatBytes(pruning.bytes)} kept\n`
+    );
+    return 0;
+  }
+
+  const wanted = branch != null ? [branch] : all ? null : [currentBranch()];
+  const failedPaths = failedOnly ? failedLogPathsFor(wanted) : null;
+  const branches = [
+    ...new Set([...listStoredLedgerBranches(), ...listBranchDirs(storeDir)]),
+  ];
+  const logs = listStoredLogs(storeDir)
+    .filter(
+      (log) =>
+        !log.file.endsWith('.gate.json') && !log.file.endsWith('.steps.json')
+    )
+    .sort((a, b) => Number(b.mtimeMs) - Number(a.mtimeMs));
+
+  let shown = 0;
+  for (const log of logs) {
+    const relative = path.relative(storeDir, log.file);
+    const owner = branchOfStoredLog(relative, branches);
+    if (wanted != null && !wanted.includes(owner)) continue;
+    if (
+      failedPaths != null &&
+      !failedPaths.has(relative) &&
+      !failedPaths.has(log.file)
+    )
+      continue;
+    process.stdout.write(
+      `  ${new Date(log.mtimeMs).toISOString()}  ${formatBytes(log.bytes).padStart(9)}  ${relative}\n`
+    );
+    shown += 1;
+  }
+  process.stdout.write(
+    `${String(shown)} log file(s) ${wanted == null ? 'from every branch' : `for ${wanted.join(', ')}`}${
+      failedOnly ? ' that the ledger says failed' : ''
+    }\n`
+  );
+  if (shown === 0 && !failedOnly && wanted != null && !all) {
+    process.stdout.write(
+      'logs: (pass --all to see every branch, or --branch <b> for a specific one)\n'
+    );
+  }
+  return 0;
+}
+
+/**
+ * Which stored logs belong to a *failed* run, according to the ledgers.
+ *
+ * Reads the branch ledgers named by the filter (or every branch's, under `--all`),
+ * because a log file's name is a hint about its outcome at best.
+ */
+function failedLogPathsFor(branches) {
+  const paths = new Set();
+  const names =
+    branches == null ? [...new Set(listStoredLedgerBranches())] : branches;
+  for (const name of names) {
+    for (const entry of readLedger(name).entries) {
+      if (!isFailedRunWithLog(entry)) continue;
+      paths.add(String(entry.logPath));
+      // A pre-X12 line names a worktree path; a migrated copy of the same file is
+      // under `.gates/logs/` in the store, so both spellings count.
+      paths.add(path.join(storeLogsDir(), String(entry.logPath)));
+      paths.add(
+        path.join(storeLogsDir(), LEDGER_DIR, 'logs', String(entry.logPath))
+      );
+    }
+  }
+  return paths;
+}
+
+/** Every branch that has a ledger in this checkout, `main` first-ish. */
+function listStoredLedgerBranches() {
+  return otherBranchLedgers(null)
+    .map((ledger) => ledger.branch)
+    .concat([currentBranch()]);
+}
+
+/** Branch-named directories directly in the store, for a log with no ledger. */
+function listBranchDirs(storeDir) {
+  try {
+    return fs
+      .readdirSync(storeDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The branch a stored log belongs to.
+ *
+ * Longest known branch name that is a prefix of the path wins, because branch names
+ * nest: `task/X12-…/check-….log` belongs to `task/X12-…`, not to `task`. A migrated
+ * pre-X12 log under `.gates/logs/` has no owner to recover and reads `(unknown)`.
+ */
+function branchOfStoredLog(relative, branches) {
+  const normalised = relative.split(path.sep).join('/');
+  if (normalised.startsWith(`${LEDGER_DIR}/`)) return '(unknown)';
+  const owner = branches
+    .filter((name) => normalised.startsWith(`${name}/`))
+    .sort((a, b) => b.length - a.length)[0];
+  return owner ?? '(unknown)';
+}
+
+function formatBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${String(value)} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MiB`;
 }
 
 /**
@@ -1315,6 +1963,36 @@ async function main(argv) {
     return commandExport({ task, out });
   }
 
+  if (command === 'logs') {
+    let branch = null;
+    let failedOnly = false;
+    let all = false;
+    let prune = false;
+    for (let index = 0; index < rest.length; index += 1) {
+      const argument = rest[index];
+      if (argument === '--branch') {
+        branch = rest[index + 1] ?? null;
+        if (branch == null) {
+          process.stderr.write(`logs: --branch needs a branch name\n${USAGE}`);
+          return 2;
+        }
+        index += 1;
+      } else if (argument.startsWith('--branch=')) {
+        branch = argument.slice('--branch='.length);
+      } else if (argument === '--failed') {
+        failedOnly = true;
+      } else if (argument === '--all') {
+        all = true;
+      } else if (argument === '--prune') {
+        prune = true;
+      } else {
+        process.stderr.write(`logs: unknown argument ${argument}\n${USAGE}`);
+        return 2;
+      }
+    }
+    return commandLogs({ branch, failedOnly, all, prune });
+  }
+
   // A gate is a name in this table, not a shell command: passing through whatever
   // arrived would make `gate.mjs rm -rf` a thing that works.
   //
@@ -1362,26 +2040,35 @@ async function main(argv) {
  * Validated rather than trusted: an inherited `NITRO_UI_GATE_LOG` from somebody's
  * shell profile would otherwise send a gate's log - which `wait` reads and the
  * ledger names - to a path of its choosing, and `bun run check` inherits the
- * environment of whatever started it. It has to be an absolute path inside this
- * checkout's own `.gates/logs/`, or it is ignored and the run behaves exactly like
- * a foreground one.
+ * environment of whatever started it. It has to be an absolute path inside the
+ * clone's log store (or, pre-X12, this checkout's own `.gates/logs/`), ending in
+ * `.log`; otherwise it is ignored and the run behaves exactly like a foreground one.
+ *
+ * The value it returns is **store-relative**, which is what the ledger records and
+ * what `ledgerLogCandidates` resolves, so a background run's line points at the same
+ * file `wait` was reading.
  */
 function backgroundOptions(env = process.env) {
   const fromEnv = env.NITRO_UI_GATE_LOG;
   if (fromEnv == null || fromEnv === '') return {};
   const absolute = path.resolve(fromEnv);
-  const logsDir = path.join(repoRoot, LEDGER_DIR, 'logs');
-  if (
-    !absolute.startsWith(`${logsDir}${path.sep}`) ||
-    !absolute.endsWith('.log')
-  ) {
+  const allowedRoots = [
+    storeLogsDir(),
+    path.join(repoRoot, LEDGER_DIR, 'logs'),
+  ];
+  const root = allowedRoots.find(
+    (dir) =>
+      absolute.startsWith(`${path.resolve(dir)}${path.sep}`) &&
+      absolute.endsWith('.log')
+  );
+  if (root == null) {
     process.stderr.write(
-      `gate: ignoring NITRO_UI_GATE_LOG=${fromEnv} - a background gate's log has to be inside ${path.relative(repoRoot, logsDir)}\n`
+      `gate: ignoring NITRO_UI_GATE_LOG=${fromEnv} - a background gate's log has to be inside ${storeLogsDir()}\n`
     );
     return {};
   }
   return {
-    logPath: path.relative(repoRoot, absolute),
+    logPath: path.relative(path.resolve(root), absolute),
     recordPath: backgroundRecordPath(absolute),
   };
 }
