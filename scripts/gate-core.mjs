@@ -47,11 +47,11 @@ export const LEDGER_DIR = '.gates';
  *     jest, then perf, then more, and "the last summary wins" made its row report
  *     the 7-test perf step instead of the 391-test unit run (M3).
  *
- * v3 adds `steps` for `check` (X10): what each of the sixteen steps did, with its
- * own duration. `check` is the one gate long enough that "3 m 04 s" is not an
+ * v3 adds `stepTimings` for `check` (X10): what each of the sixteen steps did, with
+ * its own duration. `check` is the one gate long enough that "3 m 04 s" is not an
  * actionable number - the thing a reader wants is which step got slower. It is a
- * record, not a rule: no decision in this file reads `steps`, so a v2 line and a
- * v3 line mean the same thing to `need` and `table`.
+ * record, not a rule: no decision in this file reads `stepTimings`, so a v2 line and
+ * a v3 line mean the same thing to `need` and `table`.
  *
  * v1 lines are still read: with no `trees` they compare on the full digest, and
  * with no `treeAfter` they are taken at their word.
@@ -81,6 +81,54 @@ export const REQUIRED_ELIGIBLE_PREFIXES = [
   'real-input:',
   'smoke:',
 ];
+
+/**
+ * The paths merge reuse is allowed to be blind to (X10 review M1).
+ *
+ * `need --for merge` can accept a `check` line whose code tree equals the merged tree. The code-tree
+ * digest deliberately excludes `docs/`, `bench/`, `.github/` and every `*.md`, so tree equality says
+ * nothing about whether those files changed - and `check` reads some of them (`bench:typecheck`,
+ * `lint` and `format` read `bench/`; `format` and `readme:check` read `README.md`; a jest test reads
+ * `.github/workflows/ci.yml`). So tree equality is necessary but not sufficient, and reuse also asks
+ * that every path the merge adds beyond the checked commit is listed here.
+ *
+ * `docs/**` is the whole list, because that is the only thing the probes in
+ * `scripts/check-docs-drift.mjs` can show `check` never opens: prettier and ESLint both ignore
+ * `docs/` (their own answers, not a reading of the ignore files), `tsc` and jest never list a file
+ * under it, the publish surface does not ship it, and the codegen config's spec globs do not reach
+ * it. Wider would be a lie: `bench/baselines/README.md` is read by a jest test, `coverage/` is
+ * written by jest and read by the perf gate, `docs/README.md` is quoted inside a README snippet, and
+ * `package.json`/`tsconfig.json`/`.prettierignore` are inputs by definition.
+ *
+ * The claim is checked, not asserted: `bun run check` runs that proof as part of the `test` step, so
+ * the moment a step or a test starts reading a path under this list, `check` goes red instead of
+ * reuse quietly becoming unsound.
+ */
+export const CHECK_REUSE_ALLOWLIST = Object.freeze(['docs/**']);
+
+/**
+ * Paths on the allowlist that are *not* exempt, because `check` really does read them.
+ *
+ * The drift proof named the first of these on its first run: `gate.mjs` enumerates the committed task
+ * ledgers - `docs/tasks/<ID>/gates.jsonl` - and `scripts/__tests__/gate-check.test.js` spawns that
+ * CLI, so the `test` step runs code that opens those files. Those tests point it at a throwaway repo,
+ * which is why no run fails today, but "a test happens to aim it somewhere else" is not what an
+ * allowlist is for: a merge that changes a committed ledger changes something `check` touches, and
+ * reuse has to see that.
+ *
+ * The second entry is a plain read, not a near-miss: `gate-check.test.js` opens
+ * `docs/tasks/ORCHESTRATOR.md` and asserts the reuse rule is written there, so editing that page can
+ * make the `test` step fail. A `check` from before the edit would not have seen it.
+ *
+ * So a merge that adds a task's *report* is exempt, and one that touches a committed *ledger* or the
+ * orchestrator's rules is not. That is the cost of being right rather than broad, and it is the cheap
+ * direction to be wrong in: the rule asks for a `check` run rather than asserting one that did not
+ * happen.
+ */
+export const CHECK_REUSE_EXCLUDE = Object.freeze([
+  'docs/tasks/*/gates.jsonl',
+  'docs/tasks/ORCHESTRATOR.md',
+]);
 
 /**
  * Paths that *run* the checks rather than change what ships.
@@ -128,6 +176,10 @@ export const TOOLING_FILES = [
   // timing file under `.gates/` (gitignored); they touch no source the app builds.
   'scripts/check.mjs',
   'scripts/check-steps.mjs',
+  // The proof behind merge reuse: it reads the repo to answer a question about the gate, writes
+  // nothing, and is run by `test` as a module. Nothing in a build or a device run imports it, and a
+  // broken version is a wrong *gate* - red in its own test, never a different binary.
+  'scripts/check-docs-drift.mjs',
   // Writes `src/components/**`/`example/src/App.tsx` regions when asked to (`--write`),
   // and `registry:check` - the half `check` runs - writes nothing at all. A broken
   // version of either is a wrong *gate*, caught by its own unit test in
@@ -734,38 +786,121 @@ export function summarizeGates({
 }
 
 /**
+ * Whether a path matches a reuse pattern list.
+ *
+ * Kept next to the lists so the rule and the lists cannot drift apart. `docs/**` means "inside
+ * `docs/`", with the separator required: matching the bare prefix would also match `docsx/` and
+ * `my-docs/`. An exact path matches itself; a bare directory name is not a directory match, which is
+ * deliberate - reuse should have to be told.
+ *
+ * @param {string} file repo-relative path, forward slashes
+ * @param {string[]} [patterns]
+ * @returns {boolean}
+ */
+export function isReuseAllowlistedPath(file, patterns = CHECK_REUSE_ALLOWLIST) {
+  const clean = String(file ?? '')
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '');
+  if (clean === '') return false;
+  return patterns.some((rawPattern) => {
+    const pattern = String(rawPattern).replace(/^\.\//, '').replace(/\/+$/, '');
+    if (pattern.endsWith('/**'))
+      return clean.startsWith(`${pattern.slice(0, -3)}/`);
+    if (pattern.includes('*')) {
+      // `docs/tasks/*/gates.jsonl` is one segment, not a prefix: a committed ledger lives
+      // at exactly that depth, and a deeper file must not be excluded by accident.
+      const body = pattern
+        .split('/')
+        .map((segment) =>
+          segment === '*'
+            ? '[^/]+'
+            : segment
+                .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*/g, '[^/]*')
+        )
+        .join('/');
+      return new RegExp(`^${body}$`).test(clean);
+    }
+    return clean === pattern;
+  });
+}
+
+/**
+ * The changed paths merge reuse cannot be blind to: anything not on the exemption, i.e. anything off
+ * `CHECK_REUSE_ALLOWLIST` plus anything the allowlist grants that `CHECK_REUSE_EXCLUDE` takes back
+ * because `check` really does read it. Empty means reuse would be sound.
+ *
+ * Named for what it returns, because "outside the allowlist" and "on the allowlist" differ by one `!`
+ * and the difference is the whole rule.
+ *
+ * @param {string[]} changedPaths from `git diff --name-only <commit> HEAD` plus the working tree's
+ *   uncommitted and untracked paths, as the caller read them
+ * @param {string[]} [patterns]
+ * @param {string[]} [excludes]
+ * @returns {string[]} sorted, deduped
+ */
+export function pathsOutsideReuseExemption(
+  changedPaths = [],
+  patterns = CHECK_REUSE_ALLOWLIST,
+  excludes = CHECK_REUSE_EXCLUDE
+) {
+  return [
+    ...new Set(
+      changedPaths
+        .map((file) => String(file ?? '').trim())
+        .filter(
+          (file) =>
+            file !== '' &&
+            (!isReuseAllowlistedPath(file, patterns) ||
+              isReuseAllowlistedPath(file, excludes))
+        )
+    ),
+  ].sort();
+}
+
+/**
  * A `check` line from another branch's ledger that may stand in for a run on this
  * tree at merge, or `null`.
  *
  * The question `need --for merge` asks after a merge is "has *this code* been
- * checked?", and the honest answer can come from a branch's ledger: the merge
- * commit's code tree is the branch tip's code tree whenever `main` gained nothing
- * since the branch point, and the tree digest is exactly the thing being asked
- * about. Four things have to hold, and all four are checked here rather than
- * assumed:
+ * checked?", and the honest answer can come from a branch's ledger: when the merge
+ * added nothing but docs, the merged code tree *is* the tree that passed, and the
+ * tree digest is exactly the thing being asked about. Five things have to hold, and
+ * all five are checked here rather than assumed:
  *
  *   - the line passed, on *this* full code tree (`tree`), with its `treeAfter`
  *     agreeing - a run whose tree moved under it proved neither tree (N1);
+ *   - it is the **newest decisive line on that tree** in its own ledger, and the
+ *     newest across all of them (M2). A ledger with a pass at 10:00 and a fail at
+ *     11:00 on the same tree is a branch that stopped passing, and reusing its
+ *     earlier green would contradict what `gateRowFor` says about the very same
+ *     lines. So each ledger contributes its latest pass-or-fail line on the tree,
+ *     those are compared by timestamp, and a fail at the top ends the question;
  *   - it names a `head` commit, and the caller can prove that commit is an
  *     ancestor of the tree being asked about. That is what makes the evidence
  *     *this* merge's rather than some branch that happened to share a digest; a
  *     line with no `head` cannot be placed, so it cannot be reused;
+ *   - **nothing the merge adds is a file `check` reads** (M1). The code tree
+ *     excludes `docs/`, `bench/`, `.github/` and every `*.md`, while `check` reads
+ *     three of those four. So the caller supplies `changedSince(head)` - the paths
+ *     from that commit to this tree, working tree included - and every one of them
+ *     must be on `CHECK_REUSE_ALLOWLIST`. An unreadable diff refuses reuse; `docs/`
+ *     is the only thing on the list, and `scripts/check-docs-drift.mjs` is what
+ *     keeps that claim true;
  *   - it is a `check`, and only a `check`. Device gates are keyed to a binary
  *     built on the branch's own machine and lease, and the brief leaves them to
- *     the tree rules X11 works with;
- *   - the current branch's own ledger is passed separately (it is `entries`), so a
- *     gate is never reused from a ledger nobody is standing on.
+ *     the tree rules X11 works with.
  *
  * Where a ledger came from is carried through as `source`, because the two kinds
- * are not equally strong: `.gates/<branch>.jsonl` is the machine that ran it, and
- * `docs/tasks/<ID>/gates.jsonl` is that file's committed copy - which is the only
- * version that exists in the checkout where a merge gets confirmed. The fourth
- * condition above is what makes the copy as good as the original for this
- * question: a line whose commit is not in this history is refused whichever file
- * it came from.
+ * are not equally strong evidence about *who ran it*: `.gates/<branch>.jsonl` is the
+ * machine that ran it, and `docs/tasks/<ID>/gates.jsonl` is that file's committed
+ * copy - which is the only version that exists in the checkout where a merge gets
+ * confirmed. The last two conditions above are what make the copy strong enough for
+ * this question: a line whose commit is not in this history, or whose merge added a
+ * file `check` reads, is refused whichever file it came from.
  *
- * Several branches can hold a line on the same tree; the newest wins, with the
- * branch name as a tie-break so the choice does not depend on directory order.
+ * Ties on timestamp are broken by branch name so the choice does not depend on
+ * directory order.
  *
  * @param {object} options
  * @param {Array<{branch: string, entries: object[], source?: string}>} options.ledgers
@@ -773,21 +908,40 @@ export function summarizeGates({
  * @param {string | null} options.tree the full code tree being asked about
  * @param {(commit: string) => boolean} options.headIsAncestor proves `commit` is
  *   in the history of the tree being asked about (git, in `gate.mjs`)
+ * @param {(commit: string) => string[] | null} [options.changedSince] the paths that
+ *   differ between `commit` and the tree being asked about, or `null` when that
+ *   cannot be read. Omitting it refuses reuse, because the M1 question would be
+ *   unanswered.
  * @param {string} [options.gate] which gate may be reused
- * @returns {{branch: string, entry: object, source: string} | null}
+ * @param {string[]} [options.allowlist] for tests; defaults to
+ *   `CHECK_REUSE_ALLOWLIST`
+ * @param {string[]} [options.exclude] paths the allowlist grants that are not exempt, e.g. a
+ *   committed ledger `gate.mjs` itself opens; defaults to `CHECK_REUSE_EXCLUDE`
+ * @returns {{branch: string, entry: object, source: string, changedPaths: string[]} | null}
  */
 export function findReusableCheck({
   ledgers = [],
   tree,
   headIsAncestor,
+  changedSince = null,
   gate = 'check',
+  allowlist = CHECK_REUSE_ALLOWLIST,
+  exclude = CHECK_REUSE_EXCLUDE,
+  diagnostics = null,
 }) {
   if (tree == null || typeof headIsAncestor !== 'function') return null;
-  const candidates = [];
+  if (typeof changedSince !== 'function') return null;
+  const note = (text) => {
+    if (Array.isArray(diagnostics)) diagnostics.push(text);
+  };
+  const latestPerLedger = [];
   for (const ledger of ledgers) {
     if (ledger?.branch == null || !Array.isArray(ledger.entries)) continue;
-    for (const entry of [...ledger.entries].reverse()) {
-      if (entry?.gate !== gate || entry.result !== 'pass') continue;
+    // One ledger's own answer about this tree, by the rule `gateRowFor` uses: the
+    // latest line that is pass or fail on it. A stale line is not decisive.
+    let decisive = null;
+    for (const entry of ledger.entries) {
+      if (entry?.gate !== gate) continue;
       if (entry.tree !== tree) continue;
       if (
         entry.treeAfter != null &&
@@ -796,15 +950,93 @@ export function findReusableCheck({
       ) {
         continue;
       }
-      if (typeof entry.head !== 'string' || entry.head === '') continue;
-      if (!headIsAncestor(entry.head)) continue;
-      candidates.push({
-        branch: ledger.branch,
-        entry,
-        source: ledger.source ?? `.gates/${ledger.branch}.jsonl`,
-      });
-      break;
+      if (entry.result !== 'pass' && entry.result !== 'fail') continue;
+      decisive = entry;
     }
+    if (decisive == null) continue;
+    latestPerLedger.push({
+      branch: ledger.branch,
+      entry: decisive,
+      source: ledger.source ?? `.gates/${ledger.branch}.jsonl`,
+    });
+  }
+  if (latestPerLedger.length === 0) {
+    note(
+      `no other ledger has a ${gate} line on tree ${String(tree).slice(0, 12)}`
+    );
+    return null;
+  }
+  // Newest wins, and a fail wins a tie: contradictory evidence about the same code
+  // tree resolves against reuse (M2).
+  const newest = [...latestPerLedger].sort(
+    (a, b) =>
+      String(b.entry.ts ?? '').localeCompare(String(a.entry.ts ?? '')) ||
+      String(b.entry.result).localeCompare(String(a.entry.result)) ||
+      a.branch.localeCompare(b.branch)
+  )[0];
+  if (newest.entry.result !== 'pass') {
+    note(
+      `${newest.branch}'s newest ${gate} line on this tree (${newest.source}) is a ` +
+        `fail at ${String(newest.entry.ts ?? '?')} - reuse would override it, so ` +
+        'nothing else is asked'
+    );
+    return null;
+  }
+  const candidates = [];
+  for (const candidate of latestPerLedger) {
+    if (candidate.entry.result !== 'pass') continue;
+    if (candidate !== newest) {
+      note(
+        `${candidate.branch}'s pass is older than ${newest.branch}'s evidence on the ` +
+          'same tree, and only the newest line counts'
+      );
+      continue;
+    }
+    if (
+      typeof candidate.entry.head !== 'string' ||
+      candidate.entry.head === ''
+    ) {
+      note(
+        `${candidate.branch}: its line names no head commit, so it cannot be placed in this history`
+      );
+      continue;
+    }
+    if (!headIsAncestor(candidate.entry.head)) {
+      note(
+        `${candidate.branch}: its head ${String(candidate.entry.head).slice(0, 7)} is not an ancestor of this tree`
+      );
+      continue;
+    }
+    const changed = changedSince(candidate.entry.head);
+    if (!Array.isArray(changed)) {
+      note(
+        `${candidate.branch}: the diff from ${String(candidate.entry.head).slice(0, 7)} to this tree could not be read, so what the merge added is unknown`
+      );
+      continue;
+    }
+    const outside = pathsOutsideReuseExemption(changed, allowlist, exclude);
+    if (outside.length > 0) {
+      // The one refusal that surprises people, spelled out: a task's committed ledger is written
+      // *after* the line it carries, so the merge that brings the export always adds a file `check`
+      // reads (`gate.mjs` lists `docs/tasks` and opens each ledger). Reuse therefore never borrows
+      // from an export that arrived with the merge under question - which is the right answer, since
+      // a document delivered by a merge cannot certify that same merge.
+      const allExports = outside.every((file) =>
+        isReuseAllowlistedPath(file, exclude)
+      );
+      note(
+        `${candidate.branch}: the merge adds ${outside.length} path(s) outside the reuse ` +
+          `allowlist (${outside.slice(0, 3).join(', ')}${outside.length > 3 ? ', …' : ''}) - ` +
+          `check reads those, so this tree has not been checked` +
+          (allExports
+            ? '. That path is this line\u2019s own exported ledger, and an export cannot certify the ' +
+              'merge that carries it: run check on the merged tree.'
+            : '')
+      );
+      continue;
+    }
+    // Sorted so the note the caller prints does not depend on git's ordering.
+    candidates.push({ ...candidate, changedPaths: [...changed].sort() });
   }
   if (candidates.length === 0) return null;
   candidates.sort(
@@ -829,6 +1061,8 @@ export function findReusableCheck({
  * @param {boolean} [options.diffUnknown] when the diff could not be read
  * @param {{branch: string, entry: object} | null} [options.reusedCheck] a `check`
  *   from another branch's ledger that `findReusableCheck` accepted for this tree
+ * @param {string[]} [options.reuseRefusals] why `findReusableCheck` declined, for the
+ *   notes: a refusal a reader cannot interrogate is indistinguishable from a bug
  * @returns {{ok: boolean, stage: string, required: object[], missing: string[],
  *   notes: string[]}}
  */
@@ -842,6 +1076,7 @@ export function decideNeed({
   toolingPaths = [],
   diffUnknown = false,
   reusedCheck = null,
+  reuseRefusals = [],
 }) {
   const requiredGates = requiredGatesFor({ stage, touchedPlatforms });
   const lists = listByGate(entries);
@@ -866,13 +1101,30 @@ export function decideNeed({
 
   const notes = [];
   if (reusedRow != null) {
+    const added = Array.isArray(reusedRow.reused.changedPaths)
+      ? reusedRow.reused.changedPaths
+      : [];
     notes.push(
       `check was satisfied by \`${reusedRow.reused.branch}\`'s ledger ` +
         `(${reusedRow.reused.source}): it passed on this exact code tree ` +
         `(${String(reusedRow.entry.tree ?? '?').slice(0, 12)}) at ` +
         `${String(reusedRow.entry.head ?? 'unknown HEAD').slice(0, 7)}, and that ` +
-        'commit is merged into this tree - the merge changed no code, so `check` ' +
-        'is not re-owed (see ORCHESTRATOR.md, "The loop" step 5)'
+        `commit is merged into this tree. What this tree adds beyond it is ` +
+        (added.length === 0
+          ? 'nothing at all'
+          : `${added.length} path(s), all on the reuse allowlist (${added
+              .slice(0, 4)
+              .join(', ')}${added.length > 4 ? ', …' : ''})`) +
+        ` - no file \`check\` reads, so \`check\` is not re-owed (see ` +
+        'ORCHESTRATOR.md, "The loop" step 5)'
+    );
+  } else if (stage === 'merge' && reuseRefusals.length > 0) {
+    // A refusal with no reason reads like a bug. The M1 rule in particular asks a
+    // question with an answer a person can check, so the answer goes on the page.
+    // Wording matters here: "not reused" would contain the word the *accepting* note
+    // uses, and a test that asserts "did not reuse" by string would match both.
+    notes.push(
+      `no check line was borrowed for this tree: ${reuseRefusals.join('; ')}`
     );
   }
   if (stage === 'review' && touchedPlatforms.length === 0) {
@@ -905,14 +1157,27 @@ export function decideNeed({
 }
 
 /**
- * Swap a not-green `check` row for one proved by another branch's ledger.
+ * Swap a `check` row that has no verdict on this tree for one proved by another
+ * branch's ledger.
  *
  * Shared by `decideNeed` and `renderGateTable` so the two can never disagree about
  * what reuse means - a report whose table says `missing` while `need` says satisfied
  * is exactly the kind of contradiction this ledger exists to remove.
  *
- * Only at merge, and only for `check`: a review round is evidence about its own
- * diff, and a device gate is evidence about a binary someone else built.
+ * Only at merge, only for `check`, and only when this branch's own row says nothing
+ * about this tree (M2):
+ *
+ *   - `green` - nothing to do;
+ *   - `red` - **never** overridden. This checkout ran `check` on this exact code tree
+ *     and it failed. Another branch's older pass on the same digest cannot un-fail
+ *     it; that machine, or this one, has an answer that the merge has to see;
+ *   - `stale` with `why: 'moved'` - refused for the same reason in the other
+ *     direction: the row here is a run whose tree moved under it, which is not a
+ *     verdict either, but it *is* the most recent thing this branch knows, and
+ *     silently preferring someone else's older green would hide a run nobody looked
+ *     at;
+ *   - `missing`, or `stale` with `why: 'tree'` - this branch has no evidence about
+ *     this code, which is precisely when borrowing one is the honest answer.
  *
  * @param {object} options
  * @param {object[]} options.rows rows from `summarizeGates` / `gateRowFor`
@@ -937,7 +1202,10 @@ export function applyReusedCheckRow({
     return { rows, reused: null };
   }
   const current = rows.find((row) => row.gate === 'check');
-  if (current != null && current.state === 'green')
+  if (current == null) return { rows, reused: null };
+  if (current.state === 'green' || current.state === 'red')
+    return { rows, reused: null };
+  if (current.state === 'stale' && current.why === 'moved')
     return { rows, reused: null };
   const candidate = gateRowFor({
     gate: 'check',
@@ -952,6 +1220,7 @@ export function applyReusedCheckRow({
     reused: {
       branch: reusedCheck.branch,
       source: reusedCheck.source ?? `.gates/${reusedCheck.branch}.jsonl`,
+      changedPaths: reusedCheck.changedPaths ?? null,
     },
   };
   return {

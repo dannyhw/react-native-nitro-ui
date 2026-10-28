@@ -140,7 +140,9 @@ format, test, test:native, perf:renders, nitrogen:check, registry:check,
 autolinking:check, prepare, api-extractor:check, publint, manifest:check,
 readme:check — run through a small scheduler (`scripts/check.mjs` + the step graph in
 `scripts/check-steps.mjs`), so independent ones overlap: up to half the machine's
-cores at once, `--jobs N` to override. The _steps_ and their order are unchanged, and
+cores at once, capped at 4 (`--jobs N` to override — the heavy steps already fan out
+internally, so more slots cost context-switching, not time). The _steps_ and their
+order are unchanged, and
 `scripts/__tests__/check-runner.test.js` fails if the graph and `check:serial` ever
 disagree. `bun run check:serial` is the plain `&&` chain, for comparing the two.
 `perf:renders` is part of `check` on purpose: render counts are deterministic, so they

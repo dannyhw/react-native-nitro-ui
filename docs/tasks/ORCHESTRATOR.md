@@ -43,24 +43,44 @@ any machine. The live state is in `STATUS.md` (task table) and `RECOVERY.md`
    records them in `FOLLOWUPS.md`.
 5. Merge (`git merge --no-ff task/<ID>-…`), confirm `bun run check` on the
    merged tree, push, and update `STATUS.md` / `RECOVERY.md` in the same push.
-   "Confirm" is usually a look, not a re-run (X10): `need --for merge` accepts a
-   `check` that passed on an **identical code tree**, provided that line's commit
-   is an ancestor of the merged `HEAD` (`git merge-base --is-ancestor`). A merge
-   that brought in nothing but the branch's own work produces a tree whose digest
-   *is* the one that passed, so re-running the sixteen steps would prove nothing
-   new. It reads two places, and the note says which: the other branches'
-   `.gates/*.jsonl` in this checkout, and the `docs/tasks/<ID>/gates.jsonl`
-   committed by `gate.mjs export`. The second one is what actually applies here —
-   `.gates/` is gitignored, so the checkout where you confirm a merge has never
-   seen the worktree's ledger, while the export arrived with the merge commit.
+   "Confirm" is sometimes a look, not a re-run (X10): `need --for merge` accepts
+   a `check` that passed on an **identical code tree**, provided that line's
+   commit is an ancestor of the merged `HEAD` (`git merge-base --is-ancestor`)
+   *and* every path the merge adds beyond that commit is on a small allowlist of
+   files no `check` step reads — which today is `docs/**`, minus
+   `docs/tasks/*/gates.jsonl`. The allowlist is load-bearing and is proved, not
+   asserted: `scripts/check-docs-drift.mjs` asks each of the sixteen steps what
+   it reads (its own script graph, the jest run's real `--listTests` graph, and
+   prettier/eslint's own ignore answers) and fails `bun run check` if anything
+   under `docs/` turns out to be read. The code tree digest deliberately excludes
+   `docs/`, `bench/`, `.github/` and every `*.md`, so without that second
+   condition a merge that brought in a `bench/` change would reuse a `check` that
+   never saw it (X10 review M1). Read together: a merge of **only task docs and
+   reports** reuses; one that brought in `bench/`, a README or a CI change does
+   not, and the run is owed.
+   Two sources are consulted, and the note says which: the other branches'
+   `.gates/*.jsonl` in *this* checkout, and any `docs/tasks/<ID>/gates.jsonl`
+   committed by `gate.mjs export`. In practice the first is the useful one and
+   the second is refused: a task's export is written *after* the `check` line it
+   carries, so the merge that brings the export also adds a file `check` reads
+   (`gate.mjs` lists `docs/tasks` and opens each ledger), and the rule refuses —
+   correctly, because a ledger that arrives with a merge cannot certify that
+   merge. So the first merge of a task from its worktree confirms `check` by
+   running it; a merge in a checkout that already holds the branch's `.gates/`
+   line, or a docs-only merge on top of a confirmed tree, does not.
    The line is marked `PASS (reused)` in `gate.mjs table` with the branch and the
-   file named, so the borrow is visible rather than implied. When `main` moved as
-   well the digests differ and the run is owed as before, and a **squash** merge
+   file named, so the borrow is visible rather than implied. A **squash** merge
    is refused even though the code matches, because the commit the line names is
-   not in this history. `check` only: a device gate is evidence about a binary
-   built on a particular machine and lease, and a review round is evidence about
-   its own diff. `--no-reuse` asks the strict question when you do not want to
-   take the rule's word for it.
+   not in this history. The newest line on the tree wins across every ledger, and
+   a newer **fail** refuses reuse over an older pass (M2). What reuse does *not*
+   prove: a ledger line is self-attested text — ancestry ties it to history, and
+   tree equality to content, but nothing in git signs the line itself, so a
+   determined author could write a green row for a tree they never checked. The
+   digest is easy to compute; treat a borrowed row as a shortcut for an honest
+   run, not as a substitute for one you would not have run. `check` only: a
+   device gate is evidence about a binary built on a particular machine and
+   lease, and a review round is evidence about its own diff. `--no-reuse` asks
+   the strict question when you do not want to take the rule's word for it.
 
 Delegation template (implementer):
 

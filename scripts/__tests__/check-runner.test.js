@@ -23,6 +23,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   CHECK_STEPS,
+  FINDINGS,
   MAX_DEFAULT_JOBS,
   MAX_JOBS,
   commandForStep,
@@ -247,10 +248,50 @@ describe('steps that share an output are ordered', () => {
       step.name === 'prepare' ? { ...step, needs: [] } : step
     );
     expect(findOutputConflicts(mutated).map((c) => c.kind)).toEqual([
+      'prepare writes nitrogen while lint reads it',
+      'prepare writes nitrogen while format reads it',
       'prepare writes nitrogen/generated while test reads it',
       'prepare writes nitrogen/generated while perf:renders reads it',
       'prepare writes nitrogen/generated while nitrogen:check reads it',
     ]);
+  });
+
+  it('`nitrogen/` as a whole is a region, and lint/format are its readers (N5)', () => {
+    // ESLint and Prettier ignore `nitrogen/generated` only, so they walk the rest of the directory
+    // that `prepare` deletes. Declaring that is what makes the order a checked fact: drop either
+    // declaration below and the structural guard names the pair again.
+    const lint = CHECK_STEPS.find((step) => step.name === 'lint');
+    const format = CHECK_STEPS.find((step) => step.name === 'format');
+    const prepare = CHECK_STEPS.find((step) => step.name === 'prepare');
+    const manifest = CHECK_STEPS.find((step) => step.name === 'manifest:check');
+    expect(FINDINGS.nitrogenDir).toBe('nitrogen');
+    expect(lint.reads).toContain(FINDINGS.nitrogenDir);
+    expect(format.reads).toContain(FINDINGS.nitrogenDir);
+    expect(manifest.reads).toContain(FINDINGS.nitrogenDir);
+    expect(prepare.writes).toContain(FINDINGS.nitrogenDir);
+    expect(prepare.needs).toEqual(expect.arrayContaining(['lint', 'format']));
+
+    const unwaited = CHECK_STEPS.map((step) =>
+      step.name === 'prepare'
+        ? {
+            ...step,
+            needs: step.needs.filter((n) => n !== 'lint' && n !== 'format'),
+          }
+        : step
+    );
+    expect(findOutputConflicts(unwaited).map((c) => c.kind)).toEqual([
+      'prepare writes nitrogen while lint reads it',
+      'prepare writes nitrogen while format reads it',
+    ]);
+    // And dropping the *declaration* rather than the edge is invisible to the guard, which is why
+    // the assertion above is on `reads` and not only on the conflict list: a reader that stops
+    // saying it reads is the one way to lose this check.
+    const undeclared = CHECK_STEPS.map((step) =>
+      step.name === 'lint' ? { ...step, reads: [] } : step
+    );
+    expect(findOutputConflicts(undeclared).map((c) => c.kind)).not.toContain(
+      'prepare writes nitrogen while lint reads it'
+    );
   });
 
   it('a lib reader that stops waiting for the build is the red this guards', () => {
@@ -618,30 +659,66 @@ describe('the scheduler', () => {
     ).toEqual(stepNames());
   });
 
-  it('a step whose need failed is never started even with fail-fast off', async () => {
-    // The graph is the thing under test, so the `needs` guard is exercised on its
-    // own: a step is only ever started when every need has *passed*.
+  it('a step whose need failed is never started - and that guard has a mode that reaches it', async () => {
+    // The default is fail-fast, which halts the whole plan, so the `needs` guard
+    // below it would never be exercised through the CLI. `haltOnFailure: false` is
+    // the scheduler's other mode, and the reason the guard is real rather than dead
+    // code: keep starting independent work, but never a step whose need did not
+    // pass. Mutating that guard turns *this* test red (X10 review N3).
     const steps = [
       { name: 'a', needs: [], writes: [], reads: [] },
       { name: 'b', needs: ['a'], writes: [], reads: [] },
       { name: 'c', needs: ['b'], writes: [], reads: [] },
+      { name: 'd', needs: [], writes: [], reads: [] },
     ];
-    const started = [];
-    const plan = await runCheckPlan({
+    const run = async (step) => {
+      if (step.name === 'a') return { ok: false, log: 'no\n', exitCode: 1 };
+      return { ok: true, log: '', exitCode: 0 };
+    };
+
+    const startedFast = [];
+    const halted = await runCheckPlan({
       steps,
-      jobs: 4,
+      // One slot, so fail-fast is tested as fail-fast rather than as a race: with 4
+      // slots `d` is already running when `a` fails, and running steps are allowed to
+      // finish, so `d` would pass here for the wrong reason.
+      jobs: 1,
       run: async (step) => {
-        started.push(step.name);
-        if (step.name === 'a') return { ok: false, log: 'no\n', exitCode: 1 };
-        return { ok: true, log: '', exitCode: 0 };
+        startedFast.push(step.name);
+        return run(step);
       },
     });
-    expect(started).toEqual(['a']);
-    expect(plan.results.map((r) => [r.name, r.status])).toEqual([
+    expect(startedFast).toEqual(['a']);
+    expect(halted.results.map((r) => [r.name, r.status])).toEqual([
       ['a', 'fail'],
       ['b', 'skipped'],
       ['c', 'skipped'],
+      ['d', 'skipped'],
     ]);
+    expect(halted.results.find((r) => r.name === 'b').reason ?? '').toContain(
+      'a failed'
+    );
+
+    const startedWide = [];
+    const keptGoing = await runCheckPlan({
+      steps,
+      jobs: 4,
+      haltOnFailure: false,
+      run: async (step) => {
+        startedWide.push(step.name);
+        return run(step);
+      },
+    });
+    // `d` does not depend on `a`, so it runs; `b` and `c` are refused by the guard.
+    expect(startedWide.sort()).toEqual(['a', 'd']);
+    expect(keptGoing.failures).toEqual(['a']);
+    expect(keptGoing.results.find((r) => r.name === 'b').status).toBe(
+      'skipped'
+    );
+    expect(keptGoing.results.find((r) => r.name === 'b').reason).toContain(
+      'which did not pass'
+    );
+    expect(keptGoing.results.find((r) => r.name === 'd').status).toBe('pass');
   });
 
   it('a step that throws is a failure, not a hang', async () => {
@@ -953,10 +1030,141 @@ describe('check.mjs, spawning real steps', () => {
     // waits on, so `Checks (parallel)` would be a new check name with the old one
     // reported as expected-but-never-run.
     expect(job[1]).toMatch(/^ {4}name: Checks\n/);
-    expect(job[1]).toContain('run: bun run check');
+    // The exact command line, not a substring: `run: bun run check:serial` contains
+    // `run: bun run check`, so a loose match stayed green when CI was pointed back at
+    // the old chain (review N2). Eight spaces: `run:` is a step key, `name:` above is
+    // a job key at four.
+    expect(job[1]).toMatch(/^ {8}run: bun run check\n/m);
     // Not a chain of steps, and not forced to a job count: a pinned `--jobs` would
     // make CI's evidence a different experiment from the local one.
     expect(job[1]).not.toMatch(/run: bun run (typecheck|test) &&/);
     expect(job[1]).not.toContain('--jobs');
   });
+});
+
+/* --------------------- the entry guard, in an odd path (M3) ------------------- */
+
+/**
+ * The runner decides whether to *run* by comparing its own URL with `argv[1]`, and
+ * that comparison is where a silent no-op hides: an ESM URL is percent-encoded and
+ * symlink-resolved, so the naive `file://${argv[1]}` form never matched for a
+ * checkout under a path with a space or reached through a symlink. `main()` then
+ * never ran, the process exited 0 with no output, and `gate.mjs check` recorded
+ * that silence as a green run (X10 review M3).
+ *
+ * A copy of the runner in a scratch checkout is the only way to test this honestly:
+ * the guard compares the file that was *invoked*, so the path under test has to be
+ * the path in `argv[1]`.
+ */
+function runnerInScratchCheckout(named) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'x10-entry-'));
+  fs.mkdirSync(path.join(dir, named, 'scripts'), { recursive: true });
+  // The graph is only allowed to run if it still describes `check:serial`, so the
+  // scratch manifest carries the real chain - generated from the real graph, which
+  // the parity test above already pins to the real manifest.
+  fs.writeFileSync(
+    path.join(dir, named, 'package.json'),
+    JSON.stringify({
+      name: 'x10-entry-fixture',
+      scripts: { 'check:serial': serialChainFromSteps() },
+    })
+  );
+  for (const file of ['check.mjs', 'check-steps.mjs']) {
+    fs.copyFileSync(
+      path.join(root, 'scripts', file),
+      path.join(dir, named, 'scripts', file)
+    );
+  }
+  const bin = path.join(dir, named, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const fakeBun = path.join(bin, 'bun');
+  fs.writeFileSync(fakeBun, FAKE_BUN);
+  fs.chmodSync(fakeBun, 0o755);
+  return {
+    dir,
+    bin,
+    script: path.join(dir, named, 'scripts', 'check.mjs'),
+  };
+}
+
+describe('the runner runs itself from any path (M3)', () => {
+  it('runs steps from a checkout whose path contains a space', () => {
+    const { dir, bin, script } = runnerInScratchCheckout('a space');
+    const trace = path.join(dir, 'trace.log');
+    fs.writeFileSync(trace, '');
+    const run = spawnSync(process.execPath, [script, '--jobs', '1'], {
+      cwd: path.dirname(script),
+      encoding: 'utf8',
+      timeout: 120_000,
+      env: {
+        ...process.env,
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+        X10_FAKE_STEPS: '{}',
+        X10_FAKE_TRACE: trace,
+      },
+    });
+    // The header is the proof that `main()` ran, and the trace that a step did.
+    expect(run.stdout).toContain('steps, 1 job(s) of');
+    expect(run.status).toBe(0);
+    expect(
+      fs
+        .readFileSync(trace, 'utf8')
+        .split('\n')
+        .filter((line) => line.startsWith('start ')).length
+    ).toBe(CHECK_STEPS.length);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 120_000);
+
+  it('runs steps when invoked through a symlink to itself', () => {
+    const { dir, bin, script } = runnerInScratchCheckout('real');
+    const linkDir = path.join(dir, 'link');
+    fs.mkdirSync(path.join(linkDir, 'scripts'), { recursive: true });
+    fs.symlinkSync(script, path.join(linkDir, 'scripts', 'check.mjs'));
+    const trace = path.join(dir, 'trace.log');
+    fs.writeFileSync(trace, '');
+    const run = spawnSync(
+      process.execPath,
+      [path.join(linkDir, 'scripts', 'check.mjs'), '--jobs', '1'],
+      {
+        cwd: dir,
+        encoding: 'utf8',
+        timeout: 120_000,
+        env: {
+          ...process.env,
+          PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+          X10_FAKE_STEPS: '{}',
+          X10_FAKE_TRACE: trace,
+        },
+      }
+    );
+    expect(run.stdout).toContain('steps, 1 job(s) of');
+    expect(run.status).toBe(0);
+    expect(
+      fs
+        .readFileSync(trace, 'utf8')
+        .split('\n')
+        .filter((line) => line.startsWith('start ')).length
+    ).toBe(CHECK_STEPS.length);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 120_000);
+
+  it('a no-op runner is visible: no header and exit 0 is the bug, not a pass', () => {
+    // The M3 shape from the other side. With the guard fixed this cannot happen for
+    // a path reason, so the assertion is the one `gate.mjs check` now leans on: an
+    // exit-0 run with no step list is refused by the ledger, which is tested there.
+    // Here: prove the runner says something when it works, so "printed nothing" is a
+    // signal rather than a normal-looking outcome.
+    const { dir, script } = runnerInScratchCheckout('quiet');
+    const trace = path.join(dir, 'trace.log');
+    fs.writeFileSync(trace, '');
+    const run = spawnSync(process.execPath, [script, '--jobs', 'nope'], {
+      cwd: dir,
+      encoding: 'utf8',
+      timeout: 60_000,
+      env: { ...process.env, X10_FAKE_TRACE: trace },
+    });
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain('--jobs');
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 60_000);
 });

@@ -44,6 +44,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 import {
   CHECK_STEPS,
@@ -251,8 +252,14 @@ const running = new Set();
 /**
  * Ctrl-C or a task runner's SIGTERM has to reach the steps, not just this process:
  * children left holding a checkout after the parent exits is how one machine ends
- * up with two checks in it. Forwarding gives each step its own cleanup, and the
- * default behaviour then re-raises on self so the exit status is still the signal.
+ * up with two checks in it. Forwarding gives each step its own cleanup.
+ *
+ * What it does *not* do is preserve the signal exit status. Installing a listener
+ * replaces Node's default "die from this signal" behaviour, so once the last child
+ * is reaped this process exits normally — status 0 or 1, never 130 — and a caller
+ * that watched for "killed by SIGINT" would see a run that finished. That is the
+ * trade for not orphaning a build; `gate.mjs` is the caller that cares and it
+ * re-raises on itself after writing the ledger line (X10 review N6).
  */
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
@@ -329,7 +336,18 @@ export function runStep(step, env = process.env) {
 
 if (
   process.argv[1] != null &&
-  import.meta.url === `file://${path.resolve(process.argv[1])}`
+  // The repo's idiom (`lease.mjs`, `pod-install.mjs`), not a `file://${path}` string: ESM URLs are
+  // percent-encoded and symlink-resolved, so a checkout path with a space, `%`, `#`, or one reached
+  // through a symlink (`/tmp` -> `/private/tmp`) never matched - `main()` silently did not run, the
+  // process exited 0 with no output, and `gate.mjs check` recorded that silence as a pass (M3).
+  // `realpathSync` so being invoked through a symlinked path is the same script; `existsSync`
+  // because realpathSync throws for a path that is gone.
+  import.meta.url ===
+    pathToFileURL(
+      fs.existsSync(path.resolve(process.argv[1]))
+        ? fs.realpathSync(path.resolve(process.argv[1]))
+        : path.resolve(process.argv[1])
+    ).href
 ) {
   try {
     process.exitCode = await main();
