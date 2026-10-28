@@ -1,10 +1,10 @@
 # Committed benchmark baselines
 
-**Status: `maintainer-mac-1` has both files; `maintainer-mac-2` has none yet.** On
-`maintainer-mac-1`, `--check` gates both platforms. On `maintainer-mac-2` it refuses
-until that machine mints its own (`--exclusive`, idle, overnight — see
-`docs/tasks/RECOVERY.md`). The numbers below are what `maintainer-mac-1`'s two runs
-recorded.
+**Status: `maintainer-mac-1` has both files; `maintainer-mac-2` has Android only.** On
+`maintainer-mac-1`, `--check` gates both platforms. On `maintainer-mac-2` Android gates
+and iOS refuses until that machine mints its own (`--exclusive`, idle, overnight — see
+`docs/tasks/RECOVERY.md` and the iOS paragraph below). The numbers below are what
+`maintainer-mac-1`'s two runs recorded.
 
 ## Layout
 
@@ -12,6 +12,8 @@ recorded.
       maintainer-mac-1/
         ios27-sim-iphone17.json      # iPhone 17 simulator, iOS 27
         android35-emu-pixel9.json    # API 35 Pixel 9 emulator, ART speed-profile
+      maintainer-mac-2/
+        android35-emu-pixel9.json    # same device class, 10-core M1 Max host
       <machine-label>/<deviceKey>.json   # the rule
       renders.json                   # JS render counts (machine-independent)
       README.md
@@ -85,9 +87,33 @@ problem-free and were refused by the single end-of-run sample (10.50 and 7.60 ag
 7.0). Judging load over the whole run is what let this one through, and its `max` of
 75.64 shows why one sample was never enough.
 
+`maintainer-mac-2/android35-emu-pixel9.json` comes from one clean
+`--plan full --launches 8` run on that machine's canonical API 35 Pixel 9 AVD at
+`9cf95f3` — 1848/1848 launches (49 cells x 5 implementations x 8; the `nitro-ui-host`
+arm is Android-only), no problems, ART `speed-profile` on the first attempt, and
+whole-run sampling as quiet as it gets: 2475 samples, median 1.47 against that machine's
+ceiling of 5.0 (10 cores, so 0.5 x cores is 5.0 there, not 7.0), p90 2.11, max 3.81, and
+**none** of them over it. `--check` on Android gates there: 166 nitro-ui rows within
+tolerance, 27 suppressed by their own within-run spread, 7 `new arm` (the leak cells,
+which store no slope), 0 failures — and halving one quiet `presented` ratio, in both
+`ratio` and all eight `launchRatios`, makes it exit 1.
+
+`maintainer-mac-2` has **no iOS file yet, and a retry would not produce one.** Its one
+attempt (`--plan full --launches 8`, 1568/1568 launches, `problems: []`, clean tree,
+4 h 24 min) was refused for one reason, and it was not load: `mount.date-picker` at N=200
+presented on 55 of 160 measured iterations on `expo-ui-host-per-control` and 87 of 160 on
+`expo-ui-shared-host`, and the completeness rule will not mint a ratio table with a
+survivor-biased metric in it. That run's samples were 2096 strong with median 2.19 against
+the 5.0 ceiling and 11 over (0.5 %). `maintainer-mac-1`'s file has both cells with
+`missingPresented: 0` and a 0.5 % spread, so this is a per-machine frame-probe gap on that
+simulator rather than a plan defect, and closing it is `docs/tasks/FOLLOWUPS.md`'s before
+that machine mints iOS. Details in `docs/tasks/A3-baselines-mac2.report.md`.
+
 Components added after a baseline was recorded have no entries in it yet: `Picker` on
 both platforms and `DatePicker` on Android. `--check` reports their cells as
-`new arm` until the next refresh.
+`new arm` until the next refresh. That is `maintainer-mac-1`'s situation only —
+`maintainer-mac-2`'s Android file recorded every scenario for every component the plan has
+on Android, so nothing is `new arm` there but the `leak` cells, which store no slope.
 
 The one Android baseline committed before this one (`bb41d00`) was recorded while
 nitro-ui self-skipped: all seven of its nitro-ui cells carry a `skipReason` and zero
@@ -132,10 +158,15 @@ overFraction }`. A run is refused when its **median** sample is over the ceiling
 - **`--plan full` with 8 launches**, no `problems`, on the canonical device.
   `--plan quick` numbers are local feedback, not baseline material.
 - **Machine + device key** — the label rules are above, and `--force` does not get
-  around them. A runtime change is a
-  comparability break, so it gets a new file. Anything that is not the canonical
-  device on its own machine uses same-run ratio tables and `--compare <ref>`, never
-  `--check`.
+  around them. The load ceiling belongs to the _measuring_ machine: 7.0 on
+  `maintainer-mac-1` (14 cores), 5.0 on `maintainer-mac-2` (10). Two files can share a
+  `deviceKey` while their hosts are different hardware, and `machine.cpuModel` is what
+  says which (`Apple M4 Pro` / `Apple M1 Max`) — as well as why one machine's `presented`
+  column can sit on a 16 ms frame floor while the other's spans three frames. Load-sample
+  medians across machines are not comparable numbers, and neither are ratios whose control
+  arm moved. A runtime change is a comparability break, so it gets a new file. Anything
+  that is not the canonical device on its own machine uses same-run ratio tables and
+  `--compare <ref>`, never `--check`.
 - **One dedicated commit** per refresh, so the diff is only this directory.
 - **Prettier-clean.** The runner writes 2-space JSON with one `launchRatios`
   entry per line, and `bun run check` runs `prettier --check .`, which rejects that
