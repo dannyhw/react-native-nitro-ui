@@ -212,3 +212,85 @@ above; nothing from that run should be read as a proof.
 - `scripts/__tests__/gate-logs.test.js` 44 → 62 tests; `scripts/__tests__/gate.test.js` the progress
   race; `AGENTS.md`, `CONTRIBUTING.md`, `docs/tasks/ORCHESTRATOR.md` — what the store, `--failed` and
   an excerpt actually guarantee, with no "read it before you push" hedge.
+
+## Fix round 2
+
+Against the re-review (`ad90616`): all five must-fixes, plus N4, N7 and N8.
+
+**N3** the two assignment regexes became one left-to-right pass with a bounded key scan, and an excerpt selects its lines first and scrubs only those, each capped. A 1 MB line of `a.` scrubs in 70 ms; the old pair took 12.6 s at 40 KB. **N5** two halves now: exact strings plus whole-word username and host rules and the whole scratch folder, and shape rules for other people's `/Users/x` and any `/var/folders/<hash>`. Added: email, `curl -u`, `user:pass@host`, Stripe/Anthropic/GitLab shapes, a config value that is a phrase. `git@github.com` and `logo@2x.png` stay. **N6** probes pass through `redactForeignDeviceIds`, so another task's UDID or serial becomes `<other device>` and the header's claim is true. **N1** a migrated log's branch is read from its own path, its verdict under the migrated spelling. **N2** the sequence keys on the file name, not the millisecond-bearing `ts`. **N4/N7/N8** three guards are testable, expired logs stop migrating, `NITRO_UI_GATE_LOG` must be this branch's own.
+
+**N9** is this section: the numbers below were read off the file, not remembered; round 1's "excerpts sequenced" claim was false until N2; the `FAKE_SLEEP` cost is listed as a follow-up, not a fix.
+
+### Gates (fix round 2)
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 871 tests / 36 suites | `182f1afd98ff` | 2 m 46 s | start 1.9 / med 3.6 / max 75.6 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`need --for review`: `need: review is satisfied on this code tree.` — the diff is check-only tooling, so no device gate is asked for. No devices were used; the probes are fake binaries. `gate-logs.test.js` 62 → 99 tests. The `max 75.6` load is this machine running the mutation batteries beside the gate.
+
+### Red proofs (fix round 2)
+
+Each mutation applied alone and restored from an in-memory copy. Format: mutation -> the line that went red, in `gate-logs.test.js`.
+
+N3:
+
+- `MAX_KEY_SCAN` bound removed -> `:2222` `it('is not quadratic when one separator sits at the end of a long run')` — the suite did not reach its own result inside 420 s
+- key reach `128` → `1` -> `:2258 expect(text).not.toContain('abcdef123456')` — the bound's other direction: a key longer than one character stops being recognised, so a real credential buried in a megabyte survives
+- `EXCERPT_MAX_LINE_CHARS` cap dropped -> `:2364 expect(content).toContain('[line truncated]')`
+- scrubbing every line again (round 1) -> `:2347 expect(scrubbed).toBe(0)`, received `300`
+- `tailLines: 0` accepted as `slice(-0)` (the whole log) -> `:2347` same line, received `300`
+
+N5 and N6:
+
+- identity rules never returned -> `:1995 expect(apply(line)).not.toContain('danielwilliams')`
+- host matched only in `os.hostname()`'s spelling -> `:2036 expect(redacted).not.toContain('daniels-macbook-pro')`
+- host matched case-sensitively -> `:2036` same line
+- identity strings of any length matched -> `:2099 expect(shortUser).toBe('ps -o user=p | grep -w id …')`
+- email rule off -> `:1924 expect(text).not.toContain(address)`
+- `git@github.com` treated as a person -> `:1936 expect(scrubSecrets(remote).text).toBe(remote)`
+- `curl -u` rule off -> `:1953 expect(text).not.toContain('hunter2')`
+- bare `user:pass@host` rule off -> `:1954 expect(text).toContain('[scrubbed]')` (the email rule caught part of it, which is itself worth knowing)
+- config-style value dropped -> `:1866 expect(config.text).toBe('nexusPassword: [scrubbed]')`
+- JSON structural character read as a value -> `:1882 expect(nested.text).toContain('"b":"c"')`
+- `/Users` + `/home` shape rule inert -> `:2134 expect(result).not.toContain(secret)`
+- role accounts redacted anyway -> `:2154 expect(scrubMachinePaths(line)).toBe(line)`
+- `/var/folders` shape rule inert -> `:2134` same line
+- this machine's scratch parent kept -> `:2060 expect(apply(line)).not.toContain('ZZ34Q44R7S30Q5V4F04F0000')`
+- a plain `/tmp` redacted -> `:2071 expect(apply('rm -rf /tmp/whatever')).toBe(…)`
+- device-block redaction skipped -> `:2584 expect(context).not.toContain('1F2D3E4F-…')`
+- the lease's own UDID not treated as ours -> `:2580 expect(context).toContain('CD670291-…')`
+- emulator serials left alone -> `:2621 expect(context).not.toContain('emulator-5560')`
+- nothing claimed means nothing compared -> `:2607 expect(context).not.toContain('CD670291-…')`
+
+N1, N2, N4, N7, N8:
+
+- N1 branch read as `(unknown)` under `.gates/logs/` -> `:712` `3 log file(s) for task/x12-legacy`, printed 1
+- N1 record's migrated key dropped -> `:743 expect(afterRemoval.stdout).toContain('check-2026-10-27…')`
+- N1 ledger line's migrated key dropped -> `:726` `3 log file(s)`, printed 2
+- N2 sequence keyed on raw `ts` -> `:1630 expect(written).toHaveLength(2)`, one file both lines point at
+- N4 `asksAdb = true` -> `:2649 expect(asked).not.toContain('adb')`
+- N4 `foreground !== true` removed -> `:1358 expect(wait.status).toBe(13)`, received `7`
+- N4 branch comparison removed -> `:1409 expect(wait.status).toBe(2)`, received `13`
+- N4 the fake adb's `get-state` grep bug restored -> `:2671 expect(context).toMatch(/adb get-state…\|\s*device/)`
+- N7 age check removed -> `:1032 expect(runs).not.toContain('retention removed')` — the review's line, twice in three runs
+- N8 widened to "anywhere in the store" -> `:829 expect(run.stderr).toContain('ignoring NITRO_UI_GATE_LOG')`
+- N8 compared as unresolved `path.resolve` -> `:884 expect(run.stderr).not.toContain('ignoring NITRO_UI_GATE_LOG')` — the launcher's own path, spelled through a symlink, is rejected. `:852`, the other acceptance test, stays green under this mutation because it builds its path from the already-resolved store: that is why both exist.
+
+The first batteries reported three of these as green and two others as red in name only, and all five were my error rather than the code's: the detector called "no ✕ printed" green, so a suite that failed to parse passed, and three mutations renamed an identifier instead of disabling a rule, which threw at import instead of asserting. The rewritten battery separates a broken file from a passing test, and every line above was read out of a failure that names an `expect`.
+
+Three guards arrived untested and were caught before this report rather than after: the `PROTOCOL_ACCOUNTS` exemption, the role-account list, and the `> '/tmp'.length` floor that stops `os.tmpdir()` on a Linux runner rewriting every `/tmp/...` in a CI log. The hostname test was worse than untested — it asserted `not.toContain(form.toLowerCase())` against text that still read `Daniels-MacBook-Pro`, so it could never have failed.
+
+### Privacy re-check of the committed excerpt
+
+`grep -cE` over `docs/tasks/X12/{failures/*.log,gates.jsonl}`, each returning 0: `danielwilliams`; `/Users/[A-Za-z]`; `/home/[A-Za-z]`; `/var/folders/[a-z0-9]{2}/`; a UUID-shaped UDID; `emulator-[0-9]+`; any email; `MacBook|.local|williams`; `ghp_|npm_|sk-ant|sk_live|AIza|glpat-|eyJ`; `_auth|password|secret|token=`. What remains is placeholders only — `<repo>` ×4, `<tmp>` ×3, `<store>` ×2, and one each of `<host>`, `<user>`, `<other device>`, all six inside the header sentence that names the guarantees. No device gate ran this round, so no real identifier was ever in scope.
+
+### Follow-ups (fix round 2)
+
+- `FAKE_SLEEP` 5 → 20 in `gate.test.js` costs ~15 s of suite time (round 1's race fix). A barrier on the log line would remove both the sleep and the flake; not done here, since a faster fake re-exposes the race the review asked closed.
+- `scrubMachinePaths` leaves `/Volumes/<host>/…` to the hostname rule instead of matching mount roots itself, so a host whose name is an ambiguous word keeps its mount path.
+- N1's foreground half: a pre-X12 *foreground* run leaves only a ledger line, so after `git worktree remove` its log is listed and reported as unjudgeable. Making that judgement survive would mean writing a record at migration time — inventing a verdict the source never recorded.
