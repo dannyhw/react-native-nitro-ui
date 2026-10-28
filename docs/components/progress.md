@@ -99,7 +99,7 @@ asserts (`example/__tests__/Progress.harness.tsx`).
 
 The component declares `320 × 4` with the `fillWidth` policy as its fallback on
 both platforms (`NitroUiDeclaredFallbacks`, registered at startup — a Fabric measure can happen
-before any view exists). Two things follow, both measured rather than argued:
+before any view exists). Two things follow:
 
 - The declared height is the *linear* one, which is also the default variant, so
   a cold bar is laid out at the right thickness on the first frame. Under a finite
@@ -108,10 +108,14 @@ before any view exists). Two things follow, both measured rather than argued:
   horizontal `ScrollView` — the declared **width** is what draws, on the first frame
   and on every frame after it: there is no box width to substitute and a linear bar
   has no intrinsic width of its own, so 320 is not a placeholder there, it is the
-  length of the bar the user sees. Declare the width you would want that bar to be.
+  length of the bar the user sees. An app can't change the declared number; give
+  the bar an explicit `width` style if 320 is wrong for the layout. (The device test
+  for this case is the Slider's, `hands an unbounded parent its declared width…`;
+  Progress uses the same sizing engine path but has no unbounded-parent test of its
+  own.)
 - The fallback map is keyed by **component**, not by configuration, so a cold
   mount of the *ring* starts from the bar's box and is corrected to 20 pt / 40 dp
-  one frame later. That is D17's one-frame budget, documented here and named by
+  one frame later (measured). That is D17's one-frame budget, documented here and named by
   the harness's poison test, which seeds the cache with `137 × 23` for both keys
   and then waits for the box to become what the control measured. Fixtures that
   equalled the declared fallback could not tell a correction from a control that
