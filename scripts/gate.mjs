@@ -78,6 +78,12 @@ import {
   summarizeLoad,
 } from './gate-core.mjs';
 import { contentHash, isCodeFile } from './app-stamp-core.mjs';
+import {
+  SUITE_TIMING_ENV,
+  formatSuiteTimings,
+  readSuiteTiming,
+  suiteTimingPath,
+} from './harness-suite-timing.mjs';
 import { writeJsonAtomic } from './lease-core.mjs';
 import { currentCodeTree, repoRootOf } from './app-stamp.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
@@ -539,6 +545,17 @@ async function runGate(name, resolved, options = {}) {
   // thing. Foreground runs still name their own log.
   const logName = `${name.replaceAll(/[^\w.-]+/g, '+')}-${new Date(startedAt).toISOString().replaceAll(':', '-')}.log`;
   const logPath = options.logPath ?? path.join(LEDGER_DIR, 'logs', logName);
+  // The suite-timing hand-off lives beside the log and shares its timestamp, so a reader who has
+  // one can find the other. `.json` next to `.log`, not inside `logs/`, because a timing file is
+  // data the ledger cites and a log is prose a human reads.
+  const suiteTimingFile = resolved.platform
+    ? suiteTimingPath({
+        repoRoot,
+        gate: name,
+        pid: process.pid,
+        startedAt,
+      })
+    : null;
   // Appending for a backgrounded run: the launcher already has that file open in
   // append mode for this process's own stdout/stderr, and truncating it here would
   // erase the lines that explain a crash.
@@ -578,6 +595,10 @@ async function runGate(name, resolved, options = {}) {
       env: (() => {
         const childEnv = { ...process.env };
         delete childEnv.NITRO_UI_GATE_LOG;
+        // Per-suite timings (X11): the harness's plugin writes durations next to this run's
+        // log, and the ledger line below cites them. Only a harness run can produce them.
+        if (suiteTimingFile != null)
+          childEnv[SUITE_TIMING_ENV] = suiteTimingFile;
         return childEnv;
       })(),
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -655,6 +676,8 @@ async function runGate(name, resolved, options = {}) {
     // perf step that happened to print last (M3).
     counts: parseTestCounts(logText) ?? summaries[0] ?? null,
     summaries,
+    suiteTimings:
+      suiteTimingFile == null ? null : readSuiteTiming(suiteTimingFile),
     logPath,
     startedAt,
     exitCode: exit.code ?? (exit.signal != null ? null : 1),
@@ -686,6 +709,18 @@ async function runGate(name, resolved, options = {}) {
       `${exit.signal != null ? ` (signal ${exit.signal})` : ''}${suffix}\n` +
       `gate: recorded in ${path.relative(repoRoot, file)}\n`
   );
+  // Slowest suites first, on the terminal and in the log, because the point of recording them is
+  // that somebody reads them at the moment a run looks slow rather than months later.
+  const timings = line.suiteTimings;
+  if (timings != null && timings.suites.length > 0) {
+    const table = formatSuiteTimings(timings, { limit: 12 });
+    logStream.write(`${table}\n`);
+    if (echo) process.stdout.write(`${table}\n`);
+  } else if (suiteTimingFile != null) {
+    process.stderr.write(
+      'gate: no per-suite timings recorded - the harness plugin did not run\n'
+    );
+  }
   if (result === 'fail' && resolved.bench) {
     process.stderr.write(
       'gate: a bench never blocks `need` - benches go to the bench host (D15).\n'
@@ -829,6 +864,25 @@ function commandTable({ stage, full }) {
           : null,
     })}\n`
   );
+  // `--full` also prints where the time went, for the runs *this table reports on*: the Duration
+  // column says a harness run cost 455 s, and only these rows say whether that is the sizing suite
+  // or the boot (X11). Iterating the reported rows rather than the whole ledger matters - a branch
+  // with thirty recorded runs would otherwise print thirty tables - and a row with no timings
+  // prints nothing, so the section claims "measured" and never reads as "all fast".
+  if (full === true) {
+    const rows = summarizeGates({
+      entries,
+      tree: read.tree,
+      trees: read.trees,
+      stage,
+      required: MERGE_GATES,
+    });
+    for (const row of rows) {
+      const timings = row.entry?.suiteTimings;
+      if ((timings?.suites?.length ?? 0) === 0) continue;
+      process.stdout.write(`\n${formatSuiteTimings(timings, { limit: 15 })}\n`);
+    }
+  }
   return 0;
 }
 
