@@ -418,22 +418,29 @@ What that means in practice:
   fall under the bench's settle ceiling, and resets the example app. Without it
   a lease only reserves names - which is what a test, a CI runner or a bench
   host wants.
-- **Reaping is the cheap half and it is not opt-in.** `acquire`, `release`,
-  `list` and `reap` power off any pool device idle past `idleShutdownMinutes`
-  (`devices.json`, default 30; `0` means "as soon as a run lets go"). No
-  daemon: the reaper runs from the commands people already type. `--no-reap`
-  opts out, and `NITRO_UI_LEASE_BOOT=0` takes the whole device lifecycle
-  offline for a machine that manages its own devices. `reap --idle-minutes N`
-  overrides the configured limit for that one call - `0` is "off now", which is
-  what you want when the machine is yours again at the end of the day.
-- **A device under a live lease is never powered off on a timer**, and
-  `--idle-minutes` does not override that. The idle clock is for the boot
-  somebody _left behind_: a task that released, or one whose lease ran out its
-  TTL. It is not a licence to evict a running task, because most of what a task
-  does makes no claim - building, running Metro, a direct `real-input` run, or
-  twenty minutes reading a stack trace - and 31 idle minutes is ordinary work.
-  The way to get a leased device powered off is to release its lease, not to
-  pass a flag in your own shell; `list` names whose it is.
+- **Nothing reaps passively.** `acquire`, `release` and `list` never power a
+  device off and never reset one, not even one that is idle past
+  `idleShutdownMinutes` (`devices.json`, default 30). Devices are powered off in
+  exactly two places: when you type `node scripts/lease.mjs reap`, and when an
+  `--exclusive` acquire promises its bench a quiet machine. There is no daemon,
+  and no lease command kills on your behalf, because `list` is the command every
+  task runs most often and a `list` that reaps is a reaper in every shell.
+  `--no-reap` opts out of even the explicit reap, and `NITRO_UI_LEASE_BOOT=0`
+  takes the whole device lifecycle offline for a machine that manages its own
+  devices. `reap --idle-minutes N` overrides the configured limit for that one
+  call - `0` is "off now", which is what you want when the machine is yours again
+  at the end of the day. An abandoned boot therefore waits for the next explicit
+  reap, and that is the trade: the alternative was a command that killed devices
+  nobody typed it for.
+- **A device under a live lease is never powered off on a timer**, whoever is
+  asking - including the task that holds the lease - and `--idle-minutes` does not
+  override that. The idle clock is for the boot somebody _left behind_: a task
+  that released, or one whose lease ran out its TTL. It is not a licence to evict
+  a running task, because most of what a task does makes no claim - building,
+  running Metro, a direct `real-input` run, or twenty minutes reading a stack
+  trace - and 31 idle minutes is ordinary work. The way to get a leased device
+  powered off is to release its lease, not to pass a flag in your own shell;
+  `list` names whose it is.
 - **A device is only ever powered off if `devices.json` names it**, and never
   on a reserved serial. The pool shuts down what the machine _declared_, never
   something it merely observed booted. And it never acts on the serial a state
@@ -444,11 +451,16 @@ What that means in practice:
 - **A run in flight is never interrupted.** A gate claims the devices of the
   lease it runs under for the duration of the run (`scripts/gate.mjs`), so a
   reap cannot power off an emulator mid-suite, and a second gate aimed at the
-  same device is refused before it starts. `NITRO_UI_GATE_DEVICE_FORCE=1` runs
-  anyway; a bench that wants the machine to itself uses `--exclusive`, which
-  powers off every pool device no _other_ lease holds - with or without
-  `--boot`, because the bench host's documented invocation is the one without
-  it.
+  same device is refused before it starts. Every kill re-checks that claim at the
+  moment it acts, so a lease and claim taken _while a reap is running_ are seen:
+  the decision is not allowed to be minutes old. The between-task reset does the
+  same and skips a device with a live claim, which is what stops a task
+  re-running `acquire --boot` in a second shell - the documented way to
+  regenerate its env file - from wiping its own running suite.
+  `NITRO_UI_GATE_DEVICE_FORCE=1` runs anyway; a bench that wants the machine to
+  itself uses `--exclusive`, which powers off every pool device no _other_ lease
+  holds - with or without `--boot`, because the bench host's documented
+  invocation is the one without it.
 - **Anything started outside `gate.mjs` runs unclaimed.** `bun run harness:*`,
   a direct `node scripts/real-input/*.mjs --control …` and `build-app.mjs` take
   no claim, so what protects them is the rule above: their pair is leased, and a

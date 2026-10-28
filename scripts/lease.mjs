@@ -63,7 +63,7 @@ const USAGE =
   '                                          [--no-boot] [--no-reset] [--boot-timeout-minutes N]\n' +
   '       node scripts/lease.mjs renew <lease-id> | --task <id>\n' +
   '       node scripts/lease.mjs release <lease-id> | --task <id>\n' +
-  '       node scripts/lease.mjs reap [--idle-minutes N] [--config <file>]\n' +
+  '       node scripts/lease.mjs reap [--idle-minutes N] [--config <file>]   (the only reaper)\n' +
   '       node scripts/lease.mjs list [--json]';
 
 /**
@@ -89,8 +89,10 @@ const LOCK_TIMEOUT_MS = Number(
  * (`acquire`, `release`, `list`, `renew`) are run by tests, by CI and by scripts that have no
  * interest in a simulator appearing. Booting a device is seconds-to-minutes of work, it moves the
  * machine's load, and it is a side effect nobody asked for when they wanted a port number. So
- * `acquire --boot` is the command that warms the pair, `lease.mjs reap` is the one that powers
- * devices off, and both `acquire` and `release` reap when they are told to (`--boot`).
+ * `acquire --boot` is the command that warms the pair, and `lease.mjs reap` is the one that powers
+ * devices off — plus the power-off an `--exclusive` acquire owes its bench. Nothing else kills:
+ * X11's re-review found that a `list` which reaps is a reaper in every shell on the machine, and
+ * `list` is the command every task runs most.
  *
  * `NITRO_UI_LEASE_BOOT=1` turns `--boot` on for a whole shell, which is what CONTRIBUTING tells an
  * agent to do, because an agent's lease is always a device lease.
@@ -628,8 +630,8 @@ function main(argv) {
   if (command === 'reap') {
     const { devices } = loadDevices(options, paths);
     // Asked directly, `reap` accounts for every device it looked at, including the ones it left
-    // up - the silent version is right for the automatic reap on `acquire`/`list`, where a
-    // device every task is about to reuse would print a line a hundred times a day.
+    // up: this is the one command with no reason to be quiet about what it touched, and "kept"
+    // is the answer a caller needs when they were told the machine would be free.
     reportReap(reapPool({ devices, paths, options, log }), log, {
       reportKeeps: true,
     });

@@ -31,9 +31,11 @@ Background (read the sections your brief points to):
   shut down, wipe or kill devices you did not start. **Never touch the `emulator-5560` emulator —
   it belongs to the human.**
   **The lease owns device lifecycle, not you** (X11): `--boot` starts the pair and waits until it
-  is settled, `release` leaves it booted, and `lease.mjs reap` powers off what is idle past
-  `idleShutdownMinutes` *and* no live lease holds. So do *not* power off your devices at the end of
-  a round — an idle device is the pool's business, and a warm one is the reason the next run does
+  is settled, `release` leaves it booted, and only an explicit `lease.mjs reap` — or an
+  `--exclusive` acquire — powers anything off. `acquire`, `list` and `release` never kill or reset
+  another device, however idle it looks, and a live lease protects its pair from *its own* task's
+  reap. So do *not* power off your devices at the end of a round — an idle device is the pool's
+  business, and a warm one is the reason the next run does
   not pay for a boot. How much a boot costs is machine-local: `acquire --boot` prints the wait it
   just did, and the one measured series on this box is iOS — `load1` peaks of 58.5/64.6/72.2/74.3
   over four cold boots, still 16–21 after 150 s (X11 report item 6). No Android boot has been

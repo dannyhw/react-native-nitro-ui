@@ -634,10 +634,17 @@ describe('the lease owns the device lifecycle', () => {
     // is what it did the first time round.
     tools({ androidUp: true });
     warmDevice(idleEntry());
-    const acquired = cli(['acquire', '--task', 'T1', '--no-boot', '--no-reap']);
-    expect(acquired.status).toBe(0);
+    // `lease.mjs reap` rather than `acquire`: since the no-passive-reaping decision, an acquire
+    // kills nothing whatever the flags, so the only command that can honour `--no-reap` is the one
+    // somebody typed. Both halves are here so this is about the flag and not an unreachable path.
+    const suppressed = cli(['reap', '--no-reap']);
+    expect(suppressed.status).toBe(0);
     expect(log()).not.toContain('emu kill');
     expect(poolDevices()).toHaveLength(1);
+    const reaped = cli(['reap']);
+    expect(reaped.status).toBe(0);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+    expect(poolDevices()).toEqual([]);
   });
 
   it('boots its own pair under --boot --no-reap, and still leaves others alone', () => {
@@ -658,6 +665,10 @@ describe('the lease owns the device lifecycle', () => {
     expect(poolDevices().map((x) => x.key)).toContain('avd:nitro-ui-a');
     // pair-b's device is 90 minutes idle and named in devices.json: reap would take it, and this
     // caller said not to reap.
+    expect(log()).not.toContain('emu kill');
+    expect(poolDevices().map((x) => x.key)).toContain('avd:nitro-ui-b');
+    // Where the flag has teeth now: the explicit reap, suppressed.
+    expect(cli(['reap', '--no-reap']).status).toBe(0);
     expect(log()).not.toContain('emu kill');
     expect(poolDevices().map((x) => x.key)).toContain('avd:nitro-ui-b');
   });
