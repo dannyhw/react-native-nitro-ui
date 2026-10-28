@@ -99,7 +99,7 @@ slow arm from a dead probe. Three things make that work, and all three are load-
 The defaults themselves are a measured rule, not a habit. `presented` waits 8 000 ms
 because A4 measured the same cell's first frame at p50 2.7-3.0 s on the canonical iPhone 17
 simulator - above the 2 000 ms it used to wait - with the slowest frame seen anywhere at
-3.9 s; `mounted` stays at 1 500 ms because the slowest mount measured was 213 ms. Raising
+3.9 s; `mounted` stays at 1 500 ms because the slowest mount measured was 226 ms. Raising
 the presented wait is **value-neutral for every cell that was already complete**: a sample
 that arrived inside 2 s arrives with the identical stamp under 8 s, so its median cannot
 move. Only cells that were losing samples change, and they change towards the truth, since
