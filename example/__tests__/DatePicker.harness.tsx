@@ -211,6 +211,42 @@ function reportOf(testId: string): Report {
   };
 }
 
+/**
+ * The platform-build count of `testId` once it has stopped moving, and why the
+ * word "settled" is load-bearing.
+ *
+ * A mount is built again while its props land - the bounds arrive after the first
+ * commit, and on iOS a value still outside the bounds the control was built with is
+ * one more reason to rebuild - so a baseline sampled too early is a race, not an
+ * assertion. What a re-render may not do is *add* to the settled number, which is
+ * why every rebuild assertion in this file is made against a baseline.
+ *
+ * Shared by the two tests that measure rebuilds (`keeps the live control when a
+ * re-render sends a new bound instant` and the escape-clause test), because the
+ * quiet-window rule has to be the same in both or one of them is racing.
+ */
+async function settledBuilds(testId: string, what: string): Promise<number> {
+  const QUIET_POLLS = 15;
+  let previous = -1;
+  let quiet = 0;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    await sleep(100);
+    const now = reportOf(testId).controlBuilds;
+    quiet = now >= 1 && now === previous ? quiet + 1 : 0;
+    previous = now;
+    if (quiet >= QUIET_POLLS) {
+      console.log(`settled platform builds (${testId}): ${String(now)}`);
+      return now;
+    }
+  }
+  throw new Error(
+    `"${testId}" never settled on a platform-build count (${what}): its report ` +
+      `is "${handles.get(testId)?.nuiTestStateReport() ?? '<no handle>'}" - ` +
+      `still changing after 12s, so there is no baseline for the re-render ` +
+      `assertions to be made against.`
+  );
+}
+
 /** `'2026-07'` for the month a report names, in UTC — the calendar's own page. */
 function monthKeyOf(utcMillis: number): string {
   const date = new Date(utcMillis);
@@ -999,32 +1035,13 @@ describe('DatePicker · G5', () => {
 
     // The instrument first: the sixth field has to be readable and counting, because a
     // missing one would make every assertion below vacuous. And it has to be read once it
-    // has *stopped moving*: a mount is built again while its props land - the bounds
-    // arrive after the first commit, and on iOS a value still outside the bounds the
-    // control was built with is one more reason to rebuild - so a baseline sampled too
-    // early would be a race, not an assertion. What a re-render may not do is add to the
-    // settled number, which is why every assertion below is against a baseline.
-    const settledBuilds = async (testId: string) => {
-      const QUIET_POLLS = 15;
-      let previous = -1;
-      let quiet = 0;
-      for (let attempt = 0; attempt < 120; attempt += 1) {
-        await sleep(100);
-        const now = reportOf(testId).controlBuilds;
-        quiet = now >= 1 && now === previous ? quiet + 1 : 0;
-        previous = now;
-        if (quiet >= QUIET_POLLS) {
-          console.log(`settled platform builds (${testId}): ${String(now)}`);
-          return now;
-        }
-      }
-      throw new Error(
-        `"${testId}" never settled on a platform-build count: its report is ` +
-          `"${reportText(testId)}" - still changing after 12s, so there is no ` +
-          `baseline for the re-render assertions to be made against.`
-      );
-    };
-    const buildsInline0 = await settledBuilds('fresh-inline');
+    // has *stopped moving* (`settledBuilds`, shared with the escape-clause test), or a
+    // baseline is a race. What a re-render may not do is add to the settled number,
+    // which is why every assertion below is against a baseline.
+    const buildsInline0 = await settledBuilds(
+      'fresh-inline',
+      'the seed of the fresh-instant test'
+    );
 
     for (const tick of [1, 2, 3]) {
       await rerender(tree(tick, value));

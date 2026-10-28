@@ -104,13 +104,20 @@ Slider's height (`value`, `step`, `disabled` and `tintColor` move the thumb or
 repaint), so there is one configuration and one cached height for the whole app —
 which is what `prewarm(['NitroUiSlider'])` can warm ahead of the first screen.
 
-The declared fallback is the per-OS height above plus a plausible width
-(351 pt / 328 dp, used only when a parent gives no finite width — a Slider in a
-horizontal scroller). It is deliberately the *measured* height: for a `fillWidth`
-control the width is never corrected, so the height is the only half that can be
-wrong, and being wrong costs a visible jump on the first frame (D14, D17). An OS
-whose control turns out to be a different size corrects itself from its own
-measurement on the first layout rather than shipping a wrong constant.
+The declared fallback is the per-OS height above plus a width (351 pt / 328 dp)
+that is used when a parent gives no finite width — a Slider in a horizontal
+scroller. Under such a parent that width *is* what the Slider draws, on the first
+frame and on every frame after it: there is no box width to substitute and the
+control has no width of its own to be corrected to, so the declared number is the
+answer (`docs/architecture/sizing.md` §5; asserted by `hands an unbounded parent
+its declared width, not another instance's box` in
+`example/__tests__/Slider.harness.tsx`). Under any finite parent the box owns the
+width and it never shows. It is deliberately the *measured* height: for a
+`fillWidth` control the width is never corrected, so the height is the only half
+that can be wrong under a finite parent, and being wrong costs a visible jump on
+the first frame (D14, D17). An OS whose control turns out to be a different size
+corrects itself from its own measurement on the first layout rather than shipping
+a wrong constant.
 
 The base style is `{ alignSelf: 'stretch' }` (`FILL_WIDTH_BASE_STYLE`,
 `src/components/Slider/Slider.tsx`) — the opposite of `Switch`'s
