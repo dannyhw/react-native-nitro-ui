@@ -1835,9 +1835,13 @@ describe('booting a pair', () => {
       state.simulators = new Map([['UDID-A', 'Booted']]);
     };
     const result = pool.ensureBooted(PAIR_A, lease());
+    // The adb server travels with the boot, not just with the later calls: an emulator registers
+    // with the server named in its own launch environment, so a `bootEmulator` that never hears the
+    // pair's port leaves a device that comes up fine and is invisible to every poll. Found on the
+    // first cold boot on hardware (`device-ops.test.js` proves the launch env carries it).
     expect(calls).toContainEqual([
       'boot-emulator',
-      { avd: 'nitro-ui-a', port: 5574 },
+      { avd: 'nitro-ui-a', port: 5574, adbPort: 5043 },
     ]);
     expect(calls).toContainEqual(['boot-sim', 'UDID-A']);
     expect(result.booted.sort()).toEqual(['avd:nitro-ui-a', 'ios:UDID-A']);
