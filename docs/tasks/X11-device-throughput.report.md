@@ -60,8 +60,13 @@ ledger: platform trees ios 75cef8436a00 android 346faf0806c9
 built and stamped at `86bbaae359c3`, but **the re-runs are blocked, not skipped**: `A4` took an
 exclusive lease on `pair-a` + `pair-b` at 14:14 and still held it at 16:15 (114 min, 846 min of TTL
 left). The stale rows above are those same gates on the previous tree (`9d9ce869206a`), where they
-were green; the only device-path code that has moved since is `poolReapDecision`'s idle-limit
-precedence and its two tests, plus docs — nothing on the harness path. See Questions.
+were green. Corrected in fix round 2 (M4): the claim that followed — "nothing on the harness path" —
+was **false**. Fix round 1's `1487e34` rewrote
+`patches/@react-native-harness%2Fplatform-android@1.6.0.patch` (`-port` handling now throws instead
+of dropping the flag) and changed `scripts/emulator-launch.mjs`, both of which are on the path the
+Android harness takes to start an emulator. The risk is low — a valid `EMULATOR_PORT` takes the same
+branch as before — but the row is not "the same harness path on an older tree", and that sentence
+was the argument for reviewing on stale rows. See Questions.
 
 ## Measurements
 
@@ -303,8 +308,18 @@ was at **cell 809 of 1568 at 18:19Z**, so it has roughly two more hours to go. T
 exclusive lease is for, so I neither waited on it nor took anything from it: **nothing in this round
 touched a device**, which is also why the live reset proofs for M1/M2 are unit-level against faked
 `adb`/`simctl` rather than on hardware. If those two rows must be fresh before merge, they need a
-window after `A4` releases; `check` is green at this tree (`911d1ce1b9fd`) and no harness-path code has
-moved since the green runs at `9d9ce869206a`.
+window after `A4` releases; `check` is green at this tree (`911d1ce1b9fd`). The sentence that closed
+this paragraph claimed no harness-path code had moved since the green runs, and that was wrong —
+`1487e34` changed the Android harness patch and `scripts/emulator-launch.mjs` (M4, corrected above).
+
+**Limitation worth reading with the reset rows (N4).** "Reset" means the example app's data container,
+proven against fakes here and owed a live write/reset/read proof on both platforms. Two things survive
+it on iOS by design of `simctl uninstall`: the **keychain** and the **privacy-consent (TCC) grants**.
+So a task inherits neither storage nor app files but can inherit a device that has already been told
+"allow notifications" or "allow photo access", and any future test that asserts a permission prompt
+appears on a warm pooled device will be asserting it against a simulator that already answered it.
+`simctl privacy reset` and a keychain wipe are the fixes and neither is cheap enough to run per
+hand-off; the honest statement is that the reset is storage-complete, not state-complete.
 
 
 ## Fix round 1
