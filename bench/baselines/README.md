@@ -1,10 +1,8 @@
 # Committed benchmark baselines
 
-**Status: `maintainer-mac-1` has both files; `maintainer-mac-2` has Android only.** On
-`maintainer-mac-1`, `--check` gates both platforms. On `maintainer-mac-2` Android gates
-and iOS refuses until that machine mints its own (`--exclusive`, idle, overnight — see
-`docs/tasks/RECOVERY.md` and the iOS paragraph below). The numbers below are what
-`maintainer-mac-1`'s two runs recorded.
+**Status: both machines have both files.** On `maintainer-mac-1` and on
+`maintainer-mac-2`, `--check` gates both platforms. The numbers below are what each
+machine's own runs recorded.
 
 ## Layout
 
@@ -13,6 +11,7 @@ and iOS refuses until that machine mints its own (`--exclusive`, idle, overnight
         ios27-sim-iphone17.json      # iPhone 17 simulator, iOS 27
         android35-emu-pixel9.json    # API 35 Pixel 9 emulator, ART speed-profile
       maintainer-mac-2/
+        ios27-sim-iphone17.json      # same simulator class, 10-core M1 Max host
         android35-emu-pixel9.json    # same device class, 10-core M1 Max host
       <machine-label>/<deviceKey>.json   # the rule
       renders.json                   # JS render counts (machine-independent)
@@ -98,16 +97,24 @@ tolerance, 27 suppressed by their own within-run spread, 7 `new arm` (the leak c
 which store no slope), 0 failures — and halving one quiet `presented` ratio, in both
 `ratio` and all eight `launchRatios`, makes it exit 1.
 
-`maintainer-mac-2` has **no iOS file yet, and a retry would not produce one.** Its one
-attempt (`--plan full --launches 8`, 1568/1568 launches, `problems: []`, clean tree,
-4 h 24 min) was refused for one reason, and it was not load: `mount.date-picker` at N=200
-presented on 55 of 160 measured iterations on `expo-ui-host-per-control` and 87 of 160 on
-`expo-ui-shared-host`, and the completeness rule will not mint a ratio table with a
-survivor-biased metric in it. That run's samples were 2096 strong with median 2.19 against
-the 5.0 ceiling and 11 over (0.5 %). `maintainer-mac-1`'s file has both cells with
-`missingPresented: 0` and a 0.5 % spread, so this is a per-machine frame-probe gap on that
-simulator rather than a plan defect, and closing it is `docs/tasks/FOLLOWUPS.md`'s before
-that machine mints iOS. Details in `docs/tasks/A3-baselines-mac2.report.md`.
+`maintainer-mac-2/ios27-sim-iphone17.json` is that machine's iOS file now, and the story of
+getting it is A4. Its first attempt (A3, same plan, same device, 1568/1568 launches, clean
+tree) was refused, and it was not load: `mount.date-picker` at N=200 presented on 55 of 160
+iterations on `expo-ui-host-per-control` and 87 of 160 on `expo-ui-shared-host`. The cause was
+the waiting rule, not the machine — those arms present their first frame at p50 2 950 ms and
+2 702 ms on this simulator, above the 2 000 ms the runner waited, and the probe's native "no
+frame" backstop was a hardcoded 2 s that overrode any longer ask. `presented` now waits 8 000
+ms (see the rule above), the backstop is a 90 s ceiling, and the retry recorded **160/160 on
+both cells** with 196 complete rows, `skippedCells: {}`, and `timeouts` naming the rule it was
+made under.
+
+The run: one clean `--plan full --launches 8` at `99ec3a0`, 1568/1568 launches, `problems: []`,
+4 h 24 min (10.2 s per launch — the same as A3's, because a launch waits for the frame, not
+for the timeout), and quiet over the whole run rather than at its end: 2100 load samples,
+median 3.05 against the 5.0 ceiling, p90 4.46, 86 over (4.1 %, under the allowance). `--check`
+on iOS gates there: 121 rows within tolerance, 74 suppressed by their own within-run spread,
+7 `new arm` (the `leak` cells, which store no slope), 0 failures — and dividing one quiet
+`presented` ratio by three, in both `ratio` and all eight `launchRatios`, makes it exit 1.
 
 Components added after a baseline was recorded have no entries in it yet: `Picker` on
 both platforms and `DatePicker` on Android. `--check` reports their cells as
