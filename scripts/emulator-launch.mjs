@@ -150,8 +150,23 @@ export function emulatorLaunchArgs({
   // `-port` straight after the AVD, so the port a device claimed is the first
   // thing a console shows: the failure this arg exists to prevent is a leased
   // AVD coming up as somebody else's serial.
-  if (port != null && isEmulatorConsolePort(port))
+  //
+  // A port that was *offered* and cannot be taken is an error, not a reason to
+  // leave `-port` out (X11 review N2): dropping it silently is precisely the
+  // "boot on whatever console is free" behaviour the flag exists to forbid, and
+  // it turns a mistyped devices.json into a device nobody can address. An
+  // absent port is the other case, and legitimate: upstream, and every run
+  // outside a lease, boots without one.
+  if (port != null && port !== '') {
+    if (!isEmulatorConsolePort(port)) {
+      throw new Error(
+        `emulatorLaunchArgs: ${String(port)} is not a console port the emulator can take ` +
+          `(even numbers ${String(EMULATOR_PORT_FLOOR)}-${String(EMULATOR_PORT_CEILING)}); ` +
+          'booting without -port would put this AVD on any free serial'
+      );
+    }
     args.push('-port', String(port));
+  }
   args.push(
     ...emulatorSnapshotArgs(snapshot),
     '-no-window',
@@ -204,10 +219,13 @@ export function harnessLaunchBlock() {
     // another task was told not to touch, and the serial the lease exported
     // (\`emulator-5574\`) is not the one that exists. When EMULATOR_PORT is set
     // the emulator either gets that port or fails to start - which is the
-    // answer a lease needs. The GPU mode is \`host\` rather than upstream's
-    // \`swiftshader_indirect\`: software rendering is most of why the Android
-    // harness costs three times iOS. Set NITRO_UI_EMULATOR_GPU to override for
-    // one shell (an A/B run, or a bench host pinning its baseline's mode).
+    // answer a lease needs; a port that cannot be a console port at all is a
+    // mistake in the environment, and dropping \`-port\` there would boot the AVD
+    // on any free serial, which is the very thing this patch prevents. The GPU
+    // mode is \`host\` rather than upstream's \`swiftshader_indirect\`: software
+    // rendering is most of why the Android harness costs three times iOS. Set
+    // NITRO_UI_EMULATOR_GPU to override for one shell (an A/B run, or a bench
+    // host pinning its baseline's mode).
     // Drop this patch once react-native-harness accepts a port and a GPU mode.
     //
     // nitro-ui: the block below is rendered verbatim by
@@ -215,9 +233,15 @@ export function harnessLaunchBlock() {
     // scripts/__tests__/emulator-launch.test.js fails if the patch and that
     // file disagree, or if this stops matching emulatorLaunchArgs().
     const nitroUiPort = process.env.EMULATOR_PORT ?? '';
-    const nitroUiPortArgs = /^\\d+$/.test(nitroUiPort) && Number(nitroUiPort) % 2 === 0 && Number(nitroUiPort) >= ${EMULATOR_PORT_FLOOR} && Number(nitroUiPort) <= ${EMULATOR_PORT_CEILING}
-        ? ['-port', nitroUiPort]
-        : [];
+    let nitroUiPortArgs = [];
+    if (nitroUiPort !== '') {
+        const nitroUiPortNumber = Number(nitroUiPort);
+        const nitroUiPortOk = /^\\d+$/.test(nitroUiPort) && nitroUiPortNumber % 2 === 0 && nitroUiPortNumber >= ${EMULATOR_PORT_FLOOR} && nitroUiPortNumber <= ${EMULATOR_PORT_CEILING};
+        if (!nitroUiPortOk) {
+            throw new Error(\`EMULATOR_PORT="\${nitroUiPort}" is not a console port the emulator can take (even numbers ${EMULATOR_PORT_FLOOR}-${EMULATOR_PORT_CEILING})\`);
+        }
+        nitroUiPortArgs = ['-port', nitroUiPort];
+    }
     const nitroUiGpu = (process.env.${EMULATOR_GPU_ENV} ?? '').trim() || '${HARNESS_GPU_MODE}';
     return [\`@\${name}\`, ...nitroUiPortArgs, ...modeArgs, '-no-window', '-gpu', nitroUiGpu, '-noaudio', '-no-boot-anim', '-no-metrics'];`;
 }

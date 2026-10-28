@@ -170,10 +170,18 @@ describe('emulator launch args have one source', () => {
     }
   });
 
-  it('drops a port the emulator could not take rather than booting anywhere', () => {
-    // An odd port is not a console port, and both arrive as strings from a shell.
-    // Booting on "whatever is free" is the failure `-port` exists to prevent.
-    for (const port of [5575, '5575', 5000, 6000, '', null, undefined]) {
+  it('refuses a port the emulator could not take, rather than booting anywhere', () => {
+    // X11 review N2. The name of this case used to be a promise the code did not keep: an
+    // un-takeable port was *dropped*, so the emulator booted on the lowest free console port -
+    // exactly the failure `-port` exists to prevent, and the reason a leased AVD ends up on a
+    // serial nobody exported. A mistake in devices.json has to stop the boot.
+    for (const port of [5575, '5575', 5000, 6000, '5574x', -5574]) {
+      expect(() => emulatorLaunchArgs({ avd: 'a', port })).toThrow(
+        /not a console port/
+      );
+    }
+    // An *absent* port is the legitimate no-flag case: upstream, and every run outside a lease.
+    for (const port of [null, undefined, '']) {
       expect(emulatorLaunchArgs({ avd: 'a', port })).not.toContain('-port');
     }
     expect(emulatorLaunchArgs({ avd: 'a', port: '5574' })).toContain('-port');
@@ -238,7 +246,6 @@ describe('the installed harness module agrees with this file', () => {
         ['5570', 'clean-snapshot-generation'],
         ['5560', 'default-boot'],
         ['', 'default-boot'],
-        ['5575', 'default-boot'],
       ]) {
         process.env.EMULATOR_PORT = port;
         delete process.env[EMULATOR_GPU_ENV];
@@ -248,6 +255,18 @@ describe('the installed harness module agrees with this file', () => {
             port: port === '' ? null : port,
             snapshot: modeToSnapshot[mode],
           })
+        );
+      }
+      // An un-takeable port refuses in both implementations, and the patch's own words are the
+      // reason: a harness that quietly dropped `-port` would boot the leased AVD on some other
+      // serial (N2), so this is the same rule on both sides of the drift test.
+      for (const port of ['5575', '5000']) {
+        process.env.EMULATOR_PORT = port;
+        expect(() =>
+          harness.getEmulatorStartupArgs('nitroui_a', 'default-boot')
+        ).toThrow(/not a console port/);
+        expect(() => emulatorLaunchArgs({ avd: 'nitroui_a', port })).toThrow(
+          /not a console port/
         );
       }
       // And the override reaches it - the one axis the A/B measurement moves.
