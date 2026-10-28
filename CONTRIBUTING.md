@@ -491,10 +491,12 @@ messages, the last 150 lines, the load at both ends and, for a failed device gat
 the booted simulators, the leased emulator's `adb get-state`, the lease list, load1
 and the app's last `logcat` lines — and names that file in the ledger line's
 `failureLogPath`. Passing runs get no file. A committed excerpt holds no credential
-and no machine-specific path: tokens, `Authorization:`/`Cookie:` headers (whole, any
-scheme) and `.npmrc` `_auth=` lines are replaced, and your home, scratch directory,
-hostname, repo and store paths are written as `~`, `<tmp>`, `<host>`, `<repo>` and
-`<store>`.
+and no machine identity: tokens, `Authorization:`/`Cookie:` headers (whole, any
+scheme), `.npmrc` `_auth=` lines, `curl -u user:pass`, `user:pass@host`, a config
+file's whole `password: some phrase`, email addresses and Stripe/Anthropic/GitLab
+token shapes are replaced, and your home, scratch directory, username, hostname,
+repo and store paths — and anyone else's `/Users/<name>` or `/var/folders/<hash>`
+— are written as `~`, `<tmp>`, `<user>`, `<host>`, `<repo>` and `<store>`.
 
 ### Build speed
 
