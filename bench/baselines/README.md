@@ -157,6 +157,27 @@ overFraction }`. A run is refused when its **median** sample is over the ceiling
   ratio noise on a shared development machine.
 - **`--plan full` with 8 launches**, no `problems`, on the canonical device.
   `--plan quick` numbers are local feedback, not baseline material.
+- **Every metric the table gates on is actually measured** - and since A4 that is
+  scoped by arm. A metric with too few samples (`over 10 %` missing, `MAX_MISSING_SAMPLE_RATIO`)
+  is `n/a`, and:
+  - on `nitro-ui` (the gated arm) or `rn-core` (every ratio's denominator) that **refuses
+    the mint** - a survivor-biased verdict is not baseline material;
+  - on a comparison arm (`expo-ui-*`, `nitro-ui-host` - measured and reported, never
+    gated) it costs **that cell** its row: the file leaves it out and records it under
+    `skippedCells` with the metric, its sample counts and the reasons that were recorded,
+    and the mint prints one line per cell left out. Before A4 the same defect refused the
+    whole table, which is how one machine went without a baseline over two reference
+    arms' frame probe (see the `maintainer-mac-2` status below).
+    Either way the reason is in the file, not in someone's memory: every iteration that
+    gets no `mountedNs`/`presentedNs` records a reason code (`probe-timeout` with the
+    timeout and how long the wait ran, `not-awaited`, `probe-error` with the message), so
+    a refusal says "48 probe-timeout (asked 2000 ms, waited up to 2000.4 ms)" rather than
+    "45 missing". See `docs/DECISIONS.md` D9 (A4 amendments).
+- **Minted under the default waiting rule.** `presented` waits 2 000 ms and `mounted`
+  1 500 ms unless a run asks otherwise (`--timeout-presented`, `--timeout-mount`), and a
+  run that asks for longer is a diagnostic: the samples that arrive keep their values,
+  but _which_ arrive changes the median. Such a run is refused, and every baseline
+  records the rule it was made under in its `timeouts` block.
 - **Machine + device key** — the label rules are above, and `--force` does not get
   around them. The load ceiling belongs to the _measuring_ machine: 7.0 on
   `maintainer-mac-1` (14 cores), 5.0 on `maintainer-mac-2` (10). Two files can share a

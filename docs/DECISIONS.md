@@ -29,6 +29,34 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
     when `load1` is already over the ceiling (fail fast rather than burn three hours). Results
     files without samples keep the single-sample rule. Learned from A1/A1b: two complete,
     problem-free iOS runs were refused by the load of their final minute.
+  - **A4 amendment (2026-10-28) - an incomplete metric costs its own cell, not the table.** The
+    completeness rule (a metric with too few samples is `n/a`, and a baseline may not
+    carry an `n/a` it gates on) stayed, but its scope narrowed by arm: an incomplete
+    metric on a **comparison arm** (`expo-ui-host-per-control`, `expo-ui-shared-host`,
+    `nitro-ui-host` - measured, reported, never gated) now leaves **that cell** out of
+    the baseline and records it in the file's `skippedCells` with its metric, sample
+    counts and the recorded reasons; an incomplete metric on `nitro-ui` (the gated arm)
+    or on `rn-core` (the denominator of every ratio) still refuses the mint. Reason: one
+    reference cell's lost frames were refusing an entire machine's baseline - A3's iOS
+    mint died on `mount.date-picker` N=200 at 55/160 and 87/160 samples on the two
+    `@expo/ui` arms, with every `nitro-ui` row in the run measured cleanly. A
+    survivor-biased reference number is worthless to gate against, and a machine with no
+    baseline gates nothing at all.
+  - **A4 amendment (2026-10-28) - a missing sample records why.** Every iteration that produces no
+    value for `mountedNs`/`presentedNs` records a reason (`probe-timeout`,
+    `not-awaited`, `probe-error`), the wait it ran and the timeout in force, per
+    iteration; the runner prints them per launch, the report prints them per cell, and
+    both the refusal and the left-out-cell note say where the detail lives. A count of
+    nulls cannot be diagnosed after the fact, and a mint refusal is the expensive moment
+    to discover that. Relatedly: the probe's native "no frame" backstop is a **ceiling**
+    (90 s on both platforms), not the wait the runner asked for - it used to be a
+    hardcoded 2 s on both, which silently *was* the timeout however long JS waited.
+  - **A4 amendment (2026-10-28) - the waiting rule is recorded, and a longer wait is a diagnostic.**
+    `--timeout-mount` / `--timeout-presented` raise how long a launch waits for a signal
+    (to ask "did that arm never draw, or did it draw later than we waited?"). A run that
+    raises one cannot mint: a sample that arrives keeps its value, but *which* samples
+    arrive moves the median. Baselines carry their `timeouts` block so a `presented`
+    column has its rule attached.
   - Device keys = platform + OS runtime + device class (e.g. `ios27-sim-iphone17`,
     `android35-emu-pixel9`). One canonical device per platform; other hardware uses `--compare`.
   - Locally and on hosted CI, benchmarks **inform review**; they block only on a clear regression

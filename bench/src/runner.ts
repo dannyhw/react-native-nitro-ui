@@ -1,13 +1,21 @@
 import {
   awaitMountNs,
-  awaitPresentedNs,
+  awaitMountStamp,
+  awaitPresentedStamp,
   collectGarbage,
   heapBreakdown,
   nextFrameNs,
   probe,
   settle,
 } from './probe';
-import type { BenchPerfMark, BenchPlan, BenchRecord } from './types';
+import type { StampWait } from './probe';
+import type {
+  BenchPerfMark,
+  BenchPlan,
+  BenchRecord,
+  MissingSample,
+  MissingSampleReason,
+} from './types';
 
 /** Noise control protocol (docs/research/setup-decisions.md SS6). */
 export const WARMUP_ITERATIONS = 5;
@@ -50,6 +58,12 @@ interface IterationTarget {
  * `mountedNs`/`presentedNs` are absolute D1 timestamps (`probe.now()` shares that
  * base), so each is reported as an offset from `t0` rather than a duration.
  *
+ * A signal that does not arrive is recorded with a *reason* (`missing`), because a
+ * count of nulls is not a diagnosis: A3's iOS mint was refused over 105 missing
+ * `presented` samples on one arm and nobody could tell a 2 s probe timeout from a
+ * probe that never answered. `jsCommitNs` is resolved by the app itself in the same
+ * turn, so a null there has no meaningful cause and is not attributed.
+ *
  * Returns `t0` so the caller can put the runtime's own perf marks on this
  * iteration's timeline.
  */
@@ -62,10 +76,27 @@ async function measureLatency(
   // A cell that declares `mountSignal: false` has no transaction to stamp, so
   // both waits can only end in a timeout - 3.5 s per iteration of nothing, and
   // the pair is reported as `n/a` afterwards regardless. Skip the wait; the
-  // nulls below are the same nulls, reached without the delay.
+  // nulls below are the same nulls, reached without the delay, and recorded as
+  // `not-awaited` so the per-cell summary cannot mistake them for timeouts.
   const expectsSignal = target.plan.mountSignal;
-  const mountedAt = expectsSignal ? await awaitMountNs() : null;
-  const presentedAt = expectsSignal ? await awaitPresentedNs() : null;
+  const missing: MissingSample[] = [];
+  const mountedWait = expectsSignal
+    ? await awaitMountStamp(target.plan.mountTimeoutMs)
+    : null;
+  const presentedWait = expectsSignal
+    ? await awaitPresentedStamp(target.plan.presentedTimeoutMs)
+    : null;
+
+  if (mountedWait === null || mountedWait.stamp === null) {
+    missing.push(
+      missingSample('mountedNs', mountedWait, 'not-awaited', target.plan)
+    );
+  }
+  if (presentedWait === null || presentedWait.stamp === null) {
+    missing.push(
+      missingSample('presentedNs', presentedWait, 'not-awaited', target.plan)
+    );
+  }
 
   engine.emit({
     kind: 'iter',
@@ -76,10 +107,40 @@ async function measureLatency(
     index: target.index,
     warmup: target.warmup,
     jsCommitNs: tCommit - t0,
-    mountedNs: mountedAt === null ? null : mountedAt - t0,
-    presentedNs: presentedAt === null ? null : presentedAt - t0,
+    mountedNs: mountedWait?.stamp == null ? null : mountedWait.stamp - t0,
+    presentedNs: presentedWait?.stamp == null ? null : presentedWait.stamp - t0,
+    ...(missing.length > 0 ? { missing } : {}),
   });
   return t0;
+}
+
+/**
+ * The `missing` entry for one signal that did not arrive.
+ *
+ * `wait` is null when the runner never asked (the `mountSignal: false` case), so the
+ * caller supplies that reason; otherwise the reason comes from the wait itself.
+ */
+function missingSample(
+  metric: 'mountedNs' | 'presentedNs',
+  wait: StampWait | null,
+  fallbackReason: MissingSampleReason,
+  plan: BenchPlan
+): MissingSample {
+  const timeoutMs =
+    wait?.timeoutMs ??
+    (metric === 'mountedNs' ? plan.mountTimeoutMs : plan.presentedTimeoutMs);
+  if (wait === null) {
+    return { metric, reason: fallbackReason, waitedMs: 0, timeoutMs };
+  }
+  return wait.detail === undefined
+    ? { metric, reason: wait.reason, waitedMs: wait.waitedMs, timeoutMs }
+    : {
+        metric,
+        reason: wait.reason,
+        waitedMs: wait.waitedMs,
+        timeoutMs,
+        detail: wait.detail,
+      };
 }
 
 /**
@@ -159,7 +220,11 @@ async function teardown(
   target: IterationTarget
 ): Promise<void> {
   await engine.commit(0, target.value);
-  await awaitMountNs();
+  // Same rule as the measured wait: a diagnostic run that asked to wait longer for a
+  // mount should not have its teardown give up at the default while its iterations do
+  // not, or the launch's wall-clock budget (which is derived from the requested waits,
+  // `launchBudget` in scripts/bench/run.mjs) would not describe the launch it covers.
+  await awaitMountNs(target.plan.mountTimeoutMs);
 }
 
 /**

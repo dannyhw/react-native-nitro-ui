@@ -91,13 +91,60 @@ const NO_MOUNT_SIGNAL: readonly string[] = [
 ];
 
 /**
- * Parse the `scenario:implementation:N[:marks]` launch argument.
- * Returns null for an unconfigured launch, which renders the idle screen.
+ * The launch-flag names the parser accepts, and the defaults they override.
  *
- * The optional 4th token asks for the runtime's own native perf marks
- * (`bun bench --perf-marks`). It is deliberately part of the launch argument
- * rather than an env var: a release build has no env, and one launch must be
- * fully described by the string the runner passed it.
+ * All four live here, and `probe.ts` imports the defaults from here, because this
+ * file must stay free of the probe: `probe.ts` creates the native hybrid object at
+ * import time, and a plan string has to parse - and reject a bad flag loudly - before
+ * anything touches Nitro.
+ */
+export const MOUNT_TIMEOUT_FLAG = 'mountTimeout';
+export const PRESENTED_TIMEOUT_FLAG = 'presentedTimeout';
+
+/**
+ * How long the runner waits for each native signal before calling it missing.
+ *
+ * A4: both are overridable from the launch plan (`scenario:impl:N:presentedTimeout=40000`)
+ * because "is the sample missing because it never happened, or because we stopped
+ * asking?" can only be answered by asking for longer. A run that raises one is stamped
+ * `presentedTimeoutMs` in its results file and is diagnostic, not baseline material: a
+ * sample that arrives keeps its value, but *which* samples arrive moves the median.
+ *
+ * Not the whole story on either platform: the native side also refuses to wait forever
+ * for a presenting frame (iOS: the safety timer in `BenchProbeArmPresentation`;
+ * Android: `FRAME_TIMEOUT_MS`), so a wait above that ceiling is still answered `-1` by
+ * the ceiling. Both are documented next to their `dispatch_after`/`postDelayed`.
+ */
+export const DEFAULT_MOUNT_TIMEOUT_MS = 1500;
+export const DEFAULT_PRESENTED_TIMEOUT_MS = 2000;
+
+/**
+ * The largest timeout a launch plan may ask for.
+ *
+ * It must stay below both platforms' native backstops (90 s: iOS
+ * `kBenchPresentationCeilingSeconds`, Android `PRESENTATION_CEILING_MS`) so the
+ * requested wait is always the one that answers, and the ceiling is always the thing
+ * that catches a process that cannot draw at all. A wall-clock `mount` launch is 25
+ * iterations x (mount + presented) plus pacing, so a caller that asks near the cap
+ * also raises the runner's per-launch budget (`BENCH_LAUNCH_TIMEOUT_S`) - which is
+ * exactly what the A4 time-to-present diagnostic run does.
+ */
+export const MAX_TIMEOUT_MS = 80_000;
+
+/**
+ * Parse the `scenario:implementation:N[:flags]` launch argument, where `flags` is a
+ * comma-separated list of:
+ *
+ * - `marks` - ask the runtime for its own native perf marks (`bun bench --perf-marks`);
+ * - `presentedTimeout=<ms>` - how long to wait for the presenting frame;
+ * - `mountTimeout=<ms>` - how long to wait for the mount signal.
+ *
+ * They are part of the launch argument rather than an env var because a release build
+ * has no env, and one launch must be fully described by the string the runner passed
+ * it. The timeouts are here at all because "this arm never draws" and "this arm draws
+ * slower than we wait" are the same null in the results file otherwise (A4).
+ *
+ * Returns null for an unconfigured launch, which renders the idle screen.
  */
 export function parsePlan(raw: string): BenchPlan | null {
   if (raw.length === 0) {
@@ -129,10 +176,43 @@ export function parsePlan(raw: string): BenchPlan | null {
       `NITRO_BENCH plan "${raw}" has a non-negative integer count`
     );
   }
-  if (flags != null && flags !== 'marks') {
-    throw new Error(
-      `NITRO_BENCH plan "${raw}" has an unknown flag "${flags}" (known: marks)`
-    );
+  let perfMarks = false;
+  let mountTimeoutMs = DEFAULT_MOUNT_TIMEOUT_MS;
+  let presentedTimeoutMs = DEFAULT_PRESENTED_TIMEOUT_MS;
+  for (const flag of (flags ?? '').split(',').map((part) => part.trim())) {
+    if (flag === '') {
+      continue;
+    }
+    if (flag === 'marks') {
+      perfMarks = true;
+      continue;
+    }
+    const [name, value, extra] = flag.split('=');
+    const ms = Number(value);
+    if (
+      extra != null ||
+      value == null ||
+      value === '' ||
+      !Number.isFinite(ms) ||
+      ms < 1 ||
+      ms > MAX_TIMEOUT_MS
+    ) {
+      throw new Error(
+        `NITRO_BENCH plan "${raw}" has an unknown or malformed flag "${flag}" ` +
+          `(known: marks, ${MOUNT_TIMEOUT_FLAG}=<1..${String(MAX_TIMEOUT_MS)}>, ` +
+          `${PRESENTED_TIMEOUT_FLAG}=<1..${String(MAX_TIMEOUT_MS)}>)`
+      );
+    }
+    if (name === MOUNT_TIMEOUT_FLAG) {
+      mountTimeoutMs = ms;
+    } else if (name === PRESENTED_TIMEOUT_FLAG) {
+      presentedTimeoutMs = ms;
+    } else {
+      throw new Error(
+        `NITRO_BENCH plan "${raw}" has an unknown flag "${name}" ` +
+          `(known: marks, ${MOUNT_TIMEOUT_FLAG}, ${PRESENTED_TIMEOUT_FLAG})`
+      );
+    }
   }
   const [action, component] = halves;
   return {
@@ -142,6 +222,8 @@ export function parsePlan(raw: string): BenchPlan | null {
     implementation,
     n,
     mountSignal: !NO_MOUNT_SIGNAL.includes(`${scenario}:${implementation}`),
-    perfMarks: flags === 'marks',
+    perfMarks,
+    mountTimeoutMs,
+    presentedTimeoutMs,
   };
 }

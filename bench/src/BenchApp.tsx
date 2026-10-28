@@ -127,6 +127,8 @@ function BenchRunner({
         platform: `${Platform.OS} ${String(Platform.Version)}`,
         probeClock,
         mountSignal: plan.mountSignal,
+        mountTimeoutMs: plan.mountTimeoutMs,
+        presentedTimeoutMs: plan.presentedTimeoutMs,
       });
 
       const emit = (record: BenchRecord) => {

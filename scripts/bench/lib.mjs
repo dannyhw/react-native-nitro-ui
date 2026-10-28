@@ -91,6 +91,143 @@ export const IMPLEMENTATIONS = [
 ];
 
 /**
+ * The arms a baseline **compares against** rather than gates: everything measured
+ * except the library under development and the `rn-core` control.
+ *
+ * This is the A4 amendment to D9. An incomplete metric on a comparison arm makes that
+ * one cell's ratio survivor-biased - which is a reason not to print or gate it, and
+ * never a reason to refuse a whole table, because these arms carry no verdict
+ * (`GATED_IMPLEMENTATIONS`). One such cell refusing an entire machine's baseline is
+ * how A3's `maintainer-mac-2` iOS mint died: `mount.date-picker` at N=200 presented on
+ * 55/160 and 87/160 measured iterations on the two `@expo/ui` arms and nothing else was
+ * wrong. Under the amendment that cell is left out and recorded; a gap in `nitro-ui`
+ * (gated) or `rn-core` (the denominator of every ratio) still refuses the mint.
+ *
+ * `nitro-ui-host` counts as a comparison arm for the same reason `expo-ui-*` does: it
+ * is measured, reported, and never gated.
+ */
+export const COMPARISON_IMPLEMENTATIONS = IMPLEMENTATIONS.filter(
+  (name) => name !== 'nitro-ui' && name !== 'rn-core'
+);
+
+/**
+ * The waiting rule a baseline has to be minted under (A4).
+ *
+ * `bench/src/plan.ts` owns these numbers - it is what parses them off the launch plan -
+ * and they are restated here because `scripts/` cannot import the app's TypeScript.
+ * `scripts/__tests__/bench-missing-samples.test.js` imports both sides and fails if they
+ * disagree.
+ *
+ * A run that waited longer for a presenting frame is a **diagnostic**, like a
+ * `--perf-marks` run: a sample that arrives keeps its value, but *which* samples arrive
+ * changes the median, so its ratios are not comparable with a table recorded under a
+ * different rule. `baselineBlockers()` refuses one instead of letting it quietly
+ * redefine what `presented` means.
+ */
+export const BASELINE_MOUNT_TIMEOUT_MS = 1500;
+export const BASELINE_PRESENTED_TIMEOUT_MS = 2000;
+
+/**
+ * The per-launch wall-clock budgets, by scenario action, that `run.mjs` starts from.
+ * Restated here so `launchBudgetMs` can be tested without importing the runner (which
+ * cannot be imported under jest: `import.meta`).
+ */
+export const DEFAULT_SCENARIO_BUDGETS = {
+  mount: 180_000,
+  update: 180_000,
+  memory: 180_000,
+  leak: 300_000,
+};
+
+/**
+ * The wall-clock budget for one launch, widened by whatever signal waits that launch was
+ * asked to make.
+ *
+ * The budgets above assume the default waits: an iteration of `mount` waits up to
+ * `mount` + `presented` for its own two signals and again `mount` in the teardown that
+ * follows, so 25 iterations already contain ~87 s of waiting. Ask for a 40 s presenting
+ * wait and the same launch would be killed as *stalled* for a reason the runner itself
+ * introduced - and a killed launch becomes a `problem`, a worse record than the slow
+ * sample it was chasing.
+ *
+ * `overrideSeconds` is the `BENCH_LAUNCH_TIMEOUT_S` escape hatch and wins outright: that
+ * override exists precisely to set the budget by hand.
+ */
+export function launchBudgetMs(
+  entry,
+  { scenarioBudgets = DEFAULT_SCENARIO_BUDGETS, overrideSeconds = null } = {}
+) {
+  const base = scenarioBudgets[scenarioActionOf(entry.scenario)] ?? 180_000;
+  if (isNumber(overrideSeconds) && overrideSeconds > 0) {
+    return base;
+  }
+  // 2 mount waits + 1 presented per iteration is the widest case (`mount`); `update`
+  // waits twice and `memory`/`leak` not at all, so this only ever over-allows.
+  const waitsFor = (mount, presented) => 2 * mount + presented;
+  const asked = waitsFor(
+    entry.mountTimeoutMs ?? BASELINE_MOUNT_TIMEOUT_MS,
+    entry.presentedTimeoutMs ?? BASELINE_PRESENTED_TIMEOUT_MS
+  );
+  const standard = waitsFor(
+    BASELINE_MOUNT_TIMEOUT_MS,
+    BASELINE_PRESENTED_TIMEOUT_MS
+  );
+  return (
+    base +
+    Math.max(0, asked - standard) * (WARMUP_ITERATIONS + MEASURED_ITERATIONS)
+  );
+}
+
+/**
+ * The longest signal timeout a run may ask for (`--timeout-mount`,
+ * `--timeout-presented`, and the `mountTimeout=`/`presentedTimeout=` launch flags).
+ *
+ * Both platforms arm a native backstop for a process that never draws at all - 90 s
+ * (`kBenchPresentationCeilingSeconds` in `HybridBenchProbe.mm`,
+ * `PRESENTATION_CEILING_MS` in `HybridBenchProbe.kt`) - and a backstop that wins the
+ * race *is* the timeout: it would answer `-1` and the recorded reason would blame a
+ * wait the run never asked for. So the requested wait stays strictly below the ceiling,
+ * which keeps "we stopped asking" and "the process is not drawing" two distinguishable
+ * answers. `bench/src/plan.ts` `MAX_TIMEOUT_MS` restates this number for the app.
+ */
+export const MAX_REQUESTED_TIMEOUT_MS = 80_000;
+
+/**
+ * `--timeout-mount <ms>` / `--timeout-presented <ms>`: how long each launch waits for a
+ * native signal before recording it as missing, with the reason.
+ *
+ * The point is the diagnostic question A4 asks - "did this arm's frame never come, or
+ * did it come later than we were willing to wait?" - which is unanswerable at the
+ * default 2 s when the arm in question takes 40 s. The value rides the launch string
+ * rather than an env var because a release build has no env, exactly like `marks`.
+ *
+ * Returns the problem rather than exiting, so a test can prove the validation without
+ * spawning a run. A run that raises a timeout is not baseline material (see
+ * `BASELINE_*_TIMEOUT_MS`) and `run.mjs` says so at startup.
+ */
+export function parseTimeoutFlags(argv, readFlag) {
+  const out = { mountTimeoutMs: null, presentedTimeoutMs: null, problem: null };
+  for (const [name, key] of [
+    ['--timeout-mount', 'mountTimeoutMs'],
+    ['--timeout-presented', 'presentedTimeoutMs'],
+  ]) {
+    if (!argv.includes(name)) {
+      continue;
+    }
+    const raw = readFlag(name);
+    const ms = raw == null ? Number.NaN : Number(raw);
+    if (!Number.isFinite(ms) || ms < 1 || ms > MAX_REQUESTED_TIMEOUT_MS) {
+      out.problem = `${name} must be a number of milliseconds between 1 and ${String(
+        MAX_REQUESTED_TIMEOUT_MS
+      )} (both platforms arm a 90 s native backstop, and one that answers first would record a wait the run never asked for)`;
+      return out;
+    }
+    out[key] = ms;
+  }
+  return out;
+}
+
+/**
  * Arms that cannot mount a component on one platform, keyed
  * `platform:implementation:component`, so those cells are simply not scheduled
  * there (G5).
@@ -298,8 +435,11 @@ export function scenarioFor(action, component) {
 }
 
 /** `mount:rn-core:50` - the string one app launch is driven with. */
-export function planString(scenario, implementation, n) {
-  return `${scenario}:${implementation}:${n}`;
+export function planString(scenario, implementation, n, flags = null) {
+  const base = `${scenario}:${implementation}:${n}`;
+  return flags == null || flags.length === 0
+    ? base
+    : `${base}:${flags.filter(Boolean).join(',')}`;
 }
 
 /**
@@ -308,10 +448,17 @@ export function planString(scenario, implementation, n) {
  * it (`cellKey`): a marks run is a diagnosis of the same cell, not a fifth arm.
  */
 export function launchPlanString(entry) {
-  return (
-    planString(entry.scenario, entry.implementation, entry.n) +
-    (entry.perfMarks === true ? ':marks' : '')
-  );
+  const flags = [];
+  if (entry.perfMarks === true) {
+    flags.push('marks');
+  }
+  if (isNumber(entry.mountTimeoutMs)) {
+    flags.push(`mountTimeout=${String(entry.mountTimeoutMs)}`);
+  }
+  if (isNumber(entry.presentedTimeoutMs)) {
+    flags.push(`presentedTimeout=${String(entry.presentedTimeoutMs)}`);
+  }
+  return planString(entry.scenario, entry.implementation, entry.n, flags);
 }
 
 /** `mount:rn-core:50` - the key a cell of the results matrix is stored under. */
@@ -339,6 +486,8 @@ export function buildSchedule({
   perfMarks = false,
   component = null,
   platform = null,
+  mountTimeoutMs = null,
+  presentedTimeoutMs = null,
 } = {}) {
   const cells = PLANS[plan];
   if (cells == null) {
@@ -432,12 +581,18 @@ export function buildSchedule({
           // schedule, a test) still asks for every arm it was given.
           continue;
         }
+        // Only a timeout the caller *asked for* goes on the launch string, so a
+        // normal run's strings stay exactly what they were and the app's own
+        // defaults apply. Anything non-default makes the run a diagnostic
+        // (`BASELINE_*_TIMEOUT_MS`), which `run.mjs` says at startup.
         schedule.push({
           scenario: cell.scenario,
           implementation,
           n: cell.n,
           perfMarks: perfMarks === true,
           launch,
+          ...(isNumber(mountTimeoutMs) ? { mountTimeoutMs } : {}),
+          ...(isNumber(presentedTimeoutMs) ? { presentedTimeoutMs } : {}),
         });
       }
     }
@@ -652,6 +807,23 @@ function emptyCell(record) {
       mountBeforeCommit: 0,
     },
     /**
+     * Why each missing signal is missing, accumulated while folding the run:
+     * `metric -> reason -> { count, maxWaitedMs, askedMs, details }`.
+     *
+     * The counts in `sanity` answer "how many"; they cannot answer "why", which is the
+     * question a refused baseline leaves behind (A3's iOS mint: 105 missing `presented`
+     * samples on one arm, and no way to tell a 2 s probe timeout from a probe that
+     * never answered at all). Every `iter` record now carries a reason per null, and
+     * `summariseCell` turns these into the compact `cell.missing` the report prints.
+     */
+    missing: {},
+    /**
+     * The waiting rule this cell was measured under, as recorded by the launches'
+     * own `meta` records (A4). Null until a launch says otherwise, which is what a
+     * results file from before the flag existed looks like.
+     */
+    timeouts: { mountTimeoutMs: null, presentedTimeoutMs: null },
+    /**
      * Denominators for the completeness rule, counted from the records that
      * arrived: what each metric should have produced. Without them a metric
      * that produced 35 of 80 samples is indistinguishable from one that
@@ -670,6 +842,164 @@ function emptyCell(record) {
       leakLaunches: new Set(),
     },
   };
+}
+
+/**
+ * Fold one iteration's `missing` entry into the cell's reason tally.
+ *
+ * Kept as a function of the accumulating cell (rather than a post-pass over records) so
+ * the tally is built in the same pass as the latency values it explains, and so a record
+ * with no `missing` array - every results file written before A4, and every healthy
+ * iteration - contributes nothing.
+ */
+function recordMissingReason(cell, entry) {
+  if (entry == null || typeof entry !== 'object') {
+    return;
+  }
+  const metric = entry.metric;
+  const reason = entry.reason;
+  if (metric !== 'mountedNs' && metric !== 'presentedNs') {
+    return;
+  }
+  if (typeof reason !== 'string' || reason.length === 0) {
+    return;
+  }
+  const byMetric = (cell.missing[metric] ??= {});
+  const tally = (byMetric[reason] ??= {
+    count: 0,
+    maxWaitedMs: null,
+    /** Every timeout this reason was recorded under (a launch may ask for longer). */
+    askedMs: [],
+    /** A few verbatim messages, so a `probe-error` can be read without the log. */
+    details: [],
+  });
+  tally.count += 1;
+  if (isNumber(entry.waitedMs)) {
+    tally.maxWaitedMs = Math.max(tally.maxWaitedMs ?? 0, entry.waitedMs);
+  }
+  if (isNumber(entry.timeoutMs) && !tally.askedMs.includes(entry.timeoutMs)) {
+    tally.askedMs.push(entry.timeoutMs);
+  }
+  if (
+    typeof entry.detail === 'string' &&
+    tally.details.length < 3 &&
+    !tally.details.includes(entry.detail)
+  ) {
+    tally.details.push(entry.detail);
+  }
+}
+
+/**
+ * The per-cell `missing` summary the report prints and the refusal points at: one entry
+ * per signal, one per reason, with the counts and the waits.
+ *
+ * Returns null for a cell nothing went missing in, so the cells in a healthy results file
+ * stay the size they were before A4.
+ */
+function summariseMissing(byMetric) {
+  if (Object.keys(byMetric).length === 0) {
+    return null;
+  }
+  const out = {};
+  for (const [metric, reasons] of Object.entries(byMetric)) {
+    let total = 0;
+    const byReason = {};
+    for (const [reason, tally] of Object.entries(reasons)) {
+      total += tally.count;
+      byReason[reason] = {
+        count: tally.count,
+        maxWaitedMs: isNumber(tally.maxWaitedMs)
+          ? Math.round(tally.maxWaitedMs * 10) / 10
+          : null,
+        timeoutMs: tally.askedMs.length === 0 ? null : tally.askedMs,
+        details: tally.details.length > 0 ? tally.details : undefined,
+      };
+    }
+    out[metric] = { total, byReason };
+  }
+  return out;
+}
+
+/**
+ * One human-readable line per signal with missing samples, for the report and for the
+ * mint's refusal. The reasons are the point of the whole exercise, so they lead:
+ *
+ *     presentedNs: 12 probe-timeout (asked 2000 ms, waited up to 2000.4 ms)
+ *     mountedNs: 20 not-awaited
+ *
+ * A results file written before A4 has counts and no reasons, and says so rather than
+ * printing an empty summary.
+ */
+export function describeMissing(cell) {
+  const lines = [];
+  for (const [metric, summary] of Object.entries(cell?.missing ?? {})) {
+    const reasons = Object.entries(summary.byReason);
+    if (reasons.length === 0) {
+      lines.push(
+        `${metric}: ${String(summary.total)} missing, no reason recorded (a results file from before A4)`
+      );
+      continue;
+    }
+    const parts = reasons.map(([reason, tally]) => {
+      const facts = [];
+      if (Array.isArray(tally.timeoutMs) && tally.timeoutMs.length > 0) {
+        facts.push(
+          `asked ${tally.timeoutMs.map((ms) => `${String(ms)} ms`).join('/')}`
+        );
+      }
+      if (isNumber(tally.maxWaitedMs)) {
+        facts.push(`waited up to ${String(tally.maxWaitedMs)} ms`);
+      }
+      const detail =
+        tally.details && tally.details.length > 0
+          ? ` - ${tally.details[0]}`
+          : '';
+      return `${String(tally.count)} ${reason}${
+        facts.length > 0 ? ` (${facts.join(', ')})` : ''
+      }${detail}`;
+    });
+    lines.push(`${metric}: ${parts.join('; ')}`);
+  }
+  return lines;
+}
+
+/**
+ * The same reasons counted over one launch's raw records, for the run's progress line:
+ *
+ *     20 iterations, 3 presented probe-timeout (2000 ms)
+ *
+ * Lives in `lib.mjs` rather than inlined in `run.mjs` so it can be unit tested: the
+ * runner cannot be imported under jest at all (`import.meta`), and a progress line that
+ * silently stopped counting reasons is exactly the kind of regression nobody notices on a
+ * four-hour run. Measured iterations only, so the counts line up with the iteration count
+ * in front of them; warmups still reach the cell's own `missing` block.
+ */
+export function summarizeMissingReasons(records) {
+  const reasons = {};
+  for (const record of records) {
+    if (record.kind !== 'iter' || record.warmup) {
+      continue;
+    }
+    for (const missing of record.missing ?? []) {
+      const metric = String(missing.metric).replace(/Ns$/, '');
+      const key = `${metric} ${String(missing.reason)}`;
+      const tally = (reasons[key] ??= { count: 0, askedMs: null });
+      tally.count += 1;
+      if (isNumber(missing.timeoutMs)) {
+        tally.askedMs =
+          tally.askedMs == null
+            ? missing.timeoutMs
+            : Math.max(tally.askedMs, missing.timeoutMs);
+      }
+    }
+  }
+  return Object.entries(reasons)
+    .map(([reason, tally]) =>
+      tally.askedMs == null
+        ? `${String(tally.count)} ${reason}`
+        : `${String(tally.count)} ${reason} (${String(tally.askedMs)} ms)`
+    )
+    .join(', ');
 }
 
 /** How many launches actually produced data for a cell (they can differ per metric). */
@@ -870,6 +1200,14 @@ function summariseCell(key, cell) {
     metrics,
     cpu,
     /**
+     * Why signals did not arrive, per metric and reason (A4). Null in a clean cell.
+     * The counts next to it (`sanity.missingPresented`) say how many; these say why,
+     * which is what a refused mint has to answer.
+     */
+    missing: summariseMissing(cell.missing),
+    /** The waiting rule this cell ran under, from its launches' `meta` records. */
+    timeouts: cell.timeouts,
+    /**
      * `{ samples, expected, reportable }` per metric: the denominator rule
      * behind every `n/a` in the tables, and the reason a cell with a 44 %-missing
      * column cannot carry a verdict (round 4).
@@ -936,6 +1274,19 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       if (record.mountSignal === false) {
         cell.mountSignal = false;
       }
+      /**
+       * The waiting rule this cell was measured under (A4). Max, not first: a mixed
+       * launch set is worth seeing rather than averaging away, and `baselineBlockers`
+       * refuses a mint whose rule is not the one the baseline is recorded under.
+       */
+      for (const [field, value] of [
+        ['mountTimeoutMs', record.mountTimeoutMs],
+        ['presentedTimeoutMs', record.presentedTimeoutMs],
+      ]) {
+        if (isNumber(value)) {
+          cell.timeouts[field] = Math.max(cell.timeouts[field] ?? 0, value);
+        }
+      }
     } else if (record.kind === 'skip') {
       if (!cell.skipReasons.includes(record.reason)) {
         cell.skipReasons.push(record.reason);
@@ -956,6 +1307,13 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       }
       if (record.presentedNs == null) {
         cell.sanity.missingPresented += 1;
+      }
+      // Why, not just how many (A4). Sits in the same branch as the `sanity` counters
+      // it explains, so warmups are excluded here for exactly the reason they are
+      // excluded there: the denominators, the samples and the reasons have to be
+      // counted over the same set of iterations or the two cannot be reconciled.
+      for (const missing of record.missing ?? []) {
+        recordMissingReason(cell, missing);
       }
       if (
         isNumber(record.presentedNs) &&
@@ -1624,6 +1982,98 @@ export function loadBlocker(machine) {
 }
 
 /**
+ * The waiting rule a run measured under: the largest timeout any of its cells was
+ * asked to wait for, and 0 when a results file predates the field.
+ *
+ * Compared against `BASELINE_*_TIMEOUT_MS` by `baselineBlockers()`: a run that waited
+ * longer is a diagnostic (it changes which samples arrive, not what they say), so it
+ * cannot mint the table future runs are gated against.
+ */
+export function requestedTimeouts(run) {
+  let mountTimeoutMs = 0;
+  let presentedTimeoutMs = 0;
+  for (const cell of Object.values(cellsFrom(run.cells ?? run))) {
+    if (isNumber(cell?.timeouts?.mountTimeoutMs)) {
+      mountTimeoutMs = Math.max(mountTimeoutMs, cell.timeouts.mountTimeoutMs);
+    }
+    if (isNumber(cell?.timeouts?.presentedTimeoutMs)) {
+      presentedTimeoutMs = Math.max(
+        presentedTimeoutMs,
+        cell.timeouts.presentedTimeoutMs
+      );
+    }
+  }
+  return { mountTimeoutMs, presentedTimeoutMs };
+}
+
+/**
+ * The incomplete metrics of a run, split by whose fault it is (A4).
+ *
+ * `refusals` are cells whose incomplete metric makes a number the baseline *gates on*
+ * unusable: a `nitro-ui` row (the only gated arm), or any metric of `rn-core`, which is
+ * the denominator of every ratio in the file. Those refuse the whole mint - a
+ * survivor-biased verdict is not baseline material, and this half of the rule is
+ * unchanged from round 4.
+ *
+ * `comparisonGaps` are the same defect on an arm that carries no verdict (`expo-ui-*`,
+ * `nitro-ui-host`). Those cells are left out of the baseline and recorded, because
+ * refusing a machine's entire table over a reference arm's frame probe throws away every
+ * gated row that run measured correctly - which is exactly what A3's iOS mint did for
+ * 55/160 and 87/160 samples on two `@expo/ui` cells.
+ *
+ * Both halves key on the arm, not the component or scenario: what matters is whether the
+ * number gates anything.
+ */
+export function baselineCompleteness(run) {
+  const incomplete = Object.entries(cellsFrom(run.cells ?? run)).flatMap(
+    ([key, cell]) =>
+      incompleteMetrics(cell).map((entry) => ({
+        key,
+        implementation:
+          cell?.implementation ?? parseCellKey(key).implementation,
+        ...entry,
+      }))
+  );
+  const refusals = [];
+  const comparisonGaps = [];
+  for (const entry of incomplete) {
+    // `rn-core` is not gated either, but its metrics *are* every ratio's
+    // denominator: an incomplete control metric poisons the row above it, so the
+    // control belongs with the gated arm, not with the comparison arms.
+    if (
+      GATED_IMPLEMENTATIONS.includes(entry.implementation) ||
+      entry.implementation === 'rn-core'
+    ) {
+      refusals.push(entry);
+    } else {
+      comparisonGaps.push(entry);
+    }
+  }
+  return { refusals, comparisonGaps, incomplete };
+}
+
+/**
+ * A short, greppable pointer to the per-iteration detail behind a gap: the reason codes
+ * and counts that were recorded with them (A4's "a failure leaves a record").
+ */
+function missingDetailHint(run, key) {
+  const cell = cellsFrom(run.cells ?? run)[key];
+  const lines = describeMissing(cell);
+  return lines.length > 0
+    ? ` - ${lines.join('; ')}`
+    : ' - no per-iteration reason recorded for this cell (a results file from before A4)';
+}
+
+/**
+ * Where a refusal or a left-out cell points a reader for the per-iteration detail
+ * (A4: a failure has to leave a record, and the record has to say where it is).
+ */
+const WHERE_THE_DETAILS_LIVE =
+  "\n        per-iteration reasons are in that cell's `missing` block in the results " +
+  'file, and verbatim in its sibling `.ndjson` (bench/src/runner.ts records a reason ' +
+  'per null; scripts/bench/render.mjs prints the same line per cell).';
+
+/**
  * Whether a run may mint a committed baseline (D9 + T02 review S10): clean tree,
  * every launch completed, an idle machine, and on Android an app that is actually
  * compiled. `--force` overrides, loudly.
@@ -1655,23 +2105,36 @@ export function baselineBlockers(run) {
       `${String(run.problems.length)} launch(es) did not complete in this run`
     );
   }
-  // A baseline is a table of ratios, so it can only be minted while every
-  // gated metric is actually being measured. If any cell has a metric that is
-  // n/a because too few samples arrived (round 4 completeness rule), the
-  // ratios that survive are survivor-biased and the baseline is not sound.
-  const incomplete = Object.entries(cellsFrom(run.cells ?? run)).flatMap(
-    ([key, cell]) => incompleteMetrics(cell).map((entry) => ({ key, ...entry }))
-  );
-  if (incomplete.length > 0) {
-    const where = incomplete
+  // A baseline is a table of ratios, so it can only be minted while every metric the
+  // table *gates on* is actually being measured (round 4's completeness rule, narrowed
+  // by A4). An incomplete metric on a gated arm (`nitro-ui`) or on `rn-core` (the
+  // denominator of every ratio) makes the surviving ratios survivor-biased verdicts, and
+  // refuses the mint. The same defect on a comparison arm (`expo-ui-*`, `nitro-ui-host`)
+  // leaves just that cell out - see `baselineCompleteness()`.
+  const { refusals } = baselineCompleteness(run);
+  if (refusals.length > 0) {
+    const where = refusals
       .slice(0, 3)
       .map(
         (entry) =>
-          `${entry.key} ${entry.metric} (${String(entry.samples ?? '?')} of ${String(entry.expected ?? '?')} samples)`
+          `${entry.key} ${entry.metric} (${String(entry.samples ?? '?')} of ${String(entry.expected ?? '?')} samples)${missingDetailHint(run, entry.key)}`
       )
-      .join(', ');
+      .join('\n  - ');
     reasons.push(
-      `${String(incomplete.length)} metric(s) are n/a because too few samples arrived: ${where}`
+      `${String(refusals.length)} gated metric(s) are n/a because too few samples arrived:\n  - ${where}` +
+        WHERE_THE_DETAILS_LIVE
+    );
+  }
+  // Waiting longer than the rule the baseline is recorded under is the same kind of
+  // disqualifier as `--perf-marks`: the samples that arrive keep their values, but
+  // *which* arrive changes the median, so the run cannot redefine `presented`.
+  const timeouts = requestedTimeouts(run);
+  if (
+    timeouts.presentedTimeoutMs > BASELINE_PRESENTED_TIMEOUT_MS ||
+    timeouts.mountTimeoutMs > BASELINE_MOUNT_TIMEOUT_MS
+  ) {
+    reasons.push(
+      `the run waited longer for a signal than a baseline is recorded under (${String(timeouts.mountTimeoutMs)} ms mount / ${String(timeouts.presentedTimeoutMs)} ms presented vs ${String(BASELINE_MOUNT_TIMEOUT_MS)}/${String(BASELINE_PRESENTED_TIMEOUT_MS)}), so which samples arrived is not comparable with a committed baseline - it is a diagnostic run like --perf-marks`
     );
   }
   const machine = run.machine ?? {};
@@ -1708,7 +2171,34 @@ export function buildBaseline(run) {
   const table = ratioTable(run);
   const noise = noiseTable(table);
   const cells = {};
+  // Comparison-arm cells with an incomplete metric do not go in the table (A4): a
+  // survivor-biased reference row is worthless to gate against and would be quoted as
+  // if it were whole. They are collected in `skippedCells` instead - with the metric,
+  // its sample counts and the recorded reasons - so the file says what is missing and
+  // why, rather than looking like the cell was never measured.
+  const { comparisonGaps } = baselineCompleteness(run);
+  const gapsByCell = {};
+  for (const gap of comparisonGaps) {
+    (gapsByCell[gap.key] ??= []).push(gap);
+  }
+  const skippedCells = {};
+  for (const [key, gaps] of Object.entries(gapsByCell).sort()) {
+    const cell = cellsFrom(run.cells ?? run)[key] ?? {};
+    skippedCells[key] = {
+      scenario: cell.scenario ?? parseCellKey(key).scenario,
+      implementation: cell.implementation ?? parseCellKey(key).implementation,
+      n: cell.n ?? parseCellKey(key).n,
+      skipReason: gaps.map((gap) => `${gap.metric} incomplete`).join(', '),
+      skipReasons: gaps.map(
+        (gap) =>
+          `${gap.metric}: ${String(gap.samples ?? '?')} of ${String(gap.expected ?? '?')} samples arrived${missingDetailHint(run, key)}`
+      ),
+    };
+  }
   for (const [key, entry] of Object.entries(table)) {
+    if (skippedCells[key] != null) {
+      continue;
+    }
     cells[key] = {
       scenario: entry.scenario,
       implementation: entry.implementation,
@@ -1728,6 +2218,7 @@ export function buildBaseline(run) {
       sanity: cellsFrom(run.cells)[key]?.sanity ?? null,
     };
   }
+  const timeouts = requestedTimeouts(run);
   return {
     schemaVersion: SCHEMA_VERSION,
     platform: run.platform,
@@ -1739,8 +2230,60 @@ export function buildBaseline(run) {
     updatedAt: run.createdAt,
     machine: run.machine ?? null,
     art: run.art ?? null,
+    /**
+     * The waiting rule this table was recorded under (A4). A baseline's `presented`
+     * column only means anything with its timeout attached: raise the wait and
+     * previously-missing samples start arriving, which moves the median without
+     * anything about the app changing.
+     */
+    timeouts: {
+      mountTimeoutMs:
+        timeouts.mountTimeoutMs > 0
+          ? timeouts.mountTimeoutMs
+          : BASELINE_MOUNT_TIMEOUT_MS,
+      presentedTimeoutMs:
+        timeouts.presentedTimeoutMs > 0
+          ? timeouts.presentedTimeoutMs
+          : BASELINE_PRESENTED_TIMEOUT_MS,
+    },
+    /**
+     * Comparison-arm cells left out of `cells`, and why (A4). Empty in a run where
+     * every signal arrived.
+     */
+    skippedCells,
     cells,
   };
+}
+
+/**
+ * The lines a mint prints after writing, naming every comparison-arm cell the file left
+ * out and why (A4). Nothing for a run with no gaps, so a clean mint's output does not
+ * grow a section nobody asked for.
+ *
+ * In `lib.mjs` rather than `report.mjs` so it can be unit tested: the reporter imports
+ * `node:fs` and `import.meta`, and the important half of a mint is not just that the
+ * cells were left out but that the run *said so* on the terminal.
+ */
+export function skippedCellNotes(baseline, { display }) {
+  const skipped = baseline?.skippedCells ?? {};
+  const keys = Object.keys(skipped).sort();
+  if (keys.length === 0) {
+    return [];
+  }
+  const lines = [
+    `Left out of the baseline: ${String(keys.length)} comparison-arm cell(s) with an incomplete metric (D9's A4 amendment - a comparison arm carries no verdict, so its gap costs it its own row, not the table):`,
+  ];
+  for (const key of keys) {
+    for (const reason of skipped[key].skipReasons ?? [
+      skipped[key].skipReason ?? 'incomplete',
+    ]) {
+      lines.push(`  - ${key}: ${reason}`);
+    }
+  }
+  lines.push(
+    `        details: \`${display}\` -> \`skippedCells\`; per-iteration reasons in the results file's cells -> \`missing\`.`
+  );
+  return lines;
 }
 
 /** A baseline from before D9 (absolute cells) cannot be gated against. */
