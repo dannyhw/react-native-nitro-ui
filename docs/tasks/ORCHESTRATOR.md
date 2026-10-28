@@ -44,45 +44,45 @@ any machine. The live state is in `STATUS.md` (task table) and `RECOVERY.md`
 5. Merge (`git merge --no-ff task/<ID>-…`), confirm `bun run check` on the
    merged tree, push, and update `STATUS.md` / `RECOVERY.md` in the same push.
    "Confirm" is sometimes a look, not a re-run (X10): `need --for merge` accepts
-   a `check` that passed on an **identical code tree**, provided that line's
-   commit is an ancestor of the merged `HEAD` (`git merge-base --is-ancestor`)
-   *and* every path the merge adds beyond that commit is on a small allowlist of
-   files no `check` step reads — which today is `docs/**`, minus
-   `docs/tasks/*/gates.jsonl` (which `gate.mjs` opens) and
-   `docs/tasks/ORCHESTRATOR.md` (which a unit test reads to check this page says
-   what the code does). The allowlist is load-bearing and is proved, not
-   asserted: `scripts/check-docs-drift.mjs` asks each of the sixteen steps what
-   it reads (its own script graph, the jest run's real `--listTests` graph, and
-   prettier/eslint's own ignore answers) and fails `bun run check` if anything
-   under `docs/` turns out to be read. The code tree digest deliberately excludes
-   `docs/`, `bench/`, `.github/` and every `*.md`, so without that second
-   condition a merge that brought in a `bench/` change would reuse a `check` that
-   never saw it (X10 review M1). Read together: a merge of **only task docs and
-   reports** reuses; one that brought in `bench/`, a README or a CI change does
-   not, and the run is owed.
+   a `check` whose recorded **`fullTree` equals the merge result's** — git's own
+   `rev-parse HEAD^{tree}`, the whole tracked tree, `docs/` and `bench/` and every
+   `*.md` included — provided that line was run with a **clean worktree**, its
+   commit is an ancestor of the merged `HEAD` (`git merge-base --is-ancestor`),
+   and this worktree is clean too. An equal tree hash means a run here would read
+   the same bytes, which is the whole rule; there is no list of paths reuse is
+   allowed to be blind to, because a hash has no blind spot. The cost is the
+   honest one: **any** change since the checked tree — a report, a README, a
+   rename — re-owns the 2½-minute run. An earlier version compared the *code*
+   digest (which excludes `docs/`, `bench/`, `.github/` and `*.md`) and patched
+   that gap with a `docs/**` allowlist plus a drift "proof", and a
+   `bench/… → docs/…` rename still read as docs-only, because git reports only a
+   rename's destination and no list is told about files that do not exist yet
+   (X10 review M1/M2/M3). A dirty worktree disqualifies a line for reuse rather
+   than for the other checks: the run saw the tree *plus* unrecorded edits, and
+   only the commit's hash is written down, so it cannot say this tree was checked
+   on its own.
    Two sources are consulted, and the note says which: the other branches'
    `.gates/*.jsonl` in *this* checkout, and any `docs/tasks/<ID>/gates.jsonl`
-   committed by `gate.mjs export`. In practice the first is the useful one and
-   the second is refused: a task's export is written *after* the `check` line it
-   carries, so the merge that brings the export also adds a file `check` reads
-   (`gate.mjs` lists `docs/tasks` and opens each ledger), and the rule refuses —
-   correctly, because a ledger that arrives with a merge cannot certify that
-   merge. So the first merge of a task from its worktree confirms `check` by
-   running it; a merge in a checkout that already holds the branch's `.gates/`
-   line, or a docs-only merge on top of a confirmed tree, does not.
+   committed by `gate.mjs export`. A committed export names the tree it was
+   written on, so if the merge also brings the export commit, the trees differ and
+   reuse declines — which is the right answer anyway: a ledger that arrives with
+   a merge cannot certify that merge. So the first merge of a task from its
+   worktree confirms `check` by running it; a merge in a checkout that already
+   holds the branch's `.gates/` line for the tree that merge produces does not.
    The line is marked `PASS (reused)` in `gate.mjs table` with the branch and the
    file named, so the borrow is visible rather than implied. A **squash** merge
-   is refused even though the code matches, because the commit the line names is
+   is refused even though the tree matches, because the commit the line names is
    not in this history. The newest line on the tree wins across every ledger, and
-   a newer **fail** refuses reuse over an older pass (M2). What reuse does *not*
-   prove: a ledger line is self-attested text — ancestry ties it to history, and
-   tree equality to content, but nothing in git signs the line itself, so a
-   determined author could write a green row for a tree they never checked. The
-   digest is easy to compute; treat a borrowed row as a shortcut for an honest
-   run, not as a substitute for one you would not have run. `check` only: a
-   device gate is evidence about a binary built on a particular machine and
-   lease, and a review round is evidence about its own diff. `--no-reuse` asks
-   the strict question when you do not want to take the rule's word for it.
+   a newer **fail** refuses reuse over an older pass (M2); on an exact timestamp
+   tie the fail is the decisive line. What reuse does *not* prove: a ledger line
+   is self-attested text — ancestry ties it to history, and an equal tree hash to
+   content, but nothing in git signs the line itself, so a determined author could
+   write a green row for a tree they never checked. The hash is easy to compute;
+   treat a borrowed row as a shortcut for an honest run, not as a substitute for
+   one you would not have run. `check` only: a device gate is evidence about a
+   binary built on a particular machine and lease, and a review round is evidence
+   about its own diff. `--no-reuse` asks the strict question when you do not want
+   to take the rule's word for it.
 
 Delegation template (implementer):
 
