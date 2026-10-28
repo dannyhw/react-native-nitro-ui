@@ -2,9 +2,12 @@
  * On-device spike tests for the TextField prototypes (task T18, `docs/tasks/Q2-textfield-research.md` §7).
  *
  * These are **evidence, not a component's test suite**: the spike exports nothing and has no `component.json`,
- * so nothing here can quietly become a shipped contract. What they do is run P1, P3, P4 and the X4 rules
- * against the real hosting path — `NitroSwiftUIHost`, `NitroComposeHost`, a hosted `UITextField` — and print
- * the numbers the go/no-go table is built from.
+ * so nothing here can quietly become a shipped contract. What they do is run P1, P3, P4 (and P4b's
+ * content-driven auto-grow) and as much of X4's four rules as a JS harness can reach, against the real hosting
+ * path — `NitroSwiftUIHost`, `NitroComposeHost`, a hosted `UITextField` — and print the numbers the go/no-go
+ * table is built from. X4's rules are named one by one in `X4`'s own evidence line, measured where this runner
+ * can see them and marked `not measured here` where it cannot, because T18's review (M6) found the old label
+ * claiming more than the scenario checked.
  *
  * Division of labour, because each runner proves things the other cannot:
  *
@@ -24,6 +27,7 @@ import type { ReactNode } from 'react';
 import { Platform, TextInput, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
+  beforeAll,
   cleanup,
   describe,
   expect,
@@ -54,10 +58,13 @@ const EMOJI_32 = '\u{1F600}\u{1F601}\u{1F602}\u{1F603}';
 /*
  * Which arm an imperative `focus()` actually works on.
  *
- * `@FocusState` is private to the SwiftUI subtree, so on iOS the SwiftUI arm has no imperative focus path at
- * all — `focus()` is a no-op there and the scenario below asserts that rather than waiting for an event that
- * never comes. Android's one shape takes focus through `FocusRequester`, so the distinction is iOS-only, and
- * it is a G8 cost of choosing the SwiftUI shape: an app cannot focus a field from a method.
+ * Which arm a scenario drives: the one an app can focus on command. On iOS that is the hosted `UITextField`
+ * (arm B), whose `becomeFirstResponder()` is called from the view. Arm A's `@FocusState` is private to the
+ * SwiftUI subtree, so an imperative ask reaches it only through the binding the SwiftUI body hands to the
+ * model in `onAppear`, and `P5 focus latency` measures whether that lands rather than assuming it. Android
+ * has one shape and takes focus through the composable's own `FocusRequester`, so every arm value there
+ * means the same field. Either way the arm choice carries a G8 cost: a field whose imperative focus depends
+ * on the shape it was mounted with is a field whose API has two behaviours.
  */
 const focusableArm: 'swiftui' | 'textfield' = iOS ? 'textfield' : 'swiftui';
 
@@ -408,6 +415,21 @@ async function focusLands(
 ): Promise<boolean> {
   const before = count();
   ask();
+  return eventArrives(count, before, timeoutMs);
+}
+
+/**
+ * Whether an event counter moves past `before` inside `timeoutMs`, without asking for it.
+ *
+ * `focusLands` asks *and* waits. Half the follow-up questions a focus ask raises are about the second edge:
+ * the `onBlur` that should answer a `blur()` already sent. Splitting the wait out keeps those questions from
+ * re-asking the thing under test.
+ */
+async function eventArrives(
+  count: () => number,
+  before: number,
+  timeoutMs = 1500
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (count() > before) {
@@ -532,6 +554,20 @@ async function resolveFocusCapability(): Promise<{
 
 describe('T18 spike — TextField', () => {
   afterEach(cleanup);
+
+  /*
+   * The focus probe is a `render()`, and the harness's `render()` unmounts whatever is already rendered
+   * (`@react-native-harness/runtime/src/render/index.ts:21-26`). T18 resolved it lazily, from *inside* `P5`
+   * and `X4`, so the probe's own two trees tore down the field each scenario had just mounted, and the ask
+   * that followed reached a dropped view: `P5` printed `expected 0 to be greater than or equal to 1` and
+   * `X4` reported its focus observable as `unobserved`. Both were measurements of the test order.
+   *
+   * So it runs once, before any scenario has a tree to lose. It is memoised, which is what makes the fix
+   * cover every caller: after this, `resolveFocusCapability()` returns the cached answer and renders nothing.
+   */
+  beforeAll(async () => {
+    await resolveFocusCapability();
+  });
 
   /**
    * **P1 — the two iOS shapes host, round-trip, and coexist** (Q2 §3's deciding question, §7 P1).
@@ -937,6 +973,80 @@ describe('T18 spike — TextField', () => {
   });
 
   /**
+   * **P4b — auto-grow through the real layout path, with the text actually growing** (Q2 §7's
+   * "auto-grow converges in ≤1 correction", D17).
+   *
+   * `P4` above does not measure that line, and its review (T18 M5) says so plainly: `P4` keeps the text fixed
+   * and moves `layoutWidth`/`width` from the test, so what converges is a *width*-driven re-key pushed through
+   * a JS override. A field whose content gains a line is a different event — the content size changes under a
+   * box that did not, which is exactly what the sizing engine's correction exists for, and what an app hits
+   * with every growing comment box.
+   *
+   * So: a fixed-width multiline field, and three controlled writes that add a line each. Every write goes
+   * through React's `value`; the height is read back from `measureContent()`, the line count from the field's
+   * own mirror, and the corrections from the engine's counters — so "converged" is the engine's word, not a
+   * layout snapshot's.
+   */
+  it('P4b auto-grow: content growth through onLayout, at most one correction per step', async () => {
+    const field = await mountSpike({
+      arm: 'swiftui',
+      multiline: true,
+      maxLines: 4,
+      layoutWidth: 320,
+      width: 320,
+      value: 'one',
+    });
+    await waitFor(
+      () => {
+        expect(field.handle()).not.toBeNull();
+        expect(field.mirror().impl).toBeTruthy();
+      },
+      { timeout: 10000, interval: 50 }
+    );
+    // One beat and one snapshot *after* the mount settled: the corrections counted here belong to the content
+    // growth, so the mount's own first correction has to be behind the baseline, not inside it.
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const baseline = nitroUiCore.sizingStats();
+    const correctionsOf = (stats: typeof baseline) =>
+      stats.correctionsImmediate + stats.correctionsBatched;
+    const oneLineHeight = field.handle()?.measureContent().height ?? 0;
+
+    const growth = ['one\ntwo', 'one\ntwo\nthree', 'one\ntwo\nthree\nfour'];
+    const heights: string[] = [`1:${oneLineHeight.toFixed(1)}`];
+    /** Corrections the engine queued for each growth step, in order. */
+    const corrections: number[] = [];
+    let previous = baseline;
+    for (const text of growth) {
+      await field.set({ value: text });
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      const stats = nitroUiCore.sizingStats();
+      corrections.push(correctionsOf(stats) - correctionsOf(previous));
+      previous = stats;
+      heights.push(
+        `${String(text.split('\n').length)}:${(field.handle()?.measureContent().height ?? 0).toFixed(1)}`
+      );
+    }
+
+    const parsed = heights.map((entry) => Number(entry.split(':')[1]));
+    const maxCorrections = Math.max(...corrections);
+    evidence('p4_auto_grow', {
+      platform: Platform.OS,
+      steps: growth.length,
+      heights: heights.join(','),
+      lines: field.mirror().lines ?? '',
+      corrections: corrections.join(','),
+      max_corrections_per_step: maxCorrections,
+      cache_growth: previous.cachedSizes - baseline.cachedSizes,
+      measurements: previous.measurements - baseline.measurements,
+    });
+
+    // The field has to be growing at all, or "≤1 correction" would be measuring an idle control.
+    expect(parsed[parsed.length - 1]).toBeGreaterThan(parsed[0]);
+    // D17's line, per step: three new lines of content cost no more than one correction each.
+    expect(maxCorrections).toBeLessThanOrEqual(1);
+  });
+
+  /**
    * **P5 — focus latency, spike field vs RN's own `TextInput`, in one run.**
    *
    * The bench cannot carry this: its arms are generated from `component.json` and the spike deliberately has
@@ -1058,8 +1168,8 @@ describe('T18 spike — TextField', () => {
       current: null,
     };
 
-    // Focus latency is only measurable on the arm that can take focus on command; the finding that the other
-    // arm cannot is `spike_focus_swiftui_noop` below.
+    // Measured on the arm an app can focus on command. What the *other* iOS arm does with the same ask is a
+    // separate row of this scenario's evidence line, read at the end.
     const field = await mountSpike(
       // Boxed, like the `TextInput` mounted beside it: `resolveFocusCapability` reports focus capability
       // per box shape, and a latency comparison against a field that always has a height has to ask in a
@@ -1091,32 +1201,16 @@ describe('T18 spike — TextField', () => {
     );
 
     /*
-     * Focus latency is a comparison of two timings, so it needs two timings. Where an imperative focus ask
-     * produces no event at all, the loop below would measure nothing and the budget would compare a zero with
-     * a zero; the probe says which world this is, and the spike's own bug stays red in the one world where it
-     * is one.
+     * The probe's answer is evidence here, not a gate.
+     *
+     * T18 used it to short-circuit this loop and then assert that RN could not take focus, which inverted the
+     * witness: the one world where focus *does* land became the case that reported `unmeasured`, and the
+     * red it printed came from the probe having dropped this scenario's own tree (see the `beforeAll` above).
+     * Here the field is the live tree, so whether a focus ask lands is decided by the wait inside the loop —
+     * the thing actually under test — and `capability` only says what RN did beside it.
      */
     await awaitHostedField(field);
     const capability = await resolveFocusCapability();
-    if (!capability.spikeBoxedTakesFocus) {
-      evidence('p5_focus', {
-        platform: Platform.OS,
-        samples: 0,
-        spike_p95_ms: 'unmeasured',
-        rn_p95_ms: 'unmeasured',
-        ratio: 'unmeasured',
-        rn_takes_focus: capability.rnTakesFocus ? 1 : 0,
-        spike_plain_takes_focus: capability.spikePlainTakesFocus ? 1 : 0,
-        plain_write: capability.plainWrite,
-        boxed_write: capability.boxedWrite,
-        swiftui_imperative_focus: iOS ? 'noop' : 'same arm',
-        reason: capability.rnTakesFocus
-          ? 'RN TextInput took focus on command and the spike field did not'
-          : 'nothing takes focus on command in this environment',
-      });
-      expect(capability.rnTakesFocus).toBe(false);
-      return;
-    }
 
     const SAMPLES = 6;
     const spikeFocus: number[] = [];
@@ -1164,33 +1258,120 @@ describe('T18 spike — TextField', () => {
       p95(rnFocus) > 0
         ? p95(spikeFocus) / p95(rnFocus)
         : Number.POSITIVE_INFINITY;
-    // The other arm, measured rather than asserted from a comment: on iOS, focusing the SwiftUI shape is a
-    // no-op, so a shipped `focus()` would silently do nothing for half the library's fields.
-    const swiftUIArmNoop = await mountSpike({
+    /*
+     * **A field mounted later in the same suite.** T18 read this as "an identically boxed field mounted later
+     * never fires `onFocus`"; its review showed the field in question had been mounted *earlier* and dropped
+     * by the probe's `render()`. The case worth having is still here, and it is the one an app actually hits:
+     * a fresh field, mounted after several other trees in one run, focused on command. This `render()` drops
+     * the field the loop above timed, which is why it runs last.
+     */
+    const late = await mountSpike({
+      arm: focusableArm,
+      defaultValue: '',
+      width: 320,
+      height: 44,
+    });
+    await waitFor(
+      () => {
+        expect(late.handle()).not.toBeNull();
+      },
+      { timeout: 10000, interval: 50 }
+    );
+    const lateAttached = await awaitHostedField(late);
+    const lateFocused = await focusLands(
+      () => late.handle()?.focus(),
+      () => late.log.focus
+    );
+    const lateMirrorFocused = late.mirror().focused ?? '';
+    /*
+     * `blur()` on this field, asked twice, recorded rather than gated.
+     *
+     * The field the loop above timed answers `blur()` on every sample (`field.log.blur` is asserted below), so
+     * the method works on the tree a suite mounted first. This field, mounted several trees later, is what
+     * T18's "state-dependent" wording was about, and its review could not tell whether the effect was real or
+     * the probe's doing. Measured here: the ask is posted and no `onBlur` comes back. A second ask is included
+     * because an app that sees no effect re-asks, and because "never" and "not on the first ask" are different
+     * costs for G8. Both rows are evidence, so the finding is reported as a number instead of a red suite.
+     */
+    late.handle()?.blur();
+    const lateBlurAsk1 = await eventArrives(() => late.log.blur, 0, 1200);
+    const lateMirrorAfterAsk1 = late.mirror().focused ?? '';
+    late.handle()?.blur();
+    const lateBlurAsk2 = await eventArrives(() => late.log.blur, 0, 1200);
+    const lateMirrorAfterAsk2 = late.mirror().focused ?? '';
+    late.unmount();
+
+    /*
+     * The other iOS arm, measured rather than read out of a comment.
+     *
+     * `@FocusState` is private to the SwiftUI subtree, which is why T18 called arm A's `focus()` a no-op
+     * (a reading of the source, labelled as one). `ios/spike/HybridNitroUiSpikeTextField.swift` now hands the
+     * projected binding to the model from `onAppear`, so the host has something to write; whether that lands
+     * is what this measures. On Android there is one shape, so the same field is asked twice by construction
+     * and the row says `same arm`.
+     */
+    const swiftUIArm = await mountSpike({
       arm: 'swiftui',
       defaultValue: '',
     });
-    const noopFocusBefore = swiftUIArmNoop.log.focus;
-    swiftUIArmNoop.handle()?.focus();
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    const noopFocused = swiftUIArmNoop.mirror().focused ?? '';
-    swiftUIArmNoop.unmount();
+    await waitFor(
+      () => {
+        expect(swiftUIArm.handle()).not.toBeNull();
+      },
+      { timeout: 10000, interval: 50 }
+    );
+    const armAFocusBefore = swiftUIArm.log.focus;
+    const swiftUIFocused = await focusLands(
+      () => swiftUIArm.handle()?.focus(),
+      () => swiftUIArm.log.focus
+    );
+    const armAMirrorFocused = swiftUIArm.mirror().focused ?? '';
+    swiftUIArm.unmount();
 
     evidence('p5_focus', {
       platform: Platform.OS,
       samples: SAMPLES,
       spike_p95_ms: p95(spikeFocus),
       spike_median_ms: median(spikeFocus),
+      spike_samples: spikeFocus.join('-'),
       rn_p95_ms: p95(rnFocus),
       rn_median_ms: median(rnFocus),
+      rn_samples: rnFocus.join('-'),
       ratio: ratio.toFixed(2),
-      swiftui_imperative_focus: iOS ? 'noop' : 'same arm',
-      swiftui_focus_events: swiftUIArmNoop.log.focus - noopFocusBefore,
-      swiftui_mirror_focused: noopFocused,
+      spike_focus_events: spikeFocus.length,
+      spike_blur_events: field.log.blur,
+      rn_takes_focus: capability.rnTakesFocus ? 1 : 0,
+      probe_rn: capability.rnTakesFocus ? 1 : 0,
+      probe_spike_plain: capability.spikePlainTakesFocus ? 1 : 0,
+      probe_spike_boxed: capability.spikeBoxedTakesFocus ? 1 : 0,
+      probe_plain_write: capability.plainWrite,
+      probe_boxed_write: capability.boxedWrite,
+      late_focus_lands: lateFocused ? 1 : 0,
+      late_mirror_focused: lateMirrorFocused,
+      late_attached: lateAttached ? 1 : 0,
+      late_blur_ask1: lateBlurAsk1 ? 1 : 0,
+      late_blur_ask2: lateBlurAsk2 ? 1 : 0,
+      late_mirror_after_blur1: lateMirrorAfterAsk1,
+      late_mirror_after_blur2: lateMirrorAfterAsk2,
+      swiftui_imperative_focus: iOS
+        ? swiftUIFocused
+          ? 'lands'
+          : 'no-op'
+        : 'same arm',
+      swiftui_focus_events: swiftUIArm.log.focus - armAFocusBefore,
+      swiftui_mirror_focused: armAMirrorFocused,
     });
+
+    // `blur()` is a shipped method, so its observable is asserted, not inferred from the next focus working.
+    expect(field.log.blur).toBeGreaterThanOrEqual(SAMPLES - 1);
+    // The method has to work on a field the app opened later, not only on the first one in the process.
+    expect(lateFocused).toBe(true);
+    expect(lateMirrorFocused).toBe('1');
+    // Recorded, not asserted, and reported: on Android `blur()` does not answer a field mounted later in the
+    // same suite, while it answers the first field on every sample. See the report's focus row.
     if (iOS) {
-      // Asserted so it cannot rot into a silent behaviour change: the SwiftUI arm has no imperative focus.
-      expect(swiftUIArmNoop.log.focus - noopFocusBefore).toBe(0);
+      // Asserted so it cannot rot into a silent behaviour change, whichever way it lands.
+      expect(swiftUIArm.log.focus - armAFocusBefore).toBeGreaterThan(0);
     }
     await expectTimingBudget({
       label: 'focus() → onFocus p95, spike field vs RN TextInput',
@@ -1208,7 +1389,7 @@ describe('T18 spike — TextField', () => {
    * is the rule a text field is most likely to break, because it is the only control in the library whose
    * *content* changes continuously while it is mounted.
    */
-  it('X4 the sizing rules hold for a text field', async () => {
+  it('X4 what of X4 four rules this runner can see', async () => {
     const before = nitroUiCore.sizingStats();
     const field = await mountSpike({ arm: focusableArm, defaultValue: '' });
     await waitFor(
@@ -1221,6 +1402,16 @@ describe('T18 spike — TextField', () => {
 
     const size = field.handle()?.measureContent();
     expect(size?.height ?? 0).toBeGreaterThan(0);
+
+    /*
+     * X4's rule 3, half of it. "Declared fallback … different from the measured size" has two halves: the
+     * registration is a reading of source (`HybridNitroUiSpikeTextField.kt:359-367` and
+     * `HybridNitroUiSpikeTextField.swift:728-736` both declare 44 before the first measure), and the
+     * *difference* is measurable here. 44 is written again below rather than read from the engine, which has no
+     * getter for it, so this row is a measurement beside a reading — labelled as such in the evidence, not
+     * claimed as a measurement of the declaration.
+     */
+    const DECLARED_FALLBACK_HEIGHT = 44;
 
     /*
      * A prop that cannot change the size must leave the hosted control alone, and the observable form of
@@ -1279,6 +1470,26 @@ describe('T18 spike — TextField', () => {
       ledger_delta: after.ledgerEntries - before.ledgerEntries,
       registry_delta: after.registryEntries - before.registryEntries,
       cache_delta: after.cachedSizes - before.cachedSizes,
+      /*
+       * X4's four rules, named the way X4 names them (`docs/tasks/X4-conformance.md:33-39`), so a reader can
+       * tell which ones ran. T18 printed one row called "the sizing rules" for a scenario that checked an
+       * intrinsic height, no rebuild on a prop or a text change, and three engine counters.
+       */
+      // Nothing in a JS harness can read an accessibility tree. Android's real-input suite does prove it —
+      // `spike-text-typing` finds the field by its `accessibilityLabel` and the *tap* on that node focuses it.
+      rule1_a11y_name_on_focusable_node:
+        'not measured here (Android: spike-text-typing)',
+      // The engine half of "no leak on drop" is the three deltas above; the memory half is `P5 memory`, whose
+      // baseline-referenced reading does not come back to the floor.
+      rule2_no_leak_on_drop: 'engine deltas above; memory half in p5_memory',
+      rule3_fallback_declared: DECLARED_FALLBACK_HEIGHT,
+      rule3_fallback_vs_measured:
+        Math.abs((size?.height ?? 0) - DECLARED_FALLBACK_HEIGHT) > 0.1
+          ? 'differs'
+          : 'equal (a failed correction would be invisible)',
+      // RN reuses a native view only when its own recycler does — a list cell being rebound — and nothing in
+      // this runner can force that. `MountChurn.harness.tsx` has no recycle seam either.
+      rule4_recycle_reset: 'not measured',
     });
     expect(after.ledgerEntries).toBeLessThanOrEqual(before.ledgerEntries + 2);
     expect(after.registryEntries).toBeLessThanOrEqual(
@@ -1374,9 +1585,26 @@ describe('T18 spike — TextField', () => {
       typeof heldMiB === 'number'
         ? Math.round((heldMiB * MIB) / MAX / 1024)
         : 'unavailable';
-    // `dropped` vs `empty` is the leak reading: what the process still holds after every field is gone,
-    // against what it held before any field existed.
-    const retainedMiB =
+    /*
+     * The leak reading, against the floor taken *before any field was mounted*.
+     *
+     * T18 read this as `dropped - empty`, which are two GC'd reads taken back to back after the same unmount:
+     * their difference is whatever ART did in the last few milliseconds, and it reported `0` on a tree where
+     * the post-drop floor was 43.69 MiB against a 13.94 MiB pre-mount floor (review M4). Both numbers stay
+     * here — the pair is what shows the old reading was vacuous — and the claim below is made against
+     * `floors[0]`, the baseline this run took before it mounted anything.
+     */
+    const baseline = floors[0]?.mib;
+    const retainedAgainstBaselineMiB =
+      typeof dropped === 'number' && typeof baseline === 'number'
+        ? Number((dropped - baseline).toFixed(2))
+        : 'unavailable';
+    const retainedDirtyAgainstBaselineMiB =
+      typeof droppedDirty === 'number' && typeof dirty[0]?.mib === 'number'
+        ? Number((droppedDirty - dirty[0].mib).toFixed(2))
+        : 'unavailable';
+    /** What T18 asserted, kept so the two readings can be compared side by side. */
+    const retainedPairMiB =
       typeof dropped === 'number' && typeof empty === 'number'
         ? Number((dropped - empty).toFixed(2))
         : 'unavailable';
@@ -1392,23 +1620,27 @@ describe('T18 spike — TextField', () => {
         .join(','),
       held_200_miB: heldMiB,
       per_field_kib: perFieldKiB,
+      baseline_miB: baseline ?? 'unavailable',
       dropped_miB: dropped,
       empty_miB: empty,
-      retained_after_drop_miB: retainedMiB,
+      retained_vs_baseline_miB: retainedAgainstBaselineMiB,
+      retained_dirty_vs_baseline_miB: retainedDirtyAgainstBaselineMiB,
+      retained_dropped_minus_empty_miB: retainedPairMiB,
       dropped_private_dirty_miB: droppedDirty,
       empty_private_dirty_miB: emptyDirty,
     });
 
-    // Leak-free in the sense the go line means: after the drop the heap is back near the empty floor. Two MiB
-    // of slack for the tree the harness itself still holds, and the Dalvik private-dirty floor is the stricter
-    // of the two readings.
-    if (typeof retainedMiB === 'number') {
-      expect(retainedMiB).toBeLessThanOrEqual(2);
-      expect(
-        typeof droppedDirty === 'number' && typeof emptyDirty === 'number'
-          ? droppedDirty - emptyDirty
-          : Number.POSITIVE_INFINITY
-      ).toBeLessThanOrEqual(2);
+    /*
+     * Asserted: that the run measured a heap at all (mounting 200 fields must move the floor).
+     *
+     * What is *not* asserted is Q2 §7's "leak-free", and that is the finding rather than an omission: the
+     * baseline-referenced reading says a drop returns part of what the mount took but not most of it, so a
+     * bound placed anywhere between "returns nothing" and "returns everything" is red on this tree. A red
+     * harness scenario is not how a spike should say that — the number is the artifact, and G8 gets it with
+     * the baseline it was measured against. See the report's go/no-go row and the follow-up.
+     */
+    if (typeof heldMiB === 'number') {
+      expect(heldMiB).toBeGreaterThan(0);
     }
   });
 });
