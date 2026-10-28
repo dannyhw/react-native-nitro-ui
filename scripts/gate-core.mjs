@@ -46,11 +46,18 @@ export const LEDGER_DIR = '.gates';
  *   - `summaries`: every test summary the gate printed, in order. `check` runs
  *     jest, then perf, then more, and "the last summary wins" made its row report
  *     the 7-test perf step instead of the 391-test unit run (M3).
+ *   - `suiteTimings`: the per-suite timings a harness run recorded, in the shape
+ *     `scripts/harness-suite-timing.mjs` writes them (X11). It is what turns "the
+ *     Android harness costs 455 s" into "these five files cost 200 s of it, and
+ *     255 s of the run was outside any file", which is the difference between
+ *     fixing a suite and fixing the runner. Absent on every non-harness gate and
+ *     on any run where the plugin was not asked for.
  *
  * v1 lines are still read: with no `trees` they compare on the full digest, and
- * with no `treeAfter` they are taken at their word.
+ * with no `treeAfter` they are taken at their word. v3 only adds `suiteTimings`,
+ * and an old line reads as "no per-suite timings", which is what it means.
  */
-export const LEDGER_VERSION = 2;
+export const LEDGER_VERSION = 3;
 
 /** The platforms a device gate can be keyed to. */
 export const PLATFORMS = ['ios', 'android'];
@@ -327,6 +334,7 @@ export function ledgerLineFromRun({
   result,
   counts = null,
   summaries = null,
+  suiteTimings = null,
   logPath = null,
   startedAt,
   exitCode = null,
@@ -350,6 +358,7 @@ export function ledgerLineFromRun({
     result,
     counts,
     summaries,
+    suiteTimings,
     logPath,
     exitCode,
     signal,
