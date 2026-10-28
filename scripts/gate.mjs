@@ -94,6 +94,7 @@ import {
   platformTreesFromEntries,
   platformsOwningFile,
   platformsTouchedByPaths,
+  redactForeignDeviceIds,
   renderFailureExcerpt,
   renderGateTable,
   renderStepTimings,
@@ -806,7 +807,22 @@ function collectDeviceContext({
       }
     }
   }
-  return probes;
+  // One pass over every probe's text, answers and error messages alike, for the
+  // identifiers this run does not own (review N6). The questions are host-wide -
+  // `simctl list devices booted` answers with every simulator on the Mac, and adb
+  // puts a serial in its own error text - so without this the block names another
+  // task's device, or the maintainer's, and the block is copied verbatim into a
+  // committed excerpt. Done here rather than in `renderDeviceContext` so the *log*
+  // is clean as well, since that is what `export` reads.
+  const own = deviceFromEnv(env, platform);
+  return probes.map((probe) => ({
+    ...probe,
+    text: redactForeignDeviceIds(String(probe.text), {
+      udid: claimed.udid,
+      serial: claimed.serial,
+      device: own.device,
+    }),
+  }));
 }
 
 /**

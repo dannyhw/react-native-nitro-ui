@@ -212,11 +212,18 @@ function fakeBins(dir, hook = '') {
     `printf '%s %s\\n' "${program}" "$*" >> "${calls}"\n` +
     `${output}\n` +
     'exit ${FAKE_DEVICE_EXIT:-0}\n';
+  // Two booted simulators, because the one that matters for N6 is the *other* one:
+  // the probe is host-wide, so it names whoever else is running on this Mac -
+  // another task's pair, or the maintainer's own device - and the excerpt must not
+  // repeat a name it has no business committing. The first UDID is `pair-2`'s, the
+  // pair this task's lease holds; the second belongs to nobody in the fixture's
+  // pool, which is exactly the case that has to go.
   fs.writeFileSync(
     path.join(bin, 'simctl'),
     recorder(
       'simctl',
-      'echo "    iPhone 17 (CD670291-1111-1111-1111-111111111111) (Booted)"'
+      'echo "    iPhone 17 (CD670291-1111-1111-1111-111111111111) (Booted)"\n' +
+        'echo "    iPhone 16 (1F2D3E4F-AAAA-BBBB-CCCC-DDDDCCCCAAAA) (Booted)"'
     )
   );
   // `adb` answers `devices` and `pidof`; logcat gets 600 lines so the ~500 cap is
@@ -248,7 +255,13 @@ function fakeBins(dir, hook = '') {
       // `get-state` is the only "is your device there" question the gate asks. It
       // answers with a state, not a device list, because a list would name devices
       // this task does not own - which is the whole reason for using it (N5).
-      `if grep -q ' get-state ' "${argsFile}"; then\n` +
+      // The foreign-serial branch exists for N6: adb puts a serial in its own error
+      // text, and that text is echoed into the block when a probe fails.
+      `if grep -qE '(^| )get-state( |$)' "${argsFile}"; then\n` +
+      '  if [ -n "${FAKE_ADB_FOREIGN_SERIAL:-}" ]; then\n' +
+      "    echo 'adb: error: failed to get feature set: device emulator-5560 not found (also emulator-5561 offline)' >&2\n" +
+      '    exit 1\n' +
+      '  fi\n' +
       '  echo device\n' +
       '  exit ${FAKE_DEVICE_EXIT:-0}\n' +
       'fi\n' +
@@ -1949,6 +1962,62 @@ describe('a failed device gate records its device context', () => {
     expect(log).toContain('---- end device context ----');
   });
 
+  it('names only this run’s own device in the block, and the rest as <other device>', () => {
+    // The re-review's N6. `simctl list devices booted` is a host-wide question: it
+    // answers with every simulator on the Mac, including another task's pair and the
+    // maintainer's own device, and the block is copied into a committed excerpt. The
+    // brief asked for the probe, so the fix is to keep the identifying half of the
+    // *lease's* line and replace it on everyone else's.
+    const dir = makeRepo();
+    const { run } = failedDeviceRun(dir);
+    expect(run.status).toBe(1);
+    const context = splitDeviceContext(logOf(dir)).context;
+    // Ours, whole: the UDID is what you type back into `simctl` to debug the run.
+    expect(context).toContain('CD670291-1111-1111-1111-111111111111');
+    // Someone else's: the name and state stay (that is the useful half — it is how
+    // you spot a second simulator stealing focus), the identifier does not.
+    expect(context).toContain('iPhone 16');
+    expect(context).not.toContain('1F2D3E4F-AAAA-BBBB-CCCC-DDDDCCCCAAAA');
+    expect(context).toContain('<other device>');
+    // And the header of the committed file says the same thing the block does.
+    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
+    const failures = path.join(dir, 'docs', 'tasks', 'X12', 'failures');
+    const excerpt = fs
+      .readdirSync(failures)
+      .map((name) => fs.readFileSync(path.join(failures, name), 'utf8'))
+      .join('\n');
+    expect(excerpt).not.toContain('1F2D3E4F-AAAA-BBBB-CCCC-DDDDCCCCAAAA');
+    expect(excerpt).toContain('CD670291-1111-1111-1111-111111111111');
+    expect(excerpt).toContain('Device identifiers are limited to this run');
+  });
+
+  it('names no device at all when the run holds no lease', () => {
+    // Without a lease there is no "own" device, so nothing in the host-wide answer
+    // belongs here: every identifier in it is somebody else's.
+    const dir = makeRepo();
+    const { run } = failedDeviceRun(dir, {}, '', { lease: false });
+    expect(run.status).toBe(1);
+    const context = splitDeviceContext(logOf(dir)).context;
+    expect(context).toContain('iPhone 17');
+    expect(context).toContain('iPhone 16');
+    expect(context).not.toContain('CD670291-1111-1111-1111-111111111111');
+    expect(context).not.toContain('1F2D3E4F-AAAA-BBBB-CCCC-DDDDCCCCAAAA');
+    expect(context.match(/<other device>/g)).toHaveLength(2);
+  });
+
+  it('redacts a foreign emulator serial that an adb error names', () => {
+    // A probe's *failure* text is echoed into the block, and adb puts a serial in
+    // its own error messages, so the redaction cannot apply only to the answers.
+    const dir = makeRepo();
+    const { run } = failedDeviceRun(dir, { FAKE_ADB_FOREIGN_SERIAL: '1' });
+    expect(run.status).toBe(1);
+    const context = splitDeviceContext(logOf(dir)).context;
+    // Our own serial is fine to print — the ledger line carries it anyway.
+    expect(context).toContain('emulator-5574');
+    expect(context).not.toContain('emulator-5560');
+    expect(context).toContain('<other device>');
+  });
+
   it('asks the leased device its own state, and never lists devices', () => {
     const dir = makeRepo();
     const { run } = failedDeviceRun(dir);
@@ -1963,7 +2032,10 @@ describe('a failed device gate records its device context', () => {
         .filter((line) => line.startsWith('adb') && line.includes(' devices'))
     ).toEqual([]);
     const context = splitDeviceContext(logOf(dir)).context;
-    expect(context).toContain('device');
+    // The *answer*, not merely the word "device" — which the `simctl` label two
+    // lines above also contains, and which is why this assertion used to read as
+    // covering the probe while the probe's reply was being thrown away.
+    expect(context).toMatch(/adb get-state[^|]*\n\s*\|\s*device/);
     expect(context).not.toContain('List of devices attached');
     expect(context).not.toContain('emulator-9999');
     expect(context).not.toContain('emulator-5560');
