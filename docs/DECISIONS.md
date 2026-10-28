@@ -32,11 +32,12 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   - **A4 amendment (2026-10-28) - an incomplete metric costs its own cell, not the table.** The
     completeness rule (a metric with too few samples is `n/a`, and a baseline may not
     carry an `n/a` it gates on) stayed, but its scope narrowed by arm: an incomplete
-    metric on a **comparison arm** (`expo-ui-host-per-control`, `expo-ui-shared-host`,
-    `nitro-ui-host` - measured, reported, never gated) now leaves **that cell** out of
+    metric on a **comparison arm** (`expo-ui-host-per-control`, `expo-ui-shared-host` -
+    measured, reported, never gated, and not our code) now leaves **that cell** out of
     the baseline and records it in the file's `skippedCells` with its metric, sample
-    counts and the recorded reasons; an incomplete metric on `nitro-ui` (the gated arm)
-    or on `rn-core` (the denominator of every ratio) still refuses the mint. Reason: one
+    counts and the recorded reasons; an incomplete metric on `nitro-ui` (the gated arm),
+    on `nitro-ui-host` (never gated, but our own runtime) or on `rn-core` (the
+    denominator of every ratio) still refuses the mint. Reason: one
     reference cell's lost frames were refusing an entire machine's baseline - A3's iOS
     mint died on `mount.date-picker` N=200 at 55/160 and 87/160 samples on the two
     `@expo/ui` arms, with every `nitro-ui` row in the run measured cleanly. A
