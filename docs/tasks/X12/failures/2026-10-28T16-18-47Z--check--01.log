@@ -1,0 +1,176 @@
+# Failure excerpt — check
+
+- Ran: 2026-10-28T16:18:47.725Z on code tree `43ba510c1452` at HEAD `b2e1011` (branch `task/X12-failure-logs`)
+- Command: `bun run check`
+- Result: fail, exit 1, 143852 ms
+- Load: start 3.97, end 3.35, median 3.63, max 5.30
+- Device: none recorded (not a device gate)
+- Full log: `task/X12-failure-logs/check-2026-10-28T16-18-47.524Z.log` (<store>/task/X12-failure-logs/check-2026-10-28T16-18-47.524Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's and your home paths are written as `<repo>`/`<store>`/`~`, before this file was written. Device identifiers appear only when the run recorded its own lease.
+
+## Failing tests and assertion messages
+
+- `error: script "lint" exited with code 1`
+- `● Console`
+- `FAIL scripts/__tests__/gate.test.js (24.244 s)`
+- `● gate.mjs --background and wait › starts detached, records the same line a foreground run would, and wait reports it`
+- `expect(received).toContain(expected) // indexOf`
+- `Expected substring: "Compiling Switch.swift"`
+- `Received string:    "wait: harness:android (pid 91688) - budget 45 min`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 390 — the rest is in the full log above)
+
+```
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (7 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.2s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — pass, 0.1s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 8 blocks match example/src/readme-examples.tsx
+check: 9 passed, 2 failed, 5 skipped in 143.8s
+check: failed step(s): lint, test
+check: not started after the first failure: perf:renders, prepare, api-extractor:check, publint, manifest:check
+──────── full log: lint ──────────────────────────────────────────────────────────
+$ eslint "**/*.{js,mjs,ts,tsx}"
+
+<repo>/scripts/__tests__/gate-logs.test.js
+   775:27  warning  'branch' is assigned a value but never used  no-unused-vars
+  1019:7   error    'Atomics' is not defined                     no-undef
+  1019:39  error    'SharedArrayBuffer' is not defined           no-undef
+
+<repo>/scripts/__tests__/registry.test.js
+  651:11  warning  'manifests' is already declared in the upper scope on line 441 column 11  no-shadow
+
+<repo>/scripts/gate.mjs
+  97:3  warning  'redactLocalPaths' is defined but never used  no-unused-vars
+
+✖ 5 problems (2 errors, 3 warnings)
+
+error: script "lint" exited with code 1
+──────── full log: test ──────────────────────────────────────────────────────────
+$ jest
+PASS scripts/__tests__/bench-baseline-machine.test.js
+PASS scripts/__tests__/build-slot.test.js
+PASS scripts/__tests__/patch-nitrogen.test.js
+PASS scripts/__tests__/registry.test.js
+PASS scripts/__tests__/bench-dry-run.test.js
+PASS scripts/__tests__/bench-machine.test.js
+PASS scripts/__tests__/example-lock.test.js (6.14 s)
+PASS src/__tests__/host.test.tsx
+PASS src/__tests__/hostLayoutWarning.test.tsx
+  ● Console
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+PASS eslint-rules/__tests__/rules.test.js
+PASS src/__tests__/NitroUiCore.test.ts
+PASS scripts/__tests__/app-stamp.test.js
+PASS scripts/__tests__/bench-baseline-format.test.js
+PASS src/__tests__/picker.test.tsx
+PASS src/__tests__/hostReport.test.tsx
+PASS src/__tests__/useSizingId.test.tsx
+PASS src/__tests__/useStableCallback.test.tsx
+PASS src/__tests__/hostInertStyles.test.tsx
+PASS scripts/__tests__/component-coverage.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS src/__tests__/segmentedControl.test.tsx
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/lease.test.js (11.486 s)
+PASS scripts/__tests__/check-runner.test.js (12.197 s)
+PASS scripts/__tests__/gate-check.test.js (20.709 s)
+FAIL scripts/__tests__/gate.test.js (24.244 s)
+  ● gate.mjs --background and wait › starts detached, records the same line a foreground run would, and wait reports it
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "Compiling Switch.swift"
+    Received string:    "wait: harness:android (pid 91688) - budget 45 min
+    gate: harness:android: 0s | gate:       <tmp>/x2-gate-ObxOKo/.git/nitro-ui-gates/task/x2-fixture/harness+android-2026-10-28T16-18-55.998Z.log
+    gate: harness:android passed (6s)
+    "
+
+      1769 |     expect(wait.status).toBe(0);
+      1770 |     // Progress comes from the log, which is the whole point of recording the path.
+    > 1771 |     expect(wait.stderr).toContain('Compiling Switch.swift');
+           |                         ^
+      1772 |     expect(wait.stderr).toContain('passed');
+      1773 |
+      1774 |     const lines = ledgerLines(dir);
+
+      at Object.toContain (scripts/__tests__/gate.test.js:1771:25)
+
+PASS scripts/__tests__/gate-logs.test.js (30.418 s)
+PASS scripts/__tests__/bench-gate.test.js (140.357 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/gate.test.js (24.244 s)
+  ● gate.mjs --background and wait › starts detached, records the same line a foreground run would, and wait reports it
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "Compiling Switch.swift"
+    Received string:    "wait: harness:android (pid 91688) - budget 45 min
+    gate: harness:android: 0s | gate:       <tmp>/x2-gate-ObxOKo/.git/nitro-ui-gates/task/x2-fixture/harness+android-2026-10-28T16-18-55.998Z.log
+    gate: harness:android passed (6s)
+    "
+
+      1769 |     expect(wait.status).toBe(0);
+      1770 |     // Progress comes from the log, which is the whole point of recording the path.
+    > 1771 |     expect(wait.stderr).toContain('Compiling Switch.swift');
+           |                         ^
+      1772 |     expect(wait.stderr).toContain('passed');
+      1773 |
+      1774 |     const lines = ledgerLines(dir);
+
+      at Object.toContain (scripts/__tests__/gate.test.js:1771:25)
+
+
+Test Suites: 1 failed, 35 passed, 36 total
+Tests:       1 failed, 833 passed, 834 total
+Snapshots:   0 total
+Time:        140.653 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 143.9 s
+gate: recorded in .gates/task/X12-failure-logs.jsonl
+
+```

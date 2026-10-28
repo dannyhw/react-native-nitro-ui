@@ -1,6 +1,6 @@
 # X12 — Failure logs that outlive the worktree
 
-**Branch:** `task/X12-failure-logs` (from `main` at `4257a0f`) · **Round:** 1 of up to 3 (D19) ·
+**Branch:** `task/X12-failure-logs` (from `main` at `4257a0f`) · **Round:** fix round 1 of 2 (D19) ·
 **Lease:** none (tooling only, no devices)
 
 ## Summary
@@ -125,3 +125,90 @@ the recursive-walk mutation above is the proof).
 - `logcat` is captured for the app's pid, so on a crash — the case where it matters most — `pidof`
   is empty and nothing is captured. The brief scopes the probe to the app's pid; the fix would be a
   `--pid`-less buffer dump bounded by line count, which is a different amount of evidence.
+
+## Fix round 1
+
+Against the review (`60ebba9`): all must-fixes and nits are in.
+
+**M1** records carry `branch` *and* `worktree`, and `ownBackgroundRecords`/`ownRunningGates` scope
+`wait`/`status` to the calling checkout — tested with two `git worktree add -f` checkouts on **one**
+branch, so branch matching cannot explain it. **M2** every run writes a record, `branchOfStoredLog`
+reads the branch from the whole path, `--failed` judges from the store's record, and a log neither can
+judge reads *unknown*, not "0 failed". **M3** the copy has no marker gate: idempotent and
+branch-keyed, `.migrated` provenance only. **M4** store, repo, lease file, `$HOME`, scratch dir and
+host become placeholders — the scratch dir being the leak this round's export showed. **M5**
+`Authorization`/`Cookie` scrubbed whole, `[_-]?auth` added, the false `.npmrc` claim gone. **N1**
+retention prunes on both launch paths, printing what it deleted. **N2** grace tested by a 36-day
+running record beside a 60-day victim. **N3/N4** dead assertion gone, migrated lines resolve, mtime
+kept, collisions counted. **N5/N6** `get-state` of the lease's serial only, Android only, nothing
+without a live lease. **N7** `logPathsFor` derives both spellings and validates the inherited path.
+**N8/N9** env scrubbed, excerpts sequenced. `check` also caught three lint errors and a `wait`
+assertion that only passed on an idle machine.
+
+### Gates (fix round 1)
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 834 tests / 36 suites | `6913bb53fb5b` | 2 m 34 s | start 1.9 / med 3.5 / max 5.2 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`need --for review`: `need: review is satisfied on this code tree.` — the diff is check-only tooling, so
+no device gate is asked for. Two `check` runs went red on the way (`43ba510c1452`: the three lint errors
+and the `wait` race; that failure is the excerpt now committed under `docs/tasks/X12/failures/`), and the
+row above is the green one on `eddce4c`. No devices were used; the probes are fake binaries as before.
+
+### Red proofs (fix round 1)
+
+One battery, `/tmp/x12-red-proofs3.py`: 26 mutations (28 edits), each applied, the named test run, then
+restored from the in-memory copy. All 26 red, line numbers in `gate-logs.test.js`. Format: mutation ->
+the line that went red.
+
+- M1 scoping deleted from `ownBackgroundRecords` -> `gate-logs.test.js:990 expect(wait.stderr).toContain('this worktree ran this')`
+- M1 launcher + runner both stop writing `worktree` -> `:1024 expect(ours[0]).toMatchObject({`
+- M1 `wait` reads the whole store again -> `:990 expect(wait.stderr).toContain('this worktree ran this')`
+- M2 branch read from the first segment -> `:580 expect(byBranch.stdout).toContain('2 log file(s) for task/x12-nested/deep')`
+- M2 foreground record moves off the log's basename -> `:589 expect(failed.stdout).toContain('1 log file(s)')`
+- M2 `--failed` ignores store records -> `:589 expect(failed.stdout).toContain('1 log file(s)')`
+- M2 unjudgeable log skipped silently -> `:609 expect(failed.stdout).toContain('could not be judged')`
+- M3 per-clone marker rebuilt (read *and* write) -> `:1070 expect(fs.readFileSync(stored, 'utf8')).toContain(...)` — B's log never lands
+- M4 body stops redacting -> `:1162 expect(excerpt).not.toContain(store)` (the store path appears verbatim)
+- M4 scratch dir dropped as a target -> `:1171 expect(excerpt).not.toContain(tmp)` (`/private/var/folders/x4/<hash>/T`)
+- M4 store dropped as a target -> `:1177 expect(excerpt).toContain('<store>/')`
+- M5 header rule knows only `Bearer` -> `gate-core.mjs:1822 value.trim is not a function` (group 3 is undefined)
+- M5 `[_-]?auth` removed -> `:1323 expect(result.text).not.toContain('dXNlcjpwYXNzd29yZA==')`
+- N1 `pruneStoredLogs` dropped from `runGate` -> `:848 expect(run.stderr).toContain('retention removed 1 stored log file(s)')`
+- N1 dropped from `startBackgroundGate` -> `:868 expect(started.stderr).toContain('retention removed 1 stored log file(s)')`
+- N2 grace extension flattened -> `:915 expect(pruned.stdout).toContain('retention removed 1 file(s)')` (the 36-day log goes)
+- N4 `utimesSync` removed -> `:715 expect(...mtimeMs / 1000)).toBe(` (copy time, not the original's)
+- N3 migrated branch candidate dropped -> `:740 expect(typeof committed.failureLogPath).toBe('string')`
+- N5 probe asks `devices` -> `:1630 expect(asked).toContain('adb -s emulator-5574 get-state')`
+- N5 reserved serial not refused -> `:1702 expect(asked).not.toContain('-s emulator-5560')`
+- N6 no-lease run trusts `ANDROID_SERIAL` -> `:1723 expect(asked).not.toContain('adb')`
+- N6 env beats the pair's serial -> `:1668 expect(asked).toContain('adb -s emulator-5574 get-state')` (it asked 5576)
+- N6 expired lease probed anyway -> `:1760 expect(asked).not.toContain('adb')`
+- N7 ledger spelling stops following the file -> `:630 expect(line.logPath).toBe('.gates/logs/check-from-legacy-launcher.log')`
+- N7 env value stops being validated -> `:641 expect(run.stderr).toContain('ignoring NITRO_UI_GATE_LOG')`
+- N9 sequence number dropped -> `:1458 expect(name).toBe('2026-10-28T09-00-00Z--harness+android--01.log')`
+
+The **first** battery run came back with six GREEN results — M1 ×2, M3, N1 background, N6 ×2 — and every
+one was a gap in my test or my mutation, not in the code: the M1 fixture used two *different* branches
+(branch matching alone satisfied it), the M1 mutation hit the runner while the launcher's own write was
+the one under test, the M3 mutation relocated a note that is no longer read, the N1 background case
+asserted only a file's absence (which `logs --prune` in the same test had explained away), and both N6
+cases were judged by a note that the mutated code still printed. All six were closed before the run
+above; nothing from that run should be read as a proof.
+
+### Files changed (fix round 1)
+
+- `scripts/gate-core.mjs` — `ownBackgroundRecords`, `storedLogFailed`, `localPathRedactions` (incl.
+  `<tmp>`), the header rule and `[_-]?auth` in `scrubSecrets`, sequenced `failureExcerptName`, the
+  migrated-branch candidate in `ledgerLogCandidates`.
+- `scripts/gate.mjs` — `worktree`/`foreground` on records, `ownRecordScope`/`ownRunningGates`,
+  `branchOfStoredLog`, `outcomeOfStoredLogs`, `pruneStoredLogs`, migration with no marker + mtime +
+  conflicts, `logPathsFor` with env validation, `claimedDevice`/`get-state`, USAGE.
+- `scripts/__tests__/gate-logs.test.js` 44 → 62 tests; `scripts/__tests__/gate.test.js` the progress
+  race; `AGENTS.md`, `CONTRIBUTING.md`, `docs/tasks/ORCHESTRATOR.md` — what the store, `--failed` and
+  an excerpt actually guarantee, with no "read it before you push" hedge.
