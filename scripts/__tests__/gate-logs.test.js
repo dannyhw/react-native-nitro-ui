@@ -1387,6 +1387,89 @@ describe('scrubSecrets (what may be committed)', () => {
   });
 });
 
+/* --------------------- the scrubber must cost what it reads ---------------- */
+
+describe('scrubSecrets is linear in what it reads (re-review N3)', () => {
+  // The re-review measured the *old* patterns under Node 24: 40 KB of `a.` took
+  // 12.6 s and 160 KB took 199 s, because `[\w.-]*` before `authorization` and
+  // `\b[\w.-]{3,}` restart an unbounded scan at every `.`/`_`/`-` boundary. A gate
+  // log that is one long data URI or base64url blob - a Metro bundle graph, a
+  // SwiftPM manifest, an xcodebuild `-showBuildSettings` dump - therefore hung
+  // `export` for minutes, which is the opposite of "the evidence survives".
+  //
+  // The budget is 1 s against a workload a linear scan finishes in a few ms, so it
+  // cannot flake on a loaded machine; and it is deliberately a *time* assertion,
+  // because that is the only way this failure mode is visible from outside.
+  const BUDGET_MS = 1000;
+
+  const scrubTimed = (text) => {
+    const started = process.hrtime.bigint();
+    const result = scrubSecrets(text);
+    return {
+      ...result,
+      ms: Number(process.hrtime.bigint() - started) / 1e6,
+    };
+  };
+
+  it('scrubs a 1 MB line of `a.` in under a second', () => {
+    const result = scrubTimed('a.'.repeat(500_000));
+    expect(result.ms).toBeLessThan(BUDGET_MS);
+  });
+
+  it('scrubs a 1 MB base64url line in under a second', () => {
+    const alphabet =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    let line = '';
+    for (let i = 0; i < 1_000_000; i += 1) {
+      line += alphabet[(i * 7919) % alphabet.length];
+    }
+    const result = scrubTimed(line);
+    expect(result.ms).toBeLessThan(BUDGET_MS);
+  });
+
+  it('is not slower when the credential sits at the end of a long run', () => {
+    // The shape that costs the old patterns most: no separator until the very last
+    // character, so every one of the half-million boundaries is a candidate start
+    // that has to fail only after reading the whole rest of the line.
+    const result = scrubTimed(
+      `a.${'b.'.repeat(499_999)}authorization=abcdef0123456789`
+    );
+    expect(result.ms).toBeLessThan(BUDGET_MS);
+    expect(result.text).not.toContain('abcdef0123456789');
+    expect(result.replaced).toBe(1);
+  });
+
+  it('is not quadratic in the number of URL-shaped runs', () => {
+    // The userinfo rule had the same disease, and worse: 64 KB of `a.` took 3.4 s.
+    const result = scrubTimed(`a.${'b.'.repeat(500_000)}@example.invalid`);
+    expect(result.ms).toBeLessThan(BUDGET_MS);
+  });
+
+  it('is not quadratic in a line of XML-shaped runs', () => {
+    const result = scrubTimed('<a>'.repeat(300_000));
+    expect(result.ms).toBeLessThan(BUDGET_MS);
+  });
+
+  it('still finds the credential shapes inside a long line', () => {
+    // The cheap way to pass a timing test is to stop matching things. This is the
+    // counterweight: the same shapes the short-line tests assert, now buried at the
+    // end of a megabyte of data-URI-looking text.
+    const prefix = 'data:application/json;base64,' + 'QUJD'.repeat(250_000);
+    const { text } = scrubTimed(
+      [
+        prefix,
+        'ghp_abcdefghijklmnopqrstuvwxyz123456',
+        'NPM_TOKEN=abcdef123456',
+        'Authorization: Bearer abcdef0123456789secretvalue',
+      ].join('\n')
+    );
+    expect(text).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz123456');
+    expect(text).not.toContain('abcdef123456');
+    expect(text).not.toContain('abcdef0123456789secretvalue');
+    expect(text).toContain('Authorization: [scrubbed]');
+  });
+});
+
 describe('renderFailureExcerpt', () => {
   const entry = {
     gate: 'harness:android',
