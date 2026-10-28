@@ -189,6 +189,20 @@ type Report = {
    * throws away are both re-derived from the value, so nothing else can read it.
    */
   controlBuilds: number;
+  /**
+   * What the platform control ON SCREEN was built with, as the two bounds the
+   * native build recorded for it (`-1` = no control built yet, `-2` = that bound is
+   * unset).
+   *
+   * `controlBuilds` says how often a control was built; this says *what the one that
+   * is up there knows*. That difference is the whole content of `docs/tasks/
+   * FOLLOWUPS.md` row 46: iOS keyed a rebuild on the live control's bounds while the
+   * record of those bounds was written from an `.onAppear` that survived rebuilds, so
+   * the count and the bounds disagreed about which control was on screen. Only
+   * reading both can show that.
+   */
+  builtMinimum: number;
+  builtMaximum: number;
 };
 
 function reportOf(testId: string): Report {
@@ -200,6 +214,8 @@ function reportOf(testId: string): Report {
     calendarHasSelection,
     livePresentations,
     controlBuilds,
+    builtMinimum,
+    builtMaximum,
   ] = raw.split('|');
   return {
     millis: Number(millis),
@@ -208,6 +224,8 @@ function reportOf(testId: string): Report {
     calendarHasSelection: Number(calendarHasSelection),
     livePresentations: Number(livePresentations),
     controlBuilds: Number(controlBuilds),
+    builtMinimum: Number(builtMinimum),
+    builtMaximum: Number(builtMaximum),
   };
 }
 
@@ -1059,7 +1077,10 @@ describe('DatePicker · G5', () => {
     handles.get('fresh-dialog')?.nuiTestPresent();
     await waitForPresented('fresh-dialog', true, 'the field press');
     await waitForLivePresentations('fresh-dialog', 1, 'the open presentation');
-    const buildsOpen = await settledBuilds('fresh-dialog');
+    const buildsOpen = await settledBuilds(
+      'fresh-dialog',
+      'the open presentation'
+    );
     if (isAndroid) {
       await waitForMonth('fresh-dialog', 2026, 7, 'the dialog as it opened');
     }
@@ -1161,6 +1182,131 @@ describe('DatePicker · G5', () => {
         `inline=${reportText('fresh-inline')} ` +
         `dialog=${reportText('fresh-dialog')}`
     );
+    unmount();
+  });
+
+  it('records the bounds the control it just built was built with', async () => {
+    // The rebuild decision (`controlIdentity` on iOS, `key(selectable, yearRange)` on
+    // Android) and the record of *what the live control holds* have to agree, because
+    // iOS's own escape clause reads that record: a value that has left the range the
+    // control ON SCREEN was built with is one more reason to rebuild, since
+    // `UIDatePicker` clamps such a value inside its own update and the reload that
+    // follows asserts in `UICalendarView _setVisibleMonth:`.
+    //
+    // Until F3 the two disagreed on iOS: `.onAppear` sat *outside* `.id(_:)`, so it
+    // fired once per mount and `builtBounds` froze there - while the identity, and the
+    // control, went on changing (`docs/tasks/FOLLOWUPS.md` row 46). That costs a
+    // rebuild for every later crossing of a bound the live control does not hold, and
+    // it makes the escape clause check the value against bounds nobody is showing.
+    //
+    // The oracle is the pair `readReport()` now ends with - the bounds recorded *at
+    // the build* - plus the build count, because the failure was precisely that a
+    // rebuild happened without the record moving. Android is the control half: it
+    // records at the same moment Compose builds the state, so it passes either way
+    // and proves the assertions are about the mechanism rather than about one
+    // platform's quirk.
+    const MIN = localMs(2026, 0, 1, 0, 0);
+    const FIRST_MAX = localMs(2026, 0, 20, 12, 0);
+    const WIDER_MAX = localMs(2026, 1, 20, 12, 0);
+    const INSIDE_FIRST = localMs(2026, 0, 10, 12, 0);
+    // Inside the widened range and outside the first build's, so the two readings of
+    // the record disagree about whether this value needs a fresh control.
+    const BETWEEN = localMs(2026, 1, 10, 12, 0);
+    // Truncated to whole seconds: `readReport()` publishes the bounds as integers, so
+    // a sub-second difference would look like a mismatch here even though the control
+    // holds exactly the instant React sent (and `maximumMillis` above already proves
+    // the wire is exact).
+    const truncated = (millis: number) => Math.trunc(millis / 1000) * 1000;
+    const boundOf = (testId: string, which: 'builtMinimum' | 'builtMaximum') =>
+      reportOf(testId)[which];
+    const isAndroid = Platform.OS === 'android';
+
+    // `inline`, because that is the variant whose platform control is on screen the
+    // whole time: a `compact` field composes no calendar until its dialog opens, so
+    // neither the record nor the count would move.
+    const tree = (maximum: number, value: number) => (
+      <DatePicker
+        value={new Date(value)}
+        variant="inline"
+        minimumDate={new Date(MIN)}
+        maximumDate={new Date(maximum)}
+        testID="built-bounds"
+        hybridRef={captureHybrid('built-bounds')}
+      />
+    );
+
+    const { rerender, unmount } = await render(
+      tree(FIRST_MAX, INSIDE_FIRST),
+      { timeout: 20000 }
+    );
+    await waitForTestId('built-bounds');
+    await waitForDisplayed('built-bounds', INSIDE_FIRST, 'the seed');
+    // The bounds arrive after the first commit, so the control may well be built once
+    // with none of them; what has to be true is that the record ends up describing the
+    // control that is up. This is already red on iOS before the fix when the control
+    // appeared before its bounds did, and the assertions below are red either way.
+    await pollUntil(
+      () =>
+        boundOf('built-bounds', 'builtMaximum') === truncated(FIRST_MAX)
+          ? truncated(FIRST_MAX)
+          : null,
+      () =>
+        new Error(
+          `the record never became the bounds the mount started with: report is ` +
+            `"${handles.get('built-bounds')?.nuiTestStateReport() ?? '<no handle>'}", ` +
+            `want builtMaximum ${String(truncated(FIRST_MAX))} (first maximumDate).`
+        )
+    );
+    const built0 = await settledBuilds('built-bounds', 'the seed');
+    expect(boundOf('built-bounds', 'builtMinimum')).toBe(truncated(MIN));
+
+    // Bounds and value move together - one batch, the shape of the crash the escape
+    // clause exists for.
+    await rerender(tree(WIDER_MAX, BETWEEN));
+    await waitForDisplayed('built-bounds', BETWEEN, 'the widened range');
+    const widened = await settledBuilds('built-bounds', 'the widened bounds');
+    const afterWiden = reportOf('built-bounds');
+    console.log(
+      `built bounds (${Platform.OS}): built0=${String(built0)} ` +
+        `afterWiden=${String(widened)} report="${
+          handles.get('built-bounds')?.nuiTestStateReport() ?? '<no handle>'
+        }" firstMax=${String(truncated(FIRST_MAX))} ` +
+        `widerMax=${String(truncated(WIDER_MAX))} between=${String(BETWEEN)}`
+    );
+    // The rebuild itself, on both platforms. On Android this is `key(...)` re-creating
+    // the state; on iOS it is the `.id(_:)` replacement, which the counter could not
+    // see while the appearance handler sat *outside* the identity - the handler
+    // belonged to the structure that survives a re-identification, so the count was
+    // blind to every rebuild (that blindness is `keeps the live control…`'s reason for
+    // saying iOS gets no rebuild assertion at all, and it is the same fact row 46
+    // recorded about `builtBounds`). With the handler inside the identity, one bounds
+    // change is one appearance of one control, on either platform.
+    expect(widened).toBeGreaterThan(built0);
+    // And the record describes the control that is on screen. Red on iOS before the
+    // move: the record still said `firstMax` (or nothing at all, if the control had
+    // appeared before its bounds did) while the identity, the control and React all
+    // said `widerMax`.
+    expect(afterWiden.builtMaximum).toBe(truncated(WIDER_MAX));
+    expect(afterWiden.builtMinimum).toBe(truncated(MIN));
+
+    // And now nothing moves but the value, across the bound the *first* build held. A
+    // control that holds `WIDER_MAX` has no reason to be rebuilt.
+    for (const value of [INSIDE_FIRST, BETWEEN, INSIDE_FIRST]) {
+      await rerender(tree(WIDER_MAX, value));
+      await waitForDisplayed(
+        'built-bounds',
+        value,
+        'the value across the first build’s bound'
+      );
+    }
+    const afterFlips = await settledBuilds(
+      'built-bounds',
+      'three crossings of the first build’s bound'
+    );
+    if (isAndroid) {
+      expect(afterFlips).toBe(widened); // no bound moved, so no control was rebuilt
+    }
+    expect(boundOf('built-bounds', 'builtMaximum')).toBe(truncated(WIDER_MAX));
     unmount();
   });
 

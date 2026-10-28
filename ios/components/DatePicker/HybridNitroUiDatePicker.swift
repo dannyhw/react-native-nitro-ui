@@ -155,12 +155,27 @@ final class DatePickerModel: NitroUiModel {
     // then the process-wide count of live presentations, read live rather than
     // published: a dropped mount has nothing left to publish, which is exactly the
     // case the count exists for.
-    // The last field is this mount's own count of platform controls it has built
+    // The next field is this mount's own count of platform controls it has built
     // (`controlBuilds`), which is how "a re-render must not re-create the control" is
     // tested: the number has to move when a bound really moved, and must not when only
     // the bound's millisecond did.
-    return "\(report)|-1|-1|\(NitroUiDatePickerPresentation.livePresentations)|\(controlBuilds)"
+    // The last two are what the control ON SCREEN was built with - the two halves of
+    // `builtBounds`, flattened so both platforms can publish the same pair. They are
+    // the only witness that the identity's bounds actually reached the live control:
+    // `controlBuilds` counts *appearances*, and an `.id(_:)` change on a control that
+    // is already on screen does not move that count (measured, and the reason the
+    // `keeps the live control…` test says what it says). `-1` = no control built yet,
+    // `-2` = that bound is unset.
+    let built = builtBounds.map { bounds in
+      "\(Int64(bounds.minimum ?? Self.NO_BOUND))|\(Int64(bounds.maximum ?? Self.NO_BOUND))"
+    } ?? "\(Self.NO_BUILD)|\(Self.NO_BUILD)"
+    return "\(report)|-1|-1|\(NitroUiDatePickerPresentation.livePresentations)|\(controlBuilds)|\(built)"
   }
+
+  /// `readReport()`'s sentinel for a bound the app never set.
+  static let NO_BOUND: Double = -2
+  /// `readReport()`'s sentinel for a mount that has not built a control yet.
+  static let NO_BUILD: Int = -1
 
   /// How many times the platform control was built by this mount. See ``readReport()``.
   ///
@@ -216,11 +231,11 @@ final class DatePickerModel: NitroUiModel {
   /// `maximumDate` by an hour inside one day and sending a value in that hour is exactly
   /// the crash above - and that value needs a control that is not holding the old bound.
   /// Such a re-identification rebuilds once more than the bounds alone ask for; the
-  /// alternative is the assert. Caveat (G5 re-review 2): `builtBounds` is recorded by an
-  /// `.onAppear` that sits outside `.id(_:)`, so it holds the bounds at first appearance,
-  /// not at the last rebuild - after the bounds widen, a value crossing the old bound
-  /// rebuilds once per crossing (never per render). Follow-up: move the recording inside
-  /// `.id(_:)`.
+  /// alternative is the assert. Since F3 the comparison is against the bounds of the
+  /// control actually on screen: the appearance that records ``builtBounds`` moved
+  /// *inside* `.id(_:)` (`docs/tasks/FOLLOWUPS.md` row 46), so widening a bound updates
+  /// the record and a value crossing the bound that was widened away from no longer
+  /// costs a rebuild.
   ///
   /// Applied as `.id(_:)` to the control itself. One level out, on `PlatformPicker`, the
   /// same key was measured to assert in `UICalendarView _setVisibleMonth:` - the fresh
