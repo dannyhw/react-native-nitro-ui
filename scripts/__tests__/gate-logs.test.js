@@ -1339,6 +1339,73 @@ describe('gate.mjs export attaches failure evidence', () => {
     expect(excerpt).toContain('Authorization: [scrubbed]');
   });
 
+  it('keeps two failed runs in the same second in two excerpts (N2)', () => {
+    // `failureExcerptName` folds milliseconds out of the file name, so two runs of
+    // one gate inside one second collide; `export` counted per raw `ts`, which still
+    // differs at the millisecond, so both runs got sequence `01` and the second
+    // export overwrote the first excerpt while *both* ledger lines pointed at it. A
+    // re-run right after a fast failure is exactly the case. The first run's evidence
+    // then survived only as a path in the commit, and nothing else.
+    const dir = makeRepo();
+    expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
+    const [first] = ledgerIn(dir, 'task/x12-fixture');
+    const branchDir = path.join(storeOf(dir), 'task', 'x12-fixture');
+    // A marker in each log, so an excerpt can be traced to the run it came from.
+    fs.appendFileSync(
+      path.join(branchDir, path.basename(first.logPath)),
+      '\nX12-FIRST-RUN\n'
+    );
+    const secondLog = 'check-2026-10-28T09-00-00.900Z.log';
+    fs.writeFileSync(
+      path.join(branchDir, secondLog),
+      'the second run\nFAIL Second.test.tsx\nX12-SECOND-RUN\n'
+    );
+    // The pair, spelled by hand, because a test cannot make two real runs land in
+    // one second. Both `ts` values carry milliseconds — as every real line does —
+    // and differ only there, which is precisely what the name then discards.
+    const live = path.join(dir, '.gates', 'task', 'x12-fixture.jsonl');
+    fs.writeFileSync(live, '');
+    for (const [ts, logPath] of [
+      ['2026-10-28T09:00:00.100Z', first.logPath],
+      ['2026-10-28T09:00:00.900Z', `task/x12-fixture/${secondLog}`],
+    ]) {
+      fs.appendFileSync(
+        live,
+        `${JSON.stringify({ ...first, ts, logPath, gate: 'check' })}\n`
+      );
+    }
+
+    const exported = runCli(dir, ['export', '--task', 'X12']);
+    expect(exported.status).toBe(0);
+    const written = fs
+      .readdirSync(path.join(dir, 'docs', 'tasks', 'X12', 'failures'))
+      .sort();
+    // Two files, one per run, differing only in the sequence suffix.
+    expect(written).toHaveLength(2);
+    expect(written[1]).toMatch(/--02\.log$/);
+
+    const lines = fs
+      .readFileSync(
+        path.join(dir, 'docs', 'tasks', 'X12', 'gates.jsonl'),
+        'utf8'
+      )
+      .split('\n')
+      .filter((raw) => raw.trim() !== '')
+      .map((raw) => JSON.parse(raw));
+    expect(lines).toHaveLength(2);
+    const paths = lines.map((line) => line.failureLogPath);
+    // Two distinct paths — before the fix both lines named `…--01.log`.
+    expect(new Set(paths).size).toBe(2);
+    for (const [index, relative] of paths.entries()) {
+      expect(typeof relative).toBe('string');
+      // And each excerpt is the excerpt of *its own* run, not of whichever export
+      // happened to write last.
+      expect(fs.readFileSync(path.join(dir, relative), 'utf8')).toContain(
+        index === 0 ? 'X12-FIRST-RUN' : 'X12-SECOND-RUN'
+      );
+    }
+  });
+
   it('writes nothing at all when the ledger holds only passes', () => {
     const dir = makeRepo();
     expect(runCli(dir, ['check']).status).toBe(0);
@@ -1937,9 +2004,15 @@ describe('renderFailureExcerpt', () => {
     const name = failureExcerptName(entry);
     expect(name).toBe('2026-10-28T09-00-00Z--harness+android--01.log');
     expect(name).not.toContain('/');
-    // `ts` is second-granular, so a re-run inside the same second has the same ts and
-    // gate. Without the sequence the second export would overwrite the first
-    // excerpt while both ledger lines still pointed at it.
+    // Two runs one second apart, spelled the way the ledger spells them (both with
+    // milliseconds). The name is deliberately second-granular, so the two are EQUAL:
+    // that is the collision the sequence below exists for, and the reason `export`
+    // has to count by the name rather than by `ts` (review N2). Round 1's fixture
+    // used a ts with no milliseconds, which is the only reason it never saw this.
+    const sameSecond = { ...entry, ts: '2026-10-28T09:00:00.900Z' };
+    expect(failureExcerptName(sameSecond)).toBe(name);
+    // Without the sequence the second export would overwrite the first excerpt while
+    // both ledger lines still pointed at it.
     expect(failureExcerptName(entry, 2)).toBe(
       '2026-10-28T09-00-00Z--harness+android--02.log'
     );
