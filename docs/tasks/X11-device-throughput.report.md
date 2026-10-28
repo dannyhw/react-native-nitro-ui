@@ -28,13 +28,12 @@ down, waits for the load to settle, resets the app; `release` leaves devices up;
 `idleShutdownMinutes`) runs from the lease commands people already type, with no daemon. A gate
 claims its lease's devices for the duration of the run, so a reap cannot power off an emulator
 mid-suite and a second gate aimed at the same device is refused before it starts. A claim is a pid,
-so a killed gate wedges nothing. Two bugs came out of running it rather than faking it: a claim
-record that carried no serial made a live emulator read as "already off" and dropped it from the
-pool, and `pm clear` answers `Failed` for a few seconds on an emulator that has just attached, so
-the reset now retries and quotes the device's own answer. A third came from using it as the
-operator: `reap --idle-minutes 0` — "power the pool off now" — lost the comparison against the
-limit stamped in devices.json and answered "keeping it up (idle, under the limit)" about the very
-number it had been told to override.
+so a killed gate wedges nothing. Three bugs came out of running it rather than faking it: a claim
+record with no serial made a live emulator read as "already off" and dropped it from the pool;
+`pm clear` answers `Failed` for a few seconds on an emulator that has just attached, so the reset
+now retries and quotes the device's own answer; and `reap --idle-minutes 0` lost the comparison
+against the limit stamped in devices.json, answering "keeping it up (idle, under the limit)" about
+the very number it had been told to override.
 
 Benches are deliberately unchanged and say why (`BENCH_GPU_MODE_NOTE`). Concurrent harnesses are
 measured and **not recommended** — see item 5.
@@ -205,12 +204,17 @@ after the ✕; a case whose mutation could not be applied is marked as not claim
 
 ## Questions for orchestrator
 
-`real-input:ios` is red at merge bar and I cannot turn it green honestly. Evidence: 5/5 failures
-this round, always the same assertion (`("off") is not equal to ("on") - one real tap should flip
-the Switch`), including when the *app under test is `main`'s* build (`/tmp/x11-main-checkout` at
-`20b4069`) on the same simulator, with the XCUITest source byte-identical and no iOS, `src/` or
-example-app file differing between the two checkouts. So it is not this branch, and fixing it is a
-SwiftUI/React-Native touch-delivery investigation in code this task must not touch.
+`real-input:ios` is red at merge bar and I cannot turn it green honestly. Every one of the eleven
+runs today failed the same assertion (`("off") is not equal to ("on") - one real tap should flip
+the Switch`): the three `real-input:ios` gates, and eight single-control runs of
+`--control switch`, two of which tested **`main`'s own build** (a throwaway checkout at `20b4069`,
+app built there) on the same simulator with the XCUITest source byte-identical and no iOS, `src/`
+or example-app file differing between the checkouts. The other twelve controls pass every time
+(12 PASS / 1 FAIL in the last gate), including `hosted-switch`, so it is one tap path on one
+platform. Prior task ledgers say `real-input:ios` has been in this state for a while: 11 red, 5
+green across X6, H2b and X3, and X6 wrote up the same message as a flake that it then beat by
+re-rolling. It is not this branch, and fixing it is a touch-delivery investigation in code this
+brief must not touch.
 
 1. **Merge with the row red, plus a task for the `switch` check (recommended).** The row and its
    log are in the exported ledger, and the two harnesses plus `real-input:android` are green here.
