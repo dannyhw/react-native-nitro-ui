@@ -138,8 +138,11 @@ export type MissingSampleReason =
  * iteration of every launch.
  *
  * `kind`/`scenario`/`implementation`/`n`/`launch`/`index` are already on the `iter`
- * record this rides, so a reason is three short fields plus a timeout number - about
- * 40 bytes of NDJSON, and under 1 % on a full-plan results file.
+ * record this rides, so a reason is three short fields plus a timeout number. Measured
+ * on A4's mint: 800 `iter` records carried one, costing 133.6 KB, i.e. ~84 bytes per
+ * entry and 2.0 % of that file's 6.79 MB of NDJSON. Every healthy run pays that (its
+ * reasons are all `not-awaited`), which is the cost of asking a missing null to explain
+ * itself instead of adding the instrumentation again in the next investigation.
  */
 export interface MissingSample {
   /** Which signal did not arrive. */
@@ -147,7 +150,12 @@ export interface MissingSample {
   reason: MissingSampleReason;
   /** Wall-clock ms the runner actually waited, so a claimed timeout can be checked. */
   waitedMs: number;
-  /** The timeout in force for this wait; null when nothing was waited. */
+  /**
+   * The timeout that was in force for this cell, so a claimed timeout can be checked
+   * against the rule the run said it used. Not null for `not-awaited`: the wait never
+   * ran, but the plan still had one (`timeoutMs: [8000]` on the `not-awaited` rows of
+   * A4's mint), and a null here would lose which rule a by-construction null belongs to.
+   */
   timeoutMs: number | null;
   /** `probe-error` only: the message, clipped by the caller. */
   detail?: string;
@@ -190,19 +198,22 @@ export interface BenchPlan {
   perfMarks: boolean;
   /**
    * How long this launch waits for the mount signal
-   * (`scenario:implementation:N:mountTimeout=1500`, default 1500).
+   * (`scenario:implementation:N:mountTimeout=1500`, default 1500 on both platforms).
    */
   mountTimeoutMs: number;
   /**
    * How long this launch waits for the presenting frame
-   * (`scenario:implementation:N:presentedTimeout=40000`, default 2000).
+   * (`scenario:implementation:N:presentedTimeout=40000`), and **per platform**: 8 000 ms
+   * on iOS, 2 000 ms on Android, from `BENCH_DEFAULT_TIMEOUTS` in `./plan` - the one
+   * place either number is written.
    *
    * Overridable per launch because the only way to tell "this arm never draws" from
    * "this arm draws slower than we wait" is to wait longer, and a release build has
-   * no env to read - so it travels on the launch string like `marks` does. A run
-   * that raises it is stamped in its results file and cannot mint a baseline: the
-   * samples that arrive keep their values, but *which* samples arrive changes the
-   * median, and a ratio is only comparable under one waiting rule.
+   * no env to read - so it travels on the launch string like `marks` does. A run that
+   * asks for anything other than its platform's default is stamped in its results file
+   * and cannot mint a baseline: the samples that arrive keep their values, but *which*
+   * samples arrive changes the median, and a ratio is only comparable under one waiting
+   * rule. Android's cap is 1 900 ms because its native backstop is 2 s (review M1).
    */
   presentedTimeoutMs: number;
 }
@@ -229,7 +240,7 @@ export type BenchRecord =
       /**
        * What this launch waited for, so a `probe-timeout` reason in an `iter`
        * record can be checked against the rule that was in force. Written as
-       * `timeout=<ms>` / `presentedTimeout=<ms>` flags on the launch string, so a
+       * `mountTimeout=<ms>` / `presentedTimeout=<ms>` flags on the launch string, so a
        * release build with no env can still be asked to wait longer (A4).
        */
       mountTimeoutMs: number;

@@ -11,7 +11,8 @@ On this machine's canonical iPhone 17 simulator, `mount.date-picker` at N=200 on
 **2 702 ms** (`expo-ui-shared-host`), both *above* the 2 000 ms the runner waited. Nothing was
 hung: at a 40 s ceiling the same cell completes **40/40** iterations, p90 3 049 ms. Worse and
 invisible: the probe's native "no frame" backstop was a **hardcoded 2 s on both platforms**, so
-it *was* the timeout however long JS waited. It is a 90 s ceiling now. Recorded reasons show
+it *was* the timeout however long JS waited. On iOS it is a named 90 s ceiling now; Android's
+stays 2 s, with the requested-wait cap below it (round 1, M1). Recorded reasons show
 that timer firing late too (`waited up to 2 920 ms` when asked for 2 000) — it is queued on a
 main thread still laying out 200 pickers, a second reason a 2 s rule could never hold.
 
@@ -26,11 +27,12 @@ arm (`expo-ui-*`) — left out, recorded in `skippedCells` with counts and reaso
 `nitro-ui`, `nitro-ui-host` and `rn-core` still refuse the mint. (2) Every missing sample
 records *why* (`probe-timeout` with the wait asked and run, `not-awaited`, `probe-error`),
 per iteration, tallied per cell, printed in the progress line, quoted by a refusal.
-(3) `presented` waits **8 000 ms**; `mounted` stays at 1 500 (measured max 226 ms). Asking
-longer is a diagnostic that cannot mint, capped at 80 s against the 90 s backstop. The raise
-is value-neutral for any cell already complete — an arriving sample keeps its stamp — and a
-committed baseline has no incomplete cells, so mac-1's iOS and mac-2's Android files stay
-valid. (4) `--scenario`/`--n` narrow a run; `--update-baseline` refuses a narrowed schedule
+(3) `presented` waits **8 000 ms on iOS**; `mounted` stays at 1 500 on both (measured max 226
+ms). Android keeps 2 000 ms (round 1, M1 — see the Question). Asking for anything but the
+platform's default is a diagnostic that cannot mint, capped at 80 s on iOS and 1 900 ms on
+Android. The raise is value-neutral for any iOS cell already complete — an arriving sample
+keeps its stamp — so mac-1's iOS file stays valid, and mac-2's Android file is untouched by
+the change. (4) `--scenario`/`--n` narrow a run; `--update-baseline` refuses a narrowed schedule
 before booting, because a baseline *is* the table `--check` gates.
 
 **Re-mint:** `bench/baselines/maintainer-mac-2/ios27-sim-iphone17.json` — 196 cells, none
@@ -76,7 +78,7 @@ suite; the 26th is runner CLI wiring no unit test can see and is proven at the C
 - `starts above the most a default launch can spend waiting` -> budget base back to 180 s -> `✕`
 - `tallies the reasons …` (+5 more) -> a missing sample filled with the timeout instead of dropped -> `✕` 6 tests
 - `is the same table, read from the runner that uses it` -> runner raises only its own copy of the budgets -> `✕`
-- `refuses a non-number and a value past the native ceiling` -> `MAX_REQUESTED_TIMEOUT_MS` past 90 s -> `✕`
+- `refuses a non-number and a value past the native ceiling` -> the cap past the ceiling -> `✕`
 - **runner call site (not suite-visible):** `preflight.push(narrowed)` -> `if (false)` -> the CLI stops printing `the schedule is narrowed to 32 of 1568 launches` and proceeds toward a mint; restored and re-verified
 
 Baseline readback, `node /tmp/a4/verify-mint.mjs`: prettier `--check` clean; `--check` exit 0;
@@ -109,41 +111,57 @@ Same cell, one day apart, same machine, same tree:
 8 000 ms  [150/1568] …expo-ui-host-per-control:200 launch 1/8 ... 20 iterations (83.3s)
 ```
 
-**Cost of the longer wait: none measured.** The mint ran at 10.2 s/launch against A3's 10.1 s
-under the 2 s rule — a launch waits for the frame, not for the timeout. Only a launch whose
-frames never arrive pays, and the per-launch budget was raised (300 s, 420 s `leak`) so it
-records 20 `probe-timeout` reasons instead of being killed as "stalled" with all data lost;
+**Cost of the longer wait: none measured, on iOS.** The mint ran at 10.2 s/launch against A3's
+10.1 s under the 2 s rule — a launch waits for the frame, not for the timeout. Only a launch
+whose frames never arrive pays, and iOS's per-launch budget was raised (300 s, 420 s `leak`) so
+it records 20 `probe-timeout` reasons instead of being killed as "stalled" with all data lost
+(Android's table stays at 180 s / 300 s because its waits never changed). On Android the cost
+was measured, and it is what scoped the change to iOS: its 8 losing `update.progress` /
+`update.picker` `@expo/ui` cells await both signals and time out on **every** iteration, so 6 s
+x 8 cells x 8 launches x 25 iterations is ~2.7 h added to a ~5.2 h run at ~80 % of that
+platform's launch budget — for cells whose arms never draw a frame there. See the Question
+below, which this round answers differently.
 `--check` on the mint: 121 rows within tolerance, 74 noise-suppressed, 7 `new arm` — one per
 leak scenario, because no arm climbed monotonically in any run so those cells store no slope
 (mac-1's file shows the same 6, one fewer only because it was minted before `Picker`), **0
 failures**.
 
 **Probe-bias check (the brief's stop condition).** `presentedBeforeMount` — a presenting frame
-that predates its own iteration's mount — is **12.5 %** of iterations on the mint, against
-**12.3 %** on mac-1's committed file, on all four arms including the control. The wait does not
+that predates its own iteration's mount — is **11.9 %** of the mint's iterations that have a
+presented sample (10.6 % over all measured iterations), against **12.3 %** on mac-1's committed
+file, on all four arms including the control. The wait does not
 move it and mac-2 is not an outlier, so it is a pre-existing property of the metric (which frame
 gets attributed), normalised away by the rn-core pairing. Not a reason to stop the mint; filed
 below.
 
 **Compactness (part 2b).** On the 800-iteration repro: an iteration with a reason is **296
 bytes** vs **188** without (~108 per reason); the per-cell tally is 112 bytes for a 104-sample
-gap; a healthy cell's `"missing":null` costs 4 bytes; a full-plan results JSON is 60 KB.
+gap; a healthy cell's `"missing":null` costs 4 bytes. Measured against the mint instead of the
+repro (round 1): that results JSON is **2.32 MB** (the 60 KB figure was the 32-launch repro),
+and 800 `iter` records carry a reason at a total of 133.6 KB — **~84 bytes per entry, 2.0 %** of
+the 6.79 MB NDJSON. Every healthy run pays that 2.0 %, because its reasons are all
+`not-awaited`.
 
 ## Files changed
 
-- `bench/src/plan.ts` — 8 000 ms default with the measurement beside it, `mountTimeout=`/
-  `presentedTimeout=` launch flags, `MAX_TIMEOUT_MS` 80 s.
+- `bench/src/plan.ts` — `BENCH_DEFAULT_TIMEOUTS`, per platform (iOS 8 000 ms with the
+  measurement beside it, Android unchanged at 2 000 ms) with each platform's native ceiling and
+  requested-wait cap, `mountTimeout=`/`presentedTimeout=` launch flags, `parsePlan` now takes
+  the platform.
 - `bench/src/probe.ts`, `runner.ts`, `types.ts` — `awaitStamp` returns the reason and the wait
   actually run; per-iteration `missing`; reasons recorded for `not-awaited` without waiting.
-- `bench/modules/bench-probe/ios/HybridBenchProbe.mm`, `android/…/HybridBenchProbe.kt` — the
-  "no frame" backstop becomes a 90 s ceiling on both instead of a silent 2 s.
+- `bench/modules/bench-probe/ios/HybridBenchProbe.mm` — the "no frame" backstop becomes a named
+  90 s ceiling instead of a silent 2 s, and the pacing timer gets its own constant.
+  `android/…/HybridBenchProbe.kt` — the same rename, with the ceiling **left at 2 s** (M1).
 - `scripts/bench/lib.mjs` — `COMPARISON_IMPLEMENTATIONS`, `baselineCompleteness`,
   `describeMissing`/`summarizeMissingReasons`, `skippedCellNotes`, `launchBudgetMs` +
-  `DEFAULT_SCENARIO_BUDGETS`, `narrowingProblem`, `parseTimeoutFlags`, `--scenario`/`--n`.
+  per-platform `DEFAULT_SCENARIO_BUDGETS`, `narrowingProblem`, `parseTimeoutFlags`,
+  `BASELINE_TIMEOUTS_MS`, `timeoutRuleProblem`, `--scenario`/`--n`.
 - `scripts/bench/run.mjs`, `report.mjs`, `render.mjs`, `dry-run.mjs` — flags, per-cell reason
   lines, refusals that name counts and where the detail lives, launch budgets, narrowed-mint
   refusal at startup and in a dry run.
-- `scripts/__tests__/bench-missing-samples.test.js` (44 tests), `bench-dry-run.test.js` (+1).
+- `scripts/__tests__/bench-missing-samples.test.js` (55 tests) and
+  `bench-dry-run.test.js` (22, two of them A4's).
 - `docs/DECISIONS.md` (four D9 amendments), `docs/architecture/benchmarks.md`,
   `bench/baselines/README.md` (Status + the 8 s rule), and the new baseline file.
 
@@ -157,6 +175,21 @@ gap; a healthy cell's `"missing":null` costs 4 bytes; a full-plan results JSON i
   guard would need its own investigation.
 - bench: `leak *:N=200` still records no slope on either machine and stays `new arm` (A1c's
   item, unchanged).
+- bench (from M1, needs its own task): the 8 Android `update.{progress,picker}:expo-ui-*`
+  cells that never produce a Fabric transaction should be declared platform-scoped
+  `NO_MOUNT_SIGNAL` entries (not awaited, Android only), which retires 160 x 160 timeouts and
+  the CPU rows that measure them. Round 1 scoped the wait to iOS instead of doing this, so the
+  cells still measure what they measured before.
+- bench (N6): iOS's 90 s ceiling now keeps each mount's `CADisplayLink`, its target and the
+  capture alive for 90 s instead of 2 s, including during `memory`/`leak` launches, because
+  `gCapture` is never cleared and every mount transaction arms a presentation. Each set is
+  sub-KB so `bytesPerInstance` should not move, but it changes what is resident when the
+  footprint is sampled; a future `memory`/`leak` refresh should re-measure before trusting a
+  delta, or the timer should be cancelled when the display link fires.
+- bench (N7): with Android reverted to its old ceiling and no behaviour change left in the
+  Kotlin probe beyond the constant rename, the next Android bench run executes nothing new —
+  the `stopFrameCapture`-on-timeout path added in round 1 was dropped in round 1 for that
+  reason.
 - tooling: pre-existing lint warning `scripts/__tests__/registry.test.js:651` (`manifests` shadow).
 - docs: `docs/tasks/RECOVERY.md` still lists mac-2's iOS mint as owed; it is A3-lineage
   orchestration prose, so I left it for the orchestrator rather than editing another task's
@@ -164,11 +197,18 @@ gap; a healthy cell's `"missing":null` costs 4 bytes; a full-plan results JSON i
 
 ## Questions for orchestrator
 
-**Should mac-2's Android baseline be re-minted under the 8 s wait? Recommendation: no.**
-Its committed file has 231 cells and exactly **one** awaited a presenting signal and lost a
-sample (`mount.picker:expo-ui-host-per-control:50`, 1 of 9). The other 12 cells with missing
-signals never wait at all — `mountSignal: false`, recorded as `not-awaited` — so a longer wait
-cannot move them. One row out of 231, at 11 %, inside the 10 % allowance it minted under, is
-not worth 5 hours of the only Android baseline this machine gates on. If it is ever re-minted
-for another reason, do it under the new rule so its `timeouts` block gets recorded. Same
-reasoning for mac-1: its iOS file has **zero** cells that awaited and lost a sample.
+**Should mac-2's Android baseline be re-minted under the 8 s wait? Now moot: Android never
+took the 8 s wait (round 1, M1).** The question as first answered here rested on a wrong
+premise, which the review caught. What the committed Android file actually says (231 cells,
+13 with a missing signal): 4 are `rn-core update.slider`/`update.progress` at N=1 and N=50,
+which the runner does not await (`not-awaited`); 8 are `update.progress` and `update.picker`
+on both `@expo/ui` arms at N=1 and N=50, which **await and time out on both signals on every
+one of their 160 iterations** (`missingMount: 160`, `missingPresented: 160`) because those arms
+never produce a Fabric transaction there (A3, "never mounted"); and exactly **one** is a real
+partial loss — `mount.picker:expo-ui-host-per-control:50`, `missingPresented: 1` of **160**
+(0.6 %), not "1 of 9 … 11 %" as this section said. So the 8 are not cells a longer wait could
+fix — waiting 6 s longer per iteration changes their CPU rows (`opBatch` brackets the wait) and
+adds ~2.7 h per Android run without recovering one sample — and the one 1-of-160 row is well
+inside the completeness allowance. Nothing about Android's numbers, budgets or run times
+changed, so its baseline stays valid as minted. If Android is ever re-minted for another
+reason, its `timeouts` block will then record 1 500/2 000.

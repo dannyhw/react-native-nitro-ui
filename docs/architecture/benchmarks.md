@@ -95,10 +95,12 @@ load-bearing:
   is also why the two platforms cap a requested wait differently (80 s on iOS, 1 900 ms on
   Android): a request at or above the ceiling would be recorded as a timeout the run never
   asked for;
-- a run that asks for a longer timeout than its platform's default **cannot mint a
-  baseline**: a sample that arrives keeps its value, but *which* samples arrive moves the
-  median. It is a diagnostic like `--perf-marks`, and says so at startup. Every baseline
-  records the rule it was minted under in its own `timeouts` block.
+- a run that asks for anything other than its platform's default timeout **cannot mint a
+  baseline**, in either direction: a sample that arrives keeps its value, but *which*
+  samples arrive moves the median. It is a diagnostic like `--perf-marks`, and says so at
+  startup. Every baseline records the rule it was minted under in its own `timeouts` block,
+  read back from what the app reported - a run whose app reported nothing is refused rather
+  than stamped with today's default.
 
 The defaults themselves are a measured rule, not a habit, and they are **per platform**
 (`BENCH_DEFAULT_TIMEOUTS` in `bench/src/plan.ts` is the one place either number is written).
