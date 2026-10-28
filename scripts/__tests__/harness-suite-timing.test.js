@@ -60,15 +60,30 @@ const REPO_ROOT = join(__dirname, '..', '..');
 const SWITCH_FILE = '/work/example/__tests__/Switch.harness.tsx';
 const SIZING_FILE = '/work/example/__tests__/Sizing.harness.tsx';
 
+/**
+ * The shape `@react-native-harness/bridge` actually reports: a tree of `describe` blocks
+ * (`{ name, tests, suites }`), not a flat list. A fixture with a made-up `testResults` field let
+ * the first version of the reader return zero tests for every file, and the 455 s run that proved
+ * it wrong is the reason this comment is here.
+ */
 const switchContext = {
   file: SWITCH_FILE,
   projectRoot: '/work/example',
   duration: 40_400,
   status: 'passed',
   result: {
-    testResults: [
-      { name: 'toggles', status: 'passed', duration: 1_250 },
-      { name: 'keeps value', status: 'passed', duration: 1_900 },
+    name: '__tests__/Switch.harness.tsx',
+    status: 'passed',
+    duration: 40_400,
+    tests: [{ name: 'toggles', status: 'passed', duration: 1_250 }],
+    suites: [
+      {
+        name: 'controlled value',
+        status: 'passed',
+        duration: 1_900,
+        tests: [{ name: 'keeps value', status: 'passed', duration: 1_900 }],
+        suites: [],
+      },
     ],
   },
 };
@@ -79,8 +94,20 @@ const sizingContext = {
   duration: 12_500,
   status: 'failed',
   result: {
-    testResults: [
-      { name: 'measures 200 arms', status: 'failed', duration: 11_900 },
+    name: '__tests__/Sizing.harness.tsx',
+    status: 'failed',
+    duration: 12_500,
+    tests: [],
+    suites: [
+      {
+        name: 'cold',
+        status: 'failed',
+        duration: 11_900,
+        tests: [
+          { name: 'measures 200 arms', status: 'failed', duration: 11_900 },
+        ],
+        suites: [],
+      },
     ],
   },
 };
@@ -107,6 +134,16 @@ describe('the suite-timing row', () => {
     // The number that matters on a red run is still there: the slow suite is the failing one,
     // and a row that only appeared on green would hide exactly the file worth reading.
     expect(row.testBodyMs).toBe(11900);
+  });
+
+  it('counts tests nested in describe blocks, not just the top level', () => {
+    // Two tests, one of them a level down: a reader that only looked at `result.tests` would
+    // report 1, and a reader that looked at a field that does not exist would report 0 - which is
+    // what shipped first, and made every row say "37.3s restart, 0.0s tests".
+    expect(suiteTimingRow(switchContext)).toMatchObject({
+      tests: 2,
+      testBodyMs: 3150,
+    });
   });
 
   it('survives the harness handing over nothing', () => {

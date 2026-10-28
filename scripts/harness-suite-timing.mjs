@@ -89,8 +89,7 @@ export function newSuiteTimingRecord({ gate, platform = null, startedAt }) {
  * brief asks, and only the two numbers side by side can answer it.
  */
 export function suiteTimingRow(ctx, { projectRoot = null } = {}) {
-  const result = ctx?.result ?? null;
-  const tests = Array.isArray(result?.testResults) ? result.testResults : [];
+  const tests = flattenTests(ctx?.result);
   const testBodyMs = tests.reduce(
     (total, t) => total + (Number.isFinite(t?.duration) ? t.duration : 0),
     0
@@ -108,8 +107,28 @@ export function suiteTimingRow(ctx, { projectRoot = null } = {}) {
   };
 }
 
-/** `…/example/__tests__/Switch.harness.tsx` -> `__tests__/Switch.harness.tsx`. */
-export function relativeName(file, projectRoot) {
+/**
+ * The leaf tests of a `TestSuiteResult`.
+ *
+ * The harness hands back a *tree* (`{ name, tests, suites }`, nested `describe` blocks as children),
+ * and the first version of this read `result.testResults` - a field that does not exist - so every
+ * suite came back with `tests: 0` and `testBodyMs: 0` and the whole restart/test-body split was
+ * silently wrong. A real run caught it; the fixture below is shaped like the real thing now.
+ *
+ * @param {object | null | undefined} result
+ * @returns {object[]}
+ */
+export function flattenTests(result) {
+  if (result == null || typeof result !== 'object') return [];
+  const own = Array.isArray(result.tests) ? result.tests : [];
+  const children = Array.isArray(result.suites) ? result.suites : [];
+  return [...own, ...children.flatMap(flattenTests)];
+}
+
+/** `…/example/__tests__/Switch.harness.tsx` -> `__tests__/Switch.harness.tsx`. */ export function relativeName(
+  file,
+  projectRoot
+) {
   const text = String(file ?? '');
   const root = projectRoot ? String(projectRoot).replace(/\/+$/, '') : null;
   if (root != null && text.startsWith(`${root}/`))
