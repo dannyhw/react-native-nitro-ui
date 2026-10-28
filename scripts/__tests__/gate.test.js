@@ -667,6 +667,9 @@ describe('summarizeLoad', () => {
       median: 3,
       max: 9,
       count: 5,
+      // X12: the last sample, so a failure excerpt can say what load the run
+      // *ended* under and not just how it averaged.
+      end: 3,
     });
     // Even count: the middle two, so a run that was busy for half its length is
     // not summarised as quiet.
@@ -683,6 +686,7 @@ describe('summarizeLoad', () => {
       median: null,
       max: null,
       count: 0,
+      end: null,
     });
     expect(summarizeLoad({ samples: [Number.NaN, 3] }).count).toBe(1);
   });
@@ -1242,7 +1246,13 @@ describe('summarizeLoad rounding (N5)', () => {
     // "start":13.54443359375 in it.
     const samples = [13.54443359375, 20.4, 31.9];
     const load = summarizeLoad({ start: 13.54443359375, samples });
-    expect(load).toEqual({ start: 13.54, median: 20.4, max: 31.9, count: 3 });
+    expect(load).toEqual({
+      start: 13.54,
+      median: 20.4,
+      max: 31.9,
+      count: 3,
+      end: 31.9,
+    });
     expect(summarizeLoad({ start: 13.54443359375, samples: [] }).start).toBe(
       13.54
     );
@@ -1664,18 +1674,45 @@ describe('gate.mjs --background and wait', () => {
     for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  /** The one background record in the checkout, throwing when there is not one. */
+  /**
+   * This checkout's gate log store: `<git-common-dir>/nitro-ui-gates`.
+   *
+   * X12 moved logs out of the worktree, and a `git init` fixture's common dir is
+   * its own `.git`, so the store is a sibling of `.gates/` rather than inside it.
+   */
+  function storeDir(dir) {
+    return path.join(dir, '.git', 'nitro-ui-gates');
+  }
+
+  /** Resolves a ledger line's (store-relative) log path to a file on disk. */
+  function logFile(dir, logPath) {
+    return path.join(storeDir(dir), logPath);
+  }
+
+  /** The one background record in the store, throwing when there is not one. */
   function theRecord(dir) {
-    const logs = path.join(dir, '.gates', 'logs');
-    const names = fs.existsSync(logs)
-      ? fs.readdirSync(logs).filter((name) => name.endsWith('.gate.json'))
-      : [];
-    if (names.length !== 1) {
+    const logs = storeDir(dir);
+    const found = [];
+    const walk = (current) => {
+      let names;
+      try {
+        names = fs.readdirSync(current, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of names) {
+        const absolute = path.join(current, entry.name);
+        if (entry.isDirectory()) walk(absolute);
+        else if (entry.name.endsWith('.gate.json')) found.push(absolute);
+      }
+    };
+    walk(logs);
+    if (found.length !== 1) {
       throw new Error(
-        `expected exactly one background record, found ${names.length}`
+        `expected exactly one background record, found ${found.length}`
       );
     }
-    return JSON.parse(fs.readFileSync(path.join(logs, names[0]), 'utf8'));
+    return JSON.parse(fs.readFileSync(found[0], 'utf8'));
   }
 
   /** Polls until the record says the gate is done (or gives up loudly). */
@@ -1693,6 +1730,25 @@ describe('gate.mjs --background and wait', () => {
     }
   }
 
+  /** Polls until the log holds `text` (the gate has begun producing output). */
+  async function waitForLog(dir, record, text, timeoutMs = 30_000) {
+    const file = logFile(dir, record.logPath);
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      try {
+        if (fs.readFileSync(file, 'utf8').includes(text)) return;
+      } catch {
+        /* not created yet */
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `the gate's log never contained ${JSON.stringify(text)}`
+        );
+      }
+      await sleep(50);
+    }
+  }
+
   const iosOnly = {
     'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
   };
@@ -1701,9 +1757,11 @@ describe('gate.mjs --background and wait', () => {
     const dir = checkout(iosOnly);
     const startedAt = Date.now();
     const started = runCli(dir, ['harness:android', '--background'], {
-      // Longer than any plausible launcher overhead, so "returned early" below is
-      // a measurement and not a coincidence.
-      FAKE_SLEEP: '5',
+      // Long enough that the gate is certainly still mid-run by the time `wait`
+      // gets its first look (see the wait below), and longer than any plausible
+      // launcher overhead, so "returned early" is a measurement and not a
+      // coincidence.
+      FAKE_SLEEP: '20',
       FAKE_PROGRESS: 'Compiling Switch.swift',
     });
     expect(started.status).toBe(0);
@@ -1721,12 +1779,21 @@ describe('gate.mjs --background and wait', () => {
     expect(record.gate).toBe('harness:android');
     expect(record.done).toBe(false);
     expect(typeof record.pid).toBe('number');
-    expect(fs.existsSync(path.join(dir, record.logPath))).toBe(true);
+    expect(fs.existsSync(logFile(dir, record.logPath))).toBe(true);
 
     // `status` must not call a run that is happening "missing".
     const status = runCli(dir, ['status']);
     expect(status.stdout).toContain('running harness:android');
     expect(status.stdout).toMatch(/pid \d+/);
+
+    // Wait for the gate to have *written* the line `wait` is about to be asked to
+    // report. `wait` prints progress once, on its first pass, and a gate that has
+    // not started printing yet leaves it with the launcher's own header as the last
+    // line - which is what the full `check` (36 suites at once) caught: the
+    // assertion below was passing only because the machine was idle enough for the
+    // child to beat `wait` to the file. The claim under test is "progress comes from
+    // the log", so the fixture supplies the log's content rather than racing it.
+    await waitForLog(dir, record, 'Compiling Switch.swift');
 
     const wait = runCli(dir, ['wait', '--gate', 'harness:android']);
     expect(wait.status).toBe(0);
@@ -1803,11 +1870,13 @@ describe('gate.mjs --background and wait', () => {
     // process to ask. The wrong answer is to poll for 45 minutes on a corpse, and
     // the other wrong answer is to call it a pass.
     const deadPid = spawnSync(process.execPath, ['-e', '']).pid;
-    const logPath = path.join('.gates', 'logs', 'ghost-check.log');
-    fs.mkdirSync(path.dirname(path.join(dir, logPath)), { recursive: true });
-    fs.writeFileSync(path.join(dir, logPath), 'gate: check\nmid-compile\n');
+    // Store-relative, as a real record's `logPath` is, and written into the store
+    // rather than the worktree (X12).
+    const logPath = 'task/x2-fixture/ghost-check.log';
+    fs.mkdirSync(path.dirname(logFile(dir, logPath)), { recursive: true });
+    fs.writeFileSync(logFile(dir, logPath), 'gate: check\nmid-compile\n');
     fs.writeFileSync(
-      backgroundRecordPath(path.join(dir, logPath)),
+      backgroundRecordPath(logFile(dir, logPath)),
       JSON.stringify({
         version: 1,
         gate: 'check',
@@ -1841,7 +1910,7 @@ describe('gate.mjs --background and wait', () => {
     expect(runCli(dir, ['check']).status).toBe(0);
     const recorded = ledgerLines(dir)[0];
     const deadPid = spawnSync(process.execPath, ['-e', '']).pid;
-    const recordPath = backgroundRecordPath(path.join(dir, recorded.logPath));
+    const recordPath = backgroundRecordPath(logFile(dir, recorded.logPath));
     fs.writeFileSync(
       recordPath,
       JSON.stringify({
@@ -1879,7 +1948,7 @@ describe('gate.mjs --background and wait', () => {
     expect(started.status).toBe(0);
     expect(runCli(dir, ['wait', '--gate', 'check']).status).toBe(0);
     const [record] = ledgerLines(dir);
-    const log = fs.readFileSync(path.join(dir, record.logPath), 'utf8');
+    const log = fs.readFileSync(logFile(dir, record.logPath), 'utf8');
     // N5: a backgrounded run's stdout *is* this file, so echoing there as well as
     // writing the stream duplicates every line for the person who opens it.
     const summaries = log
@@ -1914,7 +1983,7 @@ describe('gate.mjs --background and wait', () => {
     // And the *gate process* never saw the flag: the fake runner echoes its own
     // argv into the log, so a leaked `--background` is visible there even though the
     // run still succeeds - which is exactly why the exit code above is not evidence.
-    const log = fs.readFileSync(path.join(dir, lines[0].logPath), 'utf8');
+    const log = fs.readFileSync(logFile(dir, lines[0].logPath), 'utf8');
     expect(log).toContain('fake runner:');
     expect(log).not.toContain('--background');
     expect(log).toContain('ColdSizing');

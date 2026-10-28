@@ -478,6 +478,28 @@ asks the strict question. A task report starts from
 ledger beside it. The rules are in the header of `scripts/gate.mjs` and in
 `scripts/gate-core.mjs`.
 
+A run's **log** is not in the worktree: it goes to the clone's gate log store,
+`<git-common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`, which every
+worktree of the clone shares and `git worktree remove` leaves alone, so removing a
+merged worktree cannot lose the evidence (`gate.mjs logs [--branch b] [--failed]
+[--all]` lists it; 35 days, then 64 MiB, oldest first). Each run's record also names
+the worktree that started it, so `wait` and `status` follow _your_ background gate
+when several worktrees are running one at the same time. `export --task <id>` also
+writes a scrubbed excerpt of every **failed** run into
+`docs/tasks/<ID>/failures/<run>-<n>.log` — the failing test names, the assertion
+messages, the last 150 lines, the load at both ends and, for a failed device gate,
+the booted simulators, the leased emulator's `adb get-state`, the lease list, load1
+and the app's last `logcat` lines. Any device identifier in that block that is not
+this run's own lease becomes `<other device>`, so another task's simulator or the
+maintainer's emulator is never committed. It names that file in the ledger line's
+`failureLogPath`. Passing runs get no file. A committed excerpt holds no credential
+and no machine identity: tokens, `Authorization:`/`Cookie:` headers (whole, any
+scheme), `.npmrc` `_auth=` lines, `curl -u user:pass`, `user:pass@host`, a config
+file's whole `password: some phrase`, email addresses and Stripe/Anthropic/GitLab
+token shapes are replaced, and your home, scratch directory, username, hostname,
+repo and store paths — and anyone else's `/Users/<name>` or `/var/folders/<hash>`
+— are written as `~`, `<tmp>`, `<user>`, `<host>`, `<repo>` and `<store>`.
+
 ### Build speed
 
 Nothing in this section changes what a library user gets. It is all in
