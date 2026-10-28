@@ -34,8 +34,11 @@
 #include "JHybridNitroUiSwitchSpec.hpp"
 #include "JFunc_void_bool_double.hpp"
 #include "views/JHybridNitroUiSwitchStateUpdater.hpp"
-#include "HybridNitroUiCore.hpp"
+#include "JHybridNitroUiSpikeTextFieldSpec.hpp"
+#include "JFunc_void_std__string_double.hpp"
+#include "views/JHybridNitroUiSpikeTextFieldStateUpdater.hpp"
 #include <NitroModules/DefaultConstructableObject.hpp>
+#include "HybridNitroUiCore.hpp"
 
 namespace margelo::nitro::nitroui {
 
@@ -45,6 +48,14 @@ int initialize(JavaVM* vm) {
   });
 }
 
+struct JHybridNitroUiSpikeTextFieldSpecImpl: public jni::JavaClass<JHybridNitroUiSpikeTextFieldSpecImpl, JHybridNitroUiSpikeTextFieldSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiSpikeTextField;";
+  static std::shared_ptr<JHybridNitroUiSpikeTextFieldSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiSpikeTextFieldSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiSpikeTextFieldSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiSpikeTextFieldSpec();
+  }
+};
 struct JHybridNitroUiButtonSpecImpl: public jni::JavaClass<JHybridNitroUiButtonSpecImpl, JHybridNitroUiButtonSpec::JavaPart> {
   static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiButton;";
   static std::shared_ptr<JHybridNitroUiButtonSpec> create() {
@@ -134,8 +145,17 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiSwitchSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_bool_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSwitchStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiSpikeTextFieldSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_std__string_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiSpikeTextFieldStateUpdater::registerNatives();
 
   // Register Nitro Hybrid Objects
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiSpikeTextField",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiSpikeTextFieldSpecImpl::create();
+    }
+  );
   HybridObjectRegistry::registerHybridObjectConstructor(
     "NitroUiCore",
     []() -> std::shared_ptr<HybridObject> {

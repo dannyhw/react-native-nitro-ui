@@ -22,6 +22,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiSegmentedControlSpec; }
 // Forward declaration of `HybridNitroUiSliderSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSliderSpec; }
+// Forward declaration of `HybridNitroUiSpikeTextFieldSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiSpikeTextFieldSpec; }
 // Forward declaration of `HybridNitroUiSwitchSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 // Forward declaration of `NitroUiButtonSize` to properly resolve imports.
@@ -45,6 +47,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
+#include "HybridNitroUiSpikeTextFieldSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "NitroUiButtonSize.hpp"
 #include "NitroUiDatePickerSize.hpp"
@@ -86,6 +89,8 @@ namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 namespace NitroUi { class HybridNitroUiSegmentedControlSpec_cxx; }
 // Forward declaration of `HybridNitroUiSliderSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSliderSpec_cxx; }
+// Forward declaration of `HybridNitroUiSpikeTextFieldSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiSpikeTextFieldSpec_cxx; }
 // Forward declaration of `HybridNitroUiSwitchSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 

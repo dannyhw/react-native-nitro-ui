@@ -12,6 +12,16 @@
     "androidCxxLibName": "nitroui"
   },
   "autolinking": {
+    "NitroUiSpikeTextField": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiSpikeTextField"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiSpikeTextField"
+      }
+    },
     "NitroUiCore": {
       "all": {
         "language": "c++",

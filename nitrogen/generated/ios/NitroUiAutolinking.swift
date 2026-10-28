@@ -12,6 +12,18 @@ import NitroModules
 public final class NitroUiAutolinking {
   public typealias bridge = margelo.nitro.nitroui.bridge.swift
 
+  public static func createNitroUiSpikeTextField() -> bridge.std__shared_ptr_HybridNitroUiSpikeTextFieldSpec_ {
+    let hybridObject = HybridNitroUiSpikeTextField()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiSpikeTextFieldSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiSpikeTextFieldRecyclable() -> Bool {
+    return HybridNitroUiSpikeTextField.self is any RecyclableView.Type
+  }
+  
   public static func createNitroUiButton() -> bridge.std__shared_ptr_HybridNitroUiButtonSpec_ {
     let hybridObject = HybridNitroUiButton()
     return { () -> bridge.std__shared_ptr_HybridNitroUiButtonSpec_ in
