@@ -168,7 +168,7 @@ const SIZING_KEY = '';
  *
  * For a `fillWidth` control this is the one declared number that reaches the screen
  * only under an unbounded parent - see `docs/architecture/sizing.md` §5 and row 10
- * of `docs/tasks/FOLLOWUPS.md`. The height side of the declaration is
+ * of `docs/tasks/Q4-followups-triage.md`. The height side of the declaration is
  * `EXPECTED_HEIGHT` above.
  */
 const DECLARED_WIDTH = Platform.select({ android: 328, default: 351 })!;
@@ -500,7 +500,7 @@ describe('Slider', () => {
     // different control in a different parent, with nothing able to notice (the
     // unbounded instance's own report agrees by height, which is all the policy
     // compares, so it confirms the stale frame rather than correcting it).
-    // `docs/tasks/FOLLOWUPS.md` row 10.
+    // `docs/tasks/Q4-followups-triage.md` row 10.
     //
     // The fixture is what makes a wrong fix as visible as the old bug. Seeding
     // 240x12 writes both the cold guess *and* the component's declaration
