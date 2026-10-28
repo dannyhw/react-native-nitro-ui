@@ -106,6 +106,18 @@ final class SpikeTextFieldModel: NitroUiModel {
   weak var hostedField: SpikeHostedUITextField?
 
   /*
+   * Arm A's focus handle: the projected `@FocusState` of the SwiftUI body that owns it.
+   *
+   * `@FocusState` is view state, so before this existed arm A had no imperative focus path at all and `focus()`
+   * returned having touched nothing — the reading T18 reported as "imperative focus does not land on either
+   * platform". The body still owns the state; the model only holds the projected binding, which is SwiftUI's
+   * own external-write form, the same shape `autoFocus` already uses from `onAppear`. Whether writing it
+   * actually focuses the field is `P5 focus latency`'s `swiftui_*` row, not an assumption of this file.
+   * Cleared when the subtree goes, so an ask aimed at a dropped field reports a miss.
+   */
+  var focusBinding: FocusState<Bool>.Binding?
+
+  /*
    * Installs the Hybrid View's own mirror renderer so the commit helpers can republish from anywhere.
    *
    * The helpers are a plain enum and cannot reach the host, and on the SwiftUI arm there is no other path that
@@ -252,6 +264,8 @@ struct SpikeSwiftUITextField: View {
       SpikeTextFieldCommit.submit(model)
     }
     .onAppear {
+      // Hand the imperative focus path to the host before anything can ask for focus (see `focusBinding`).
+      model.focusBinding = $focused
       // Nitro-input measured 580 ms of keyboard churn from a *deferred* autofocus
       // (Q2 §5), so this fires from `onAppear` with no hop. SwiftUI still
       // resolves `@FocusState` through its own update pass, which is the arm's
@@ -262,6 +276,11 @@ struct SpikeSwiftUITextField: View {
         // `wrappedValue` is not addressable through the projected name.)
         $focused.wrappedValue = true
       }
+    }
+    .onDisappear {
+      // The binding belongs to this subtree. A `focus()` after it is gone must report a miss rather than write
+      // into a view graph SwiftUI has thrown away.
+      model.focusBinding = nil
     }
   }
 }
@@ -981,6 +1000,7 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
     model.requestedImplementation = ""
     model.frozenImplementation = nil
     model.hostedField = nil
+    model.focusBinding = nil
     model.composing = false
     model.focused = false
     model.selectionStart = -1
@@ -1019,12 +1039,23 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       guard let field = self.model.hostedField else {
-        // Arm A has nothing to call: `@FocusState` is private to the SwiftUI
-        // subtree, so an imperative `focus()` on that arm is a no-op. P1 reports
-        // that, and the harness asserts `focused` did not move. A *frozen*
-        // textfield arm with no field is a different thing — recorded below.
+        /*
+         * No `UITextField` behind this instance: arm A, or arm B before SwiftUI built its representable.
+         *
+         * Arm A is focusable through the binding its body handed over, so the ask is attempted there. The two
+         * ways it cannot be attempted are different findings and are recorded differently: a frozen `textfield`
+         * arm whose control never got built (`focus:no-field`), and an arm whose body never handed a binding
+         * over at all (`focus:no-binding`).
+         */
+        if let binding = self.model.focusBinding {
+          binding.wrappedValue = true
+          return
+        }
         if self.model.frozenImplementation == SpikeTextFieldShapes.textfield {
           self.model.lastWrite = "focus:no-field"
+          self.publishMirror()
+        } else {
+          self.model.lastWrite = "focus:no-binding"
           self.publishMirror()
         }
         return
@@ -1048,7 +1079,14 @@ final class HybridNitroUiSpikeTextField: HybridNitroUiSpikeTextFieldSpec, Recycl
 
   func blur() throws {
     DispatchQueue.main.async { [weak self] in
-      _ = self?.model.hostedField?.resignFirstResponder()
+      guard let self else { return }
+      if let field = self.model.hostedField {
+        _ = field.resignFirstResponder()
+      } else {
+        // Arm A's blur is the same handle written false — without this, `blur()` on that arm is a no-op and a
+        // field focused by hand can only be unfocused by the user.
+        self.model.focusBinding?.wrappedValue = false
+      }
     }
   }
 
