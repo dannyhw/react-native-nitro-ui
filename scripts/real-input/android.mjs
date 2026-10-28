@@ -49,6 +49,7 @@ import {
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { assertFreshApp, colorize } from '../app-stamp.mjs';
 import { checkEmulatorEnv, isReservedSerial } from '../lease-core.mjs';
+import { emulatorLaunchCommand } from '../emulator-launch.mjs';
 
 // One Node across every device gate: the harness cannot run on Node 25/26 at
 // all, so a real-input run on that runtime is not comparable evidence. When this
@@ -3143,9 +3144,16 @@ function resolveDevice(env) {
   // This suite boots nothing, so it is the last place that can still say no
   // before someone else's device receives an `adb -s`.
   const lease = checkEmulatorEnv(env);
-  const bootHint =
-    `emulator -avd ${avd} -port ${String(lease.port ?? 5572)} ` +
-    '-gpu host -no-window -no-audio -no-boot-anim -no-snapshot-save';
+  // The shared launch config rather than a hand-typed line: this string is what a
+  // person pastes when a lease names a device that is not up, so it has to be the
+  // same command the harness and the pool run - same port, same GPU mode, same
+  // snapshot flags. The hand-written version here had drifted already (`-no-audio`,
+  // which is not an emulator flag at all).
+  const bootHint = emulatorLaunchCommand({
+    avd,
+    port: lease.port ?? null,
+    snapshot: 'cold',
+  });
 
   const listed = run('adb', ['devices'], { env });
   if (listed.status !== 0) {

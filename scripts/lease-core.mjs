@@ -82,6 +82,146 @@ const NODE_FS = {
 /** Two device tasks is what one 14-core machine does without load-induced flakes. */
 export const DEFAULT_MAX_DEVICE_LEASES = 2;
 
+/**
+ * How long a pool device may sit idle before `lease.mjs reap` powers it off (X11), overridable
+ * per machine through devices.json's `idleShutdownMinutes`. Thirty minutes covers the gap between
+ * two runs by one task and a task that acquired and then went to lunch, and a machine that idles
+ * longer than that has no reason to be paying for a booted emulator - which is also what makes an
+ * iOS simulator boot (load1 ~100 on this 10-core machine, 4-6 min to settle) the most expensive
+ * thing a task can do by accident.
+ */
+export const IDLE_SHUTDOWN_DEFAULT_MINUTES = 30;
+
+/**
+ * How long the pool waits between two looks at `adb devices` / `simctl list` while a device comes
+ * up. Two seconds is calm enough for a boot that takes a minute and cheap enough that a warm
+ * device costs one poll.
+ */
+export const DEVICE_POLL_MS = 2_000;
+
+/** The shape of `~/.nitro-ui/pool.json`, so a future format change is one constant. */
+export const POOL_STATE_VERSION = 1;
+
+/**
+ * A boot is *settled* once the machine's 1-minute load average drops below this
+ * multiple of the core count. `scripts/bench/lib.mjs` uses the same ceiling for
+ * benches ("the machine is still draining a previous run"); the harness waits for
+ * it too, because a suite started while the boot drains measures - or at least
+ * runs - at the machine's worst moment.
+ */
+export const LOAD_SETTLE_CORE_MULTIPLIER = 0.5;
+
+/** Cap on waiting for the load to settle: a busy machine must not hang a lease forever. */
+export const LOAD_SETTLE_TIMEOUT_MS = 180_000;
+
+/** Cap on waiting for a cold boot to attach (`emulator` + `simctl` can be slow, not stuck). */
+export const DEVICE_SETTLE_TIMEOUT_MS = 420_000;
+
+/**
+ * One pool record per physical device: when it was booted, last handed to a run, and which runs
+ * are holding it right now.
+ */
+export function newPoolEntry({
+  key,
+  kind,
+  id,
+  leaseId,
+  idleShutdownMinutes,
+  nowMs,
+  bootedMs = nowMs,
+}) {
+  return {
+    key,
+    kind,
+    id,
+    leaseId,
+    bootedAtMs: bootedMs,
+    lastUsedMs: nowMs,
+    idleShutdownMinutes: idleShutdownMinutes ?? IDLE_SHUTDOWN_DEFAULT_MINUTES,
+    serial: null,
+    udid: null,
+    claims: [],
+  };
+}
+
+/**
+ * Is a device in use? A gate claims the devices of the lease it runs under for the duration of
+ * the run (`scripts/device-pool.mjs`), so "busy" means a claim whose pid is still alive - or a
+ * boot that has not finished. A claim left by a killed process is dead on arrival: pid liveness
+ * is the whole protocol, which is why a reaper never has to trust a clean exit.
+ */
+export function deviceIsBusy(entry, nowMs, isPidAlive = pidIsAlive) {
+  if (!entry) return false;
+  if (entry.phase === 'booting') return true;
+  return (entry.claims ?? []).some((claim) => isPidAlive(claim?.pid));
+}
+
+/** `process.kill(pid, 0)`, kept out of the pool module so the decision above stays pure. */
+export function pidIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+/**
+ * Reaping decision for one pool record.
+ *
+ * One rule, from the brief: a device idle past `idleShutdownMinutes` is powered off, whether or
+ * not a lease still names it, and a device with a run in flight never is. That covers both leaks
+ * a warm pool can spring: the task that released and left a boot behind, and the one that
+ * acquired, walked away, and let its lease expire mid-afternoon. The `lease-gone` reason exists
+ * because those two read differently in `list` - an unused hand-off, versus an abandoned boot.
+ */
+export function poolReapDecision(
+  entry,
+  {
+    nowMs,
+    leases,
+    defaultIdleMinutes = IDLE_SHUTDOWN_DEFAULT_MINUTES,
+    isPidAlive = pidIsAlive,
+  }
+) {
+  const started = entry?.bootedAtMs ?? nowMs;
+  const lastSeen = Math.max(started, entry?.lastUsedMs ?? 0);
+  const idleMs = Math.max(0, nowMs - lastSeen);
+  const lease = entry?.leaseId
+    ? (leases ?? []).find((x) => x.id === entry.leaseId)
+    : undefined;
+  const idleMinutes =
+    entry?.idleShutdownMinutes ??
+    defaultIdleMinutes ??
+    IDLE_SHUTDOWN_DEFAULT_MINUTES;
+  if (deviceIsBusy(entry, nowMs, isPidAlive)) {
+    return { action: 'keep', reason: 'busy', idleMs, protected: true };
+  }
+  if (idleMs >= idleMinutes * 60_000) {
+    return {
+      action: 'reap',
+      reason: lease ? 'idle' : 'lease-gone',
+      idleMs,
+      protected: false,
+    };
+  }
+  return {
+    action: 'keep',
+    reason: lease ? 'idle-grace' : 'unowned-grace',
+    idleMs,
+    protected: true,
+  };
+}
+
+/** Load-average ceiling under which a device run is measured on a settled machine. */
+export function loadSettleCeiling(cores) {
+  return Math.max(
+    1,
+    Math.round(cores * LOAD_SETTLE_CORE_MULTIPLIER * 100) / 100
+  );
+}
+
 /** @param {NodeJS.ProcessEnv} [env] @returns {string} */
 export function stateHome(env = process.env) {
   return env.NITRO_UI_HOME ?? join(homedir(), '.nitro-ui');
@@ -172,6 +312,14 @@ export function normalizeDevices(config) {
       ? config.maxDeviceLeases
       : DEFAULT_MAX_DEVICE_LEASES;
 
+  // `idleShutdownMinutes: 0` is a real answer ("reap as soon as a run lets go"), so the test is
+  // "a non-negative number", not truthiness.
+  const idleRaw = config?.idleShutdownMinutes;
+  const idleShutdownMinutes =
+    typeof idleRaw === 'number' && Number.isFinite(idleRaw) && idleRaw >= 0
+      ? idleRaw
+      : IDLE_SHUTDOWN_DEFAULT_MINUTES;
+
   if (problems.length > 0) {
     throw new Error(
       `devices.json is not usable:\n${problems.map((p) => `  - ${p}`).join('\n')}`
@@ -181,6 +329,7 @@ export function normalizeDevices(config) {
   return {
     pairs: cleanPairs,
     maxDeviceLeases,
+    idleShutdownMinutes,
     reservedEmulatorPorts,
     reservedIdentifiers: Array.isArray(config?.reservedIdentifiers)
       ? config.reservedIdentifiers
