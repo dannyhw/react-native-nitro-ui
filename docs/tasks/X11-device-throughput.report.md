@@ -31,7 +31,10 @@ mid-suite and a second gate aimed at the same device is refused before it starts
 so a killed gate wedges nothing. Two bugs came out of running it rather than faking it: a claim
 record that carried no serial made a live emulator read as "already off" and dropped it from the
 pool, and `pm clear` answers `Failed` for a few seconds on an emulator that has just attached, so
-the reset now retries and quotes the device's own answer.
+the reset now retries and quotes the device's own answer. A third came from using it as the
+operator: `reap --idle-minutes 0` — "power the pool off now" — lost the comparison against the
+limit stamped in devices.json and answered "keeping it up (idle, under the limit)" about the very
+number it had been told to override.
 
 Benches are deliberately unchanged and say why (`BENCH_GPU_MODE_NOTE`). Concurrent harnesses are
 measured and **not recommended** — see item 5.
@@ -158,6 +161,8 @@ after the ✕; a case whose mutation could not be applied is marked as not claim
 - `ignores a claim whose process is gone` -> dead claims never dropped (in `claim()` and `pruneClaims()`) -> `✕ ignores a claim whose process is gone`
 - `starts a device that is down, and records the boot on the lease` -> pool boots `swiftshader_indirect`, ignoring the shared default -> `✕ starts a device that is down, and records the boot on the lease` (the stub `emulator` records argv, and `-gpu host` is missing)
 - `retries a reset on a device that is still settling` -> `attempts = 1` -> `✕ retries a reset on a device that is still settling, and reports the tries`; and -> retry `sleep` removed -> same ✕ (the loop must wait, not busy-poll)
+- `honours \`reap --idle-minutes 0\` over devices.json` -> the pool stops passing the override into the decision (the shipped bug, at the CLI boundary) -> `✕ honours \`reap --idle-minutes 0\` over devices.json, as power-off now`
+- `lets an explicit override outrank the record, including a zero` -> the record's limit moved ahead of the override -> `✕ lets an explicit override outrank the record, including a zero`; and -> `(overrideIdleMinutes || null)` so `0` is not an override -> same ✕
 - `reports a pm clear that never succeeded as a failed reset` -> `ok: true` -> `✕ reports a pm clear that never succeeded as a failed reset, with the answer`; and -> `answer: null` -> same ✕
 - CLI `retries a reset on a device still settling` -> the lease's `row.ok` test replaced by `true` -> `✕ says so, in the device's own words, when the reset never succeeds`
 - CLI `says so, in the device's own words` -> the reset line stops quoting `pm clear` -> `✕ says so, in the device's own words, when the reset never succeeds`
@@ -174,7 +179,7 @@ after the ✕; a case whose mutation could not be applied is marked as not claim
 - `scripts/device-pool.mjs`, `scripts/lease.mjs`, `scripts/lease-core.mjs`,
   `scripts/devices.example.json` — the warm pool, boot/reset/reap, claims.
 - `scripts/__tests__/{emulator-launch,harness-suite-timing,device-pool,lease-pool-cli}.test.js` —
-  new: 16 + 22 + 43 + 16 = 97 tests; plus 4 claim cases in the existing `gate.test.js`. All shown
+  new: 16 + 22 + 45 + 17 = 100 tests; plus 4 claim cases in the existing `gate.test.js`. All shown
   red above.
 - `scripts/real-input/{android,ios}.mjs` — boot hints from the shared config, and no
   `open -a Simulator` (Xcode 27's app asks DeviceKit for a device no lease handed out).

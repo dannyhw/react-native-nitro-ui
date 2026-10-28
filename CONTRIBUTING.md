@@ -404,6 +404,7 @@ powering devices off.
 node scripts/lease.mjs acquire --task X11 --boot        # boots the pair, waits until settled
 node scripts/lease.mjs list                             # what is booted, and who holds it
 node scripts/lease.mjs reap                             # powers off what is idle past the limit
+node scripts/lease.mjs reap --idle-minutes 0            # "power the pool off now", whatever the limit says
 node scripts/lease.mjs release X11                      # devices stay up, on purpose
 ```
 
@@ -420,7 +421,9 @@ What that means in practice:
   (`devices.json`, default 30; `0` means "as soon as a run lets go"). No
   daemon: the reaper runs from the commands people already type. `--no-reap`
   opts out, and `NITRO_UI_LEASE_BOOT=0` takes the whole device lifecycle
-  offline for a machine that manages its own devices.
+  offline for a machine that manages its own devices. `reap --idle-minutes N`
+  overrides the configured limit for that one call - `0` is "off now", which is
+  what you want when the machine is yours again at the end of the day.
 - **A device is only ever powered off if `devices.json` names it**, and never
   on a reserved serial. The pool shuts down what the machine _declared_, never
   something it merely observed booted.
