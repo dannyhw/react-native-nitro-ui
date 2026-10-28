@@ -524,120 +524,132 @@ describe('Slider', () => {
       before.environmentEpoch + 1
     );
 
-    // Half one: a bounded instance measures, reports, and is the only thing that
-    // could contaminate the configuration's width.
-    const bounded = await render(
-      <View style={{ width: BOX_WIDTH }}>
-        <Slider
-          defaultValue={0.4}
-          testID="scroller-seed"
-          hybridRef={captureFor('scroller-seed')}
-        />
-      </View>
-    );
-    const seedBox = await pollUntil(
-      () => {
-        const box = harnessUi.queryByTestId('scroller-seed');
-        return box !== null && Math.abs(box.height - EXPECTED_HEIGHT) < 1
-          ? box
-          : null;
-      },
-      () =>
-        new Error(
-          `the bounded Slider's box never became ${String(
-            EXPECTED_HEIGHT
-          )} tall (last=${describeBox(
-            harnessUi.queryByTestId('scroller-seed')
-          )}, guess was ${String(GUESSED_WIDTH)}x12).`
-        )
-    );
-    await handleFor('scroller-seed');
-    // What that host measured, read while its tree is still live (Android leaves an
-    // earlier `render()`'s host unmeasurable once a second one exists, so this is
-    // the only point at which it can be read). It is the box's own 200 - the number
-    // that used to land in the configuration the scroller then measured against.
-    const seedMeasured = await pollUntil(
-      () => {
-        const size = handles.get('scroller-seed')!.measureContent();
-        return size.height > 0 ? size : null;
-      },
-      () => new Error('the bounded Slider never measured.')
-    );
-    expect(Math.abs(seedMeasured.width - BOX_WIDTH)).toBeLessThan(1);
-    console.log(
-      `unbounded: bounded box=${describeBox(seedBox)} measured=${describeBox(
-        seedMeasured
-      )}`
-    );
-    bounded.unmount();
-    // The box was 200 wide, so 200 is what the host measured and reported - the
-    // number the fix keeps out of the configuration.
-    expect(Math.abs(seedBox.width - BOX_WIDTH)).toBeLessThan(1);
+    // Everything below runs with this component's real declaration replaced by
+    // 240x12, and a failure halfway through used to leave it that way: the restore
+    // sat at the end of the body, so the red run that mattered most - the one where
+    // the width came back 200 - took the fixture down with it and every later Slider
+    // test measured against a 240-wide declaration with intrinsic flags
+    // (`seedSizingSize` passes `0u`, `HybridNitroUiCore.cpp:76`). The cascade made the
+    // first red unreadable. Hence: try/finally, so the poison is always cleaned up and
+    // exactly one test says no.
+    try {
+      // Half one: a bounded instance measures, reports, and is the only thing that
+      // could contaminate the configuration's width.
+      const bounded = await render(
+        <View style={{ width: BOX_WIDTH }}>
+          <Slider
+            defaultValue={0.4}
+            testID="scroller-seed"
+            hybridRef={captureFor('scroller-seed')}
+          />
+        </View>
+      );
+      const seedBox = await pollUntil(
+        () => {
+          const box = harnessUi.queryByTestId('scroller-seed');
+          return box !== null && Math.abs(box.height - EXPECTED_HEIGHT) < 1
+            ? box
+            : null;
+        },
+        () =>
+          new Error(
+            `the bounded Slider's box never became ${String(
+              EXPECTED_HEIGHT
+            )} tall (last=${describeBox(
+              harnessUi.queryByTestId('scroller-seed')
+            )}, guess was ${String(GUESSED_WIDTH)}x12).`
+          )
+      );
+      await handleFor('scroller-seed');
+      // What that host measured, read while its tree is still live (Android leaves an
+      // earlier `render()`'s host unmeasurable once a second one exists, so this is
+      // the only point at which it can be read). It is the box's own 200 - the number
+      // that used to land in the configuration the scroller then measured against.
+      const seedMeasured = await pollUntil(
+        () => {
+          const size = handles.get('scroller-seed')!.measureContent();
+          return size.height > 0 ? size : null;
+        },
+        () => new Error('the bounded Slider never measured.')
+      );
+      expect(Math.abs(seedMeasured.width - BOX_WIDTH)).toBeLessThan(1);
+      console.log(
+        `unbounded: bounded box=${describeBox(seedBox)} measured=${describeBox(
+          seedMeasured
+        )}`
+      );
+      bounded.unmount();
+      // The box was 200 wide, so 200 is what the host measured and reported - the
+      // number the fix keeps out of the configuration.
+      expect(Math.abs(seedBox.width - BOX_WIDTH)).toBeLessThan(1);
 
-    // Half two: the same configuration, in a parent with no width to give.
-    await render(
-      <ScrollView horizontal>
-        <Slider
-          defaultValue={0.4}
-          testID="unbounded"
-          hybridRef={captureFor('unbounded')}
-        />
-      </ScrollView>
-    );
-    const unboundedContent = await pollUntil(
-      () => {
-        const size = handles.get('unbounded')!.measureContent();
-        return size.width > 0 && size.height > 0 ? size : null;
-      },
-      () => new Error('the unbounded Slider never measured.')
-    );
-    // The claim is only ever about the width, so the width is what is waited for;
-    // the height travels with it, and the box is polled to agree rather than being
-    // pinned. (Pinning it through the scroller's own style was tried first and does
-    // not pin the child on Android: a horizontal scroller stretches its children
-    // along the cross axis, and the box came back 923 tall - a true fact about
-    // `ScrollView`, and nothing to do with the engine.)
-    const unboundedBox = await pollUntil(
-      () => {
-        const box = harnessUi.queryByTestId('unbounded');
-        return box !== null && Math.abs(box.width - GUESSED_WIDTH) < 1
-          ? box
-          : null;
-      },
-      () =>
-        new Error(
-          `the unbounded Slider's box never became ${String(
-            GUESSED_WIDTH
-          )} wide (last=${describeBox(
-            harnessUi.queryByTestId('unbounded')
-          )}, the other instance's box was ${String(BOX_WIDTH)}, the guess was ` +
-            `${String(GUESSED_WIDTH)}x12).`
-        )
-    );
-    console.log(
-      `unbounded: bounded box=${describeBox(seedBox)} ` +
-        `scroller box=${describeBox(unboundedBox)} ` +
-        `measured=${describeBox(unboundedContent)} declared=${String(GUESSED_WIDTH)}`
-    );
+      // Half two: the same configuration, in a parent with no width to give.
+      await render(
+        <ScrollView horizontal>
+          <Slider
+            defaultValue={0.4}
+            testID="unbounded"
+            hybridRef={captureFor('unbounded')}
+          />
+        </ScrollView>
+      );
+      const unboundedContent = await pollUntil(
+        () => {
+          const size = handles.get('unbounded')!.measureContent();
+          return size.width > 0 && size.height > 0 ? size : null;
+        },
+        () => new Error('the unbounded Slider never measured.')
+      );
+      // The claim is only ever about the width, so the width is what is waited for;
+      // the height travels with it, and the box is polled to agree rather than being
+      // pinned. (Pinning it through the scroller's own style was tried first and does
+      // not pin the child on Android: a horizontal scroller stretches its children
+      // along the cross axis, and the box came back 923 tall - a true fact about
+      // `ScrollView`, and nothing to do with the engine.)
+      const unboundedBox = await pollUntil(
+        () => {
+          const box = harnessUi.queryByTestId('unbounded');
+          return box !== null && Math.abs(box.width - GUESSED_WIDTH) < 1
+            ? box
+            : null;
+        },
+        () =>
+          new Error(
+            `the unbounded Slider's box never became ${String(
+              GUESSED_WIDTH
+            )} wide (last=${describeBox(
+              harnessUi.queryByTestId('unbounded')
+            )}, the other instance's box was ${String(BOX_WIDTH)}, the guess was ` +
+              `${String(GUESSED_WIDTH)}x12).`
+          )
+      );
+      console.log(
+        `unbounded: bounded box=${describeBox(seedBox)} ` +
+          `scroller box=${describeBox(unboundedBox)} ` +
+          `measured=${describeBox(unboundedContent)} declared=${String(GUESSED_WIDTH)}`
+      );
 
-    // The width is the number this component declared for exactly this case. Against
-    // the pre-F3 engine this reads 200: the *other* Slider's box, in a parent that
-    // never had a width to give it, with nothing in the policy able to notice.
-    expect(Math.abs(unboundedBox.width - GUESSED_WIDTH)).toBeLessThan(1);
-    // Stated as the failure, because that is the sentence the bug is about.
-    expect(Math.abs(unboundedBox.width - BOX_WIDTH)).toBeGreaterThanOrEqual(1);
-
-    // Seeding *is* the declaration for the rest of this process
-    // (`seedSizingSize` writes `fallbacks_`), so the real one goes back on the way
-    // out and the epoch it was cached under goes with it - the same exit
-    // `ColdSizing.harness.tsx` uses after poisoning a declaration.
-    nitroUiCore.seedSizingSize(
-      COMPONENT,
-      SIZING_KEY,
-      DECLARED_WIDTH,
-      EXPECTED_HEIGHT
-    );
-    nitroUiCore.invalidateSizingEnvironment();
+      // The width is the number this component declared for exactly this case. Against
+      // the pre-F3 engine this reads 200: the *other* Slider's box, in a parent that
+      // never had a width to give it, with nothing in the policy able to notice.
+      expect(Math.abs(unboundedBox.width - GUESSED_WIDTH)).toBeLessThan(1);
+      // Stated as the failure, because that is the sentence the bug is about.
+      expect(Math.abs(unboundedBox.width - BOX_WIDTH)).toBeGreaterThanOrEqual(
+        1
+      );
+    } finally {
+      // Seeding *is* the declaration for the rest of this process
+      // (`seedSizingSize` writes `fallbacks_`), so the real one goes back and the
+      // epoch it was cached under goes with it - the same exit
+      // `ColdSizing.harness.tsx` uses after poisoning a declaration.
+      nitroUiCore.seedSizingSize(
+        COMPONENT,
+        SIZING_KEY,
+        DECLARED_WIDTH,
+        EXPECTED_HEIGHT
+      );
+      nitroUiCore.invalidateSizingEnvironment();
+    }
   });
 
   it('lays out at the declared fallback and corrects a wrong cached size', async () => {

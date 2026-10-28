@@ -311,8 +311,15 @@ internal class DatePickerModel : NitroUiModel() {
     if (countedControl !== control) {
       countedControl = control
       controlBuilds.incrementAndGet()
-      builtMinimum = minimum
-      builtMaximum = maximum
+      // Under [reportLock], because that is the lock [readReport] takes to print the
+      // pair: the two fields are one statement about one control, and writing them
+      // unguarded would let a reader see the new minimum with the old maximum. The
+      // harness polls, so the race it prevents is not one a test would trip often -
+      // which is exactly why it costs a lock rather than a comment saying "careful".
+      synchronized(reportLock) {
+        builtMinimum = minimum
+        builtMaximum = maximum
+      }
     }
   }
 

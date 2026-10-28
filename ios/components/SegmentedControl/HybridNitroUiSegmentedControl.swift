@@ -72,6 +72,19 @@ final class SegmentedControlModel: NitroUiModel {
     return pixelReport
   }
 
+  /// Forget the last probe, for recycling.
+  ///
+  /// Android's model `reset()` does this, and the reason is worth the symmetry rather
+  /// than the asymmetry: a recycled view whose report still described another owner's
+  /// pixels would let a test read a hit that is not its control's. The `n=` counter
+  /// keeps that from being silent, but "empty until the next probe" is the state a
+  /// fresh mount should start in on both platforms.
+  func clearPixelReport() {
+    pixelReportLock.lock()
+    pixelReport = ""
+    pixelReportLock.unlock()
+  }
+
   /// A segment index that exists in `options`, as a whole number in range.
   ///
   /// The one rule of this component: `options` and the selection arrive in one
@@ -454,6 +467,7 @@ final class HybridNitroUiSegmentedControl: HybridNitroUiSegmentedControlSpec, Re
 
   func prepareForRecycle() {
     model.options = []
+    model.clearPixelReport()
     model.state = NitroUiControlledValue<Double>(displayed: 0)
     model.defaultSelectedIndex = 0
     model.didApplyDefault = false
