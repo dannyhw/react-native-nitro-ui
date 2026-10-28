@@ -84,6 +84,7 @@ import {
   readSuiteTiming,
   suiteTimingPath,
 } from './harness-suite-timing.mjs';
+import { claimDevicesFromEnv } from './device-pool.mjs';
 import { writeJsonAtomic } from './lease-core.mjs';
 import { currentCodeTree, repoRootOf } from './app-stamp.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
@@ -105,6 +106,7 @@ const USAGE =
   '       (a device gate reads its device from `node scripts/lease.mjs acquire`;\n' +
   '        a harness/real-input gate needs app.stamp from scripts/build-app.mjs)\n' +
   '\n' +
+  '       (NITRO_UI_GATE_DEVICE_FORCE=1 claims a device another live run holds)\n' +
   '       (--background starts a gate detached and returns at once, so waiting\n' +
   '        costs no polling; `wait` then blocks until it ends, prints a progress\n' +
   "        line a minute, and exits with the gate's own code. Exit 13 means\n" +
@@ -135,6 +137,9 @@ const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'];
  * style spelling is how the rest of this CLI's flags are written.
  */
 const BACKGROUND_FLAGS = ['--background', '--background=true'];
+
+/** Set to run a device gate on a device another live run has claimed (see `runGate`). */
+const DEVICE_FORCE_RE = /^(1|true|yes)$/i;
 
 const repoRoot = repoRootOf();
 
@@ -527,7 +532,62 @@ function changedCodePaths({ base }) {
  * on one tree and finished on another be read as evidence about either. Both are
  * recorded, and a line where they differ is never green (N1).
  */
+/**
+ * Runs one gate, holding a claim on the device it is about to use (X11).
+ *
+ * Two rules make this worth a wrapper around the runner:
+ *
+ *   - a device gate marks its lease's devices *in use* for the duration of the run, so a reap
+ *     started by another task cannot power off an emulator mid-suite, and a second gate on the
+ *     same device is refused before it spends four minutes building rather than after it fought
+ *     over Metro and the screenshots;
+ *   - the claim dies with the process whether the run ends well or not, because a claim is a pid
+ *     and a reaper treats a dead pid as no claim. No `finally` has to succeed for the device to
+ *     become reclaimable - which is why a killed gate cannot wedge a device.
+ *
+ * Nothing is claimed when the environment names no lease (a plain `bun run check`, CI): the
+ * claim is about a machine's pool, not about a run in general. `NITRO_UI_GATE_DEVICE_FORCE=1`
+ * claims a device another live run holds, for the one case where that is the point - it is an env
+ * var rather than a flag because a backgrounded gate is re-spawned from this command line, and a
+ * flag here would need stripping in two places to keep it out of the gate's own argv.
+ */
 async function runGate(name, resolved, options = {}) {
+  let claim = null;
+  if (resolved.platform != null) {
+    try {
+      claim = claimDevicesFromEnv({
+        gate: name,
+        platform: resolved.platform,
+        force: DEVICE_FORCE_RE.test(
+          process.env.NITRO_UI_GATE_DEVICE_FORCE ?? ''
+        ),
+      });
+    } catch (error) {
+      process.stderr.write(`gate: ${error.message}\n`);
+      return 1;
+    }
+    if (claim != null)
+      process.stderr.write(
+        `gate: claimed ${claim.keys.join(', ')} for this run\n`
+      );
+  }
+  try {
+    return await runGateUnclaimed(name, resolved, options);
+  } finally {
+    // Best-effort and never fatal: an unreachable state file must not turn a
+    // passing run into a failing one, and the pid rule above already frees the
+    // device if this does not happen.
+    if (claim != null) {
+      try {
+        claim.pool.releaseClaim(claim);
+      } catch {
+        /* the claim expires with this pid */
+      }
+    }
+  }
+}
+
+async function runGateUnclaimed(name, resolved, options = {}) {
   const branch = currentBranch();
   const before = readTrees();
   const device = deviceFromEnv(process.env, resolved.platform);
