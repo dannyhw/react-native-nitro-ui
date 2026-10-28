@@ -392,13 +392,15 @@ task means one task's `adb` never queues behind another's, and it is what makes
 
 ### The lease owns device lifecycle (X11)
 
-Booting costs 54 s on Android and about 200 s on an iOS 27 simulator - which
-additionally sends `load1` to 56-78, still above the bench's settle ceiling of 5
-after 150 seconds (X11 measured four cold boots of the same device: peaks of
-58.5, 64.6, 72.2 and 74.3) - and every task used to pay it twice, once for the
-harness and once for real-input, then shut its devices down so the next task paid
-it too. So the lease now keeps the pair it hands out **warm**, and a task stops
-powering devices off.
+What a boot costs is a property of the machine, so it is measured rather than
+quoted: `acquire --boot` prints the wait it just did (device attached plus the
+load settling). The one timed series on this box is iOS — four cold boots of the
+pool's simulator, `load1` peaking at 58.5, 64.6, 72.2 and 74.3, still 16-21 after
+150 seconds, above the bench's settle ceiling of 5 (X11 report item 6). No
+Android boot has been timed here, so no Android figure is quoted. Every task used
+to pay for a boot twice, once for the harness and once for real-input, then shut
+its devices down so the next task paid it too. So the lease now keeps the pair it
+hands out **warm**, and a task stops powering devices off.
 
 ```sh
 node scripts/lease.mjs acquire --task X11 --boot        # boots the pair, waits until settled
@@ -424,15 +426,35 @@ What that means in practice:
   offline for a machine that manages its own devices. `reap --idle-minutes N`
   overrides the configured limit for that one call - `0` is "off now", which is
   what you want when the machine is yours again at the end of the day.
+- **A device under a live lease is never powered off on a timer**, and
+  `--idle-minutes` does not override that. The idle clock is for the boot
+  somebody _left behind_: a task that released, or one whose lease ran out its
+  TTL. It is not a licence to evict a running task, because most of what a task
+  does makes no claim - building, running Metro, a direct `real-input` run, or
+  twenty minutes reading a stack trace - and 31 idle minutes is ordinary work.
+  The way to get a leased device powered off is to release its lease, not to
+  pass a flag in your own shell; `list` names whose it is.
 - **A device is only ever powered off if `devices.json` names it**, and never
   on a reserved serial. The pool shuts down what the machine _declared_, never
-  something it merely observed booted.
+  something it merely observed booted. And it never acts on the serial a state
+  file happens to hold: the address is derived from the pair, the record is not
+  allowed to disagree with it silently, and the emulator itself is asked (`adb
+-s <serial> emu avd name`) to confirm which AVD is behind that serial before
+  anything is powered off. A device that cannot identify itself stays up.
 - **A run in flight is never interrupted.** A gate claims the devices of the
   lease it runs under for the duration of the run (`scripts/gate.mjs`), so a
   reap cannot power off an emulator mid-suite, and a second gate aimed at the
   same device is refused before it starts. `NITRO_UI_GATE_DEVICE_FORCE=1` runs
   anyway; a bench that wants the machine to itself uses `--exclusive`, which
-  powers off every non-leased pool device before it returns.
+  powers off every pool device no _other_ lease holds - with or without
+  `--boot`, because the bench host's documented invocation is the one without
+  it.
+- **Anything started outside `gate.mjs` runs unclaimed.** `bun run harness:*`,
+  a direct `node scripts/real-input/*.mjs --control …` and `build-app.mjs` take
+  no claim, so what protects them is the rule above: their pair is leased, and a
+  leased pair is off-limits to the reaper. If you need to run a device command
+  with no lease in the environment, take a lease - do not expect a claim, and do
+  not reach for `--idle-minutes`.
 - **A claim is a pid.** A gate that is killed leaves a claim that a reaper
   treats as no claim at all, so nothing has to trust a clean exit - and a
   device cannot be wedged "in use" by a process that no longer exists.
