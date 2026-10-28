@@ -77,6 +77,7 @@ import {
   gateLogStoreDir,
   isFailedRunWithLog,
   lastLogLine,
+  ledgerFileName,
   ledgerLineFromRun,
   ledgerLogCandidates,
   ledgerRelativePath,
@@ -284,19 +285,69 @@ function storeLogsDir() {
  * @param {{branch: string, gate: string, startedAt: number, fromEnv?: string | null}} run
  * @returns {{logPath: string, absolute: string, recordPath: string, backgrounded: boolean}}
  */
+/**
+ * The real path of `file`, resolving through symlinks as far as the filesystem can.
+ *
+ * Two reasons this is not just `fs.realpathSync`: a log that has not been created yet
+ * has no realpath, and "cannot resolve" is not a reason to return nothing - so the
+ * nearest existing ancestor is resolved and the remainder re-joined. Otherwise a first
+ * run in a new directory would compare differently from every later one. The second
+ * reason is why any of this exists: on macOS `/var` is a symlink to `/private/var`, so
+ * a checkout created under one spelling does not prefix-match the other, and
+ * `logPathsFor` decides permission with a prefix test.
+ *
+ * @param {string} file
+ */
+function realpathOrResolved(file) {
+  const absolute = path.resolve(file);
+  try {
+    return fs.realpathSync(absolute);
+  } catch {
+    /* the file, or a parent of it, does not exist yet */
+  }
+  let tail = [];
+  let cursor = absolute;
+  for (;;) {
+    const parent = path.dirname(cursor);
+    if (parent === cursor) return absolute;
+    tail = [path.basename(cursor), ...tail];
+    cursor = parent;
+    try {
+      return path.join(fs.realpathSync(cursor), ...tail);
+    } catch {
+      /* keep walking */
+    }
+  }
+}
+
 function logPathsFor({ branch, gate, startedAt, fromEnv = null }) {
-  const storeDir = path.resolve(storeLogsDir());
-  const legacy = path.resolve(path.join(repoRoot, LEDGER_DIR, 'logs'));
+  // Resolved, not merely absolutised, and everywhere in this function: on macOS `/var`
+  // is a symlink to `/private/var`, so a checkout created under one spelling does not
+  // prefix-match the other, and the checks below are prefix tests. Comparing mixed
+  // spellings can turn a *legitimate* launcher path into an apparent intrusion.
+  const storeDir = realpathOrResolved(storeLogsDir());
+  const legacy = realpathOrResolved(path.join(repoRoot, LEDGER_DIR, 'logs'));
   let absolute = null;
   if (fromEnv != null && fromEnv !== '') {
-    const candidate = path.resolve(fromEnv);
+    const candidate = realpathOrResolved(path.resolve(fromEnv));
+    const ownBranchDir = path.join(
+      storeDir,
+      // This branch's own directory in the store: the only place the launcher that
+      // sets this variable ever writes (`logPathsFor` with no `fromEnv`).
+      ledgerFileName(branch).replace(/\.jsonl$/, '')
+    );
     const inside = (dir) => candidate.startsWith(`${dir}${path.sep}`);
-    if (!candidate.endsWith('.log') || (!inside(storeDir) && !inside(legacy))) {
-      // Validated rather than trusted: an inherited `NITRO_UI_GATE_LOG` from
-      // somebody's shell profile would otherwise send a gate's log - which `wait`
-      // reads and the ledger names - to a path of their choosing.
+    // Narrower than round 1's "anywhere in the store" (review N8): the store is one
+    // directory shared by the whole clone, so that rule admitted another worktree's
+    // run and another branch's. An inherited or leaked `NITRO_UI_GATE_LOG` would then
+    // have this run append its output into *that* log, name it in this branch's ledger
+    // line, and mark that run's `.gate.json` done - which is how one task's `wait`
+    // ends up returning while its own gate is still running.
+    const allowed =
+      candidate.endsWith('.log') && (inside(ownBranchDir) || inside(legacy));
+    if (!allowed) {
       process.stderr.write(
-        `gate: ignoring NITRO_UI_GATE_LOG=${fromEnv} - a background gate's log has to be a .log inside ${storeDir}\n`
+        `gate: ignoring NITRO_UI_GATE_LOG=${fromEnv} - a background gate's log has to be a .log inside ${ownBranchDir}\n`
       );
     } else {
       absolute = candidate;
