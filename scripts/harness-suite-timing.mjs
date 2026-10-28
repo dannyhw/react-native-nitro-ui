@@ -27,32 +27,40 @@ import { dirname, join } from 'node:path';
 /** What `example/rn-harness.config.mjs` reads to decide whether to register the plugin. */
 export const SUITE_TIMING_ENV = 'HARNESS_SUITE_TIMING';
 
+/**
+ * The gate the hand-off belongs to, spelled by whoever asked for it. Optional: the name can be
+ * recovered from the file (see `gateFromTimingFile`), but that is a *reconstruction* — the log name
+ * has every character outside `[\w.-]` folded to `+`, so an argument containing one of those comes
+ * back with a `+` in it. A header that says which gate it belongs to should not be approximate, so
+ * `gate.mjs` passes the real string and the file-name parser is the fallback rather than the rule.
+ */
+export const SUITE_TIMING_GATE_ENV = 'HARNESS_SUITE_TIMING_GATE';
+
 /** The shape of the hand-off file, so a stale one is detectable rather than misreadable. */
 export const SUITE_TIMING_VERSION = 1;
 
-/** `scripts/gate-core.mjs`'s `LEDGER_DIR`, spelled here so this module stays dependency-free. */
-const LEDGER_SUBDIR = '.gates';
-
 /**
- * Where a run's timings land, beside the ledger that will cite them. The pid is in the name
- * because two harness runs can be alive on one machine and this file records one of them; the
- * wrapper owns the name and hands it over through `HARNESS_SUITE_TIMING`, so the config never has
- * to guess a project root.
+ * The hand-off file for a run, named from that run's **log**.
+ *
+ * It used to be `<repo>/.gates/suite-timing/<gate>-<ms>-<pid>.json`, built from the project root.
+ * That was wrong in three ways X12 has since made explicit for every other per-run file: it was
+ * inside the worktree, so `git worktree remove` took a run's timings with it while its ledger line
+ * went on citing them; it was in a directory retention does not walk, so the files accumulated
+ * forever; and its name was derived independently of the log's, which is the shape of the bug
+ * X10's review N7 found for step timings — two functions naming one run's file, and a reader sent
+ * to the file that was never written. So this returns `<log>.suites.json`, beside the log in the
+ * clone's gate log store, which retention already sweeps along with `.log` and `.steps.json`.
+ *
+ * Naming it from the log costs a `pid`: the log name is unique per run, so the file is too, and the
+ * pid bought nothing but a second way to be wrong.
  */
-export function suiteTimingPath({
-  repoRoot,
-  gate,
-  pid = process.pid,
-  startedAt = Date.now(),
-}) {
-  const safe = String(gate ?? 'harness').replaceAll(/[^\w.-]+/g, '+');
-  return join(
-    repoRoot,
-    LEDGER_SUBDIR,
-    'suite-timing',
-    `${safe}-${startedAt}-${pid}.json`
-  );
+export function suiteTimingPath(absoluteLogFile) {
+  const file = String(absoluteLogFile ?? '').trim();
+  return file === '' ? null : `${file}.suites.json`;
 }
+
+/** The suffix `gate.mjs` appends to a run's log to name its timings, in both directions. */
+export const SUITE_TIMING_SUFFIX = '.suites.json';
 
 /** Turns an env value into the plugin's options, or null when timing was not asked for. */
 export function suiteTimingFromEnv(env = process.env) {
@@ -319,10 +327,10 @@ export function createSuiteTimingPlugin({
  * The env-facing helper the harness config calls: build the plugin when the environment asked for
  * it, otherwise return null so the config's `plugins` array stays empty.
  *
- * The gate name is taken from the hand-off file's name (`harness+android-<ts>-<pid>.json`, see
- * `suiteTimingPath`), because the plugin would otherwise report the *runner* name and the two are
- * the same string only by luck - and a ledger row that cannot say which gate produced a timing is
- * the kind of evidence a report then has to explain.
+ * The gate name comes from `SUITE_TIMING_GATE_ENV` when the caller supplied it, and is otherwise
+ * reconstructed from the hand-off file's name — because the plugin would otherwise report the
+ * *runner* name, and the two are the same string only by luck. A ledger row that cannot say which
+ * gate produced a timing is the kind of evidence a report then has to explain.
  */
 export function suiteTimingPluginFromEnv(
   env = process.env,
@@ -330,19 +338,39 @@ export function suiteTimingPluginFromEnv(
 ) {
   const options = suiteTimingFromEnv(env);
   if (options == null) return null;
+  const fromEnv = String(env[SUITE_TIMING_GATE_ENV] ?? '').trim();
   return createSuiteTimingPlugin({
     ...options,
-    gate: gateFromTimingFile(options.file),
+    gate: fromEnv !== '' ? fromEnv : gateFromTimingFile(options.file),
     startedAt,
     log: (message) => console.log(message),
   });
 }
 
-/** `…/harness+android-1730000000000-4242.json` -> `harness:android`. */
+/**
+ * The gate a hand-off file belongs to, read back from its name.
+ *
+ * Current shape (`<safeGate>-<iso>.log.suites.json`, see `suiteTimingPath`) and the pre-X12 shape
+ * (`<safeGate>-<ms>-<pid>.json`) are both recognised, because an old file can still be sitting in a
+ * worktree's `.gates/suite-timing/` while its gate is re-run.
+ *
+ * This is a reconstruction, not the truth: the safe spelling folds every character outside
+ * `[\w.-]` into `+`, so the gate that comes back is right for every name `canonicalGateName` can
+ * produce (those `:` become `+` and reverse cleanly) and approximate for a raw argument that
+ * already contained one of the folded characters. That is why `gate.mjs` also passes the real name
+ * through `SUITE_TIMING_GATE_ENV` and this is the fallback.
+ */
 export function gateFromTimingFile(file) {
   const base = String(file ?? '')
     .split('/')
     .pop();
-  const match = /^(.*)-\d+-\d+\.json$/.exec(base ?? '');
-  return match?.[1] != null ? match[1].replaceAll('+', ':') : null;
+  if (base == null) return null;
+  const current = /^(.*)-\d{4}-\d{2}-\d{2}T[\d.-]+Z\.log$/.exec(
+    base.endsWith(SUITE_TIMING_SUFFIX)
+      ? base.slice(0, -SUITE_TIMING_SUFFIX.length)
+      : ''
+  );
+  if (current?.[1] != null) return current[1].replaceAll('+', ':');
+  const legacy = /^(.*)-\d+-\d+\.json$/.exec(base);
+  return legacy?.[1] != null ? legacy[1].replaceAll('+', ':') : null;
 }

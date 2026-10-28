@@ -42,6 +42,7 @@ import {
   readTreeState,
   sideEffectsToUndo,
 } from '../example-lock-core.mjs';
+import { CHECK_STEPS } from '../check-steps.mjs';
 
 const root = resolve(process.cwd());
 
@@ -652,12 +653,18 @@ describe('node scripts/sync-example-lock.mjs', () => {
     expect(pkg.scripts['lock:check']).toBe(
       'node scripts/sync-example-lock.mjs'
     );
-    const check = pkg.scripts.check;
+    // X10: `check` is a runner now, so the ordering is asserted twice - against
+    // the serial chain the runner must equal, and against the graph it runs.
+    const check = pkg.scripts['check:serial'];
     expect(check).toContain('bun run lock:check');
     // A version mismatch costs a string compare, not a ten-minute `prepare`.
     expect(check.indexOf('bun run lock:check')).toBeLessThan(
       check.indexOf('bun run prepare')
     );
+    // ...and the same intent in the graph: `prepare` waits for the cheap guard, so
+    // a stale lock never starts a build.
+    const prepare = CHECK_STEPS.find((step) => step.name === 'prepare');
+    expect(prepare.needs).toContain('lock:check');
   });
 
   it('is what `changeset version` refreshes the lock with, on the release path', () => {
