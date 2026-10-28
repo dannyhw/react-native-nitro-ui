@@ -92,6 +92,10 @@ function loadInstalledModule() {
     .join('\n')
     .replaceAll('export const', 'const')
     .replaceAll('export {', '// export {');
+  // The one place in this repo that evaluates a string, and it is a test reading the *installed*
+  // file: `import()` is unavailable under jest's CJS transform (node_modules is deliberately
+  // untransformed), and a copy of the module would test the copy rather than the patch.
+  // eslint-disable-next-line no-new-func
   const factory = new Function(
     'process',
     'getDeviceCoreBudget',
