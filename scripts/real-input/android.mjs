@@ -159,7 +159,8 @@ const CHECKS = {
         () => t.requireControl('Controlled switch'),
         ECHO.switchValue,
         'on',
-        'the first real tap'
+        'the first real tap',
+        { nativeLabel: 'Controlled switch' }
       ),
       'on'
     );
@@ -170,7 +171,8 @@ const CHECKS = {
         () => t.requireControl('Controlled switch'),
         ECHO.switchValue,
         'off',
-        'the second real tap'
+        'the second real tap',
+        { nativeLabel: 'Controlled switch' }
       ),
       'off'
     );
@@ -210,7 +212,8 @@ const CHECKS = {
         () => t.requireControl('Hosted switch 0'),
         ECHO.hostValue,
         'on',
-        'the first real tap on a hosted Switch'
+        'the first real tap on a hosted Switch',
+        { nativeLabel: 'Hosted switch 0' }
       ),
       'on'
     );
@@ -221,7 +224,8 @@ const CHECKS = {
         () => t.requireControl('Hosted switch 0'),
         ECHO.hostValue,
         'off',
-        'the second real tap'
+        'the second real tap',
+        { nativeLabel: 'Hosted switch 0' }
       ),
       'off'
     );
@@ -2944,6 +2948,14 @@ function makeContext(harness, log) {
      * @param {() => string | null} options.reading the witness right now; cheap and
      *   non-fatal, since a missing node mid-retry is still a reading.
      * @param {(shown: string | null) => boolean} options.raised whether it arrived
+     * @param {() => string | null} [options.nativeState] what the *control itself*
+     *   holds (`nativeChecked`), for the controls that publish their state. The
+     *   witness is React's render, so its absence means either that the touch never
+     *   arrived or that the control changed and lost the event on the way to JS, and
+     *   an attempt's window expiring cannot tell those apart. Retrying is right for
+     *   the first and wrong for the second: a third press would land the event, the
+     *   echo would arrive, and a lost change would read as a dropped tap (F1 M3).
+     *   When this moves while the witness has not, the helper stops and says so.
      * @param {number} [options.attempts]
      * @param {number} [options.windowMs] how long one press gets to show its
      *   witness. The default is `REACT_TIMEOUT`, the budget `waitForEcho` already
@@ -2962,12 +2974,28 @@ function makeContext(harness, log) {
       press,
       reading,
       raised,
+      nativeState,
       attempts = 3,
       windowMs = REACT_TIMEOUT,
       pollMs = 100,
     }) {
       /** @type {string | null} */
       let shown = null;
+      const echoStart = reading();
+      // Read once, before any press: "did it move" is what the comparison needs,
+      // and a witness that costs two seconds must not be polled.
+      const stateStart = nativeState == null ? null : nativeState();
+      if (nativeState != null && stateStart == null) {
+        // A witness that reads nothing can never report a change, so passing it
+        // would be worse than passing nothing: every retry would be attributed to
+        // a dropped touch, and a lost event would still go green. Say that the
+        // guard is not armed rather than pretending it is.
+        log.abort(
+          `${waitingFor}: ${what} was given a native-state witness and it read ` +
+            'nothing, so a delivered touch could not be told from a lost event. The ' +
+            'control publishes no state to read, or the label names the wrong node.'
+        );
+      }
       for (let attempt = 1; attempt <= attempts; attempt += 1) {
         await press(attempt);
         const deadline = Date.now() + windowMs;
@@ -2975,7 +3003,7 @@ function makeContext(harness, log) {
           shown = reading();
           if (raised(shown)) {
             if (attempt > 1) {
-              log.note(
+              log.retried(
                 `${waitingFor}: ${what} answered on tap ${String(attempt)}/${String(
                   attempts
                 )} - the earlier tap(s) were never delivered`
@@ -2988,12 +3016,108 @@ function makeContext(harness, log) {
           }
           blockMs(pollMs);
         }
+        // Not answered. Before pressing again, ask the control whether it moved.
+        // Only when the echo has not moved at all: an echo that moved to the
+        // wrong value proves JS heard something, and "the event never reached
+        // JS" would be a false accusation about it.
+        if (nativeState != null) {
+          const moved = nativeState();
+          if (
+            moved != null &&
+            stateStart != null &&
+            moved !== stateStart &&
+            shown === echoStart
+          ) {
+            // Not a retry: no press. "The event never reached JS" is only safe once
+            // the echo has had a second window to arrive, because a JS thread that is
+            // merely very slow - a cold bundle on a busy machine - looks exactly like
+            // a lost event from here. A dropped event still fails, one window later.
+            const graceDeadline = Date.now() + windowMs;
+            for (;;) {
+              shown = reading();
+              if (raised(shown)) {
+                log.note(
+                  `${waitingFor}: ${what} answered ${String(windowMs)}ms after its ` +
+                    'press, late enough that the control had already changed - a slow ' +
+                    'JS thread, not a lost event'
+                );
+                return { delivered: true, shown };
+              }
+              if (Date.now() > graceDeadline) {
+                break;
+              }
+              blockMs(pollMs);
+            }
+            log.abort(
+              `${waitingFor}: ${what} took the touch and lost the event - the control's ` +
+                `own state moved from "${stateStart}" to "${moved}" and its echo is ` +
+                `still "${String(shown)}", the value it had before any press, ${String(
+                  windowMs * 2
+                )}ms later. Not retried: a further press would land the event and make a ` +
+                'lost change look like a dropped tap.'
+            );
+          }
+        }
         log.note(
           `${waitingFor}: tap ${String(attempt)}/${String(attempts)} on ${what} left ` +
             `"${String(shown)}" - tapping again`
         );
       }
       return { delivered: false, shown };
+    },
+
+    /**
+     * The control's own answer to "what value do I hold", read from the same dump as
+     * the echo: `checked` on the checkable node that carries this labelled control.
+     *
+     * A hosted Compose Switch publishes its state on its own accessibility node, and
+     * the label the library sets lands on a *child* of it (measured in a dump of the
+     * running app: the parent is `checkable="true" checked="false"` at
+     * `[901,738][1038,864]`; the labelled node is `checkable="false"` at
+     * `[901,759][1038,843]`), so this takes the tightest checkable box that contains
+     * the labelled one. Tightest rather than nearest-in-document-order, because the
+     * dump is flat and "nearest" is an accident of how the tree happens to be written.
+     *
+     * The value is the control's, not React's, which is the whole point: `pressUntil`
+     * compares it against what it was before the first press to tell a dropped touch
+     * from a delivered one whose change event never reached JS (F1 M3).
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     * @returns {string | null} `"on"` / `"off"`, or null when no node answers
+     */
+    nativeChecked(description) {
+      const tree = harness.hierarchy();
+      const labelled = tree.find(
+        (node) => node.contentDesc === description && node.bounds.height > 0
+      );
+      if (labelled == null) {
+        return null;
+      }
+      /** @type {{area: number, checked: string} | null} */
+      let tightest = null;
+      for (const node of tree) {
+        if (node.checkable !== 'true') {
+          continue;
+        }
+        const { bounds } = node;
+        const contains =
+          bounds.x1 <= labelled.bounds.x1 &&
+          bounds.y1 <= labelled.bounds.y1 &&
+          bounds.x2 >= labelled.bounds.x2 &&
+          bounds.y2 >= labelled.bounds.y2;
+        if (!contains) {
+          continue;
+        }
+        const area = bounds.width * bounds.height;
+        if (tightest == null || area < tightest.area) {
+          tightest = { area, checked: node.checked };
+        }
+      }
+      return tightest == null
+        ? null
+        : tightest.checked === 'true'
+          ? 'on'
+          : 'off';
     },
 
     /**
@@ -3013,22 +3137,34 @@ function makeContext(harness, log) {
      * @param {string} testID the echo whose value proves the press arrived
      * @param {string} expected what the echo has to say
      * @param {string} waitingFor what this tap was meant to do
-     * @param {(node: import('./uiautomator.mjs').UiautomatorNode) => Promise<void>} [aim] how to press it, for the taps that aim at a fraction of the control
+     * @param {{aim?: (node: import('./uiautomator.mjs').UiautomatorNode) => Promise<void>, attempts?: number, nativeLabel?: string}} [options]
+     *   `aim` - how to press it, for the taps that aim at a fraction of the control.
+     *   `nativeLabel` - the control's `accessibilityLabel` when it publishes its own
+     *   state, which for a Switch it does: `pressUntil` then refuses to retry a press
+     *   whose touch clearly landed (F1 M3). Pass it for every single-value control
+     *   whose native state can be read, because without it a lost change event is
+     *   exactly what a retry turns green.
      */
-    async tapUntilValue(
-      lookUp,
-      testID,
-      expected,
-      waitingFor,
-      aim,
-      attempts = 3
-    ) {
+    async tapUntilValue(lookUp, testID, expected, waitingFor, options = {}) {
+      const { aim, attempts = 3, nativeLabel } = options;
       const { delivered, shown } = await this.pressUntil({
         what: `"${testID}"`,
         waitingFor,
         attempts,
-        press: async () => {
+        press: async (attempt) => {
           const node = await lookUp();
+          if (nativeLabel != null && attempt === 1) {
+            // A label that does not name the pressed control would consult somebody
+            // else's state, so the option is checked rather than trusted. Done on the
+            // way in, because a witness must not cost an extra dump of its own.
+            if (node.contentDesc !== nativeLabel) {
+              log.abort(
+                `${waitingFor}: nativeLabel "${nativeLabel}" does not name the control ` +
+                  `being pressed ("${node.contentDesc}") - the native-state witness ` +
+                  'would read the wrong control'
+              );
+            }
+          }
           if (aim == null) {
             await this.tapNode(node);
           } else {
@@ -3036,6 +3172,10 @@ function makeContext(harness, log) {
           }
         },
         reading: () => echo(testID),
+        nativeState:
+          nativeLabel == null
+            ? undefined
+            : () => this.nativeChecked(nativeLabel),
         raised: (current) => current === expected,
       });
       if (!delivered) {

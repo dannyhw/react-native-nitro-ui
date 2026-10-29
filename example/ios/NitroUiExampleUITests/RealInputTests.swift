@@ -160,7 +160,8 @@ final class RealInputTests: XCTestCase {
         echo: Echo.switchValue,
         expected: "on",
         as: "the controlled Switch",
-        waitingFor: "the first real tap"
+        waitingFor: "the first real tap",
+        nativeState: { self.nativeSwitchState(of: "switch-controlled") }
       ),
       "on",
       "one real tap should flip the Switch, and React should render \"on\""
@@ -178,7 +179,8 @@ final class RealInputTests: XCTestCase {
         echo: Echo.switchValue,
         expected: "off",
         as: "the controlled Switch",
-        waitingFor: "the second real tap"
+        waitingFor: "the second real tap",
+        nativeState: { self.nativeSwitchState(of: "switch-controlled") }
       ),
       "off",
       "a second real tap should flip it back, so the check is not one fluke"
@@ -334,7 +336,8 @@ final class RealInputTests: XCTestCase {
         echo: Echo.hostValue,
         expected: "on",
         as: "the Switch inside the Host",
-        waitingFor: "the first real tap"
+        waitingFor: "the first real tap",
+        nativeState: { self.nativeSwitchState(of: "host-switch-0") }
       ),
       "on",
       "one real tap should flip a Switch inside a Host, and React should render \"on\""
@@ -348,7 +351,8 @@ final class RealInputTests: XCTestCase {
         echo: Echo.hostValue,
         expected: "off",
         as: "the Switch inside the Host",
-        waitingFor: "the second real tap"
+        waitingFor: "the second real tap",
+        nativeState: { self.nativeSwitchState(of: "host-switch-0") }
       ),
       "off",
       "a second real tap should flip it back, so the check is not one fluke"
@@ -1942,6 +1946,16 @@ final class RealInputTests: XCTestCase {
   ///   treat it as gone - nothing to press, just keep waiting - after that.
   /// - Parameter reading: what the witness currently says, for the log line and the
   ///   failure. Keep it cheap and non-fatal - `read(_:)` XCTFails on a missing id.
+  /// - Parameter nativeState: what the *control itself* says it holds, read the same
+  ///   way `switch-uncontrolled`'s native `value:` was read to diagnose the drop. The
+  ///   witness is React's render, so it can be absent for two different reasons, and
+  ///   an attempt's window expiring cannot tell them apart on its own: the touch never
+  ///   arrived, or the control changed and lost the event on its way to JS. Retrying
+  ///   is right for the first and wrong for the second - a third press would land the
+  ///   event, the echo would arrive, and the check would go green reporting a drop
+  ///   that never happened (F1 M3). When this is given and it has moved while the
+  ///   witness has not, the helper stops and says "delivered, but the change never
+  ///   reached JS". Pass it wherever the control publishes its own state.
   /// - Parameter raised: whether the witness has arrived.
   /// - Parameter attemptWindow: how long one press gets to show its witness. The
   ///   default is `reactTimeout` - the same budget the blind `readUntil` it replaces
@@ -1957,10 +1971,25 @@ final class RealInputTests: XCTestCase {
     attemptWindow: TimeInterval? = nil,
     press: (_ attempt: Int) throws -> Void,
     reading: () -> String,
+    nativeState: (() -> String?)? = nil,
     _ raised: (String) -> Bool
   ) throws -> String {
     let window = attemptWindow ?? reactTimeout
     var shown = ""
+    let startedAt = nativeState?()
+    let echoStart = reading()
+    if nativeState != nil && startedAt == nil {
+      // A witness that reads nothing can never report a change, so passing it would
+      // be worse than passing nothing: every retry would be blamed on a dropped
+      // touch, and a lost event would still go green. Say the guard is not armed
+      // rather than pretending it is.
+      XCTFail(
+        "\(waitingFor): \(what) was given a native-state witness and it read nothing, "
+          + "so a delivered touch could not be told from a lost event. The control "
+          + "publishes no value to read, or its testID does not wrap one."
+      )
+      throw RealInputCheckAborted(identifier: what)
+    }
     for attempt in 1...attempts {
       try press(attempt)
       let until = Date().addingTimeInterval(window)
@@ -1976,16 +2005,56 @@ final class RealInputTests: XCTestCase {
         }
         Thread.sleep(forTimeInterval: 0.2)
       }
+      // Not answered. Before pressing again, ask the control whether it moved:
+      // a control that changed state while its echo sat still has the touch, and
+      // has lost the event. Pressing a third time would hide that.
+      //
+      // Only when the echo has not moved *at all*: an echo that moved to the
+      // wrong value proves JS heard something, and saying "the event never
+      // reached JS" about it would be a false accusation.
+      if let nativeState,
+        let moved = nativeState(),
+        let startedAt,
+        moved != startedAt,
+        shown == echoStart
+      {
+        // Not a retry: no press. "The event never reached JS" is only safe once the
+        // echo has had a second window to arrive, because a JS thread that is merely
+        // very slow - a cold bundle on a busy machine - looks exactly like a lost
+        // event from here. A dropped event still fails, one window later.
+        let graceUntil = Date().addingTimeInterval(window)
+        while Date() < graceUntil {
+          shown = reading()
+          if raised(shown) {
+            print(
+              "real-input (ios): \(waitingFor): \(what) answered \(Int(window))s after its press, late enough that the control had already changed - a slow JS thread, not a lost event"
+            )
+            return shown
+          }
+          Thread.sleep(forTimeInterval: 0.2)
+        }
+        dumpHierarchy("\(waitingFor): \(what) changed natively but its echo did not")
+        XCTFail(
+          "\(waitingFor): \(what) took the touch and lost the event - the control's own "
+            + "state moved from \"\(startedAt)\" to \"\(moved)\" and its echo is still "
+            + "\"\(shown)\", the value it had before any press, \(Int(window * 2))s "
+            + "later. Not retried: a further press would land the event and make a lost "
+            + "change look like a dropped tap."
+        )
+        throw RealInputCheckAborted(identifier: what)
+      }
       print(
         "real-input (ios): \(waitingFor): tap \(attempt)/\(attempts) left \(what) at \"\(shown)\""
       )
     }
     dumpHierarchy("\(attempts) presses on \(what) raised no witness")
     XCTFail(
-      "\(waitingFor): \(attempts) real presses on \(what) left it at \"\(shown)\" - "
-        + "either the touches were never delivered (FOLLOWUPS.md:58) or \(what) ignores "
-        + "a real touch; the dump above says which. One delivered touch was enough to "
-        + "pass, so this is not a control that answers sometimes."
+      "\(waitingFor): \(attempts) real presses on \(what) left it at \"\(shown)\". Its "
+        + "own state never moved either, so on the evidence here the touch was never "
+        + "delivered (FOLLOWUPS.md:58) - though a control that flips back before this "
+        + "helper next looks would read the same way, and the dump is what tells them "
+        + "apart. One delivered touch was enough to pass, so this is not a control that "
+        + "answers sometimes."
     )
     throw RealInputCheckAborted(identifier: what)
   }
@@ -2008,6 +2077,9 @@ final class RealInputTests: XCTestCase {
   ///
   /// - Parameter atFractionX: how far across the control to press, for the controls
   ///   where the middle is not the segment under test (see `atFraction(_:)`).
+  /// - Parameter nativeState: the control's own answer, for the controls that publish
+  ///   one - `nativeSwitchState(of:)` for a Switch. See `pressUntil`: this is what
+  ///   tells a dropped touch apart from a lost event, before a retry can confuse them.
   private func tapUntilValue(
     _ identifier: String,
     echo: String,
@@ -2015,6 +2087,7 @@ final class RealInputTests: XCTestCase {
     as what: String,
     waitingFor: String,
     atFractionX: CGFloat? = nil,
+    nativeState: (() -> String?)? = nil,
     attempts: Int = 3
   ) throws -> String {
     return try pressUntil(
@@ -2029,7 +2102,8 @@ final class RealInputTests: XCTestCase {
           control.fingerTap()
         }
       },
-      reading: { self.echoText(echo) }
+      reading: { self.echoText(echo) },
+      nativeState: nativeState
     ) { shown in
       shown == expected
     }
@@ -2037,10 +2111,10 @@ final class RealInputTests: XCTestCase {
 
   /// A Switch's own state, as iOS answers it: the toggle's `value`, not the echo.
   ///
-  /// The dwell probe's witness (`testMeasureSwitchDwellDelivery`), and the read that
-  /// settled the drop question: an echo can only move if the touch reached SwiftUI
-  /// *and* the event reached JS, so it cannot tell a dropped touch from a lost event.
-  /// The control's own state can.
+  /// This is the read that settled the drop question - the one that said
+  /// `switch-uncontrolled` was still `0` while nothing on screen had moved - and it is
+  /// what makes M3 checkable: a control whose `value` has flipped while its echo sits
+  /// still has the touch and has lost the change event.
   ///
   /// The `testID` is on the React Native component view, which answers with no value
   /// of its own; the SwiftUI `Toggle` that holds the state sits *inside* it, so this
