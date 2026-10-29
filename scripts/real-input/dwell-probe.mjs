@@ -116,11 +116,41 @@ const PROBE_STALL = flag('--stall', '');
  */
 const PROBE_RESCUE = args.includes('--rescue');
 /**
- * Log how long the app's main thread goes without running any work (a gap over 40 ms
- * is one log line), for the arm that has to show the React Native screen really does
- * stall for the length the stall arm had to set by hand to lose a press.
+ * Have the app log every main-queue delay of 8 ms or more, one line each, for the arm
+ * that wants to know whether the React Native screen really does block for the length
+ * the stall arm had to set by hand to lose a press.
+ *
+ * What the lines are is worth being exact about, because a summary of them is not the
+ * quantity its name suggests: a block that lasts 400 ms has a 20 ms timer waiting
+ * behind it, so it produces roughly twenty logged gaps of decreasing size, and the
+ * median of the logged lines is the median *of those samples*, not the app's typical
+ * main-queue latency. Two screens with the same typical block but different block
+ * frequency therefore print different medians for reasons that have nothing to do with
+ * either one. `--watchdog` is good at answering "does this process ever block at all,
+ * and how badly at its worst"; it is not a latency histogram, and the F7 report's
+ * comparison of two medians is the mistake this comment exists to prevent repeating.
  */
 const WATCHDOG = args.includes('--watchdog');
+/**
+ * F7 measurement (a): press a fixed screen point and read the witness once at the end,
+ * with no accessibility lookup of the target between presses.
+ *
+ * Every iOS number F7 first reported came from a loop that resolved the control by
+ * identifier before each press — an accessibility query answered on the app's main
+ * thread over a two-hundred-control tree — and XCTest also waits for the app to go idle
+ * before it posts an event (`-[XCUIApplication _waitForQuiescenceAsPreEvent:]`, in
+ * `XCUIAutomation.framework`). So the measurements never separated "a 50 ms press is
+ * lost" from "the harness put load on the app's main thread right before pressing it,
+ * then waited for it to settle". This flag is the arm that separates them, and until it
+ * is measured, "an XCUITest artefact" is not ruled out.
+ */
+const NO_LOOKUP = args.includes('--no-lookup');
+/**
+ * With `--no-lookup`: additionally ask XCTest not to wait for the app to be idle around
+ * each event, through the private interaction option that does it. Used to price the
+ * idle wait itself once the lookups are out of the way.
+ */
+const SKIP_QUIESCENCE = args.includes('--skip-quiescence');
 /**
  * Read the witness twice instead of polling it: press, then read once. For the
  * case where the concern is that the probe's own accessibility traffic into a busy
@@ -451,6 +481,10 @@ async function main() {
                 ...(PROBE_RESCUE ? { TEST_RUNNER_NUI_PROBE_RESCUE: '1' } : {}),
               }),
           ...(WATCHDOG ? { TEST_RUNNER_NUI_PROBE_WATCHDOG: '1' } : {}),
+          ...(NO_LOOKUP ? { TEST_RUNNER_NUI_PROBE_NO_LOOKUP: '1' } : {}),
+          ...(SKIP_QUIESCENCE
+            ? { TEST_RUNNER_NUI_PROBE_SKIP_QUIESCENCE: '1' }
+            : {}),
         }
       );
       const log = fs.readFileSync(logFile, 'utf8');
@@ -468,6 +502,24 @@ async function main() {
         taps: result.taps,
         jsToggle: result.control,
         jsToggleTaps: result.controlTaps,
+        // The rest of what this cell was. A row of numbers with no shape attached is
+        // how a wrong-witness cell survived into a table: `delivered: 0` from a cell
+        // that had pressed a UIButton while counting Toggles is indistinguishable, in
+        // the file, from a real drop, and the JSON outlives whoever typed the command.
+        // The variant is read back from the line the app itself prints rather than from
+        // what this run meant to ask, so a cell whose JS was not the one requested can
+        // still be thrown out.
+        target: TARGET,
+        witness: WITNESS,
+        quiet: QUIET,
+        label: LABEL,
+        arm: PROBE_UI === '' ? 'rn' : 'no-rn',
+        probeUi: PROBE_UI === '' ? null : PROBE_UI,
+        rows: PROBE_UI === '' ? null : Number(PROBE_ROWS),
+        stallMs: PROBE_STALL === '' ? null : Number(PROBE_STALL),
+        rescue: PROBE_RESCUE,
+        watchdog: WATCHDOG,
+        variant: /probe variant-(\d+)/.exec(log)?.[1] ?? null,
       });
       console.log(
         `dwell-probe:   switch ${String(result.delivered)}/${String(result.taps)} · js-toggle ` +

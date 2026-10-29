@@ -6,15 +6,24 @@ measurements were taken on lease `F7-fnto8` (pair-a), which expired mid-run.
 
 ## Summary
 
-**The drop is real, it is not ours, and no library patch is proposed.** On the shipped Switch
-screen (200 hosted Switches in a `ScrollView`) a 50 ms press arrives **0–1 times in 12**. Every
-number below is 12 presses at 50 ms unless stated, with `load1` recorded.
+**A 50 ms press is not delivered on the busy screen — under XCUITest, on a simulator.** On the
+shipped Switch screen (200 hosted Switches in a `ScrollView`) it arrives **0–1 times in 12**. That
+is the whole of what was measured: nothing here involves a finger, a real device, or any harness
+other than XCUITest, and XCUITest resolves the control by accessibility identifier and waits for
+the app to go idle before it posts each event. Whether a real thumb is affected is therefore
+**still unmeasured**, and an XCUITest artefact is not ruled out (see Fix round 1). What is ruled
+out, narrowly, is that the difference between our Switch and React Native's is ours: the same press
+in the same launch hits both equally. Every number below is 12 presses at 50 ms unless stated, with
+`load1` recorded.
 
-**It is not the probe.** `--quiet` reads its witness twice instead of polling it, so no
-accessibility traffic enters the app between presses: hosted Switch **0/12**, React Native's own
-`Switch` on the same screen **0/12**, RN's `Pressable` **12/12**, positive control **12/12**
-(load 1.8 / 4.8 / 3.8). Both are read as a JS event count, so the loss is visible through JS's own
-render.
+**Quieter, but not silent.** `--quiet` reads its witness twice instead of polling it, which removes
+the *witness* traffic — hosted Switch **0/12**, React Native's own `Switch` on the same screen
+**0/12**, RN's `Pressable` **12/12**, positive control **12/12** (load 1.8 / 4.8 / 3.8), both read
+as a JS event count so the loss is visible through JS's own render. It does **not** remove the
+traffic of aiming: each press still resolves its element, and XCTest still waits for idle per
+event, so an accessibility query of a 200-control tree runs on the app's main thread right before
+every press. The claim that no accessibility traffic enters the app between presses was wrong, and
+the review caught it.
 
 **Whose it is.** `RCTScrollViewComponentView.mm:145` already sets `delaysContentTouches = NO`, so
 the brief's experiment 1 was moot; measured anyway — `canCancelContentTouches=false` **0/12**,
@@ -24,15 +33,16 @@ for **RN's own** 200 Switches **0/12**. Button and SegmentedControl take the pre
 their 200-row screens and inside a `<Host>`. A plain SwiftUI `Toggle` in a `UIHostingController`
 inside a bare `UIScrollView`, no React Native in the process, is **12/12** in all four shapes.
 
-**The mechanism, reproduced.** `--stall <ms>` blocks the no-RN window's main thread on every
-run-loop pass, and the window publishes the longest block it actually performed
+**A mechanism that reproduces the symptom, not a demonstration that this screen uses it.**
+`--stall <ms>` blocks the no-RN window's main thread on every run-loop pass, and the window
+publishes the longest block it actually performed
 (`measured-max=122ms`). Toggle rows, acted/12: no stall **12**, 40 ms **4**, 80 ms **0–1**, 120 ms
 **0**, and the scroller is not required (the `view` shape drops too). In the same launches a
-`UITapGestureRecognizer` on the very view whose Toggle never acted fired **12/12**, so the press is
-hit-tested and recognised and what is lost is delivery to the control. A plain `UIButton` in the
-same scroller under the same stall takes them all, **12/12** — the arm's first version of this cell
-said otherwise and read the wrong counter (see Follow-ups). Android is not affected: 5 / 20 / 50 /
-100 ms all **12/12**, control 3/3 (load 3.8–5.2).
+`UITapGestureRecognizer` on the very view whose Toggle never acted fired **12/12**, so a press can
+be hit-tested and recognised and still never reach the control beneath. A plain `UIButton` in the
+same scroller under the same stall takes them all, **12/12**. That is *a* way to lose a Toggle
+press; it is not shown to be this screen's way — the watchdog row below argues against it. Android
+is not affected: 5 / 20 / 50 / 100 ms all **12/12**, control 3/3 (load 3.8–5.2).
 
 **Guard.** `testRealInputSwitch` now also delivers twelve presses once each with no retry and
 asserts all twelve moved the control, and asserts the 200-row list is mounted first. `pressDwell`
@@ -64,10 +74,13 @@ committed tree by design.
 
 ## Measurements
 
-Calm and loaded, same cells (50 ms, 12 presses, quiet where the witness is a count). Cells taken
-at `load1` ≥ 8 were re-measured on an idle machine; none moved.
+Two load conditions, because the brief asks for both: **busy** means other work was running on the
+machine (the "loaded" column below spans `load1` 2.99–13.42 at the row level), **quiet machine**
+means the machine was idle. Cells taken at `load1` ≥ 8 were re-measured on an idle machine; none
+moved. The second column is the busy one, the third the quiet one — neither is a controlled
+variable of the experiment, both are recorded because the numbers move with it.
 
-| Cell | loaded | calm |
+| Cell | busy machine | quiet machine |
 | --- | --- | --- |
 | busy screen, hosted Switch (native value) | 0/12 (`6.48`) | — |
 | busy screen, hosted Switch, quiet | 0/12 (`8.75`) | 0/12 (`1.81`) |
@@ -104,14 +117,19 @@ Android, same busy screen and same counting witness (`probe-hosted-events`), pre
 | 50 ms | 12/12 | 3/3 | 4.34 |
 | 100 ms | 12/12 | 3/3 | 4.58 |
 
-**Negative result, kept because it contradicts the obvious story.** `--watchdog` measures main-queue
-latency (a background timer offers a block every 20 ms; the log records when it runs). The busy RN
-screen: median **85 ms**, p90 162 ms, max 718 ms over 1290 samples. The no-RN window, which
-delivers every press at 50 ms: median **398 ms**, p90 774 ms over 2384 samples. So main-queue
-latency is *not* the quantity that loses a press — queueing behind UIKit waits without losing
-touches, while blocking at `.beforeSources` stops the input source before it is read. The stall arm
-reproduces the failure by name; it does not show that the React Native screen stalls the way the
-stall arm does, and nothing measured here says what the busy screen crosses.
+**Negative result, kept because it contradicts the obvious story.** `--watchdog` logs every delay of
+8 ms or more between offering a block to the main queue and that block running. The busy RN screen:
+median **85 ms**, p90 162 ms, max 718 ms over 1290 samples. The no-RN window, which delivers every
+press at 50 ms: median **398 ms**, p90 774 over 2384 samples. Read as a headline, that says the
+screen which delivers every press has four times the main-queue latency of the one that delivers
+none — so latency is not the quantity that loses a press. But the comparison is weaker than it
+looks, and the review is right to say so: a block of length *L* behind a 20 ms timer logs roughly
+*L*/20 decreasing samples, so a median of *logged gaps* counts block **frequency** as well as
+length, and two screens with the same typical block and different busyness print different medians
+for reasons that have nothing to do with either. What survives is the shape: queueing behind UIKit
+waits without losing touches, while blocking at `.beforeSources` stops the input source before it is
+read. The stall arm reproduces the failure by name; it does not show that the React Native screen
+stalls the way the stall arm does, and nothing measured here says what the busy screen crosses.
 
 ## Red proofs
 

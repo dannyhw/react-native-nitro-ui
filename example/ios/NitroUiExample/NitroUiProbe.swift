@@ -112,12 +112,20 @@ enum NitroUiProbe {
   /// screen:
   ///
   /// - `scroll` — a `UIScrollView` left at UIKit's own defaults
-  ///   (`delaysContentTouches == true`, `canCancelContentTouches == true`).
+  ///   (`delaysContentTouches == true`, `canCancelContentTouches == true`), holding
+  ///   SwiftUI `Toggle`s in `UIHostingController`s.
   /// - `scroll-rn` — the same scroll view configured the way React Native's
   ///   `RCTScrollViewComponentView` configures its own: it sets
   ///   `delaysContentTouches = NO` in its initialiser.
   /// - `view` — no scroll view at all: the same rows in a plain view, so no pan
   ///   recogniser anywhere and nothing that can delay a touch.
+  /// - `uikit-switch` / `uikit-switch-rn` — the two scroll shapes again, but the rows
+  ///   are plain `UISwitch`es rather than hosted SwiftUI `Toggle`s. This is the arm
+  ///   that separates "React Native" from "the platform" without also changing the
+  ///   control: `RCTSwitchComponentView` is a `UISwitch` subclass wrapped in RN's view
+  ///   hierarchy, so until a bare `UISwitch` list is measured, every no-React-Native
+  ///   result so far compares an RN screen against a *SwiftUI* one, which moves the
+  ///   control, the hosting and the accessibility tree together.
   ///
   /// `NUI_PROBE_STALL=<ms>` additionally blocks the main thread for that long on
   /// every run-loop pass. That is the causal test for the one explanation the
@@ -182,6 +190,13 @@ private final class ProbeViewController: UIViewController {
   /// Held because a child view controller's view is a subview, and the containment
   /// has to outlive `viewDidLoad`.
   private var hosted: [UIHostingController<ProbeToggleRow>] = []
+  /// The rows' `UISwitch`es, for the `uikit-switch` shapes. Retained because a
+  /// control the view controller does not hold is released by its owner.
+  private var switches: [UISwitch] = []
+  /// Whether the rows are plain `UISwitch`es rather than hosted SwiftUI `Toggle`s.
+  /// Both `-rn` suffixes mean the same scroll-view configuration RN uses, so the
+  /// check is a prefix one, and the shape stays one difference apart from its twin.
+  private var isUIKitSwitchShape: Bool { kind.hasPrefix("uikit-switch") }
   /// Keeps the stall alive for the life of the screen; see `ProbeMainLoopStall`.
   private var stallSource: ProbeMainLoopStall?
   private var toggleFlips = 0 {
@@ -252,7 +267,7 @@ private final class ProbeViewController: UIViewController {
     } else {
       let scroller = UIScrollView()
       scroller.translatesAutoresizingMaskIntoConstraints = false
-      if kind == "scroll-rn" {
+      if kind == "scroll-rn" || kind == "uikit-switch-rn" {
         // React Native's configuration. The claim that this is what RN does is read
         // from the source, not guessed: `RCTScrollViewComponentView.mm` sets
         // `delaysContentTouches = NO` in its initialiser.
@@ -394,18 +409,18 @@ private final class ProbeViewController: UIViewController {
     label.numberOfLines = 1
   }
 
-  /// One row per control: a label and a real SwiftUI Toggle, sized like the app's.
+  /// One row per control: a label and a real control of the shape `kind` asks for,
+  /// sized like the app's.
+  ///
+  /// Two control kinds, identical apart from the control itself. The `UISwitch` shape
+  /// exists because every earlier no-React-Native cell used a SwiftUI `Toggle` in a
+  /// `UIHostingController`, which differs from the React Native screen in three ways
+  /// at once — the control, the hosting and the accessibility tree — so it could never
+  /// separate them. A plain `UISwitch` is what `RCTSwitchComponentView` *is* under
+  /// RN's wrappers, so this is the arm that says whether a screen of two hundred real
+  /// UIKit switches loses a 50 ms press with no React Native in the process at all.
   private func mountRows(in stack: UIStackView) {
     for index in 0..<rows {
-      let controller = UIHostingController(
-        rootView: ProbeToggleRow(index: index) { [weak self] in
-          self?.toggleFlips += 1
-        }
-      )
-      addChild(controller)
-      controller.didMove(toParent: self)
-      hosted.append(controller)
-
       let row = UIView()
       let label = UILabel()
       label.text = "row \(index)"
@@ -413,17 +428,46 @@ private final class ProbeViewController: UIViewController {
       label.translatesAutoresizingMaskIntoConstraints = false
       row.addSubview(label)
 
-      let control = controller.view!
-      control.backgroundColor = .clear
+      let control: UIView
+      /// The control's own fitting width/height, asked the way each kind asks: a
+      /// hosting controller's `sizeThatFits(in:)` is the same unbounded proposal
+      /// `NitroSwiftUIHost` makes for an intrinsic control, and is not the same call as
+      /// the one on its view, so the Toggle arm keeps the exact size the earlier cells
+      /// were measured at rather than being quietly retuned by this refactor.
+      var fitting = CGSize(width: 51, height: 31)
+      if isUIKitSwitchShape {
+        let toggle = UISwitch()
+        toggle.accessibilityIdentifier = "probe-toggle-\(index)"
+        // The same counter the Toggle rows report into, so every cell in the matrix
+        // reads one witness name. A `UISwitch` reports its own `value:` as well, which
+        // is the stronger witness the non-quiet shape uses.
+        toggle.addTarget(
+          self,
+          action: #selector(ProbeViewController.rowSwitchFlipped),
+          for: .valueChanged
+        )
+        switches.append(toggle)
+        control = toggle
+      } else {
+        let controller = UIHostingController(
+          rootView: ProbeToggleRow(index: index) { [weak self] in
+            self?.toggleFlips += 1
+          }
+        )
+        addChild(controller)
+        controller.didMove(toParent: self)
+        hosted.append(controller)
+        control = controller.view!
+        control.backgroundColor = .clear
+        fitting = controller.sizeThatFits(in: CGSize(width: 10_000, height: 10_000))
+      }
       control.translatesAutoresizingMaskIntoConstraints = false
       row.addSubview(control)
 
-      // The Toggle's own fitting size — the same unbounded proposal
-      // `NitroSwiftUIHost` asks with for an intrinsic control — and a row height
-      // matching the app's, so a press aims at the same size target in both apps.
-      let fitting = controller.sizeThatFits(in: CGSize(width: 10_000, height: 10_000))
+      // A row height matching the app's, so a press aims at the same size target in
+      // both apps.
       let width = fitting.width > 0 ? fitting.width : 61
-      let height = fitting.height > 0 ? fitting.height : 28
+      let height = fitting.height > 0 ? fitting.height : 31
       NSLayoutConstraint.activate([
         row.heightAnchor.constraint(equalToConstant: 34),
         label.leadingAnchor.constraint(equalTo: row.leadingAnchor),
@@ -435,7 +479,7 @@ private final class ProbeViewController: UIViewController {
       ])
       stack.addArrangedSubview(row)
 
-      if rescue {
+      if rescue && !isUIKitSwitchShape {
         // Attached to the hosting view, not the row, so it covers the control and
         // nothing else, and `delaysTouchesEnded = false` so it is not the recogniser
         // that holds the up-event back — the point is to see whether UIKit recognises
@@ -450,6 +494,12 @@ private final class ProbeViewController: UIViewController {
         rescuers.append(recogniser)
       }
     }
+  }
+
+  /// The in-scroller `UISwitch`es' flip count, published through the same counter the
+  /// hosted Toggles use.
+  @objc private func rowSwitchFlipped() {
+    toggleFlips += 1
   }
 
   /// Counts a recogniser firing. Deliberately does not flip the Toggle: whether a

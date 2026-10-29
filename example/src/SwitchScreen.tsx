@@ -329,11 +329,14 @@ function List({
   rows: ReadonlyArray<{ id: string; on: boolean }>;
   kind: 'hosted' | 'rn-switch' | 'box';
 }) {
+  // The screen's own palette rather than a literal: `Row` beside it uses `ink.muted`,
+  // and a hard-coded grey is the one that shows up wrong in dark mode.
+  const ink = useInk();
   return (
     <View style={styles.list}>
       {rows.map((row, index) => (
         <View key={row.id} style={styles.row}>
-          <Text style={[styles.label, { color: '#666' }]}>row {index}</Text>
+          <Text style={[styles.label, { color: ink.muted }]}>row {index}</Text>
           {kind === 'hosted' ? (
             <Switch
               defaultValue={row.on}
