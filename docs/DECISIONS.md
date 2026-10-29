@@ -363,3 +363,17 @@ and sequencing calls (such as how TextField restarts) are the orchestrator's to 
 restarts with a measurement task first (in-app iOS latency in a release build, alternating arm
 order on Android, the cause of the N=200 retention, the cause of the P1 failures). The component
 (G8) is built only if those clear Q2's go/no-go thresholds.
+
+## D32 — Menu: what G7a found on iOS, and the pick order (2026-10-29)
+
+The owner's rulings on G7a's draft PR #7 amend D29 and `Q1-menu-design.md` §5:
+
+- **`onOpen`/`onClose` are Android-only.** SwiftUI's `Menu` (iOS 27.0 SDK) has no expansion binding,
+  so iOS never reports either. `menu.md` documents it. G7b spikes `.onAppear`/`.onDisappear` on the
+  menu content as a possible iOS route.
+- **`disabled` while open closes the menu on Android only.** On iOS, the open menu stays until the
+  user dismisses it. That is a platform limit, and `menu.md` documents it. D29's harness gate holds
+  for Android.
+- **A pick fires `onSelect`, then `onClose`** (where `onClose` fires, i.e. Android). The choice is
+  reported before the close. Q1 §5's "never for a pick" is superseded: every open is paired with
+  one close, including the open a pick ends.
