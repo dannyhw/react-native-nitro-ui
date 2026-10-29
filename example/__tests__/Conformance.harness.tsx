@@ -281,6 +281,18 @@ function correctionsSince(before: NitroUiSizingStats): number {
 
 const PLATFORM = Platform.OS === 'ios' ? 'ios' : 'android';
 
+/**
+ * Every `render` in this file, for the reason every other harness suite gives it.
+ *
+ * `react-native-harness` rejects with "Render timeout: Element did not mount within 1000ms"
+ * unless a suite says otherwise, and the first cold mount of a native view on an emulator can
+ * exceed that on its own — the Android run went red on exactly that, at load1 11, on a control
+ * that had nothing wrong with it. 20 s is what `Button.harness.tsx` and
+ * `MountChurn.harness.tsx` pass; the value is a budget for the *mount*, not for the
+ * measurement, and the wall-clock assertions below still have their own tighter gates.
+ */
+const RENDER = { timeout: 20000 } as const;
+
 /* ------------------------------ the rule bodies ------------------------------ */
 /* Mirrors of `fallbackFindings`, `leakFindings` and `recycleFindings` in
  * `scripts/conformance-core.mjs`: the harness cannot import a Node module, so the wording
@@ -819,7 +831,7 @@ describe('conformance · every control, four rules', () => {
         try {
           poison(fixture.component);
           const coldBefore = stats();
-          const cold = await render(fixture.owner(false));
+          const cold = await render(fixture.owner(false), RENDER);
           await settle(600);
           const coldMeasure = handleFor(fixture.testId).measureContent();
           const coldBox = harnessUi.queryByTestId(fixture.testId);
@@ -854,7 +866,7 @@ describe('conformance · every control, four rules', () => {
         //    finding if a correction was needed where the declaration should have made it
         //    unnecessary.
         const warmBefore = stats();
-        const warm = await render(fixture.owner(false));
+        const warm = await render(fixture.owner(false), RENDER);
         await settle(600);
         const warmMeasure = handleFor(fixture.testId).measureContent();
         console.log(
@@ -880,14 +892,14 @@ describe('conformance · every control, four rules', () => {
         // not by a drop, so a baseline taken before it would count one legitimate entry as
         // a leak — and the first green-ish run of a wrongly-based rule is how a rule gets
         // exempted for the wrong reason.
-        const warmUp = await render(fixture.owner(false));
+        const warmUp = await render(fixture.owner(false), RENDER);
         await settle();
         warmUp.unmount();
         await settle(500);
 
         const baseline = stats();
         for (let cycle = 0; cycle < CHURN; cycle += 1) {
-          const mounted = await render(fixture.owner(cycle % 2 === 1));
+          const mounted = await render(fixture.owner(cycle % 2 === 1), RENDER);
           mounted.unmount();
         }
         await settle(700);
@@ -911,7 +923,7 @@ describe('conformance · every control, four rules', () => {
       });
 
       it('shows none of its previous owner under one identity', async () => {
-        const first = await render(fixture.owner(false));
+        const first = await render(fixture.owner(false), RENDER);
         await settle();
         const firstChecks = fixture.state(handleFor(fixture.testId), false);
         expect(
@@ -924,7 +936,7 @@ describe('conformance · every control, four rules', () => {
         first.unmount();
         await settle(400);
 
-        const second = await render(fixture.owner(true));
+        const second = await render(fixture.owner(true), RENDER);
         await settle();
         const checks = fixture.state(handleFor(fixture.testId), true);
         console.log(
@@ -944,7 +956,7 @@ describe('conformance · every control, four rules', () => {
       });
 
       it('is named on its own box, not on a wrapper around it', async () => {
-        const mounted = await render(fixture.owner(false));
+        const mounted = await render(fixture.owner(false), RENDER);
         await settle();
         const box = harnessUi.queryByTestId(fixture.testId);
         const labelled = harnessUi.queryByAccessibilityLabel(fixture.label);
