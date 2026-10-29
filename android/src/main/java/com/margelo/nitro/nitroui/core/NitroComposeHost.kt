@@ -1502,9 +1502,16 @@ internal fun NitroUiMeasuredRoot(
     //
     // The arming and its width are read live rather than captured above because this
     // block is what makes and unmakes them, and a decision taken from a
-    // composition-time copy would always be a pass late. They are plain fields, and
-    // that matters: a measure block that observes what it writes dirties the node it
+    // composition-time copy would always be a pass late. The two stamps are plain fields,
+    // and that matters: a measure block that observes what it writes dirties the node it
     // runs in, which here would be a measure → arm → measure loop that never settles.
+    // [NitroUiOverWidePlacement.armed] is the one snapshot value read here. Observing it is
+    // safe because every write is a verdict written once: the unbounded pass that finds an
+    // overrun arms, the unbounded pass that finds a fit releases, and a pass confirming the
+    // verdict already held writes the same value, which is not a state write. So the only
+    // recomposition this read can cause is the one that places at the box, and the bounded
+    // pass that answers it writes nothing here.
+    //
     // The one write that has to reach Compose is the ask for the next measure, and that
     // goes through [remeasureToken], which this block already reads.
     //
