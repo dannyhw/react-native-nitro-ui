@@ -1,0 +1,75 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-29T14:05:34.582Z on code tree `df73c43b5063` at HEAD `1b671c2` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit null signal SIGTERM, 147403 ms
+- Load: start 4.64, end 4.13, median 4.60, max 5.32
+- Device: android / device `emulator-5570` / lease `X4-fwfhi`
+- Full log: `task/X4-conformance/harness+android-2026-10-29T14-05-34.380Z.log` (<store>/task/X4-conformance/harness+android-2026-10-29T14-05-34.380Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Host.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+android-2026-10-29T14-05-34.380Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-fwfhi (still live)
+  |   F7-fnto8                 F7           both              pair-a
+  |   X4-fwfhi                 X4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.13 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 30 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree df73c43b5063 at HEAD 1b671c2
+gate: git tree 5446e73c2211 with a DIRTY worktree (not reusable)
+gate: log task/X4-conformance/harness+android-2026-10-29T14-05-34.380Z.log
+gate:       <store>/task/X4-conformance/harness+android-2026-10-29T14-05-34.380Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree df73c43b5063, 8 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.64/5.68 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X4-conformance/harness+android-2026-10-29T14-05-34.380Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Host.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge was disposed before the test file finished running.
+
+gate: harness:android FAIL in 147.4 s (signal SIGTERM) - note: the code tree moved during the run (b5229a9cae65 now), so this line describes df73c43b5063
+gate: recorded in .gates/task/X4-conformance.jsonl
+
+
+gate: appended the device context to task/X4-conformance/harness+android-2026-10-29T14-05-34.380Z.log (5 probe(s))
+gate: re-raising SIGTERM
+
+```
