@@ -12,6 +12,7 @@ import {
   SEGMENTED_SELECTION,
   buttonTitle,
   dateLabel,
+  menuTitle,
   onPress,
   onValueChange,
   range,
@@ -63,6 +64,10 @@ import {
  *   other arm displays, formatted by the shared `Intl` formatter (`dateLabel`).
  *   Also a *floor* - it owns no calendar, no dialog and no native control - and
  *   the G5 brief asks for exactly this arm.
+ * - `menu`: RN core has no menu either, so the floor is the same `Pressable` +
+ *   `Text` trigger, drawn with the shared `menuTitle` and nothing else: no popup,
+ *   no list, no native control. The ratio therefore reads "what does a real menu
+ *   cost over a tappable label", and the `@expo/ui` arms answer the peer question.
  */
 export function RnCoreList({ n, value, component }: BenchListProps) {
   const style = rowStyle(component);
@@ -147,6 +152,30 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
           >
             <Text style={[buttonStyles.background, buttonStyles.label]}>
               {buttonTitle(value)}
+            </Text>
+          </Pressable>
+        ))}
+      </>
+    );
+  }
+  if (component === 'menu') {
+    // RN core has no menu either, so the floor is the same `Pressable` + `Text`
+    // button a JS-only menu without a popup is: the trigger's label, and nothing
+    // else. Also a *floor* - it owns no popup window, no list and no native control,
+    // which is exactly the cost this arm exists to make visible. The words come from
+    // the shared `menuTitle`, so the flip paints the same new label everywhere and
+    // the box grows with it the way the hosted controls' boxes do.
+    return (
+      <>
+        {range(n).map((index) => (
+          <Pressable
+            key={index}
+            testID={`bench-rn-core-menu-${String(index)}`}
+            onPress={onPress}
+            style={style}
+          >
+            <Text style={[buttonStyles.background, buttonStyles.label]}>
+              {menuTitle(value)}
             </Text>
           </Pressable>
         ))}

@@ -21,7 +21,10 @@ import type { BenchListProps } from '../types';
 import {
   SEGMENTED_SELECTION,
   buttonTitle,
+  menuItems,
+  menuTitle,
   onPress,
+  onMenuSelect,
   onPickerChange,
   onSliderChange,
   onValueChange,
@@ -126,6 +129,44 @@ function BenchPicker({ value }: { value: boolean }) {
 }
 
 /**
+ * Material 3's menu, composed out of the same primitives `nitro-ui`'s Android Menu
+ * composes through Expo's bridge: an `ExposedDropdownMenuBox`, a `Button` anchor
+ * carrying `menuAnchor()`, and an `ExposedDropdownMenu` of `DropdownMenuItem`s.
+ *
+ * The anchor is a `Button` with a `Text` child rather than the `TextField` the
+ * Picker's arm needs, because that is the control under test's own shape
+ * (`HybridNitroUiMenu.kt` composes `NitroUiM3Button` with
+ * `menuAnchor(PrimaryNotEditable)`), and a slot `Text` takes its string from a prop
+ * like every other arm does - no observable write, no `useNativeState`.
+ *
+ * The expanded state is React's own: the box is controlled, and a menu no check
+ * opens stays shut in every cell, so the bench measures mounting the box, the
+ * trigger and the items - what a list of mounted menus costs.
+ */
+function BenchMenu({ value }: { value: boolean }) {
+  return (
+    // `expanded` is a constant rather than React state, and `onExpandedChange` is
+    // left out entirely: no cell opens a popup, so this arm would pay a `useState`
+    // and a dismiss handler for a state transition that never happens. The props
+    // that reach Compose are the ones the control mounts with.
+    <ExposedDropdownMenuBox expanded={false}>
+      <Button onClick={onPress} modifiers={[MENU_ANCHOR]}>
+        <Text>{menuTitle(value)}</Text>
+      </Button>
+      <ExposedDropdownMenu expanded={false}>
+        {menuItems().map((label) => (
+          <DropdownMenuItem key={label} onClick={onMenuSelect}>
+            <DropdownMenuItem.Text>
+              <Text>{label}</Text>
+            </DropdownMenuItem.Text>
+          </DropdownMenuItem>
+        ))}
+      </ExposedDropdownMenu>
+    </ExposedDropdownMenuBox>
+  );
+}
+
+/**
  * `@expo/ui` worst case for the library: one Compose hosting view per control
  * (one `AndroidComposeView` each). Expo UI always needs a `Host`, so both Expo
  * arms are required for a fair comparison
@@ -162,6 +203,13 @@ export function ExpoUiHostPerControlList({
         ) : component === 'picker' ? (
           <Host key={index} style={style}>
             <BenchPicker value={value} />
+          </Host>
+        ) : component === 'menu' ? (
+          // `matchContents` for the same reason the Button arm gets it: the trigger
+          // sizes itself, and a host that stretched it would price a box this control
+          // does not have.
+          <Host key={index} matchContents style={style}>
+            <BenchMenu value={value} />
           </Host>
         ) : (
           <Host key={index} style={style}>
@@ -291,6 +339,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
             <BenchSegmented key={index} value={value} />
           ) : component === 'picker' ? (
             <BenchPicker key={index} value={value} />
+          ) : component === 'menu' ? (
+            <BenchMenu key={index} value={value} />
           ) : component === 'slider' ? (
             <BenchSlider key={index} value={value} />
           ) : component === 'progress' ? (
