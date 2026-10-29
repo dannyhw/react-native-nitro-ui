@@ -1060,11 +1060,25 @@ export function checkInAppFixtures(manifests, harnessText) {
         'rules have no suite, so no control is checked by them',
     ];
   }
+  const table = fixtureRows(harnessText);
+  if (table == null) {
+    return [
+      'example/__tests__/Conformance.harness.tsx: the FIXTURES table could not be ' +
+        'found, so nothing here can say which controls the three in-app rules ' +
+        'actually run — a scan that cannot find the table must not report that it ' +
+        'checked it',
+    ];
+  }
   const problems = [];
   for (const manifest of manifests) {
-    // `name: 'Switch'` is the fixture's own row; a control whose fixture exists under a
-    // stale name would render the wrong component and assert nothing about this one.
-    if (!harnessText.includes(`name: '${manifest.name}'`)) {
+    // The row itself, not a substring of the file. Round 1 asked whether the text
+    // `name: 'Switch'` appeared anywhere, so a comment saying
+    // `// TODO: name: 'Switch' is missing` satisfied it, and so would a fixture for a
+    // different control whose props happened to mention the string. A row is a `{` at the
+    // table's indent level whose *own* members carry the name and the component — the
+    // shape a comment cannot take, and the shape the suite actually renders.
+    const row = table.find((entry) => entry.name === manifest.name);
+    if (row == null) {
       problems.push(
         `example/__tests__/Conformance.harness.tsx: no fixture for ` +
           `${manifest.name} (${manifest.id}). Every control the registry declares ` +
@@ -1073,24 +1087,20 @@ export function checkInAppFixtures(manifests, harnessText) {
       );
       continue;
     }
-    if (!harnessText.includes(`component: '${manifest.hybridView}'`)) {
+    if (row.component !== manifest.hybridView) {
       problems.push(
         `example/__tests__/Conformance.harness.tsx: the ${manifest.name} fixture ` +
-          `does not name ${manifest.hybridView}, so the sizing rules ask the engine ` +
-          'about a component that is not this one'
+          `says ${String(row.component)} and the manifest says ` +
+          `${manifest.hybridView}, so the sizing rules ask the engine about a ` +
+          'component that is not this one'
       );
     }
-    // And the recycle rule's oracle for this control, or the reason it has none. The check is
-    // per row rather than one scan for either word, because the failure it exists for is a
-    // probe quietly *leaving* one control's row while the other six keep theirs — a suite that
-    // prints seven green lines, one of which asserts nothing, is the exact shape this whole
-    // file was written to refuse.
-    const row = harnessText.slice(
-      harnessText.indexOf(`name: '${manifest.name}'`)
-    );
-    const rowEnd = row.search(/\n {2}\{\n {4}name: '/);
-    const fixture = rowEnd === -1 ? row : row.slice(0, rowEnd);
-    if (!/probe: \{/.test(fixture)) {
+    // And the recycle rule's oracle for this control, or the reason it has none. Per row
+    // rather than one scan for either word, because the failure it exists for is a probe
+    // quietly *leaving* one control's row while the other six keep theirs — a suite that
+    // prints seven green lines, one of which asserts nothing, is the shape this file was
+    // written to refuse.
+    if (!/\n {4}probe: \{/.test(row.text)) {
       problems.push(
         `example/__tests__/Conformance.harness.tsx: the ${manifest.name} ` +
           'fixture has no `probe`, so this control has no recycle rule that can ' +
@@ -1098,8 +1108,8 @@ export function checkInAppFixtures(manifests, harnessText) {
           '`probe: { noProbe: … }`'
       );
     } else if (
-      !/leaveBehind:/.test(fixture) &&
-      !/noProbe:/.test(fixture)
+      !/\n {6}leaveBehind:/.test(row.text) &&
+      !/\n {6}noProbe:/.test(row.text)
     ) {
       problems.push(
         `example/__tests__/Conformance.harness.tsx: the ${manifest.name} ` +
@@ -1109,19 +1119,66 @@ export function checkInAppFixtures(manifests, harnessText) {
     }
   }
 
-  // And the reverse: a fixture for a control that no longer exists is a test of nothing.
-  const fixtureNames = [
-    ...harnessText.matchAll(/^\s+name: '([A-Z][A-Za-z]*)',$/gm),
-  ].map((match) => match[1]);
-  for (const name of fixtureNames) {
-    if (manifests.some((manifest) => manifest.name === name)) continue;
+  // And the reverse: a row for a control that no longer exists is a test of nothing. Read
+  // from the same parse, so the two directions cannot disagree about what a row is.
+  for (const row of table) {
+    if (manifests.some((manifest) => manifest.name === row.name)) continue;
     problems.push(
-      `example/__tests__/Conformance.harness.tsx: a fixture guards "${name}" ` +
+      `example/__tests__/Conformance.harness.tsx: a fixture guards "${row.name}" ` +
         'and no manifest declares that control — the suite is asserting about a ' +
         'component that is not in the registry'
     );
   }
   return problems;
+}
+
+/**
+ * The FIXTURES table, parsed into rows of `{ name, component, text }`.
+ *
+ * Line-anchored rather than a substring scan (X4 review N3): round 1's `includes` was
+ * satisfied by a comment, by a mention in a doc block, and by one fixture's props naming
+ * another control. What is being asked is "does the suite render a fixture for this
+ * control", and the only evidence for that is a row of the table it renders from.
+ *
+ * Returns `null` when the table is not there in the shape this understands — reported as a
+ * problem rather than silently skipping, because an unfound table looks exactly like an
+ * empty one to a caller that trusts the scan.
+ *
+ * @param {string} harnessText
+ * @returns {Array<{name: string, component: string | null, text: string}> | null}
+ */
+function fixtureRows(harnessText) {
+  // Not `/g`: `String#match` with the global flag returns the matched strings and drops
+  // their offsets, which reads as "the table is not there" to the caller below.
+  const declared = /^const FIXTURES: ReadonlyArray<Fixture> = \[\n/m.exec(
+    harnessText
+  );
+  if (declared == null || declared.index == null) return null;
+  const body = harnessText.slice(declared.index + declared[0].length);
+  const close = body.indexOf('\n];');
+  if (close === -1) return null;
+  const tableText = body.slice(0, close);
+  // A row opens with `{` at the table's own indent (two spaces: one level under the
+  // array), and every row boundary is such a line.
+  const openers = [...tableText.matchAll(/^ {2}\{$/gm)];
+  return openers.map((opener, index) => {
+    const next = openers[index + 1];
+    const text = tableText.slice(
+      opener.index,
+      next == null ? tableText.length : next.index
+    );
+    // Members are properties of the row: exactly four spaces of indent, so a mention
+    // inside a comment (`   * name: 'Switch'`) or in a nested object is not one.
+    const name = text.match(/^ {4}name: '([^']+)',$/m)?.[1];
+    const component = text.match(/^ {4}component: '([^']+)',$/m)?.[1];
+    // An un-named `{` block in the table is a shape this scan does not understand, and a
+    // row that reads as `undefined` would fail the reverse check for the wrong reason.
+    return {
+      name: name ?? String(text.match(/^ {4}\S[^:\n]*:/m)?.[0] ?? '(no name)'),
+      component: component ?? null,
+      text,
+    };
+  });
 }
 
 /**
