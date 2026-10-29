@@ -182,7 +182,8 @@ function xcodebuild(args, { logFile, what }) {
         if (
           /^\s*(Test Case|Test Suite|Testing failed|error:|warning: .*RealInput)|\*\* (TEST|BUILD)/.test(
             line
-          )
+          ) ||
+          realInputLine(line) != null
         ) {
           console.log(`    ${line.trim()}`);
         }
@@ -199,20 +200,70 @@ function xcodebuild(args, { logFile, what }) {
 }
 
 /**
+ * The suite's own log line, if this line of an xcodebuild log is one.
+ *
+ * A `print()` from an XCUITest case arrives with whatever prefix the tool in
+ * front of it decides on - none, a timestamp, quotes - so the prefix is not
+ * matched; the `real-input (ios):` tag is what makes the line ours, and the
+ * helper returns the text with the prefix stripped so the report reads the same
+ * whichever tool produced the log.
+ *
+ * @param {string} line
+ * @returns {{ text: string, isRetry: boolean } | null}
+ */
+function realInputLine(line) {
+  const match = /real-input \((?:ios|android)\): (.*)$/.exec(line);
+  if (match == null) {
+    return null;
+  }
+  return {
+    text: `real-input (ios): ${match[1].trim()}`,
+    // Only "answered on tap n/N" says a press was delivered and had to be
+    // repeated. The "tap n/N left ..." lines say an attempt was not answered,
+    // and belong to the notes rather than to the count.
+    isRetry: / answered on tap \d+\/\d+/.test(match[1]),
+  };
+}
+
+/**
  * What each test case did, read out of an xcodebuild log.
  *
+ * The suite's own `real-input (ios):` lines are attached to whichever case was
+ * running when they were printed, which is what makes a retry a fact about a
+ * control rather than a line that only ever lived in
+ * `.real-input/ios/xcodebuild-test.log` - a file the next run overwrites (F1 M2).
+ *
  * @param {string} log
- * @returns {Map<string, { outcome: string, notes: string[] }>} by method name
+ * @returns {Map<string, { outcome: string, notes: string[], retries: string[] }>} by method name
  */
 function parseTestResults(log) {
-  /** @type {Map<string, { outcome: string, notes: string[] }>} */
+  /** @type {Map<string, { outcome: string, notes: string[], retries: string[] }>} */
   const results = new Map();
   for (const match of log.matchAll(
     /Test Case '-\[[\w.]+ (\w+)\]' (passed|failed|skipped) \(([\d.]+) seconds\)/g
   )) {
-    results.set(match[1], { outcome: match[2], duration: match[3], notes: [] });
+    results.set(match[1], {
+      outcome: match[2],
+      duration: match[3],
+      notes: [],
+      retries: [],
+    });
   }
+  /** Which case is on screen right now, while walking the log in order. */
+  let running = null;
   for (const line of log.split('\n')) {
+    const started = /Test Case '-\[[\w.]+ (\w+)\]' started/.exec(line);
+    if (started != null) {
+      running = results.get(started[1]) ?? null;
+    }
+    const own = realInputLine(line);
+    if (own != null) {
+      running?.notes.push(own.text);
+      if (own.isRetry) {
+        running?.retries.push(own.text);
+      }
+      continue;
+    }
     if (!/error:/.test(line)) {
       continue;
     }
@@ -464,6 +515,9 @@ async function main() {
       }
       for (const note of outcome.notes) {
         check.note(note);
+      }
+      for (const retried of outcome.retries) {
+        check.retried(retried);
       }
       // Phrased so the line reads the same way whether the case passed or
       // failed: the suite's report prefixes failures with "failed:".
