@@ -100,6 +100,19 @@ const KEY_BACK = 4;
 
 /** How long a control gets to react to a gesture it should have answered. */
 const REACT_TIMEOUT = Number(process.env.REAL_INPUT_TIMEOUT ?? 8000);
+
+/**
+ * How often to poll a witness that is read out of `uiautomator dump`.
+ *
+ * A dump costs about two seconds on this machine's loaded emulator (measured: three
+ * back-to-back dumps at 1.96-2.00 s), so polling one at `pressUntil`'s default 100 ms
+ * spends the entire attempt on readings - and, worse, spends it *inside* whatever
+ * timer inside the app the check is racing. The drop-picker cycles arm an unmount on
+ * a timer of their own, and a witness loop that needs four dumps to find what it is
+ * looking for arrives after the view has gone. The reading cannot be made cheaper
+ * from out here, so the poll matches it.
+ */
+const DUMP_POLL_MS = 500;
 /** How long the first render may take (a cold Metro bundle is slow). */
 const READY_TIMEOUT = Number(process.env.REAL_INPUT_READY_TIMEOUT ?? 180000);
 
@@ -830,7 +843,8 @@ const CHECKS = {
     await t.tapUntilUp(
       () => t.requireControlOnScreen('Hosted date picker'),
       'a real tap on the hosted DatePicker field to open its dialog',
-      () => t.dump().filter(isDayCell).length
+      () => t.dump().filter(isDayCell).length,
+      { pollMs: DUMP_POLL_MS }
     );
     const cells = dayGrid(t, 'the hosted DatePicker');
     t.log.check(
@@ -876,7 +890,8 @@ const CHECKS = {
     await t.tapUntilUp(
       () => t.requireControlOnScreen('Hosted date picker'),
       'a real tap on the hosted DatePicker field to open its dialog again',
-      () => t.dump().filter(isDayCell).length
+      () => t.dump().filter(isDayCell).length,
+      { pollMs: DUMP_POLL_MS }
     );
     dayGrid(t, 'the hosted DatePicker');
     await t.pressUntil({
@@ -888,7 +903,8 @@ const CHECKS = {
         );
       },
       reading: () => String(t.dump().filter(isDayCell).length),
-      raised: (value) => value === '0',
+      raised: (current) => current === '0',
+      pollMs: DUMP_POLL_MS,
     });
     await waitForDialogGone(t, 'Cancel to take the hosted dialog down');
     t.log.checkEquals(
@@ -944,13 +960,15 @@ const CHECKS = {
       },
       reading: () =>
         t.nodeByTestId(ECHO.hostDateDropArmed) == null ? '0' : '1',
-      raised: (value) => value === '1',
+      raised: (current) => current === '1',
+      pollMs: DUMP_POLL_MS,
     });
     t.waitForNode(ECHO.hostDateDropArmed, 'the unmount to be armed');
     await t.tapUntilUp(
       () => t.requireControlOnScreen('Hosted date picker'),
       'a real tap on the hosted field to open its dialog before the unmount',
-      () => t.dump().filter(isDayCell).length
+      () => t.dump().filter(isDayCell).length,
+      { pollMs: DUMP_POLL_MS }
     );
     dayGrid(t, 'the hosted DatePicker');
     // The app's own echo is the witness that the unmount happened, so wait for it rather
@@ -989,7 +1007,8 @@ const CHECKS = {
         t.dump().some((node) => node.contentDesc === 'Hosted date picker')
           ? '1'
           : '0',
-      raised: (value) => value === '1',
+      raised: (current) => current === '1',
+      pollMs: DUMP_POLL_MS,
     });
     await t.requireControlOnScreen('Hosted date picker');
   },
@@ -1605,6 +1624,14 @@ const CHECKS = {
       await t.pressUntil({
         what: 'the unmount button',
         waitingFor: `cycle ${String(cycle)}: a real tap to arm the unmount`,
+        attempts: 2,
+        // Both readings here are accessibility dumps, and a dump costs about two
+        // seconds on this box, so the poll is as slow as the reading can be. Reading
+        // at 100 ms would spend the whole window on readings and arrive at the press
+        // that opens the menu after the app's own unmount timer had fired - which is
+        // the race this cycle has always had, made worse by the witness.
+        windowMs: 4000,
+        pollMs: 500,
         press: async () => {
           await t.tapNode(
             t.waitForNode(
@@ -1615,13 +1642,15 @@ const CHECKS = {
         },
         reading: () =>
           t.nodeByTestId('real-input-drop-armed') == null ? '0' : '1',
-        raised: (value) => value === '1',
+        raised: (current) => current === '1',
       });
       // And the menu is opened by a press that is repeated until its window shows up.
       await t.tapUntilUp(
         () => t.requireControl('Real-input drop picker'),
         `cycle ${String(cycle)}: a real tap to open the drop picker's menu`,
-        () => t.popupWindowCount()
+        () => t.popupWindowCount(),
+        2,
+        4000
       );
       // Read the window table, not the accessibility dump: `dump` costs around a
       // second under load and can miss a menu that is open for less, while the
@@ -1958,10 +1987,16 @@ function yearAtEnd(label) {
  * @returns {Promise<string>} what the tapped cell called itself, for the report
  */
 async function openAndPick(t, description, offset) {
+  // The dialog's own confirm button is the witness that the dialog is up. The month
+  // grid cannot be: the date-picker page has an inline calendar in its own dump, so
+  // "some day cells on screen" is true before the field is ever pressed - a witness
+  // that answers before the press is worse than none, and this run's first attempt
+  // read it as a dialog that had opened.
   await t.tapUntilUp(
     () => t.requireControl(description),
     `a real tap on "${description}" to open its dialog`,
-    () => t.dump().filter(isDayCell).length
+    () => t.dump().filter(isConfirmLabel).length,
+    { pollMs: DUMP_POLL_MS }
   );
   const cells = dayGrid(t, description);
   const middle = Math.floor(cells.length / 2);
@@ -1969,15 +2004,28 @@ async function openAndPick(t, description, offset) {
     cells[Math.min(cells.length - 1, Math.max(0, middle + offset))];
   t.log.note(`tapping dialog day "${target.text}"`);
   // A day cell is a *selection*, and the dialog shows it: the headline above the
-  // calendar names the chosen day, and only that moves on a tap while a dialog is up
-  // (the app's own echo is in another window). Without that witness a tap dropped on
-  // the way to a cell is reported by the OK tap below as a pick that changed nothing.
+  // calendar names the chosen day, and while the dialog is up its window owns the
+  // accessibility tree, so that headline is the only reading a day tap moves. Without
+  // a witness, a tap dropped on the way to a cell is reported by the check's own count
+  // assertion as a pick that changed nothing.
+  //
+  // Two cases have no witness and stay blind on purpose. A dialog in another locale
+  // headlines its date in another shape, so there is nothing to read. And a cell that
+  // *is* the headline's own day is the documented no-op this check's own caller probes
+  // for - it moves nothing however many times it is pressed, so pressing it twice
+  // would only buy a wait.
   const headline = dialogHeadline(t);
-  if (headline == null) {
-    // A dialog in another locale headlines its date in another shape, and there is
-    // nothing here to watch: the tap stays blind rather than aborting on a reading
-    // this emulator's format happens to allow.
-    t.log.note('no dialog headline to watch - the day tap stays blind');
+  const sameDay =
+    headline != null &&
+    headline.day === dayNumberAtEnd(target.text) &&
+    headline.year === yearAtEnd(target.text);
+  if (headline == null || sameDay) {
+    t.log.note(
+      headline == null
+        ? 'no dialog headline to watch - the day tap stays blind'
+        : `"${target.text}" is the day the dialog already shows - the tap is the ` +
+            'documented no-op, and nothing moves to wait for'
+    );
     await t.tapNode(target);
   } else {
     await t.pressUntil({
@@ -1986,7 +2034,8 @@ async function openAndPick(t, description, offset) {
       attempts: 2,
       // The headline is Compose's own state, not a JS echo, so it repaints on the
       // dialog's next frame: one second is a generous window for a real selection.
-      windowMs: 1000,
+      windowMs: 2000,
+      pollMs: DUMP_POLL_MS,
       press: async () => {
         const cell = t
           .dump()
@@ -1999,23 +2048,34 @@ async function openAndPick(t, description, offset) {
         }
         await t.tapNode(cell);
       },
-      reading: () => dialogHeadline(t),
-      raised: (value) => value != null && value !== headline,
+      reading: () => {
+        const now = dialogHeadline(t);
+        return now == null ? null : `${now.day}/${String(now.year)}`;
+      },
+      raised: (current) =>
+        current !== `${headline.day}/${String(headline.year)}`,
     });
   }
   // The dialog is a window of its own, so the app's text is unreadable until it
-  // closes - which is what the confirm button, and nothing else, does. Its own going
-  // away is therefore the witness that the OK tap arrived.
+  // closes - which is what the confirm button, and nothing else, does. The button
+  // going away with it is the witness that the OK tap arrived. (Not "no day cells
+  // left": the date-picker page has an inline calendar of its own in the same dump
+  // once the dialog goes down, and that reading never reaches zero there - the first
+  // run of this helper measured exactly that, `left "10"` after a closed dialog.)
   await t.pressUntil({
     what: "the dialog's OK button",
     waitingFor: 'a real tap on OK to take the dialog down',
+    attempts: 3,
     press: async () => {
-      await t.tapNode(
-        t.waitForNodes(isConfirmLabel, "the dialog's OK button", 1)[0]
-      );
+      const label = t.dump().find(isConfirmLabel);
+      if (label == null) {
+        return;
+      }
+      await t.tapNode(label);
     },
-    reading: () => String(t.dump().filter(isDayCell).length),
-    raised: (value) => value === '0',
+    reading: () => String(t.dump().filter(isConfirmLabel).length),
+    raised: (current) => current === '0',
+    pollMs: DUMP_POLL_MS,
   });
   await t.settle(500);
   return target.text;
@@ -2026,16 +2086,24 @@ async function openAndPick(t, description, offset) {
  *
  * Material 3 names the chosen day above the calendar ("Oct 25, 2026"). The month
  * toggle ("October 2026") and the day cells ("Sunday, October 25, 2026") are excluded
- * by shape, so the reading is the headline's own, and it is the only thing on that
- * window which a day tap moves.
+ * by shape, so the reading is the headline's own. Only the day and year are returned:
+ * the month arrives abbreviated here and spelled out in the cells, and a comparison
+ * that read it would be a comparison with a locale.
  *
  * @param {ReturnType<typeof makeContext>} t
  */
 function dialogHeadline(t) {
   const found = t
     .dump()
-    .find((node) => /^[A-Z][a-z]{2} \d{1,2}, \d{4}$/.test(node.text.trim()));
-  return found == null ? null : found.text.trim();
+    .find((node) => /^[A-Z][a-z]{2,8} \d{1,2}, \d{4}$/.test(node.text.trim()));
+  if (found == null) {
+    return null;
+  }
+  const match = found.text.trim().match(/^[A-Za-z]+ (\d{1,2}), (\d{4})$/);
+  if (match == null) {
+    return null;
+  }
+  return { day: Number(match[1]), year: Number(match[2]) };
 }
 
 /**
@@ -2881,6 +2949,11 @@ function makeContext(harness, log) {
      *   witness. The default is `REACT_TIMEOUT`, the budget `waitForEcho` already
      *   gave the same control, so a check gets that wait *plus* the retries rather
      *   than three attempts sharing what used to be one wait.
+     * @param {number} [options.pollMs] how often to take a reading. The default
+     *   suits an echo, which is one cheap query. A reading that dumps the
+     *   accessibility tree costs about two seconds each on its own, and polling
+     *   one at 100 ms spends the entire wait on readings - which is how a retry
+     *   helper came to lose a race against a timer inside the app it is watching.
      * @returns {Promise<{delivered: boolean, shown: string | null}>}
      */
     async pressUntil({
@@ -2891,6 +2964,7 @@ function makeContext(harness, log) {
       raised,
       attempts = 3,
       windowMs = REACT_TIMEOUT,
+      pollMs = 100,
     }) {
       /** @type {string | null} */
       let shown = null;
@@ -2912,7 +2986,7 @@ function makeContext(harness, log) {
           if (Date.now() > deadline) {
             break;
           }
-          blockMs(100);
+          blockMs(pollMs);
         }
         log.note(
           `${waitingFor}: tap ${String(attempt)}/${String(attempts)} on ${what} left ` +
@@ -2987,11 +3061,16 @@ function makeContext(harness, log) {
      * @param {() => Promise<import('./uiautomator.mjs').UiautomatorNode>} lookUp
      * @param {string} waitingFor
      * @param {() => number} countUp what is up right now (popup windows, day cells)
+     * @param {{attempts?: number, windowMs?: number, pollMs?: number}} [options]
+     *   passed through to `pressUntil`. Pass them when `countUp` reads the
+     *   accessibility tree: a dump costs about two seconds here, and polling one at
+     *   the default 100 ms spends the whole window on readings.
      */
-    async tapUntilUp(lookUp, waitingFor, countUp) {
+    async tapUntilUp(lookUp, waitingFor, countUp, options = {}) {
       const { delivered, shown } = await this.pressUntil({
         what: 'its window',
         waitingFor,
+        ...options,
         press: async () => {
           await this.tapNode(await lookUp());
         },
@@ -2999,10 +3078,11 @@ function makeContext(harness, log) {
         raised: (current) => current !== '0',
       });
       if (!delivered) {
+        const attempts = String(options.attempts ?? 3);
         log.abort(
-          `${waitingFor}: 3 real taps opened nothing - either the taps were never ` +
-            'delivered (FOLLOWUPS.md:58) or the control cannot present. The dump ' +
-            'above is the screen a finger would have found.'
+          `${waitingFor}: ${attempts} real taps opened nothing - either the taps ` +
+            'were never delivered (FOLLOWUPS.md:58) or the control cannot present. ' +
+            'The dump above is the screen a finger would have found.'
         );
       }
       return shown;
@@ -3049,7 +3129,7 @@ function makeContext(harness, log) {
             return;
           }
           await this.tapNode(
-            t.waitForOption(option, 'the menu row to still be up')
+            this.waitForOption(option, 'the menu row to still be up')
           );
         },
         reading: () => echo(testID),
