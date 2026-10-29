@@ -12,7 +12,10 @@ import {
   View,
 } from 'react-native';
 import { Switch } from 'react-native-nitro-ui';
-import { SWITCH_SCREEN_VARIANT } from './probeVariant';
+import {
+  SWITCH_SCREEN_PROBE_CONTROLS,
+  SWITCH_SCREEN_VARIANT,
+} from './probeVariant';
 
 /**
  * Text colours for the current appearance.
@@ -135,55 +138,61 @@ export default function SwitchScreen() {
           accessibilityLabel="Controlled switch"
         />
       </Row>
-      <Text style={[styles.section, { color: ink.ink }]}>Probe pair</Text>
-      <Row label="hosted · events JS saw">
-        <Switch
-          value={probeHosted}
-          onValueChange={acceptHosted}
-          testID="probe-hosted-switch"
-          accessibilityLabel="Probe hosted switch"
-        />
-      </Row>
-      <Row label="">
-        <Text
-          testID="probe-hosted-events"
-          style={[styles.value, { color: ink.ink }]}
-        >
-          {probeHostedEvents}
-        </Text>
-      </Row>
-      <Row label="react native · events JS saw">
-        <RNSwitch
-          value={probeNative}
-          onValueChange={acceptNative}
-          testID="probe-native-switch"
-        />
-      </Row>
-      <Row label="">
-        <Text
-          testID="probe-native-events"
-          style={[styles.value, { color: ink.ink }]}
-        >
-          {probeNativeEvents}
-        </Text>
-      </Row>
-      <Row label="pressable · events JS saw">
-        <Pressable
-          onPress={countProbePress}
-          testID="probe-pressable"
-          hitSlop={8}
-        >
-          <Text style={styles.link}>count me</Text>
-        </Pressable>
-      </Row>
-      <Row label="">
-        <Text
-          testID="probe-press-events"
-          style={[styles.value, { color: ink.ink }]}
-        >
-          {probePressEvents}
-        </Text>
-      </Row>
+      {/* F7 dwell probe's witnesses, rendered only when a probe asks for them —
+          see `SWITCH_SCREEN_PROBE_CONTROLS` for why that default is `false`. */}
+      {SWITCH_SCREEN_PROBE_CONTROLS ? (
+        <>
+          <Text style={[styles.section, { color: ink.ink }]}>Probe pair</Text>
+          <Row label="hosted · events JS saw">
+            <Switch
+              value={probeHosted}
+              onValueChange={acceptHosted}
+              testID="probe-hosted-switch"
+              accessibilityLabel="Probe hosted switch"
+            />
+          </Row>
+          <Row label="">
+            <Text
+              testID="probe-hosted-events"
+              style={[styles.value, { color: ink.ink }]}
+            >
+              {probeHostedEvents}
+            </Text>
+          </Row>
+          <Row label="react native · events JS saw">
+            <RNSwitch
+              value={probeNative}
+              onValueChange={acceptNative}
+              testID="probe-native-switch"
+            />
+          </Row>
+          <Row label="">
+            <Text
+              testID="probe-native-events"
+              style={[styles.value, { color: ink.ink }]}
+            >
+              {probeNativeEvents}
+            </Text>
+          </Row>
+          <Row label="pressable · events JS saw">
+            <Pressable
+              onPress={countProbePress}
+              testID="probe-pressable"
+              hitSlop={8}
+            >
+              <Text style={styles.link}>count me</Text>
+            </Pressable>
+          </Row>
+          <Row label="">
+            <Text
+              testID="probe-press-events"
+              style={[styles.value, { color: ink.ink }]}
+            >
+              {probePressEvents}
+            </Text>
+          </Row>
+        </>
+      ) : null}
       <Row label="value shown to JS">
         <Text
           testID="switch-controlled-value"
@@ -278,10 +287,17 @@ export default function SwitchScreen() {
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
       {/* F7 dwell probe only: the screen says which variant it is rendering, so a
           cell of the matrix can be thrown out when Metro served somebody else's
-          JS. Not a status the product has a use for, and it goes with the probe. */}
-      <Text testID="probe-variant" style={[styles.note, { color: ink.muted }]}>
-        probe variant-{variant}
-      </Text>
+          JS. Behind the same flag as the probe's controls, because this line is
+          above the content and would move every frame below it — including the
+          ones another check compares across a tap. */}
+      {SWITCH_SCREEN_PROBE_CONTROLS ? (
+        <Text
+          testID="probe-variant"
+          style={[styles.note, { color: ink.muted }]}
+        >
+          probe variant-{variant}
+        </Text>
+      ) : null}
       {/* Variant 4 keeps all 200 hosted Switches mounted but takes the scroll
           view away, which is the difference between "a control inside a busy
           scroller drops the touch" and "a control drops the touch". */}
