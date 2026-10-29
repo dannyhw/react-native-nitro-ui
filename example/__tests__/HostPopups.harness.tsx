@@ -1367,7 +1367,14 @@ if (Platform.OS === 'android') {
           `hosted ${mode} picker`
         );
         date.nuiTestPresent();
-        const open = await waitForDate(date, (r) => r.presented);
+        // Both halves in one wait, as the gates above do: `presented` is model state
+        // and lands with the props batch, while the count moves when the dialog's
+        // composition starts. Waiting on `presented` and then reading the count
+        // measured the frame in between.
+        const open = await waitForDate(
+          date,
+          (r) => r.presented && r.livePresentations === live0 + 1
+        );
         expect(open.livePresentations).toBe(live0 + 1);
         unmount();
         await settle(400);
