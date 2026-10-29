@@ -157,10 +157,15 @@ export interface NitroUiMenuProps
    */
   onOpen?: () => void;
   /**
-   * Called when the menu closes without a pick having been reported for it -
-   * an outside tap, the back gesture, a layout move, or the control being
-   * disabled while it was open. **Android only**, for the same reason as
-   * `onOpen`.
+   * Called when the menu closes, whichever way it closed - a pick, an outside
+   * tap, the back gesture, a layout move, or the control being disabled while it
+   * was open. **Android only**, for the same reason as `onOpen`.
+   *
+   * A pick fires it too, so an open never goes unpaired. It fires *before*
+   * `onSelect`: the popup goes away first, and the choice is reported after it.
+   * Whether the pair belongs to a pick at all, and in which order, is open with
+   * the owner (`docs/tasks/G7a-menu.review.md` decision 3) against
+   * `docs/tasks/Q1-menu-design.md` §5, which words it as "never for a pick".
    */
   onClose?: () => void;
   /**

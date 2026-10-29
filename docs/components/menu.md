@@ -116,7 +116,14 @@ never learns that the system presented the menu, which is the same thing `Picker
 already reports (`docs/components/picker.md`: `-1` for every popup field, never a `0`
 that reads as "checked"). The Android popup is our own window, so it can be witnessed:
 `onOpen` and `onClose` fire once each per open, including dismissal by outside tap,
-back gesture, a pick, or `disabled` arriving while open.
+back gesture, a pick, or `disabled` arriving while open. **A pick fires `onClose`
+before `onSelect`** — the popup closes first, then the choice is reported — so a
+listener never sees an open that was never closed. `docs/tasks/Q1-menu-design.md` §5
+words the same rule as "never for a pick"; the reading taken here is that what to
+refuse is an *unpaired* open, and the pair plus its order is asserted on-device
+(`Menu.harness.tsx`, "reports the open and the close"). Whether a pick should fire
+`onClose` at all, and in which order, is an open owner decision
+(`docs/tasks/G7a-menu.review.md` decision 3).
 
 `primaryAction` is iOS-only (DECISIONS D29) and follows the native idiom: with it set,
 a tap runs it and a long-press opens the menu; without it, a tap opens the menu.
