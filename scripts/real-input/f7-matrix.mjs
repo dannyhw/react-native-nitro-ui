@@ -217,16 +217,22 @@ const CELLS = [
   },
 ];
 
+/** The one line in `probeVariant.ts` that says which shape the screen renders. */
+const VARIANT_LINE =
+  /export const SWITCH_SCREEN_VARIANT: SwitchScreenVariant = [0-9]+;/;
+
 function writeVariant(value) {
   const src = fs.readFileSync(VARIANT_FILE, 'utf8');
-  if (!/export const SWITCH_SCREEN_VARIANT: SwitchScreenVariant = \d+;/.test(src)) {
+  if (!VARIANT_LINE.test(src)) {
     throw new Error('f7-matrix: could not find the variant constant to set');
   }
-  const next = src.replace(
-    /export const SWITCH_SCREEN_VARIANT: SwitchScreenVariant = \d+;/,
-    `export const SWITCH_SCREEN_VARIANT: SwitchScreenVariant = ${value};`
+  fs.writeFileSync(
+    VARIANT_FILE,
+    src.replace(
+      VARIANT_LINE,
+      `export const SWITCH_SCREEN_VARIANT: SwitchScreenVariant = ${value};`
+    )
   );
-  fs.writeFileSync(VARIANT_FILE, next);
 }
 
 function currentVariant() {
