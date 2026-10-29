@@ -407,8 +407,9 @@ function AppearancePanel() {
         These are drawn by the toolkit in the appearance the device is set to.
         Switch the device to Dark Mode to see this story dark - `xcrun simctl ui
         &lt;udid&gt; appearance dark` on iOS, `adb -s &lt;serial&gt; shell cmd
-        uimode night yes` on Android - and the real light/dark pair lives in
-        docs/components/date-picker.md.
+        uimode night yes` on Android. Among the component docs only
+        docs/components/button.md carries a captured light/dark pair; this
+        control's doc does not.
       </Note>
     </Showcase>
   );

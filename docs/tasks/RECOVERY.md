@@ -16,15 +16,31 @@
 > and one more exclusive window. It was delegated once X3 and X9 had released their leases (this machine is a
 > dedicated spare: benches need an idle machine, not a time of day). Step 3 (X3) is merged, and so is X9.
 >
-> **Owner away from 2026-10-29 (autonomous):** mac-1 runs G7a, then F2 (`HANDOFF-mac1-2026-10-29.md`), and
+> **0.3.2 published (2026-10-29):** approved by the owner; `latest` is 0.3.2, and `v0.3.2` is tagged at `54dcaf5`
+> (the Version Packages commit) with its GitHub release. F3's three fixes are what it ships. `Stage on npm` treats
+> npm's `E409 Cannot stage previously published version` as already known (`c235180`).
+>
+> **G7a (Menu) is draft PR #7, waiting on three owner API rulings** (its body has the detail and recommendations):
+> (1) iOS `onOpen`/`onClose` never fire (SwiftUI `Menu` has no expansion binding) — accept as Android-only and amend D29?
+> (2) iOS `disabled` while open does not close the menu — accept and amend D29's third bullet?
+> (3) a pick fires `onClose` then `onSelect` — keep the pairing and amend Q1 §5?
+> Decided here (implementation, not API): (4) Android anchors with `menuAnchor`/`ExposedDropdownMenuBox`, accepted on
+> condition G7b commits a red run with a plain `DropdownMenu` and an upper-bound test; (5) mac-2 re-runs `harness:android`
+> on the merged tree: 232/232 green here (and `harness:ios` 182 + 1 skipped), so mac-1's Host-suite failures are
+> machine-specific. Merges once (1)–(3) are ruled, after `real-input:*` on the then-current merge tree.
+>
+> **Owner away from 2026-10-29 (autonomous):** mac-1 runs G7a, then F2 (`HANDOFF-mac1-2026-10-29.md`; F2 merged, PR #6), and
 > opens a PR per task. mac-2 runs F1, X13 and X4, and merges mac-1's PRs after re-running gates here
-> (T3 schedule `nitroui-pr-watch`, every 45 min). It merges the 0.3.2 Version Packages PR once CI is
+> (the `nitroui-pr-watch` schedule ran until F2 merged and G7a went draft; it was deleted 2026-10-29). It merges the 0.3.2 Version Packages PR once CI is
 > green; npm staging still needs the owner's approval on npmjs.com.
 >
 > **Components:** 0.4 is a button-anchored Menu (G7a/G7b), after X4; TextField moved to 0.5 (D30;
 > T18/T18b kept as branches). F3 (0.3.x-visible fixes) merged from maintainer-mac-1.
-> **X11 and A4 merged (2026-10-28); next device task: F1** (`F1-determinism.md`): `real-input:ios` fails the Switch
-> check 11/11 on `main` on this machine, so it blocks merges that owe real input.
+> **F1 merged (2026-10-29, `2d58ca6`):** `real-input:ios` is green on this machine again (tap-delivery witness,
+> retry counts in every gate log). Its dwell probe found a product bug: a hosted Switch on the busy Switch screen
+> drops presses shorter than ~0.1 s (a human tap), while RN's `Pressable` takes them; **F7** (`F7-quick-tap.md`) owns
+> it. The suite presses for 0.15 s meanwhile. **X4 and F7 started 2026-10-29 from `3dfe041`**, one device pair each
+> (worktrees `nitro-ui-worktrees/X4`, `/F7`).
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure

@@ -268,10 +268,13 @@ move a control from costing that control a commit. Measured, and covered by
 
 The ledger entries **survive** the bump, marked inexact, with their key recomputed for the new epoch
 from the component name and sizing key the entry already holds. That is what lets a control that is
-*already mounted* be corrected: the host re-measures and reports, and `report()` finds a live ledger
-entry to correct instead of an instance "that was never laid out" to drop. Dropping the ledger here
-was the round-1 bug — a mounted text-sized control would have kept its old-environment box until it
-remounted.
+*already mounted* be corrected, and each platform asks for that correction rather than hoping for it:
+Android's `onConfigurationChanged` clears the report dedupe, resets the over-wide placement and bumps
+`remeasureToken` (`NitroComposeHost.kt`), and iOS's `traitCollectionDidChange` calls
+`invalidateContentSize()`, which measures and reports (`NitroSwiftUIHost.swift`). Either way the new
+measure arrives as a `report()` that finds a live ledger entry to correct instead of an instance "that
+was never laid out" to drop. Dropping the ledger here was the round-1 bug — a mounted text-sized
+control would have kept its old-environment box until it remounted.
 
 The first mount after an environment change therefore lays out at the declared size, measures, and
 corrects. Nothing cached survives the change to be wrong forever.

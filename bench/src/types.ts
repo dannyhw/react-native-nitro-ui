@@ -63,7 +63,7 @@ export interface BenchImplementation {
   /**
    * Which controls this arm renders, or `null` for every component the plan has.
    *
-   * An arm that implements one component (T16's `nitro-ui-host`, Switch only) must
+   * An arm that implements one component (as T16's `nitro-ui-host` once was, Switch only) must
    * not be launched on another component's cell: rendering nothing there would
    * still produce a plausible-looking mount time for zero controls. `BenchApp`
    * records a `skip` with the list instead, so the table says what was never

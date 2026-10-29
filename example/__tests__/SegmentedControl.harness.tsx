@@ -948,6 +948,11 @@ describe('SegmentedControl · G4', () => {
 
     // Uncontrolled, so native owns the result: the right edge is the last segment
     // and the left edge is the first, if the row was laid out at 140 dp.
+    // The box reaching 140 says nothing about which of the row's drawings is on
+    // screen, and the first placement costs a clipped frame (C1, `core.md` §7), so the
+    // passes get a turn before a finger does — on a loaded emulator a tap dispatched
+    // during that frame would hit the neighbour and be indistinguishable from the bug.
+    await settle();
     await userEvent.pressAt(box!.x + box!.width - 2, box!.y + box!.height / 2);
     expect(await waitForEvents(1)).toEqual(['overwide:3']);
 
@@ -1005,6 +1010,8 @@ describe('SegmentedControl · G4', () => {
     // is why this asserts both numbers as well as the taps.
     expect(Math.abs(box!.width - 300) < 0.6).toBe(true);
     expect(intrinsic.width).toBeGreaterThan(box!.width + 20);
+    // As above: the box is here, the placement pass that fits the row into it may not be.
+    await settle();
     await pressBothEnds('clamped', ['clamped:5', 'clamped:0']);
 
     await rerender(row(260));
@@ -1013,6 +1020,7 @@ describe('SegmentedControl · G4', () => {
       { width: 260, height: box!.height },
       'the narrower parent'
     );
+    await settle();
     await pressBothEnds('clamped', [
       'clamped:5',
       'clamped:0',
@@ -1026,6 +1034,7 @@ describe('SegmentedControl · G4', () => {
       { width: 224, height: box!.height },
       'the narrowest parent'
     );
+    await settle();
     await pressBothEnds('clamped', [
       'clamped:5',
       'clamped:0',
@@ -1061,6 +1070,9 @@ describe('SegmentedControl · G4', () => {
     const wide = boxOf('narrowing');
     expect(wide).not.toBeNull();
     await waitForMeasured('narrowing', 'four long options at 140');
+    // Same reason as in the two tests above: a box that is here is not a placement pass
+    // that has run, and the taps are the oracle.
+    await settle();
     await pressBothEnds('narrowing', ['narrowing:3', 'narrowing:0']);
 
     await rerender(
@@ -1077,6 +1089,7 @@ describe('SegmentedControl · G4', () => {
       { width: 120, height: wide!.height },
       'the narrower box'
     );
+    await settle();
     await pressBothEnds('narrowing', [
       'narrowing:3',
       'narrowing:0',
@@ -1111,6 +1124,7 @@ describe('SegmentedControl · G4', () => {
     );
     await waitForTestId('tinted');
     await waitForMeasured('tinted', 'four long options at 140');
+    await settle();
     await pressBothEnds('tinted', ['tinted:3', 'tinted:0']);
 
     await rerender(

@@ -51,12 +51,30 @@ if (cli == null) {
   process.exit(1);
 }
 
+const args = process.argv.slice(2);
+
+/**
+ * The `bun run` name these arguments came from, so the refusal names the gate it
+ * is refusing. This file is the entry point behind `harness:ios`,
+ * `harness:android` and the two cold variants (see `example/package.json`), and
+ * the label used to be hardcoded to Android - so an iOS run told the reader to
+ * re-run the other platform (X1 re-review F5).
+ *
+ * @param {string[]} argv Arguments after the script name.
+ * @returns {string}
+ */
+function bunScriptName(argv) {
+  const at = argv.indexOf('--harnessRunner');
+  const runner = at === -1 ? null : argv[at + 1];
+  if (runner !== 'ios' && runner !== 'android') return 'bun run harness';
+  return `bun run harness${argv.includes('ColdSizing') ? ':cold' : ''}:${runner}`;
+}
+
 assertSupportedNodeOrReexec({
-  command: 'bun run harness:android',
+  command: bunScriptName(args),
   entryUrl: import.meta.url,
 });
 
-const args = process.argv.slice(2);
 const command = [process.execPath, cli, ...args];
 process.stderr.write(`harness: ${command.join(' ')}\n`);
 

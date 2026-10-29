@@ -265,6 +265,57 @@ async function waitForMeasured(testId: string, what: string) {
   );
 }
 
+/**
+ * Poll until the control reports a size that could only have come from after the
+ * rerender.
+ *
+ * `waitForRemeasure` asks only that the number differ from the one before the
+ * change. A variant change is a remount (`Picker.tsx` keys the native view on
+ * `variantKey`), and four answers that all mean "not done" satisfy it: the new
+ * host has not measured yet (`measureContent()` is the host cache, 0 when empty),
+ * the old host was dropped (`drop()` nils the cached size) while `handles` still
+ * points at it - `hybridRef` fires only on the new view's first props batch - or
+ * no handle is there at all. Zero then *ends* the wait, because 0x0 is not the
+ * previous size, and the box assertion below it compares a real box with nothing:
+ * that is the `wheel=0.00x0.00` red X3 saw at load 35.6-57.2.
+ *
+ * So this refuses all four: no handle, a zero (absence, never a verdict), and the
+ * size from before the rerender (Android re-measures on the UI thread, so the old
+ * number is what the first frames answer with - the reason `waitForRemeasure`
+ * waits for a difference at all). `waitForMeasured` already refused zero; it had
+ * just never learned about the mount.
+ *
+ * The witness is the *size*, not the handle object. It cannot be the object: on
+ * iOS the same hybrid answers for both mounts of a keyed rerender (measured - the
+ * handle captured before the rerender is still what `handles` holds, reporting the
+ * new variant's 330.00x216.00), so requiring a different one fails a run that
+ * succeeded. Refusing a missing handle and a zero covers the dropped-old-host
+ * state, because a dropped host reports nothing but zero.
+ */
+async function waitForFreshMeasure(
+  testId: string,
+  stale: Size | null,
+  what: string,
+  timeoutMs = 12000
+): Promise<Size> {
+  return await pollUntil(
+    () => {
+      const size = measured(testId);
+      if (size == null) return null; // no mount to ask yet
+      if (size.width <= 0 || size.height <= 0) return null; // 0x0 is absence
+      return stale != null && sameSize(size, stale) ? null : size;
+    },
+    () =>
+      new Error(
+        `"${testId}" (${what}) never reported a size of its new mount - ` +
+          `measureContent() says ${describeSize(measured(testId))}, was ` +
+          `${describeSize(stale)} before the rerender, box ` +
+          `${describeSize(sizeOf(testId))}.`
+      ),
+    timeoutMs
+  );
+}
+
 /*
  * No `waitForEvents` helper here, unlike the G2/G4 suites: every positive change
  * event this control makes comes from a popup row the harness cannot press, so the
@@ -1688,6 +1739,9 @@ describe('Picker · G6', () => {
     expect(asMenu.width).not.toBeCloseTo(BOX.width, 0);
     await settle(200);
 
+    // What this mount measures before the rerender, so the wait after it can
+    // refuse the pre-change number and a zero.
+    const staleWheel = asMenu;
     await rerender(
       <Picker
         options={OPTIONS}
@@ -1698,10 +1752,10 @@ describe('Picker · G6', () => {
         hybridRef={captureHybrid('var-w')}
       />
     );
-    const asWheel = await waitForRemeasure(
+    const asWheel = await waitForFreshMeasure(
       'var-w',
-      asMenu,
-      'a wheel, which fills the box'
+      staleWheel,
+      'the wheel after the remount'
     );
     await settle(300);
     console.log(
@@ -1737,6 +1791,9 @@ describe('Picker · G6', () => {
     expect(Math.abs(asWheel.width - BOX.width) < 1).toBe(true);
     await settle(200);
 
+    // What this mount measures before the rerender, so the wait after it can
+    // refuse the pre-change number and a zero.
+    const staleMenu = asWheel;
     await rerender(
       <Picker
         options={OPTIONS}
@@ -1747,10 +1804,10 @@ describe('Picker · G6', () => {
         hybridRef={captureHybrid('var-m')}
       />
     );
-    const asMenu = await waitForRemeasure(
+    const asMenu = await waitForFreshMeasure(
       'var-m',
-      asWheel,
-      'a menu, which measures the long title unbounded'
+      staleMenu,
+      'the menu after the remount'
     );
     await settle(300);
     console.log(

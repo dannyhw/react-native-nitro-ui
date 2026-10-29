@@ -911,10 +911,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    *
    * The token is the same lever an armed sizing key change uses (see
    * [remeasureToken]), and this is a write to the state the calling measure block
-   * reads, from inside that block: Compose routes that as a request to measure the
-   * node again, deferred to the end of the traversal, which is exactly the ask. It is
-   * only made when there is something to place, and the bounded pass that answers it
-   * writes nothing, so the asking stops with that pair.
+   * reads, from inside that block. Compose routes that as a request to measure the node
+   * again in three steps, not one: the write schedules the global apply notification, that
+   * notification runs on `AndroidUiDispatcher` and invalidates the node, and the
+   * invalidation is answered by the next frame. Which is exactly the ask -
+   * a later measure of this node, on the UI thread, off the current pass. It is only made
+   * when there is something to place, and the bounded pass that answers it writes nothing,
+   * so the asking stops with that pair.
    *
    * One traversal's worth of the unbounded drawing does reach the screen first, and it
    * cannot be avoided here: a `Measurable` may be measured exactly once per pass
@@ -1502,9 +1505,20 @@ internal fun NitroUiMeasuredRoot(
     //
     // The arming and its width are read live rather than captured above because this
     // block is what makes and unmakes them, and a decision taken from a
-    // composition-time copy would always be a pass late. They are plain fields, and
-    // that matters: a measure block that observes what it writes dirties the node it
+    // composition-time copy would always be a pass late. The two stamps are plain fields,
+    // and that matters: a measure block that observes what it writes dirties the node it
     // runs in, which here would be a measure → arm → measure loop that never settles.
+    // [NitroUiOverWidePlacement.armed] is the one placement value read here that is snapshot
+    // state. Observing it is safe because every write from a pass is a verdict written once:
+    // the unbounded pass that finds an overrun arms, the unbounded pass that finds a fit
+    // releases, and a pass confirming the verdict it already held writes the same value, which
+    // is not a state write. [NitroUiOverWidePlacement.reset] writes `false` outside any pass,
+    // from [onLayout], [onConfigurationChanged], [prepareForRecycle] and [drop], and is the
+    // same no-op unless the host was armed - which is the case that has to be heard. So the
+    // most this read can cost is one further measure of this node: a measure block dirties the
+    // node it runs in, not the composition, and the group restart that starts observing the
+    // revision is the read above. The bounded pass that places at the box writes nothing here.
+    //
     // The one write that has to reach Compose is the ask for the next measure, and that
     // goes through [remeasureToken], which this block already reads.
     //
