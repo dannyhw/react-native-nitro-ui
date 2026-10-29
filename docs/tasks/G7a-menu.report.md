@@ -144,3 +144,76 @@ otherwise post, which is why the suite's counts are exact rather than eventually
 5. **Registry decoupling.** `hostArm()` in `scripts/registry-core.mjs:619` now reads `hostable && bench` rather than `hostable`, because Menu is `hostable: true, bench: false` and regenerating the bench arm under the old rule would have claimed an arm that does not exist. G7b's `bench: true` restores it. **Recommend confirming this is the right factoring rather than a Menu-shaped special case.**
 6. **`realInput: false` against Q1 section 5**, which lists `realInput: true` in the same sentence as "makes X4's four rules". The brief gates this task with no real-input case, and X4 exists at this base only as `docs/tasks/X4-conformance.md` plus a context pack - there is no conformance suite to run - so nothing silently under-runs today. **Recommend confirming `realInput: true` is G7b's commit, not this one's.**
 7. **`onClose` on `disabled`-while-open** is asserted on Android only (same observability limit as 2). If a reviewer wants that guarantee on iOS too, it needs the UIKit trigger from 2, not a smaller change.
+
+## Fix round 1
+
+**Round:** 1 of 2 (D19) · review `docs/tasks/G7a-menu.review.md` at `7d9df2d`, verdict FIX
+ROUND. Lease `G7a-424pv`.
+
+| Item | Commit | What it became |
+| --- | --- | --- |
+| M1 | `02eac4f` | the a11y test reads the tree, Progress/Slider's pattern |
+| M2 | `48fe182` | both remeasure waits refuse a wrong answer, and prove it |
+| M3 | `22f02a1` | the leftover-menu read is a `liveBefore` delta |
+| M4 | `0f4954a` | `expanded = false` is the reset's first write |
+| M5 | `7162f87` | spec + docs + an `orderLog` assertion: a pick fires `onClose`, first |
+| M6 | `322059c` | `disabled`-while-open documented as an Android-only limit |
+| N | `b817df2` | `hostArm()` pinned by a registry case |
+| docs | `25d1dba` | the a11y section split measured from read (review N10 inside) |
+
+Two measurements narrowed M1 and M2, and `9a6dc90`/`4a601f3` are superseded on both. The iOS
+a11y walk lands on the RN component view, which RN labels itself, so the read holds "the name
+is on the element at the trigger's box" and nothing about the SwiftUI modifier; iOS's remount
+answers through the *same* JS handle object, so the wait asks for a title instead of an
+identity. Both refusals are now asserted in the test, not described in a comment. The new red
+proofs are in the section above.
+
+**The base claim is corrected above** — in the Gates prose and in Question 1. The review built
+`747debc` from scratch and all four Android Host failures reproduce there, `HostControls`
+included; round 1's `3 failed / 190 passed / 217` base run was never committed as a log and is
+withdrawn. Question 1's recommendation stands, on stronger evidence.
+
+**`need --for review`**: `need: 1 gate(s) missing for review: harness:android` - `check` green and `harness:ios` green on this tree, `harness:android` red on it, `real-input:*` deliberately absent (G7b). Two full `harness:android` runs landed here, **5 failures then 3** - `F8`, `HostControls` and the `HostPopups` counter cases in different combinations, `harness+android-06-29-15Z` and `-06-38-53Z`. The count moves, the family does not, and neither run has a Menu failure: both `harness:*:Menu` suites were 15/15 on the same tree.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1113 tests / 42 suites | `84f0fd365c1c` | 1 m 59 s | start 10.0 / med 11.2 / max 14.4 |
+| `harness:ios` | **PASS** | 183 tests / 14 suites | `84f0fd365c1c` (ios tree) | 2 m 10 s | start 7.6 / med 5.4 / max 7.8 |
+| `harness:android` | **FAIL** | 3 failed of 232 tests / 14 suites | `84f0fd365c1c` (android tree) | 9 m 37 s | start 3.9 / med 4.7 / max 5.7 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:android:Host` | stale | 4 failed of 69 tests / 3 suites | 1515f2ab3b65 (not this tree) | 5 m 35 s | start 108.6 / med 18.3 / max 108.6 |
+| `harness:android:Menu` | **PASS** | 15 tests / 1 suites | `84f0fd365c1c` (android tree) | 35.3 s | start 5.3 / med 6.2 / max 6.4 |
+| `harness:android:Menu:-t:opens%20once` | stale | 1 failed of 15 tests / 1 suites | d3ac5d7c66a9 (not this tree) | 19.8 s | start 4.5 / med 4.5 / max 4.6 |
+| `harness:android:Menu:-t:remount` | stale | 1 failed of 15 tests / 1 suites | d5625f3ef35e (not this tree) | 16.2 s | start 4.5 / med 4.8 / max 4.8 |
+| `harness:android:Menu:Menu` | stale | 2 failed of 13 tests / 1 suites | 27009f2a63ac (not this tree) | 29.7 s | start 3.8 / med 5.1 / max 5.3 |
+| `harness:ios:Menu` | **PASS** | 15 tests / 1 suites | `84f0fd365c1c` (ios tree) | 16.9 s | start 6.5 / med 6.5 / max 6.5 |
+
+## Owner decisions
+
+Four points change what D29 or Q1 promise rather than filling a gap in them, so they go to the
+owner rather than being decided here. Nothing below edits `docs/DECISIONS.md` or
+`docs/tasks/Q1-menu-design.md`.
+
+1. **iOS `onOpen`/`onClose`.** D29 says open state is "observed through `onOpen`/`onClose`",
+   with no platform split. iPhoneOS SDK 27.0 gives SwiftUI's `Menu` no expansion binding
+   (checked in the swiftinterface), so neither ever fires on iOS and the harness asserts the
+   `-1` answer. Options: accept as Android-only and amend D29; have G7b try
+   `.onAppear`/`.onDisappear` on the menu content, a workaround this task did not verify; or a
+   UIKit `UIContextMenuInteraction` trigger, which is a different control from Q1 §2's.
+   **Recommend accept + amend, with the `.onAppear` attempt as a G7b spike.**
+2. **A `disabled` that arrives while the menu is open.** D29 says it closes the menu; iOS
+   neither enforces nor observes it, for the same SDK reason, so an iOS menu can stay on screen
+   over a disabled trigger. **Recommend accept as a documented iOS limit and amend D29** —
+   "Limits" in `docs/components/menu.md` now says it.
+3. **A pick fires `onClose`, before `onSelect`.** Q1 §5 words the pair as "exactly once each
+   and never for a pick". The popup's teardown is what reports the close, so not firing would
+   leave an unpaired open, which is worse for a listener than an extra close. **Recommend keep
+   the pairing and amend Q1, and choose the order on purpose:** `onClose` first is what ships
+   (set in `MenuModel.applyPick`, held by the `orderLog` assertion); `onSelect` first reads
+   more naturally to an app and costs one line per platform plus that assertion.
+4. **`menuAnchor` / `ExposedDropdownMenuBox` on Android**, reversing Q1 §3's explicit "no
+   `menuAnchor`". **Recommend accept**, with the review's N5 caveat attached: the evidence is
+   thin — the plain-`DropdownMenu` comparison was measured and not committed, and the hosted
+   test's first half does not discriminate — so the sign-off rests on the reasoning written at
+   `docs/components/menu.md:143` until a committed comparison exists.
