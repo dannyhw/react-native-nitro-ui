@@ -83,7 +83,7 @@ untouched; bypassing the guard and running `pod install` directly churns 87 chec
 
 ## Follow-ups
 
-- `ci.yml` / `smoke.yml`: their `pod install` (via `build-app.mjs`) churns the working-tree lock the same way; nothing checks that file's cleanliness today, and the next maintainer's `pod install` writes it back. `installPods` warns, which is the intended non-blocking behaviour for builds.
-- `pod-install-lib.mjs`: if a future json changes the style again, the probe reports "a different way again" and every macOS job refuses until `EXPECTED_EMPTY_ARRAY_STYLE` is revisited — correct, but unpractised.
+- `ci.yml`: `harness-ios` is `workflow_dispatch`-only and runs `bundler-cache: true` in `example/`, so its json is whatever Bundler resolves. Whether that churns the working-tree lock is unverified, and nothing checks that file's cleanliness anyway; the next maintainer's `pod install` writes it back.
+- `pod-install-lib.mjs`: if a future json changes the style again, the probe answers `other` and every macOS job refuses until `EXPECTED_EMPTY_ARRAY_STYLE` is revisited — correct, but unpractised.
 - `scripts/pod-install.mjs`: `example/Gemfile`'s `concurrent-ruby < 1.3.4` and friends are a second, unenforced environment contract that could move a checksum someday; only json is pinned.
 - `.github/workflows/release.yml`: the json pin and `ruby-version: '3.3'` are maintained separately from `ci.yml`'s Ruby; a shared `env:` or composite action would keep them from drifting.
