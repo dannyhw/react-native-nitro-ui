@@ -77,6 +77,7 @@ const BUTTON_COMPONENT = 'NitroUiButton';
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
   queryByTestId(testId: string): ViewInfo | null;
+  queryByAccessibilityLabel(label: string): ViewInfo | null;
 };
 const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
@@ -1701,6 +1702,12 @@ describe('Menu · inside a Host', () => {
           testID="read-back-plain"
           hybridRef={captureHybrid('read-back-plain')}
         />
+        <Menu
+          title="Fallback"
+          group={GROUP}
+          testID="read-back-fallback"
+          hybridRef={captureHybrid('read-back-fallback')}
+        />
       </View>,
       { timeout: 20000 }
     );
@@ -1726,6 +1733,37 @@ describe('Menu · inside a Host', () => {
           named?.accessibilityLabel
         )}`
     );
+    // The half the getters cannot say: that the name reaches the element a screen
+    // reader lands on. Everything above is a round trip through React's props and
+    // would still pass with the platform's own labelling deleted, so this reads the
+    // tree the harness can walk - the house pattern of `Progress.harness.tsx` and
+    // `Slider.harness.tsx`. iOS exposes UIElements carrying `accessibilityLabel`, and
+    // the query answers with the control's own box; Compose publishes `SemanticsNode`s
+    // that are not Views, so on Android it answers null however correct the component
+    // is, and reading that tree is `uiautomator dump` - G7b's real-input pass.
+    const namedElement =
+      harnessUi.queryByAccessibilityLabel('Open the actions');
+    // `read-back-fallback` sets no `accessibilityLabel`: this is the title fallback,
+    // asserted on a control a screen reader can stop on.
+    const fallbackElement = harnessUi.queryByAccessibilityLabel('Fallback');
+    // `Plain` is disabled, and whether a disabled control belongs in the tree is the
+    // platform's call rather than this control's, so it is logged and not asserted.
+    console.log(
+      `a11y tree: named=${describeSize(namedElement)} ` +
+        `fallback=${describeSize(fallbackElement)} ` +
+        `plain=${describeSize(harnessUi.queryByAccessibilityLabel('Plain'))}`
+    );
+    expect(handles.get('read-back-fallback')?.accessibilityLabel).toBeNull();
+    if (Platform.OS === 'ios') {
+      const namedBox = await waitForTestId('read-back');
+      const fallbackBox = await waitForTestId('read-back-fallback');
+      expect(namedElement).not.toBeNull();
+      expect(Math.abs(namedElement!.width - namedBox.width)).toBeLessThan(2);
+      expect(fallbackElement).not.toBeNull();
+      expect(Math.abs(fallbackElement!.width - fallbackBox.width)).toBeLessThan(
+        2
+      );
+    }
     // What this cannot say: on Android the one-node promise (`clearAndSetSemantics`
     // carrying name, value, role, state and the action, so TalkBack gets one focus
     // stop rather than a nameless one beside it) is a claim about the node tree, and
