@@ -137,6 +137,19 @@ export interface MenuProps extends ViewProps {
         readonly systemImage: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
+        /**
+         * Test-only row press (G7a): runs the pick path a popup row uses, so a
+         * harness can assert a real pick without an injector that reaches into a
+         * popup's window. `@internal` (D14) - see `NitroUiMenuHandle`.
+         */
+        nuiTestSelectRow(id: string): void;
+        /**
+         * Test-only popup witness (G7a): `expanded=...;live=...;anchor=...;` +
+         * `menu=...;rows=...`. Android measures it; iOS answers `-1` in every field
+         * but `rows`, because a SwiftUI `Menu` keeps its open state and its window to
+         * itself. `@internal` (D14) - see `NitroUiMenuHandle`.
+         */
+        nuiTestMenuReport(): string;
       }) => void)
     | undefined;
   /**
