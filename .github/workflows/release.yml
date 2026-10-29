@@ -284,7 +284,23 @@ jobs:
         run: |
           set -euo pipefail
           gem install json -v 2.18.0 --no-document
-          gem list json
+          # Assert what *loads*, not what is installed. `gem list json` shows
+          # every version on the gem path side by side - `json (2.18.0, default:
+          # 2.7.2)` - and says nothing about which one `require "json"` picks,
+          # which is the only fact this pin is about. `ruby -rjson` takes the
+          # same default-gem activation path CocoaPods takes, so either this
+          # line says the pin took effect, or the job says so here rather than
+          # twenty minutes later at the preflight probe.
+          ruby -rjson -e '
+            ok = Gem::Version.new(JSON::VERSION) >= Gem::Version.new("2.8.0")
+            puts "pod-serialisation: `require \"json\"` loads #{JSON::VERSION} " \
+              "(needs >= 2.8.0, the first version whose JSON.pretty_generate " \
+              "writes `[]` for an empty array)"
+            exit(ok ? 0 : 1)
+          ' || {
+            echo "::error title=The json pin did not take::The Ruby this job loads is still serialising empty arrays the pre-2.8 way; a pod install here would rewrite nearly every SPEC CHECKSUMS line."
+            exit 1
+          }
 
       - name: Install the pinned CocoaPods
         run: |
