@@ -20,14 +20,11 @@
 > (the Version Packages commit) with its GitHub release. F3's three fixes are what it ships. `Stage on npm` treats
 > npm's `E409 Cannot stage previously published version` as already known (`c235180`).
 >
-> **G7a (Menu) is draft PR #7, waiting on three owner API rulings** (its body has the detail and recommendations):
-> (1) iOS `onOpen`/`onClose` never fire (SwiftUI `Menu` has no expansion binding) — accept as Android-only and amend D29?
-> (2) iOS `disabled` while open does not close the menu — accept and amend D29's third bullet?
-> (3) a pick fires `onClose` then `onSelect` — keep the pairing and amend Q1 §5?
-> Decided here (implementation, not API): (4) Android anchors with `menuAnchor`/`ExposedDropdownMenuBox`, accepted on
-> condition G7b commits a red run with a plain `DropdownMenu` and an upper-bound test; (5) mac-2 re-runs `harness:android`
-> on the merged tree: 232/232 green here (and `harness:ios` 182 + 1 skipped), so mac-1's Host-suite failures are
-> machine-specific. Merges once (1)–(3) are ruled, after `real-input:*` on the then-current merge tree.
+> **G7a (Menu), draft PR #7: the owner ruled (D32)**: `onOpen`/`onClose` Android-only; iOS `disabled`-while-open is a
+> documented limit; a pick fires `onSelect` then `onClose` (an Android reorder). Fix round 2 runs on maintainer-mac-2 in
+> `nitro-ui-worktrees/G7a` (branch `task/G7a-menu`, main merged in at `7a1d830`). Then: Menu conformance rows if X4 has
+> landed, full merge gates here, mark the PR ready and merge. `menuAnchor` (accepted, G7b proves it) and mac-1's
+> Host-suite failures (not reproduced here, 232/232) were settled earlier.
 >
 > **Owner away from 2026-10-29 (autonomous):** mac-1 runs G7a, then F2 (`HANDOFF-mac1-2026-10-29.md`; F2 merged, PR #6), and
 > opens a PR per task. mac-2 runs F1, X13 and X4, and merges mac-1's PRs after re-running gates here
