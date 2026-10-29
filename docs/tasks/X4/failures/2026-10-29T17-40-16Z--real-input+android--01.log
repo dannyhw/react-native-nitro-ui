@@ -1,0 +1,56 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-10-29T17:40:16.100Z on code tree `8d6e6397ac0d` at HEAD `e08d6db` (branch `task/X4-conformance`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 327 ms
+- Load: start 3.88, end 3.88, median 3.88, max 3.88
+- Device: android / device `emulator-5574` / lease `X4-s25z9`
+- Full log: `task/X4-conformance/real-input+android-2026-10-29T17-40-16.100Z.log` (<store>/task/X4-conformance/real-input+android-2026-10-29T17-40-16.100Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/real-input+android-2026-10-29T17-40-16.100Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-s25z9 (still live)
+  |   F7-p6svp                 F7           both              pair-b
+  |   X4-s25z9                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.05 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 12 log line(s)
+
+```
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp a68b9f86 at a8aef55e98536630b938f26a7c871e5ba3cf77f2, now 8d6e6397 at e08d6dbd06b23619dc3012a9066a1d636fcb574e)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp a68b9f86 at a8aef55e98536630b938f26a7c871e5ba3cf77f2, now 8d6e6397 at e08d6dbd06b23619dc3012a9066a1d636fcb574e)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+
+
+```
