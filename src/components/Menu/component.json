@@ -9,7 +9,7 @@
   "exampleLabel": "Menu",
   "bench": true,
   "benchUnsuffixed": false,
-  "smoke": false,
+  "smoke": true,
   "realInput": true,
   "realInputTitle": "real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none"
 }
