@@ -47,7 +47,11 @@ export function realInputLine(line) {
  * `.real-input/ios/xcodebuild-test.log` - a file the next run overwrites (F1 M2).
  *
  * @param {string} log
- * @returns {Map<string, { outcome: string, duration: string, notes: string[], retries: string[] }>} by method name
+ * @returns {Map<string, { outcome: string, duration: string, notes: string[], retries: string[] }>} by method name.
+ *   `notes` and `retries` are disjoint: a retry line is in `retries` only. Both end
+ *   up on the control's log, so a parser that also left them in `notes` printed every
+ *   retry twice - once as a note, once as the counted retry - which is how the first
+ *   version of this came out of a real run.
  */
 export function parseTestResults(log) {
   /** @type {Map<string, { outcome: string, duration: string, notes: string[], retries: string[] }>} */
@@ -77,9 +81,10 @@ export function parseTestResults(log) {
         // it would put a retry on a control that did not do one.
         continue;
       }
-      running.notes.push(own.text);
       if (own.isRetry) {
         running.retries.push(own.text);
+      } else {
+        running.notes.push(own.text);
       }
       continue;
     }
