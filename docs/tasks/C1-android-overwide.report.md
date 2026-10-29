@@ -198,8 +198,10 @@ the exact thing M1 is about. Neither round-0 caption mentioned it.
   middle of the row); the 140 dp Button shows `too long for the box it w`, cut at both ends;
   the no-width row is clipped at both ends too.
 - `android-after.png` — retaken after M1: all three rows are inside their boxes, with both
-  end caps drawn and each label reduced to an ellipsis; the Button reads `A title far too…`
-  inside its pill. See "Fix round 1" for what each row proves.
+  end caps drawn. Row 1 (`width: 140`) has all four labels reduced to an ellipsis; row 2 (no
+  `width`, box clamped by the parent) keeps all four labels whole — January, February, March,
+  April — because its box is wide enough for them; the Button reads `A title far too…` inside
+  its pill. See "Fix round 1" for what each row proves.
 
 The after shot is honest about the trade: fitting is not legibility. Material 3 splits the
 row's width equally, so four segments in 140 dp each get an ellipsis, where iOS's `Picker`
