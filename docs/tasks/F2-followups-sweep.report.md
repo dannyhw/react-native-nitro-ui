@@ -19,9 +19,10 @@ Three of the brief's items were **wrong about the tree** and are closed as readi
   no change at all, so the line row 18 names does not exist (T14's own sentence was about sizing.md's
   claim that a mounted instance "is asked to measure again"). What *was* vague — "the host re-measures and reports" — now
   names the two asks it means (`onConfigurationChanged`, `traitCollectionDidChange`).
-- H1's S2 "value change while hidden" is already covered (`Host.harness.tsx:1126-1180`,
-  `6028511`); the gap Q4 cited is the dialog test. F10's **shown→hidden after mount** half is
-  still open and is now recorded as such.
+- H1's S2 "value change while hidden" is already covered (`Host.harness.tsx:1124-1178`,
+  `6028511`); the gap Q4 cited is the dialog test. Round 1 called F10's **shown→hidden after
+  mount** half open, and review M1 showed that is wrong — `HostPopups.harness.tsx:1135` performs
+  that teardown; the hit-test half is what has no test (fixed in the fix round, below).
 - Row 25's audit tail closes clean: the three components passing a configuration to
   `useSizingId` are exactly the three that render their native view with a `key`.
 
