@@ -1,0 +1,21 @@
+[
+  {
+    "dwell": 0.05,
+    "load1": 1.89,
+    "delivered": 12,
+    "taps": 12,
+    "jsToggle": 3,
+    "jsToggleTaps": 3,
+    "target": "probe-toggle-2",
+    "witness": "native",
+    "quiet": false,
+    "label": "native-uikit-switch-200",
+    "arm": "no-rn",
+    "probeUi": "uikit-switch",
+    "rows": 200,
+    "stallMs": null,
+    "rescue": false,
+    "watchdog": false,
+    "variant": null
+  }
+]
