@@ -87,3 +87,24 @@ untouched; bypassing the guard and running `pod install` directly churns 87 chec
 - `pod-install-lib.mjs`: if a future json changes the style again, the probe answers `other` and every macOS job refuses until `EXPECTED_EMPTY_ARRAY_STYLE` is revisited — correct, but unpractised.
 - `scripts/pod-install.mjs`: `example/Gemfile`'s `concurrent-ruby < 1.3.4` and friends are a second, unenforced environment contract that could move a checksum someday; only json is pinned.
 - `.github/workflows/release.yml`: the json pin and `ruby-version: '3.3'` are maintained separately from `ci.yml`'s Ruby; a shared `env:` or composite action would keep them from drifting.
+
+## Fix round 1
+
+**M1**: `/:\s*\[\s*\]/` let `\s` span newlines, so `[ ]` and `[\n]` read as agreement — a fail-open, with the "other format" branch unreachable. Compact is now the bytes `[]`. **M2**: the probe ran in a temp cwd, so `bundle exec pod` found no Gemfile and preflight refused on a correct machine, and a `.ruby-version` beside the app went unmeasured; it now asks from the Podfile's directory.
+
+Also: 60 s probe timeout, closed stdin; `--fix` probes once and passes the answer down; the pin step asserts what `require "json"` loads, not `gem list json`; `''` counts as set for the truthiness readers, per entry, plus `RCT_IGNORE_PODS_DEPRECATION`; the contract applies only to the lock it governs.
+
+Red proofs, each red on its own test: M1 permissive regex; M2 `cwd: tmp` (6 tests); N2 ignore exit status; N6 no timeout, `--fix` re-probing; N3 `governed = true`; N4 `''` universally unset; N1 revert to `gem list json`.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1145 tests / 43 suites | `4a54bbc84608` | 3 m 11 s | start 10.6 / med 20.9 / max 40.3 |
+| `harness:ios` | stale | 168 tests / 13 suites | f5358952127f (not this tree) | 2 m 15 s | start 67.3 / med 26.4 / max 67.3 |
+| `harness:android` | stale | 217 tests / 13 suites | f5358952127f (not this tree) | 6 m 18 s | start 16.7 / med 6.1 / max 16.7 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`need --for review`: `✓ check`; `✗ harness:ios`, `✗ harness:android` — this round was device-free
+by instruction and `scripts/pod-install*.mjs` count as both platforms, so both need a lease re-run.
+
+**Unproven:** CI's exact combination never ran. Ruby 3.3 won't build here (`miniruby` segfaults under Xcode 27, with and without yjit), and Ruby 2.7 can't host CocoaPods 1.17.0. The mechanism is proven on a real Ruby: the pin loads 2.18.0 over a 2.3.0 default.
