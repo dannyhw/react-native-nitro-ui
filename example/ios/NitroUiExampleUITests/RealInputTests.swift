@@ -128,6 +128,22 @@ final class RealInputTests: XCTestCase {
     // failure in one control cannot be explained away by the one before it.
     continueAfterFailure = false
     app = XCUIApplication()
+    // The dwell probe's no-React-Native arm (F7): when the runner is told which
+    // shape to build, the app starts that window instead of React Native. See
+    // `NitroUiProbe.swift`.
+    if let probeUI = ProcessInfo.processInfo.environment["NUI_PROBE_UI"] {
+      app.launchEnvironment["NUI_PROBE_UI"] = probeUI
+      if let rows = ProcessInfo.processInfo.environment["NUI_PROBE_ROWS"] {
+        app.launchEnvironment["NUI_PROBE_ROWS"] = rows
+      }
+      app.launch()
+      _ = try required(
+        "probe-button",
+        as: "the native probe's own button",
+        timeout: firstRenderTimeout
+      )
+      return
+    }
     app.launch()
     _ = try required(Tab.switchTab, as: "the example's tab bar", timeout: firstRenderTimeout)
   }
@@ -235,7 +251,59 @@ final class RealInputTests: XCTestCase {
     let target = env["NUI_PROBE_TARGET"] ?? "switch-uncontrolled"
     let tab = env["NUI_PROBE_TAB"] ?? Tab.switchTab
     let anchor = env["NUI_PROBE_ANCHOR"] ?? Echo.switchValue
+    // `native` (the default) reads the control's own `value:`; `echo:<testID>`
+    // reads a rendered text, for the controls that publish no value of their own -
+    // a Button's press count, a SegmentedControl's event count. Weaker, and named
+    // in the RESULT line so no one reads an echo row as a touch-only witness.
+    let witness = env["NUI_PROBE_WITNESS"] ?? "native"
+    let label = env["NUI_PROBE_LABEL"] ?? ""
+    let useEcho = witness.hasPrefix("echo:")
+    let echoID = useEcho ? String(witness.dropFirst("echo:".count)) : nil
+    // Where across the control to press, cycled one press per entry. A segmented
+    // control needs it: pressing the middle twice reports nothing the second time
+    // (that is the `Picker` binding's own rule), so only an alternating aim makes
+    // every press a fresh selection and the count a usable witness.
+    let fractions = (env["NUI_PROBE_FRACTIONS"] ?? "")
+      .split(separator: ",")
+      .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+    // The no-React-Native arm (F7): the app launched a probe window instead of a
+    // React Native one, so there is no tab to visit and no `js-toggle` to press.
+    // The positive control there is the probe's own UIKit button.
+    let nativeOnly = env["NUI_PROBE_UI"] != nil
+    if nativeOnly {
+      print(
+        "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) ui=\(env["NUI_PROBE_UI"] ?? "?") rows=\(env["NUI_PROBE_ROWS"] ?? "?") label=\(label.isEmpty ? "-" : label)"
+      )
+      let nativeDelivered = try measureDelivery(
+        target: target,
+        dwell: dwell,
+        taps: taps,
+        fractions: fractions,
+        reading: { self.nativeSwitchState(of: $0) }
+      )
+      let positiveDelivered = try measureDelivery(
+        target: "probe-button",
+        dwell: dwell,
+        taps: 3,
+        fractions: fractions,
+        reading: { element in
+          let node = app.descendants(matching: .any)[element].firstMatch
+          let shown = (node.value as? String) ?? ""
+          return shown.isEmpty ? nil : shown
+        }
+      )
+      print(
+        "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(nativeDelivered)/\(taps) js-toggle=\(positiveDelivered)/3"
+      )
+      return
+    }
     try goToTab(tab, showing: anchor)
+    // The probe presses a control wherever it is now, and XCUITest taps a frame
+    // whether or not the screen can show it — so a control below the fold would be
+    // pressed in empty space and read as a lost touch. Same helper the suite's own
+    // checks use; it returns without scrolling when the control is already in the
+    // band a tap can land in, which is the case for every control at the top.
+    try scrollIntoView(target, as: "the control under the probe")
     // The positive control lives on the Switch screen; on another tab, the check
     // that the event path is alive is the screen's own anchor being there at all,
     // which `goToTab` already proved by finding it.
@@ -244,49 +312,37 @@ final class RealInputTests: XCTestCase {
       : nil
     // A probe that cannot read its witness has not measured anything, and printing
     // zeros for it would be worse than saying the witness is unreadable.
-    guard nativeSwitchState(of: target) != nil else {
+    if !useEcho, nativeSwitchState(of: target) == nil {
       XCTFail(
         "dwell-probe: \(target) answers no native value, so delivery cannot be read "
           + "from the control. The probe measures the touch, not React's render, and "
-          + "an echo would not tell a dropped press from a lost event."
+          + "an echo would not tell a dropped press from a lost event. Pass "
+          + "NUI_PROBE_WITNESS=echo:<testID> to measure a rendered count instead."
       )
       return
     }
+    // Which build of the busy screen Metro actually served. The mechanism matrix
+    // changes only JS, so a cell whose variant is not the one asked for would
+    // otherwise read as a result; this line is what lets it be thrown out.
+    let variant = echoText("probe-variant")
     print(
-      "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) tab=\(tab)"
+      "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) tab=\(tab) witness=\(witness) label=\(label.isEmpty ? "-" : label) \(variant.isEmpty ? "variant=?" : variant)"
     )
 
-    var delivered = 0
-    for index in 1...taps {
-      let before = nativeSwitchState(of: target)
-      // Re-aimed each press rather than pressing a coordinate held from the start:
-      // the app can lay the row out again while the probe runs, and a stale point
-      // would measure the empty space where the Switch used to be.
-      try required(target, as: "the uncontrolled Switch").centre
-        .fingerTap(duration: dwell)
-      // "Delivered" is the control's own state moving. The wait is short on purpose:
-      // this measures the touch, not React's round trip, and a long window would
-      // credit a press whose value arrived while the next one was already aimed.
-      let until = Date().addingTimeInterval(1.5)
-      var moved = false
-      while Date() < until {
-        if nativeSwitchState(of: target) != before {
-          moved = true
-          break
+    let delivered = try measureDelivery(
+      target: target,
+      dwell: dwell,
+      taps: taps,
+      fractions: fractions,
+      reading: { identifier in
+        if let echoID {
+          let shown = echoText(echoID)
+          return shown.isEmpty ? nil : shown
         }
-        Thread.sleep(forTimeInterval: 0.05)
+        _ = identifier
+        return nativeSwitchState(of: target)
       }
-      if moved {
-        delivered += 1
-      }
-      print(
-        "real-input (ios): dwell-probe: tap \(index)/\(taps) \(before ?? "?") -> \(nativeSwitchState(of: target) ?? "?") delivered=\(moved)"
-      )
-      // Leave the app settled for the next press: an uncontrolled Toggle keeps its
-      // value, so a press that lands while the last one is still being painted would
-      // measure the app's queue rather than the gesture's shape.
-      Thread.sleep(forTimeInterval: 0.4)
-    }
+    )
 
     // Positive control, same launch, same press shape.
     var controlDelivered = 0
@@ -310,6 +366,61 @@ final class RealInputTests: XCTestCase {
     print(
       "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(delivered)/\(taps) js-toggle=\(controlDelivered)/\(controlTaps)"
     )
+  }
+
+  /// Press one control `taps` times and report how many presses its witness says
+  /// arrived. Shared by the dwell probe's two arms (React Native's screen, and the
+  /// no-React-Native probe window) so the two are pressed identically and only the
+  /// app under the finger differs.
+  ///
+  /// - Parameter reading: what the witness says right now, for one control. It is
+  ///   passed the identifier so the same closure can serve a control and the
+  ///   positive control.
+  private func measureDelivery(
+    target: String,
+    dwell: TimeInterval,
+    taps: Int,
+    fractions: [Double],
+    reading: (String) -> String?
+  ) throws -> Int {
+    var delivered = 0
+    for index in 1...taps {
+      let before = reading(target)
+      // Re-aimed each press rather than pressing a coordinate held from the start:
+      // the app can lay the row out again while the probe runs, and a stale point
+      // would measure the empty space where the Switch used to be.
+      let element = try required(target, as: "the control under the probe")
+      if let fraction = fractions.isEmpty ? nil : fractions[(index - 1) % fractions.count] {
+        element
+          .atFraction(CGFloat(fraction))
+          .fingerTap(duration: dwell)
+      } else {
+        element.fingerTap(duration: dwell)
+      }
+      // "Delivered" is the witness moving. The wait is short on purpose: this
+      // measures the touch, not React's round trip, and a long window would credit
+      // a press whose value arrived while the next one was already aimed.
+      let until = Date().addingTimeInterval(1.5)
+      var moved = false
+      while Date() < until {
+        if reading(target) != before {
+          moved = true
+          break
+        }
+        Thread.sleep(forTimeInterval: 0.05)
+      }
+      if moved {
+        delivered += 1
+      }
+      print(
+        "real-input (ios): dwell-probe: tap \(index)/\(taps) \(before ?? "?") -> \(reading(target) ?? "?") delivered=\(moved)"
+      )
+      // Leave the app settled for the next press: an uncontrolled Toggle keeps its
+      // value, so a press that lands while the last one is still being painted would
+      // measure the app's queue rather than the gesture's shape.
+      Thread.sleep(forTimeInterval: 0.4)
+    }
+    return delivered
   }
 
   /// A real tap must toggle a Switch that sits inside a `<Host>`.

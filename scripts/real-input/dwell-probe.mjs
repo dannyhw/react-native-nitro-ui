@@ -68,6 +68,32 @@ const TAPS = Number(flag('--taps', '12'));
 const TARGET = flag('--target', 'switch-uncontrolled');
 const TAB = flag('--tab', 'tab-switch');
 const ANCHOR = flag('--anchor', 'switch-controlled-value');
+/**
+ * What counts as "delivered". `native` (the default, and F1's shape) reads the
+ * control's own accessibility `value:`, which only a control that publishes one
+ * has. `echo:<testID>` reads a rendered text instead, for the controls that do
+ * not - a Button's press count, a SegmentedControl's event count. It is the
+ * weaker witness: it cannot tell a dropped touch from a lost event, so an echo
+ * row is read next to the same launch's `js-toggle` row, not on its own.
+ */
+const WITNESS = flag('--witness', 'native');
+/** Free text naming the shape of the app this cell measured, carried into the log. */
+const LABEL = flag('--label', '');
+/**
+ * Reuse the binary in `example/ios/build` instead of compiling: for a probe whose
+ * variants differ only in JS, which comes from Metro, the compile would rebuild
+ * the same native code once per cell. Nothing is stamped in this mode, so the
+ * binary's own stamp keeps naming the tree it was really built from.
+ */
+const SKIP_BUILD = args.includes('--skip-build');
+/**
+ * Where across the control to press, cycled one press per entry. For a segmented
+ * control, whose binding reports nothing when the same segment is chosen twice.
+ */
+const FRACTIONS = flag('--fractions', '');
+/** The no-React-Native arm: a shape from `NitroUiProbe.swift`, and its row count. */
+const PROBE_UI = flag('--probe-ui', '');
+const PROBE_ROWS = flag('--rows', '200');
 const DWELLS = flag('--dwells', '0,0.03,0.05,0.08,0.12,0.15')
   .split(',')
   .map((value) => Number(value.trim()))
@@ -210,29 +236,44 @@ async function main() {
       'CODE_SIGNING_ALLOWED=NO',
       ...iosModuleCacheArgs({ derivedData: derived, ccache: false }),
     ];
-    const buildLog = path.join(out, 'dwell-probe-build.log');
-    console.log(`dwell-probe: building (log: ${buildLog})`);
-    const built = await xcodebuild(
-      [
-        'build-for-testing',
-        '-workspace',
-        WORKSPACE,
-        '-scheme',
-        SCHEME,
-        '-configuration',
-        'Debug',
-        '-destination',
-        `platform=iOS Simulator,id=${udid}`,
-        '-derivedDataPath',
-        derived,
-        ...settings,
-      ],
-      buildLog,
-      {}
+    const app = path.join(
+      derived,
+      'Build/Products/Debug-iphonesimulator/NitroUiExample.app'
     );
-    if (built !== 0) {
-      throw new Error(
-        `dwell-probe: build-for-testing failed (${String(built)})`
+    if (!SKIP_BUILD) {
+      const buildLog = path.join(out, 'dwell-probe-build.log');
+      console.log(`dwell-probe: building (log: ${buildLog})`);
+      const built = await xcodebuild(
+        [
+          'build-for-testing',
+          '-workspace',
+          WORKSPACE,
+          '-scheme',
+          SCHEME,
+          '-configuration',
+          'Debug',
+          '-destination',
+          `platform=iOS Simulator,id=${udid}`,
+          '-derivedDataPath',
+          derived,
+          ...settings,
+        ],
+        buildLog,
+        {}
+      );
+      if (built !== 0) {
+        throw new Error(
+          `dwell-probe: build-for-testing failed (${String(built)})`
+        );
+      }
+    } else {
+      // The variants of a JS-only matrix differ in what Metro serves, not in the
+      // binary, so the compile would produce the same one every cell. The stamp
+      // written by the build that *did* run still says which tree it came from,
+      // and this mode deliberately does not overwrite it with a newer tree.
+      console.log(
+        'dwell-probe: --skip-build reusing ' +
+          `${app}; no stamp is written by this run.`
       );
     }
 
@@ -240,16 +281,14 @@ async function main() {
     // does this: the probe drives the same binary the gate does. Same stamp guard,
     // because it compiles into the same derived data - the next harness run has to
     // be able to tell that this binary came from this tree.
-    const app = path.join(
-      derived,
-      'Build/Products/Debug-iphonesimulator/NitroUiExample.app'
-    );
-    recordBuild({
-      platform: 'ios',
-      artifact: app,
-      treeBefore,
-      log: (message) => console.log(`  ${message}`),
-    });
+    if (!SKIP_BUILD) {
+      recordBuild({
+        platform: 'ios',
+        artifact: app,
+        treeBefore,
+        log: (message) => console.log(`  ${message}`),
+      });
+    }
     const installed = run('xcrun', ['simctl', 'install', udid, app]);
     if (installed.status !== 0) {
       throw new Error(
@@ -271,7 +310,10 @@ async function main() {
       console.log(
         `\ndwell-probe: dwell ${dwell.toFixed(2)}s · ${String(TAPS)} taps · load1 ${at.toFixed(2)}`
       );
-      const logFile = path.join(out, `dwell-probe-${dwell.toFixed(2)}.log`);
+      const logFile = path.join(
+        out,
+        `dwell-probe-${LABEL.replace(/[^a-zA-Z0-9._-]/g, '_') || 'cell'}-${dwell.toFixed(2)}.log`
+      );
       const status = await xcodebuild(
         [
           'test-without-building',
@@ -300,6 +342,17 @@ async function main() {
           TEST_RUNNER_NUI_PROBE_TARGET: TARGET,
           TEST_RUNNER_NUI_PROBE_TAB: TAB,
           TEST_RUNNER_NUI_PROBE_ANCHOR: ANCHOR,
+          TEST_RUNNER_NUI_PROBE_WITNESS: WITNESS,
+          TEST_RUNNER_NUI_PROBE_LABEL: LABEL,
+          TEST_RUNNER_NUI_PROBE_FRACTIONS: FRACTIONS,
+          // Only this arm of the probe builds a window with no React Native in
+          // it; an empty value leaves the app's own launch untouched.
+          ...(PROBE_UI === ''
+            ? {}
+            : {
+                TEST_RUNNER_NUI_PROBE_UI: PROBE_UI,
+                TEST_RUNNER_NUI_PROBE_ROWS: PROBE_ROWS,
+              }),
         }
       );
       const log = fs.readFileSync(logFile, 'utf8');
