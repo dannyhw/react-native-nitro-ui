@@ -1,0 +1,72 @@
+# Failure excerpt — real-input:ios:--control:switch
+
+- Ran: 2026-10-29T15:25:09.269Z on code tree `6114ae2584a6` at HEAD `4505389` (branch `task/F7-quick-tap`)
+- Command: `node scripts/real-input/ios.mjs --control switch`
+- Result: fail, exit 1, 144612 ms
+- Load: start 3.69, end 2.63, median 3.31, max 3.69
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F7-fnto8`
+- Full log: `task/F7-quick-tap/real-input+ios+--control+switch-2026-10-29T15-25-09.269Z.log` (<store>/task/F7-quick-tap/real-input+ios+--control+switch-2026-10-29T15-25-09.269Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputSwitch in 125.827s`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F7-quick-tap/real-input+ios+--control+switch-2026-10-29T15-25-09.269Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F7-fnto8 (no longer live)
+  |   X4-p29cc                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.63 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 31 log line(s)
+
+```
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: reusing the server already listening on 8295
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree 6114ae2584a6 (563 files) head 4505389c · 8 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8295
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-10-29 15:25:27.275.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-10-29 15:25:27.276.
+    Test Suite 'RealInputTests' started at 2026-10-29 15:25:27.276.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' started.
+    real-input (ios): accessibility hierarchy - no element "tab-switch" after 120.0s
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' failed (125.827 seconds).
+    Test Suite 'RealInputTests' failed at 2026-10-29 15:27:33.107.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-10-29 15:27:33.107.
+    Test Suite 'Selected tests' failed at 2026-10-29 15:27:33.108.
+    ** TEST EXECUTE FAILED **
+
+  switch: real tap flips the Switch and JS sees the new value
+    · real-input (ios): accessibility hierarchy - no element "tab-switch" after 120.0s
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:2188: error: -[NitroUiExampleUITests.RealInputTests testRealInputSwitch] : failed - the example's tab bar: no element with accessibilityIdentifier "tab-switch" appeared within 120.0s
+    ✗ XCUITest reported "failed" for testRealInputSwitch in 125.827s
+
+switch: FAIL (no retries)
+    failed: XCUITest reported "failed" for testRealInputSwitch in 125.827s
+
+real-input (ios): 0/1 controls passed · 0 press sequence(s) needed a retry
+
+
+
+```

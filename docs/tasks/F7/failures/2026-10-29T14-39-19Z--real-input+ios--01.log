@@ -1,0 +1,166 @@
+# Failure excerpt — real-input:ios
+
+- Ran: 2026-10-29T14:39:19.007Z on code tree `f8adfcef2ec2` at HEAD `1aa0ff2` (branch `task/F7-quick-tap`)
+- Command: `node scripts/real-input/ios.mjs`
+- Result: fail, exit 1, 669737 ms
+- Load: start 3.61, end 2.97, median 4.64, max 22.18
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F7-fnto8`
+- Full log: `task/F7-quick-tap/real-input+ios-2026-10-29T14-39-18.830Z.log` (<store>/task/F7-quick-tap/real-input+ios-2026-10-29T14-39-18.830Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputSwitch in 16.519s`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F7-quick-tap/real-input+ios-2026-10-29T14-39-18.830Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F7-fnto8 (still live)
+  |   F7-fnto8                 F7           both              pair-a
+  |   X4-fwfhi                 X4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.97 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 124 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios
+gate: node scripts/real-input/ios.mjs (cwd .)
+gate: code tree f8adfcef2ec2 at HEAD 1aa0ff2
+gate: git tree 37cccc3fc800
+gate: log task/F7-quick-tap/real-input+ios-2026-10-29T14-39-18.830Z.log
+gate:       <store>/task/F7-quick-tap/real-input+ios-2026-10-29T14-39-18.830Z.log
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree f8adfcef2ec2 (563 files) head 1aa0ff2e · 8 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8295
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-10-29 14:41:07.368.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-10-29 14:41:07.368.
+    Test Suite 'RealInputTests' started at 2026-10-29 14:41:07.369.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputButton]' started.
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on real-input-count
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputButton]' passed (26.961 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDatePicker]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDatePicker]' passed (66.047 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedButton]' started.
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on host-button-presses
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedButton]' passed (29.125 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedDatePicker]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedDatePicker]' passed (32.927 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedMixed]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedMixed]' passed (35.132 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedPicker]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedPicker]' passed (44.327 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSegmented]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSegmented]' passed (34.428 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSlider]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSlider]' passed (22.604 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSwitch]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSwitch]' passed (24.320 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputPicker]' started.
+    real-input (ios): heartbeat with nothing presented: "One" then "January"
+    real-input (ios): cycle 1: with the menu open the screen's heartbeat: "One" then "January"
+    real-input (ios): cycle 2: with the menu open the screen's heartbeat: "Yes" then "One"
+    real-input (ios): cycle 3: with the menu open the screen's heartbeat: "One" then "January"
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputPicker]' passed (143.974 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSegmentedControl]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSegmentedControl]' passed (41.602 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSlider]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSlider]' passed (42.183 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' failed (16.519 seconds).
+    Test Suite 'RealInputTests' failed at 2026-10-29 14:50:27.529.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-10-29 14:50:27.531.
+    Test Suite 'Selected tests' failed at 2026-10-29 14:50:27.532.
+    ** TEST EXECUTE FAILED **
+
+  switch: real tap flips the Switch and JS sees the new value
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:2234: error: -[NitroUiExampleUITests.RealInputTests testRealInputSwitch] : XCTAssertEqual failed: ("(325.0, 242.3333282470703, 61.0, 28.000015258789062)") is not equal to ("(325.0, 242.3333282470703, 61.0, 28.0)") - switch-controlled should still be drawn where it started, after the first real tap
+    ✗ XCUITest reported "failed" for testRealInputSwitch in 16.519s
+
+  slider: real drag moves the Slider and fires start, change and complete
+    ✓ XCUITest reported "passed" for testRealInputSlider in 42.183s
+
+  button: real tap presses the Button, and a disabled one stays pressed-out
+    · real-input (ios): accessibility hierarchy - nothing matched what was waited for on real-input-count
+    ✓ XCUITest reported "passed" for testRealInputButton in 26.961s
+
+  segmented-control: real tap selects the segment under the finger, and a refused selection snaps back
+    ✓ XCUITest reported "passed" for testRealInputSegmentedControl in 41.602s
+
+  date-picker: real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back
+    ✓ XCUITest reported "passed" for testRealInputDatePicker in 66.047s
+
+  picker: real tap opens the menu, a real tap on a row reports it, and an unmount while open leaks no popup
+    · real-input (ios): heartbeat with nothing presented: "One" then "January"
+    · real-input (ios): cycle 1: with the menu open the screen's heartbeat: "One" then "January"
+    · real-input (ios): cycle 2: with the menu open the screen's heartbeat: "Yes" then "One"
+    · real-input (ios): cycle 3: with the menu open the screen's heartbeat: "One" then "January"
+    ✓ XCUITest reported "passed" for testRealInputPicker in 143.974s
+
+  hosted-switch: real tap toggles a Switch inside a <Host>, where the control has no view of its own
+    ✓ XCUITest reported "passed" for testRealInputHostedSwitch in 24.320s
+
+  hosted-button: real tap presses a Button inside a <Host>, and a disabled one beside it stays unpressed
+    · real-input (ios): accessibility hierarchy - nothing matched what was waited for on host-button-presses
+    ✓ XCUITest reported "passed" for testRealInputHostedButton in 29.125s
+
+  hosted-slider: real drag moves a Slider inside a <Host>, whose width is the track
+    ✓ XCUITest reported "passed" for testRealInputHostedSlider in 22.604s
+
+  hosted-mixed: one <Host> composes four kinds of control, and each keeps its own node, order and geometry
+    ✓ XCUITest reported "passed" for testRealInputHostedMixed in 35.132s
+
+  hosted-segmented: real tap selects a segment of a SegmentedControl inside a <Host>, which owns no window
+    ✓ XCUITest reported "passed" for testRealInputHostedSegmented in 34.428s
+
+  hosted-picker: real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS
+    ✓ XCUITest reported "passed" for testRealInputHostedPicker in 44.327s
+
+  hosted-date-picker: real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, and OK, Cancel, Back and removing the child each close it
+    ✓ XCUITest reported "passed" for testRealInputHostedDatePicker in 32.927s
+
+switch: FAIL (no retries)
+    failed: XCUITest reported "failed" for testRealInputSwitch in 16.519s
+slider: PASS (no retries)
+button: PASS (no retries)
+segmented-control: PASS (no retries)
+date-picker: PASS (no retries)
+picker: PASS (no retries)
+hosted-switch: PASS (no retries)
+hosted-button: PASS (no retries)
+hosted-slider: PASS (no retries)
+hosted-mixed: PASS (no retries)
+hosted-segmented: PASS (no retries)
+hosted-picker: PASS (no retries)
+hosted-date-picker: PASS (no retries)
+
+real-input (ios): 12/13 controls passed · 0 press sequence(s) needed a retry
+gate: real-input:ios FAIL in 669.7 s
+gate: recorded in .gates/task/F7-quick-tap.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/F7-quick-tap/real-input+ios-2026-10-29T14-39-18.830Z.log (4 probe(s))
+
+```

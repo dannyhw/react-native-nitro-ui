@@ -128,6 +128,32 @@ final class RealInputTests: XCTestCase {
     // failure in one control cannot be explained away by the one before it.
     continueAfterFailure = false
     app = XCUIApplication()
+    // The dwell probe's knobs (F7), forwarded to the app by name. A list rather
+    // than a chain of optionals: an earlier version of this block forwarded two of
+    // the three stall variables and not the third, and the result read as a clean
+    // "a busy main thread loses nothing" when in fact nothing had been stalled.
+    for key in [
+      "NUI_PROBE_UI",
+      "NUI_PROBE_ROWS",
+      "NUI_PROBE_STALL",
+      "NUI_PROBE_RESCUE",
+      "NUI_PROBE_WATCHDOG",
+    ] {
+      if let value = ProcessInfo.processInfo.environment[key] {
+        app.launchEnvironment[key] = value
+      }
+    }
+    if ProcessInfo.processInfo.environment["NUI_PROBE_UI"] != nil {
+      // The no-React-Native arm: the app built a probe window instead of a React
+      // Native one, so there is no tab bar to wait for. See `NitroUiProbe.swift`.
+      app.launch()
+      _ = try required(
+        "probe-button",
+        as: "the native probe's own button",
+        timeout: firstRenderTimeout
+      )
+      return
+    }
     app.launch()
     _ = try required(Tab.switchTab, as: "the example's tab bar", timeout: firstRenderTimeout)
   }
@@ -185,6 +211,191 @@ final class RealInputTests: XCTestCase {
       "off",
       "a second real tap should flip it back, so the check is not one fluke"
     )
+
+    // F7: the same screen, every press counted, no retries. See the phase's own
+    // comment for why this belongs to this check rather than to its own method.
+    try assertBusyScreenDeliversEveryPress()
+  }
+
+  /// Asserts that every press this suite delivers on the busy Switch screen arrives,
+  /// and calls it from `testRealInputSwitch`.
+  ///
+  /// `testRealInputSwitch` presses the same screen through `tapUntilValue`, which taps
+  /// up to three times and passes if any one of them lands. That is the right shape
+  /// for a functional check and the wrong shape for this question: F7 measured this
+  /// screen losing a 50 ms press roughly every time, so a check that taps until one
+  /// works cannot see a screen that drops most of what it is given. Here each press is
+  /// delivered once and has to count, which is the property the suite's press length
+  /// rests on — `pressDwell` is a value the probe measured arriving, and if that ever
+  /// stopped being true the suite would otherwise carry on passing by retrying its way
+  /// past a regression.
+  ///
+  /// The dwell is not a literal here. Inlining one would let this check drift from the
+  /// value every other press in the suite uses, and the two agreeing is the point: it
+  /// is `RealInputTests.pressDwell` that the probe measured, and `pressDwell` that
+  /// every other gesture in this file inherits.
+  ///
+  /// A phase of the Switch check rather than its own method because the runner's
+  /// coverage guard pairs every `testRealInput*` with a control row in
+  /// `scripts/real-input/controls.mjs`, and that table is generated from the component
+  /// manifests, so a check about a *screen* has no row to be paired with.
+  ///
+  /// - Note: Fails red if `pressDwell` is lowered into the band F7 measured as dropped,
+  ///   and red if the screen stops being the busy one. Both are shown in
+  ///   `docs/tasks/F7-quick-tap.report.md`'s red proofs; the second is the one that
+  ///   keeps this check honest, because a calm screen passes it for the wrong reason.
+  private func assertBusyScreenDeliversEveryPress() throws {
+    // Counted as Switch elements, not as testIDs beginning `switch-list-`. The
+    // distinction is what makes this a precondition at all: probe variant 6 mounts 200
+    // rows carrying exactly those testIDs and exactly zero Switches, so an ID count
+    // would have called that screen busy and let the guard measure 200 plain boxes.
+    let switches = app.descendants(matching: .switch).count
+    XCTAssertGreaterThanOrEqual(
+      switches,
+      Self.busyScreenMinimumSwitches,
+      "the Switch screen has to carry its 200-row list of Switches for this check to "
+        + "mean anything: with the list absent, the same press was measured arriving "
+        + "at 30 ms, so this case would pass on a calm screen and report nothing about "
+        + "the busy one. The tree exposes \(switches) switch elements."
+    )
+
+    let target = "switch-uncontrolled"
+    var delivered = 0
+    var unreadable = 0
+    // The dwell actually used, so a mutation of `pressOnce` cannot have the failure
+    // message go on quoting `pressDwell` and misreport what was pressed.
+    var pressedAt: TimeInterval?
+    for attempt in 1...Self.busyScreenPresses {
+      // A missing witness is a broken check, not a delivered press. `?? ""` here used to
+      // turn one into a delivery: the loop then compared `String?` against `""`, so a
+      // control that answered nothing at all satisfied "the value changed" twelve times
+      // and the guard passed on a screen where nothing was visible. Fail loudly instead.
+      guard let before = nativeSwitchState(of: target) else {
+        XCTFail(
+          "\(target) published no switch value before press \(attempt) of "
+            + "\(Self.busyScreenPresses), so this check cannot tell a delivered press "
+            + "from a dropped one. A witness that stops publishing must not be able to "
+            + "read as twelve successes."
+        )
+        return
+      }
+      // Delivered once, deliberately: `fingerTap` at the suite's dwell, no retry, no
+      // `tapUntilValue`. `scrollIntoView` is not called because this control sits at
+      // the top of the screen, above the list, and moving the page would change the
+      // hit-test workload this check exists to measure.
+      guard let dwell = pressOnce(target) else {
+        XCTFail(
+          "\(target) could not be found before press \(attempt) of "
+            + "\(Self.busyScreenPresses): nothing was pressed, so the presses that "
+            + "follow would only measure the screen going away."
+        )
+        return
+      }
+      pressedAt = dwell
+      switch waitForNativeValueToChange(target, from: before) {
+      case .delivered:
+        delivered += 1
+      case .unreadable:
+        unreadable += 1
+      case .dropped:
+        break
+      }
+    }
+    let pressedAtSeconds = pressedAt.map { String($0) } ?? "an unknown"
+    XCTAssertEqual(
+      unreadable,
+      0,
+      "the busy Switch screen published no value at all after \(unreadable) of "
+        + "\(Self.busyScreenPresses) presses. Those presses are counted as dropped, "
+        + "and the check that they are not silently credited is the reason this is a "
+        + "separate assertion."
+    )
+    XCTAssertEqual(
+      delivered,
+      Self.busyScreenPresses,
+      "the busy Switch screen dropped \(Self.busyScreenPresses - delivered) of "
+        + "\(Self.busyScreenPresses) presses at \(pressedAtSeconds)s dwell. That is "
+        + "the property every other tap in this file depends on; see "
+        + "docs/tasks/F7-quick-tap.report.md for the measurements and "
+        + "docs/tasks/F1/dwell-probe.md for the tool that produced them."
+    )
+  }
+
+  /// How many mounted Switch elements make this "the busy screen", for the guard.
+  ///
+  /// The screen renders 200 rows plus the controls above them, so this is not the
+  /// interesting number; it is the guard's proof that it is not pressing a stripped
+  /// screen or a screen of plain boxes. It is not 200 because the tree exposes the
+  /// rows that are realised, and that count is not something a test should depend on.
+  /// It is well above the dozen-odd controls every other screen carries, which is
+  /// where F1 measured delivery already working at 30 ms.
+  private static let busyScreenMinimumSwitches = 100
+  /// Presses the guard delivers. Twelve is what every F1 and F7 ladder cell used, so
+  /// a regression here can be compared with those tables press for press.
+  private static let busyScreenPresses = 12
+
+  /// Delivers exactly one press, at the suite's dwell, and never a second one.
+  ///
+  /// Separate from `tap`/`tapUntilValue` because those exist to make a control answer;
+  /// this exists to count how often it does. A control that moved between the aim and
+  /// the press is the reason the element is looked up here rather than held across the
+  /// loop.
+  ///
+  /// Returns the dwell it pressed at rather than taking one silently from the call
+  /// site, so the guard's failure message can quote the length that was actually used:
+  /// the red proof for this check works by changing exactly that value, and a message
+  /// naming a constant the run did not press at would misreport the experiment.
+  /// Returns nil without pressing when the control cannot be found, which the guard
+  /// treats as a broken check rather than a dropped press.
+  private func pressOnce(_ identifier: String) -> TimeInterval? {
+    guard let element = try? required(identifier, as: "the uncontrolled Switch") else {
+      return nil
+    }
+    element.fingerTap()
+    return RealInputTests.pressDwell
+  }
+
+  /// What happened to one press, as read from the control's own value.
+  ///
+  /// Three states because two are not enough. `dropped` and `unreadable` look the same
+  /// to a boolean, and the difference is the whole reason the witness is the control's
+  /// native value: a control that has stopped publishing one reports every press as
+  /// "no change", which is a broken check, not a product bug. Collapsing them cost this
+  /// guard its first version, whose `?? ""` made a nil reading count as a delivery.
+  private enum PressOutcome {
+    /// The control's value moved away from where it started.
+    case delivered
+    /// The window closed with the control still reporting its original value.
+    case dropped
+    /// The control answered with nothing at all for the whole window.
+    case unreadable
+  }
+
+  /// Waits for the control's own value to move away from `before`.
+  ///
+  /// The window is the same short one the dwell probe uses: this measures whether the
+  /// touch reached the control, not whether React re-rendered, and a long window would
+  /// credit a press whose value arrived while the next was already being aimed.
+  ///
+  /// A reading of nil is never a change. The window ends `unreadable` only if *every*
+  /// reading was nil; a single real reading that matches `before` makes it `dropped`,
+  /// because then the control was answering and simply did not move.
+  private func waitForNativeValueToChange(
+    _ identifier: String,
+    from before: String
+  ) -> PressOutcome {
+    let until = Date().addingTimeInterval(1.5)
+    var sawAnyReading = false
+    while Date() < until {
+      if let shown = nativeSwitchState(of: identifier) {
+        sawAnyReading = true
+        if shown != before {
+          return .delivered
+        }
+      }
+      Thread.sleep(forTimeInterval: 0.05)
+    }
+    return sawAnyReading ? .dropped : .unreadable
   }
 
   /// Measures how long a synthesised press has to last before the busy Switch screen
@@ -235,7 +446,124 @@ final class RealInputTests: XCTestCase {
     let target = env["NUI_PROBE_TARGET"] ?? "switch-uncontrolled"
     let tab = env["NUI_PROBE_TAB"] ?? Tab.switchTab
     let anchor = env["NUI_PROBE_ANCHOR"] ?? Echo.switchValue
+    // `native` (the default) reads the control's own `value:`; `echo:<testID>`
+    // reads a rendered text, for the controls that publish no value of their own -
+    // a Button's press count, a SegmentedControl's event count. Weaker, and named
+    // in the RESULT line so no one reads an echo row as a touch-only witness.
+    let witness = env["NUI_PROBE_WITNESS"] ?? "native"
+    let label = env["NUI_PROBE_LABEL"] ?? ""
+    // F7 measurement (a): press a fixed screen point with no accessibility lookup per
+    // press. See ``measureDeliveryWithoutLookups`` for what that settles and why the
+    // earlier shapes could not.
+    let noLookup = env["NUI_PROBE_NO_LOOKUP"] == "1"
+    // With `--no-lookup`, also ask XCTest not to wait for the app to be idle around
+    // each event. A separate flag because it is the second question: the first is
+    // whether the probe's own queries lose the press, the second whether XCTest's
+    // settle-before-posting does, and a cell that turned both off at once could not say
+    // which one changed the number.
+    let skipQuiescence = env["NUI_PROBE_SKIP_QUIESCENCE"] == "1"
+    let useEcho = witness.hasPrefix("echo:")
+    let echoID = useEcho ? String(witness.dropFirst("echo:".count)) : nil
+    // Where across the control to press, cycled one press per entry. A segmented
+    // control needs it: pressing the middle twice reports nothing the second time
+    // (that is the `Picker` binding's own rule), so only an alternating aim makes
+    // every press a fresh selection and the count a usable witness.
+    let fractions = (env["NUI_PROBE_FRACTIONS"] ?? "")
+      .split(separator: ",")
+      .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+    // The no-React-Native arm (F7): the app launched a probe window instead of a
+    // React Native one, so there is no tab to visit and no `js-toggle` to press.
+    // The positive control there is the probe's own UIKit button.
+    let nativeOnly = env["NUI_PROBE_UI"] != nil
+    if nativeOnly {
+      // What the stall arm actually blocked for, read out of the app itself rather
+      // than assumed from the flag: a stall that never happened would otherwise be
+      // reported as "a busy main thread does not lose presses", which is the
+      // opposite fact. The probe window publishes it as an element's value.
+      let stallReport = echoText("probe-stall")
+      print(
+        "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) ui=\(env["NUI_PROBE_UI"] ?? "?") rows=\(env["NUI_PROBE_ROWS"] ?? "?") quiet=\(quiet) stall=\(env["NUI_PROBE_STALL"] ?? "-") \(stallReport.isEmpty ? "stall-report=-" : stallReport) label=\(label.isEmpty ? "-" : label)"
+      )
+      // Under a stall the arm is slow on purpose, so the witness has to be a count:
+      // a toggling value that is merely late to report is indistinguishable from one
+      // whose presses were lost, and the whole point of the arm is to tell those two
+      // apart. The probe window publishes its counters as plain numbers for this, and
+      // `--witness echo:<identifier>` picks any of them — which is how the rescue
+      // cell reads the recogniser's own firing count rather than the Toggle's state.
+      // Without a stall the original witnesses are kept, so the cells already
+      // measured stay comparable with this file's own earlier logs.
+      //
+      // The default counter follows the pressed control rather than being one
+      // constant, because that mistake was made and it produced a wrong result: an
+      // earlier `probe-inner-button` cell ran with no `--witness`, quietly read the
+      // *Toggle's* counter while pressing the *button*, and reported 0/12 for a
+      // control whose own counter said 12/12. Ask a control and it answers for
+      // itself, or the cell says nothing about the thing it pressed.
+      let counterForTarget: String? = {
+        if target == "probe-inner-button" {
+          return "probe-inner-count"
+        }
+        if target.hasPrefix("probe-toggle-") {
+          return "probe-toggle-count"
+        }
+        return nil
+      }()
+      let rowsReading: (String) -> String? = { _ in
+        if let echoID {
+          return self.publishedNumber(echoID)
+        }
+        if self.quiet, let counterForTarget {
+          return self.publishedNumber(counterForTarget)
+        }
+        return self.quiet
+          ? nil
+          : self.nativeSwitchState(of: target)
+      }
+      let buttonReading: (String) -> String? = quiet
+        ? { _ in self.publishedNumber("probe-button-count") }
+        : { element in
+            let node = self.app.descendants(matching: .any)[element].firstMatch
+            let shown = (node.value as? String) ?? ""
+            return shown.isEmpty ? nil : shown
+          }
+      let nativeDelivered = try measureDelivery(
+        target: target,
+        dwell: dwell,
+        taps: taps,
+        fractions: fractions,
+        reading: rowsReading
+      )
+      let positiveDelivered = try measureDelivery(
+        target: "probe-button",
+        dwell: dwell,
+        taps: quiet ? taps : 3,
+        fractions: fractions,
+        reading: buttonReading
+      )
+      print(
+        "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(nativeDelivered)/\(taps) js-toggle=\(positiveDelivered)/\(quiet ? taps : 3)"
+      )
+      // Every counter the window publishes, read after the presses. One launch that
+      // reports them together is what turns "the recogniser fired" and "the control
+      // did not act" into one fact rather than two runs that have to be believed to
+      // agree; under a stall the two can only be compared if they were measured in
+      // the same launch, on the same frames, at the same block lengths.
+      let counters = [
+        "toggle-flips=\(publishedNumber("probe-toggle-count") ?? "?")",
+        "outer-button=\(publishedNumber("probe-button-count") ?? "?")",
+        "inner-button=\(publishedNumber("probe-inner-count") ?? "?")",
+        "recogniser=\(publishedNumber("probe-rescue-count") ?? "?")",
+      ]
+      print("real-input (ios): dwell-probe: counters \(counters.joined(separator: " "))")
+      return
+    }
     try goToTab(tab, showing: anchor)
+    // The probe presses a control wherever it is now, and XCUITest taps a frame
+    // whether or not the screen can show it — so a control below the fold would be
+    // pressed in empty space and read as a lost touch. Same helper the suite's own
+    // checks use; it returns without scrolling when the control is already in the
+    // band a tap can land in, which is the case for every control at the top.
+    try scrollIntoView(target, as: "the control under the probe")
     // The positive control lives on the Switch screen; on another tab, the check
     // that the event path is alive is the screen's own anchor being there at all,
     // which `goToTab` already proved by finding it.
@@ -244,33 +572,193 @@ final class RealInputTests: XCTestCase {
       : nil
     // A probe that cannot read its witness has not measured anything, and printing
     // zeros for it would be worse than saying the witness is unreadable.
-    guard nativeSwitchState(of: target) != nil else {
+    if !useEcho, nativeSwitchState(of: target) == nil {
       XCTFail(
         "dwell-probe: \(target) answers no native value, so delivery cannot be read "
           + "from the control. The probe measures the touch, not React's render, and "
-          + "an echo would not tell a dropped press from a lost event."
+          + "an echo would not tell a dropped press from a lost event. Pass "
+          + "NUI_PROBE_WITNESS=echo:<testID> to measure a rendered count instead."
       )
       return
     }
+    // Which build of the busy screen Metro actually served. The mechanism matrix
+    // changes only JS, so a cell whose variant is not the one asked for would
+    // otherwise read as a result; this line is what lets it be thrown out.
+    let variant = echoText("probe-variant")
     print(
-      "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) tab=\(tab)"
+      "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) tab=\(tab) witness=\(witness) quiet=\(quiet) label=\(label.isEmpty ? "-" : label) \(variant.isEmpty ? "variant=?" : variant)"
     )
 
+    let noLookupReading: (String) -> String? = { identifier in
+      if let echoID {
+        let shown = self.echoText(echoID)
+        return shown.isEmpty ? nil : shown
+      }
+      _ = identifier
+      return self.nativeSwitchState(of: target)
+    }
+    // F7 measurement (a): the busy screen, the same press, and *no accessibility
+    // traffic of the probe's own* between presses, so that "a 50 ms press is lost" is
+    // separated from "the harness queried a two-hundred-control tree and waited for the
+    // app to settle immediately before pressing it". `--skip-quiescence` additionally
+    // asks XCTest not to wait for idle around the events at all.
+    if noLookup {
+      let skipped =
+        skipQuiescence
+        ? (skipQuiescenceChecksIfPossible() ?? "unavailable")
+        : "off"
+      // The aim comes from where the control is *now*, so this is after the scroll
+      // rather than at the top of the case. `scrollIntoView` returns without moving the
+      // page for a control already in the band a tap can land in, which is the case for
+      // every control at the top of this screen.
+      let frozen = try measureDeliveryWithoutLookups(
+        target: target,
+        dwell: dwell,
+        taps: taps,
+        reading: noLookupReading
+      )
+      // The idle wait's own footprint, so "XCTest still waits per event" is a measured
+      // number rather than a claim: a call that costs the dwell plus tens of
+      // milliseconds is XCTest settling the app before it posts the event, and the same
+      // cell with `--skip-quiescence` says what that wait was worth.
+      print(
+        "real-input (ios): dwell-probe: no-lookup shape skip-quiescence=\(skipped) call-ms \(describeTimings(frozen.pressMillis))"
+      )
+      // The positive control is pressed the same way or it proves nothing: a
+      // `probe-pressable` row that lands 12/12 *because it was resolved by identifier
+      // each press* would report a healthy launch while differing from the target in the
+      // one variable under test.
+      var controlDelivered = 0
+      var controlTaps = 0
+      if anchor == Echo.switchValue {
+        controlTaps = taps
+        controlDelivered = try measureDeliveryWithoutLookups(
+          target: "probe-pressable",
+          dwell: dwell,
+          taps: taps,
+          reading: { _ in
+            let shown = echoText("probe-press-events")
+            return shown.isEmpty ? nil : shown
+          }
+        ).delivered
+      }
+      print(
+        "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(frozen.delivered)/\(taps) js-toggle=\(controlDelivered)/\(controlTaps)"
+      )
+      return
+    }
+
+    let delivered = try measureDelivery(
+      target: target,
+      dwell: dwell,
+      taps: taps,
+      fractions: fractions,
+      reading: { identifier in
+        if let echoID {
+          let shown = echoText(echoID)
+          return shown.isEmpty ? nil : shown
+        }
+        _ = identifier
+        return nativeSwitchState(of: target)
+      }
+    )
+
+    // Positive control, same launch, same press shape.
+    //
+    // The default shape presses `js-toggle`, which flips a boolean: three presses,
+    // each confirmed by the echo moving. The quiet shape cannot use it — an even
+    // number of flips looks like none when the witness is read once at the end — so
+    // there the control is `probe-pressable`, whose witness counts, pressed as many
+    // times as the target was. If that does not report every press, the launch was
+    // not healthy and the target's number says nothing.
+    var controlDelivered = 0
+    var controlTaps = 3
+    if let toggle {
+      if quiet {
+        controlTaps = taps
+        controlDelivered = try measureDelivery(
+          target: "probe-pressable",
+          dwell: dwell,
+          taps: taps,
+          fractions: [],
+          reading: { _ in
+            let shown = echoText("probe-press-events")
+            return shown.isEmpty ? nil : shown
+          }
+        )
+      } else {
+        for _ in 1...controlTaps {
+          let before = echoText(Echo.switchValue)
+          toggle.centre.fingerTap(duration: dwell)
+          let until = Date().addingTimeInterval(2)
+          while Date() < until {
+            if echoText(Echo.switchValue) != before {
+              controlDelivered += 1
+              break
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+          }
+          Thread.sleep(forTimeInterval: 0.3)
+        }
+      }
+    }
+
+    print(
+      "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(delivered)/\(taps) js-toggle=\(controlDelivered)/\(controlTaps)"
+    )
+  }
+
+  /// Press one control `taps` times and report how many presses its witness says
+  /// arrived. Shared by the dwell probe's two arms (React Native's screen, and the
+  /// no-React-Native probe window) so the two are pressed identically and only the
+  /// app under the finger differs.
+  ///
+  /// Set by `NUI_PROBE_QUIET=1` to switch ``measureDelivery`` to the low-
+  /// interference shape described by ``measureDeliveryQuietly``.
+  private var quiet: Bool {
+    ProcessInfo.processInfo.environment["NUI_PROBE_QUIET"] == "1"
+  }
+
+  /// - Parameter reading: what the witness says right now, for one control. It is
+  ///   passed the identifier so the same closure can serve a control and the
+  ///   positive control.
+  private func measureDelivery(
+    target: String,
+    dwell: TimeInterval,
+    taps: Int,
+    fractions: [Double],
+    reading: (String) -> String?
+  ) throws -> Int {
+    if quiet {
+      return try measureDeliveryQuietly(
+        target: target,
+        dwell: dwell,
+        taps: taps,
+        fractions: fractions,
+        reading: reading
+      )
+    }
     var delivered = 0
     for index in 1...taps {
-      let before = nativeSwitchState(of: target)
+      let before = reading(target)
       // Re-aimed each press rather than pressing a coordinate held from the start:
       // the app can lay the row out again while the probe runs, and a stale point
       // would measure the empty space where the Switch used to be.
-      try required(target, as: "the uncontrolled Switch").centre
-        .fingerTap(duration: dwell)
-      // "Delivered" is the control's own state moving. The wait is short on purpose:
-      // this measures the touch, not React's round trip, and a long window would
-      // credit a press whose value arrived while the next one was already aimed.
+      let element = try required(target, as: "the control under the probe")
+      if let fraction = fractions.isEmpty ? nil : fractions[(index - 1) % fractions.count] {
+        element
+          .atFraction(CGFloat(fraction))
+          .fingerTap(duration: dwell)
+      } else {
+        element.fingerTap(duration: dwell)
+      }
+      // "Delivered" is the witness moving. The wait is short on purpose: this
+      // measures the touch, not React's round trip, and a long window would credit
+      // a press whose value arrived while the next one was already aimed.
       let until = Date().addingTimeInterval(1.5)
       var moved = false
       while Date() < until {
-        if nativeSwitchState(of: target) != before {
+        if reading(target) != before {
           moved = true
           break
         }
@@ -280,36 +768,187 @@ final class RealInputTests: XCTestCase {
         delivered += 1
       }
       print(
-        "real-input (ios): dwell-probe: tap \(index)/\(taps) \(before ?? "?") -> \(nativeSwitchState(of: target) ?? "?") delivered=\(moved)"
+        "real-input (ios): dwell-probe: tap \(index)/\(taps) \(before ?? "?") -> \(reading(target) ?? "?") delivered=\(moved)"
       )
       // Leave the app settled for the next press: an uncontrolled Toggle keeps its
       // value, so a press that lands while the last one is still being painted would
       // measure the app's queue rather than the gesture's shape.
       Thread.sleep(forTimeInterval: 0.4)
     }
+    return delivered
+  }
 
-    // Positive control, same launch, same press shape.
-    var controlDelivered = 0
-    let controlTaps = 3
-    if let toggle {
-      for _ in 1...controlTaps {
-        let before = echoText(Echo.switchValue)
-        toggle.centre.fingerTap(duration: dwell)
-        let until = Date().addingTimeInterval(2)
-        while Date() < until {
-          if echoText(Echo.switchValue) != before {
-            controlDelivered += 1
-            break
-          }
-          Thread.sleep(forTimeInterval: 0.05)
-        }
-        Thread.sleep(forTimeInterval: 0.3)
+  /// The same presses with the probe's own interference taken out of the run.
+  ///
+  /// The default loop above consults the witness up to thirty times per press, and
+  /// every consultation is an accessibility query that goes into the app under test
+  /// and is answered on its main thread. On a screen with two hundred mounted
+  /// controls that is a load the probe itself is imposing on the thing it is
+  /// measuring, and it is exactly the kind of thing that could turn "the press was
+  /// lost" into "the press was lost because I was asking too loudly".
+  ///
+  /// Here the probe reads the witness twice: once before the first press and once
+  /// after the last. A witness that counts (a rendered event count) then reports the
+  /// number of delivered presses directly, as a delta, with no polling at all and no
+  /// per-pass deadline that a slow-but-real delivery could miss. A witness that only
+  /// toggles can still say whether anything arrived, which is the weaker claim, and
+  /// is labelled as such by the caller passing a count witness whenever it has one.
+  ///
+  /// The trade is that this arm cannot say *which* press was lost, and it aims once
+  /// rather than re-aiming, so it is only valid while the control does not move.
+  private func measureDeliveryQuietly(
+    target: String,
+    dwell: TimeInterval,
+    taps: Int,
+    fractions: [Double],
+    reading: (String) -> String?
+  ) throws -> Int {
+    let before = reading(target)
+    let element = try required(target, as: "the control under the probe")
+    for index in 1...taps {
+      if let fraction = fractions.isEmpty ? nil : fractions[(index - 1) % fractions.count] {
+        element
+          .atFraction(CGFloat(fraction))
+          .fingerTap(duration: dwell)
+      } else {
+        element.fingerTap(duration: dwell)
       }
+      print("real-input (ios): dwell-probe: quiet tap \(index)/\(taps) pressed")
+      Thread.sleep(forTimeInterval: 0.4)
     }
+    // One read, after the last press has had time to be applied and rendered.
+    Thread.sleep(forTimeInterval: 1.0)
+    let after = reading(target)
+    print("real-input (ios): dwell-probe: quiet \(before ?? "?") -> \(after ?? "?")")
+    // A counting witness says exactly how many arrived.
+    if let start = Int(before ?? ""), let end = Int(after ?? "") {
+      return max(0, end - start)
+    }
+    // Anything else can only answer "did any of them land", and the caller's
+    // positive control is what keeps that honest.
+    return before == after ? 0 : 1
+  }
 
-    print(
-      "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(delivered)/\(taps) js-toggle=\(controlDelivered)/\(controlTaps)"
+  /// Turns off XCTest's own waiting-for-idle around each event, if it can.
+  ///
+  /// The point is to measure the harness rather than the app. `XCUIAutomation` posts
+  /// every event behind a pre-event quiescence check — `-[XCUIApplication
+  /// _waitForQuiescenceAsPreEvent:]`, which calls `-[XCUIApplicationProcess
+  /// waitForQuiescenceIncludingAnimationsIdle:isPreEvent:]` — and skips it only when
+  /// `-[XCUIApplicationProcess shouldSkipPreEventQuiescence]` says so, which returns bit 0
+  /// of that process's `_interactionOptions`. That bit is
+  /// `XCUIApplicationInteractionOptionSkipPreEventQuiescence`, and the only setter is
+  /// `-[XCUIApplication setCurrentInteractionOptions:]`, which forwards it to the current
+  /// process. Neither is declared in any header in this Xcode — the public
+  /// `XCUIApplication` has no interaction options at all.
+  ///
+  /// So this goes through key-value coding, which is the safe way to reach a scalar
+  /// setter that Swift cannot see: `setValue(_:forKey:)` finds that setter and unboxes the
+  /// number to `NSUInteger` itself, where `perform(_:)` would hand the callee a pointer
+  /// and let it read the low word as an integer. It is private API in a UI-test bundle,
+  /// behind an environment variable, and cannot be reached by a shipped target; and the
+  /// value is read back and printed, so if Apple renames it the cell reports
+  /// `skip-quiescence=unavailable` instead of pretending the wait was turned off.
+  ///
+  /// - Returns: what the app reports as its interaction options afterwards, or nil if the
+  ///   property is not there to set.
+  private func skipQuiescenceChecksIfPossible() -> String? {
+    let skipPreEvent = UInt(1 << 0)  // XCUIApplicationInteractionOptionSkipPreEventQuiescence
+    let skipPostEvent = UInt(1 << 1)  // XCUIApplicationInteractionOptionSkipPostEventQuiescence
+    let wanted = skipPreEvent | skipPostEvent
+    // Guarded by `responds(to:)` rather than left to key-value coding to report: an
+    // unknown key raises an Objective-C exception, which is a crash in this process, not
+    // a Swift error. If the selector is there, KVC finds that same accessor and unboxes
+    // the number to the scalar the setter wants.
+    let setter = NSSelectorFromString("setCurrentInteractionOptions:")
+    let getter = NSSelectorFromString("currentInteractionOptions")
+    guard app.responds(to: setter), app.responds(to: getter) else {
+      return nil
+    }
+    app.setValue(NSNumber(value: wanted), forKey: "currentInteractionOptions")
+    guard let back = app.value(forKey: "currentInteractionOptions") as? NSNumber else {
+      return nil
+    }
+    return back.uintValue == wanted ? "on(\(wanted))" : "refused(\(back.uintValue))"
+  }
+
+  /// end, with no accessibility lookup of the target between presses.
+  ///
+  /// This is F7 fix-round measurement (a), and it exists because every iOS number in
+  /// the report so far was produced by a loop that resolves the control by identifier
+  /// before each press. That resolution is an accessibility query into the app, answered
+  /// on the app's main thread, over a tree of two hundred controls — and XCTest
+  /// additionally waits for the app to go idle before it posts an event
+  /// (`-[XCUIApplication _waitForQuiescenceAsPreEvent:]`, which waits on
+  /// `-[XCUIApplicationProcess waitForQuiescenceIncludingAnimationsIdle:isPreEvent:]`,
+  /// both in `XCUIAutomation.framework`). So "the press was lost" has never been
+  /// separated from "the harness loaded the app's main thread immediately before
+  /// pressing it, and then waited for it to settle". Those two have completely
+  /// different answers about a real user's thumb, and no amount of quiet witness
+  /// reading separates them, because the lookup was never the witness — it was the aim.
+  ///
+  /// Here the aim is computed once: the target's frame centre, expressed as an offset
+  /// from the window's top-left, so each press re-resolves only the window (a
+  /// one-element query) rather than searching the tree for a control. The point is held
+  /// across the loop deliberately, which is also why this shape is only valid for a
+  /// control that does not move — a row that re-lays itself out mid-loop would be
+  /// pressed in the wrong place and read as another dropped press.
+  ///
+  /// What this arm cannot do is turn off XCTest's own per-event idle wait: the option
+  /// that skips it (`XCUIApplicationInteractionOptionSkipPreEventQuiescence`) is private
+  /// API with no public `XCUIApplication` surface in this Xcode, so the wait still
+  /// happens here. That is why the timings are measured and printed. A press whose
+  /// `press(forDuration:)` call takes far longer than the dwell did not fail to wait
+  /// for idle; it waited, and the number printed says how long, which is the difference
+  /// between "the idle wait is innocent" and "the idle wait never happened".
+  ///
+  /// - Returns: how many presses the witness says arrived, and the per-press wall-clock
+  ///   timings of the calls themselves.
+  private func measureDeliveryWithoutLookups(
+    target: String,
+    dwell: TimeInterval,
+    taps: Int,
+    reading: (String) -> String?
+  ) throws -> (delivered: Int, pressMillis: [Int]) {
+    let before = reading(target)
+    // Resolved exactly once, and only used to fix the point. After this line the
+    // element is dropped on purpose: holding it would let XCUITest re-query *it* on
+    // every press, which is the thing being taken out of the run.
+    let element = try required(target, as: "the control under the probe")
+    let window = app.windows.firstMatch
+    guard window.exists else {
+      XCTFail("dwell-probe: no window to aim from, so a fixed point cannot be computed")
+      return (0, [])
+    }
+    let targetFrame = element.frame
+    let windowFrame = window.frame
+    let aim = CGPoint(
+      x: targetFrame.midX - windowFrame.minX,
+      y: targetFrame.midY - windowFrame.minY
     )
+    let frozen = window
+      .coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+      .withOffset(CGVector(dx: aim.x, dy: aim.y))
+    print(
+      "real-input (ios): dwell-probe: no-lookup aim x=\(String(format: "%.2f", aim.x)) y=\(String(format: "%.2f", aim.y)) (window \(String(format: "%.0f", windowFrame.width))x\(String(format: "%.0f", windowFrame.height)))"
+    )
+
+    var pressMillis: [Int] = []
+    for index in 1...taps {
+      let started = Date()
+      frozen.press(forDuration: dwell)
+      let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+      pressMillis.append(elapsed)
+      print("real-input (ios): dwell-probe: no-lookup press \(index)/\(taps) call took \(elapsed)ms (dwell \(Int(dwell * 1000))ms)")
+      Thread.sleep(forTimeInterval: 0.4)
+    }
+    Thread.sleep(forTimeInterval: 1.0)
+    let after = reading(target)
+    print("real-input (ios): dwell-probe: no-lookup \(before ?? "?") -> \(after ?? "?")")
+    if let start = Int(before ?? ""), let end = Int(after ?? "") {
+      return (max(0, end - start), pressMillis)
+    }
+    return (before == after ? 0 : 1, pressMillis)
   }
 
   /// A real tap must toggle a Switch that sits inside a `<Host>`.
@@ -2068,6 +2707,21 @@ final class RealInputTests: XCTestCase {
     return node.label.isEmpty ? ((node.value as? String) ?? "") : node.label
   }
 
+  /// A probe readout that is a bare number, or nil when it is not there or says
+  /// something else.
+  ///
+  /// Kept apart from `echoText` because the two fail differently: an echo the suite
+  /// asserts on must be present and correct or the check is wrong, while the probe's
+  /// counters are optional witnesses — the same cell can be read from a control's own
+  /// value instead — so an unreadable one is reported as no reading, not as zero. A
+  /// zero from a witness that is missing would be a measurement, and a false one.
+  ///
+  /// - Parameter identifier: the readout's `accessibilityIdentifier`.
+  private func publishedNumber(_ identifier: String) -> String? {
+    let shown = echoText(identifier).trimmingCharacters(in: .whitespaces)
+    return shown.allSatisfy(\.isNumber) && !shown.isEmpty ? shown : nil
+  }
+
   /// Tap a control until the on-screen *value* it is meant to change says so.
   ///
   /// The value rather than the echo's *existence*, which is what `tapUntilEcho`
@@ -2507,6 +3161,22 @@ final class RealInputTests: XCTestCase {
 /// letting the next assertion run against nothing.
 private struct RealInputCheckAborted: Error {
   let identifier: String
+}
+
+/// A short summary of a list of millisecond timings: min, median, max, count.
+///
+/// Median rather than mean because a handful of slow presses is what matters here and
+/// a mean would hide them in the middle of a mostly-fast run.
+private func describeTimings(_ values: [Int]) -> String {
+  guard !values.isEmpty else {
+    return "none"
+  }
+  let sorted = values.sorted()
+  let median =
+    sorted.count.isMultiple(of: 2)
+    ? (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2
+    : sorted[sorted.count / 2]
+  return "n=\(values.count) min=\(sorted.first!) median=\(median) max=\(sorted.last!)"
 }
 
 extension XCUIElement {

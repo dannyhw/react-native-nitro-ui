@@ -1,0 +1,34 @@
+[
+  {
+    "dwellMs": 5,
+    "load1": 5.15,
+    "delivered": 12,
+    "taps": 12,
+    "positive": 3,
+    "positiveTaps": 3
+  },
+  {
+    "dwellMs": 20,
+    "load1": 3.8,
+    "delivered": 12,
+    "taps": 12,
+    "positive": 3,
+    "positiveTaps": 3
+  },
+  {
+    "dwellMs": 50,
+    "load1": 4.34,
+    "delivered": 12,
+    "taps": 12,
+    "positive": 3,
+    "positiveTaps": 3
+  },
+  {
+    "dwellMs": 100,
+    "load1": 4.58,
+    "delivered": 12,
+    "taps": 12,
+    "positive": 3,
+    "positiveTaps": 3
+  }
+]
