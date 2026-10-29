@@ -46,6 +46,7 @@ import {
   findTab,
   parseHierarchy,
 } from './uiautomator.mjs';
+import { nativeChecked } from './android-tree.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { assertFreshApp, colorize } from '../app-stamp.mjs';
 import { checkEmulatorEnv, isReservedSerial } from '../lease-core.mjs';
@@ -3067,57 +3068,15 @@ function makeContext(harness, log) {
     },
 
     /**
-     * The control's own answer to "what value do I hold", read from the same dump as
-     * the echo: `checked` on the checkable node that carries this labelled control.
-     *
-     * A hosted Compose Switch publishes its state on its own accessibility node, and
-     * the label the library sets lands on a *child* of it (measured in a dump of the
-     * running app: the parent is `checkable="true" checked="false"` at
-     * `[901,738][1038,864]`; the labelled node is `checkable="false"` at
-     * `[901,759][1038,843]`), so this takes the tightest checkable box that contains
-     * the labelled one. Tightest rather than nearest-in-document-order, because the
-     * dump is flat and "nearest" is an accident of how the tree happens to be written.
-     *
-     * The value is the control's, not React's, which is the whole point: `pressUntil`
-     * compares it against what it was before the first press to tell a dropped touch
-     * from a delivered one whose change event never reached JS (F1 M3).
+     * See `nativeChecked` in `android-tree.mjs`, which is where this lives and
+     * where the tests are: a witness whose failure mode is silence needs a fixture,
+     * and this file cannot be imported without a device.
      *
      * @param {string} description the control's `accessibilityLabel`
      * @returns {string | null} `"on"` / `"off"`, or null when no node answers
      */
     nativeChecked(description) {
-      const tree = harness.hierarchy();
-      const labelled = tree.find(
-        (node) => node.contentDesc === description && node.bounds.height > 0
-      );
-      if (labelled == null) {
-        return null;
-      }
-      /** @type {{area: number, checked: string} | null} */
-      let tightest = null;
-      for (const node of tree) {
-        if (node.checkable !== 'true') {
-          continue;
-        }
-        const { bounds } = node;
-        const contains =
-          bounds.x1 <= labelled.bounds.x1 &&
-          bounds.y1 <= labelled.bounds.y1 &&
-          bounds.x2 >= labelled.bounds.x2 &&
-          bounds.y2 >= labelled.bounds.y2;
-        if (!contains) {
-          continue;
-        }
-        const area = bounds.width * bounds.height;
-        if (tightest == null || area < tightest.area) {
-          tightest = { area, checked: node.checked };
-        }
-      }
-      return tightest == null
-        ? null
-        : tightest.checked === 'true'
-          ? 'on'
-          : 'off';
+      return nativeChecked(harness.hierarchy(), description);
     },
 
     /**
