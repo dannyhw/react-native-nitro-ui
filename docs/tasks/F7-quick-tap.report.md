@@ -98,14 +98,16 @@ stall arm does, and nothing measured here says what the busy screen crosses.
 ## Red proofs
 
 - `testRealInputSwitch` busy-screen phase -> `pressOnce` pressing at `0.05` instead of
-  `RealInputTests.pressDwell` -> `RealInputTests.swift:284: XCTAssertEqual failed: ("5") is not
-  equal to ("12") — the busy Switch screen dropped 7 of 12 presses`; reverted, then
-  `real-input:ios:--control:switch` **PASS** (99 s).
-- `testRealInputSwitch` -> shared `pressDwell` lowered to `0.05` -> `RealInputTests.swift:2415`
-  (the pre-existing `tapUntilValue` aborts first: "3 real presses … left it at \"off\""). Kept
-  because it says something a reviewer would otherwise assume: at a globally lowered dwell the old
-  failure comes first, which is why the guard is a phase of the Switch check rather than a later
-  assertion in a run that has already aborted.
+  `RealInputTests.pressDwell` -> `XCTAssertEqual failed: ("5") is not equal to ("12") — the busy
+  Switch screen dropped 7 of 12 presses` (the guard's own assertion; it printed at
+  `RealInputTests.swift:284` on that tree). Reverted, then `real-input:ios:--control:switch`
+  **PASS** (99 s).
+- `testRealInputSwitch` -> shared `pressDwell` lowered to `0.05` -> the pre-existing `tapUntilValue`
+  aborts before the guard runs: "the first real tap: 3 real presses on the controlled Switch
+  (`switch-controlled`) left it at \"off\". Its own state never moved either, so on the evidence
+  here the touch was never delivered". Kept because it says something a reviewer would otherwise
+  assume: at a globally lowered dwell the old failure comes first, which is why the guard is a phase
+  of the Switch check rather than a later assertion in a run that has already aborted.
 - The guard's row-count precondition -> not mutated. Turning the list off is a probe variant rather
   than a mutation of the guard, so the precondition is asserted rather than shown red; it exists so
   a stripped screen cannot pass the check for the wrong reason.
