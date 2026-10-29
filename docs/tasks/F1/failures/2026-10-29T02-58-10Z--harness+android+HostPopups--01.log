@@ -1,0 +1,205 @@
+# Failure excerpt — harness:android:HostPopups
+
+- Ran: 2026-10-29T02:58:10.374Z on code tree `73649082cf0e` at HEAD `68ed539` (branch `task/F1-determinism`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android HostPopups`
+- Result: fail, exit 1, 172618 ms
+- Load: start 2.89, end 2.32, median 1.79, max 2.89
+- Device: android / device `emulator-5574` / lease `F1-q325w`
+- Full log: `task/F1-determinism/harness+android+HostPopups-2026-10-29T02-58-10.374Z.log` (<store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T02-58-10.374Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostPopups.harness.tsx`
+- `● Host · a hosted Picker’s menu is a window of the Host › opens two popup owners in one Host, one after the other`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › opens its dialog as a window of the Host’s composition`
+- `expected 1 to be +0 // Object.is equality`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › follows a value React writes while the dialog is open (G5)`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › closes when the control is disabled while the dialog is open (G5)`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › does not reopen a dialog that a hidden child left behind`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › takes a hosted dialog down when only its child leaves the Host`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › comes down with its row, and leaves nothing when the Host is dropped`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › presents a dialog for the time and datetime modes too`
+- `● Host · all seven controls, one composition › follows all seven when two of them trade places`
+- `● Host · all seven controls, one composition › follows all seven when one is removed and another added back`
+- `● Host · all seven controls, one composition › opens a hosted menu inside the seven and still leaves nothing after a churn`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T02-58-10.374Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-q325w (still live)
+  |   F1-q325w                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.32 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 152 — the rest is in the full log above)
+
+```
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.89/2.65 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T02-58-10.374Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/HostPopups.harness.tsx
+  ● Host · a hosted Picker’s menu is a window of the Host › opens two popup owners in one Host, one after the other
+
+    Date report never matched within 12000ms; last read "1778972400000|0|-1|-1|1|1|-2|-2".
+
+      [0m [90m 332 |[39m     seen [33m=[39m line[33m;[39m
+       [90m 333 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 334 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 335 |[39m         [32m`Date report never matched within ${String(timeoutMs)}ms; last read "${seen}".`[39m
+       [90m 336 |[39m       )[33m;[39m
+       [90m 337 |[39m     }[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › opens its dialog as a window of the Host’s composition
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 1118 |[39m       [36mconst[39m before [33m=[39m parseDateReport(date[33m.[39mnuiTestStateReport())[33m;[39m
+       [90m 1119 |[39m       expect(before[33m.[39mpresented)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1120 |[39m       expect(before[33m.[39mlivePresentations)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                            [31m[1m^[22m[39m
+       [90m 1121 |[39m       date[33m.[39mnuiTestPresent()[33m;[39m
+       [90m 1122 |[39m       [36mconst[39m open [33m=[39m [36mawait[39m waitForDate(
+       [90m 1123 |[39m         date[33m,[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › follows a value React writes while the dialog is open (G5)
+
+    Date report never matched within 12000ms; last read "1825200000000|0|-1|-1|2|1|-2|-2".
+
+      [0m [90m 332 |[39m     seen [33m=[39m line[33m;[39m
+       [90m 333 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 334 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 335 |[39m         [32m`Date report never matched within ${String(timeoutMs)}ms; last read "${seen}".`[39m
+       [90m 336 |[39m       )[33m;[39m
+       [90m 337 |[39m     }[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › closes when the control is disabled while the dialog is open (G5)
+
+    Date report never matched within 12000ms; last read "1778972400000|1|1777593600000|1|3|1|-2|-2".
+
+      [0m [90m 332 |[39m     seen [33m=[39m line[33m;[39m
+       [90m 333 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 334 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 335 |[39m         [32m`Date report never matched within ${String(timeoutMs)}ms; last read "${seen}".`[39m
+       [90m 336 |[39m       )[33m;[39m
+       [90m 337 |[39m     }[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › does not reopen a dialog that a hidden child left behind
+
+    Date report never matched within 12000ms; last read "1778972400000|1|1777593600000|1|4|1|-2|-2".
+
+      [0m [90m 332 |[39m     seen [33m=[39m line[33m;[39m
+       [90m 333 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 334 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 335 |[39m         [32m`Date report never matched within ${String(timeoutMs)}ms; last read "${seen}".`[39m
+       [90m 336 |[39m       )[33m;[39m
+       [90m 337 |[39m     }[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › takes a hosted dialog down when only its child leaves the Host
+
+    "child-leaves-the-host" could not earn a zero baseline: 5 DatePicker window(s) were live before it opened anything, and they did not come down when it closed its own. Those are windows this gate did not open and cannot close - a leaked or still-undisposed dialog, not a wrong count in the control under test.
+
+      [0m [90m 382 |[39m       handle[33m.[39mnuiTestStateReport()
+       [90m 383 |[39m     )[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 384 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 385 |[39m       [32m`"${what}" could not earn a zero baseline: ${String(stuck)} DatePicker `[39m [33m+[39m
+       [90m 386 |[39m         [32m`window(s) were live before it opened anything, and they did not come `[39m [33m+[39m
+       [90m 387 |[39m         [32m`down when it closed its own. Those are windows this gate did not open `[39m [33m+[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › comes down with its row, and leaves nothing when the Host is dropped
+
+    "comes-down-with-its-row" could not earn a zero baseline: 6 DatePicker window(s) were live before it opened anything, and they did not come down when it closed its own. Those are windows this gate did not open and cannot close - a leaked or still-undisposed dialog, not a wrong count in the control under test.
+
+      [0m [90m 382 |[39m       handle[33m.[39mnuiTestStateReport()
+       [90m 383 |[39m     )[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 384 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 385 |[39m       [32m`"${what}" could not earn a zero baseline: ${String(stuck)} DatePicker `[39m [33m+[39m
+       [90m 386 |[39m         [32m`window(s) were live before it opened anything, and they did not come `[39m [33m+[39m
+       [90m 387 |[39m         [32m`down when it closed its own. Those are windows this gate did not open `[39m [33m+[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › presents a dialog for the time and datetime modes too
+
+    "hosted time picker" could not earn a zero baseline: 7 DatePicker window(s) were live before it opened anything, and they did not come down when it closed its own. Those are windows this gate did not open and cannot close - a leaked or still-undisposed dialog, not a wrong count in the control under test.
+
+      [0m [90m 382 |[39m       handle[33m.[39mnuiTestStateReport()
+       [90m 383 |[39m     )[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 384 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 385 |[39m       [32m`"${what}" could not earn a zero baseline: ${String(stuck)} DatePicker `[39m [33m+[39m
+       [90m 386 |[39m         [32m`window(s) were live before it opened anything, and they did not come `[39m [33m+[39m
+       [90m 387 |[39m         [32m`down when it closed its own. Those are windows this gate did not open `[39m [33m+[39m[0m
+
+  ● Host · all seven controls, one composition › follows all seven when two of them trade places
+
+    Date report never matched within 12000ms; last read "1778972400000|0|-1|-1|8|1|-2|-2".
+
+      [0m [90m 332 |[39m     seen [33m=[39m line[33m;[39m
+       [90m 333 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 334 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 335 |[39m         [32m`Date report never matched within ${String(timeoutMs)}ms; last read "${seen}".`[39m
+       [90m 336 |[39m       )[33m;[39m
+       [90m 337 |[39m     }[0m
+
+  ● Host · all seven controls, one composition › follows all seven when one is removed and another added back
+
+    Date report never matched within 12000ms; last read "1778972400000|0|-1|-1|9|1|-2|-2".
+
+      [0m [90m 332 |[39m     seen [33m=[39m line[33m;[39m
+       [90m 333 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 334 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 335 |[39m         [32m`Date report never matched within ${String(timeoutMs)}ms; last read "${seen}".`[39m
+       [90m 336 |[39m       )[33m;[39m
+       [90m 337 |[39m     }[0m
+
+  ● Host · all seven controls, one composition › opens a hosted menu inside the seven and still leaves nothing after a churn
+
+    Date report never matched within 12000ms; last read "1778972400000|1|1777593600000|1|10|1|-2|-2".
+
+      [0m [90m 332 |[39m     seen [33m=[39m line[33m;[39m
+       [90m 333 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 334 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 335 |[39m         [32m`Date report never matched within ${String(timeoutMs)}ms; last read "${seen}".`[39m
+       [90m 336 |[39m       )[33m;[39m
+       [90m 337 |[39m     }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       11 failed, 13 passed, 24 total
+Snapshots:   0 total
+Time:        171.754 s
+Ran all test suites matching HostPopups.
+
+
+
+```

@@ -1,0 +1,80 @@
+# Failure excerpt — real-input:ios:--control:switch
+
+- Ran: 2026-10-28T23:12:49.202Z on code tree `2f8eccc5b7b1` at HEAD `c8ac6dd` (branch `task/F1-determinism`)
+- Command: `node scripts/real-input/ios.mjs --control switch`
+- Result: fail, exit 1, 140563 ms
+- Load: start 5.91, end 17.10, median 10.80, max 17.10
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F1-q325w`
+- Full log: `task/F1-determinism/real-input+ios+--control+switch-2026-10-28T23-12-49.029Z.log` (<store>/task/F1-determinism/real-input+ios+--control+switch-2026-10-28T23-12-49.029Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputSwitch in 25.717s`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/real-input+ios+--control+switch-2026-10-28T23-12-49.029Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-q325w (still live)
+  |   F1-q325w                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 17.10 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 40 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios:--control:switch
+gate: node scripts/real-input/ios.mjs --control switch (cwd .)
+gate: code tree 2f8eccc5b7b1 at HEAD c8ac6dd
+gate: git tree 4eba683c057c
+gate: log task/F1-determinism/real-input+ios+--control+switch-2026-10-28T23-12-49.029Z.log
+gate:       <store>/task/F1-determinism/real-input+ios+--control+switch-2026-10-28T23-12-49.029Z.log
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree 2f8eccc5b7b1 (549 files) head c8ac6dd9 · 8 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8295
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-10-28 23:14:43.192.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-10-28 23:14:43.192.
+    Test Suite 'RealInputTests' started at 2026-10-28 23:14:43.192.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' failed (25.717 seconds).
+    Test Suite 'RealInputTests' failed at 2026-10-28 23:15:08.928.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-10-28 23:15:08.929.
+    Test Suite 'Selected tests' failed at 2026-10-28 23:15:08.929.
+    ** TEST EXECUTE FAILED **
+
+  switch: real tap flips the Switch and JS sees the new value
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:142: error: -[NitroUiExampleUITests.RealInputTests testRealInputSwitch] : XCTAssertEqual failed: ("off") is not equal to ("on") - one real tap should flip the Switch, and React should render "on"
+    ✗ XCUITest reported "failed" for testRealInputSwitch in 25.717s
+
+switch: FAIL
+    failed: XCUITest reported "failed" for testRealInputSwitch in 25.717s
+
+real-input (ios): 0/1 controls passed
+gate: real-input:ios:--control:switch FAIL in 140.6 s
+gate: recorded in .gates/task/F1-determinism.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/F1-determinism/real-input+ios+--control+switch-2026-10-28T23-12-49.029Z.log (4 probe(s))
+
+```

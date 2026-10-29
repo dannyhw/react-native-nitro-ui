@@ -46,6 +46,7 @@ import {
   findTab,
   parseHierarchy,
 } from './uiautomator.mjs';
+import { nativeChecked } from './android-tree.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { assertFreshApp, colorize } from '../app-stamp.mjs';
 import { checkEmulatorEnv, isReservedSerial } from '../lease-core.mjs';
@@ -100,6 +101,19 @@ const KEY_BACK = 4;
 
 /** How long a control gets to react to a gesture it should have answered. */
 const REACT_TIMEOUT = Number(process.env.REAL_INPUT_TIMEOUT ?? 8000);
+
+/**
+ * How often to poll a witness that is read out of `uiautomator dump`.
+ *
+ * A dump costs about two seconds on this machine's loaded emulator (measured: three
+ * back-to-back dumps at 1.96-2.00 s), so polling one at `pressUntil`'s default 100 ms
+ * spends the entire attempt on readings - and, worse, spends it *inside* whatever
+ * timer inside the app the check is racing. The drop-picker cycles arm an unmount on
+ * a timer of their own, and a witness loop that needs four dumps to find what it is
+ * looking for arrives after the view has gone. The reading cannot be made cheaper
+ * from out here, so the poll matches it.
+ */
+const DUMP_POLL_MS = 500;
 /** How long the first render may take (a cold Metro bundle is slow). */
 const READY_TIMEOUT = Number(process.env.REAL_INPUT_READY_TIMEOUT ?? 180000);
 
@@ -131,31 +145,36 @@ const CHECKS = {
    * @param {ReturnType<typeof makeContext>} t
    */
   'switch': async (t) => {
-    const control = await t.requireControl('Controlled switch');
     const before = t.requireEcho(ECHO.switchValue);
     t.log.checkEquals('the Switch starts off', before, 'off');
 
-    await t.tapNode(control);
-    const flipped = t.waitForEchoToChange(
-      ECHO.switchValue,
-      before,
-      'a real tap to register'
-    );
+    // Each tap is confirmed by the value it should produce before the next one is
+    // made, so a delivery the InputManager dropped costs a retry instead of reading
+    // as a Switch that refuses a finger (`FOLLOWUPS.md:58`, and the same fault iOS
+    // reproduces on this machine's runs). `waitForEchoToChange` alone would accept
+    // *any* movement and then be asserted against `on`, so it is not a safe thing to
+    // repeat; keying on the value is the same wait, made repeatable.
     t.log.checkEquals(
       'one real tap flips the Switch (React renders "on")',
-      flipped,
+      await t.tapUntilValue(
+        () => t.requireControl('Controlled switch'),
+        ECHO.switchValue,
+        'on',
+        'the first real tap',
+        { nativeLabel: 'Controlled switch' }
+      ),
       'on'
     );
 
-    await t.tapNode(control);
-    const back = t.waitForEchoToChange(
-      ECHO.switchValue,
-      'on',
-      'a second real tap to register'
-    );
     t.log.checkEquals(
       'a second real tap flips it back (React renders "off")',
-      back,
+      await t.tapUntilValue(
+        () => t.requireControl('Controlled switch'),
+        ECHO.switchValue,
+        'off',
+        'the second real tap',
+        { nativeLabel: 'Controlled switch' }
+      ),
       'off'
     );
   },
@@ -185,31 +204,30 @@ const CHECKS = {
    * @param {ReturnType<typeof makeContext>} t
    */
   'hosted-switch': async (t) => {
-    const control = await t.requireControl('Hosted switch 0');
     const before = t.requireEcho(ECHO.hostValue);
     t.log.checkEquals('the hosted Switch starts off', before, 'off');
 
-    await t.tapNode(control);
-    const flipped = t.waitForEchoToChange(
-      ECHO.hostValue,
-      before,
-      'a real tap on a hosted Switch to register'
-    );
     t.log.checkEquals(
       'one real tap flips a hosted Switch (React renders "on")',
-      flipped,
+      await t.tapUntilValue(
+        () => t.requireControl('Hosted switch 0'),
+        ECHO.hostValue,
+        'on',
+        'the first real tap on a hosted Switch',
+        { nativeLabel: 'Hosted switch 0' }
+      ),
       'on'
     );
 
-    await t.tapNode(control);
-    const back = t.waitForEchoToChange(
-      ECHO.hostValue,
-      'on',
-      'a second real tap to register'
-    );
     t.log.checkEquals(
       'a second real tap flips it back, so the check is not one fluke',
-      back,
+      await t.tapUntilValue(
+        () => t.requireControl('Hosted switch 0'),
+        ECHO.hostValue,
+        'off',
+        'the second real tap',
+        { nativeLabel: 'Hosted switch 0' }
+      ),
       'off'
     );
 
@@ -314,7 +332,7 @@ const CHECKS = {
    * @param {ReturnType<typeof makeContext>} t
    */
   'hosted-button': async (t) => {
-    const control = await t.requireControlOnScreen('Hosted button');
+    await t.requireControlOnScreen('Hosted button');
     const disabled = await t.requireControlOnScreen('Hosted disabled button');
     t.log.checkEquals(
       'the hosted Buttons start with no presses recorded',
@@ -322,21 +340,23 @@ const CHECKS = {
       '0'
     );
 
-    await t.tapNode(control);
-    const first = t.waitForEcho(
-      ECHO.hostButtonPresses,
-      '1',
-      'a real tap on a hosted Button to reach onPress'
-    );
+    // The node is looked up on every attempt rather than reused: the echo re-renders
+    // the row, and a stale box is how a check starts tapping a neighbour.
     t.log.checkEquals(
       'one real tap on a hosted Button reaches onPress',
-      first,
+      await t.tapUntilValue(
+        () => t.requireControlOnScreen('Hosted button'),
+        ECHO.hostButtonPresses,
+        '1',
+        'the first real tap on a hosted Button'
+      ),
       '1'
     );
 
     // The disabled one gets the same tap at the same kind of offset. Nothing should
     // happen, and the way to say that is to keep watching the number the enabled one
-    // moves.
+    // moves. Deliberately not retried: this assertion is about a period in which the
+    // count must not move, and pressing again is the one thing that would move it.
     await t.tapNode(disabled);
     const afterDisabled = t.requireEchoToStay(
       ECHO.hostButtonPresses,
@@ -351,18 +371,14 @@ const CHECKS = {
 
     // And the counter is still live: without this, the line above could have passed
     // because the screen stopped rendering rather than because the Button refused.
-    // Tap it again - the node is looked up rather than reused because the echo above
-    // re-renders the row, and a stale box is how a check starts tapping a neighbour.
-    const again = await t.requireControlOnScreen('Hosted button');
-    await t.tapNode(again);
-    const second = t.waitForEcho(
-      ECHO.hostButtonPresses,
-      '2',
-      'a second real tap to reach onPress'
-    );
     t.log.checkEquals(
       'a second real tap presses the hosted Button again',
-      second,
+      await t.tapUntilValue(
+        () => t.requireControlOnScreen('Hosted button'),
+        ECHO.hostButtonPresses,
+        '2',
+        'the second real tap on a hosted Button'
+      ),
       '2'
     );
   },
@@ -476,7 +492,7 @@ const CHECKS = {
     // first: `uiautomator dump` lists nothing off screen. The readout sits above the
     // box precisely so that it is still on screen at that point, which is what lets
     // the same check read what its own taps did.
-    const button = await t.requireControlOnScreen('Mixed button');
+    await t.requireControlOnScreen('Mixed button');
     const before = t.requireEcho(ECHO.hostMixedState);
     t.log.checkEquals(
       'the mixed Host starts with nothing answered',
@@ -556,22 +572,21 @@ const CHECKS = {
     );
 
     // Pressing one child answers for that child only.
-    await t.tapNode(button);
-    const pressed = t.waitForEcho(
-      ECHO.hostMixedState,
-      'off 0.50 1',
-      'a real tap on the mixed Host Button to reach onPress'
-    );
     t.log.checkEquals(
       'the Button in a mixed Host presses, and nothing else in it moved',
-      pressed,
+      await t.tapUntilValue(
+        () => t.requireControlOnScreen('Mixed button'),
+        ECHO.hostMixedState,
+        'off 0.50 1',
+        'a real tap on the mixed Host Button to reach onPress'
+      ),
       'off 0.50 1'
     );
 
-    await t.tapNode(await t.requireControlOnScreen('Mixed switch'));
     t.log.checkEquals(
       'the Switch in the same Host answers too, and the press count stays',
-      t.waitForEcho(
+      await t.tapUntilValue(
+        () => t.requireControlOnScreen('Mixed switch'),
         ECHO.hostMixedState,
         'on 0.50 1',
         'a real tap on the mixed Host Switch to register'
@@ -612,13 +627,17 @@ const CHECKS = {
       0
     );
 
-    await t.tapControlAt(control, 0.5);
+    // The control is re-found for each press: a hosted SegmentedControl keeps its box
+    // (asserted below), but a check that aimed every attempt at a stale node would be
+    // aiming at the wrong place wherever that is not true.
     t.log.checkEquals(
       'a real tap on the middle segment of a hosted SegmentedControl reaches JS as index 1',
-      t.waitForEcho(
+      await t.tapUntilValue(
+        () => t.requireControlAt('Hosted segmented', control),
         ECHO.hostSegmentedIndex,
         '1',
-        'a real tap on a hosted segment to register'
+        'a real tap on a hosted segment to register',
+        { aim: (node) => t.tapControlAt(node, 0.5) }
       ),
       '1'
     );
@@ -630,13 +649,14 @@ const CHECKS = {
       startedAt
     );
 
-    await t.tapControlAt(moved, 0.9);
     t.log.checkEquals(
       'a real tap on the last segment reaches JS as index 2',
-      t.waitForEcho(
+      await t.tapUntilValue(
+        () => t.requireControlAt('Hosted segmented', control),
         ECHO.hostSegmentedIndex,
         '2',
-        'a second real tap to register'
+        'a second real tap to register',
+        { aim: (node) => t.tapControlAt(node, 0.9) }
       ),
       '2'
     );
@@ -697,14 +717,14 @@ const CHECKS = {
 
     // 1. Open. The rows exist only while the menu is open, which is also the witness
     //    that the hosted anchor answered a touch at all.
-    await t.tapNode(anchor);
     t.log.checkEquals(
       'a real tap on the hosted anchor opens the menu as a popup window',
-      t.waitForPopupCount(
-        1,
-        'a real tap on the hosted anchor to open a popup window'
+      await t.tapUntilUp(
+        () => t.requireControlAt('Hosted picker', anchor),
+        'a real tap on the hosted anchor to open a popup window',
+        () => t.popupWindowCount()
       ),
-      1
+      '1'
     );
     const row = t.waitForOption(PICK, 'the hosted menu to open');
     t.log.note(
@@ -726,7 +746,16 @@ const CHECKS = {
     );
 
     // 2. A row is a choice.
-    await t.tapNode(row);
+    t.log.checkEquals(
+      'and the row reaches JS as index 2',
+      await t.tapOptionUntilValue(
+        PICK,
+        ECHO.hostPickerIndex,
+        '2',
+        'a pick from the hosted menu to reach JS'
+      ),
+      '2'
+    );
     t.log.checkEquals(
       'a real tap on a hosted menu row closes the popup',
       t.waitForPopupCount(
@@ -735,19 +764,14 @@ const CHECKS = {
       ),
       0
     );
-    t.log.checkEquals(
-      'and the row reaches JS as index 2',
-      t.waitForEcho(
-        ECHO.hostPickerIndex,
-        '2',
-        'a pick from a hosted menu to reach JS'
-      ),
-      '2'
-    );
 
     // 3. The way out that changes nothing. Aim again: choosing a row widens the title
     //    the anchor paints, so the box this check has may be stale.
-    await t.tapNode(await t.requireControlAt('Hosted picker', anchor));
+    await t.tapUntilUp(
+      () => t.requireControlAt('Hosted picker', anchor),
+      'a real tap that reopens the hosted menu',
+      () => t.popupWindowCount()
+    );
     t.waitForOption(PICK, 'the hosted menu to reopen');
     await t.pressBack();
     t.log.checkEquals(
@@ -811,7 +835,7 @@ const CHECKS = {
     // `HostScreen` seeds the popup Host's DatePicker at 2026-05-17 and echoes what JS
     // holds. Written by hand rather than formatted, so no locale moves the assertion.
     const SEEDED = '2026-05-17';
-    const field = await t.requireControlOnScreen('Hosted date picker');
+    await t.requireControlOnScreen('Hosted date picker');
     t.log.checkEquals(
       'the hosted DatePicker shows the day JS gave it',
       t.requireEcho(ECHO.hostDateValue),
@@ -821,7 +845,12 @@ const CHECKS = {
     // 1. A real press on the field the Host drew. The month grid is both the witness
     //    that the press arrived and the accessibility tree this case has to cover: 14+
     //    clickable, square, date-named cells is a calendar a screen reader can use.
-    await t.tapNode(field);
+    await t.tapUntilUp(
+      () => t.requireControlOnScreen('Hosted date picker'),
+      'a real tap on the hosted DatePicker field to open its dialog',
+      () => t.dump().filter(isDayCell).length,
+      { pollMs: DUMP_POLL_MS }
+    );
     const cells = dayGrid(t, 'the hosted DatePicker');
     t.log.check(
       `the hosted dialog's day cells are in the accessibility tree (${String(
@@ -862,12 +891,26 @@ const CHECKS = {
       t.nodeByTestId(ECHO.hostDateValue) != null
     );
 
-    // 3b. Cancel: closes it and reports nothing.
-    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
-    dayGrid(t, 'the hosted DatePicker');
-    await t.tapNode(
-      t.waitForNodes(isCancelLabel, "the dialog's Cancel button", 1)[0]
+    // 3b. Cancel: closes it and reports nothing. The witness is the grid leaving.
+    await t.tapUntilUp(
+      () => t.requireControlOnScreen('Hosted date picker'),
+      'a real tap on the hosted DatePicker field to open its dialog again',
+      () => t.dump().filter(isDayCell).length,
+      { pollMs: DUMP_POLL_MS }
     );
+    dayGrid(t, 'the hosted DatePicker');
+    await t.pressUntil({
+      what: "the dialog's Cancel button",
+      waitingFor: 'a real tap on Cancel to take the hosted dialog down',
+      press: async () => {
+        await t.tapNode(
+          t.waitForNodes(isCancelLabel, "the dialog's Cancel button", 1)[0]
+        );
+      },
+      reading: () => String(t.dump().filter(isDayCell).length),
+      raised: (current) => current === '0',
+      pollMs: DUMP_POLL_MS,
+    });
     await waitForDialogGone(t, 'Cancel to take the hosted dialog down');
     t.log.checkEquals(
       'Cancel closes the hosted dialog and reports no day',
@@ -909,11 +952,29 @@ const CHECKS = {
     // tap and lands on a timer inside the app for the reason `PickerScreen` states: a
     // second tap while a dialog is open is an outside tap, which dismisses the dialog
     // instead of pressing anything.
-    await t.tapNode(
-      t.waitForNode(ECHO.hostDateDropButton, 'the unmount-the-field button')
-    );
+    // The arm's own echo is the witness, for the same reason `PickerScreen` gives for
+    // its own: a press that never landed leaves nothing scheduled, and the field's
+    // survival afterwards would read as the library leaking a dialog.
+    await t.pressUntil({
+      what: 'the unmount-the-field button',
+      waitingFor: 'a real tap to arm the unmount',
+      press: async () => {
+        await t.tapNode(
+          t.waitForNode(ECHO.hostDateDropButton, 'the unmount-the-field button')
+        );
+      },
+      reading: () =>
+        t.nodeByTestId(ECHO.hostDateDropArmed) == null ? '0' : '1',
+      raised: (current) => current === '1',
+      pollMs: DUMP_POLL_MS,
+    });
     t.waitForNode(ECHO.hostDateDropArmed, 'the unmount to be armed');
-    await t.tapNode(await t.requireControlOnScreen('Hosted date picker'));
+    await t.tapUntilUp(
+      () => t.requireControlOnScreen('Hosted date picker'),
+      'a real tap on the hosted field to open its dialog before the unmount',
+      () => t.dump().filter(isDayCell).length,
+      { pollMs: DUMP_POLL_MS }
+    );
     dayGrid(t, 'the hosted DatePicker');
     // The app's own echo is the witness that the unmount happened, so wait for it rather
     // than for a guessed delay: the timer is the app's, not this loop's, and a settle that
@@ -935,13 +996,25 @@ const CHECKS = {
     );
 
     // Leave the screen as this check found it: the next control reads the same Host.
-    await t.tapNode(
-      t.waitForNode(ECHO.hostDateRemount, 'the remount-the-field button')
-    );
     // The witness is the label, not the testID. A hosted control's React Native view is
     // the `0 x 0` decorative one (D24) and uiautomator drops a node with no box, so the
     // only thing this screen offers of a hosted field is the box the Host drew and named.
     // Every other press in this case is aimed the same way.
+    await t.pressUntil({
+      what: 'the remount-the-field button',
+      waitingFor: 'a real tap to mount the hosted field again',
+      press: async () => {
+        await t.tapNode(
+          t.waitForNode(ECHO.hostDateRemount, 'the remount-the-field button')
+        );
+      },
+      reading: () =>
+        t.dump().some((node) => node.contentDesc === 'Hosted date picker')
+          ? '1'
+          : '0',
+      raised: (current) => current === '1',
+      pollMs: DUMP_POLL_MS,
+    });
     await t.requireControlOnScreen('Hosted date picker');
   },
 
@@ -1035,7 +1108,7 @@ const CHECKS = {
    * @param {ReturnType<typeof makeContext>} t
    */
   'button': async (t) => {
-    const control = await t.requireControl('Real-input button');
+    await t.requireControl('Real-input button');
     const disabled = await t.requireControl('Real-input disabled button');
     t.log.checkEquals(
       'the Button starts with no presses recorded',
@@ -1043,20 +1116,21 @@ const CHECKS = {
       '0'
     );
 
-    await t.tapNode(control);
-    const first = t.waitForEcho(
-      ECHO.buttonCount,
-      '1',
-      'a real tap to reach onPress'
-    );
     t.log.checkEquals(
       'one real tap on the enabled Button reaches onPress',
-      first,
+      await t.tapUntilValue(
+        () => t.requireControl('Real-input button'),
+        ECHO.buttonCount,
+        '1',
+        'a real tap to reach onPress'
+      ),
       '1'
     );
 
     // The disabled one gets the same tap. Nothing should happen, and the way to
     // say that is to keep watching the same number the enabled Button moves.
+    // Deliberately not retried: the assertion is about a period in which the count
+    // must not move, and pressing again is the one thing that would move it.
     await t.tapNode(disabled);
     const afterDisabled = t.requireEchoToStay(
       ECHO.buttonCount,
@@ -1072,15 +1146,14 @@ const CHECKS = {
     // And the counter is still live: without this, the line above could have
     // passed because the app stopped rendering rather than because the disabled
     // Button refused the touch.
-    await t.tapNode(control);
-    const second = t.waitForEcho(
-      ECHO.buttonCount,
-      '2',
-      'a second real tap to reach onPress'
-    );
     t.log.checkEquals(
       'a second real tap presses the enabled Button again',
-      second,
+      await t.tapUntilValue(
+        () => t.requireControl('Real-input button'),
+        ECHO.buttonCount,
+        '2',
+        'a second real tap to reach onPress'
+      ),
       '2'
     );
   },
@@ -1124,10 +1197,15 @@ const CHECKS = {
       '0'
     );
 
-    await t.tapControlAt(control, 0.5);
     t.log.checkEquals(
       'a real tap on the second segment reaches JS as index 1',
-      t.waitForEcho(ECHO.segmentedIndex, '1', 'a real tap to register'),
+      await t.tapUntilValue(
+        () => t.requireControlAt('Real-input segmented control', control),
+        ECHO.segmentedIndex,
+        '1',
+        'a real tap to register',
+        { aim: (node) => t.tapControlAt(node, 0.5) }
+      ),
       '1'
     );
     t.log.checkEquals(
@@ -1145,10 +1223,15 @@ const CHECKS = {
 
     // A different segment, so a second change is owed: a control that reported the
     // same index twice would also satisfy the line above by echoing once.
-    await t.tapControlAt(moved, 0.12);
     t.log.checkEquals(
       'a real tap on the first segment reaches JS as index 0',
-      t.waitForEcho(ECHO.segmentedIndex, '0', 'a second real tap to register'),
+      await t.tapUntilValue(
+        () => t.requireControlAt('Real-input segmented control', control),
+        ECHO.segmentedIndex,
+        '0',
+        'a second real tap to register',
+        { aim: (node) => t.tapControlAt(node, 0.12) }
+      ),
       '0'
     );
     t.log.checkEquals(
@@ -1158,9 +1241,6 @@ const CHECKS = {
     );
 
     // The refusing parent.
-    const rejecting = await t.requireControl(
-      'Real-input rejecting segmented control'
-    );
     t.log.checkEquals(
       'the refusing parent pins its SegmentedControl at index 0',
       t.requireEcho(ECHO.rejectValue),
@@ -1172,10 +1252,15 @@ const CHECKS = {
       '0'
     );
 
-    await t.tapControlAt(rejecting, 0.5);
     t.log.checkEquals(
       'a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4)',
-      t.waitForEcho(ECHO.rejectEvents, '1', 'the controlled tap to register'),
+      await t.tapUntilValue(
+        () => t.requireControl('Real-input rejecting segmented control'),
+        ECHO.rejectEvents,
+        '1',
+        'the controlled tap to register',
+        { aim: (node) => t.tapControlAt(node, 0.5) }
+      ),
       '1'
     );
     t.log.checkEquals(
@@ -1186,10 +1271,15 @@ const CHECKS = {
 
     // The snap-back oracle, explained above: this tap can only be reported if the
     // selection went back to the first segment.
-    await t.tapControlAt(rejecting, 0.5);
     t.log.checkEquals(
       'a second tap on segment 2 is a fresh selection, which is only true if the refused one was rolled back',
-      t.waitForEcho(ECHO.rejectEvents, '2', 'the repeated tap to register'),
+      await t.tapUntilValue(
+        () => t.requireControl('Real-input rejecting segmented control'),
+        ECHO.rejectEvents,
+        '2',
+        'the repeated tap to register',
+        { aim: (node) => t.tapControlAt(node, 0.5) }
+      ),
       '2'
     );
     t.log.checkEquals(
@@ -1354,12 +1444,16 @@ const CHECKS = {
     );
 
     // 1. Opening. A tap on the anchor opens a list - and the control is not
-    //    expected to treat that as a choice (asserted after it closes, below).
-    await t.tapNode(control);
+    //    expected to treat that as a choice (asserted after it closes, below). The
+    //    window is the witness that the tap arrived, so it is tapped until one is up.
     t.log.checkEquals(
       'a real tap on the anchor opens the menu as a popup window',
-      t.waitForPopupCount(1, 'a real tap on the anchor to open a popup window'),
-      1
+      await t.tapUntilUp(
+        () => t.requireControlAt('Real-input picker', control),
+        'a real tap on the anchor to open a popup window',
+        () => t.popupWindowCount()
+      ),
+      '1'
     );
     // Wait for the dump to carry the menu's rows before asking it about
     // selection - the popup owns the tree only while it is open.
@@ -1391,7 +1485,15 @@ const CHECKS = {
     //       menu and reports no choice. Android suppresses that no-op on purpose,
     //       and G6 measured that iOS reports it unless told not to, so both
     //       platforms carry this check (`HybridNitroUiPicker.swift`).
-    await t.tapNode(t.requireControlAt('Real-input picker', control));
+    //       The row tap stays blind on purpose: its correct outcome is that *nothing*
+    //       is reported, so there is no witness to wait for, and a retry would press a
+    //       closing menu a second time. What the helper guarantees is only that the
+    //       menu this tap lands in was really opened by a touch.
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input picker', control),
+      'a real tap that reopens the menu',
+      () => t.popupWindowCount()
+    );
     await t.tapNode(
       t.waitForOption(FIRST, 'the menu to show the current choice')
     );
@@ -1410,12 +1512,22 @@ const CHECKS = {
     );
 
     // 3. Choosing. The rows are the popup's, so this tap is aimed at a node that
-    //    only exists while the menu is open.
-    await t.tapNode(t.requireControlAt('Real-input picker', control));
-    await t.tapNode(t.waitForOption(LONGEST, 'the menu to open again'));
+    //    only exists while the menu is open. The row is re-found each attempt and the
+    //    echoed index is the witness, so a tap that never landed stops being the
+    //    first explanation offered for "the menu will not pick".
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input picker', control),
+      'a real tap that opens the menu again',
+      () => t.popupWindowCount()
+    );
     t.log.checkEquals(
       'a real tap on a menu row reaches JS as index 2',
-      t.waitForEcho(ECHO.pickerIndex, '2', 'a real tap on the row to register'),
+      await t.tapOptionUntilValue(
+        LONGEST,
+        ECHO.pickerIndex,
+        '2',
+        'a real tap on the row to register'
+      ),
       '2'
     );
     t.log.checkEquals(
@@ -1455,13 +1567,19 @@ const CHECKS = {
       t.requireEcho(ECHO.rejectValue),
       '0'
     );
-    await t.tapNode(rejecting);
-    await t.tapNode(
-      t.waitForOption('Ridge', 'the refusing picker menu to open')
+    await t.tapUntilUp(
+      () => t.requireControl('Real-input rejecting picker'),
+      'a real tap on the controlled picker to open its menu',
+      () => t.popupWindowCount()
     );
     t.log.checkEquals(
       'a real tap on the controlled picker still reaches JS - native paints optimistically',
-      t.waitForEcho(ECHO.rejectEvents, '1', 'the controlled tap to register'),
+      await t.tapOptionUntilValue(
+        'Ridge',
+        ECHO.rejectEvents,
+        '1',
+        'the controlled tap to register'
+      ),
       '1'
     );
     t.log.checkEquals(
@@ -1474,15 +1592,19 @@ const CHECKS = {
       t.anchorTitle('Real-input rejecting picker'),
       'Summit'
     );
-    await t.tapNode(
-      t.requireControlAt('Real-input rejecting picker', rejecting)
-    );
-    await t.tapNode(
-      t.waitForOption('Ridge', 'the refusing picker menu to reopen')
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input rejecting picker', rejecting),
+      'a real tap that reopens the refusing picker menu',
+      () => t.popupWindowCount()
     );
     t.log.checkEquals(
       'tapping the refused row again is a fresh choice, which is only true if the refused one was rolled back',
-      t.waitForEcho(ECHO.rejectEvents, '2', 'the repeated tap to register'),
+      await t.tapOptionUntilValue(
+        'Ridge',
+        ECHO.rejectEvents,
+        '2',
+        'the repeated tap to register'
+      ),
       '2'
     );
     t.log.checkEquals(
@@ -1496,13 +1618,45 @@ const CHECKS = {
     //    window owned by the app - a popup that survives its view is invisible in
     //    the accessibility tree, so the window table is what is read.
     for (let cycle = 1; cycle <= 3; cycle += 1) {
-      const dropControl = await t.requireControl('Real-input drop picker');
-      const dropButton = t.waitForNode(
-        ECHO.pickerGone.replace('-gone', '-button'),
-        'the unmount button'
+      // Brings the row into the dump; every press below re-finds its own target.
+      await t.requireControl('Real-input drop picker');
+      // The arm has its own echo on this row (`real-input-drop-armed`, written by
+      // `PickerScreen` for exactly this reason), so the press that arms the unmount is
+      // retried until it shows. Pressing it blind is how a dropped tap came to read as
+      // the library leaking a menu: nothing was ever scheduled, the Picker survived,
+      // and the popup count stayed 0 for the wrong reason. Each extra press is the
+      // same press on a row that is not a counter, so it cannot overscore anything.
+      await t.pressUntil({
+        what: 'the unmount button',
+        waitingFor: `cycle ${String(cycle)}: a real tap to arm the unmount`,
+        attempts: 2,
+        // Both readings here are accessibility dumps, and a dump costs about two
+        // seconds on this box, so the poll is as slow as the reading can be. Reading
+        // at 100 ms would spend the whole window on readings and arrive at the press
+        // that opens the menu after the app's own unmount timer had fired - which is
+        // the race this cycle has always had, made worse by the witness.
+        windowMs: 4000,
+        pollMs: 500,
+        press: async () => {
+          await t.tapNode(
+            t.waitForNode(
+              ECHO.pickerGone.replace('-gone', '-button'),
+              'the unmount button'
+            )
+          );
+        },
+        reading: () =>
+          t.nodeByTestId('real-input-drop-armed') == null ? '0' : '1',
+        raised: (current) => current === '1',
+      });
+      // And the menu is opened by a press that is repeated until its window shows up.
+      await t.tapUntilUp(
+        () => t.requireControl('Real-input drop picker'),
+        `cycle ${String(cycle)}: a real tap to open the drop picker's menu`,
+        () => t.popupWindowCount(),
+        2,
+        4000
       );
-      await t.tapNode(dropButton);
-      await t.tapNode(dropControl);
       // Read the window table, not the accessibility dump: `dump` costs around a
       // second under load and can miss a menu that is open for less, while the
       // window table is one cheap query that says the same thing - a popup of this
@@ -1530,12 +1684,27 @@ const CHECKS = {
         0
       );
       if (cycle < 3) {
-        await t.tapNode(
-          t.waitForNode(
-            ECHO.pickerGone.replace('-gone', '-remount'),
-            'the remount button'
-          )
-        );
+        // The remount's witness is the Picker's own node coming back, so a dropped
+        // press on the button cannot come round the loop as "no drop picker on screen".
+        await t.pressUntil({
+          what: 'the remount button',
+          waitingFor: `cycle ${String(cycle)}: a real tap to mount the picker again`,
+          press: async () => {
+            await t.tapNode(
+              t.waitForNode(
+                ECHO.pickerGone.replace('-gone', '-remount'),
+                'the remount button'
+              )
+            );
+          },
+          reading: () =>
+            t
+              .dump()
+              .some((node) => node.contentDesc === 'Real-input drop picker')
+              ? '1'
+              : '0',
+          raised: (value) => value === '1',
+        });
       }
     }
 
@@ -1565,13 +1734,14 @@ const CHECKS = {
       t.waitForPopupCount(0, 'a tap on the disabled picker to open nothing'),
       0
     );
-    const unlocked = await t.requireControlOnScreen(
-      'Real-input enabled picker'
+    await t.tapUntilUp(
+      () => t.requireControlOnScreen('Real-input enabled picker'),
+      'a real tap on the enabled picker to open its menu',
+      () => t.popupWindowCount()
     );
-    await t.tapNode(unlocked);
     t.log.checkEquals(
       'the ordinary picker, tapped the same way, opens one - so the line above measured a refusal',
-      t.waitForPopupCount(1, 'a tap on the enabled picker to open its menu'),
+      t.popupWindowCount(),
       1
     );
     await t.pressBack();
@@ -1750,8 +1920,17 @@ async function tapBackToTheDisplayedDay(t) {
     'a tap on the day the calendar already shows'
   );
 
-  await t.tapNode(b);
-  t.waitForEcho(COUNT, '1', `a real tap on another day (day ${String(bDay)})`);
+  // Each cell below is re-tapped until the count moves. A second tap on a cell that
+  // has just been chosen is the correct no-op the line above measures, so retrying a
+  // dropped delivery costs nothing here; a count that arrives *late* would be
+  // overtapped, which shows up as the check's own count assertion naming a number
+  // past the one it wanted.
+  await t.tapUntilValue(
+    () => b,
+    COUNT,
+    '1',
+    `a real tap on another day (day ${String(bDay)})`
+  );
   const afterB = t.requireEcho(VALUE);
   t.log.check(
     `the tap moved the value it is echoing: "${afterB}" is not "${baseline}"`,
@@ -1760,8 +1939,8 @@ async function tapBackToTheDisplayedDay(t) {
 
   // The bug: back onto the day it came from. With the memory written only where a
   // write happened, this emitted nothing and the calendar snapped forward again.
-  await t.tapNode(a);
-  t.waitForEcho(
+  await t.tapUntilValue(
+    () => a,
     COUNT,
     '2',
     'the tap back onto the previous day - the snap-back leaves this at 1'
@@ -1774,8 +1953,12 @@ async function tapBackToTheDisplayedDay(t) {
 
   // The guard is not simply gone: the pick after the returned one is still a fresh
   // selection, and one write per pick is what the exact counts above say.
-  await t.tapNode(b);
-  t.waitForEcho(COUNT, '3', 'a pick after the returned one to be fresh');
+  await t.tapUntilValue(
+    () => b,
+    COUNT,
+    '3',
+    'a pick after the returned one to be fresh'
+  );
 }
 
 /**
@@ -1809,24 +1992,123 @@ function yearAtEnd(label) {
  * @returns {Promise<string>} what the tapped cell called itself, for the report
  */
 async function openAndPick(t, description, offset) {
-  const field = await t.requireControl(description);
-  await t.tapNode(field);
+  // The dialog's own confirm button is the witness that the dialog is up. The month
+  // grid cannot be: the date-picker page has an inline calendar in its own dump, so
+  // "some day cells on screen" is true before the field is ever pressed - a witness
+  // that answers before the press is worse than none, and this run's first attempt
+  // read it as a dialog that had opened.
+  await t.tapUntilUp(
+    () => t.requireControl(description),
+    `a real tap on "${description}" to open its dialog`,
+    () => t.dump().filter(isConfirmLabel).length,
+    { pollMs: DUMP_POLL_MS }
+  );
   const cells = dayGrid(t, description);
   const middle = Math.floor(cells.length / 2);
   const target =
     cells[Math.min(cells.length - 1, Math.max(0, middle + offset))];
   t.log.note(`tapping dialog day "${target.text}"`);
-  await t.tapNode(target);
+  // A day cell is a *selection*, and the dialog shows it: the headline above the
+  // calendar names the chosen day, and while the dialog is up its window owns the
+  // accessibility tree, so that headline is the only reading a day tap moves. Without
+  // a witness, a tap dropped on the way to a cell is reported by the check's own count
+  // assertion as a pick that changed nothing.
+  //
+  // Two cases have no witness and stay blind on purpose. A dialog in another locale
+  // headlines its date in another shape, so there is nothing to read. And a cell that
+  // *is* the headline's own day is the documented no-op this check's own caller probes
+  // for - it moves nothing however many times it is pressed, so pressing it twice
+  // would only buy a wait.
+  const headline = dialogHeadline(t);
+  const sameDay =
+    headline != null &&
+    headline.day === dayNumberAtEnd(target.text) &&
+    headline.year === yearAtEnd(target.text);
+  if (headline == null || sameDay) {
+    t.log.note(
+      headline == null
+        ? 'no dialog headline to watch - the day tap stays blind'
+        : `"${target.text}" is the day the dialog already shows - the tap is the ` +
+            'documented no-op, and nothing moves to wait for'
+    );
+    await t.tapNode(target);
+  } else {
+    await t.pressUntil({
+      what: `dialog day "${target.text}"`,
+      waitingFor: 'a real tap on a dialog day to select it',
+      attempts: 2,
+      // The headline is Compose's own state, not a JS echo, so it repaints on the
+      // dialog's next frame: one second is a generous window for a real selection.
+      windowMs: 2000,
+      pollMs: DUMP_POLL_MS,
+      press: async () => {
+        const cell = t
+          .dump()
+          .filter(isDayCell)
+          .find((node) => node.text === target.text);
+        if (cell == null) {
+          // The dialog is not up any more: the earlier tap closed it, which a day
+          // cell must not do. Nothing to press; let the wait below notice.
+          return;
+        }
+        await t.tapNode(cell);
+      },
+      reading: () => {
+        const now = dialogHeadline(t);
+        return now == null ? null : `${now.day}/${String(now.year)}`;
+      },
+      raised: (current) =>
+        current !== `${headline.day}/${String(headline.year)}`,
+    });
+  }
   // The dialog is a window of its own, so the app's text is unreadable until it
-  // closes - which is what the confirm button, and nothing else, does.
-  const confirm = t.waitForNodes(
-    isConfirmLabel,
-    "the dialog's OK button",
-    1
-  )[0];
-  await t.tapNode(confirm);
+  // closes - which is what the confirm button, and nothing else, does. The button
+  // going away with it is the witness that the OK tap arrived. (Not "no day cells
+  // left": the date-picker page has an inline calendar of its own in the same dump
+  // once the dialog goes down, and that reading never reaches zero there - the first
+  // run of this helper measured exactly that, `left "10"` after a closed dialog.)
+  await t.pressUntil({
+    what: "the dialog's OK button",
+    waitingFor: 'a real tap on OK to take the dialog down',
+    attempts: 3,
+    press: async () => {
+      const label = t.dump().find(isConfirmLabel);
+      if (label == null) {
+        return;
+      }
+      await t.tapNode(label);
+    },
+    reading: () => String(t.dump().filter(isConfirmLabel).length),
+    raised: (current) => current === '0',
+    pollMs: DUMP_POLL_MS,
+  });
   await t.settle(500);
   return target.text;
+}
+
+/**
+ * The date an open date dialog's headline is showing, or `null` when none is.
+ *
+ * Material 3 names the chosen day above the calendar ("Oct 25, 2026"). The month
+ * toggle ("October 2026") and the day cells ("Sunday, October 25, 2026") are excluded
+ * by shape, so the reading is the headline's own. Only the day and year are returned:
+ * the month arrives abbreviated here and spelled out in the cells, and a comparison
+ * that read it would be a comparison with a locale.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+function dialogHeadline(t) {
+  const found = t
+    .dump()
+    .find((node) => /^[A-Z][a-z]{2,8} \d{1,2}, \d{4}$/.test(node.text.trim()));
+  if (found == null) {
+    return null;
+  }
+  const match = found.text.trim().match(/^[A-Za-z]+ (\d{1,2}), (\d{4})$/);
+  if (match == null) {
+    return null;
+  }
+  return { day: Number(match[1]), year: Number(match[2]) };
 }
 
 /**
@@ -2639,6 +2921,345 @@ function makeContext(harness, log) {
     async tapNode(node) {
       harness.tap(node);
       await sleep(250);
+    },
+
+    /**
+     * Press, then wait for the witness that the press *arrived*, and retry the press
+     * until the witness shows or the attempts run out.
+     *
+     * `adb shell input` injects into the system InputManager, and a synthesised
+     * injection can be dropped - the same fault iOS has (`FOLLOWUPS.md:58`; the
+     * H2b review records `testRealInputSwitch` on Android missing "one real tap",
+     * the same class), and the same fault with the same consequence: a check that
+     * taps and then waits for the answer reports a lost delivery as a control that
+     * refuses a finger. `picker` already retries the aim of each day cell for
+     * exactly that reason; this is the preconditions of every other check.
+     *
+     * The witness has to be something a touch causes, and the retry only happens
+     * while it is still absent, so a retry cannot manufacture a result. What it can
+     * do is overt tap an echo that arrives *late* rather than never, which shows up
+     * as the note below quoting a reading past what was expected.
+     *
+     * @param {object} options
+     * @param {string} options.what what is being pressed, for the log line
+     * @param {string} options.waitingFor what this press was meant to do
+     * @param {(attempt: number) => Promise<void>} options.press delivers the touch.
+     *   Told which attempt it is, so a press that needs something on screen (a popup
+     *   row) can re-find it, or give up pressing when it has gone.
+     * @param {() => string | null} options.reading the witness right now; cheap and
+     *   non-fatal, since a missing node mid-retry is still a reading.
+     * @param {(shown: string | null) => boolean} options.raised whether it arrived
+     * @param {() => string | null} [options.nativeState] what the *control itself*
+     *   holds (`nativeChecked`), for the controls that publish their state. The
+     *   witness is React's render, so its absence means either that the touch never
+     *   arrived or that the control changed and lost the event on the way to JS, and
+     *   an attempt's window expiring cannot tell those apart. Retrying is right for
+     *   the first and wrong for the second: a third press would land the event, the
+     *   echo would arrive, and a lost change would read as a dropped tap (F1 M3).
+     *   When this moves while the witness has not, the helper stops and says so.
+     * @param {number} [options.attempts]
+     * @param {number} [options.windowMs] how long one press gets to show its
+     *   witness. The default is `REACT_TIMEOUT`, the budget `waitForEcho` already
+     *   gave the same control, so a check gets that wait *plus* the retries rather
+     *   than three attempts sharing what used to be one wait.
+     * @param {number} [options.pollMs] how often to take a reading. The default
+     *   suits an echo, which is one cheap query. A reading that dumps the
+     *   accessibility tree costs about two seconds each on its own, and polling
+     *   one at 100 ms spends the entire wait on readings - which is how a retry
+     *   helper came to lose a race against a timer inside the app it is watching.
+     * @returns {Promise<{delivered: boolean, shown: string | null}>}
+     */
+    async pressUntil({
+      what,
+      waitingFor,
+      press,
+      reading,
+      raised,
+      nativeState,
+      attempts = 3,
+      windowMs = REACT_TIMEOUT,
+      pollMs = 100,
+    }) {
+      /** @type {string | null} */
+      let shown = null;
+      const echoStart = reading();
+      // Read once, before any press: "did it move" is what the comparison needs,
+      // and a witness that costs two seconds must not be polled.
+      const stateStart = nativeState == null ? null : nativeState();
+      if (nativeState != null && stateStart == null) {
+        // A witness that reads nothing can never report a change, so passing it
+        // would be worse than passing nothing: every retry would be attributed to
+        // a dropped touch, and a lost event would still go green. Say that the
+        // guard is not armed rather than pretending it is.
+        log.abort(
+          `${waitingFor}: ${what} was given a native-state witness and it read ` +
+            'nothing, so a delivered touch could not be told from a lost event. The ' +
+            'control publishes no state to read, or the label names the wrong node.'
+        );
+      }
+      for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        await press(attempt);
+        const deadline = Date.now() + windowMs;
+        for (;;) {
+          shown = reading();
+          if (raised(shown)) {
+            if (attempt > 1) {
+              log.retried(
+                `${waitingFor}: ${what} answered on tap ${String(attempt)}/${String(
+                  attempts
+                )} - the earlier tap(s) were never delivered`
+              );
+            }
+            return { delivered: true, shown };
+          }
+          if (Date.now() > deadline) {
+            break;
+          }
+          blockMs(pollMs);
+        }
+        // Not answered. Before pressing again, ask the control whether it moved.
+        // Only when the echo has not moved at all: an echo that moved to the
+        // wrong value proves JS heard something, and "the event never reached
+        // JS" would be a false accusation about it.
+        if (nativeState != null) {
+          const moved = nativeState();
+          if (
+            moved != null &&
+            stateStart != null &&
+            moved !== stateStart &&
+            shown === echoStart
+          ) {
+            // Not a retry: no press. "The event never reached JS" is only safe once
+            // the echo has had a second window to arrive, because a JS thread that is
+            // merely very slow - a cold bundle on a busy machine - looks exactly like
+            // a lost event from here. A dropped event still fails, one window later.
+            const graceDeadline = Date.now() + windowMs;
+            for (;;) {
+              shown = reading();
+              if (raised(shown)) {
+                log.note(
+                  `${waitingFor}: ${what} answered ${String(windowMs)}ms after its ` +
+                    'press, late enough that the control had already changed - a slow ' +
+                    'JS thread, not a lost event'
+                );
+                return { delivered: true, shown };
+              }
+              if (Date.now() > graceDeadline) {
+                break;
+              }
+              blockMs(pollMs);
+            }
+            log.abort(
+              `${waitingFor}: ${what} took the touch and lost the event - the control's ` +
+                `own state moved from "${stateStart}" to "${moved}" and its echo is ` +
+                `still "${String(shown)}", the value it had before any press, ${String(
+                  windowMs * 2
+                )}ms later. Not retried: a further press would land the event and make a ` +
+                'lost change look like a dropped tap.'
+            );
+          }
+        }
+        log.note(
+          `${waitingFor}: tap ${String(attempt)}/${String(attempts)} on ${what} left ` +
+            `"${String(shown)}" - tapping again`
+        );
+      }
+      return { delivered: false, shown };
+    },
+
+    /**
+     * See `nativeChecked` in `android-tree.mjs`, which is where this lives and
+     * where the tests are: a witness whose failure mode is silence needs a fixture,
+     * and this file cannot be imported without a device.
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     * @returns {string | null} `"on"` / `"off"`, or null when no node answers
+     */
+    nativeChecked(description) {
+      return nativeChecked(harness.hierarchy(), description);
+    },
+
+    /**
+     * Tap a control until the on-screen *value* it should change says so.
+     *
+     * The value, not merely a change: `waitForEchoToChange` is satisfied by any
+     * movement of the echo, and a check that then asserts the new value is one
+     * dropped tap away from reporting a control that refuses a finger. Each flip
+     * this suite waits for is unreachable without a delivered touch, so waiting for
+     * the value is the same wait, made safe to repeat.
+     *
+     * When no attempt landed, this aborts naming both readings and both possible
+     * faults, because that is the distinction a blind tap could not make - and the
+     * reason a retry is not simply a road to green.
+     *
+     * @param {() => Promise<import('./uiautomator.mjs').UiautomatorNode> | import('./uiautomator.mjs').UiautomatorNode} lookUp the control to press, re-read each attempt: a control that moved must be aimed at where it is now
+     * @param {string} testID the echo whose value proves the press arrived
+     * @param {string} expected what the echo has to say
+     * @param {string} waitingFor what this tap was meant to do
+     * @param {{aim?: (node: import('./uiautomator.mjs').UiautomatorNode) => Promise<void>, attempts?: number, nativeLabel?: string}} [options]
+     *   `aim` - how to press it, for the taps that aim at a fraction of the control.
+     *   `nativeLabel` - the control's `accessibilityLabel` when it publishes its own
+     *   state, which for a Switch it does: `pressUntil` then refuses to retry a press
+     *   whose touch clearly landed (F1 M3). Pass it for every single-value control
+     *   whose native state can be read, because without it a lost change event is
+     *   exactly what a retry turns green.
+     */
+    async tapUntilValue(lookUp, testID, expected, waitingFor, options = {}) {
+      // Fail loudly on a mis-shaped option rather than reading it as "no aim":
+      // this helper's fifth argument changed from a positional `aim` to an
+      // options object, and a callsite left behind would keep tapping the
+      // middle of the control - which is a wrong-place tap, not a dropped one,
+      // and it showed up as two segmented checks going red for the wrong reason.
+      const known = ['aim', 'attempts', 'nativeLabel'];
+      const unknown = Object.keys(options).filter((k) => !known.includes(k));
+      if (typeof options === 'function' || unknown.length > 0) {
+        log.abort(
+          `${waitingFor}: tapUntilValue was given ${
+            typeof options === 'function'
+              ? 'a positional aim function (it is now { aim })'
+              : `unknown option(s) ${unknown.join(', ')} - the fifth argument is ` +
+                '{ aim, attempts, nativeLabel }'
+          }. Refusing to tap: an ignored aim presses the middle of the control, ` +
+            'which fails a segment check and blames delivery.'
+        );
+      }
+      const { aim, attempts = 3, nativeLabel } = options;
+      const { delivered, shown } = await this.pressUntil({
+        what: `"${testID}"`,
+        waitingFor,
+        attempts,
+        press: async (attempt) => {
+          const node = await lookUp();
+          if (nativeLabel != null && attempt === 1) {
+            // A label that does not name the pressed control would consult somebody
+            // else's state, so the option is checked rather than trusted. Done on the
+            // way in, because a witness must not cost an extra dump of its own.
+            if (node.contentDesc !== nativeLabel) {
+              log.abort(
+                `${waitingFor}: nativeLabel "${nativeLabel}" does not name the control ` +
+                  `being pressed ("${node.contentDesc}") - the native-state witness ` +
+                  'would read the wrong control'
+              );
+            }
+          }
+          if (aim == null) {
+            await this.tapNode(node);
+          } else {
+            await aim(node);
+          }
+        },
+        reading: () => echo(testID),
+        nativeState:
+          nativeLabel == null
+            ? undefined
+            : () => this.nativeChecked(nativeLabel),
+        raised: (current) => current === expected,
+      });
+      if (!delivered) {
+        log.abort(
+          `${waitingFor}: ${String(attempts)} real taps left ${testID} at "${String(
+            shown
+          )}" rather than "${expected}" - either the taps were never delivered ` +
+            '(FOLLOWUPS.md:58) or the control ignores a real touch. One delivered ' +
+            'tap was enough to pass, so this is not a control that answers sometimes.'
+        );
+      }
+      return /** @type {string} */ (shown);
+    },
+
+    /**
+     * Tap the field of a `compact` control until its dialog or popup is really up.
+     *
+     * A popup is the only witness while it is open (nothing else on that screen can
+     * be read from the dump), so this is the same lesson with a different witness:
+     * without it, `dayGrid`'s "timed out waiting for the dialog to open with a
+     * month grid" is the first thing said about a tap that never arrived.
+     *
+     * @param {() => Promise<import('./uiautomator.mjs').UiautomatorNode>} lookUp
+     * @param {string} waitingFor
+     * @param {() => number} countUp what is up right now (popup windows, day cells)
+     * @param {{attempts?: number, windowMs?: number, pollMs?: number}} [options]
+     *   passed through to `pressUntil`. Pass them when `countUp` reads the
+     *   accessibility tree: a dump costs about two seconds here, and polling one at
+     *   the default 100 ms spends the whole window on readings.
+     */
+    async tapUntilUp(lookUp, waitingFor, countUp, options = {}) {
+      const { delivered, shown } = await this.pressUntil({
+        what: 'its window',
+        waitingFor,
+        ...options,
+        press: async () => {
+          await this.tapNode(await lookUp());
+        },
+        reading: () => String(countUp()),
+        raised: (current) => current !== '0',
+      });
+      if (!delivered) {
+        const attempts = String(options.attempts ?? 3);
+        log.abort(
+          `${waitingFor}: ${attempts} real taps opened nothing - either the taps ` +
+            'were never delivered (FOLLOWUPS.md:58) or the control cannot present. ' +
+            'The dump above is the screen a finger would have found.'
+        );
+      }
+      return shown;
+    },
+
+    /**
+     * Tap an open menu's row until the *value* it should report arrives.
+     *
+     * The row is re-found each attempt, which is exactly when it can still be found: a
+     * pick that travelled closes the menu and moves the value, so the loop has already
+     * returned, and a pick that never arrived leaves the menu open with that row still
+     * in the tree. Keying on the value rather than on the popup count leaving zero is
+     * what keeps a tap that opened nothing from reading as a choice: `waitForPopupCount
+     * (0, …)` is satisfied by the *absence* of a window, so when the first tap never
+     * landed, the row tap has nothing to press, the count is already 0, and the check
+     * reports a dropped delivery as a Picker that cannot pick.
+     *
+     * A later attempt presses only while the row is still up. If it has gone, the
+     * earlier tap travelled and the echo is merely slow, and pressing where the menu
+     * was would aim at whatever the closed menu left behind - so that attempt waits out
+     * its window instead.
+     *
+     * @param {string} option the menu row's label
+     * @param {string} testID the echo the pick has to move
+     * @param {string} expected what the echo has to say
+     * @param {string} waitingFor what this tap was meant to do
+     */
+    async tapOptionUntilValue(
+      option,
+      testID,
+      expected,
+      waitingFor,
+      attempts = 3
+    ) {
+      const { delivered, shown } = await this.pressUntil({
+        what: `menu row "${option}"`,
+        waitingFor,
+        attempts,
+        press: async (attempt) => {
+          if (
+            attempt > 1 &&
+            findAllByText(harness.hierarchy(), option).length === 0
+          ) {
+            return;
+          }
+          await this.tapNode(
+            this.waitForOption(option, 'the menu row to still be up')
+          );
+        },
+        reading: () => echo(testID),
+        raised: (current) => current === expected,
+      });
+      if (!delivered) {
+        log.abort(
+          `${waitingFor}: ${String(attempts)} real taps on "${option}" left ${testID} ` +
+            `"${String(shown)}" rather than "${expected}" - either the taps were never ` +
+            'delivered (FOLLOWUPS.md:58) or the row ignores a real touch.'
+        );
+      }
+      return /** @type {string} */ (shown);
     },
 
     /**

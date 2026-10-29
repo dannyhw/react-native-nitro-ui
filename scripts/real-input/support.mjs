@@ -216,6 +216,15 @@ export class CheckLog {
     this.notes = [];
     /** @type {string[]} */
     this.failures = [];
+    /**
+     * Presses this control needed more than once to get an answer. Kept apart
+     * from `notes` because a run where every control needed a second press is
+     * the regression `FOLLOWUPS.md:58` describes, and it must be countable
+     * rather than one line among forty.
+     *
+     * @type {string[]}
+     */
+    this.retries = [];
   }
 
   /**
@@ -224,6 +233,18 @@ export class CheckLog {
   note(message) {
     this.notes.push(message);
     console.log(`    · ${message}`);
+  }
+
+  /**
+   * A press was delivered and had to be repeated. Says how often, because
+   * "10/10 green" cannot tell "never retried" from "retried every time" unless
+   * the number is recorded (Q3 §3, F1 M2).
+   *
+   * @param {string} message
+   */
+  retried(message) {
+    this.retries.push(message);
+    this.note(message);
   }
 
   /**
@@ -334,13 +355,27 @@ export class Suite {
         continue;
       }
       const label = entry.log?.passed ? 'PASS' : 'FAIL';
-      console.log(`${entry.control.id}: ${label}`);
+      const retries = entry.log?.retries.length ?? 0;
+      console.log(
+        `${entry.control.id}: ${label}` +
+          (retries > 0
+            ? ` (retried ${String(retries)} press sequence(s))`
+            : ' (no retries)')
+      );
       for (const failure of entry.log?.failures ?? []) {
         console.log(`    failed: ${failure}`);
       }
     }
+    const totalRetries = done.reduce(
+      (sum, entry) => sum + (entry.log?.retries.length ?? 0),
+      0
+    );
     console.log(
-      `\nreal-input (${this.platform}): ${String(passed.length)}/${String(expected)} controls passed`
+      `\nreal-input (${this.platform}): ${String(passed.length)}/${String(expected)} controls passed` +
+        ` · ${String(totalRetries)} press sequence(s) needed a retry` +
+        (totalRetries === 0
+          ? ''
+          : ' - see the "answered on tap" notes above for which')
     );
     return passed.length === expected && this.results.length === expected
       ? 0
