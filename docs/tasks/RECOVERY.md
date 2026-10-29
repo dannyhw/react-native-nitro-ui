@@ -41,7 +41,8 @@
 > **F1 merged (2026-10-29, `2d58ca6`):** `real-input:ios` is green on this machine again (tap-delivery witness,
 > retry counts in every gate log). Its dwell probe found a product bug: a hosted Switch on the busy Switch screen
 > drops presses shorter than ~0.1 s (a human tap), while RN's `Pressable` takes them; **F7** (`F7-quick-tap.md`) owns
-> it. The suite presses for 0.15 s meanwhile. Next device task: **X4**.
+> it. The suite presses for 0.15 s meanwhile. **X4 and F7 started 2026-10-29 from `3dfe041`**, one device pair each
+> (worktrees `nitro-ui-worktrees/X4`, `/F7`).
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
