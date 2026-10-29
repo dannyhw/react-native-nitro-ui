@@ -180,6 +180,15 @@ const SHARED = {
     }
   },
   "tolerance": 0.6,
+  "boxRules": {
+    "NitroUiSwitch": "both",
+    "NitroUiSlider": "height",
+    "NitroUiButton": "none",
+    "NitroUiProgress": "height",
+    "NitroUiSegmentedControl": "both",
+    "NitroUiDatePicker": "both",
+    "NitroUiPicker": "both"
+  },
   "exemptions": []
 };
 /** END CONFORMANCE SHARED TABLE */
@@ -300,6 +309,9 @@ function fmt(size: Size | null): string {
  * @param input.declared what the engine reports for the control (`null` = nothing
  *   registered). JS cannot read the number, only whether one exists, so the caller passes
  *   `expected` when `hasDeclaredFallback` said yes and `null` when it said no.
+ * @param input.boxRule which axes the declaration describes — from the mirrored table,
+ *   never worked out here. See `boxRuleFor` in `scripts/conformance-core.mjs` for why a
+ *   `fillWidth` control's width and a content-sized control's box are not its declaration.
  */
 function fallbackFindings(input: {
   component: string;
@@ -308,14 +320,29 @@ function fallbackFindings(input: {
   corrections: number;
   poisoned: boolean;
   expected: Size;
+  boxRule: 'both' | 'height' | 'none';
 }): Finding[] {
-  const { component, declared, measured, corrections, poisoned, expected } =
-    input;
+  const {
+    component,
+    declared,
+    measured,
+    corrections,
+    poisoned,
+    expected,
+    boxRule,
+  } = input;
   const tolerance = SHARED.tolerance;
   const poisonedSize = SHARED.poisonSizes[PLATFORM];
   const problems: Finding[] = [];
   const report = (problem: string): void => {
     problems.push({ component, rule: 'declared-fallback', problem });
+  };
+  const ownsAgrees = (actual: Size, want: Size): boolean => {
+    if (Math.abs(actual.height - want.height) > tolerance) return false;
+    if (boxRule === 'both') {
+      return Math.abs(actual.width - want.width) <= tolerance;
+    }
+    return true;
   };
 
   if (declared == null) {
@@ -335,19 +362,29 @@ function fallbackFindings(input: {
     );
     return problems;
   }
-  if (!near(measured, expected, tolerance)) {
+  if (boxRule === 'none') {
+    if (near(measured, expected, tolerance)) {
+      report(
+        `this control is exempt from the box comparison as content-sized, and it ` +
+          `settled at its own declared ${fmt(expected)} anyway — a control that ` +
+          'always measures its declared size is not sizing itself from its content, ' +
+          'so the exemption is no longer true'
+      );
+    }
+  } else if (!ownsAgrees(measured, expected)) {
     report(
       `the fallback ${fmt(expected)} is not the measured ${fmt(measured)} for a ` +
-        'control that declares its size — for an intrinsic control those are the same ' +
-        'number by definition, so a mismatch means the declaration drifted from the ' +
-        'component'
+        (boxRule === 'height'
+          ? 'control whose own axis is its height (its width is its parent’s)'
+          : 'control that declares its size') +
+        ' — a mismatch means the declaration drifted from the component'
     );
   }
-  if (!poisoned && corrections > 0) {
+  if (!poisoned && corrections > 0 && boxRule === 'both') {
     report(
-      `needed ${String(corrections)} correction(s) from a warm engine whose fallback ` +
-        `${fmt(expected)} already equals the measured ${fmt(measured)} — the ` +
-        'declaration is not reaching the engine'
+      `needed ${String(corrections)} correction(s) from a warm engine whose ` +
+        `fallback ${fmt(expected)} already describes this control’s whole box — ` +
+        'the declaration is not reaching the engine'
     );
   }
   if (poisoned && corrections === 0) {
@@ -508,6 +545,24 @@ function declaredFallback(component: string): Size {
     );
   }
   return entry[PLATFORM];
+}
+
+/**
+ * Which axes this control's declaration describes, from the mirrored table.
+ *
+ * A missing entry throws rather than defaulting: `boxRules` is generated from the same keys
+ * as `declaredFallbacks`, so its absence means the mirror is stale, and silently choosing
+ * the strict rule would turn a broken table into a false red on the control.
+ */
+function boxRuleFor(component: string): 'both' | 'height' | 'none' {
+  const rule = (SHARED.boxRules as Record<string, string>)[component];
+  if (rule !== 'both' && rule !== 'height' && rule !== 'none') {
+    throw new Error(
+      `no boxRules row for ${component} — regenerate the shared table with ` +
+        '`node scripts/conformance/print-shared-table.mjs --write`'
+    );
+  }
+  return rule;
 }
 
 /* ------------------------------ the control table ---------------------------- */
@@ -748,6 +803,10 @@ describe('conformance · every control, four rules', () => {
   for (const fixture of FIXTURES) {
     describe(`· ${fixture.name}`, () => {
       const expected = declaredFallback(fixture.component);
+      // From the mirrored table, because which axes a control's declaration describes is a
+      // host-side fact about its sizing policy — the suite that asserts does not get to
+      // decide it. See `boxRuleFor` in scripts/conformance-core.mjs.
+      const boxRule = boxRuleFor(fixture.component);
 
       it('has its own declared fallback, and still corrects a wrong guess', async () => {
         // 1. The engine knows a fallback at all. `prewarmSizing` answers from the
@@ -778,6 +837,7 @@ describe('conformance · every control, four rules', () => {
               corrections: coldCorrections,
               poisoned: true,
               expected,
+              boxRule,
             })
           );
           cold.unmount();
@@ -786,15 +846,20 @@ describe('conformance · every control, four rules', () => {
         }
         await settle();
 
-        // 3. Warm: the declared number *is* the measured number for an intrinsic control,
-        //    so nothing has to be corrected. This is the assertion a poisoned fallback
-        //    cannot satisfy and a stale declaration cannot either.
+        // 3. Warm. For a control whose declaration describes its whole box, the declared
+        //    number *is* the measured one and nothing has to be corrected — the assertion a
+        //    poisoned fallback cannot satisfy and a stale declaration cannot either. For a
+        //    `fillWidth` or content-sized control the box it settles at is its parent's or
+        //    its content's, so `boxRule` narrows the comparison and this run only reports a
+        //    finding if a correction was needed where the declaration should have made it
+        //    unnecessary.
         const warmBefore = stats();
         const warm = await render(fixture.owner(false));
         await settle(600);
         const warmMeasure = handleFor(fixture.testId).measureContent();
         console.log(
-          `    · warm measured=${describeBox(warmMeasure)} declared=${describeBox(expected)}`
+          `    · warm measured=${describeBox(warmMeasure)} declared=${describeBox(expected)} ` +
+            `boxRule=${boxRule}`
         );
         expectConformance(
           fallbackFindings({
@@ -804,6 +869,7 @@ describe('conformance · every control, four rules', () => {
             corrections: correctionsSince(warmBefore),
             poisoned: false,
             expected,
+            boxRule,
           })
         );
         warm.unmount();
