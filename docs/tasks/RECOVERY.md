@@ -19,6 +19,8 @@
 > **0.3.2 staged on npm (2026-10-29, stage id `4642b5ea-5878-4442-a9d0-48f9b1b6ac01`)**: F3's three fixes.
 > **Waiting on the owner's approval** on npmjs.com (Staged Packages, or `npm stage approve <id>`); `Release tag`
 > then creates `v0.3.2`. X13 fixed the release lock refresh (json 2.18.0 pin); Version Packages PR #5 merged.
+> Pushes while it waits re-run **Stage on npm**; npm answers `E409 Cannot stage previously published
+> version`, which `c235180` taught the job to treat as already known (it went red once, on `d677dbd`).
 >
 > **Owner away from 2026-10-29 (autonomous):** mac-1 runs G7a, then F2 (`HANDOFF-mac1-2026-10-29.md`), and
 > opens a PR per task. mac-2 runs F1, X13 and X4, and merges mac-1's PRs after re-running gates here
