@@ -45,6 +45,29 @@ something real — the list clears itself with a failing test rather than a revi
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
 
+## Bench
+
+No bench numbers: this round adds no control and touches no rendering path, and `gate.mjs
+need` does not ask for a bench (AGENTS: benches belong to the bench host). The one cost the
+suite could plausibly add is at *build* time — it registers no component, so
+`app.stamp`'s component count is unchanged at 8, and the new harness file is 28 tests in one
+of 14 suites (47 s of a 167 s iOS run).
+
+## Coverage, as the suite prints it
+
+`node --input-type=module -e '…coverageMatrix…formatMatrix…'` — the same call the report's
+`checkCoverage` guard is built from, so this table cannot disagree with the test:
+
+| Control | a11y-name-on-focusable-node | declared-fallback | no-leak-on-drop | recycle-reset |
+| --- | --- | --- | --- | --- |
+| Button | covered | covered | covered | covered |
+| DatePicker | covered | covered | covered | covered |
+| Picker | covered | covered | covered | covered |
+| Progress | covered | covered | covered | covered |
+| SegmentedControl | **failing** — see X4 a11y: nothing actionable at the named node | covered | covered | covered |
+| Slider | **failing** — see X4 a11y: Compose RangeInfo nodes are not actionable in a dump | covered | covered | covered |
+| Switch | covered | covered | covered | covered |
+
 ## Red proofs
 
 Every one run on this tree; the mutation is the line that was changed, the right-hand side is
@@ -87,7 +110,7 @@ Coverage as a failing test (`component-coverage.test.js`, on the real tree):
 - `every manifest is covered, or has a stated reason` -> rename a fixture in the harness table -> `+ "…Conformance.harness.tsx: no fixture for Picker (picker)"`
 - the same test -> rename a `FOLLOWUPS.md` line the debt cites -> `+ "Slider × a11y-name-on-focusable-node: marked failing with no … line"`
 
-`scripts/task-ready.mjs` (`scripts/__tests__/task-ready.test.js`, 29 cases):
+`scripts/task-ready.mjs` (`scripts/__tests__/task-ready.test.js`, 30 cases):
 
 - `ends the region at the end marker…` -> the flag is never cleared -> `✕ ends the region at the end marker`
 - `goes red for a FIXME in a declared fallback table` -> `FALLBACK_FILE` matches nothing -> `✕ …FIXME in a declared fallback table`
@@ -117,4 +140,7 @@ Coverage as a failing test (`component-coverage.test.js`, on the real tree):
 - Android a11y: Progress's own screen can never be dumped (indeterminate indicators never idle), so what a screen reader announces for an *animating* indicator is unasserted; `hosted-progress` covers the determinate one.
 - The recycle rule measures identity, not recycling — `enableViewRecycling` appears nowhere in `src/` or `example/`, so the fixture hands one `testID` to a second owner rather than reaching `prepareForRecycle`.
 - `scripts/conformance-core.mjs` and friends count as both platforms in `gate.mjs` (they are not in `TOOLING_FILES`), so a rules-only edit owes two harness runs. Deliberate for `real-input/*`; arguable for `conformance-core.mjs` alone, and left as the expensive-but-honest default.
-- The `iOS real-input` gate was not run: this round adds no iOS real-input check, and the sweep is Android-only. Recorded rather than skipped silently.
+- `real-input:ios` is not run by this task's `need`, and this round adds no iOS real-input
+  check — the sweep is Android-only, because the in-app query already reaches the name on
+  iOS. It is worth one run anyway as a regression check on `support.mjs`: `Suite.finish` is
+  shared, and the `auxiliary` list now prints in its summary on both platforms.

@@ -59,7 +59,9 @@ import {
   repoManifests,
 } from './conformance-core.mjs';
 import {
+  expandOnly,
   missingReportPaths,
+  ONLY_GROUPS,
   reportCandidates,
   reportTableProblems,
   summarise,
@@ -115,14 +117,19 @@ const ALL = [
   'report-table',
 ];
 
-const only =
+const only = expandOnly(
   arg('--only')
     ?.split(',')
-    .map((name) => name.trim()) ?? ALL;
+    .map((name) => name.trim()) ?? ALL
+);
 for (const name of only) {
   if (!ALL.includes(name)) {
+    const groups = Object.entries(ONLY_GROUPS).map(
+      ([group, members]) => `${group} = ${members.join(', ')}`
+    );
     console.error(
-      `task-ready: --only does not know "${name}". Known: ${ALL.join(', ')}`
+      `task-ready: --only does not know "${name}". ` +
+        `Sections: ${ALL.join(', ')}. Groups: ${groups.join('; ')}`
     );
     process.exit(2);
   }
