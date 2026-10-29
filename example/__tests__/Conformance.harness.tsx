@@ -392,34 +392,57 @@ const localDay = (year: number, month: number, day: number): number =>
   new Date(year, month - 1, day).getTime();
 
 /**
- * One `key=value` field out of a control's report string.
+ * The DatePicker's displayed instant and open presentation, read off the view.
  *
- * The reports are `|`-separated on iOS and `;`-separated on Android for Picker, so both are
- * treated as one separator class here rather than the probes each carrying their own split.
+ * `nuiTestStateReport()` is **positional**, not `key=value`: `millis|presented|calendarMonthUtc|
+ * hasSelection|livePresentations|controlBuilds|builtMinimum|builtMaximum`
+ * (`HybridNitroUiDatePicker.swift`'s `publishReport`). Round 1's reader looked for `millis=` in
+ * it, so every field it "read" was the `<no millis in "…">` sentinel and the probe would have
+ * polled for a value it could never observe. The Picker's report *is* `key=value`-shaped
+ * (`expanded=-1;live=-1;…`), which is what made the mistake easy — two controls, two formats.
+ *
+ * The order is the one `DatePicker.harness.tsx:208` destructures, and the segment count is
+ * checked rather than trusted: a reordered or extended report has to fail here, not silently
+ * answer a question about somebody else's field.
  */
-function reportField(report: string, key: string): string {
-  const pair = report
-    .split(/[|;]/)
-    .find((entry) => entry.startsWith(`${key}=`));
-  return pair === undefined
-    ? `<no ${key} in "${report}">`
-    : pair.slice(key.length + 1);
-}
+const DATE_PICKER_FIELDS = [
+  'millis',
+  'presented',
+  'calendarMonthUtc',
+  'calendarHasSelection',
+  'livePresentations',
+  'controlBuilds',
+  'builtMinimum',
+  'builtMaximum',
+] as const;
 
-/**
- * The DatePicker's report: `millis|presented|calendarMonthUtc|hasSelection|livePresentations|
- * controlBuilds|builtMinimum|builtMaximum` — displayed instant and open presentation, both read
- * off the view (`HybridNitroUiDatePicker.swift`'s `nuiTestStateReport`). The field order is the
- * one `DatePicker.harness.tsx:208` parses, so the two suites cannot disagree about it silently.
- */
-function datePickerReportOf(testId: string): string {
+function datePickerStateOf(testId: string): {
+  millis: number;
+  presented: string;
+  raw: string;
+} {
   const handle = handleFor(testId);
   if (handle.nuiTestStateReport == null) {
     throw new Error(
       `"${testId}" reports no state, so the recycle rule cannot read it`
     );
   }
-  return handle.nuiTestStateReport();
+  const raw = handle.nuiTestStateReport();
+  const parts = raw.split('|');
+  if (parts.length !== DATE_PICKER_FIELDS.length) {
+    throw new Error(
+      `"${testId}" reported ${String(parts.length)} field(s) ` +
+        `("${raw}") and the DatePicker's report has ` +
+        `${String(DATE_PICKER_FIELDS.length)} (${DATE_PICKER_FIELDS.join(',')}), ` +
+        'so reading it by position would answer a question about the wrong field'
+    );
+  }
+  const [millis, presented] = parts;
+  return {
+    millis: Number(millis),
+    presented: presented ?? '<none>',
+    raw,
+  };
 }
 
 /** The Slider's a11y step: fire the queued action and wait for its report to change. */
@@ -456,6 +479,38 @@ function stepFrom(report: string): string {
     throw new Error(`step report names no value pair: "${report}"`);
   }
   return from;
+}
+
+/**
+ * Engine counters, read once the ledger has stopped moving.
+ *
+ * Two consecutive equal reads, because "the ledger returned to baseline" only means something
+ * against a baseline that is not on its way somewhere else. A drop from a test that ran before
+ * this one can land inside the window — the first run of the leak control measured exactly that,
+ * `+7` on the way up and `−8` on the way down for eight controls — and a comparison against a
+ * moving number passes for the wrong reason, which is how a leak rule gets a green row.
+ *
+ * Throws rather than returning a contested read: this is a rule's setup, and a window that never
+ * settles is not the finding this test exists to report.
+ */
+async function settledStats(what: string): Promise<NitroUiSizingStats> {
+  let previous = stats();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await settle(150);
+    const current = stats();
+    if (
+      current.ledgerEntries === previous.ledgerEntries &&
+      current.registryEntries === previous.registryEntries
+    ) {
+      return current;
+    }
+    previous = current;
+  }
+  throw new Error(
+    `${what}: the engine's ledger and registry kept moving for 3s ` +
+      `(last read ${String(previous.ledgerEntries)}/` +
+      `${String(previous.registryEntries)}), so no number here is a baseline`
+  );
 }
 
 /** A `hybridRef` callback per testID, so one `render` can hand several controls out. */
@@ -736,12 +791,20 @@ function expectConformance(findings: Finding[]): void {
         `${finding.rule}: ${finding.problem}`
     );
   }
-  // `toBe('')` on the joined text, not `toEqual([])` (the convention `HostControls.harness.tsx`
-  // already uses). Jest abbreviates an array it expects to be empty — every run of this file
-  // printed `expected [ …(2) ] to deeply equal []` for nine failures and not one word of what
-  // the rules had actually found, which turns a red gate into a re-run just to learn which
-  // assertion moved. A string is printed whole.
-  expect(failures.join('\n')).toBe('');
+  // Thrown, not asserted (X4 round 2). Neither of Jest's two channels carries a finding out
+  // of a device run here: `toEqual([])` prints `expected [ …(2) ] to deeply equal []`, `toBe('')`
+  // prints `expected 'Switch × no-leak-on-drop: 8 controls …' to be ''`, and `console.log`/
+  // `console.error` from this file reached the gate log in none of three runs — while a thrown
+  // `Error` from a probe arrived whole (`the first owner's pick: report="1799971200000|0|…"`).
+  // So the sentence a rule writes is the sentence a reviewer reads, or the gate is a list of
+  // control names. One thrown Error is still one failed test, so the summary's count is right.
+  if (failures.length > 0) {
+    throw new Error(
+      `${String(failures.length)} conformance finding(s):\n${failures
+        .map((failure) => `  - ${failure}`)
+        .join('\n')}`
+    );
+  }
 }
 
 /* ------------------------------- the shared tables --------------------------- */
@@ -1111,8 +1174,12 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         );
         return [
           {
+            // The report prints the value as the double it is (`... 0.0->0.25 ...`,
+            // `HybridNitroUiSlider.swift:979`), so the expected string is the same shape: `0`
+            // and `0.0` are the same number and different strings, and a rule that can only
+            // fail because of a format is a rule the next person deletes.
             label: 'the value the control was showing before any step',
-            expected: '0',
+            expected: '0.0',
             actual: stepFrom(report),
           },
         ];
@@ -1304,14 +1371,14 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         const picked = localDay(2027, 1, 15);
         handleFor('conformance-date-picker').nuiTestSelect?.(2027, 1, 15, 0, 0);
         await pollReport(
-          () => datePickerReportOf('conformance-date-picker'),
-          (report) => reportField(report, 'millis') === String(picked),
+          () => datePickerStateOf('conformance-date-picker').raw,
+          () => datePickerStateOf('conformance-date-picker').millis === picked,
           'the first owner’s pick'
         );
         handleFor('conformance-date-picker').nuiTestPresent?.();
         await pollReport(
-          () => datePickerReportOf('conformance-date-picker'),
-          (report) => reportField(report, 'presented') === '1',
+          () => datePickerStateOf('conformance-date-picker').raw,
+          () => datePickerStateOf('conformance-date-picker').presented === '1',
           'the first owner’s presentation'
         );
       },
@@ -1325,22 +1392,21 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         />
       ),
       read: async () => {
-        const report = await pollReport(
-          () => datePickerReportOf('conformance-date-picker'),
-          (next) =>
-            reportField(next, 'millis') === String(localDay(2026, 6, 4)),
-          'the second owner’s default'
-        );
+        const state = datePickerStateOf('conformance-date-picker');
         return [
           {
+            // The displayed day, read from the view rather than from the `value` React sent:
+            // the second owner passes no `value` at all, so only the control's own state can
+            // answer this. No `pollReport` here — waiting for the reset before asking whether
+            // it happened is how this rule would go green on a control that resets late.
             label: 'the day the field shows',
             expected: localDay(2026, 6, 4),
-            actual: Number(reportField(report, 'millis')),
+            actual: state.millis,
           },
           {
             label: 'a presentation left open',
             expected: '0',
-            actual: reportField(report, 'presented'),
+            actual: state.presented,
           },
         ];
       },
@@ -1543,32 +1609,33 @@ describe('conformance · every control, four rules', () => {
       it('is known to the engine while mounted, and unknown after', async () => {
         // The positive control, which is the half round 1's leak rule was missing. It churned
         // 50 mount/unmount pairs with no settle between them and read `ledger 0→0`, a number a
-        // control that never registered an instance in the first place produces just as well as
-        // one that registers and forgets correctly. So this mounts K controls, waits for each to
-        // be laid out — an instance reaches the engine on its first measure, which is what
-        // `laidOut` records — and requires the ledger to have risen by K. Only then does it drop
-        // them and require the rise to have gone away.
+        // control that never registered an instance produces just as well as one that registers
+        // and forgets correctly. So this mounts K controls, waits for the last of them to be
+        // laid out — an instance reaches the engine on its first measure — requires the ledger
+        // to have risen by exactly K, then drops them and requires the rise to be gone.
         //
-        // Both halves are needed and they fail for different reasons: without the first, "back
-        // to baseline" is unfalsifiable; without the second, a control that registers and never
-        // forgets is invisible.
+        // The window has to be *quiescent* at both reads, and that is not a nicety: the first
+        // run of this test read `rose=7` for 8 controls and `−8` on the way down, which is one
+        // instance from the *previous test's* `unmount()` releasing inside the window. Against a
+        // baseline that is still moving, "returned to baseline" is unfalsifiable in exactly the
+        // way round 1's churn was, so `settledStats` waits for two consecutive equal reads and
+        // refuses rather than comparing against a number that is on its way somewhere.
         const MOUNTS = 8;
-        const before = stats();
+        const before = await settledStats('before the mount window');
         const many = await render(
           <View>
             {Array.from({ length: MOUNTS }, (_, row) => row).map((row) =>
-              // `testID` per row so every one is its own Fabric node, and alternating
-              // `defaultValue` because the wrappers memoise on props: 8 identical elements
-              // would be 8 nodes either way, but this is what the other suites' churn uses
-              // (`Sizing.harness.tsx:504`).
+              // A `testID` per row, so every one is its own Fabric node and the query below can
+              // name the last; `variant` flips a prop so the rows are visibly distinct, the way
+              // the other suites' churn does (`Sizing.harness.tsx:504`).
               fixture.control(`leak-mounted-${String(row)}`, row % 2 === 0)
             )}
           </View>,
           RENDER
         );
-        // The layout has to have happened for all K, or the ledger rise being asserted below is
-        // a race rather than a fact. The last row's box is the witness: Fabric lays out in
-        // order, so a measured last row means all rows were measured.
+        // The layout has to have happened for all K, or the rise asserted below is a race
+        // rather than a fact. The last row's box is the witness: Fabric lays out in order, so a
+        // measured last row means every row before it was measured.
         await waitFor(
           () => {
             const box = harnessUi.queryByTestId(
@@ -1580,14 +1647,12 @@ describe('conformance · every control, four rules', () => {
           },
           { timeout: 20000 }
         );
-        const mounted = stats();
+        const mounted = await settledStats('after the mount window');
         many.unmount();
-        // A settle, then the read: `onDropView` runs on the mounting transaction that removes
-        // the view, and `host.drop()` is where the instance is released
-        // (`NitroSwiftUIHost.swift:327`), so this waits for the drops rather than assuming they
-        // were synchronous with `unmount()`.
-        await settle(700);
-        const after = stats();
+        // `onDropView` runs on the mounting transaction that removes the view and `host.drop()`
+        // is where the instance is released (`NitroSwiftUIHost.swift:327`), so this waits for
+        // the drops to have happened rather than assuming they were synchronous with unmount().
+        const after = await settledStats('after the drop window');
         console.log(
           `    · ledger ${String(before.ledgerEntries)}→` +
             `${String(mounted.ledgerEntries)}→${String(after.ledgerEntries)} ` +
@@ -1597,26 +1662,30 @@ describe('conformance · every control, four rules', () => {
         );
         const problems: Finding[] = [];
         const rose = mounted.ledgerEntries - before.ledgerEntries;
-        if (rose < MOUNTS) {
-          // Said as a finding rather than a thrown error, because the reason matters: a control
-          // whose instances never reach the engine cannot leak there, and this rule would be
-          // vacuous for it — which is a fact about the control worth printing.
+        if (rose !== MOUNTS) {
+          // A finding rather than a thrown error, because the reason matters: a control whose
+          // instances never reach the engine cannot leak there, and this rule would be vacuous
+          // for it — a fact about the control worth printing, not banking.
           problems.push({
             component: fixture.name,
             rule: 'no-leak-on-drop',
             problem:
-              `${MOUNTS} controls were mounted and laid out together and the ledger rose ` +
-              `by ${String(rose)}, so this control does not hold ${
-                rose === 0 ? 'an' : 'enough'
-              } engine entry per instance — the drop half below can return to ` +
-              'baseline without anything having been released, which is the same ' +
-              'vacuity a churn loop with no settle between mounts had',
+              `${String(MOUNTS)} controls were mounted and laid out together and the ` +
+              `ledger rose by ${String(rose)}. One entry per instance is what makes the ` +
+              'drop half below mean anything: an instance that is not in the ledger cannot ' +
+              'be seen to leave it, which is the vacuity round 1’s churn had',
           });
         }
+        // Compared against the *pre-mount* baseline, not the mounted one. `leakFindings`
+        // subtracts its baseline from the post-drop read, and the mounted read already includes
+        // the K entries being asserted: passing it as the baseline asks for `0` where the honest
+        // answer is `-K` (the first run reported `-8 ledger entry(ies) survived 8 drops` for a
+        // control that had just released all eight, which is the rule crying wolf about a leak
+        // in the one direction it cannot be wrong in).
         problems.push(
           ...leakFindings({
             component: fixture.name,
-            baseline: mounted,
+            baseline: before,
             after,
             instances: MOUNTS,
           })
