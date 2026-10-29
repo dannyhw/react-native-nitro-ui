@@ -447,6 +447,18 @@ describe('the two things a refresh must never do', () => {
       fakePod,
       `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "1.17.0"; exit 0; fi
+# 'pod ipc spec <file>' is the serialisation probe. It must PRINT and touch
+# nothing, the way the real one does, or the hygiene tests below would be
+# measuring a fixture that rewrites the tree just to be asked a question.
+# FAKE_POD_JSON_STYLE=expanded answers the way a json gem before 2.8.0 does.
+if [ "$1" = "ipc" ] && [ "$2" = "spec" ]; then
+  if [ "\${FAKE_POD_JSON_STYLE:-compact}" = "expanded" ]; then
+    printf '%s\n' '{' '  "name": "NitroUiSerialisationCanary",' '  "dependencies": {' '    "react-native-nitro-ui": [' '' '    ]' '  }' '}'
+  else
+    printf '%s\n' '{' '  "name": "NitroUiSerialisationCanary",' '  "dependencies": {' '    "react-native-nitro-ui": []' '  }' '}'
+  fi
+  exit 0
+fi
 if [ -n "$FAKE_POD_EXTRA_CHURN" ]; then
   src="${dir}/pod-writes-churn.lock"
 else

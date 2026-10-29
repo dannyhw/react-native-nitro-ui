@@ -51,7 +51,7 @@ import {
   readTreeState,
   sideEffectsToUndo,
 } from './example-lock-core.mjs';
-import { installPods } from './pod-install.mjs';
+import { installPods, podSerialisationCheck } from './pod-install.mjs';
 import { cocoapodsStamp } from './pod-install-lib.mjs';
 
 const REPO_ROOT = path.resolve(
@@ -78,6 +78,20 @@ function rootFrom(env = process.env) {
   return fromEnv != null && fromEnv.trim() !== ''
     ? path.resolve(fromEnv.trim())
     : REPO_ROOT;
+}
+
+/**
+ * The directory holding the Podfile, in the checkout `env` points at.
+ *
+ * Separate from `rootFrom` because `--preflight` needs it and does not want to
+ * recompute the path from a repo root it has already resolved elsewhere; the
+ * one expression appearing twice is how a preflight and a fix end up asking
+ * about different checkouts.
+ *
+ * @param {Record<string, string | undefined>} env
+ */
+function iosDirFrom(env) {
+  return path.join(rootFrom(env), IOS_SCOPE);
 }
 
 /** @param {(message: string) => void} log */
@@ -127,6 +141,14 @@ function cocoaPodsHere(env) {
  * `--preflight`: the release path's first stage, and the only one that runs before
  * `changeset version` has written anything.
  *
+ * Two questions, and they are genuinely different. *Is CocoaPods here* - a
+ * Linux contributor previewing a release has no `pod` at all. And *would the
+ * CocoaPods that is here write the lock we have*: X13's release runner had
+ * CocoaPods 1.17.0, the exact pin, and still rewrote 87 of 96 checksums, because
+ * the `json` gem under its Ruby serialises an empty array two bytes differently
+ * (`pod-install-lib.mjs` has the mechanism). A machine can pass the first
+ * question and fail the second, and the one that matters is the second.
+ *
  * Deliberately blind to whether the two files agree: asking that would make this stage
  * refuse for a reason unrelated to the question, at a point where the tree it would be
  * complaining about is the one at HEAD.
@@ -139,22 +161,35 @@ export function preflight({
   log = (message) => process.stdout.write(`${message}\n`),
   error = (message) => process.stderr.write(`${message}\n`),
 } = {}) {
+  const refusal = (detail) => {
+    error(
+      `example-lock: refusing to start a version bump: ${detail}\n` +
+        '  Nothing has been changed. `bun run release:version` refreshes ' +
+        `${LOCK_REL} in the same breath as bumping the version, and only CocoaPods ` +
+        'can write that lock - so it answers first, rather than leave a half-versioned ' +
+        'tree behind.\n' +
+        '  Install the CocoaPods the lock records (its COCOAPODS: trailer, or `gem ' +
+        'install cocoapods -v <that>`) and run it again. The release job does exactly ' +
+        'that, on a macOS runner.'
+    );
+    return 1;
+  };
+
   const pods = cocoaPodsHere(env);
-  if (pods.ok) {
-    makeSay(log)(`CocoaPods is here - ${pods.why}.`);
-    return 0;
+  if (!pods.ok) return refusal(pods.why);
+  makeSay(log)(`CocoaPods is here - ${pods.why}.`);
+
+  // The X13 question: same CocoaPods version, different `json`, different lock.
+  // Asked here because by `--fix` the version has already been bumped, and a
+  // refusal there is the half-versioned tree this stage exists to prevent.
+  const serialisation = podSerialisationCheck({ dir: iosDirFrom(env), env });
+  if (serialisation.problem != null) {
+    return refusal(serialisation.problem);
   }
-  error(
-    `example-lock: refusing to start a version bump: ${pods.why}.\n` +
-      '  Nothing has been changed. `bun run release:version` refreshes ' +
-      `${LOCK_REL} in the same breath as bumping the version, and only CocoaPods ` +
-      'can write that lock - so it answers first, rather than leave a half-versioned ' +
-      'tree behind.\n' +
-      '  Install the CocoaPods the lock records (its COCOAPODS: trailer, or `gem ' +
-      'install cocoapods -v <that>`) and run it again. The release job does exactly ' +
-      'that, on a macOS runner.'
+  makeSay(log)(
+    `CocoaPods serialises podspecs the way ${LOCK_REL} was written.`
   );
-  return 1;
+  return 0;
 }
 
 /**
@@ -228,10 +263,25 @@ export function run({
     return 1;
   }
 
+  // The same second question `--preflight` asks, because `--fix` is also callable on
+  // its own and has to give the same answer as the stage that asked for it. Here it
+  // is worth refusing over: the tree is already bumped, but a refresh that rewrites
+  // 87 checksums is worse than a refusal - the changesets action commits whatever is
+  // in the tree, and that lock would be reverted by the next maintainer's install.
+  const serialisation = podSerialisationCheck({ dir: iosDir, env });
+  if (serialisation.problem != null) {
+    error(
+      `example-lock: refusing to refresh ${LOCK_REL}: ${serialisation.problem}\n` +
+        '  The version in this tree has already been bumped by `changeset version`; ' +
+        'the lock has not. Restore it with:  git checkout -- .'
+    );
+    return 1;
+  }
+
   const before = treeState();
   const stampBefore = cocoapodsStamp(lockText);
 
-  const status = installPods({ dir: iosDir, log }).status;
+  const status = installPods({ dir: iosDir, log, strict: true, env }).status;
   if (status !== 0) {
     error(
       `example-lock: pod install exited ${status}, so ${LOCK_REL} was not ` +
