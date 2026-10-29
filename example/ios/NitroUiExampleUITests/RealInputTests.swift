@@ -136,6 +136,13 @@ final class RealInputTests: XCTestCase {
       if let rows = ProcessInfo.processInfo.environment["NUI_PROBE_ROWS"] {
         app.launchEnvironment["NUI_PROBE_ROWS"] = rows
       }
+      // Forwarded like the other two. The probe's own `probe-stall` readout is what
+      // catches a miss here: it reports the longest block the app actually
+      // performed, so a stall that was asked for and not forwarded shows up as
+      // `stall=none` rather than as a clean "a busy main thread loses nothing".
+      if let stall = ProcessInfo.processInfo.environment["NUI_PROBE_STALL"] {
+        app.launchEnvironment["NUI_PROBE_STALL"] = stall
+      }
       app.launch()
       _ = try required(
         "probe-button",
@@ -271,29 +278,46 @@ final class RealInputTests: XCTestCase {
     // The positive control there is the probe's own UIKit button.
     let nativeOnly = env["NUI_PROBE_UI"] != nil
     if nativeOnly {
+      // What the stall arm actually blocked for, read out of the app itself rather
+      // than assumed from the flag: a stall that never happened would otherwise be
+      // reported as "a busy main thread does not lose presses", which is the
+      // opposite fact. The probe window publishes it as an element's value.
+      let stallReport = echoText("probe-stall")
       print(
-        "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) ui=\(env["NUI_PROBE_UI"] ?? "?") rows=\(env["NUI_PROBE_ROWS"] ?? "?") label=\(label.isEmpty ? "-" : label)"
+        "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) ui=\(env["NUI_PROBE_UI"] ?? "?") rows=\(env["NUI_PROBE_ROWS"] ?? "?") quiet=\(quiet) stall=\(env["NUI_PROBE_STALL"] ?? "-") \(stallReport.isEmpty ? "stall-report=-" : stallReport) label=\(label.isEmpty ? "-" : label)"
       )
+      // Under a stall the arm is slow on purpose, so the witness has to be a count:
+      // a toggling value that is merely late to report is indistinguishable from one
+      // whose presses were lost, and the whole point of the arm is to tell those two
+      // apart. The probe window publishes both counters as plain numbers for this.
+      // Without a stall the original witnesses are kept, so the cells already
+      // measured stay comparable with this file's own earlier logs.
+      let rowsReading: (String) -> String? = quiet
+        ? { _ in self.publishedNumber("probe-toggle-count") }
+        : { self.nativeSwitchState(of: $0) }
+      let buttonReading: (String) -> String? = quiet
+        ? { _ in self.publishedNumber("probe-button-count") }
+        : { element in
+            let node = self.app.descendants(matching: .any)[element].firstMatch
+            let shown = (node.value as? String) ?? ""
+            return shown.isEmpty ? nil : shown
+          }
       let nativeDelivered = try measureDelivery(
         target: target,
         dwell: dwell,
         taps: taps,
         fractions: fractions,
-        reading: { self.nativeSwitchState(of: $0) }
+        reading: rowsReading
       )
       let positiveDelivered = try measureDelivery(
         target: "probe-button",
         dwell: dwell,
-        taps: 3,
+        taps: quiet ? taps : 3,
         fractions: fractions,
-        reading: { element in
-          let node = app.descendants(matching: .any)[element].firstMatch
-          let shown = (node.value as? String) ?? ""
-          return shown.isEmpty ? nil : shown
-        }
+        reading: buttonReading
       )
       print(
-        "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(nativeDelivered)/\(taps) js-toggle=\(positiveDelivered)/3"
+        "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(nativeDelivered)/\(taps) js-toggle=\(positiveDelivered)/\(quiet ? taps : 3)"
       )
       return
     }
@@ -2264,6 +2288,21 @@ final class RealInputTests: XCTestCase {
       return ""
     }
     return node.label.isEmpty ? ((node.value as? String) ?? "") : node.label
+  }
+
+  /// A probe readout that is a bare number, or nil when it is not there or says
+  /// something else.
+  ///
+  /// Kept apart from `echoText` because the two fail differently: an echo the suite
+  /// asserts on must be present and correct or the check is wrong, while the probe's
+  /// counters are optional witnesses — the same cell can be read from a control's own
+  /// value instead — so an unreadable one is reported as no reading, not as zero. A
+  /// zero from a witness that is missing would be a measurement, and a false one.
+  ///
+  /// - Parameter identifier: the readout's `accessibilityIdentifier`.
+  private func publishedNumber(_ identifier: String) -> String? {
+    let shown = echoText(identifier).trimmingCharacters(in: .whitespaces)
+    return shown.allSatisfy(\.isNumber) && !shown.isEmpty ? shown : nil
   }
 
   /// Tap a control until the on-screen *value* it is meant to change says so.

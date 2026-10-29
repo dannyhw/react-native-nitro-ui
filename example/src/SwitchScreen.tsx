@@ -141,6 +141,7 @@ export default function SwitchScreen() {
           value={probeHosted}
           onValueChange={acceptHosted}
           testID="probe-hosted-switch"
+          accessibilityLabel="Probe hosted switch"
         />
       </Row>
       <Row label="">

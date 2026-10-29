@@ -95,6 +95,12 @@ const FRACTIONS = flag('--fractions', '');
 const PROBE_UI = flag('--probe-ui', '');
 const PROBE_ROWS = flag('--rows', '200');
 /**
+ * For the no-React-Native arm: hold its main thread for this many milliseconds on
+ * every run-loop pass, so the arm can be asked whether a busy main thread alone is
+ * enough to lose a short press.
+ */
+const PROBE_STALL = flag('--stall', '');
+/**
  * Read the witness twice instead of polling it: press, then read once. For the
  * case where the concern is that the probe's own accessibility traffic into a busy
  * app is what disturbs the answer. Needs a counting witness to say how many
@@ -360,6 +366,9 @@ async function main() {
             : {
                 TEST_RUNNER_NUI_PROBE_UI: PROBE_UI,
                 TEST_RUNNER_NUI_PROBE_ROWS: PROBE_ROWS,
+                ...(PROBE_STALL === ''
+                  ? {}
+                  : { TEST_RUNNER_NUI_PROBE_STALL: PROBE_STALL }),
               }),
         }
       );
