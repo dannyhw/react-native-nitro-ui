@@ -47,22 +47,35 @@
  * - the recycle rule asserts each property against the props of the control's *second*
  *   owner, so a value that stayed behind names itself.
  *
- * ## The recycle rule's limitation, stated rather than hidden
+ * ## The recycle rule, and what it can reach on each platform
  *
- * `enableViewRecycling` is off in this app — it appears nowhere in `src/` or `example/`, and
- * `FOLLOWUPS.md` B1 lists "recycling path has no leak gate" as still open — so Android's
- * real `prepareForRecycle` is not reached. What this asserts is the identity a list gives a
- * control: one `testID`, a second owner's props, and nothing from the first owner visible in
- * what the control says about itself. That is the case a component can get wrong today; when
- * recycling is switched on the same fixture becomes the real path with no change to the
- * assertions, and the rule is named for what it measures.
+ * The two platforms do not run the same code here, and round 1 of this file had it backwards.
+ *
+ * - **iOS recycles by default.** Nitrogen reports each of our views as recyclable when it
+ *   implements `RecyclableView` (`NitroUiAutolinking.swift:71`), which all seven do, and
+ *   nothing overrides that — so Fabric's registry enqueues the instance on unmount, calling
+ *   `prepareForRecycle` as it does (`RCTComponentViewRegistry.mm:117`), and dequeues it for
+ *   the next mount of that component (`:95`). The reset is live code on this platform, which
+ *   is why the residue probes below are real tests on iOS and not only on paper.
+ * - **Android does not reach it.** Nitro's generated manager wires recycling up and would call
+ *   `prepareForRecycle` from `prepareToRecycleView`, but that method is a legacy-architecture
+ *   hook: its only caller is `ViewManager.recycleView` (`ViewManager.java:269`), and Fabric's
+ *   Android mounting layer calls `onDropViewInstance` and nothing else
+ *   (`SurfaceMountingManager.kt:1060`). So `onDropView` runs on Android and `prepareForRecycle`
+ *   does not — `FOLLOWUPS.md` B1's "recycling path has no leak gate" is that gap, and
+ *   `docs/tasks/B1-android-mount-oom.report.md` is where `onDropView` is proved instead.
+ *
+ * Consequence for this suite, stated plainly: the residue probes can only go red on iOS, and
+ * on Android the rule's failure mode is a prop that stops arriving. Both halves run on both
+ * platforms, and `checkInAppFixtures` insists every control has a probe or a written reason it
+ * cannot have one, so the list of unprovable controls cannot grow by omission.
  *
  * @file Gates: `harness:ios`, `harness:android`. Discovered automatically:
  *       `example/jest.harness.config.mjs` matches any `*.harness.tsx` under a
  *       `__tests__` directory, so nothing here needed registering.
  */
 import type { ReactElement } from 'react';
-import { Platform, TurboModuleRegistry } from 'react-native';
+import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
   cleanup,
@@ -70,7 +83,9 @@ import {
   expect,
   it,
   render,
+  waitFor,
 } from 'react-native-harness';
+import { screen, userEvent } from '@react-native-harness/ui';
 import {
   Button,
   DatePicker,
@@ -228,7 +243,221 @@ type Handle = {
   readonly value?: boolean | number | null;
   readonly selectedIndex?: number | null;
   measureContent(): Size;
+  /**
+   * The Slider's own answer to "what value is showing, and what happened when a reader
+   * acted on it" — `performed accessibilityIncrement on <node> <from>-><to> disabled=<bool>`,
+   * numbered `#n` on Android. The recycle rule's oracle for this control, because it is the
+   * one number that comes from the view rather than from React's last write: the `value`
+   * getter above returns `model.state.js` (`HybridNitroUiSlider.swift:693`), which is what
+   * React sent, so it cannot show what the reset owns.
+   */
+  nuiTestAccessibilityStep?(direction: number): void;
+  nuiTestAccessibilityStepReport?(): string;
+  /**
+   * Picker's report — `expanded=<0|1>;live=<n>;…`. `live` is how many menus the platform
+   * believes this control has open, which is state the reset owns and no prop rewrites.
+   */
+  nuiTestMenuReport?(): string;
+  /**
+   * DatePicker's report — its displayed instant plus whether a presentation is open, both
+   * from the view. `nuiTestSelect(...)` drives a selection through the control's own path,
+   * which is what leaves residue for a reset to clear.
+   */
+  nuiTestStateReport?(): string;
+  /** Opens the DatePicker's own presentation — the other thing a dropped mount can leak. */
+  nuiTestPresent?(): void;
+  /**
+   * Drive a selection through the control's own path. Two arities because two controls share
+   * the hook name: `Picker` names an index (`HybridNitroUiPicker.swift:544`), `DatePicker`
+   * names a year/month/day/hour/minute, and this is one handle type for all seven controls.
+   */
+  nuiTestSelect?(...fields: number[]): void;
+  /** Progress's displayed fraction, as the view draws it, plus its animation flag. */
+  nuiTestDisplayedValue?(): string;
 };
+
+/**
+ * The recycle rule's per-control oracle, and the honest answer to what round 1 asserted.
+ *
+ * A recycled control's **props cannot show residue**, on either platform, for reasons two
+ * layers above ours:
+ *
+ * - Fabric hands a recycled instance its props as a *fresh mount* - the Insert mutation calls
+ *   `updateProps:newProps oldProps:nil` (`RCTMountingManager.mm:83`) - so the generated
+ *   setters run for every provided prop (`HybridNitroUiSwitchComponent.mm:84`:
+ *   `oldViewProps == nullptr ? prop.isProvided() : ...`).
+ * - and our wrappers always provide: every prop is sent, `null` included (`Switch.tsx:145-151`),
+ *   and a callback the app did not pass is sent as a stable no-op *specifically* so a recycled
+ *   view cannot keep the previous owner's handler (`Button.tsx:99-110`).
+ *
+ * So `model.accessibilityLabel = nil` in a reset is a safety line, not an observable one: the
+ * next mount writes that field either way, which is exactly why deleting it left round 1's rule
+ * green and the review called the rule unable to fail. What a reset *uniquely* owns is state no
+ * prop rewrites - the **displayed value**, the handshake's **event counts**, and the
+ * `didApplyDefault` one-shot. Only an *interaction* produces that state, and only a control's
+ * own read-out shows it: the handle's `value` returns `model.state.js`
+ * (`HybridNitroUiSlider.swift:693`), which is what React sent, not what is drawn.
+ *
+ * A probe therefore owns both lifetimes: it leaves residue behind on purpose, mounts a second
+ * owner whose props are all defaults, and asks the control the one question only its own state
+ * can answer. A control with no such question says so in the run rather than banking a pass
+ * from a check that could not have failed - and `component-coverage.test.js` insists each
+ * control has either a probe or that note, so the list of unprovable controls cannot grow in
+ * silence.
+ */
+type RecycleProbe = {
+  /** What the residue is, in words, printed beside the verdict. */
+  leaveBehind: string;
+  /** The first owner, in non-default state. */
+  first: () => ReactElement;
+  /** The interaction that creates the state the reset must clear. */
+  act: () => Promise<void>;
+  /** The second owner: same testID, every prop at its default. */
+  second: () => ReactElement;
+  /**
+   * Ask the second mount. An `actual` that is not what the second owner's own props imply is
+   * the control answering out of somebody else's state.
+   */
+  read: () => Promise<
+    Array<{ label: string; expected: unknown; actual: unknown }>
+  >;
+};
+
+/** Why a control has no probe: printed as the verdict, so a pass is not read as coverage. */
+type RecycleNote = { noProbe: string };
+
+/** Every callback the probes wired up, in order, as `testID:value`. */
+const recycleEvents: string[] = [];
+
+/** One handler per control, recording what the app was told. */
+const recordRecycle =
+  (testId: string) =>
+  (value: unknown): void => {
+    recycleEvents.push(`${testId}:${String(value)}`);
+  };
+
+/** Events recorded since `from`, so a probe reads only the effect of its own press. */
+const eventsSince = (from: number): string[] => recycleEvents.slice(from);
+
+/**
+ * Wait for `wanted` to be the whole of what the app has been told since `from`, and hand back
+ * what was actually seen either way.
+ *
+ * A probe's *setup* may throw - an interaction that never produced its event means the fixture
+ * is broken, and that should stop the run. A probe's **read** may not: a control that stays
+ * silent is the residue this rule looks for, and it has to arrive as a finding naming both
+ * values, not as a Jest timeout that names neither. So this waits, and then reports.
+ */
+async function eventsSettled(from: number, wanted: string): Promise<string> {
+  const deadline = Date.now() + 1500;
+  for (;;) {
+    const seen = eventsSince(from).join(',');
+    if (seen === wanted) return seen;
+    if (Date.now() >= deadline) return seen;
+    await sleep(50);
+  }
+}
+
+/** Press a control at its own box. */
+const pressControl = async (testId: string): Promise<void> => {
+  await userEvent.press(await screen.findByTestId(testId));
+};
+
+/**
+ * Press the right-hand end of a control's box - the last segment of a SegmentedControl, which
+ * names an index no default does. The suite's own SegmentedControl tests press at the ends for
+ * the same reason (`SegmentedControl.harness.tsx:413`).
+ */
+
+/** Poll a control's own report until it answers the way `until` wants, then hand it back. */
+async function pollReport(
+  read: () => string,
+  until: (report: string) => boolean,
+  what: string
+): Promise<string> {
+  const seen: { report: string } = { report: '' };
+  await waitFor(
+    () => {
+      seen.report = read();
+      if (!until(seen.report)) {
+        throw new Error(`${what}: report="${seen.report}"`);
+      }
+    },
+    { timeout: 8000 }
+  );
+  return seen.report;
+}
+
+/** Epoch millis for a local day, so the DatePicker probe can name a day rather than a number. */
+const localDay = (year: number, month: number, day: number): number =>
+  new Date(year, month - 1, day).getTime();
+
+/**
+ * One `key=value` field out of a control's report string.
+ *
+ * The reports are `|`-separated on iOS and `;`-separated on Android for Picker, so both are
+ * treated as one separator class here rather than the probes each carrying their own split.
+ */
+function reportField(report: string, key: string): string {
+  const pair = report
+    .split(/[|;]/)
+    .find((entry) => entry.startsWith(`${key}=`));
+  return pair === undefined
+    ? `<no ${key} in "${report}">`
+    : pair.slice(key.length + 1);
+}
+
+/**
+ * The DatePicker's report: `millis|presented|calendarMonthUtc|hasSelection|livePresentations|
+ * controlBuilds|builtMinimum|builtMaximum` — displayed instant and open presentation, both read
+ * off the view (`HybridNitroUiDatePicker.swift`'s `nuiTestStateReport`). The field order is the
+ * one `DatePicker.harness.tsx:208` parses, so the two suites cannot disagree about it silently.
+ */
+function datePickerReportOf(testId: string): string {
+  const handle = handleFor(testId);
+  if (handle.nuiTestStateReport == null) {
+    throw new Error(
+      `"${testId}" reports no state, so the recycle rule cannot read it`
+    );
+  }
+  return handle.nuiTestStateReport();
+}
+
+/** The Slider's a11y step: fire the queued action and wait for its report to change. */
+async function sliderStep(
+  handle: Handle,
+  direction: number,
+  what: string
+): Promise<string> {
+  if (
+    handle.nuiTestAccessibilityStep == null ||
+    handle.nuiTestAccessibilityStepReport == null
+  ) {
+    throw new Error(
+      `${what}: this control's handle reports no accessibility step`
+    );
+  }
+  // Both calls stay on the handle (see `datePickerReportOf`'s note). The action runs in a turn
+  // of the UI thread's queue (`HybridNitroUiSlider.swift:957`), so the wait is on the report
+  // *changing*, not on a guessed pause - same shape as `Slider.harness.tsx:80`.
+  const before = handle.nuiTestAccessibilityStepReport();
+  handle.nuiTestAccessibilityStep(direction);
+  return pollReport(
+    () => handle.nuiTestAccessibilityStepReport?.() ?? '',
+    (next) => next !== before,
+    what
+  );
+}
+
+/** The `from` of a `... <from>-><to> ...` step report: what the control was showing. */
+function stepFrom(report: string): string {
+  const pair = /(\d+(?:\.\d+)?)->(\d+(?:\.\d+)?)/.exec(report);
+  const from = pair == null ? undefined : pair[1];
+  if (from == null) {
+    throw new Error(`step report names no value pair: "${report}"`);
+  }
+  return from;
+}
 
 /** A `hybridRef` callback per testID, so one `render` can hand several controls out. */
 const handles = new Map<string, Handle>();
@@ -584,7 +813,23 @@ function boxRuleFor(component: string): 'both' | 'height' | 'none' {
  *
  * `owner(second)` is how the recycle rule hands one testID to a second owner, and `state`
  * reads what the control says about itself afterwards — through `hybridRef`, because that is
- * the control's own answer rather than a React-side copy of the props. */
+ * the control's own answer rather than a React-side copy of the props.
+ *
+ * The two owners are deliberately **not** symmetric, and that asymmetry is the fix. The first
+ * owner puts its control in non-default state — by interaction where the control can be
+ * interacted with — and the second owner sends its props at their defaults. Because:
+ *
+ * - if the second owner re-sends every prop with a fresh value, every generated setter runs
+ *   and overwrites exactly what the reset was supposed to have cleared, so the rule passes
+ *   with the reset deleted. Fabric's Insert mutation passes `oldProps:nil`
+ *   (`RCTMountingManager.mm:83`), so a recycled mount runs *all* provided setters anyway;
+ * - and a prop the second owner sends at its default leaves the reset as the only source of
+ *   its stored value, which is the thing under test.
+ *
+ * `residue`/`oracle` are the part that decides whether this rule can fail at all — see
+ * {@link RecycleProbe}. A control with no `oracle` has no state that survives independently
+ * of React's next write (or no read-out that is not a stub on one platform), and says so in
+ * the run instead of banking a pass from a check that could not have failed. */
 
 type Fixture = {
   /** The manifest `name`, which is also the key the tables use. */
@@ -602,10 +847,24 @@ type Fixture = {
     handle: Handle,
     second: boolean
   ) => Array<{ label: string; expected: unknown; actual: unknown }>;
+  /**
+   * The part of this rule that can actually fail: two owners of one testID, an interaction,
+   * and the control's own answer afterwards. See {@link RecycleProbe} for why a prop cannot
+   * show residue and an interaction can, and {@link RecycleNote} for the controls where even
+   * that is not available.
+   */
+  probe: RecycleProbe | RecycleNote;
 };
 
 const SECOND = 'second owner';
 
+const columnStyle = { flexDirection: 'column' } as const;
+
+/**
+ * Every callback the a11y rule's own wrapper has to keep alive: a probe's control is wrapped
+ * in a plain `View`, so the box the harness measures is the control's and the press lands on
+ * it. `columnStyle` is what `Slider.harness.tsx` and the other suites use for the same reason.
+ */
 const FIXTURES: ReadonlyArray<Fixture> = [
   {
     name: 'Switch',
@@ -632,6 +891,52 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
+    probe: {
+      leaveBehind:
+        'a tap the app rejected, which leaves the Switch *displayed* on',
+      first: () => (
+        <Switch
+          value={false}
+          onValueChange={recordRecycle('conformance-switch')}
+          testID="conformance-switch"
+          accessibilityLabel="Conformance switch"
+          hybridRef={captureFor('conformance-switch')}
+        />
+      ),
+      act: async () => {
+        await pressControl('conformance-switch');
+        // The handshake: native paints `true` immediately, JS refuses to move off
+        // `value={false}`, and the next commit reverts the display. Waiting for the event
+        // rather than a pause, because the revert is only real once the echo has arrived.
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-switch:true'])
+        );
+      },
+      second: () => (
+        <Switch
+          value={false}
+          onValueChange={recordRecycle('conformance-switch')}
+          testID="conformance-switch"
+          accessibilityLabel="Conformance switch"
+          hybridRef={captureFor('conformance-switch')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressControl('conformance-switch');
+        // A fresh Switch at `value={false}` has one thing to say when pressed: `true`. A
+        // display left on by the previous owner says `false` instead - the tap-twice oracle
+        // `Switch.harness.tsx:8` uses for the same reason, pointed at the reset rather than at
+        // the revert it sits behind.
+        return [
+          {
+            label: 'the first press after the second mount reports',
+            expected: 'conformance-switch:true',
+            actual: await eventsSettled(from, 'conformance-switch:true'),
+          },
+        ];
+      },
+    },
   },
   {
     name: 'Slider',
@@ -658,6 +963,74 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
+    probe: {
+      leaveBehind:
+        'an uncontrolled drag to 0.5, which is state only native holds (no prop ' +
+        'describes it once the second owner sends no `value`)',
+      first: () => (
+        <View style={columnStyle}>
+          <Slider
+            defaultValue={0}
+            step={0.25}
+            onValueChange={recordRecycle('conformance-slider')}
+            testID="conformance-slider"
+            accessibilityLabel="Conformance slider"
+            hybridRef={captureFor('conformance-slider')}
+          />
+        </View>
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        await sliderStep(
+          handleFor('conformance-slider'),
+          1,
+          'the first owner’s drag'
+        );
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual(['conformance-slider:0.25'])
+        );
+        await sliderStep(
+          handleFor('conformance-slider'),
+          1,
+          'the first owner’s second step'
+        );
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual([
+            'conformance-slider:0.25',
+            'conformance-slider:0.5',
+          ])
+        );
+      },
+      second: () => (
+        <View style={columnStyle}>
+          <Slider
+            defaultValue={0}
+            step={0.25}
+            onValueChange={recordRecycle('conformance-slider')}
+            testID="conformance-slider"
+            accessibilityLabel="Conformance slider"
+            hybridRef={captureFor('conformance-slider')}
+          />
+        </View>
+      ),
+      read: async () => {
+        // One step up from wherever the second mount is standing. The report's `from` is
+        // `model.state.displayed` read on the main thread
+        // (`HybridNitroUiSlider.swift:979`), so it is the drawn value, not React's number.
+        const report = await sliderStep(
+          handleFor('conformance-slider'),
+          1,
+          'the second owner’s first step'
+        );
+        return [
+          {
+            label: 'the value the control was showing before any step',
+            expected: '0',
+            actual: stepFrom(report),
+          },
+        ];
+      },
+    },
   },
   {
     name: 'Button',
@@ -683,6 +1056,15 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
+    probe: {
+      noProbe:
+        'a Button owns no state a reset can clear. `title`, `accessibilityLabel` and ' +
+        '`onPress` are all re-sent by the wrapper on every mount - and the callback ' +
+        'is deliberately always sent, as a stable no-op when the app passed none, ' +
+        'which is what stops a recycled view keeping a dead owner’s handler ' +
+        '(Button.tsx:99-110). Its `prepareForRecycle` is the belt, and nothing on ' +
+        'either platform can show it missing.',
+    },
   },
   {
     name: 'Progress',
@@ -709,6 +1091,14 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
+    probe: {
+      noProbe:
+        'Progress has no interaction to leave residue with - it is an indicator, not ' +
+        'a control - and both platforms’ own read-out of it is a stub: ' +
+        '`nuiTestDisplayedValue()` answers `-1` on iOS and `-1;animating=-1` on ' +
+        'Android, so any assertion written against it would be a tautology. Its ' +
+        'value, tint and variant are props the wrapper re-sends.',
+    },
   },
   {
     name: 'SegmentedControl',
@@ -740,6 +1130,20 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
+    probe: {
+      noProbe:
+        'it has residue and no way to see it. A pick really does move the ' +
+        'displayed index and the handshake counts, but neither platform reports ' +
+        "the drawn index: the handle's `selectedIndex` is `model.state.js`, which " +
+        'is what React sent, and `nuiTestPixelReport()` answers a colour, not a ' +
+        'position. A press oracle cannot stand in either - iOS emits from the ' +
+        'selection binding without asking whether the index changed ' +
+        '(HybridNitroUiSegmentedControl.swift:150-156), so the same press reports ' +
+        'an event whether or not the control was already there, and the answer ' +
+        "would differ per platform for reasons that are not the reset's. The fix " +
+        "is a read-out (a `nuiTestDisplayedIndex`, alongside Progress's and " +
+        "DatePicker's), not a weaker assertion.",
+    },
   },
   {
     name: 'DatePicker',
@@ -767,6 +1171,64 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
+    probe: {
+      leaveBehind:
+        'a picked day and an opened presentation, both owned by the view rather ' +
+        'than by a prop',
+      first: () => (
+        <DatePicker
+          defaultValue={new Date(localDay(2026, 6, 4))}
+          onChange={(date) => recordRecycle('conformance-date-picker')(date)}
+          testID="conformance-date-picker"
+          accessibilityLabel="Conformance date picker"
+          hybridRef={captureFor('conformance-date-picker')}
+        />
+      ),
+      act: async () => {
+        const picked = localDay(2027, 1, 15);
+        handleFor('conformance-date-picker').nuiTestSelect?.(2027, 1, 15, 0, 0);
+        await pollReport(
+          () => datePickerReportOf('conformance-date-picker'),
+          (report) => reportField(report, 'millis') === String(picked),
+          'the first owner’s pick'
+        );
+        handleFor('conformance-date-picker').nuiTestPresent?.();
+        await pollReport(
+          () => datePickerReportOf('conformance-date-picker'),
+          (report) => reportField(report, 'presented') === '1',
+          'the first owner’s presentation'
+        );
+      },
+      second: () => (
+        <DatePicker
+          defaultValue={new Date(localDay(2026, 6, 4))}
+          onChange={(date) => recordRecycle('conformance-date-picker')(date)}
+          testID="conformance-date-picker"
+          accessibilityLabel="Conformance date picker"
+          hybridRef={captureFor('conformance-date-picker')}
+        />
+      ),
+      read: async () => {
+        const report = await pollReport(
+          () => datePickerReportOf('conformance-date-picker'),
+          (next) =>
+            reportField(next, 'millis') === String(localDay(2026, 6, 4)),
+          'the second owner’s default'
+        );
+        return [
+          {
+            label: 'the day the field shows',
+            expected: localDay(2026, 6, 4),
+            actual: Number(reportField(report, 'millis')),
+          },
+          {
+            label: 'a presentation left open',
+            expected: '0',
+            actual: reportField(report, 'presented'),
+          },
+        ];
+      },
+    },
   },
   {
     name: 'Picker',
@@ -798,9 +1260,67 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
+    probe: {
+      leaveBehind:
+        'a pick of the last option on an uncontrolled control, then the same pick ' +
+        'again - which only counts as a choice if the selection has been reset',
+      first: () => (
+        <Picker
+          options={['One', 'Two', 'Three']}
+          defaultSelectedIndex={0}
+          onChange={(event) => recordRecycle('conformance-picker')(event.index)}
+          testID="conformance-picker"
+          accessibilityLabel="Conformance picker"
+          hybridRef={captureFor('conformance-picker')}
+        />
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        const choose = () => handleFor('conformance-picker').nuiTestSelect?.(2);
+        choose();
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual(['conformance-picker:2'])
+        );
+        // The same choice again: `applyUserSelection` returns without emitting when the
+        // index equals what is displayed (`HybridNitroUiPicker.swift:103`, whose comment
+        // names this as the thing that makes a *rolled-back* selection observable). So the
+        // second call says, in the negative, that the control really is on 2.
+        choose();
+        await settle(300);
+        if (eventsSince(before).length !== 1) {
+          throw new Error(
+            `the picker emitted twice for one repeated choice: ` +
+              eventsSince(before).join(',')
+          );
+        }
+      },
+      second: () => (
+        <Picker
+          options={['One', 'Two', 'Three']}
+          defaultSelectedIndex={0}
+          onChange={(event) => recordRecycle('conformance-picker')(event.index)}
+          testID="conformance-picker"
+          accessibilityLabel="Conformance picker"
+          hybridRef={captureFor('conformance-picker')}
+        />
+      ),
+      read: async () => {
+        const before = eventsSince(0).length;
+        handleFor('conformance-picker').nuiTestSelect?.(2);
+        // The event is the reset reporting for itself: the previous owner left this control on
+        // 2, and a control that still believes it is there emits nothing for a choice that
+        // would change nothing. Silence *is* the residue, so it gets reported, not waited away.
+        return [
+          {
+            label: 'choosing the previous owner’s option again emits',
+            expected: 'conformance-picker:2',
+            actual: await eventsSettled(before, 'conformance-picker:2'),
+          },
+        ];
+      },
+    },
   },
 ];
-
 /** Mounts per control in the leak fixture. */
 const CHURN = 50;
 
@@ -923,14 +1443,18 @@ describe('conformance · every control, four rules', () => {
       });
 
       it('shows none of its previous owner under one identity', async () => {
+        // Half one is the props, and it is the half round 1 mistook for the rule. It still
+        // earns its place: it is what notices a wrapper that stopped *providing* a prop,
+        // which is the other way this class of bug arrives (a prop that goes unset never
+        // reaches native at all, so the next mount keeps whatever was there). It is not what
+        // notices a missing reset, and the log says which half is which.
         const first = await render(fixture.owner(false), RENDER);
         await settle();
-        const firstChecks = fixture.state(handleFor(fixture.testId), false);
         expect(
           recycleFindings({
             component: fixture.name,
             identity: 'first owner',
-            checks: firstChecks,
+            checks: fixture.state(handleFor(fixture.testId), false),
           })
         ).toEqual([]);
         first.unmount();
@@ -938,10 +1462,10 @@ describe('conformance · every control, four rules', () => {
 
         const second = await render(fixture.owner(true), RENDER);
         await settle();
-        const checks = fixture.state(handleFor(fixture.testId), true);
+        const propChecks = fixture.state(handleFor(fixture.testId), true);
         console.log(
-          `    · ${fixture.testId} after the second owner: ` +
-            checks
+          `    · ${fixture.testId} props after the second owner: ` +
+            propChecks
               .map((check) => `${check.label}=${String(check.actual)}`)
               .join(' ')
         );
@@ -949,10 +1473,54 @@ describe('conformance · every control, four rules', () => {
           recycleFindings({
             component: fixture.name,
             identity: `testID "${fixture.testId}"`,
-            checks,
+            checks: propChecks,
           })
         );
         second.unmount();
+        await settle(400);
+
+        // Half two is the one that can fail, and it owns both lifetimes: an interaction that
+        // puts state in the view no prop describes, then a second mount whose props are all
+        // defaults, then a question only the control's own state can answer.
+        const probe = fixture.probe;
+        if ('noProbe' in probe) {
+          console.log(
+            `    · ${fixture.testId} residue probe: none — ${probe.noProbe}`
+          );
+          return;
+        }
+        console.log(
+          `    · ${fixture.testId} residue probe: ${probe.leaveBehind}`
+        );
+        recycleEvents.length = 0;
+        const firstOwner = await render(probe.first(), RENDER);
+        await settle();
+        await probe.act();
+        firstOwner.unmount();
+        // Long enough for the drop to have run and, on iOS, for the instance to reach the
+        // recycle pool: `enqueueComponentViewWithComponentHandle` is what calls
+        // `prepareForRecycle` (`RCTComponentViewRegistry.mm:117`), and it happens on the
+        // mounting transaction that removes the view.
+        await settle(500);
+
+        const secondOwner = await render(probe.second(), RENDER);
+        await settle();
+        const checks = await probe.read();
+        for (const check of checks) {
+          console.log(
+            `    · ${fixture.testId} after the second owner: ` +
+              `${check.label}=${String(check.actual)} (expected ` +
+              `${String(check.expected)})`
+          );
+        }
+        expectConformance(
+          recycleFindings({
+            component: fixture.name,
+            identity: `testID "${fixture.testId}"`,
+            checks,
+          })
+        );
+        secondOwner.unmount();
       });
 
       it('is named on its own box, not on a wrapper around it', async () => {
