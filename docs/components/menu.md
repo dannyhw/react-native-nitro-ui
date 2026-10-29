@@ -83,10 +83,11 @@ re-conversion of the struct array (`docs/research/nitro-patterns.md`).
 
 | Concept            | iOS                                                              | Android                                                     |
 | ------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------- |
-| Control            | `Menu { rows } label: { ButtonLabel }`, `.menuStyle(.button)` (iOS 16+) | `Box { trigger; DropdownMenu(expanded, onDismissRequest) { rows } }` |
+| Control            | `Menu { rows } label: { ButtonLabel }`, `.menuStyle(.button)` (iOS 16+) plus Button's per-variant `.buttonStyle` | `ExposedDropdownMenuBox { NitroUiM3Button(menuAnchor) ; ExposedDropdownMenu { rows } }` |
 | Host               | `UIHostingController` inside `NitroSwiftUIHost`                     | `NitroComposeHost<MenuModel>`: `AbstractComposeView`             |
 | Containment        | **required** (`needsContainment`) — the menu is the system's presentation | n/a — the popup is the composition's own window            |
-| Popup              | SwiftUI's own menu, presented by the system                          | its own `PopupWindow`, anchored under the trigger                |
+| Popup              | SwiftUI's own menu, presented by the system                          | its own `PopupWindow`, anchored to the trigger's own box          |
+| Trigger            | Button's label, Button's `.buttonStyle`, `.menuIndicator(.hidden)`    | Button's M3 button (`NitroUiM3Button`), one semantics node        |
 | Rows               | `Button`, `Section`, `Divider`, `Menu` inside `Menu`                 | `DropdownMenuItem`, `HorizontalDivider`, a non-interactive header row |
 | Submenu            | **nests** — a real second-level menu                                 | renders its items **inline under a divider**                     |
 | Section header     | `Section(header:)`                                                   | a non-interactive header row under a divider                     |
@@ -139,12 +140,61 @@ the composition's own window and the Host has to keep it honest:
 | The Host is dropped or recycled while open           | The composition is disposed, which closes the window.                  |
 | iOS                                                | A Host is a passthrough, so the menu is the ordinary system presentation. |
 
+The Android popup hangs off the **trigger's** box, not the composition's. That is a
+deliberate departure from `docs/tasks/Q1-menu-design.md` §3, which asks for a
+`Modifier.clickable` trigger beside a plain `DropdownMenu`: a plain `DropdownMenu` composes
+a `Popup` whose position provider is handed the composition's own view as its anchor, so
+the list opens under that view — the control's box while the control owns the
+composition, and the whole Host rectangle when it does not. `ExposedDropdownMenuBox` with
+`menuAnchor` is the anchor that keeps the list under its own button in both cases, which is
+what `Menu` is for; `exposedDropdownSize()` is deliberately not used, because it sizes the
+list to the anchor and a menu's list is as wide as its items need. The anchor still reports
+through `onGloballyPositioned`, so the witness's `anchor=` rect is the trigger's box in
+composition space, and dismissal on a layout move is H2b's, unchanged.
+
 ## Sizing
 
 `intrinsic`, and the box is the trigger's: `group` never changes it. The sizing key is
 Button's — `variant|size|systemImage|title` — for the same reason (`docs/components/button.md`).
 `disabled` and `tintColor` repaint; `group` is deliberately not in the key, because the
 items live in a popup and free-form text in a key fragments the cache.
+
+### Measured
+
+`example/__tests__/Menu.harness.tsx` renders one Menu per configuration with a poisoned
+size cache — `title="Variant"` at `medium` for the variants, `title="Sized"` at `filled`
+for the sizes. iPhone 17 / iOS 27 in pt, an API 35 emulator at 420 dpi in dp:
+
+| Configuration |           iOS |     Android |
+| ------------- | --------------- | --------------- |
+| `filled`      | 77.33 × 34.33 | 92.57 × 48.00 |
+| `tonal`       | 77.33 × 34.33 | 92.57 × 48.00 |
+| `outlined`    | 77.33 × 34.33 | 92.57 × 48.00 |
+| `elevated`    | 77.33 × 34.33 | 92.57 × 48.00 |
+| `text`        | 53.33 × 20.33 | 68.95 × 48.00 |
+| `small`       | 58.00 × 28.00 | 57.90 × 48.00 |
+| `large`       | 82.00 × 50.33 | 108.57 × 50.29 |
+
+The heights are Button's three heights — iOS 28.0 / 34.3 / 50.3 and Android 48.0 / 48.0 /
+50.3 (`docs/components/button.md`) — which is the claim being checked: the trigger is
+Button's label with Button's chrome, and the widths differ only because these fixtures
+carry other titles. Android's `text` is narrower than the other four because Material's
+text button carries less horizontal padding, which is what Button does there too. On iOS
+the four boxed variants collapse to one pair because SwiftUI's `.bordered` and
+`.borderedProminent` give the same box; `text` is `.borderless`, so it is a text box.
+
+Getting those numbers needed one fix: `.menuStyle(.button)` makes the label a button but
+leaves that button's *style* the automatic one, and the trigger measured 53.33 × 20.33 —
+the title's text box — for every variant. iOS now applies the same per-variant
+`.buttonStyle` Button picks (`ios/components/Menu/HybridNitroUiMenu.swift`).
+
+**The fallback.** One pair per component, Button-sized and deliberately not any fixture's
+measured size, because a fallback equal to the answer hides a correction that never
+arrived (`docs/tasks/X4-conformance.md`): `74 × 38` pt
+(`ios/components/Menu/HybridNitroUiMenu.swift`) and `118 × 52` dp
+(`android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt`). Each sizing row
+above is poisoned first, so the test asserts the box is neither the planted size nor this
+pair.
 
 ## Recycling and cleanup
 
@@ -178,6 +228,14 @@ are the platform's own elements — we do not re-label them.
 - **`primaryAction` is iOS-only**, and changes what a tap does there.
 - The menu is the platform's, so its look is the platform's. Beyond `tintColor` there is
   no row styling, no per-row icon on Android, and no way to place the popup.
+- Whether Button's `.buttonStyle` reaches an iOS menu's **rows** is unverified here.
+  `docs/tasks/G2-button.report.md` measured that the harness's synthesised `UITouch` is
+  rejected by SwiftUI's `Button` gesture environment "in all four styles this control
+  uses", and that an `agent-device` HID-level tap changed no app state at all; this
+  task's iOS runs likewise never got a `Menu` open (the events test delivers a press and
+  asserts the `-1` answer instead). So the trigger's box is measured and the open list is
+  not. It is on G7b's real-input list, and if the rows turn out to carry button chrome the
+  fix is one `.buttonStyle(.plain)` on the row content.
 - One submenu level, and no nesting of sections. No checkmarks, no per-row state —
   a menu reports a pick and forgets it, which is the point of having no value.
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated.
