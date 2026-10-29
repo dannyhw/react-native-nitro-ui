@@ -137,6 +137,239 @@ final class RealInputTests: XCTestCase {
     super.tearDown()
   }
 
+  /// The accessibility half of the suite: what a screen reader is told about each
+  /// control, read from the tree a screen reader walks.
+  ///
+  /// ## Why this is a real-input check and not an in-app one
+  ///
+  /// The in-app harness cannot answer the question at all, and on iOS it used to claim a
+  /// comparison that could not come out wrong. React Native copies an
+  /// `accessibilityLabel` prop onto its own component view (`RCTViewComponentView.mm:471`),
+  /// and the harness query finds a view by that same label (`ViewQueryHelper.mm:65`), so
+  /// the box it measured and the "labelled box" it measured were one and the same view —
+  /// `box == labelBox` for every control in its own log. The element *inside* the React
+  /// Native view, the one VoiceOver stops on, was never looked at from either side.
+  /// `uiautomator dump` is the accessibility tree on Android, and XCUITest walks it here.
+  ///
+  /// ## What this method does, and does not, decide
+  ///
+  /// It measures. One line per element per case, with the box React Native ended up with,
+  /// and `scripts/real-input/a11y.mjs` applies the rule to that — the same file the Android
+  /// sweep reads, so both platforms answer one rule out of one table (`A11Y_CONTROLS`),
+  /// and `scripts/__tests__/real-input-a11y.test.js` proves this file's case list has not
+  /// drifted from that table. Nothing here calls `XCTFail` for a failing case: a rule that
+  /// is decided in a log parser is a rule that can be shown red with a fixture, and the
+  /// one that decides a control's announcement has to be able to say *which* of its three
+  /// claims broke, in the same words on both platforms.
+  ///
+  /// The pass is its own method rather than a `testRealInput<Control>` on each control,
+  /// because it asserts nothing about behaviour: it needs no gestures, and a failure would
+  /// be blamed on whichever press sequence shared the case's log. It is selected by
+  /// `scripts/real-input/ios.mjs` the way `scripts/real-input/a11y-sweep.mjs` is run at the
+  /// end of the Android gate — after the controls, and reported as its own section, so the
+  /// control totals still mean "every control answered a real touch".
+  func testRealInputA11y() throws {
+    for one in A11yCase.all {
+      do {
+        try measure(one)
+      } catch is RealInputCheckAborted {
+        // The runner reads the absence of a case's lines as a failure; aborting here keeps
+        // one screen that will not load from taking the other twelve cases down with it.
+        continue
+      } catch {
+        print("real-input a11y case=\(one.id) | error | \(error)")
+      }
+    }
+  }
+
+  /// One control's box, its tree, and the control's own name — as `a11y.mjs` expects.
+  private func measure(_ one: A11yCase) throws {
+    try goToTab(one.tab, showing: one.screenAnchor)
+    bringIntoView(one.testId)
+    let anchor = try required(one.testId, as: "the control \"\(one.testId)\"")
+    let anchorFrame = anchor.frame
+    let nodes = [A11yNode(element: anchor)]
+      + anchor
+        .descendants(matching: .any)
+        .allElementsBoundByIndex
+        .map(A11yNode.init(element:))
+    // Key=value rather than one positional `|`-separated row, and the four frame numbers
+    // spelled out instead of interpolating a `CGRect`: Swift picks that description's shape
+    // and precision, and a parser that has to guess it is a parser that silently reads zero
+    // elements when the format moves. `a11y.mjs` reads these.
+    print(
+      "real-input a11y case=\(one.id) kind=anchor id=\(one.testId) "
+        + "x=\(anchorFrame.origin.x) y=\(anchorFrame.origin.y) "
+        + "w=\(anchorFrame.size.width) h=\(anchorFrame.size.height) "
+        + "nodes=\(nodes.count)"
+    )
+    for node in nodes {
+      print(
+        // The trait is quoted too: "segmented control" and "progress indicator" carry a
+        // space, and an unquoted one loses its second word — measured, which is how
+        // "announced as a segmented and not as a segmented control" reached a log.
+        "real-input a11y case=\(one.id) kind=node trait=\(quoted(node.traitName)) "
+          + "enabled=\(node.enabled) hittable=\(node.hittable) "
+          + "id=\(quoted(node.identifier)) label=\(quoted(node.label)) "
+          + "value=\(quoted(node.valueText)) "
+          + "x=\(node.frame.origin.x) y=\(node.frame.origin.y) "
+          + "w=\(node.frame.size.width) h=\(node.frame.size.height)"
+      )
+    }
+  }
+
+  /// Scroll until an element is inside the window, without failing when the screen will
+  /// not bring it in.
+  ///
+  /// Not `scrollIntoView`: that one fails a check whose control it could not reach, which
+  /// is right for a gesture about to be delivered and wrong here. An element React has
+  /// laid out below the fold still has an announcement to make, and the measurement is
+  /// honest where it is; what it cannot be is a scroll problem reported as a name missing.
+  /// Four steps is more than the deepest control on the Host screen needs.
+  private func bringIntoView(_ identifier: String) {
+    let node = app.descendants(matching: .any)[identifier].firstMatch
+    guard node.exists else { return }
+    let window = app.windows.firstMatch.frame
+
+    func inWindow() -> Bool {
+      node.frame.midY > window.minY + 60 && node.frame.midY < window.maxY - 60
+    }
+
+    var steps = 0
+    while !inWindow() && steps < 4 {
+      let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+      from.press(
+        forDuration: 0.05,
+        thenDragTo: from.withOffset(
+          CGVector(dx: 0, dy: node.frame.midY < window.minY + 60 ? 160 : -160)
+        )
+      )
+      steps += 1
+    }
+    if !inWindow() {
+      print(
+        "real-input a11y: \(identifier) is still outside the window after \(steps) "
+          + "scroll steps (midY=\(node.frame.midY) of \(window.height)) — measured "
+          + "where it is, which is the honest reading for a control the screen will "
+          + "not bring into view"
+      )
+    }
+  }
+
+  /// The cases, in `A11Y_CONTROLS` order, with what this file needs to reach each one:
+  /// the `testID` to anchor on, the name to listen for, and the tab and echo that put the
+  /// control on screen. The names and ids belong to `scripts/real-input/a11y.mjs`, and
+  /// `scripts/__tests__/real-input-a11y.test.js` compares this list with that table so a
+  /// rename on one side is a failing test rather than a case that quietly measures a
+  /// control nobody asked about.
+  private struct A11yCase {
+    let id: String
+    let testId: String
+    let label: String
+    let tab: String
+    let screenAnchor: String
+
+    static let all: [A11yCase] = [
+      A11yCase(id: "switch", testId: "switch-controlled", label: "Controlled switch",
+               tab: Tab.switchTab, screenAnchor: Echo.switchValue),
+      A11yCase(id: "slider", testId: "slider-controlled", label: "Controlled slider",
+               tab: Tab.sliderTab, screenAnchor: Echo.sliderValue),
+      A11yCase(id: "button", testId: "real-input-enabled", label: "Real-input button",
+               tab: Tab.buttonTab, screenAnchor: Echo.buttonCount),
+      A11yCase(id: "segmented-control", testId: "real-input-segmented",
+               label: "Real-input segmented control",
+               tab: Tab.segmentedTab, screenAnchor: Echo.segmentedIndex),
+      A11yCase(id: "date-picker", testId: "real-input-date", label: "Real-input date picker",
+               tab: Tab.datePickerTab, screenAnchor: Echo.dateValue),
+      A11yCase(id: "picker", testId: "real-input-picker", label: "Real-input picker",
+               tab: Tab.pickerTab, screenAnchor: Echo.pickerIndex),
+      A11yCase(id: "hosted-switch", testId: "host-switch-0", label: "Hosted switch 0",
+               tab: Tab.hostTab, screenAnchor: Echo.hostValue),
+      A11yCase(id: "hosted-slider", testId: "host-slider", label: "Hosted slider",
+               tab: Tab.hostTab, screenAnchor: Echo.hostValue),
+      A11yCase(id: "hosted-button", testId: "host-button", label: "Hosted button",
+               tab: Tab.hostTab, screenAnchor: Echo.hostValue),
+      A11yCase(id: "hosted-segmented", testId: "host-segmented", label: "Hosted segmented",
+               tab: Tab.hostTab, screenAnchor: Echo.hostSegmentedIndex),
+      A11yCase(id: "hosted-picker", testId: "host-picker", label: "Hosted picker",
+               tab: Tab.hostTab, screenAnchor: Echo.hostPickerIndex),
+      A11yCase(id: "hosted-date-picker", testId: "host-datepicker",
+               label: "Hosted date picker",
+               tab: Tab.hostTab, screenAnchor: Echo.hostDateValue),
+      A11yCase(id: "hosted-progress", testId: "host-mixed-progress-linear",
+               label: "Mixed linear progress",
+               tab: Tab.hostTab, screenAnchor: Echo.hostMixedState),
+    ]
+  }
+
+  /// One read of one accessibility element.
+  ///
+  /// Every property is a round trip to the test manager, so a check that reads the tree
+  /// twice sees the tree twice; this captures a subtree in one pass. The type is named the
+  /// way VoiceOver names it, because that word is what the rule asserts on and a raw enum
+  /// number in a log is a lookup table away from a wrong conclusion.
+  private struct A11yNode {
+    let identifier: String
+    let label: String
+    let elementType: XCUIElement.ElementType
+    let frame: CGRect
+    let enabled: Bool
+    let hittable: Bool
+    let selected: Bool
+    let valueText: String
+
+    init(element: XCUIElement) {
+      identifier = element.identifier
+      label = element.label
+      elementType = element.elementType
+      frame = element.frame
+      enabled = element.isEnabled
+      hittable = element.isHittable
+      selected = element.isSelected
+      let raw = element.value
+      valueText = (raw as? String) ?? (raw == nil ? "" : "\(String(describing: raw))")
+    }
+
+    var traitName: String {
+      RealInputTests.traitName(elementType)
+    }
+  }
+
+  /// An identifier, a name or a value, in quotes.
+  ///
+  /// All three can hold spaces — "Hosted switch 0" is the normal case — and the reader in
+  /// `scripts/real-input/a11y.mjs` splits on them, so an unquoted value would lose the
+  /// rest of the line. Quoting is the one shape that survives a label with a quote in it
+  /// too, because the escaping here is what `JSON.parse` on that end reads.
+  private func quoted(_ text: String) -> String {
+    let escaped = text
+      .replacingOccurrences(of: "\\", with: "\\\\")
+      .replacingOccurrences(of: "\"", with: "\\\"")
+    return "\"\(escaped)\""
+  }
+
+  /// An element type as the word a person hears, since VoiceOver says it before the
+  /// control's name. `.adjustable` is why this is a table and not a guess: the Slider vends
+  /// a `UIAccessibilityElement` whose only trait is `.adjustable`, and XCUITest reports
+  /// that element's type as `other` — measured, with its value alongside it, which is how
+  /// the rule tells it apart from a plain box that repeats a label.
+  private static func traitName(_ elementType: XCUIElement.ElementType) -> String {
+    switch elementType {
+    case .button: return "button"
+    case .slider: return "slider"
+    // `XCUIElementTypeSwitch` becomes the Swift case `switch`, which is a keyword, so it
+    // has to be written in backticks — the reason this table spells its names out rather
+    // than lower-casing `String(describing:)`: that would print "`switch`" with ticks.
+    case .`switch`: return "switch"
+    case .segmentedControl: return "segmented control"
+    case .progressIndicator: return "progress indicator"
+    case .staticText: return "static text"
+    case .group: return "group"
+    case .other: return "other"
+    default: return "type-\(elementType.rawValue)"
+    }
+  }
+
   /// A real tap must flip the hosted SwiftUI `Toggle` and bring the new value
   /// back to React. The echo is React's own render, so it only changes if the
   /// touch reached SwiftUI, SwiftUI told Nitro, and Nitro told JS.

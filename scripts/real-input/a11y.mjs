@@ -86,6 +86,32 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   label, when `accessibilityLabel="<label>"` does not describe it — `HostScreen.tsx`
  *   names its batch Switches with a template literal. The static cross-check looks for
  *   this string, so a label that exists only as an interpolation still has to be there.
+ * @property {string} anchorTestId the `testID` the control carries on screen, which is
+ *   what the **iOS** half anchors on: XCUITest finds an element by
+ *   `accessibilityIdentifier`, and the element React Native gives the `testID` to is the
+ *   box the rule compares the named element's frame against. Android does not need it —
+ *   React Native stores a `testID` as a view tag, which is not in a dump — so only the
+ *   static cross-check uses the field on that side, to prove the anchor exists.
+ * @property {string} [anchorTestIdAttribute] the exact JSX the screen must contain for
+ *   that `testID`, when `testID="<anchorTestId>"` does not describe it — `HostScreen.tsx`
+ *   numbers its batch Switches with a template literal. The same escape hatch
+ *   `labelAttribute` is, for the same reason: a name that exists only as an
+ *   interpolation still has to be there.
+ * @property {string} [iosTrait] the element type a screen reader *should* be told this
+ *   control is, as XCUITest names it (`switch`, `button`, `slider`, `segmented control`,
+ *   `progress indicator`).
+ *
+ *   Never the type the tree happens to report today. Recording the measured value would
+ *   freeze a bug into the expectation: the Slider's element announces itself as `other`,
+ *   so a row that said `'other'` would go red on the day somebody fixes it, and the fix
+ *   would come with a test to weaken. The measured deviation belongs in
+ *   {@link A11Y_EXEMPTIONS}, which is deleted by a red test when the control is repaired.
+ *
+ *   Absent for a case whose announcement cannot be graded at all, which is itself a
+ *   finding: `hosted-picker` has no element carrying its name (it announces the name
+ *   twice), so there is nothing to compare a type with. Its debt row is what keeps that
+ *   visible, and clearing it is what prompts whoever fixes it to say what the control
+ *   should be announced as.
  */
 
 /** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'host'} ScreenId */
@@ -119,6 +145,8 @@ export const A11Y_CONTROLS = Object.freeze([
     screen: 'switch',
     label: 'Controlled switch',
     role: 'interactive',
+    anchorTestId: 'switch-controlled',
+    iosTrait: 'switch',
   },
   {
     id: 'slider',
@@ -127,6 +155,12 @@ export const A11Y_CONTROLS = Object.freeze([
     screen: 'slider',
     label: 'Controlled slider',
     role: 'interactive',
+    anchorTestId: 'slider-controlled',
+    // What it is: `other` with a value, measured — the element the component vends
+    // (`NitroUiSliderAccessibilityElement`, `.adjustable`), which XCUITest reports by that
+    // type. What it should be is a slider, so that is what is asserted, and the gap is the
+    // `announced as an other` row of `A11Y_EXEMPTIONS`.
+    iosTrait: 'slider',
   },
   {
     id: 'button',
@@ -135,6 +169,8 @@ export const A11Y_CONTROLS = Object.freeze([
     screen: 'button',
     label: 'Real-input button',
     role: 'interactive',
+    anchorTestId: 'real-input-enabled',
+    iosTrait: 'button',
   },
   {
     id: 'segmented-control',
@@ -143,6 +179,8 @@ export const A11Y_CONTROLS = Object.freeze([
     screen: 'segmented',
     label: 'Real-input segmented control',
     role: 'interactive',
+    anchorTestId: 'real-input-segmented',
+    iosTrait: 'segmented control',
   },
   {
     id: 'date-picker',
@@ -151,6 +189,8 @@ export const A11Y_CONTROLS = Object.freeze([
     screen: 'datepicker',
     label: 'Real-input date picker',
     role: 'interactive',
+    anchorTestId: 'real-input-date',
+    iosTrait: 'button',
   },
   {
     id: 'picker',
@@ -159,6 +199,8 @@ export const A11Y_CONTROLS = Object.freeze([
     screen: 'picker',
     label: 'Real-input picker',
     role: 'interactive',
+    anchorTestId: 'real-input-picker',
+    iosTrait: 'button',
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all
@@ -175,6 +217,9 @@ export const A11Y_CONTROLS = Object.freeze([
     labelAttribute: 'accessibilityLabel={`Hosted switch ${String(index)}`}',
     role: 'interactive',
     hosted: true,
+    anchorTestId: 'host-switch-0',
+    anchorTestIdAttribute: 'testID={`host-switch-${index}`}',
+    iosTrait: 'switch',
   },
   {
     id: 'hosted-slider',
@@ -184,6 +229,8 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Hosted slider',
     role: 'interactive',
     hosted: true,
+    anchorTestId: 'host-slider',
+    iosTrait: 'slider',
   },
   {
     id: 'hosted-button',
@@ -193,6 +240,8 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Hosted button',
     role: 'interactive',
     hosted: true,
+    anchorTestId: 'host-button',
+    iosTrait: 'button',
   },
   {
     id: 'hosted-segmented',
@@ -202,6 +251,8 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Hosted segmented',
     role: 'interactive',
     hosted: true,
+    anchorTestId: 'host-segmented',
+    iosTrait: 'segmented control',
   },
   {
     id: 'hosted-picker',
@@ -211,6 +262,12 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Hosted picker',
     role: 'interactive',
     hosted: true,
+    anchorTestId: 'host-picker',
+    // No `iosTrait`, and it is not laziness: measured, a hosted Picker's inner element
+    // announces itself as "Hosted picker, Hosted picker" — the label twice — so no
+    // element in its subtree carries the label alone and the iOS half cannot name the
+    // control's element at all. That is a finding in its own right, in
+    // `docs/tasks/FOLLOWUPS.md`; the static anchor check still runs.
   },
   {
     id: 'hosted-date-picker',
@@ -220,6 +277,8 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Hosted date picker',
     role: 'interactive',
     hosted: true,
+    anchorTestId: 'host-datepicker',
+    iosTrait: 'button',
   },
   {
     id: 'hosted-progress',
@@ -229,6 +288,8 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Mixed linear progress',
     role: 'indicator',
     hosted: true,
+    anchorTestId: 'host-mixed-progress-linear',
+    iosTrait: 'progress indicator',
   },
 ]);
 
@@ -237,6 +298,10 @@ export const A11Y_CONTROLS = Object.freeze([
  *
  * @typedef {object} A11yExemption
  * @property {string} control the `A11yControl.id`
+ * @property {'android'|'ios'|'both'} platform which half's finding this covers. A row that
+ *   did not name one would claim both from one measurement: the Android debt is about
+ *   nodes a dump marks non-actionable, and if the same control's *iOS* case started
+ *   matching it, the run would keep silent about a second and different bug.
  * @property {string} followups the `docs/tasks/FOLLOWUPS.md` line that owns the fix
  * @property {RegExp} matches which problem it covers — an exemption is tied to one
  *   *finding*, not to a control, so a second and different failure on the same control
@@ -251,7 +316,7 @@ export const A11Y_CONTROLS = Object.freeze([
  * removed by a red test rather than by a reviewer noticing. That is the difference
  * between this list and a skipped test.
  *
- * The four rows are one finding, measured on pair-b: the Slider's and
+ * **The four Android rows are one finding**, measured on pair-b: the Slider's and
  * SegmentedControl's names are on nodes no screen reader can act on, and nothing
  * concentric with them can be either. **The caveat, stated because it is the one
  * measurement with an alternative explanation:** the dump is taken with `uiautomator`'s
@@ -263,46 +328,112 @@ export const A11Y_CONTROLS = Object.freeze([
  * whether the four nodes come back `focusable="true"`). If they do, the rows come out
  * and `role: 'interactive'` gets the same trust on Android it has on iOS.
  *
+ * **The three iOS rows** are what the XCUITest pass found on pair-a, and they are
+ * different bugs on the same two controls — on iOS those controls *are* actionable
+ * (`enabled`/`hittable` both true), so no Android row could cover them even if it named
+ * both platforms:
+ *
+ * - `slider` and `hosted-slider`: the element a screen reader reaches is announced as
+ *   `other` with a value, not as a slider. It is the one the component vends
+ *   (`NitroUiSliderAccessibilityElement`, `.adjustable`), and XCUITest reports that
+ *   element's type as Other — so VoiceOver says the name and the number but never says
+ *   what kind of control it is.
+ * - `hosted-picker`: no element under the `testID` is announced as "Hosted picker" at
+ *   all. The one the label reaches announces **"Hosted picker, Hosted picker"** — the
+ *   name twice, because the hosted Picker's own label and its `accessibilityLabel`
+ *   arrive at the same element. A person hears the name stutter.
+ *
  * @type {ReadonlyArray<A11yExemption>}
  */
 export const A11Y_EXEMPTIONS = Object.freeze([
   {
     control: 'slider',
+    platform: 'android',
     followups: 'X4 a11y: Compose RangeInfo nodes are not actionable in a dump',
     matches: /not actionable/,
   },
   {
     control: 'segmented-control',
+    platform: 'android',
     followups: 'X4 a11y: nothing actionable at the named node',
     matches: /not actionable/,
   },
   {
     control: 'hosted-slider',
+    platform: 'android',
     followups: 'X4 a11y: Compose RangeInfo nodes are not actionable in a dump',
     matches: /not actionable/,
   },
   {
     control: 'hosted-segmented',
+    platform: 'android',
     followups: 'X4 a11y: nothing actionable at the named node',
     matches: /not actionable/,
   },
+  {
+    control: 'slider',
+    platform: 'ios',
+    followups: 'X4 a11y: the Slider is announced as other and not as a slider',
+    matches: /announced as an other/,
+  },
+  {
+    control: 'hosted-slider',
+    platform: 'ios',
+    followups: 'X4 a11y: the Slider is announced as other and not as a slider',
+    matches: /announced as an other/,
+  },
+  {
+    control: 'hosted-picker',
+    platform: 'ios',
+    followups: 'X4 a11y: a hosted Picker announces its label twice',
+    matches: /no element other than the|announced as/,
+  },
 ]);
+
+/**
+ * The exemptions that apply to one control on one platform.
+ *
+ * @param {string} controlId
+ * @param {'android'|'ios'} platform
+ * @param {ReadonlyArray<A11yExemption>} [table]
+ */
+export function exemptionsFor(controlId, platform, table = A11Y_EXEMPTIONS) {
+  return table.filter(
+    (entry) =>
+      entry.control === controlId &&
+      (entry.platform === platform || entry.platform === 'both')
+  );
+}
 
 /**
  * Run one control's rule, splitting what it found into new failures and known debt.
  *
  * @param {A11yControl} control
  * @param {ReadonlyArray<import('./uiautomator.mjs').UiautomatorNode>} tree
+ * @param {'android'|'ios'} [platform] which debt list to read. Defaults to Android, the
+ *   only reader this had before the XCUITest pass.
+ * @param {ReadonlyArray<A11yExemption>} [exemptions]
  * @returns {{failures: string[], known: string[], exempt: boolean}} `failures` must go
  *   red; `known` are covered by {@link A11Y_EXEMPTIONS} and are printed instead;
  *   `exempt` says this control's problems matched a row, which is what
  *   {@link staleExemptions} clears the list against.
  */
-export function checkControlA11y(control, tree) {
-  const problems = a11yProblems(control, tree);
-  const exemptions = A11Y_EXEMPTIONS.filter(
-    (entry) => entry.control === control.id
-  );
+export function checkControlA11y(
+  control,
+  tree,
+  platform = 'android',
+  exemptions = exemptionsFor(control.id, platform)
+) {
+  return splitOnDebt(a11yProblems(control, tree), exemptions);
+}
+
+/**
+ * New failures versus recorded debt, for either platform's rule.
+ *
+ * @param {string[]} problems
+ * @param {ReadonlyArray<A11yExemption>} exemptions
+ */
+function splitOnDebt(problems, exemptions) {
   const known = problems.filter((problem) =>
     exemptions.some((entry) => entry.matches.test(problem))
   );
@@ -318,6 +449,262 @@ export function checkControlA11y(control, tree) {
   };
 }
 
+/* --------------------------------- the iOS half --------------------------------- */
+
+/**
+ * One element of the accessibility tree XCUITest walked, as the Swift side prints it.
+ *
+ * @typedef {object} IosA11yNode
+ * @property {string} id the element's `accessibilityIdentifier`, which is where React
+ *   Native puts a `testID`
+ * @property {string} label what a screen reader says for it
+ * @property {string} type the element type, named the way VoiceOver names it (`switch`,
+ *   `button`, `other`), because that word is the assertion's subject
+ * @property {{x: number, y: number, width: number, height: number}} frame in screen points
+ * @property {boolean} enabled
+ * @property {boolean} hittable whether a touch would land here
+ * @property {string} value the announced value, which is what separates the element a
+ *   control answers with from a plain box that repeats its label
+ * @property {boolean} anchor the element React Native gave the control's `testID` — the
+ *   wrapper, which is the box the named element is compared *against* and never the one
+ *   being graded
+ */
+
+/**
+ * How far a named element's box may sit from the control's before the name counts as
+ * being somewhere else.
+ *
+ * Points. Measured, the pairs agree to well under a tenth (React Native lays the wrapper
+ * out in fractions and SwiftUI reports the same rect), while the failure the rule exists
+ * for — a name slid onto a container — is off by tens. A tenth of a point is the noise
+ * floor of two independent reads of one layout, not a licence for a name to wander.
+ */
+const IOS_FRAME_TOLERANCE_PT = 0.5;
+
+/**
+ * One control's iOS case, read from the tree XCUITest walked.
+ *
+ * The Android half reads `uiautomator dump`; this reads what
+ * `RealInputTests.probeA11yTree` prints, and both apply the same rule from the same
+ * table: the control carries its name, on the box it is drawn at, as the kind of thing
+ * it is.
+ *
+ * Why it has to be the real tree rather than the in-app harness, which used to claim to
+ * assert this: React Native copies an `accessibilityLabel` prop onto the component view
+ * (`RCTViewComponentView.mm:471-473`), and the harness query matches that same view by
+ * label (`ViewQueryHelper.mm:65`). So the harness's "box" and its "labelled box" were the
+ * same view — the comparison in `Conformance.harness.tsx` could not go wrong, and the
+ * element *inside* the React Native view that a screen reader actually stops on was never
+ * looked at. XCUITest walks that tree.
+ *
+ * @param {A11yControl} control
+ * @param {ReadonlyArray<IosA11yNode>} tree
+ * @returns {string[]} problems, empty when the control passes
+ */
+export function iosA11yProblems(control, tree) {
+  if (control.anchorTestId == null) {
+    return [`${control.hybridView}: no anchorTestId, so the iOS rule has no box to read`];
+  }
+  const anchor = tree.find((node) => node.id === control.anchorTestId);
+  if (anchor == null) {
+    return [
+      `no element with accessibilityIdentifier "${control.anchorTestId}" in the tree, ` +
+        'so this run never found the control and can say nothing about its name',
+    ];
+  }
+  // The wrapper is excluded from the *candidates* rather than forgiven inside them. It
+  // always carries the label, because React Native put it there, so counting it as "the
+  // element that names the control" is the tautology the in-app rule was guilty of. What
+  // is being asked is whether anything *under* that wrapper is announced as the control.
+  const named = tree.filter(
+    (node) => node.label === control.label && !node.anchor && hasArea(node)
+  );
+  const problems = [];
+  if (named.length === 0) {
+    const unboxed = tree.filter(
+      (node) => node.label === control.label && !node.anchor && !hasArea(node)
+    );
+    problems.push(
+      unboxed.length > 0
+        ? `${control.hybridView}: ${String(unboxed.length)} element(s) under ` +
+          `"${control.anchorTestId}" are announced as "${control.label}" and every ` +
+          'one has a zero-sized box, so the name is in the tree with nothing drawn under it'
+        : `${control.hybridView}: no element other than the React Native wrapper is ` +
+          `announced as "${control.label}" — the only node that carries the name is ` +
+          'the box React Native made, which is a name on a wrapper rather than on the ' +
+          `control (wrapper: ${describeIosNode(anchor)})`
+    );
+    // Nothing to grade on name, but a doubled name is still a doubled name, and the
+    // message above would otherwise be the whole story.
+    return problems;
+  }
+  if (named.length > 1) {
+    problems.push(
+      `${control.hybridView}: ${String(named.length)} elements under ` +
+        `"${control.anchorTestId}" are announced as "${control.label}" ` +
+        `(${named.map(describeIosNode).join('; ')}) — a name on more than one ` +
+        'element is a control a screen reader announces twice, and only one of those ' +
+        'stops carries the value'
+    );
+  }
+
+  const node = named[0];
+  if (!sameBox(node.frame, anchor.frame)) {
+    problems.push(
+      `${control.hybridView}: "${control.label}" is announced by the element at ` +
+        `${iosBox(node.frame)} while the control is drawn at ${iosBox(anchor.frame)} ` +
+        '— the name is on a box that is not the control\'s, so VoiceOver stops ' +
+        'somewhere else than the thing a person presses'
+    );
+  }
+  if (control.role === 'interactive' && !node.enabled && !node.hittable) {
+    problems.push(
+      `${control.hybridView}: the element announced as "${control.label}" ` +
+        `(${describeIosNode(node)}) is neither enabled nor hittable — a screen ` +
+        'reader can stop here but nobody can act, which is the split G5 M2 and G6 M3 ' +
+        'found by hand'
+    );
+  }
+  if (control.iosTrait != null && node.type !== control.iosTrait) {
+    problems.push(
+      // "is announced as an other and not as a slider": the debt row matches on that whole
+      // phrase, and a comma-separated "announced as X, not as Y" would put the correction
+      // between the two halves — so a row meant for one wrong word would end up excusing
+      // any wrong word in the same sentence.
+      `${control.hybridView}: "${control.label}" is announced as ` +
+        `${article(node.type)} ${node.type} and not as ${article(control.iosTrait)} ` +
+        `${control.iosTrait} — the announcement lost the kind of control this is, so ` +
+        'a person hears a name with no idea what can be done with it'
+    );
+  }
+  return problems;
+}
+
+/**
+ * The iOS half's debt, split the same way the Android half splits its own.
+ *
+ * @param {A11yControl} control
+ * @param {ReadonlyArray<IosA11yNode>} tree
+ * @param {ReadonlyArray<A11yExemption>} [exemptions]
+ */
+export function checkIosControlA11y(
+  control,
+  tree,
+  exemptions = exemptionsFor(control.id, 'ios')
+) {
+  return splitOnDebt(iosA11yProblems(control, tree), exemptions);
+}
+
+/**
+ * Read one case's tree out of the xcodebuild log, as the Swift pass printed it.
+ *
+ * The lines are `real-input a11y <id> | <type> | <enabled> | <hittable> | <selected> |
+ * <identifier> | <label> | <value> | <frame>`, one per element, emitted per case with the
+ * anchor's box first. Parsing is here rather than in Swift so the rule and its fixtures
+ * live in one file — and so a mistake in the format is a unit-test failure rather than a
+ * device run that quietly reads zero elements.
+ *
+ * @param {string} log the xcodebuild test log
+ * @returns {Map<string, IosA11yNode[]>} by control id, in table order
+ */
+export function parseIosA11yLog(log) {
+  /** @type {Map<string, IosA11yNode[]>} */
+  const byControl = new Map();
+  for (const line of log.split('\n')) {
+    if (!line.includes('real-input a11y ')) continue;
+    const fields = fieldsOf(line);
+    const caseName = fields.get('case');
+    if (caseName == null || fields.get('kind') !== 'node') continue;
+    const node = {
+      type: fields.get('trait') ?? 'unknown',
+      enabled: fields.get('enabled') === 'true',
+      hittable: fields.get('hittable') === 'true',
+      id: fields.get('id') ?? '',
+      label: fields.get('label') ?? '',
+      value: fields.get('value') ?? '',
+      frame: {
+        x: Number(fields.get('x')),
+        y: Number(fields.get('y')),
+        width: Number(fields.get('w')),
+        height: Number(fields.get('h')),
+      },
+      anchor: false,
+    };
+    // A line whose box did not parse is a format change, and silently dropping the
+    // element would make the case pass on nothing.
+    if (!Number.isFinite(node.frame.width) || !Number.isFinite(node.frame.height)) {
+      throw new Error(
+        `real-input: an a11y line from the iOS run carries no readable box: ${line.trim()}`
+      );
+    }
+    const list = byControl.get(caseName) ?? [];
+    list.push(node);
+    byControl.set(caseName, list);
+  }
+  // Mark the wrapper after the fact: the element that carries the control's `testID` is
+  // the box the named element is compared against, and one definition of that is better
+  // than two that have to agree.
+  for (const [controlId, nodes] of byControl) {
+    const entry = A11Y_CONTROLS.find((candidate) => candidate.id === controlId);
+    if (entry?.anchorTestId == null) continue;
+    for (const node of nodes) {
+      if (node.id === entry.anchorTestId) node.anchor = true;
+    }
+  }
+  return byControl;
+}
+
+/**
+ * The `key=value` pairs of one printed line, with `key="quoted value"` supported.
+ *
+ * @param {string} line
+ * @returns {Map<string, string>}
+ */
+function fieldsOf(line) {
+  const fields = new Map();
+  for (const match of line.matchAll(/(\w+)=("(?:[^"\\]|\\.)*"|\S+)/g)) {
+    const value = match[2].startsWith('"')
+      ? JSON.parse(match[2])
+      : match[2];
+    if (!fields.has(match[1])) fields.set(match[1], value);
+  }
+  return fields;
+}
+
+function hasArea(node) {
+  return node.frame.width > 1 && node.frame.height > 1;
+}
+
+function sameBox(a, b) {
+  return (
+    Math.abs(a.x - b.x) <= IOS_FRAME_TOLERANCE_PT &&
+    Math.abs(a.y - b.y) <= IOS_FRAME_TOLERANCE_PT &&
+    Math.abs(a.width - b.width) <= IOS_FRAME_TOLERANCE_PT &&
+    Math.abs(a.height - b.height) <= IOS_FRAME_TOLERANCE_PT
+  );
+}
+
+function iosBox(frame) {
+  return `(${num(frame.x)}, ${num(frame.y)}, ${num(frame.width)}, ${num(frame.height)})`;
+}
+
+function num(value) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function article(word) {
+  return /^[aeiou]/.test(word) ? 'an' : 'a';
+}
+
+/**
+ * @param {IosA11yNode} node
+ */
+function describeIosNode(node) {
+  return `${node.type} "${node.label}" at ${iosBox(node.frame)}` +
+    `${node.value === '' ? '' : ` value "${node.value}"`}` +
+    `${node.enabled ? '' : ' disabled'}`;
+}
+
 /**
  * Exemptions that no longer describe anything, because nothing produced them.
  *
@@ -326,22 +713,40 @@ export function checkControlA11y(control, tree) {
  * that no longer exists. This is what stops the list decaying into a permanent skip
  * list.
  *
+ * Scoped to one platform, because the two halves can fail the same control for unrelated
+ * reasons: the Slider's Android name is on a node nothing can act on and its iOS name is
+ * announced as the wrong kind of control. Clearing the Android bug would otherwise read
+ * as though the iOS row had been earned too — and the row that stays would then excuse a
+ * bug nobody is looking for.
+ *
  * @param {Iterable<string>} coveredIds the ids the run actually read
  * @param {Iterable<string>} matchedIds the ids whose problems matched an exemption
+ * @param {'android'|'ios'} [platform] whose rows to clear
+ * @param {ReadonlyArray<A11yExemption>} [table]
  * @returns {string[]} stale exemption descriptions, in `A11Y_EXEMPTIONS` order
  */
-export function staleExemptions(coveredIds, matchedIds) {
+export function staleExemptions(
+  coveredIds,
+  matchedIds,
+  platform = 'android',
+  table = A11Y_EXEMPTIONS
+) {
   const covered = new Set(coveredIds);
   const matched = new Set(matchedIds);
-  return A11Y_EXEMPTIONS.filter(
-    (exemption) =>
-      covered.has(exemption.control) && !matched.has(exemption.control)
-  ).map(
-    (exemption) =>
-      `A11Y_EXEMPTIONS: the entry for "${exemption.control}" ` +
-      `(${exemption.followups}) matched no problem this run — the control passes ` +
-      'the rule now, so delete the exemption and let the rule guard it'
-  );
+  return table
+    .filter(
+      (exemption) =>
+        (exemption.platform === platform || exemption.platform === 'both') &&
+        covered.has(exemption.control) &&
+        !matched.has(exemption.control)
+    )
+    .map(
+      (exemption) =>
+        `A11Y_EXEMPTIONS: the ${exemption.platform} entry for ` +
+        `"${exemption.control}" (${exemption.followups}) matched no problem ` +
+        'this run — the control passes the rule now, so delete the exemption ' +
+        'and let the rule guard it'
+    );
 }
 
 /**

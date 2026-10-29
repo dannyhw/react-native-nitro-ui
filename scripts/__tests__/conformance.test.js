@@ -137,26 +137,26 @@ describe('the rule list', () => {
     // the moment it has a manifest the matrix has a row for it and every rule has a
     // verdict — `not-applicable` or `covered`, never silence.
     const sizing = JSON.parse(read('nitro-ui.sizing.json'));
-    const matrix = coverageMatrix(
-      repoWithExtraControl({
-        id: 'menu',
-        name: 'Menu',
-        hybridView: 'NitroUiMenu',
-        sizing: 'intrinsic',
-        exampleTab: 'menu',
-      }),
-      { sizing }
-    );
+    const extra = repoWithExtraControl({
+      id: 'menu',
+      name: 'Menu',
+      hybridView: 'NitroUiMenu',
+      sizing: 'intrinsic',
+      exampleTab: 'menu',
+    });
+    const matrix = coverageMatrix(extra, { sizing });
     const menu = matrix.find((row) => row.name === 'Menu');
     expect(menu).toBeDefined();
-    // No a11y case exists for it, so the a11y rule says so in words — and `checkCoverage`
-    // below is what turns that into a red run.
-    expect(menu.rules['a11y-name-on-focusable-node'].state).toBe(
-      'not-applicable'
-    );
-    expect(menu.rules['a11y-name-on-focusable-node'].reason).toContain('Menu');
+    expect(menu.rules['a11y-name-on-focusable-node'].state).toBe('covered');
     expect(menu.rules['declared-fallback'].state).toBe('covered');
     expect(menu.rules['recycle-reset'].state).toBe('covered');
+    // A control with no a11y case is a red run, not a matrix cell that explains itself.
+    // Round 1 had both, and the matrix half could not be reached: `checkA11yTable` fails
+    // the same tree first, so a cell waiting to say "no case for Menu" was dead code
+    // (review N9). One owner for the condition, and it is this.
+    expect(checkA11yTable(extra, read).join('\n')).toContain(
+      'no a11y case for Menu'
+    );
   });
 });
 
@@ -783,10 +783,15 @@ describe('the debt ledger', () => {
       a11yMatched: ['slider'],
       coveredKeys: [],
       matchedKeys: [],
+      a11yPlatform: 'android',
     });
+    // The Android sweep, the platform it was told about: three Android rows matched
+    // nothing. The iOS rows for the same controls are not in this count — an Android run
+    // never read those trees, so it has no evidence that they still reproduce.
     expect(debt.length).toBe(3);
-    expect(debt.join('\n')).toContain('the entry for "segmented-control"');
-    expect(debt.join('\n')).not.toContain('the entry for "slider"');
+    expect(debt.join('\n')).toContain('the android entry for "segmented-control"');
+    expect(debt.join('\n')).not.toContain('the android entry for "slider"');
+    expect(debt.join('\n')).not.toContain('the ios entry');
 
     // And the in-app half, from the same call. The real list is empty today, so rows are
     // passed in: the sweeper takes them as an argument because that list is frozen —
@@ -932,23 +937,64 @@ describe('the debt, as the matrix sees it', () => {
   const followups = () => read('docs/tasks/FOLLOWUPS.md');
 
   it('collapses the a11y cases onto their components, once per control', () => {
-    // Four cases, two controls: `slider` and `hosted-slider` both guard `Slider`. The
-    // matrix is about controls, so four rows of debt make two failing cells.
+    // Seven cases across three controls: `slider` and `hosted-slider` both guard `Slider`,
+    // and the debt list carries both platforms' rows for a control. The matrix is about
+    // controls, so every row for one control makes exactly one failing cell.
+    //
+    // `Picker` is here because the real accessibility tree says so, not because a rule was
+    // widened to reach it: measured under XCUITest, a hosted Picker's control announces
+    // "Hosted picker, Hosted picker" and no element carries the name alone. That is a
+    // finding about the control, so it is recorded as debt with a FOLLOWUPS line and
+    // printed on every run rather than asserted away.
     expect(failingKeys()).toEqual([
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
+      'Picker|a11y-name-on-focusable-node',
     ]);
   });
 
   it('names the FOLLOWUPS line for a failing cell, when the line exists', () => {
     const resolve = followupsResolver(followups());
     for (const key of failingKeys()) {
-      expect(resolve(key)).not.toBeNull();
-      expect(followups()).toContain(resolve(key));
+      const cited = resolve(key);
+      expect(cited).not.toBeNull();
+      // One cell can carry debt on both platforms — the Slider's Android name is not
+      // actionable and its iOS name is announced as the wrong kind of control — and the
+      // resolver joins the citations it checked. It proves each one is in the document
+      // before answering at all, so the parts are what a reader can go and open, not the
+      // joined string.
+      for (const line of cited.split(' · ')) {
+        expect(followups()).toContain(line);
+      }
     }
     // A cell no debt row claims has no line, which is what `checkCoverage` reports as debt
     // with no owner — so the resolver cannot answer for it.
     expect(resolve(findingKey('Switch', 'recycle-reset'))).toBeNull();
+  });
+
+  it('refuses to name a line when only one of a control\'s two platform rows is written down', () => {
+    // The shape the iOS rows introduced: one control, debt on both platforms. A resolver
+    // that answered with whichever citation it found first would send a reviewer to one
+    // line and leave the other bug unowned.
+    const rows = [
+      {
+        control: 'slider',
+        platform: 'android',
+        followups: 'X4 a11y: Compose RangeInfo nodes are not actionable in a dump',
+        matches: /not actionable/,
+      },
+      {
+        control: 'slider',
+        platform: 'ios',
+        followups: 'X4 a11y: a line nobody wrote',
+        matches: /announced as other/,
+      },
+    ];
+    expect(
+      followupsResolver(followups(), { a11y: rows })(
+        findingKey('Slider', 'a11y-name-on-focusable-node')
+      )
+    ).toBeNull();
   });
 
   it('goes red when a debt row cites a line that is not in FOLLOWUPS.md', () => {
@@ -1217,7 +1263,7 @@ describe('the a11y sweep, against a fake device', () => {
       sliderCase()
     );
     expect(result.stale).toEqual([
-      expect.stringContaining('the entry for "slider"'),
+      expect.stringContaining('the android entry for "slider"'),
     ]);
     const debt = logs.find((entry) => entry.id === 'a11y:debt');
     expect(debt).toBeDefined();

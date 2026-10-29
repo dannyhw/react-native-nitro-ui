@@ -80,6 +80,68 @@ describe('the TODO/FIXME scan', () => {
     expect(problems[0]).toContain('FIXME');
   });
 
+  it('goes red for a TODO beside the fallback number in a component source', () => {
+    // The review's N2. The number lives in the component (`fallbackSize` in Swift,
+    // `FALLBACK_WIDTH_DP` in Kotlin) and the generated tables are written from it, so a
+    // note about it is the same undecided fallback the generated table would carry — and
+    // this file is 1 300 lines of ordinary code the scan used to wave through.
+    const swift = [
+      '  /// The size the control reports before it has measured anything.',
+      '  // TODO: re-measure on iPad before shipping',
+      '  private static let fallbackSize = (width: 61.0, height: 29.0)',
+      '',
+      '  private static let somethingElse = 3.0',
+      '',
+      '  // TODO: this is fine, it is about something else entirely',
+    ].join('\n');
+    const problems = todoFindings(files('ios/components/Switch/HybridNitroUiSwitch.swift', swift));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('HybridNitroUiSwitch.swift:2');
+    expect(problems[0]).toContain('a fallback number');
+  });
+
+  it('goes red for a FIXME beside the Kotlin fallback constants', () => {
+    const kotlin = [
+      '  companion object {',
+      '    private const val FALLBACK_WIDTH_DP = 52.0',
+      '    // FIXME: 48 is the touch target, not the track',
+      '    private const val FALLBACK_HEIGHT_DP = 48.0',
+      '  }',
+    ].join('\n');
+    const problems = todoFindings(files('android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt', kotlin));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('HybridNitroUiSwitch.kt:3');
+    expect(problems[0]).toContain('FIXME');
+  });
+
+  it('still leaves a note alone two lines past the fallback declaration', () => {
+    // The window has to end somewhere or every note in a component source becomes a
+    // fallback finding, and the first person to see that turns the check off.
+    const swift = [
+      '  private static let fallbackSize = (width: 61.0, height: 29.0)',
+      '  private static let otherThing = 1.0',
+      '  private static let third = 2.0',
+      '  // TODO: nothing to do with the fallback',
+    ].join('\n');
+    expect(
+      todoFindings(files('ios/components/Button/HybridNitroUiButton.swift', swift))
+    ).toEqual([]);
+  });
+
+  it('calls a hit inside a generated region the generator problem, not a fallback one', () => {
+    // Ordering: a generated table is a `DeclaredFallbacks` file *and* a region. The fix is
+    // to change the manifest and re-run `regen`, and a message that said "the engine lays
+    // this out at whatever number is here" would send a person to edit the generated file.
+    const problems = todoFindings(
+      files(
+        'NitroUiDeclaredFallbacks.swift',
+        [GENERATED, '// TODO: comes from the manifest', END].join('\n')
+      )
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('a generated region');
+  });
+
   it('ends the region at the end marker, so a later TODO is not blamed on it', () => {
     // Without the end marker every line after the first region would be scanned, which
     // turns one real finding into a wall of them and hides the one that matters.
