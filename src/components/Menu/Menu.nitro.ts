@@ -101,6 +101,10 @@ export interface NitroUiMenuProps
    * Disable interaction. No row is reachable, no event fires, and an open menu
    * closes (DECISIONS D29) - a control that answers nothing cannot own a live
    * popup, the rule Picker and DatePicker already keep.
+   *
+   * Closing an open menu is **Android only** today. There the popup is our own
+   * window; on iOS SwiftUI owns the presentation, so nothing here can dismiss it and
+   * nothing can report that it did. See `docs/components/menu.md` ("Limits").
    */
   disabled: boolean;
   /**

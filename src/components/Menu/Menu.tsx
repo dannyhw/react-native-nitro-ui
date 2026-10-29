@@ -91,7 +91,10 @@ export interface MenuProps extends ViewProps {
   variant?: ButtonVariant | undefined;
   /** Trigger size, shared with Button. Default: `'medium'`. */
   size?: ButtonSize | undefined;
-  /** Disable interaction. Default: `false`. An open menu closes. */
+  /**
+   * Disable interaction. Default: `false`. An open menu closes — on Android; on
+   * iOS the presentation is SwiftUI's, so it is neither enforced nor observable.
+   */
   disabled?: boolean | undefined;
   /** Leading SF Symbol name on the trigger. iOS only in v0.1. */
   systemImage?: string | undefined;
