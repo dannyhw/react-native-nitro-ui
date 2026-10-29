@@ -61,9 +61,14 @@ describe('real-input iOS log', () => {
     // The header is printed before any `Test Case ... started`, so it belongs to
     // nobody. Attaching it to the first case would give every run one retry-free
     // note on Switch, and, if the tag ever moved, could count as a retry.
-    const all = [...results.values()].flatMap((r) => r.notes);
-    expect(all.some((note) => note.includes('Metro 8295'))).toBe(false);
-    expect(results.get('testRealInputSwitch').notes).toHaveLength(1);
+    const all = [...results.values()].flatMap((r) => [
+      ...r.notes,
+      ...r.retries,
+    ]);
+    expect(all.some((line) => line.includes('Metro 8295'))).toBe(false);
+    // The header is the only line before a case starts, so Switch keeps exactly
+    // the one line it printed.
+    expect(results.get('testRealInputSwitch').retries).toHaveLength(1);
   });
 
   it('still recognises a suite line when xcodebuild adds a prefix', () => {
@@ -95,6 +100,20 @@ describe('real-input iOS log', () => {
         '    real-input (ios): tap 1/3 on "echo" left "off" - tapping again'
       )?.isRetry
     ).toBe(false);
+  });
+
+  it('reports the counted line once, not also as a note', () => {
+    // A real run caught this: the retry line appeared twice under the control,
+    // because it sat in both `notes` and `retries`, and the caller prints both
+    // arrays. Two lists that mean different things must not both hold one line.
+    const sw = parseTestResults(RUN).get('testRealInputSwitch');
+    const answered = [...sw.notes, ...sw.retries].filter((line) =>
+      line.includes('answered on tap 2/3')
+    );
+    expect(answered).toHaveLength(1);
+    expect(sw.notes).not.toContainEqual(
+      expect.stringContaining('answered on tap')
+    );
   });
 
   it('keeps attaching an error line to the case that names it', () => {
