@@ -38,7 +38,7 @@ state is native-owned and observed through `onOpen`/`onClose`; there is no imper
 | `group`              | `MenuGroup`                           | required   | The items: `actions` then `sections`, as data.                          |
 | `variant`            | `'filled' \| 'tonal' \| 'outlined' \| 'text' \| 'elevated'` | `'filled'` | Button's variants, on the trigger only.                    |
 | `size`               | `'small' \| 'medium' \| 'large'`      | `'medium'` | Button's sizes, on the trigger only.                                    |
-| `disabled`           | `boolean \| undefined`                | `false`    | Disables the trigger. An open menu closes.                              |
+| `disabled`           | `boolean \| undefined`                | `false`    | Disables the trigger. An open menu closes — Android; see [Open and close](#open-and-close). |
 | `systemImage`        | `string \| undefined`                 | —          | **iOS only.** Leading SF Symbol on the trigger.                         |
 | `tintColor`          | `ColorValue \| undefined`             | platform   | SwiftUI `.tint()` / the variant's container colour.                     |
 | `onSelect`           | `((id: string) => void) \| undefined` | —          | One call per picked row, with that row's `id`.                          |
@@ -99,7 +99,8 @@ re-conversion of the struct array (`docs/research/nitro-patterns.md`).
 
 Nothing in the props controls whether the menu is open, and `Menu` has no value to be
 out of sync with. The menu opens on a trigger press and closes on a pick, an outside
-tap, the back gesture, or a `disabled` that arrives while it is open.
+tap, the back gesture, or a `disabled` that arrives while it is open — the last of
+these on Android only, for the reason given below.
 
 | Event         | Fires                                                            | iOS | Android |
 | ------------- | ------------------------------------------------------------------ | ------- | --------- |
@@ -131,9 +132,15 @@ Android always opens on tap and never calls it. Setting it is a change of behavi
 not only of looks, so the wrapper sends a flag rather than an optional function and the
 two platforms' triggers differ accordingly.
 
-`disabled` while open closes the menu, as `Picker` and `DatePicker` do
+`disabled` while open closes the menu on Android, as `Picker` and `DatePicker` do
 (`docs/components/host.md`): a control that cannot be pressed should not leave its own
-window on screen over the rest of the app.
+window on screen over the rest of the app. The popup is our window there, so we can
+close it and report it. **On iOS this is neither enforced nor observable** — SwiftUI
+owns the presentation, `.disabled(true)` on a `Menu` is not documented to dismiss one
+that is open, and we get no signal that one is open to act on. Nothing checks that an
+iOS menu goes away when it is disabled while open, and nothing would notice if it did
+not. Treat DECISIONS D29's rule as Android-side in this release (owner decision 2 in
+`docs/tasks/G7a-menu.review.md`).
 
 ## Inside a `Host`
 
@@ -230,6 +237,9 @@ are the platform's own elements — we do not re-label them.
 
 - **`onOpen`/`onClose` are Android-only** in this release, for the SDK reason above. Do
   not build app state on them if iOS has to agree; use `onSelect`.
+- **A `disabled` that arrives while the menu is open closes it on Android only.** On
+  iOS it is neither enforced nor observable, for the same SDK reason — so an iOS menu
+  can stay on screen over a disabled trigger. Do not rely on it going away.
 - **No submenus on Android.** A submenu's items appear inline under a divider, in place.
   Ask for a submenu only where that is acceptable, and expect a flat list there — the
   same kind of documented split as `Picker`'s iOS-only `wheel`.

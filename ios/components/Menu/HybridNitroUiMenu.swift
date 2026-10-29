@@ -522,8 +522,10 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
       // `Menu`, `.disabled(true)` on it is not documented to dismiss an open menu, and
       // we have no signal telling us one is open to act on - the same limit that makes
       // `onOpen`/`onClose` Android-only here. Android, where the popup is our window,
-      // both closes it and says so; the harness gates that side, and
-      // `docs/components/menu.md` says what iOS does.
+      // both closes it and says so; the harness gates that side. The limit documented
+      // here is the one `docs/components/menu.md` records under "Limits" ("A `disabled`
+      // that arrives while the menu is open closes it on Android only"), which is what
+      // this comment defers to.
       host.markDirty()
     }
   }
