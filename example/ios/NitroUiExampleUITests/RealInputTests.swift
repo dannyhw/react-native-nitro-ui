@@ -98,6 +98,14 @@ final class RealInputTests: XCTestCase {
   /// value would land beside the thumb rather than on it near the ends.
   fileprivate static let thumbInset: CGFloat = 0.04
 
+  /// How long a synthesized press is held, for every tap this suite delivers.
+  ///
+  /// Zero is what `XCUIElement.tap()` does, and a zero-dwell touch is dropped by the
+  /// hosted controls on a busy screen - see `XCUIElement.fingerTap`. Measured there,
+  /// 0.15 s was enough on every control tried; the number is a floor for the event's
+  /// shape rather than a wait, so it is not scaled by machine load.
+  fileprivate static let pressDwell: TimeInterval = 0.15
+
   /// A debug build loads its bundle from Metro, so the first render is not
   /// instant - especially on a machine running several tasks at once.
   private let firstRenderTimeout: TimeInterval = 120
@@ -259,7 +267,7 @@ final class RealInputTests: XCTestCase {
       "one real tap on a Button inside a Host should reach onPress, and React should render 1 (the dump above shows what was on screen instead)"
     )
 
-    disabled.centre.tap()
+    disabled.fingerTap()
     XCTAssertEqual(
       readUntil(Echo.hostButtonPresses, timeout: 1.5) { $0 != "1" },
       "1",
@@ -621,7 +629,7 @@ final class RealInputTests: XCTestCase {
     // is reported, so there is no witness to wait for and a retry would press a
     // closing menu a second time. What the helper above guarantees is only that the
     // menu this tap lands in was really opened by a touch.
-    try waitForOption("Gamma", "the reopened hosted menu to list its current choice").tap()
+    try waitForOption("Gamma", "the reopened hosted menu to list its current choice").fingerTap()
     _ = waitUntilOptionGone("Beta", "the hosted menu to close")
     XCTAssertEqual(
       try read(Echo.hostPickerIndex),
@@ -727,7 +735,7 @@ final class RealInputTests: XCTestCase {
       "one real tap on the enabled Button should reach onPress and React should render 1 - the hierarchy dump above shows what was on screen instead"
     )
 
-    disabled.centre.tap()
+    disabled.fingerTap()
     XCTAssertEqual(
       readUntil(Echo.buttonCount, timeout: 1.5) { $0 != "1" },
       "1",
@@ -965,7 +973,7 @@ final class RealInputTests: XCTestCase {
         if attempt > 1 && !optionRow(Choice.first).exists {
           return
         }
-        try waitForOption(Choice.first, "the menu's first row to be tappable").tap()
+        try waitForOption(Choice.first, "the menu's first row to be tappable").fingerTap()
       },
       reading: { "\(optionLabels(containing: Choice.longest)) row(s) named \"\(Choice.longest)\"" }
     ) { shown in
@@ -1046,8 +1054,8 @@ final class RealInputTests: XCTestCase {
     // one run and failing to open anything in a faster one. Waiting for the rows to
     // leave also says something worth saying: choosing a row closes the menu.
     _ = waitUntilOptionGone("Ridge", "the refusing Picker's menu to close")
-    try required("real-input-picker-reject", as: "the controlled Picker").centre.tap()
-    try waitForOption("Ridge", "the refusing Picker's menu to reopen").tap()
+    try required("real-input-picker-reject", as: "the controlled Picker").fingerTap()
+    try waitForOption("Ridge", "the refusing Picker's menu to reopen").fingerTap()
     XCTAssertEqual(
       readUntil(Echo.rejectEvents) { $0 == "2" },
       "2",
@@ -1089,9 +1097,10 @@ final class RealInputTests: XCTestCase {
           named: "\"\(Echo.dropRemount)\"",
           waitingFor: "cycle \(cycle): the drop Picker to be mounted again",
           press: { _ in
-            try required(Echo.dropRemount, as: "the button that brings the drop Picker back")
-              .centre
-              .tap()
+            try required(
+              Echo.dropRemount,
+              as: "the button that brings the drop Picker back"
+            ).fingerTap()
           },
           reading: {
             app.descendants(matching: .any)[Echo.dropArm].firstMatch.exists
@@ -1180,7 +1189,7 @@ final class RealInputTests: XCTestCase {
       "and the ordinary one should not - which is what proves the line above measured a refusal rather than a screen that stopped answering (hosted control isEnabled=\(open.isEnabled))"
     )
 
-    try required("disabled-one", as: "the disabled Picker").centre.tap()
+    try required("disabled-one", as: "the disabled Picker").fingerTap()
     XCTAssertEqual(
       optionLabels(containing: "Cinder"),
       0,
@@ -1417,7 +1426,7 @@ final class RealInputTests: XCTestCase {
     var attempts = 0
     while popovers.count == 0 && attempts < 3 {
       attempts += 1
-      control.centre.tap()
+      control.fingerTap()
       let settle = Date().addingTimeInterval(2.0)
       while Date() < settle, popovers.count == 0 {
         Thread.sleep(forTimeInterval: 0.1)
@@ -1488,7 +1497,9 @@ final class RealInputTests: XCTestCase {
     guard popovers.count > 0 else {
       return
     }
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.95)).tap()
+    app
+      .coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.95))
+      .fingerTap()
     let deadline = Date().addingTimeInterval(reactTimeout)
     while Date() < deadline, popovers.count > 0 {
       Thread.sleep(forTimeInterval: 0.2)
@@ -1624,7 +1635,7 @@ final class RealInputTests: XCTestCase {
       // the same list, and a pick has to be a date.
       let day = days.element(boundBy: index)
       guard day.label.range(of: "[0-9]", options: .regularExpression) != nil else { continue }
-      day.tap()
+      day.fingerTap()
       if isMoved(readUntil(echo, timeout: 3, isMoved)) {
         // The pick worked, and the presentation is still open: it covers the field
         // the next pair of assertions has to press. The field is a point outside the
@@ -1633,7 +1644,7 @@ final class RealInputTests: XCTestCase {
         // is what makes those assertions mean something. Closing it is the library's
         // job too: UIKit dismisses without asking, and the model's `presented` flag
         // has to follow or it lies to every test that reads it afterwards.
-        field.centre.tap()
+        field.fingerTap()
         let deadline = Date().addingTimeInterval(reactTimeout)
         var open = app.descendants(matching: .popover).count
         while open > 0, Date() < deadline {
@@ -1692,7 +1703,7 @@ final class RealInputTests: XCTestCase {
     if app.descendants(matching: .any)[screenAnchor].firstMatch.exists {
       return
     }
-    try required(identifier, as: "the example's tab").centre.tap()
+    try required(identifier, as: "the example's tab").fingerTap()
     _ = try required(screenAnchor, as: "the screen behind that tab", timeout: reactTimeout)
   }
 
@@ -1878,9 +1889,9 @@ final class RealInputTests: XCTestCase {
       press: { _ in
         let control = try required(identifier, as: what)
         if let atFractionX {
-          control.atFraction(atFractionX).tap()
+          control.atFraction(atFractionX).fingerTap()
         } else {
-          control.centre.tap()
+          control.fingerTap()
         }
       },
       reading: { self.echoText(echo) }
@@ -1908,7 +1919,7 @@ final class RealInputTests: XCTestCase {
       named: "\(what) (\(identifier))",
       waitingFor: waitingFor,
       attempts: attempts,
-      press: { _ in try required(identifier, as: what).centre.tap() },
+      press: { _ in try required(identifier, as: what).fingerTap() },
       reading: { String(describing: popovers.count) }
     ) { shown in
       shown != "0"
@@ -1933,7 +1944,7 @@ final class RealInputTests: XCTestCase {
       named: "\(what) (\(identifier))",
       waitingFor: waitingFor,
       attempts: attempts,
-      press: { _ in try required(identifier, as: what).centre.tap() },
+      press: { _ in try required(identifier, as: what).fingerTap() },
       reading: { "\(optionLabels(containing: title)) row(s) named \"\(title)\"" }
     ) { shown in
       !shown.hasPrefix("0 ")
@@ -1967,7 +1978,7 @@ final class RealInputTests: XCTestCase {
         if attempt > 1 && !optionRow(title).exists {
           return
         }
-        try waitForOption(title, "the menu row \"\(title)\" to be tappable").tap()
+        try waitForOption(title, "the menu row \"\(title)\" to be tappable").fingerTap()
       },
       reading: { self.echoText(echo) }
     ) { shown in
@@ -2135,7 +2146,7 @@ final class RealInputTests: XCTestCase {
   ) throws {
     let node = app.descendants(matching: .any)[echo].firstMatch
     for attempt in 1...attempts {
-      try required(identifier, as: what).centre.tap()
+      try required(identifier, as: what).fingerTap()
       let deadline = Date().addingTimeInterval(3)
       while Date() < deadline {
         if node.exists {
@@ -2251,6 +2262,26 @@ extension XCUIElement {
     coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
   }
 
+  /// A finger's tap: a touch that *lasts*, rather than `tap()`'s zero-dwell one.
+  ///
+  /// Measured on the Switch screen (F1): `tap()` puts touch down and touch up inside
+  /// a single frame, and on a screen with much mounted on it the control never sees
+  /// it. Four instant taps left `switch-uncontrolled` at its own native `value: 0`
+  /// for thirty seconds each - a control with no JS round trip to lose, so nothing
+  /// about the app's state explains it - while four presses held for 0.15 s flipped
+  /// it, on two different controls on that screen. A React Native `Pressable` beside
+  /// them took the same instant tap, so the touch path was alive: the *shape* of the
+  /// event is what a hosted control's recogniser refuses.
+  ///
+  /// It is also the honest gesture. A person's tap always lasts tens of milliseconds,
+  /// so this asks the question the check means to ask, and it is what makes the
+  /// refusal assertions below (a disabled Button, a disabled Picker) measurements at
+  /// all: on a screen whose instant taps are dropped, "nothing happened" was not
+  /// evidence that the control refused the touch.
+  func fingerTap(duration: TimeInterval = RealInputTests.pressDwell) {
+    centre.fingerTap(duration: duration)
+  }
+
   /// A point a fraction of the way across this element, vertically centred.
   ///
   /// A segmented control needs it: `centre` is always the middle segment, and
@@ -2284,5 +2315,14 @@ extension XCUIElement {
     // The hold is short because iOS clamps it to about three seconds anyway, and
     // long enough that the control must treat this as a drag, not a tap.
     start.press(forDuration: hold, thenDragTo: end)
+  }
+}
+
+extension XCUICoordinate {
+  /// A finger's tap at this point - the same held press `XCUIElement.fingerTap`
+  /// delivers, for the aims that are not an element's middle (a segment's fraction,
+  /// or a bare point used as a menu's "tap outside").
+  func fingerTap(duration: TimeInterval = RealInputTests.pressDwell) {
+    press(forDuration: duration)
   }
 }
