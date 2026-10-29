@@ -1111,6 +1111,45 @@ describe('the in-app fixture table cross-check', () => {
     expect(rowOnly).toContain('says null');
   });
 
+  it('reads the engine’s registration before it seeds anything', () => {
+    // The shape M5 is about, checked structurally because the failure is an ordering
+    // between two calls in one file and no host test can mount a control.
+    //
+    // `prewarmSizing` answers "is this name in `fallbacks_`" and `seedSizingSize` writes
+    // `fallbacks_` (`NitroUiSizingEngine.cpp:512`, `:855`), so the first poison in this file
+    // makes every later "is it registered?" the poison's own answer. The suite therefore
+    // asks once, for every control, in the file's first test — and the poison must come
+    // after it. A file that re-reads per test would pass the assertion above and still be
+    // measuring nothing.
+    const harness = read('example/__tests__/Conformance.harness.tsx');
+    const readCall = harness.indexOf('readRegistrationOnce();');
+    expect(readCall).toBeGreaterThan(-1);
+    const firstPoison = harness.indexOf('poison(fixture.component)');
+    expect(firstPoison).toBeGreaterThan(readCall);
+    // Asked once for the whole file, not per fixture row: a per-row read is exactly the
+    // bug, and `readRegistrationOnce`'s own guard is what makes it cheap, so a call site
+    // outside that guard would mean the read is being done somewhere else entirely.
+    const calls = [...harness.matchAll(/readRegistrationOnce\(\)/g)].length;
+    const insideGuard = harness.slice(
+      harness.indexOf('function readRegistrationOnce'),
+      harness.indexOf('/**', harness.indexOf('function readRegistrationOnce'))
+    );
+    expect(
+      calls - [...insideGuard.matchAll(/readRegistrationOnce\(\)/g)].length
+    ).toBe(1);
+    // And the question is asked in exactly one place. The engine seam's name appears as its
+    // own definition and as the one call inside the reader; a second call anywhere else in
+    // the file would be a per-test read wearing the fix's clothes.
+    const asks = [...harness.matchAll(/hasDeclaredFallback\(/g)];
+    expect(asks).toHaveLength(2);
+    expect(harness.slice(asks[0].index - 9, asks[0].index + 20)).toContain(
+      'function hasDeclaredFallback'
+    );
+    const guard = harness.indexOf('function readRegistrationOnce');
+    const guardEnd = harness.indexOf('\n}', guard);
+    expect(asks[1].index > guard && asks[1].index < guardEnd).toBe(true);
+  });
+
   it('looks the shared numbers up inside a test, not while collecting', () => {
     // The other half of N3. `declaredFallback` and `boxRuleFor` throw on a missing row, and
     // round 1 called them in the `describe` body — Jest runs that while collecting, so one
