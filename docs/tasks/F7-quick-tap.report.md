@@ -84,7 +84,8 @@ at `load1` ≥ 8 were re-measured on an idle machine; none moved.
 | no-RN, `scroll`, 200 rows | 12/12 (`7.59`) | 12/12 (`3.60`) |
 | no-RN, `scroll-rn` (RN's own scroll config) | 12/12 (`4.29`) | 12/12 (`5.93`) |
 | no-RN, `view` (no scroller), 200 rows | 12/12 (`4.87`) | 12/12 (`4.45`) |
-| no-RN + 120 ms stall, Toggles, `view` / `scroll` | 0/12 (`152.7`) / — | 0/12 (`2.48`) / 0/12 (`2.73`) |
+| no-RN + 120 ms stall, Toggles, `view` | 0/12 (`152.7`) | 0/12 (`2.48`) |
+| no-RN + 120 ms stall, Toggles, `scroll` | 0/12 (`12.28`) | 0/12 (`2.73`) |
 | no-RN + 120 ms stall, plain `UIButton` in the scroller | 0/12 (wrong witness) | **12/12** (`2.17`) |
 
 Ladder on the busy screen, hosted Switch, quiet: **0.08 s 0/12 · 0.10 s 12/12 · 0.12 s 12/12**
