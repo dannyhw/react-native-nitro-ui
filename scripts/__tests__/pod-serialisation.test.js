@@ -1,0 +1,360 @@
+/**
+ * The `json`-gem serialisation difference, proved on real bytes and real hashes.
+ *
+ * Release run 40789293108 failed because `pod install` on the release runner
+ * changed the `SPEC CHECKSUMS` of 87 of the lock's 96 pods, and X9's churn guard
+ * refused the release. Nothing about the release had changed. What had changed
+ * was which `json` gem the Ruby behind `pod` loaded:
+ *
+ *   - `Pod::Specification#checksum` is
+ *     `Digest::SHA1.hexdigest(File.read(defined_in_file))`
+ *     (cocoapods-core-1.17.0 `specification.rb:690`).
+ *   - For a pod pulled `from:` a path, `defined_in_file` is
+ *     `Pods/Local Podspecs/<Name>.podspec.json`, which CocoaPods writes from the
+ *     *evaluated* spec with `to_pretty_json` -> `JSON.pretty_generate(spec.to_hash)`
+ *     (cocoapods-core `specification/json.rb:18`, cocoapods `sandbox.rb:299`).
+ *   - `json` before 2.8.0 prints an empty collection with a blank line inside it;
+ *     2.8.0 onward prints `[]` and `{}` (`ruby/json` CHANGES.md, 2.8.0:
+ *     "`JSON.pretty_generate` no longer includes newlines inside empty object and
+ *     arrays", with the 2.7.0 entry "Always indent even if empty" being what put
+ *     them there in the first place).
+ *
+ * So `s.dependency 'React-cxxstableapi'` - no version constraint, which is how
+ * most of React Native and every third-party pod in this app declares a
+ * dependency - serialises as `"React-cxxstableapi": []` on a maintainer Mac and
+ * as the same three characters spread over four lines on the runner. Two bytes
+ * of whitespace, per dependency, and a release blocked.
+ *
+ * The fixtures are not authored: they are the stored spec files from a real
+ * maintainer install, and the two checksums per pod are the one committed in
+ * `example/ios/Podfile.lock` and the one the runner printed in that job's log.
+ * This test therefore cannot be satisfied by matching an implementation of
+ * itself - the expected values come from a machine that is not this one.
+ *
+ * See `pod-install-lib.mjs` for what the repo now does about it.
+ */
+
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { describe, expect, it } from '@jest/globals';
+
+import {
+  EMPTY_ARRAY_COMPACT,
+  EMPTY_ARRAY_EXPANDED,
+  EXPECTED_EMPTY_ARRAY_STYLE,
+  POD_INSTALL_CONTRACT,
+  emptyArrayStyleOf,
+  podInstallEnvironment,
+  podSerialisationProblem,
+} from '../pod-install-lib.mjs';
+import { lockChurnProblem, lockSyncProblem } from '../example-lock-core.mjs';
+
+// `__dirname`, not `import.meta.url`: jest transforms these to CommonJS, which is
+// the same reason the logic under test lives in `pod-install-lib.mjs`.
+const FIXTURES = join(__dirname, 'fixtures', 'x13-json-empty-array');
+const ROOT = join(__dirname, '..', '..');
+const manifest = JSON.parse(
+  readFileSync(join(FIXTURES, 'manifest.json'), 'utf8')
+);
+
+const sha1 = (text) => createHash('sha1').update(text).digest('hex');
+
+/**
+ * `JSON.pretty_generate` as `json` < 2.8.0 wrote it: empty collections get a
+ * line to themselves, so an empty array is an array, a blank line and a closer.
+ *
+ * Written against the real gem's output (checked below by matching a runner
+ * checksum byte for byte), not against a guess: the shape is
+ * `"deps": [` / blank / `]`, and `{` / `}` for an empty object.
+ */
+function prettyGenerateOld(value, indent = '') {
+  const pad = `${indent}  `;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return `[\n\n${indent}]`;
+    return `[\n${value
+      .map((item) => `${pad}${prettyGenerateOld(item, pad)}`)
+      .join(',\n')}\n${indent}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return `{\n${indent}}`;
+    return `{\n${keys
+      .map(
+        (key) =>
+          `${pad}${JSON.stringify(key)}: ${prettyGenerateOld(value[key], pad)}`
+      )
+      .join(',\n')}\n${indent}}`;
+  }
+  return JSON.stringify(value);
+}
+
+describe('the json gem decides every SPEC CHECKSUMS entry (X13)', () => {
+  const pods = Object.keys(manifest.pods);
+
+  it('has real fixtures from the failing run, not authored ones', () => {
+    expect(pods.length).toBeGreaterThan(0);
+    for (const pod of pods) {
+      const entry = manifest.pods[pod];
+      // The two checksums must differ, or the fixture proves nothing.
+      expect(entry.runnerChecksum).not.toBe(entry.committedChecksum);
+      expect(entry.emptyArrays).toBeGreaterThan(0);
+    }
+    // The three the brief names, so a fixture set cannot quietly shrink to one.
+    for (const required of ['React-Core', 'RCT-Folly', 'NitroModules']) {
+      expect(pods).toContain(required);
+    }
+  });
+
+  it('reproduces the committed checksum from the stored spec, byte for byte', () => {
+    for (const pod of pods) {
+      const stored = readFileSync(
+        join(FIXTURES, `${pod}.podspec.json`),
+        'utf8'
+      );
+      expect(sha1(stored)).toBe(manifest.pods[pod].committedChecksum);
+    }
+  });
+
+  it('reproduces the runner checksum from the same spec, re-serialised the old way', () => {
+    for (const pod of pods) {
+      const stored = JSON.parse(
+        readFileSync(join(FIXTURES, `${pod}.podspec.json`), 'utf8')
+      );
+      // CocoaPods appends the newline `to_pretty_json` adds.
+      const expanded = `${prettyGenerateOld(stored)}\n`;
+      expect(sha1(expanded)).toBe(manifest.pods[pod].runnerChecksum);
+    }
+  });
+
+  it('changes nothing but whitespace, and that is enough to move a release', () => {
+    const strip = (text) => text.replace(/\s+/g, '');
+    for (const pod of pods) {
+      const compact = readFileSync(
+        join(FIXTURES, `${pod}.podspec.json`),
+        'utf8'
+      );
+      const expanded = `${prettyGenerateOld(JSON.parse(compact))}\n`;
+      // Same data, different bytes: so no diff tool worth its name would call
+      // this a content change, and the churn guard is the only thing in the
+      // pipeline that can see it coming.
+      expect(strip(expanded)).toBe(strip(compact));
+      expect(expanded).not.toBe(compact);
+    }
+  });
+});
+
+describe('emptyArrayStyleOf', () => {
+  const compact = readFileSync(
+    join(FIXTURES, 'NitroModules.podspec.json'),
+    'utf8'
+  );
+  const expanded = `${prettyGenerateOld(JSON.parse(compact))}\n`;
+
+  it('reads the compact form the committed lock was written with', () => {
+    expect(emptyArrayStyleOf(compact)).toBe(EMPTY_ARRAY_COMPACT);
+  });
+
+  it('reads the expanded form the runner wrote', () => {
+    expect(emptyArrayStyleOf(expanded)).toBe(EMPTY_ARRAY_EXPANDED);
+  });
+
+  it('reads a minimal canary in both styles', () => {
+    expect(
+      emptyArrayStyleOf(
+        '{\n  "dependencies": {\n    "react-native-nitro-ui": []\n  }\n}\n'
+      )
+    ).toBe(EMPTY_ARRAY_COMPACT);
+    expect(
+      emptyArrayStyleOf(
+        '{\n  "dependencies": {\n    "react-native-nitro-ui": [\n\n    ]\n  }\n}\n'
+      )
+    ).toBe(EMPTY_ARRAY_EXPANDED);
+  });
+
+  /**
+   * The failure that would silently re-open this bug: a probe that could not run
+   * must never be mistaken for a machine that agrees.
+   */
+  it('says unknown rather than guessing when the answer is not one of the two', () => {
+    expect(emptyArrayStyleOf('')).toBeNull();
+    expect(emptyArrayStyleOf('not json at all')).toBeNull();
+    expect(emptyArrayStyleOf('{"dependencies":{}}')).toBeNull();
+    expect(emptyArrayStyleOf(null)).toBeNull();
+  });
+});
+
+describe('podSerialisationProblem', () => {
+  it('is silent about the style the lock has', () => {
+    expect(
+      podSerialisationProblem({ style: EXPECTED_EMPTY_ARRAY_STYLE })
+    ).toBeNull();
+  });
+
+  it('refuses the style that churns, and names the mechanism', () => {
+    const problem = podSerialisationProblem({ style: EMPTY_ARRAY_EXPANDED });
+    expect(problem).toContain('SPEC CHECKSUMS');
+    expect(problem).toContain('87 of 96');
+    expect(problem).toContain('2.18.0');
+  });
+
+  it('refuses an unreadable probe too - unknown is not agreement', () => {
+    const problem = podSerialisationProblem({ style: null });
+    expect(problem).not.toBeNull();
+    expect(problem).toContain('could not be read');
+  });
+});
+
+describe('podInstallEnvironment', () => {
+  it('states the prebuilt-RN defaults the lock resolves with', () => {
+    const { env, pinned } = podInstallEnvironment({ PATH: '/bin' });
+    expect(env.RCT_USE_PREBUILT_RNCORE).toBe('1');
+    expect(env.RCT_USE_RN_DEP).toBe('1');
+    expect(pinned).toContain('RCT_USE_PREBUILT_RNCORE=1');
+  });
+
+  it('does not carry a source-build or a codegen skip in from the shell', () => {
+    // The shape of the X13 failure from a different variable: `RCT_USE_PREBUILT_RNCORE=0`
+    // is a source build, which swaps every React pod's source_files and stops
+    // installing the facades, and near-total checksum churn is what that looks
+    // like in a lock.
+    const { env, deviations } = podInstallEnvironment({
+      RCT_USE_PREBUILT_RNCORE: '0',
+      RCT_SKIP_CODEGEN: '1',
+    });
+    expect(env.RCT_USE_PREBUILT_RNCORE).toBe('0');
+    expect(env.RCT_SKIP_CODEGEN).toBe('1');
+    expect(deviations.map((d) => d.name)).toEqual([
+      'RCT_USE_PREBUILT_RNCORE',
+      'RCT_SKIP_CODEGEN',
+    ]);
+    // A person set these, so they are kept and reported, never overridden: the
+    // alternative is `pod install` quietly ignoring what it was asked to do.
+    expect(deviations[0].why).toContain('react_native_pods.rb');
+    expect(deviations[1].expected).toBeNull();
+  });
+
+  it('leaves the variables that already match the contract alone and unreported', () => {
+    const { env, pinned, deviations } = podInstallEnvironment({
+      RCT_USE_PREBUILT_RNCORE: '1',
+      RCT_USE_RN_DEP: '1',
+    });
+    expect(pinned).toEqual([]);
+    expect(deviations).toEqual([]);
+    expect(env.RCT_USE_PREBUILT_RNCORE).toBe('1');
+  });
+
+  it('clears the profiling and local-artifact switches, which have no default', () => {
+    const { env, deviations } = podInstallEnvironment({
+      IS_REANIMATED_PROFILING: '1',
+      RCT_USE_LOCAL_RN_DEP: '/somewhere/React.xcframework',
+    });
+    expect(env.IS_REANIMATED_PROFILING).toBe('1');
+    expect(env.RCT_USE_LOCAL_RN_DEP).toBe('/somewhere/React.xcframework');
+    expect(deviations.map((d) => d.name)).toEqual([
+      'IS_REANIMATED_PROFILING',
+      'RCT_USE_LOCAL_RN_DEP',
+    ]);
+  });
+
+  it('does not pretend CI or NODE_BINARY decide anything', () => {
+    // Both were candidates for this bug. CI only gates CocoaPods interactivity,
+    // and NODE_BINARY reaches a podspec as the literal text `$NODE_BINARY` inside
+    // a script phase - never expanded - so pinning either would be decoration.
+    const names = POD_INSTALL_CONTRACT.map((entry) => entry.name);
+    expect(names).not.toContain('CI');
+    expect(names).not.toContain('NODE_BINARY');
+    expect(names).not.toContain('USE_FRAMEWORKS_INTEGRATION_TARGETS');
+  });
+
+  it('names the line that reads every pinned variable', () => {
+    // A pin nobody can trace is a pin nobody can remove. Each entry has to say
+    // where the value is consumed, or the list rots.
+    for (const entry of POD_INSTALL_CONTRACT) {
+      expect(entry.why).toMatch(/\.(rb|podspec):\d+/);
+    }
+  });
+
+  it('never mutates the caller environment object', () => {
+    const env = { RCT_SKIP_CODEGEN: '1' };
+    podInstallEnvironment(env);
+    expect(env).toEqual({ RCT_SKIP_CODEGEN: '1' });
+  });
+});
+
+describe('what this task must not have weakened', () => {
+  it('still allows only NitroUi version and checksum lines through the churn guard', () => {
+    // X13 had a tempting shortcut: let the other checksums through and splice
+    // just NitroUi's two lines. The guard is what makes that visible instead of
+    // quiet, so its allow-list is asserted here rather than trusted.
+    const churn = lockChurnProblem({
+      beforeText: [
+        'PODS:',
+        '  - NitroUi (0.3.1):',
+        'SPEC CHECKSUMS:',
+        '  NitroUi: aaaa',
+        '  React-Core: bbbb',
+      ].join('\n'),
+      afterText: [
+        'PODS:',
+        '  - NitroUi (0.3.2):',
+        'SPEC CHECKSUMS:',
+        '  NitroUi: cccc',
+        '  React-Core: dddd',
+      ].join('\n'),
+    });
+    expect(churn).toContain('changed beyond NitroUi');
+    expect(churn).toContain('+ React-Core: dddd');
+
+    // ...and the two lines a release does change are still allowed.
+    expect(
+      lockChurnProblem({
+        beforeText:
+          'PODS:\n  - NitroUi (0.3.1):\nSPEC CHECKSUMS:\n  NitroUi: aaaa\n',
+        afterText:
+          'PODS:\n  - NitroUi (0.3.2):\nSPEC CHECKSUMS:\n  NitroUi: cccc\n',
+      })
+    ).toBeNull();
+  });
+
+  it('pins the json gem in the job that writes the lock', () => {
+    const workflow = readFileSync(
+      join(ROOT, '.github/workflows/release.yml'),
+      'utf8'
+    );
+    expect(workflow).toMatch(/gem install json -v\s+2\.18\.0/);
+  });
+
+  it('keeps `lock:check` a version comparison, so Linux can still run `check`', () => {
+    // The split this task had to preserve: `check` compares a version on any
+    // platform, and only the refresh can compare serialisation. Asserted by
+    // behaviour rather than by grepping prose - two locks differing only in
+    // their checksums must both pass, because that is exactly the difference
+    // `check` cannot see and must not try to.
+    const lockAt = (checksum) =>
+      `PODS:\n  - NitroUi (0.3.2):\nSPEC CHECKSUMS:\n  NitroUi: ${checksum}\n`;
+    expect(
+      lockSyncProblem({
+        manifestVersion: '0.3.2',
+        lockText: lockAt('a'.repeat(40)),
+      })
+    ).toBeNull();
+    expect(
+      lockSyncProblem({
+        manifestVersion: '0.3.2',
+        lockText: lockAt('b'.repeat(40)),
+      })
+    ).toBeNull();
+    // And the version is still what it checks.
+    expect(
+      lockSyncProblem({
+        manifestVersion: '0.3.2',
+        lockText: lockAt('a'.repeat(40)).replace(
+          'NitroUi (0.3.2)',
+          'NitroUi (0.3.1)'
+        ),
+      })
+    ).toContain('while package.json is at 0.3.2');
+  });
+});
