@@ -76,6 +76,7 @@ export const implementations: BenchImplementation[] = [
       'segmented-control',
       'picker',
       'date-picker',
+      'menu',
       // @end-generated
     ],
     List: NitroUiHostList,

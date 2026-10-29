@@ -7,7 +7,7 @@
   "hostable": true,
   "exampleTab": "menu",
   "exampleLabel": "Menu",
-  "bench": false,
+  "bench": true,
   "benchUnsuffixed": false,
   "smoke": false,
   "realInput": false
