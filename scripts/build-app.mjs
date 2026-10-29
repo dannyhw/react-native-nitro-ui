@@ -56,7 +56,9 @@ import {
   decideSkipBuild,
   gradleArchArgs,
   gradleCcacheArgs,
+  iosCleanTargets,
   iosModuleCacheArgs,
+  POD_INPUTS_RECORD,
   resolveAndroidAbis,
 } from './build-speed-lib.mjs';
 import {
@@ -216,10 +218,11 @@ function removeIfPresent(dir, log) {
 /**
  * Where the Pods project records what it was last shown. Inside `Pods/`
  * because that is the thing being kept in step, and gitignored because it is
- * build state.
+ * build state. `--clean` deletes it too (see `iosCleanTargets`), which is what
+ * makes a clean build mean "show the pods the sources again".
  */
 function podInputsFile(iosDir) {
-  return path.join(iosDir, 'Pods', '.nitro-ui-pod-inputs');
+  return path.join(iosDir, 'Pods', POD_INPUTS_RECORD);
 }
 
 /** @param {string} file @returns {string | null} */
@@ -305,7 +308,14 @@ function iosInputFingerprint() {
 function buildIos({ clean, log }) {
   const iosDir = path.join(REPO_ROOT, 'example', 'ios');
   const derivedData = path.join(iosDir, 'build');
-  if (clean) removeIfPresent(derivedData, log);
+  if (clean) {
+    // DerivedData *and* the pod-inputs record, so the pod-install decision below
+    // is asked again rather than answered from the record this clean was meant
+    // to invalidate.
+    for (const target of iosCleanTargets({ iosDir })) {
+      removeIfPresent(target, log);
+    }
+  }
 
   const manifest = path.join(iosDir, 'Pods', 'Manifest.lock');
   const podfileLock = path.join(iosDir, 'Podfile.lock');
