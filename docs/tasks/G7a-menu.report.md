@@ -173,7 +173,7 @@ proofs are in the section above.
 included; round 1's `3 failed / 190 passed / 217` base run was never committed as a log and is
 withdrawn. Question 1's recommendation stands, on stronger evidence.
 
-**`need --for review`**: `need: 1 gate(s) missing for review: harness:android` - `check` green and `harness:ios` green on this tree, `harness:android` red on it, `real-input:*` deliberately absent (G7b). Two full `harness:android` runs landed here, **5 failures then 3** - `F8`, `HostControls` and the `HostPopups` counter cases in different combinations, `harness+android-06-29-15Z` and `-06-38-53Z`. The count moves, the family does not, and neither run has a Menu failure: both `harness:*:Menu` suites were 15/15 on the same tree.
+**`need --for review`**: `need: 1 gate(s) missing for review: harness:android` - `check` green and `harness:ios` green on this tree, `harness:android` red on it, `real-input:*` deliberately absent (G7b). Two full `harness:android` runs landed here, **5 failures then 3** - `F8`, `HostControls` and `HostPopups` cases in different combinations (the `HostPopups` counter cases, plus "opens its dialog as a window of the Host's composition" once, which has no base run to compare against; re-review N1), `harness+android-06-29-15Z` and `-06-38-53Z`. The count moves, the family does not, and neither run has a Menu failure: both `harness:*:Menu` suites were 15/15 on the same tree.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
