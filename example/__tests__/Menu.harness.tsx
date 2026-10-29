@@ -335,11 +335,50 @@ async function waitForMeasured(testId: string, what: string) {
 }
 
 /**
+ * Poll until *this* mount reports a size.
+ *
+ * `handles` outlives `unmount()` - the entry is replaced when the next mount
+ * registers, never cleared when the last one goes away - so `waitForMeasured` can be
+ * answered by the handle of a control that no longer exists, and the previous
+ * instance's number would satisfy "the remount measured". Q3 §1's
+ * `waitForFreshMeasure` is the house patch for exactly this: only a handle that is not
+ * the one captured before the teardown may answer, and zero is absence, not a verdict.
+ */
+async function waitForFreshMeasure(
+  testId: string,
+  stale: MenuHandle | undefined,
+  what: string
+): Promise<Size> {
+  return await pollUntil(
+    () => {
+      const handle = handles.get(testId);
+      if (handle == null || handle === stale) {
+        return null;
+      }
+      const size = handle.measureContent();
+      return size.width > 0 && size.height > 0 ? size : null;
+    },
+    () =>
+      new Error(
+        `"${testId}" (${what}) never measured on its new mount - the handle that ` +
+          `answers is ${
+            handles.get(testId) === stale ? 'the old mount' : 'absent'
+          }, measureContent() says ${describeSize(measured(testId))}, box ` +
+          `${describeSize(sizeOf(testId))}.`
+      )
+  );
+}
+
+/**
  * Poll until the control reports a size that is *not* `previous`.
  *
  * `measureContent()` keeps answering with the last measured size while Compose
  * recomposes and re-measures, so waiting for "a size" would return the pre-change
  * number and call the change measured.
+ *
+ * Zero is refused for the reason Q3 §1 gives for this same shape: a control answers
+ * `0x0` mid re-measure, and "not the previous size" is then satisfied by a change that
+ * never arrived - the historical `0.00x0.00` signature, read as a verdict.
  */
 async function waitForRemeasure(
   testId: string,
@@ -349,7 +388,12 @@ async function waitForRemeasure(
   return await pollUntil(
     () => {
       const size = measured(testId);
-      return size != null && !sameSize(size, previous) ? size : null;
+      return size != null &&
+        size.width > 0 &&
+        size.height > 0 &&
+        !sameSize(size, previous)
+        ? size
+        : null;
     },
     () =>
       new Error(
@@ -1305,6 +1349,8 @@ describe('Menu · G7a', () => {
         (r) => r.expanded === true && r.live === liveBefore + 1
       );
     }
+    // The handle this mount leaves behind, captured while it is still the only one.
+    const stale = handles.get('recycle');
     unmount();
     await settle(400);
     selectLog.length = 0;
@@ -1323,7 +1369,7 @@ describe('Menu · G7a', () => {
       { timeout: 20000 }
     );
     await waitForTestId('recycle');
-    await waitForMeasured('recycle', 'the remounted menu');
+    await waitForFreshMeasure('recycle', stale, 'the remounted menu');
     const fresh = report('recycle');
     expect(handles.get('recycle')?.title).toBe('Renamed');
     expect(fresh.rows).toBe(Platform.OS === 'android' ? 0 : 2);
