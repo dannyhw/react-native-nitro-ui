@@ -911,10 +911,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    *
    * The token is the same lever an armed sizing key change uses (see
    * [remeasureToken]), and this is a write to the state the calling measure block
-   * reads, from inside that block: Compose routes that as a request to measure the
-   * node again, deferred to the end of the traversal, which is exactly the ask. It is
-   * only made when there is something to place, and the bounded pass that answers it
-   * writes nothing, so the asking stops with that pair.
+   * reads, from inside that block. Compose routes that as a request to measure the node
+   * again in three steps, not one: the write schedules the global apply notification, that
+   * notification runs on `AndroidUiDispatcher` and invalidates the node, and the
+   * invalidation is answered by the next frame. Which is exactly the ask -
+   * a later measure of this node, on the UI thread, off the current pass. It is only made
+   * when there is something to place, and the bounded pass that answers it writes nothing,
+   * so the asking stops with that pair.
    *
    * One traversal's worth of the unbounded drawing does reach the screen first, and it
    * cannot be avoided here: a `Measurable` may be measured exactly once per pass
