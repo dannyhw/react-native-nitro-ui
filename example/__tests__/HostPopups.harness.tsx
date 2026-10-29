@@ -340,34 +340,90 @@ async function waitForDate(
 }
 
 /**
- * The `livePresentations` count a gate here may treat as its own zero.
+ * How long a dialog's *window* gets to come down once its own `presented` flag fell.
+ *
+ * The flag is model state and falls with the props batch; the count falls when the
+ * UI thread disposes the dialog's subtree, a frame or two later. Waiting on the pair
+ * with the file's 12 s default made "gone" mean "gone within twelve seconds", and a
+ * dialog still composed over the screen three or ten seconds later is H2b's original
+ * bug in a slower form. Two seconds is many frames, including the ones a loaded
+ * machine spends between them (this file's own gates are run at load1 up to 39).
+ *
+ * The long budgets elsewhere in this file are not the same wait and stay long: the
+ * baseline probe and the fresh-mount readers are waiting for *another* gate's
+ * disposal to land, which nobody here can bound, and a long budget there only costs
+ * time - it cannot let a lingering window pass, because the window it waits for is
+ * not one it just closed.
+ */
+const DISMISSAL_GRACE_MS = 2000;
+
+/**
+ * Wait for a dialog to come down, and give the count only `DISMISSAL_GRACE_MS` of it.
+ *
+ * Two polls, in the order that makes both halves provable: the flag half with the
+ * normal budget (a busy JS thread is allowed to be slow to re-render), then the count
+ * half polled - not read once - inside a frame-scale window. Reading the count after
+ * waiting only for the flag is what threw `expected 1 to be +0` at load 28, because
+ * it measured the frame in between; waiting for the count with the full budget is
+ * what let a lingering window pass. This waits for both, and fails if "both" takes
+ * seconds.
+ *
+ * @param what the gate's own name, so a slow teardown says whose dialog it was
+ */
+async function waitForDialogGone(
+  handle: DatePickerHandle,
+  what: string,
+  expected = 0
+): Promise<DateReport> {
+  await waitForDate(handle, (r) => !r.presented);
+  try {
+    return await waitForDate(
+      handle,
+      (r) => r.livePresentations === expected,
+      DISMISSAL_GRACE_MS
+    );
+  } catch {
+    const seen = parseDateReport(handle.nuiTestStateReport()).livePresentations;
+    throw new Error(
+      `"${what}": the dialog's own flag came down and its window was still composed ` +
+        `${String(DISMISSAL_GRACE_MS)} ms later (${String(seen)} live DatePicker ` +
+        `window(s), expected ${String(expected)}). A window that takes seconds to ` +
+        `leave is not "coming down with its row" - it is hanging over the screen.`
+    );
+  }
+}
+
+/**
+ * Earn the right to call the DatePicker window count zero.
  *
  * `livePresentations` counts every DatePicker dialog in the process (G5 shipped it
  * that way, and `readReport` reports it live on purpose: a dropped mount cannot
- * report its own leak). So a gate that asserts `=== 0` is asserting what every
- * *other* test in the file did too, and a leftover is charged to whichever gate
- * reads next. The likeliest leftover is not a leak: the harness's `cleanup()` only
- * nulls React's element, so a previous test's unmount — and the dialog's UI-thread
- * `onDispose` with it — can still be in flight when the next gate reads. That is
- * X3's `expected 1 to be 0` at load 5.3 and 6.7, green at 6.1: a disposal that lost
- * a race, on a file whose other gates *poll* the same count.
+ * report its own leak). So a gate that asserts `=== 0` is asserting what every *other*
+ * test in the file did too, and a leftover is charged to whichever gate reads next.
+ * The likeliest leftover is not a leak: the harness's `cleanup()` only nulls React's
+ * element, so a previous test's unmount — and the dialog's UI-thread `onDispose` with
+ * it — can still be in flight when the next gate reads. That is X3's
+ * `expected 1 to be 0` at load 5.3 and 6.7, green at 6.1: a disposal that lost a
+ * race, on a file whose other gates *poll* the same count.
  *
- * A gate therefore earns its baseline instead of assuming one. Already zero is
- * zero. Otherwise this opens a dialog of its own and takes it down, which is the
- * only probe that distinguishes a disposal still in flight (it comes down) from a
- * window that is stuck (it does not, and that is a real leak worth failing on —
- * snapshotting the count instead would hide it behind a delta).
+ * Hence the name: this does not measure a baseline to subtract, and it never returns
+ * anything but zero. Already zero is zero. Otherwise it opens a dialog of its own and
+ * takes it down, which is the only probe that tells a disposal still in flight (it
+ * comes down) from a window that is stuck (it does not, and that is a real leak worth
+ * failing on — snapshotting the count instead would hide it behind a delta). Callers
+ * therefore compare against 0 and 1 like the rest of the file, which is what this
+ * helper makes true rather than assumes.
  *
  * @param closeWindow the app-side close for *this* control: `setDateDisabled` for
  *   the single-host screens, `setDateDisabledFor(id, …)` inside the seven list.
  */
-async function liveDateBaseline(
+async function waitForNoDateWindows(
   handle: DatePickerHandle,
   closeWindow: (closed: boolean) => void,
   what: string
-): Promise<number> {
+): Promise<void> {
   if (parseDateReport(handle.nuiTestStateReport()).livePresentations === 0) {
-    return 0;
+    return;
   }
   handle.nuiTestPresent();
   await waitForDate(handle, (r) => r.presented);
@@ -375,8 +431,7 @@ async function liveDateBaseline(
   await waitForDate(handle, (r) => !r.presented);
   closeWindow(false);
   try {
-    return (await waitForDate(handle, (r) => r.livePresentations === 0, 20_000))
-      .livePresentations;
+    await waitForDate(handle, (r) => r.livePresentations === 0, 20_000);
   } catch {
     const stuck = parseDateReport(
       handle.nuiTestStateReport()
@@ -1080,10 +1135,7 @@ if (Platform.OS === 'android') {
       // Neither may be stuck. The dialog's own buttons are in its window (see the note
       // at `parseDateReport`), so this is the dismissal the harness can drive.
       log.setDateDisabledTwo?.(true);
-      const closed = await waitForDate(
-        date,
-        (r) => !r.presented && r.livePresentations === 0
-      );
+      const closed = await waitForDialogGone(date, 'hosted dialog + menu gate');
       expect(closed.livePresentations).toBe(0);
       expect(parseMenuReport(picker.nuiTestMenuReport()).live).toBe(0);
     });
@@ -1135,10 +1187,7 @@ if (Platform.OS === 'android') {
       // dialog left up here would fail every gate after it — the same reason the leak
       // gates work. Disabling a control whose window is up closes it (G5).
       log.setDateDisabled?.(true);
-      const closed = await waitForDate(
-        date,
-        (r) => !r.presented && r.livePresentations === 0
-      );
+      const closed = await waitForDialogGone(date, 'dialog before Host drop');
       expect(closed.presented).toBe(false);
       log.setDateDisabled?.(false);
       // What the harness cannot press: the dialog's own OK and Cancel live in another
@@ -1177,7 +1226,7 @@ if (Platform.OS === 'android') {
       // process, so leaving it up here reads as a leak in the mixed gates below.
       // Disabling is the app-side close, and the gate after this one is what proves it.
       log.setDateDisabled?.(true);
-      await waitForDate(date, (r) => !r.presented && r.livePresentations === 0);
+      await waitForDialogGone(date, 'dialog after the value-follow gate');
       log.setDateDisabled?.(false);
     });
 
@@ -1187,13 +1236,12 @@ if (Platform.OS === 'android') {
       date.nuiTestPresent();
       await waitForDate(date, (r) => r.presented && r.livePresentations === 1);
       log.setDateDisabled?.(true);
-      // Both halves, as the menu gate above does: `presented` is model state and drops
-      // with the props batch, while the window goes when Compose disposes the dialog -
-      // reading the count in between measured a window already on its way out.
-      const closed = await waitForDate(
-        date,
-        (r) => !r.presented && r.livePresentations === 0
-      );
+      // Both halves, as the menu gate above does, and bounded: `presented` is model
+      // state and drops with the props batch, while the window goes when Compose
+      // disposes the dialog a frame or two later. Reading the count in between measured
+      // a window already on its way out; waiting for the count with the file's whole
+      // 12 s budget would accept a dialog still over the screen ten seconds later.
+      const closed = await waitForDialogGone(date, 'disabled while open (G5)');
       expect(closed.presented).toBe(false);
       expect(date.disabled).toBe(true);
       // Re-enabling must not bring a dismissed dialog back.
@@ -1223,7 +1271,10 @@ if (Platform.OS === 'android') {
       // Hide it. The window goes because the composition dropped the child; `presented`
       // going with it is the fix, and the half this gate exists to watch.
       log.setDateHidden?.(true);
-      const hidden = await waitForDate(date, (r) => r.livePresentations === 0);
+      const hidden = await waitForDialogGone(
+        date,
+        'hidden child leaves no window'
+      );
       expect(hidden.presented).toBe(false);
       // Show it again. A dialog nobody asked for would compose itself here and take a
       // frame to appear, so give it more than a frame before reading the answer.
@@ -1247,28 +1298,22 @@ if (Platform.OS === 'android') {
     it('takes a hosted dialog down when only its child leaves the Host', async () => {
       const { unmount } = await mount(<PopupHost log={log} />);
       const date = need(log.dates.date, 'hosted date picker');
-      const live0 = await liveDateBaseline(
+      await waitForNoDateWindows(
         date,
         (closed) => log.setDateDisabled?.(closed),
         'child-leaves-the-host'
       );
       date.nuiTestPresent();
-      await waitForDate(
-        date,
-        (r) => r.presented && r.livePresentations === live0 + 1
-      );
+      await waitForDate(date, (r) => r.presented && r.livePresentations === 1);
       log.setDatePresent?.(false);
-      const gone = await waitForDate(
-        date,
-        (r) => r.livePresentations === live0
-      );
+      const gone = await waitForDialogGone(date, 'child leaves the Host');
       expect(gone.presented).toBe(false);
       // And the rest of the Host is alive: the hosted Picker still opens its menu on a
       // press aimed by its own witness, in the same composition the dialog just left.
       const picker = need(log.pickers.picker, 'hosted picker');
       await pressWitnessedAndOpen(picker);
       expect(parseDateReport(date.nuiTestStateReport()).livePresentations).toBe(
-        live0
+        0
       );
       // Take that menu down before leaving, the way the disable gate does.
       log.setPickerDisabled?.(true);
@@ -1282,7 +1327,7 @@ if (Platform.OS === 'android') {
       await mount(<PopupHost log={after} />);
       await expectDateWindowsAt(
         need(after.dates.date, 'fresh hosted date picker'),
-        live0,
+        0,
         'child leaves the Host (fresh mount reader)'
       );
     });
@@ -1293,16 +1338,13 @@ if (Platform.OS === 'android') {
       // Everything below counts relative to this: `livePresentations` is the whole
       // process, so a window another gate left mid-disposal would otherwise be
       // charged to this one as `expected 1 to be 0`.
-      const live0 = await liveDateBaseline(
+      await waitForNoDateWindows(
         first,
         (closed) => log.setDateDisabled?.(closed),
         'comes-down-with-its-row'
       );
       first.nuiTestPresent();
-      await waitForDate(
-        first,
-        (r) => r.presented && r.livePresentations === live0 + 1
-      );
+      await waitForDate(first, (r) => r.presented && r.livePresentations === 1);
       // ... a row *above* it leaves, and its row is re-framed: the dialog comes down with
       // the row, which is the rule `docs/components/host.md` states for both popup
       // controls. Measured, both halves (H2b fix round, `HostPopups` probe):
@@ -1310,17 +1352,14 @@ if (Platform.OS === 'android') {
       // dialog - and the dialog used to read `presented=1;live=1` here, a window still
       // hanging over a row that was no longer there. That was the bug, not the contract.
       log.setPickerPresent?.(false);
-      // Both halves in one wait. `presented` is model state and falls with the
-      // props batch; the count falls when Compose disposes the dialog's subtree,
-      // a frame or two later. Waiting on `presented` and then reading the count
-      // measured the frame in between - which is the same mistake the gate above
-      // says it fixed, and the `expected 1 to be +0` this gate threw at load 28.
-      // The contract is "the window is gone", and that is the pair, not the flag.
-      const moved = await waitForDate(
-        first,
-        (r) => !r.presented && r.livePresentations === live0
-      );
-      expect(moved.livePresentations).toBe(live0);
+      // Both halves, and bounded. `presented` is model state and falls with the props
+      // batch; the count falls when Compose disposes the dialog's subtree, a frame or
+      // two later. Waiting on `presented` and then reading the count measured the frame
+      // in between - the `expected 1 to be +0` this gate threw at load 28 - while
+      // waiting for the pair with the file's 12 s budget would have accepted a dialog
+      // still composed seconds later, which is the bug this gate exists to catch.
+      const moved = await waitForDialogGone(first, 'comes down with its row');
+      expect(moved.livePresentations).toBe(0);
       // A change that leaves the row where it is must not close it either: this is the
       // guard against "tear the window down whenever the Host recomposes". A sibling's
       // key changing takes *that sibling's* group out and moves nothing else, and the
@@ -1329,16 +1368,13 @@ if (Platform.OS === 'android') {
       log.setPickerPresent?.(true);
       await settle(500);
       first.nuiTestPresent();
-      await waitForDate(
-        first,
-        (r) => r.presented && r.livePresentations === live0 + 1
-      );
+      await waitForDate(first, (r) => r.presented && r.livePresentations === 1);
       log.setPickerKey?.('picker-b');
       await settle(500);
       expect(parseDateReport(first.nuiTestStateReport()).presented).toBe(true);
       expect(
         parseDateReport(first.nuiTestStateReport()).livePresentations
-      ).toBe(live0 + 1);
+      ).toBe(1);
       log.setPickerKey?.('picker-a');
       await settle(300);
       // ... and dropping the Host while a dialog is up must take the window with it. Read
@@ -1348,7 +1384,7 @@ if (Platform.OS === 'android') {
       second.nuiTestPresent();
       await waitForDate(
         second,
-        (r) => r.presented && r.livePresentations === live0 + 1
+        (r) => r.presented && r.livePresentations === 1
       );
       unmount();
       await settle(600);
@@ -1357,7 +1393,7 @@ if (Platform.OS === 'android') {
       const reader = need(after.dates.date, 'hosted date picker');
       await expectDateWindowsAt(
         reader,
-        live0,
+        0,
         'comes down with its row (fresh mount reader)'
       );
     });
@@ -1370,7 +1406,7 @@ if (Platform.OS === 'android') {
         );
         const date = need(modeLog.dates.date, 'hosted ' + mode + ' picker');
         expect(date.mode).toBe(mode);
-        const live0 = await liveDateBaseline(
+        await waitForNoDateWindows(
           date,
           (closed) => modeLog.setDateDisabled?.(closed),
           `hosted ${mode} picker`
@@ -1382,14 +1418,14 @@ if (Platform.OS === 'android') {
         // measured the frame in between.
         const open = await waitForDate(
           date,
-          (r) => r.presented && r.livePresentations === live0 + 1
+          (r) => r.presented && r.livePresentations === 1
         );
-        expect(open.livePresentations).toBe(live0 + 1);
+        expect(open.livePresentations).toBe(1);
         unmount();
         await settle(400);
         expect(
           parseDateReport(date.nuiTestStateReport()).livePresentations
-        ).toBe(live0);
+        ).toBe(0);
       }
     });
 
@@ -1673,7 +1709,7 @@ if (Platform.OS === 'android') {
       }
       const date = need(log.dates[id], `seven date picker ${id}`);
       log.setDateDisabledFor?.(id, true);
-      await waitForDate(date, (r) => !r.presented && r.livePresentations === 0);
+      await waitForDialogGone(date, `sweep close ${id}`);
       log.setDateDisabledFor?.(id, false);
     }
 
@@ -1848,16 +1884,12 @@ if (Platform.OS === 'android') {
       // mount rather than assumed: a previous gate's unmount can still be in flight
       // here, and a window that comes down was never this churn's leak. One that
       // does not comes back as the baseline refusal, which names the leak.
-      const live0 = await liveDateBaseline(
+      await waitForNoDateWindows(
         dateReader,
         (closed) => witness.setDateDisabledFor?.('mix-dp-6', closed),
         'churn reader'
       );
-      await expectDateWindowsAt(
-        dateReader,
-        live0,
-        'churn (fresh mount reader)'
-      );
+      await expectDateWindowsAt(dateReader, 0, 'churn (fresh mount reader)');
     });
   });
 }
