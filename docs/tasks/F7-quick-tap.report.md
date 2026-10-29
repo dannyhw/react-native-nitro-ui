@@ -1,8 +1,8 @@
 # F7 — Quick taps on a hosted control in a busy screen are dropped (iOS)
 
-**Branch:** `task/F7-quick-tap` (from `main` at `3dfe041`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** `F7-p6svp` (pair-b: iPhone Air / `nitroui_b` · Metro `8293`) — the earlier half of the
-measurements were taken on lease `F7-fnto8` (pair-a), which expired mid-run.
+**Branch:** `task/F7-quick-tap` (from `main` at `3dfe041`) · **Round:** 2 of up to 3 (D19) ·
+**Lease:** `F7-xbddv` (pair-b: iPhone Air / `nitroui_b` · Metro `8293`) for fix round 1; round 1 used
+`F7-p6svp` (pair-b) and, for its earlier half, `F7-fnto8` (pair-a), which expired mid-run.
 
 ## Summary
 
@@ -131,6 +131,53 @@ waits without losing touches, while blocking at `.beforeSources` stops the input
 read. The stall arm reproduces the failure by name; it does not show that the React Native screen
 stalls the way the stall arm does, and nothing measured here says what the busy screen crosses.
 
+### Fix round 1: is any of this the harness?
+
+Round 1's numbers all came from an XCUITest loop that resolved the control by accessibility
+identifier before each press, and XCUITest waits for the app to be idle before posting an event:
+`-[XCUIApplication _waitForQuiescenceAsPreEvent:]` → `-[XCUIApplicationProcess
+waitForQuiescenceIncludingAnimationsIdle:isPreEvent:]`, both in `XCUIAutomation.framework`
+(the strings are in the binary; the option that skips it,
+`XCUIApplicationInteractionOptionSkipPreEventQuiescence`, is not declared in any header in this
+Xcode). So the probe's own traffic was a live candidate for causing the thing it measured. Two arms
+take it out, both at 50 ms on the busy screen, `load1` recorded, and both with the positive control
+pressed the same way.
+
+| Cell | Delivered | Positive control | load1 |
+| --- | --- | --- | --- |
+| **no-RN, no SwiftUI: 200 plain `UISwitch`es, bare `UIScrollView`** | **12/12** | 3/3 | 2.66 |
+| **no-RN, no SwiftUI: same, RN's own scroll configuration** | **12/12** | 3/3 | 3.38 |
+| busy screen, hosted Switch, pressed **through its element** | 1/12 | 12/12 | 6.08 |
+| busy screen, hosted Switch, **no per-press lookup** (fixed window point) | **0/12** | 12/12 | 9.10 |
+| busy screen, RN's own `Switch`, no per-press lookup | **0/12** | 12/12 | 5.79 |
+| busy screen, hosted Switch, no lookup, **XCTest idle-wait disabled** | **1/12** | 12/12 | 4.74 |
+| same aim and same code path at the **shipped 150 ms dwell** | **12/12** | 12/12 | 4.9 |
+| same aim and same code path, 50 ms, **200-row list removed** (variant 3) | 12/12 | 12/12 | 5.1 |
+
+The aim was checked, not assumed: `y=338.67` for the hosted Switch cell is a fixed point taken once
+from the window root, and pressing exactly that point at 150 ms delivers **12/12** through the same
+no-lookup path. A mis-aimed point cannot produce that, so the 0/12 at 50 ms is a dropped press and
+not an aiming bug.
+
+**What this changes in the conclusion.** Taking the harness out did not fix the drop, so the
+sentence "an XCUITest artefact" is not available either — but neither is "users lose taps", because
+what remains measured is still only XCUITest events on a simulator. The claim narrows to exactly
+what is measured: **a 50 ms press is not delivered to a Switch-type control on this screen, and
+the cause is not the probe's queries, not XCTest waiting for idle, and not anything of ours** — the
+last because the private skip flag took effect (`skip-quiescence=on(3)`, read back from the app) and
+changed nothing. The `UISwitch` arm closes the gap the review named: with no React Native *and* no
+SwiftUI in the process, two hundred real UIKit switches in a bare scroller lose nothing, so the
+effect needs React Native's own tree around the control, which is where round 1's pair cells already
+put it.
+
+**A negative result worth more than the table.** The same `press(forDuration:)` call, at the same
+fixed point, costs **median 630 ms** on the busy screen and **median 1642 ms** on the same screen
+with the list removed — while the *slower* screen delivers 12/12 and the faster one delivers 0/12.
+So the time XCTest spends inside a press is not the quantity that loses one either, and neither is
+main-queue latency (the round 1 watchdog row said the same thing from the other side). Whatever the
+busy screen crosses, it is not "the app was busy when the press happened", and nothing here says
+what it is.
+
 ## Red proofs
 
 - `testRealInputSwitch` busy-screen phase -> `pressOnce` pressing at `0.05` instead of
@@ -144,9 +191,20 @@ stalls the way the stall arm does, and nothing measured here says what the busy 
   here the touch was never delivered". Kept because it says something a reviewer would otherwise
   assume: at a globally lowered dwell the old failure comes first, which is why the guard is a phase
   of the Switch check rather than a later assertion in a run that has already aborted.
-- The guard's row-count precondition -> not mutated. Turning the list off is a probe variant rather
-  than a mutation of the guard, so the precondition is asserted rather than shown red; it exists so
-  a stripped screen cannot pass the check for the wrong reason.
+- The guard's busy-screen precondition -> round 1 left this unproven, which the review
+  counted as M2. It is now both checked against Switch elements rather than testIDs and
+  shown red: `SWITCH_SCREEN_VARIANT=6` (the 200-row list rendered as plain boxes carrying
+  exactly the `switch-list-*` identifiers, so the old ID count read "busy") ->
+  `XCTAssertGreaterThanOrEqual failed: ("14") is less than ("100") — the Switch screen has
+  to carry its 200-row list of Switches … The tree exposes 14 switch elements.` Variant
+  restored, then `real-input:ios:--control:switch` **PASS** (93.6 s).
+- The guard's witness check (M1) -> `nativeSwitchState` returning nil for
+  `switch-uncontrolled` only, with the control still present and still being pressed — the
+  exact case the old `?? ""` turned into twelve credited presses ->
+  `failed - switch-uncontrolled published no switch value before press 1 of 12, so this
+  check cannot tell a delivered press from a dropped one. A witness that stops publishing
+  must not be able to read as twelve successes.` Reverted, then
+  `real-input:ios:--control:switch` **PASS** (93.6 s).
 
 ## Files changed
 
@@ -210,3 +268,23 @@ stalls the way the stall arm does, and nothing measured here says what the busy 
 3. **`pressDwell` stays 0.15** because no fix landed, per the brief's condition. If you want it
    lowered anyway, 0.12 is 12/12 busy and calm; 0.10 is the lowest value measured 12/12 on the busy
    screen and is my floor recommendation.
+
+## Fix round 1
+
+Review: MERGE WITH FIXES at `229a481`. All must-fixes and nits done, plus the two measurements.
+
+**M1** a nil witness counted as delivered (`before` was `?? ""`, then `String?` vs `String`). The
+read is required now; the wait returns delivered / dropped / unreadable, nil never a change, and
+unreadable is asserted separately. Red, then green. **M2** the precondition counts `.switch`
+elements, not `switch-list-*` IDs — the difference between passing and meaning something on variant
+6. Red at 14 against a floor of 100, on variant 6. **M3** lines 9, 13, 27 and the loaded header
+rewritten; "keep presses above ~100 ms" withdrawn. **N1** `ink.muted`. **N2** the run-together
+summaries. **N3** the watchdog's real threshold. **N4** the median-of-logged-gaps caveat, in code
+and report. **N5** per-cell JSON carries target/variant/quiet/witness/stall; the superseded
+wrong-witness cell says so and points at the 12/12 correction. **N6** `pressOnce` returns the dwell
+it used.
+
+**Measurements** (table above): removing the harness's traffic leaves the drop where it was — 0/12
+by fixed point, 1/12 with XCTest's idle wait switched off and the flag verified on — while 200 real
+`UISwitch`es with no React Native and no SwiftUI lose nothing. New arms: `--no-lookup`,
+`--skip-quiescence`, the `uikit-switch` shapes.
