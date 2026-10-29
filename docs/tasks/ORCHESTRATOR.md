@@ -35,7 +35,12 @@ any machine. The live state is in `STATUS.md` (task table) and `RECOVERY.md`
 2. Delegate to the implementer with the worktree path, the brief path and the
    lease command. Name no devices: they come from `scripts/lease.mjs`. Use the
    template below.
-3. On the report: start a review. On FIX ROUND or MERGE WITH FIXES, send the
+3. On the report: check it ran `bun run task-ready` (X4) and paste the line it prints.
+   A round that fails it goes back to the same implementer thread **before** a review
+   starts — the command reports what a reviewer's first pass used to find (a stale gate
+   table, a citation to a file that is not in the tree, a manifest with no conformance
+   coverage), and paying a review round for that is the 44 % this task exists to spend
+   elsewhere. Then start a review. On FIX ROUND or MERGE WITH FIXES, send the
    M-list **to the same implementer thread**, which saves it re-reading the
    repo. Re-review after a round that changed native code.
 4. Round cap (D19): 1 implementation round plus at most 2 fix rounds. Spikes
