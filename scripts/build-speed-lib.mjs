@@ -218,6 +218,41 @@ export function iosModuleCacheArgs({ derivedData, ccache }) {
   return [`MODULE_CACHE_DIR=${iosModuleCacheDir({ derivedData, ccache })}`];
 }
 
+/** Where the example app keeps its iOS DerivedData, relative to `example/ios`. */
+export const IOS_BUILD_DIR = 'build';
+
+/**
+ * The name of the record of what the last `pod install` was shown. Lives inside
+ * `Pods/` because that is the thing being kept in step, and gitignored because
+ * it is build state (`scripts/build-app.mjs`).
+ */
+export const POD_INPUTS_RECORD = '.nitro-ui-pod-inputs';
+
+/**
+ * What `--clean` deletes before an iOS build.
+ *
+ * The DerivedData is the half everyone thinks of. The record of what the last
+ * `pod install` was shown has to go with it: that record is how a build notices
+ * that this library's sources grew a file the Pods project was never shown
+ * (`build-app.mjs`, X1 review S6), so a clean that leaves it behind reports "no
+ * inputs changed" and recompiles the same Pods project that was already wrong -
+ * which is the exact state the flag was typed to escape.
+ *
+ * `Pods/` itself is *not* in the list: reinstalling it costs minutes, and the
+ * `COCOAPODS:` trailer in a tracked `Podfile.lock` makes an unnecessary install
+ * show up as a diff in a source file.
+ *
+ * @param {object} options
+ * @param {string} options.iosDir the example app's `ios` directory
+ * @returns {string[]} what to remove, in the order to remove it
+ */
+export function iosCleanTargets({ iosDir }) {
+  return [
+    path.join(String(iosDir), IOS_BUILD_DIR),
+    path.join(String(iosDir), 'Pods', POD_INPUTS_RECORD),
+  ];
+}
+
 /**
  * Do two ABI lists mean the same build?
  *
