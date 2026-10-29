@@ -1388,10 +1388,9 @@ describe('Menu · G7a', () => {
     unmount();
     await settle(400);
     // Q3 §1's other half, proven at the moment it is worth proving: right now the
-    // only handle that exists is the one the teardown left behind, and it is still
-    // answering. A wait that accepted "some handle has a size" would be satisfied
-    // here and report the remount as measured. The title guard refuses it, so the
-    // short wait below has to fail, and fail naming what it refused.
+    // only handle that exists is the one the teardown left behind. A wait that
+    // accepted "any handle answers" would be satisfied here and report the remount as
+    // measured. The short wait below has to fail, and fail naming what it refused.
     const previousTitle = handles.get('recycle')?.title ?? null;
     const previousSize = measured('recycle');
     let refusal = 'answered';
@@ -1409,12 +1408,12 @@ describe('Menu · G7a', () => {
       `refuse previous mount: title=${JSON.stringify(previousTitle)} ` +
         `measured=${describeSize(previousSize)} -> ${refusal}`
     );
-    // The leftover is the previous mount's handle, and it is still answering - with
-    // the title this mount was given, not the next one's.
+    // The leftover is the previous mount's handle, carrying the title this mount was
+    // given, not the next one's.
     expect(previousTitle).not.toBe('Renamed');
-    // And the wait refuses it. What does the refusing differs by platform, measured
-    // at the log quoted in the report: on Android the torn-down control answers
-    // `0.00x0.00`, so the zero rule alone refuses it. The probe after the remount
+    // And the wait refuses it. Measured on both platforms, the torn-down handle
+    // answers `0.00x0.00` (drop and recycle clear the cached size on both), so the
+    // zero rule and the title rule both refuse it here. The probe after the remount
     // holds the title rule on its own, against a handle with a real size to offer.
     expect(refusal).toContain('never answered as "Renamed"');
     selectLog.length = 0;
@@ -1842,9 +1841,12 @@ describe('Menu · inside a Host', () => {
     // applies `accessibilityLabel` to it from its own base props, and the Swift host is
     // only its `contentView` - so deleting `.modifier(OptionalMenuAccessibility(...))`
     // from the SwiftUI trigger, measured at `06-02-21Z`, leaves this query answering for
-    // `'Open the actions'`. What the assertion holds is the user-visible promise - the
-    // name a reader gets sits on the element at the trigger's box - not which of the two
-    // paths put it there. What VoiceOver says for the rows is SwiftUI's own naming, and
+    // `'Open the actions'`. What the assertion holds is that the prop reaches the
+    // component view RN makes at the trigger's box - not the name VoiceOver reads. The
+    // query walks UIKit views only, and that view is not an accessibility element (no
+    // `accessible`), so the name a reader gets comes from the SwiftUI modifier, which
+    // this test cannot reach (a reading; FOLLOWUPS has it for G7b). What VoiceOver says
+    // for the rows is SwiftUI's own naming, and
     // nothing here can open the menu to hear it. `docs/components/menu.md` keeps the list
     // of what is and is not stood behind.
   });

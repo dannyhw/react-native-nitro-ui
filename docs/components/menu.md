@@ -122,7 +122,7 @@ before `onSelect`** — the popup closes first, then the choice is reported — 
 listener never sees an open that was never closed. `docs/tasks/Q1-menu-design.md` §5
 words the same rule as "never for a pick"; the reading taken here is that what to
 refuse is an *unpaired* open, and the pair plus its order is asserted on-device
-(`Menu.harness.tsx`, "reports the open and the close"). Whether a pick should fire
+(`Menu.harness.tsx`, "opens once, closes once, and pairs every open with a close"). Whether a pick should fire
 `onClose` at all, and in which order, is an open owner decision
 (`docs/tasks/G7a-menu.review.md` decision 3).
 
@@ -236,8 +236,10 @@ What this release can show, per platform:
   measurements say how far that reaches. Deleting the SwiftUI `.accessibilityLabel` from
   the trigger leaves the query answering: the element it lands on is the one React Native
   makes for the view, and RN puts `accessibilityLabel` on the component view itself, so
-  the assertion holds *the name is where the trigger is* and not which of the two paths
-  put it there. Clearing the label off that view instead — leaving the prop, the model and
+  the assertion holds that the prop reaches React Native's component view at the
+  trigger's box, not the name VoiceOver reads. That view is not an accessibility element,
+  so the name a reader gets comes from the SwiftUI modifier, and nothing here tests it (a
+  reading of the harness' UIKit-only query; a G7b follow-up). Clearing the label off that view instead — leaving the prop, the model and
   the SwiftUI element alone — is what makes the run go red. A `title` fallback is not
   observable this way at all: a trigger with no `accessibilityLabel` answers no node for
   its title on iOS, and on Android the query answers `null` for every Compose control.
