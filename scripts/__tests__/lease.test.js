@@ -1111,7 +1111,10 @@ describe('the CLI, in a real state directory', () => {
     const bench = readState().leases.find((entry) => entry.task === 'BENCH');
     expect(bench.exclusive).toBe(true);
     expect(bench.ttlMinutes).toBe(EXCLUSIVE_TTL_MINUTES);
-    expect(bench.ttlMinutes * 60).toBeGreaterThanOrEqual(14);
+    // The *point* of the default, asserted in the unit the CLI can break: 14 h
+    // in the same minutes the lease stores. Comparing `ttlMinutes * 60` against
+    // `14` compared seconds with hours and could not fail (X1 re-review F5).
+    expect(bench.ttlMinutes).toBeGreaterThanOrEqual(14 * 60);
   });
 
   it('renews a lease by its own ttl, and says so when it is gone', () => {

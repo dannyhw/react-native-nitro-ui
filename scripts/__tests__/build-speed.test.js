@@ -25,6 +25,7 @@ import {
   ccacheEffectiveForWorktrees,
   ccacheRequested,
   decideSkipBuild,
+  iosCleanTargets,
   abisMatch,
   gradleArchArgs,
   gradleCcacheArgs,
@@ -203,6 +204,28 @@ describe('iosModuleCacheDir', () => {
     }
     expect(read('real-input/ios.mjs')).toContain(
       'iosModuleCacheArgs({ derivedData: derived, ccache: false })'
+    );
+  });
+});
+
+describe('iosCleanTargets', () => {
+  /**
+   * `--clean` is what someone types when an iOS build is wrong in a way they
+   * cannot name, and the most common wrong is a Pods project that never saw a
+   * new source file (X1 review S6). `build-app` notices that through the record
+   * of what the last `pod install` was shown, so a clean that leaves the record
+   * behind cleans the DerivedData and keeps the very staleness it was asked to
+   * remove - the build reinstalls nothing.
+   */
+  const targets = iosCleanTargets({ iosDir: '/repo/example/ios' });
+
+  it('deletes the DerivedData this build owns', () => {
+    expect(targets).toContain(path.join('/repo/example/ios', 'build'));
+  });
+
+  it('also drops the record of what the last pod install saw', () => {
+    expect(targets).toContain(
+      path.join('/repo/example/ios', 'Pods', '.nitro-ui-pod-inputs')
     );
   });
 });

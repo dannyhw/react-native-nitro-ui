@@ -132,7 +132,7 @@ export function contentHash(content) {
  *   | `HybridNitroUiSwitch`                      |      61 | 2300 |
  *   | `NitroUiSwitchSpec` (the generated spec)   |      14 | 1365 |
  *   | `Lcom/margelo/nitro/nitroui/HybridNitroUiSwitch;` | 5 |    - |
- *   | `20HybridNitroUiSwitch` (length-prefixed)  |       - |    4 |
+ *   | `19HybridNitroUiSwitch` (length-prefixed)  |       - |    4 |
  *
  * So Android asks for the JVM class descriptor, whose leading `L` and trailing
  * `;` no spec name can borrow, and iOS for the length-prefixed name that
