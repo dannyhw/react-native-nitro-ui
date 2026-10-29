@@ -139,6 +139,14 @@ Coverage as a failing test (`component-coverage.test.js`, on the real tree):
 - Android a11y: the four exempted nodes may be a dump artefact — `uiautomator dump` runs without touch exploration, so Compose may mark a node focusable only once TalkBack is up. `FOLLOWUPS.md` names the measurement that settles it.
 - Android a11y: Progress's own screen can never be dumped (indeterminate indicators never idle), so what a screen reader announces for an *animating* indicator is unasserted; `hosted-progress` covers the determinate one.
 - The recycle rule measures identity, not recycling — `enableViewRecycling` appears nowhere in `src/` or `example/`, so the fixture hands one `testID` to a second owner rather than reaching `prepareForRecycle`.
+- `harness.mjs` falls back to the next Metro port and keeps going; only the wall-clock timing
+  guard noticed (it compares the port in `harness-timing/state.json` with the run's own). Both
+  harness gates were lost that way when a Metro orphaned by a SIGTERM'd real-input run held
+  the lease's port — a cheap `gate.mjs` pre-flight that refuses a leased Metro port already
+  serving someone else would turn a lost 3-minute run into a 1-second message.
+- Two pre-existing ESLint warnings are on `main` and in files this branch does not touch:
+  `scripts/harness-suite-timing.mjs:25` (`join` unused) and
+  `scripts/__tests__/registry.test.js:651` (`manifests` shadowed).
 - `scripts/conformance-core.mjs` and friends count as both platforms in `gate.mjs` (they are not in `TOOLING_FILES`), so a rules-only edit owes two harness runs. Deliberate for `real-input/*`; arguable for `conformance-core.mjs` alone, and left as the expensive-but-honest default.
 - `real-input:ios` is not run by this task's `need`, and this round adds no iOS real-input
   check — the sweep is Android-only, because the in-app query already reaches the name on
