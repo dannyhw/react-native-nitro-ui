@@ -51,9 +51,23 @@ of promising one.
 `need: review is satisfied on this code tree.` The ledger also carries three earlier
 `harness:ios` rows that did not pass: two refusals before the stamped app was built (`05:43`,
 `05:44`), and one real red at `05:45` — `Sizing · intrinsic (T11) › lays a cold Switch out at
-the size the control measures` failed `expect(content).not.toBeNull()` at load 50 while its own
-trace showed the correction (`laidOut:40.0x20.0 … corrected:61.0x28.0`) and printed
-  `box=61.00x28.00` — the corrected size — so the handle read lost a race, not the sizing. Excerpts in `docs/tasks/F2/failures/`.
+the size the control measures`, red on `expect(content).not.toBeNull()`. The ledger's load
+samples for that run are start 50.78 / max 50.78; the excerpt's own load1 at the moment of
+failure is 8.70.
+
+Review N2: the log line this reading rests on is line 26 of the store log, outside the last 150
+lines the committed excerpt keeps, so it is quoted here rather than asked of the reader. Exact,
+with the trailing `d={…}` stats object elided:
+
+    cold: box=61.00x28.00 content=null trace=["laidOut:40.0x20.0","drew:61.0x28.0","drew:40.0x20.0","corrected:61.0x28.0"]
+
+What that shows is a box already at the corrected size and a trace whose last stage is
+`corrected`, while the value the assertion needed came back `null`. The read is
+`hybrid?.measureContent() ?? null` (`example/__tests__/Sizing.harness.tsx:362`), so the log does
+not say whether the ref was missing or `measureContent()` answered `null` — either way it is the
+read that failed and not the layout, which is as far as this report goes. S1 saw the same test
+fail at load 108 (`docs/tasks/S1-storybook.report.md:187-190`), and the pair is now one FOLLOWUPS
+line for F1-style determinism. Excerpts in `docs/tasks/F2/failures/`.
 `real-input` is not owed here: no runner or control code changed.
 
 ## Red proofs
