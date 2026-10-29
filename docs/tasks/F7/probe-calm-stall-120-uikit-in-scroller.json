@@ -5,6 +5,15 @@
     "delivered": 0,
     "taps": 12,
     "jsToggle": 12,
-    "jsToggleTaps": 12
+    "jsToggleTaps": 12,
+    "target": "probe-inner-button",
+    "witness": "the Toggle's counter, not the button's — see `note`",
+    "quiet": true,
+    "arm": "no-rn",
+    "probeUi": "scroll",
+    "rows": 200,
+    "stallMs": 120,
+    "supersededBy": "probe-inner-button-stall-120.json",
+    "note": "SUPERSEDED — do not read this cell. It pressed `probe-inner-button` while the quiet default counter was the *Toggle's*, so it reported 0/12 for a control whose own counter said 12/12. `probe-inner-button-stall-120.json` is the same cell after the counter was derived from the target: 12/12. Kept rather than deleted because the wrong number was reported for a round, and the correction should be traceable. The per-cell shape fields in this record were back-filled by hand; runs since then write them itself."
   }
 ]

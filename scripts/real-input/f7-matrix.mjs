@@ -215,6 +215,73 @@ const CELLS = [
     target: 'probe-toggle-2',
     label: 'no RN: UIScrollView, 12 rows',
   },
+  // --- The same kind of control, with no React Native in the process, and no SwiftUI.
+  //
+  // Round 1's no-RN arm used 200 SwiftUI `Toggle`s in `UIHostingController`s, which
+  // differs from the React Native screen in three ways at once — the control, the
+  // hosting, and the accessibility tree — so it could not separate them. A plain
+  // `UISwitch` is what `RCTSwitchComponentView` *is* under RN's wrappers, so these two
+  // cells are the ones that ask whether two hundred real UIKit switches in a bare
+  // `UIScrollView` lose a 50 ms press with no React Native in the process at all.
+  {
+    name: 'native-uikit-switch-200',
+    arm: 'native',
+    probeUi: 'uikit-switch',
+    rows: 200,
+    target: 'probe-toggle-2',
+    label: 'no RN, no SwiftUI: UIScrollView at UIKit defaults, 200 UISwitches',
+  },
+  {
+    name: 'native-uikit-switch-rn-200',
+    arm: 'native',
+    probeUi: 'uikit-switch-rn',
+    rows: 200,
+    target: 'probe-toggle-2',
+    label: "no RN, no SwiftUI: same, RN's scroll configuration",
+  },
+  // --- Measurement (a): the busy screen with the harness's own traffic taken out.
+  //
+  // Every iOS number round 1 reported came from a loop that resolved the control by
+  // identifier before each press — an accessibility query into the app, on its main
+  // thread, over a two-hundred-control tree — and XCTest waits for the app to be idle
+  // before posting an event. So "the press was lost" was never separated from "the
+  // harness loaded the app's main thread right before pressing it". These cells press a
+  // point fixed from the window root instead, and the last one additionally asks XCTest
+  // not to wait for idle at all, through its private interaction option. Each press's
+  // own wall-clock cost is printed, which is what prices the idle wait.
+  //
+  // Both witnesses are JS event counts, and the positive control (`probe-pressable`) is
+  // pressed with the same no-lookup shape, so a healthy launch and a lost press are told
+  // apart without ever resolving a control per press.
+  {
+    name: 'rn-nolookup-hosted',
+    arm: 'rn',
+    variant: 0,
+    target: 'probe-hosted-switch',
+    witness: 'echo:probe-hosted-events',
+    noLookup: true,
+    label: 'busy screen, hosted Switch, no per-press lookup',
+  },
+  {
+    name: 'rn-nolookup-rn-switch',
+    arm: 'rn',
+    variant: 0,
+    target: 'probe-native-switch',
+    witness: 'echo:probe-native-events',
+    noLookup: true,
+    label: "busy screen, RN's own Switch, no per-press lookup",
+  },
+  {
+    name: 'rn-nolookup-hosted-noquiescence',
+    arm: 'rn',
+    variant: 0,
+    target: 'probe-hosted-switch',
+    witness: 'echo:probe-hosted-events',
+    noLookup: true,
+    skipQuiescence: true,
+    label:
+      'busy screen, hosted Switch, no per-press lookup, XCTest idle-wait disabled',
+  },
 ];
 
 /** The one line in `probeVariant.ts` that says which shape the screen renders. */
@@ -281,6 +348,13 @@ async function runCell(cell) {
   if (cell.tab) probeArgs.push('--tab', cell.tab, '--anchor', cell.anchor);
   if (cell.probeUi)
     probeArgs.push('--probe-ui', cell.probeUi, '--rows', String(cell.rows));
+  if (cell.noLookup) probeArgs.push('--no-lookup');
+  if (cell.skipQuiescence) probeArgs.push('--skip-quiescence');
+  // The no-lookup arm is always quiet: its whole point is that the probe's own
+  // witness queries are not among the variables, and the witness is read twice rather
+  // than polled. Not applied to the echo cells above, which round 1 measured without
+  // it — defaulting them here would redefine a cell whose numbers are already reported.
+  if (cell.noLookup || cell.quiet) probeArgs.push('--quiet');
 
   const at = load1();
   console.log(
