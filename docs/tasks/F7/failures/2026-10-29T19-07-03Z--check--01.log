@@ -1,0 +1,172 @@
+# Failure excerpt — check
+
+- Ran: 2026-10-29T19:07:03.097Z on code tree `b2c5f42ebfa3` at HEAD `e6fa028` (branch `task/F7-quick-tap`)
+- Command: `bun run check`
+- Result: fail, exit 1, 153036 ms
+- Load: start 4.91, end 4.81, median 5.34, max 9.13
+- Device: none recorded (not a device gate)
+- Full log: `task/F7-quick-tap/check-2026-10-29T19-07-02.903Z.log` (<store>/task/F7-quick-tap/check-2026-10-29T19-07-02.903Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/patch-nitrogen.test.js`
+- `● Test suite failed to run`
+- `● Console`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 365 — the rest is in the full log above)
+
+```
+🔧  Loading nitro.json config...
+🎉  Generated 9/9 HybridObjects in 1.9s!
+💡  Your code is in <tmp>/nitrogen-check-sZvPIY/nitrogen/generated
+‼️   Added 259 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: no drift (198 generated files match, 29 view(s) patched).
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (7 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.2s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — pass, 0.1s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 8 blocks match example/src/readme-examples.tsx
+check: 10 passed, 1 failed, 5 skipped in 152.9s
+check: failed step(s): test
+check: not started after the first failure: perf:renders, prepare, api-extractor:check, publint, manifest:check
+──────── full log: test ──────────────────────────────────────────────────────────
+$ jest
+OUT={"status":0,"out":"example/ios/Podfile.lock locks NitroUi (0.4.1) while package.json is at 0.5.0.\n  Fix locally:  node scripts/sync-example-lock.mjs --fix   (needs CocoaPods)\n  On a release: the Version Packages pull request should have carried it - the refresh runs inside `bun run release:version`, whose job in .github/workflows/release.yml is the one on a macOS runner. It cannot be fixed on Linux: a path-pod’s checksum is only reproducible by CocoaPods, so this guard can only compare the version.\npod-install: pinned RCT_USE_PREBUILT_RNCORE=1, RCT_USE_RN_DEP=1 - the values '../../../../../../..<tmp>/nitro-ui-lock-sync-sZRldA/example/ios/Podfile.lock' resolves with. Unset here, so React Native would have chosen the same thing; stated so CI and a laptop cannot drift apart.\npod-install: <tmp>/nitro-ui-lock-sync-sZRldA/fake-pod.sh install in <tmp>/nitro-ui-lock-sync-sZRldA/example/ios (COCOAPODS_BIN)\npod-install: ../../../../../../..<tmp>/nitro-ui-lock-sync-sZRldA/example/ios/Podfile.lock changed beyond the CocoaPods stamp (ran 1.19.0, recorded 1.17.0); review the diff.\nexample-lock: kept COCOAPODS: 1.17.0 (this machine ran 1.19.0) - a release refresh changes the version line, not the toolchain.\nexample-lock: restored example/ios/project.pbxproj\nexample-lock: removed untracked example/ios/new-by-product.txt (written by pod install)\nexample-lock: example/ios/Podfile.lock now matches package.json (0.5.0).\n","err":""}
+PASS scripts/__tests__/check-runner.test.js (13.676 s)
+PASS scripts/__tests__/example-lock.test.js (15.18 s)
+PASS scripts/__tests__/device-ops.test.js (15.946 s)
+PASS scripts/__tests__/lease.test.js (16.1 s)
+FAIL scripts/__tests__/patch-nitrogen.test.js
+  ● Test suite failed to run
+
+    A jest worker process (pid=68337) was terminated by another process: signal=SIGSEGV, exitCode=null. Operating system logs may contain more information on why this occurred.
+
+      at ChildProcessWorker._onExit (node_modules/jest-worker/build/workers/ChildProcessWorker.js:370:23)
+
+PASS scripts/__tests__/bench-baseline-machine.test.js
+PASS scripts/__tests__/registry.test.js
+PASS scripts/__tests__/bench-dry-run.test.js
+PASS scripts/__tests__/bench-machine.test.js
+PASS src/__tests__/host.test.tsx
+PASS src/__tests__/hostInertStyles.test.tsx
+PASS src/__tests__/hostReport.test.tsx
+PASS eslint-rules/__tests__/rules.test.js
+PASS scripts/__tests__/app-stamp.test.js
+PASS scripts/__tests__/build-slot.test.js
+PASS scripts/__tests__/device-pool.test.js
+PASS src/__tests__/hostLayoutWarning.test.tsx
+  ● Console
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+PASS scripts/__tests__/bench-baseline-format.test.js
+PASS src/__tests__/segmentedControl.test.tsx
+PASS src/__tests__/NitroUiCore.test.ts
+PASS scripts/__tests__/bench-missing-samples.test.js
+PASS scripts/__tests__/harness-suite-timing.test.js
+PASS scripts/__tests__/component-coverage.test.js
+PASS src/__tests__/useSizingId.test.tsx
+PASS src/__tests__/picker.test.tsx
+PASS src/__tests__/useStableCallback.test.tsx
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/emulator-launch.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/lease-pool-cli.test.js (22.572 s)
+PASS scripts/__tests__/gate-check.test.js (24.485 s)
+PASS scripts/__tests__/gate.test.js (42.449 s)
+PASS scripts/__tests__/gate-logs.test.js (47.875 s)
+PASS scripts/__tests__/bench-gate.test.js (147.241 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/patch-nitrogen.test.js
+  ● Test suite failed to run
+
+    A jest worker process (pid=68337) was terminated by another process: signal=SIGSEGV, exitCode=null. Operating system logs may contain more information on why this occurred.
+
+      at ChildProcessWorker._onExit (node_modules/jest-worker/build/workers/ChildProcessWorker.js:370:23)
+
+
+Test Suites: 1 failed, 44 passed, 45 total
+Tests:       1142 passed, 1142 total
+Snapshots:   0 total
+Time:        147.533 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 153.0 s - note: the code tree moved during the run (1bfe890225b6 now), so this line describes b2c5f42ebfa3
+gate: recorded in .gates/task/F7-quick-tap.jsonl
+
+```

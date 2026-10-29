@@ -1,0 +1,71 @@
+# Failure excerpt — real-input:ios:--control:switch
+
+- Ran: 2026-10-29T19:34:55.935Z on code tree `41e4b10d8d07` at HEAD `0556755` (branch `task/F7-quick-tap`)
+- Command: `node scripts/real-input/ios.mjs --control switch`
+- Result: fail, exit 1, 42243 ms
+- Load: start 2.98, end 5.15, median 4.32, max 5.40
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `F7-xbddv`
+- Full log: `task/F7-quick-tap/real-input+ios+--control+switch-2026-10-29T19-34-55.935Z.log` (<store>/task/F7-quick-tap/real-input+ios+--control+switch-2026-10-29T19-34-55.935Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputSwitch in 22.679s`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F7-quick-tap/real-input+ios+--control+switch-2026-10-29T19-34-55.935Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F7-xbddv (still live)
+  |   X4-s25z9                 X4           both              pair-a
+  |   F7-xbddv                 F7           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.15 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 29 log line(s)
+
+```
+real-input (ios): nitro-ui B · 3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 · Metro 8293 · scheme NitroUiExampleUITests
+metro: started on 8293 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree 41e4b10d8d07 (563 files) head 05567557 · 8 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8293
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-10-29 19:35:14.727.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-10-29 19:35:14.728.
+    Test Suite 'RealInputTests' started at 2026-10-29 19:35:14.728.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' failed (22.679 seconds).
+    Test Suite 'RealInputTests' failed at 2026-10-29 19:35:37.410.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-10-29 19:35:37.410.
+    Test Suite 'Selected tests' failed at 2026-10-29 19:35:37.410.
+    ** TEST EXECUTE FAILED **
+
+  switch: real tap flips the Switch and JS sees the new value
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:274: error: -[NitroUiExampleUITests.RealInputTests testRealInputSwitch] : failed - switch-uncontrolled published no switch value before press 1 of 12, so this check cannot tell a delivered press from a dropped one. A witness that stops publishing must not be able to read as twelve successes.
+    ✗ XCUITest reported "failed" for testRealInputSwitch in 22.679s
+
+switch: FAIL (no retries)
+    failed: XCUITest reported "failed" for testRealInputSwitch in 22.679s
+
+real-input (ios): 0/1 controls passed · 0 press sequence(s) needed a retry
+
+
+
+```
