@@ -2320,8 +2320,10 @@ describeCli(
         // than as an unhandled rejection that fails an unrelated test.
         ended.catch(() => {});
         // A signal-only kill of this test's own child: the fake runner's shell
-        // exits on its own after a few seconds, so a mutation cannot leak a
-        // process into the next test.
+        // loops for 300 x 0.1 s, so it stops on its own in 30 s and a mutation
+        // cannot leak a live process into the next test. The 20 s budgets below
+        // are what actually catch a forwarder that stopped forwarding - by then
+        // the child is still running, which is the point.
         try {
           await waitUntil(output, 'fake: ready', 20_000);
           child.kill(signal);
