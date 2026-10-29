@@ -43,6 +43,7 @@ import { describe, expect, it } from '@jest/globals';
 import {
   EMPTY_ARRAY_COMPACT,
   EMPTY_ARRAY_EXPANDED,
+  EMPTY_ARRAY_OTHER,
   EXPECTED_EMPTY_ARRAY_STYLE,
   POD_INSTALL_CONTRACT,
   emptyArrayStyleOf,
@@ -174,6 +175,39 @@ describe('emptyArrayStyleOf', () => {
   });
 
   /**
+   * M1, and the case the review found: the compact pattern used to be
+   * `/:\s*\[\s*\]/`, and `\s` matches newlines - so `[ ]`, `[\n]` and
+   * `[\n    ]` all read as "compact", i.e. as agreement with the committed
+   * lock. Agreement has to mean the same *bytes*, because bytes are what the
+   * checksum hashes. Anything that is neither of the two known shapes is
+   * `other`, which refuses; only "there was nothing to read" is null.
+   */
+  it('calls an empty array with any other spacing "other", never compact', () => {
+    const variants = {
+      'spaces inside': '{\n  "dependencies": {\n    "x": [ ]\n  }\n}\n',
+      'a bare newline inside':
+        '{\n  "dependencies": {\n    "x": [\n]\n  }\n}\n',
+      'indented onto its own line':
+        '{\n  "dependencies": {\n    "x": [\n    ]\n  }\n}\n',
+      'a tab inside': '{\n  "dependencies": {\n    "x": [\t]\n  }\n}\n',
+    };
+    for (const [what, text] of Object.entries(variants)) {
+      // The assertion that matters is the negative one: not compact. Whatever
+      // this shape turns out to be, it must never be the answer that lets a
+      // version bump through.
+      expect(emptyArrayStyleOf(text)).not.toBe(EMPTY_ARRAY_COMPACT);
+      expect(emptyArrayStyleOf(text)).toBe(EMPTY_ARRAY_OTHER);
+      expect(
+        podSerialisationProblem({ style: emptyArrayStyleOf(text) })
+      ).toContain('some other way');
+      // Guard against a fixture that proves nothing: each variant must really
+      // contain an empty array written the unusual way.
+      expect(text).toMatch(/\[[^\]]*\]/);
+      expect(what).toBeTruthy();
+    }
+  });
+
+  /**
    * The failure that would silently re-open this bug: a probe that could not run
    * must never be mistaken for a machine that agrees.
    */
@@ -245,7 +279,7 @@ describe('podInstallEnvironment', () => {
     expect(env.RCT_USE_PREBUILT_RNCORE).toBe('1');
   });
 
-  it('clears the profiling and local-artifact switches, which have no default', () => {
+  it('keeps the profiling and local-artifact switches, and reports each one', () => {
     const { env, deviations } = podInstallEnvironment({
       IS_REANIMATED_PROFILING: '1',
       RCT_USE_LOCAL_RN_DEP: '/somewhere/React.xcframework',
@@ -256,6 +290,88 @@ describe('podInstallEnvironment', () => {
       'IS_REANIMATED_PROFILING',
       'RCT_USE_LOCAL_RN_DEP',
     ]);
+  });
+
+  /**
+   * N4. `NAME=` used to be treated as unset, and Ruby does not agree: `ENV['X']`
+   * is truthy for an empty string, and `ENV['X'] != nil` is true for it too. So
+   * `IS_REANIMATED_PROFILING=` really does add `-DREANIMATED_PROFILING` and move
+   * RNReanimated's checksum, and passing it silently would be this contract
+   * telling the truth about an environment it is reading wrongly.
+   *
+   * The exceptions are the variables React Native compares with `== '1'`, where
+   * an empty string behaves exactly like unset; those stay quiet on purpose, and
+   * both halves are asserted so a future "just make them all strict" edit has to
+   * answer for it.
+   */
+  it('treats NAME= as set when Ruby reads it as set, and says so', () => {
+    const truthy = podInstallEnvironment({
+      IS_REANIMATED_PROFILING: '',
+      RCT_USE_LOCAL_RN_DEP: '',
+      USE_FRAMEWORKS: '',
+    });
+    expect(truthy.deviations.map((d) => d.name)).toEqual([
+      'USE_FRAMEWORKS',
+      'IS_REANIMATED_PROFILING',
+      'RCT_USE_LOCAL_RN_DEP',
+    ]);
+    // Reported, and never cleared: the value is passed through as the shell set it.
+    expect(truthy.env.IS_REANIMATED_PROFILING).toBe('');
+    expect(truthy.deviations[0].value).toBe('');
+    expect(truthy.deviations[0].expected).toBeNull();
+
+    // The `== '1'` comparisons: empty is the same as unset, so nothing to report.
+    const compared = podInstallEnvironment({
+      RCT_USE_PREBUILT_RNCORE: '',
+      RCT_USE_RN_DEP: '',
+      RCT_IGNORE_PODS_DEPRECATION: '',
+    });
+    expect(compared.deviations).toEqual([]);
+    // The two prebuild switches have a documented default, so empty is filled in.
+    expect(compared.env.RCT_USE_PREBUILT_RNCORE).toBe('1');
+    expect(compared.env.RCT_USE_RN_DEP).toBe('1');
+  });
+
+  /**
+   * The `why` of every entry is a citation, so a reader can check it. This one
+   * checks the citations *are* citations, and that the two empty-string
+   * behaviours are each marked, rather than the contract implying one rule for
+   * all eleven variables when Ruby has two.
+   */
+  it('says, for every variable, whether an empty value counts as set', () => {
+    const marked = POD_INSTALL_CONTRACT.filter(
+      (e) => e.emptyCountsAsSet === true
+    );
+    const unmarked = POD_INSTALL_CONTRACT.filter(
+      (e) => e.emptyCountsAsSet !== true
+    );
+    expect(marked.length).toBeGreaterThan(0);
+    expect(unmarked.length).toBeGreaterThan(0);
+    // An entry with a pinned default is one React Native fills in itself when
+    // unset, so it cannot also be "empty counts as set" - that would be a
+    // contract that overrides a value it just said it would keep.
+    for (const entry of POD_INSTALL_CONTRACT) {
+      if (entry.emptyCountsAsSet === true) {
+        expect(entry.value).toBeNull();
+      }
+    }
+  });
+
+  /**
+   * RCT_IGNORE_PODS_DEPRECATION is in the contract because react_native_pods.rb
+   * folds it into RCT_SKIP_CODEGEN, so it changes codegen - and therefore the
+   * ReactCodegen pods - while looking like nothing but a warning switch.
+   */
+  it('checks RCT_IGNORE_PODS_DEPRECATION, because it skips codegen too', () => {
+    const names = POD_INSTALL_CONTRACT.map((entry) => entry.name);
+    expect(names).toContain('RCT_IGNORE_PODS_DEPRECATION');
+    const { deviations } = podInstallEnvironment({
+      RCT_IGNORE_PODS_DEPRECATION: '1',
+    });
+    expect(deviations.map((d) => d.name)).toContain(
+      'RCT_IGNORE_PODS_DEPRECATION'
+    );
+    expect(deviations[0].why).toContain('RCT_SKIP_CODEGEN');
   });
 
   it('does not pretend CI or NODE_BINARY decide anything', () => {

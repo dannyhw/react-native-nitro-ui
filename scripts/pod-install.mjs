@@ -71,6 +71,21 @@ const REPO_ROOT = path.resolve(
 const REPO_LOCK = path.join(REPO_ROOT, 'example', 'ios', 'Podfile.lock');
 
 /**
+ * How long a probe may take before it is answered "unknown" rather than waited
+ * for (M2/N6): 60 seconds.
+ *
+ * A real `pod ipc spec` measured 0.3-0.4 s on this machine's CocoaPods, so this
+ * is ~150x the answer, and the room is for a first-run `pod repo update` or a
+ * cold RubyGems on a busy CI Mac. The number matters because preflight is on
+ * the release path, where the alternative to a timeout is the job's own
+ * 30-minute limit: a `pod` that prompts or a Ruby that hangs would consume all
+ * of it with no line saying which step. The other side of the choice is a false
+ * refusal, and a false refusal here costs one re-run with a message that names
+ * the timeout.
+ */
+export const PROBE_TIMEOUT_MS = 60_000;
+
+/**
  * @param {string[]} cmd
  * @param {Record<string, string | undefined>} env
  */
@@ -78,6 +93,7 @@ function probeVersion(cmd, env) {
   const result = spawnSync(cmd[0], [...cmd.slice(1), '--version'], {
     encoding: 'utf8',
     env,
+    timeout: PROBE_TIMEOUT_MS,
   });
   const version = (result.stdout ?? '').trim().split('\n').pop() ?? '';
   // CocoaPods prints just the version; a missing gem version exits non-zero.
@@ -92,27 +108,54 @@ function probeVersion(cmd, env) {
  * `SPEC CHECKSUMS` entry hashes. So it answers "would this machine rewrite the
  * lock" by watching the machine do the thing, not by inspecting what it has.
  *
- * Returns null when the question could not be asked (no such command, a pod
- * that errors), which callers must treat as "unknown", never as "fine".
+ * It runs with `cwd` set to the directory the install will run in, and only the
+ * canary podspec goes in the temp directory (M2). Those are the same decision:
+ * a probe measured somewhere else is not measuring this install.
+ * `COCOAPODS_BIN='bundle exec pod'` cannot find a Gemfile from a fresh temp
+ * directory, so a probe run there reads null on every machine and the release
+ * refuses unconditionally on a correctly set-up one; and an rbenv/asdf
+ * `.ruby-version` next to the app picks a different Ruby, and so a different
+ * `json`, than the global one the probe would have measured. The podspec is
+ * passed as an absolute path, so the working directory changes nothing about
+ * the question asked - only about which machine answers it.
  *
- * @param {string[]} cmd the chosen pod command, e.g. `['pod', '_1.17.0_']`
- * @param {Record<string, string | undefined>} env
+ * Returns null when the question could not be asked (no such command, a pod
+ * that errors, a probe that outlasts PROBE_TIMEOUT_MS), which callers must
+ * treat as "unknown", never as "fine".
+ *
+ * @param {object} options
+ * @param {string[]} options.cmd the chosen pod command, e.g. `['pod', '_1.17.0_']`
+ * @param {string} options.dir the directory to ask from - the Podfile's own
+ * @param {Record<string, string | undefined>} options.env
+ * @param {number} [options.timeoutMs] override for PROBE_TIMEOUT_MS, for tests
  * @returns {string | null} the style, or null
  */
-export function probeSerialisationStyle(cmd, env) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nitro-ui-pod-style-'));
+export function probeSerialisationStyle({ cmd, dir, env, timeoutMs }) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nitro-ui-pod-style-'));
   try {
-    const podspec = path.join(dir, 'NitroUiSerialisationCanary.podspec');
+    const podspec = path.join(tmp, 'NitroUiSerialisationCanary.podspec');
     fs.writeFileSync(podspec, SERIALISATION_CANARY_PODSPEC);
     const result = spawnSync(
       cmd[0],
       [...cmd.slice(1), 'ipc', 'spec', podspec],
-      { encoding: 'utf8', env, cwd: dir }
+      {
+        encoding: 'utf8',
+        env,
+        cwd: dir,
+        timeout: timeoutMs ?? PROBE_TIMEOUT_MS,
+        // A `pod` that wants to prompt (a plugin, a first-run repo update) would
+        // otherwise hang preflight until the job's own limit. stdin is a closed
+        // pipe instead, and the timeout is the backstop for whatever still hangs.
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
     );
+    // Non-zero is "could not ask", whatever it printed: a `pod` that errors
+    // halfway can still put a partial spec on stdout, and a partial spec is not
+    // evidence about a serialiser.
     if (result.status !== 0) return null;
     return emptyArrayStyleOf(result.stdout);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
@@ -168,13 +211,44 @@ export function resolvePodCommand({ dir, env }) {
  * half-versioned tree - `package.json`, `CHANGELOG.md` and `.changeset/` already
  * rewritten - on a machine that only wanted to preview a release.
  *
- * @param {{dir: string, env?: Record<string, string | undefined>}} options
+ * @param {{
+ *   dir: string,
+ *   env?: Record<string, string | undefined>,
+ *   timeoutMs?: number,
+ * }} options
  * @returns {{ style: string | null, problem: string | null, cmd: string[] }}
  */
-export function podSerialisationCheck({ dir, env = process.env }) {
+export function podSerialisationCheck({ dir, env = process.env, timeoutMs }) {
   const { cmd } = resolvePodCommand({ dir, env });
-  const style = probeSerialisationStyle(cmd, env);
+  const style = probeSerialisationStyle({ cmd, dir, env, timeoutMs });
   return { style, problem: podSerialisationProblem({ style }), cmd };
+}
+
+/**
+ * Whether an install in `dir` is the one this repo's lock contract governs.
+ *
+ * The contract is about one file: `example/ios/Podfile.lock`, the lock whose
+ * `SPEC CHECKSUMS` this repo commits and whose byte-compatibility with a
+ * maintainer Mac X13 is about. `scripts/smoke/*.sh` calls this same module with
+ * `--dir <generated app>/ios`, and that app's lock has never been compared with
+ * anything: telling its author "installing here would rewrite
+ * `example/ios/Podfile.lock` across almost every pod" is about a file they are
+ * not writing (N3). Comparing the resolved paths rather than a directory name
+ * is what keeps a `--dir example/ios` from any checkout, including a scratch
+ * copy of this repo, reading as the governed install it is.
+ *
+ * @param {string} dir the directory holding the Podfile
+ */
+function governsLockHere(dir) {
+  try {
+    return (
+      fs.realpathSync(path.join(dir, 'Podfile.lock')) ===
+      fs.realpathSync(REPO_LOCK)
+    );
+  } catch {
+    // No lock on either side: there is nothing to be compatible with.
+    return false;
+  }
 }
 
 /**
@@ -191,6 +265,13 @@ export function podSerialisationCheck({ dir, env = process.env }) {
  *   `pod install` does not, because it must stay usable on a machine set up
  *   some other way.
  * @param {Record<string, string | undefined>} [options.env]
+ * @param {string | null} [options.serialStyle] the style a caller has already
+ *   probed for this same `dir` (N6). `--fix` asks in order to refuse before it
+ *   touches the tree, and asking again here would spend the same third of a
+ *   second a second time and, worse, could measure a *different* answer if
+ *   something about the environment moved in between - which would mean acting
+ *   on the second one while having refused on the first. `undefined` means
+ *   nobody has asked yet and this function must.
  * @returns {{ status: number, stampRepaired: boolean, pod: string[] }}
  */
 export function installPods({
@@ -199,6 +280,7 @@ export function installPods({
   log = (m) => process.stdout.write(`${m}\n`),
   error = (m) => process.stderr.write(`${m}\n`),
   strict = false,
+  serialStyle,
   env = process.env,
 }) {
   const lockPath = path.join(dir, 'Podfile.lock');
@@ -206,40 +288,59 @@ export function installPods({
     ? fs.readFileSync(lockPath, 'utf8')
     : null;
   const { cmd, why, pin } = resolvePodCommand({ dir, env });
+  const governed = governsLockHere(dir);
 
   const { env: installEnv, pinned, deviations } = podInstallEnvironment(env);
 
   if (pinned.length > 0) {
     log(
       `pod-install: pinned ${pinned.join(', ')} - the values ` +
-        `'example/ios/Podfile.lock' resolves with. Unset here, so React Native ` +
-        'would have chosen the same thing; stated so CI and a laptop cannot ' +
-        'drift apart.'
+        (governed
+          ? `'${path.relative(process.cwd(), lockPath) || lockPath}' resolves ` +
+            'with. Unset here, so React Native would have chosen the same thing; ' +
+            'stated so CI and a laptop cannot drift apart.'
+          : "React Native's own defaults when these are unset, so the install is " +
+            'not at the mercy of a shell profile.')
     );
   }
   for (const deviation of deviations) {
     const expected =
       deviation.expected == null ? 'unset' : `set to ${deviation.expected}`;
+    // `NAME=` is what the environment really holds, but printed as
+    // `NAME= is in your environment` it reads like a bug in this message.
+    const held =
+      deviation.value === ''
+        ? `${deviation.name}=<set but empty>`
+        : `${deviation.name}=${deviation.value}`;
     log(
-      `pod-install: ${deviation.name}=${deviation.value} is in your ` +
-        `environment and the lock is resolved with it ${expected} - kept, ` +
+      `pod-install: ${held} is in your ` +
+        `environment and ${
+          governed
+            ? 'this repo’s lock is resolved with it'
+            : 'this repo’s contract has it'
+        } ${expected} - kept, ` +
         `because you set it. ${deviation.why}\n` +
         '  Expect a large Podfile.lock diff, and do not commit it on a release.'
     );
   }
 
-  // The json-gem check. See pod-install-lib.mjs for why an empty array's
-  // whitespace is a release blocker; this is the part that finds out, here,
-  // before anything is written.
-  const style = probeSerialisationStyle(cmd, installEnv);
-  const serialisation = podSerialisationProblem({ style });
-  if (serialisation != null) {
-    const message = `pod-install: ${serialisation}`;
-    if (strict) {
-      error(message);
-      return { status: 1, stampRepaired: false, pod: cmd };
+  // The json-gem check, for the one lock this repo can make a claim about. See
+  // pod-install-lib.mjs for why an empty array's whitespace is a release
+  // blocker; this is the part that finds out, here, before anything is written.
+  if (governed) {
+    const style =
+      serialStyle === undefined
+        ? probeSerialisationStyle({ cmd, dir, env: installEnv })
+        : serialStyle;
+    const serialisation = podSerialisationProblem({ style });
+    if (serialisation != null) {
+      const message = `pod-install: ${serialisation}`;
+      if (strict) {
+        error(message);
+        return { status: 1, stampRepaired: false, pod: cmd };
+      }
+      log(message);
     }
-    log(message);
   }
 
   log(

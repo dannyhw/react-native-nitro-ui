@@ -27,6 +27,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -452,6 +453,25 @@ if [ "$1" = "--version" ]; then echo "1.17.0"; exit 0; fi
 # measuring a fixture that rewrites the tree just to be asked a question.
 # FAKE_POD_JSON_STYLE=expanded answers the way a json gem before 2.8.0 does.
 if [ "$1" = "ipc" ] && [ "$2" = "spec" ]; then
+  # M2: a real "pod ipc spec" answers from wherever it is run, and a
+  # "bundle exec pod" can only answer from under the directory holding its
+  # Gemfile. So this fixture refuses from anywhere else: that is what turns a
+  # probe spawned in a scratch temp directory into "unknown" rather than a
+  # quiet pass. $PWD is also where a .ruby-version would be looked up.
+  if [ ! -f "$PWD/Podfile" ]; then
+    echo "fake-pod: no Podfile in $PWD, cannot answer" >&2
+    exit 10
+  fi
+  printf '%s\n' "$PWD" > "\${FAKE_POD_CWD_RECORD:-/dev/null}"
+  # One line per probe asked, so a test can count how many times a single run
+  # measures the machine (N6: --fix asks once and passes the answer along).
+  printf 'probe\n' >> "\${FAKE_POD_PROBE_LOG:-/dev/null}"
+  if [ -n "$FAKE_POD_IPC_FAILS" ]; then
+    # N2: an erroring pod that still prints a partial spec. Those bytes look
+    # compact; only the exit status says the answer is worthless.
+    printf '%s\n' '{' '  "name": "NitroUiSerialisationCanary",' '  "dependencies": {' '    "react-native-nitro-ui": []'
+    exit 1
+  fi
   if [ "\${FAKE_POD_JSON_STYLE:-compact}" = "expanded" ]; then
     printf '%s\n' '{' '  "name": "NitroUiSerialisationCanary",' '  "dependencies": {' '    "react-native-nitro-ui": [' '' '    ]' '  }' '}'
   else
@@ -512,6 +532,60 @@ exit 0
             ...env,
           },
         }),
+      /**
+       * The same, running the *copy* of the CLI that lives in this checkout.
+       *
+       * `status` runs this repository's real script with its root redirected, which
+       * is right for everything that finds the tree through
+       * `NITRO_UI_LOCK_SYNC_ROOT`. But `pod-install.mjs` decides which lock its
+       * serialisation contract is about from its own location on disk, and through
+       * the real script that is the real `example/ios/Podfile.lock` - so the
+       * contract would decline to apply here, and a test about it would be silently
+       * about nothing. The copy computes its own root, which is this scratch tree.
+       */
+      statusLocal: (args = ['--fix'], env = {}) =>
+        spawnSync(
+          process.execPath,
+          [
+            realpathSync(join(dir, 'scripts', 'sync-example-lock.mjs')),
+            ...args,
+          ],
+          {
+            cwd: dir,
+            encoding: 'utf8',
+            timeout: 120_000,
+            env: {
+              ...process.env,
+              NITRO_UI_LOCK_SYNC_ROOT: dir,
+              COCOAPODS_BIN: fakePod,
+              ...env,
+            },
+          }
+        ),
+      /**
+       * Runs a small module against the copied `pod-install.mjs` in this checkout.
+       *
+       * Some properties belong to the module rather than to the CLI - which
+       * directory the probe asks from, what a hanging `pod` costs, what a
+       * generated consumer app is told - and the only way to see them is to call
+       * the exported function. It runs as a child process, not a dynamic import,
+       * because `pod-install.mjs` resolves its own repo root from `import.meta.url`
+       * and jest transforms that away; a child gets the real thing, which is the
+       * difference between testing the module and testing a stub of it.
+       */
+      driver: (source, { env = {}, timeout = 120_000 } = {}) => {
+        const file = join(
+          dir,
+          `driver-${Math.random().toString(36).slice(2)}.mjs`
+        );
+        writeFileSync(file, source);
+        return spawnSync(process.execPath, [file], {
+          cwd: dir,
+          encoding: 'utf8',
+          timeout,
+          env: { ...process.env, COCOAPODS_BIN: fakePod, ...env },
+        });
+      },
       /**
        * Runs a whole `&&` chain - a real `package.json` script - in this checkout.
        *
@@ -579,6 +653,148 @@ exit 0
     expect(out.stderr).toContain(
       'React-Core: 9999999999999999999999999999999999999999'
     );
+  });
+
+  it('asks the probe from the directory the install will run in (M2)', () => {
+    // The probe has to be asked *here*, not from a scratch directory, for two
+    // reasons that both end in a wrong answer about the machine: a
+    // `COCOAPODS_BIN='bundle exec pod'` can only answer from under the directory
+    // holding its Gemfile (used by scripts/smoke/rn-cli.sh), and a .ruby-version
+    // next to the app selects the Ruby - so the json - that the install will
+    // really use. The fake pod records $PWD, and refuses to answer at all from a
+    // directory with no Podfile, so a probe run somewhere else cannot pass.
+    const repo = scratchCheckout();
+    const recorded = join(repo.dir, 'probe-cwd');
+    const { status, stdout } = repo.driver(
+      `import { podSerialisationCheck } from './scripts/pod-install.mjs';
+const dir = new URL('./example/ios', import.meta.url).pathname;
+const { style, cmd } = podSerialisationCheck({ dir });
+process.stdout.write('STYLE ' + style + ' CMD ' + cmd.join(' ') + '\\n');
+`,
+      { env: { FAKE_POD_CWD_RECORD: recorded } }
+    );
+    expect(status).toBe(0);
+    expect(stdout).toContain('STYLE compact');
+    // The exact directory, not merely a directory that happens to hold a Podfile.
+    // realpath on both sides: a shell sets $PWD through /var -> /private/var.
+    expect(realpathSync(readFileSync(recorded, 'utf8').trim())).toBe(
+      realpathSync(join(repo.dir, 'example/ios'))
+    );
+  });
+
+  it('refuses when the probe errors, even though it printed a compact-looking spec (N2)', () => {
+    // The exit status is the whole guard here. This fake pod prints a spec that
+    // reads as compact and then exits 1, which is what a `pod` that dies halfway
+    // through looks like: trusting stdout would call a broken machine a good one,
+    // and the release would proceed and churn.
+    const repo = scratchCheckout();
+    const out = repo.status(['--fix'], { FAKE_POD_IPC_FAILS: '1' });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toContain('could not be read');
+    // And not the compact/expanded message, which would say something was measured.
+    expect(out.stderr).not.toContain('blank line inside them');
+    expect(repo.read('example/ios/Podfile.lock')).toBe(LOCK);
+    expect(repo.dirty()).toBe('');
+  });
+
+  it('gives up on a probe that hangs rather than waiting for the job (N6)', () => {
+    // Two things have to be true: the probe must not wait forever, and the
+    // budget it waits for has to be a stated number. The mechanism is exercised
+    // with a pod that never exits - remove the `timeout` from the spawn and this
+    // hangs until the child's own timeout, which is the same failure preflight
+    // has on a real runner (a `pod` that prompts, a job that burns its 30
+    // minutes). The budget is asserted as an export so changing 60 s is a line in
+    // the diff; the call below injects a short one because a unit test should not
+    // pay 60 s to learn the same fact.
+    const repo = scratchCheckout();
+    const hang = join(repo.dir, 'hanging-pod.sh');
+    // `exec` so the shell is replaced by sleep: spawnSync's timeout signals the
+    // direct child, and a sleep left behind as a grandchild would keep the stdout
+    // pipe open and hold spawnSync open with it - which is a hang, not a timeout.
+    writeFileSync(
+      hang,
+      '#!/bin/sh\nif [ "$1" = "ipc" ]; then exec sleep 300; fi\nexit 0\n'
+    );
+    chmodSync(hang, 0o755);
+    const start = Date.now();
+    const { status, stdout } = repo.driver(
+      `import { probeSerialisationStyle, PROBE_TIMEOUT_MS } from './scripts/pod-install.mjs';
+const dir = new URL('./example/ios', import.meta.url).pathname;
+const style = probeSerialisationStyle({
+  cmd: [${JSON.stringify(hang)}],
+  dir,
+  env: process.env,
+  timeoutMs: 1500,
+});
+process.stdout.write('STYLE ' + style + ' BUDGET ' + PROBE_TIMEOUT_MS + '\\n');
+`
+    );
+    expect(status).toBe(0);
+    expect(stdout).toContain('STYLE null');
+    expect(stdout).toContain('BUDGET 60000');
+    // Both bounds matter. The lower says the probe really did wait on a slow
+    // answer and was cut off - without it, a command that failed instantly would
+    // look identical and the timeout would be untested. The upper says it did not
+    // wait for the sleep.
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(1400);
+    expect(elapsed).toBeLessThan(30_000);
+
+    // And the default really is threaded into the spawn, not just exported:
+    // wiring, checked at the source because the only other way to see it is to
+    // pay the 60 s. Removing `timeout:` from the options is what N6 is about.
+    const src = readFileSync(resolve(root, 'scripts/pod-install.mjs'), 'utf8');
+    expect(src).toMatch(/timeout: timeoutMs \?\? PROBE_TIMEOUT_MS/);
+  });
+
+  it('says nothing about example/ios/Podfile.lock when installing some other app (N3)', () => {
+    // scripts/smoke/*.sh installs *generated consumer apps* through this same
+    // module. Their lock has never been compared with anything, so a warning
+    // that "installing here would rewrite example/ios/Podfile.lock across almost
+    // every pod" is about a file that app's author is not writing, and the
+    // serialisation contract is not theirs to satisfy.
+    const repo = scratchCheckout();
+    const { status, stdout, stderr } = repo.driver(
+      `import { installPods } from './scripts/pod-install.mjs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+const dir = new URL('./consumer/ios', import.meta.url).pathname;
+mkdirSync(dir, { recursive: true });
+writeFileSync(dir + '/Podfile', '# a generated app\\n');
+writeFileSync(dir + '/Podfile.lock', 'PODS:\\n  - SomePod (1.0.0):\\n\\nCOCOAPODS: 1.17.0\\n');
+const { status } = installPods({ dir, strict: true });
+process.stdout.write('STATUS ' + status + '\\n');
+`,
+      // An expanded-style pod: the thing that would refuse, if the contract
+      // applied to this app. It must not even be asked about this lock.
+      { env: { FAKE_POD_JSON_STYLE: 'expanded' } }
+    );
+    expect(status).toBe(0);
+    expect(stdout).toContain('STATUS 0');
+    expect(stdout + stderr).not.toContain('SPEC CHECKSUMS');
+    expect(stdout + stderr).not.toContain('Podfile.lock was written');
+  });
+
+  it('asks the machine once per --fix, not once per stage (N6)', () => {
+    // `--fix` measures the serialiser in order to refuse before it touches the
+    // tree, and then has to act on that same answer. Asking twice is not just a
+    // wasted third of a second: the two answers could disagree, and the run would
+    // have refused on one and installed on the other. The fake pod counts the
+    // times it is asked, so this is a count and not a reading of the log.
+    const repo = scratchCheckout();
+    const log = join(repo.dir, 'probe-log');
+    const out = repo.statusLocal(['--fix'], { FAKE_POD_PROBE_LOG: log });
+    expect(out.status).toBe(0);
+    process.stderr.write(
+      'OUT=' +
+        JSON.stringify({
+          status: out.status,
+          out: out.stdout,
+          err: out.stderr,
+        }) +
+        '\n'
+    );
+    const asks = readFileSync(log, 'utf8').trim().split('\n');
+    expect(asks).toEqual(['probe']);
   });
 
   it('refuses a refresh on a machine whose json gem would rewrite every checksum', () => {
