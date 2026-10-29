@@ -71,6 +71,9 @@ import {
 /** The Fabric name - what the sizing engine files sizes under. */
 const COMPONENT = 'NitroUiMenu';
 
+/** The sibling this control claims to size like, filed under its own name. */
+const BUTTON_COMPONENT = 'NitroUiButton';
+
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
   queryByTestId(testId: string): ViewInfo | null;
@@ -103,6 +106,20 @@ const captureHybrid =
   (testId: string) =>
   (view: MenuHandle): void => {
     handles.set(testId, view);
+  };
+
+/**
+ * The Button's handle, declared the same way (D14) and only as wide as the one
+ * claim below needs: a Button and a Menu with the same props are the same box.
+ */
+type ButtonHandle = {
+  measureContent(): { width: number; height: number };
+};
+const buttonHandles = new Map<string, ButtonHandle>();
+const captureButton =
+  (testId: string) =>
+  (view: ButtonHandle): void => {
+    buttonHandles.set(testId, view);
   };
 
 /** Every `onSelect` the app has reported, in order. */
@@ -227,6 +244,21 @@ function boxOf(testId: string): ViewInfo | null {
 
 function measured(testId: string): Size | null {
   return handles.get(testId)?.measureContent() ?? null;
+}
+
+function measuredButton(testId: string): Size | null {
+  return buttonHandles.get(testId)?.measureContent() ?? null;
+}
+
+/** Poll until the *Button* control reports a size. */
+async function waitForMeasuredButton(testId: string, what: string) {
+  return await pollUntil(
+    () => {
+      const size = measuredButton(testId);
+      return size != null && size.width > 0 && size.height > 0 ? size : null;
+    },
+    () => new Error(`"${testId}" (${what}) never reported a measured size.`)
+  );
 }
 
 function report(testId: string): MenuReport {
@@ -406,11 +438,20 @@ function sizingKey(
 /** A size that is *not* any menu's size, planted as the engine's first answer. */
 const WRONG_SIZE = { width: 14.5, height: 73.5 };
 
-/** Plant a wrong answer for several configurations, then drop the cache once. */
-function poisonConfigurations(keys: readonly string[]): void {
+/**
+ * Plant a wrong answer for several configurations, then drop the cache once.
+ *
+ * The component is a parameter because the parity gate poisons the *Button's*
+ * entry too: two controls have to earn two sizes before their boxes may be
+ * compared.
+ */
+function poisonConfigurations(
+  keys: readonly string[],
+  component: string = COMPONENT
+): void {
   for (const key of keys) {
     nitroUiCore.seedSizingSize(
-      COMPONENT,
+      component,
       key,
       WRONG_SIZE.width,
       WRONG_SIZE.height
@@ -528,6 +569,7 @@ const columnStyle = { gap: 8 } as const;
 afterEach(() => {
   cleanup();
   handles.clear();
+  buttonHandles.clear();
   selectLog.length = 0;
   stateLog.length = 0;
   nitroUiCore.setSizingTraceEnabled(false);
@@ -603,6 +645,64 @@ describe('Menu · G7a', () => {
     expect(cold.corrections).toBeGreaterThanOrEqual(
       VARIANTS.length + TRIGGER_SIZES.length
     );
+  });
+
+  it('takes exactly the box its Button twin takes', async () => {
+    // Every other sizing gate in this file only requires a box to be *earned*,
+    // so a trigger laid out at its label's text box - no fill, no padding -
+    // passes all of them. That is precisely the bug this test exists for: the
+    // iOS trigger shipped that way (53.33x20.33 against Button's 77.33x34.33,
+    // measured in `docs/components/menu.md`) and every gate above stayed green.
+    // Parity against a real Button needs no constant, which is what makes it
+    // cheap to keep.
+    const key = sizingKey('filled', 'medium', 'Twin');
+    poisonConfigurations([key]);
+    poisonConfigurations([key], BUTTON_COMPONENT);
+    const before = stats();
+    await render(
+      <View style={columnStyle}>
+        <Menu
+          title="Twin"
+          group={GROUP}
+          variant="filled"
+          testID="twin-menu"
+          hybridRef={captureHybrid('twin-menu')}
+        />
+        <Button
+          title="Twin"
+          variant="filled"
+          testID="twin-button"
+          hybridRef={captureButton('twin-button')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('twin-menu');
+    await waitForTestId('twin-button');
+    const menuBox = await waitForBox(
+      'twin-menu',
+      await waitForMeasured('twin-menu', 'the menu'),
+      'the menu'
+    );
+    const buttonBox = await waitForBox(
+      'twin-button',
+      await waitForMeasuredButton('twin-button', 'the Button'),
+      'the Button'
+    );
+    await settle(300);
+    const cold = delta(before, stats());
+    console.log(
+      `trigger parity: menu=${describeSize(menuBox)} ` +
+        `button=${describeSize(buttonBox)} ` +
+        `corrections=${String(cold.corrections)}`
+    );
+    // Neither box is inherited: both poisoned entries had to be replaced, so
+    // parity cannot be two declared fallbacks agreeing by accident.
+    expect(sameSize(menuBox, WRONG_SIZE)).toBe(false);
+    expect(sameSize(buttonBox, WRONG_SIZE)).toBe(false);
+    expect(cold.corrections).toBeGreaterThanOrEqual(2);
+    // And the one is the other's - the claim Q1 section 2 makes about the label.
+    expect(sameSize(menuBox, buttonBox)).toBe(true);
   });
 
   it('keeps the trigger when only the list changes', async () => {
