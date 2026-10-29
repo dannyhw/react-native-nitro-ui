@@ -1306,14 +1306,23 @@ describe('Menu · inside a Host', () => {
       // `<Host>` is the documented passthrough on iOS (D23): the child keeps its own
       // React Native view, so the honest claim is that hosting changes nothing the
       // box is made of - not an Android geometry that does not exist here.
-      const box = await waitForTestId('hosted-menu');
-      expect(box.width).toBeGreaterThan(10);
-      expect(box.height).toBeGreaterThan(10);
+      // The measurement is taken first and the frame is then waited for, in that
+      // order: the first frame is the declared fallback, so reading the frame once
+      // compares a pre-correction box with a post-correction measurement and passes
+      // only when the correction happened to land first. It did exactly that until
+      // this trigger grew its Button chrome, and then the window closed. `waitForBox`
+      // asks for the size the control earned, like every other sizing gate here.
       const content = await waitForMeasured(
         'hosted-menu',
         'the hosted trigger'
       );
-      expect(sameSize(box, content)).toBe(true);
+      const box = await waitForBox(
+        'hosted-menu',
+        content,
+        'the hosted trigger'
+      );
+      expect(box.width).toBeGreaterThan(10);
+      expect(box.height).toBeGreaterThan(10);
       expectUnanswerable(report('hosted-menu'));
       console.log(
         `iOS hosted box: ${describeSize(box)} measured ${describeSize(content)}`
