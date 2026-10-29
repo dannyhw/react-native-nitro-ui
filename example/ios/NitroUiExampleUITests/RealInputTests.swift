@@ -46,6 +46,7 @@ final class RealInputTests: XCTestCase {
     static let segmentedTab = "tab-segmented"
     static let datePickerTab = "tab-datepicker"
     static let pickerTab = "tab-picker"
+    static let menuTab = "tab-menu"
     static let hostTab = "tab-host"
   }
 
@@ -66,6 +67,8 @@ final class RealInputTests: XCTestCase {
     static let dateEvents = "real-input-date-events"
     static let pickerIndex = "real-input-picker-index"
     static let pickerEvents = "real-input-picker-events"
+    static let menuPick = "real-input-menu-pick"
+    static let menuEvents = "real-input-menu-events"
     static let dropArm = "real-input-drop-button"
     static let dropRemount = "real-input-drop-remount"
     static let dropGone = "real-input-drop-gone"
@@ -1984,6 +1987,170 @@ final class RealInputTests: XCTestCase {
     _ = try waitForOption(
       "Cinder",
       "the enabled Picker's menu to open, after the disabled one refused"
+    )
+  }
+
+  /// A real tap must open the `Menu`'s own presentation, a real tap on a row must
+  /// reach JS as a pick, and a disabled row must take none.
+  ///
+  /// This is the case the harness cannot see at all: it presses through
+  /// `nuiTestSelectRow`, which is the model's pick path, and no touch it injects has
+  /// ever opened a SwiftUI `Menu` (`G2-button.report.md` measured that for every
+  /// button style, and `Menu.harness.tsx` records the same refusal). So three claims
+  /// live only here, where the touch is a real HID event:
+  ///
+  /// 1. **The trigger's name is the one the library set.** `MenuContent.body` applies
+  ///    `.accessibilityLabel`, and the only tree that can show it is the one VoiceOver
+  ///    walks. The React Native wrapper carries the same string from its own
+  ///    `accessibilityLabel` prop, so the assertion has to aim at the hosted control
+  ///    inside it — reading the wrapper would pass with the SwiftUI modifier deleted.
+  ///    `hostedControl` is what reaches it, and the identifier check below is what
+  ///    refuses a reading that quietly fell back to the wrapper.
+  /// 2. **A real finger opens it**, which every comment in `HybridNitroUiMenu.swift`
+  ///    has so far only assumed.
+  /// 3. **A pick reaches JS and a disabled row does not**, with the twin row after it
+  ///    as the barrier — `onSelect` is the whole of the control's output on iOS, since
+  ///    D32 rules that a SwiftUI presentation reports no `onOpen`/`onClose`.
+  func testRealInputMenu() throws {
+    try goToTab(Tab.menuTab, showing: Echo.menuPick)
+    let alpha = "Alpha"
+    let bravo = "Bravo"
+    let locked = "Locked row"
+
+    // 1. The announcement, before anything is presented: the popup is another
+    //    window's tree once it is up, and the trigger is the only node worth reading.
+    let anchor = try required("real-input-menu", as: "the Menu")
+    let trigger = try hostedControl(in: "real-input-menu", as: "the Menu's trigger")
+    XCTAssertNotEqual(
+      trigger.identifier,
+      anchor.identifier,
+      "the node read for the announcement should be the hosted SwiftUI control and not the "
+        + "React Native view that carries the testID - the wrapper's own name comes from RN's "
+        + "accessibilityLabel prop, so reading it would say nothing about what nitro-ui passed "
+        + "down to the control. Both read id=\"\(anchor.identifier)\"."
+    )
+    XCTAssertEqual(
+      trigger.label,
+      "Real-input menu",
+      "the trigger's name should be the accessibilityLabel the library set on the SwiftUI "
+        + "Menu. Without `.accessibilityLabel` the control takes its name from its own title "
+        + "and says \"Actions\", which is what a VoiceOver user would hear."
+    )
+    XCTAssertEqual(
+      try read(Echo.menuPick),
+      "-",
+      "the Menu should have reported no pick before a touch"
+    )
+    XCTAssertEqual(
+      try read(Echo.menuEvents),
+      "none",
+      "and no event of any kind"
+    )
+    XCTAssertEqual(
+      optionLabels(containing: bravo),
+      0,
+      "no menu is open yet, so a row may not be on screen"
+    )
+
+    // 2. A real tap opens it. The row is the witness that the press arrived, so the
+    //    trigger is pressed until one of its rows is up.
+    try tapUntilOption(
+      "real-input-menu",
+      as: "the Menu trigger",
+      option: bravo,
+      waitingFor: "the real tap on the trigger"
+    )
+    _ = try waitForOption(bravo, "the menu to open")
+    XCTAssertEqual(
+      try read(Echo.menuPick),
+      "-",
+      "opening a menu is not a choice - nothing may be reported until a row is tapped"
+    )
+
+    // 3. The row vocabulary, as the presentation publishes it: the row the group
+    //    disables is disabled to a screen reader too, and its twin is not.
+    XCTAssertFalse(
+      optionRow(locked).isEnabled,
+      "a disabled row should report itself not enabled through accessibility, so VoiceOver "
+        + "refuses it too (twin \"\(alpha)\" isEnabled=\(optionRow(alpha).isEnabled))"
+    )
+    XCTAssertTrue(
+      optionRow(alpha).isEnabled,
+      "and an ordinary row should not - which is what proves the line above measured a "
+        + "refusal rather than a presentation that stopped answering"
+    )
+
+    // 4. The disabled row takes no pick. Pressed once, deliberately: the correct
+    //    outcome is that nothing is reported, so there is no witness to retry towards,
+    //    and a second press would land somewhere else in whatever the first left open.
+    //    The step after this one is what turns the silence into a refusal.
+    try optionRow(locked).fingerTap()
+    XCTAssertEqual(
+      try read(Echo.menuPick),
+      "-",
+      "a real tap on the disabled row should report no pick"
+    )
+
+    // 5. The pick that does arrive. Re-opened first, because the tap above may have
+    //    closed the presentation (Material does; SwiftUI's answer is not asserted) and
+    //    `tapOptionUntilValue` needs the row to be there to press.
+    try tapUntilOption(
+      "real-input-menu",
+      as: "the Menu trigger",
+      option: bravo,
+      waitingFor: "the real tap that reopens the menu"
+    )
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: bravo,
+        echo: Echo.menuPick,
+        expected: "bravo",
+        waitingFor: "the real tap on the row \"\(bravo)\""
+      ),
+      "bravo",
+      "a real tap on a menu row should reach JS as that row's id"
+    )
+    // D32, in the form a reader can check against the same echo Android reads: iOS
+    // reports the pick and nothing else. `open`/`close` here would mean the library
+    // invented a presentation lifecycle SwiftUI never told it about.
+    XCTAssertEqual(
+      try read(Echo.menuEvents),
+      "select bravo",
+      "one pick on iOS should report the pick alone - a SwiftUI Menu keeps its open state "
+        + "to itself, so `onOpen`/`onClose` never fire (DECISIONS D32)"
+    )
+    XCTAssertEqual(
+      optionLabels(containing: bravo),
+      0,
+      "a pick should take its own menu down - nothing on screen should still carry a row's "
+        + "name. iOS reports no dismissal, so this is the only witness that the presentation "
+        + "went away by itself."
+    )
+
+    // 6. The barrier for step 4: the same screen, the same popup, an ordinary row that
+    //    does report. A dropped tap cannot fake this - it is the same helper that
+    //    pressed the disabled row.
+    try tapUntilOption(
+      "real-input-menu",
+      as: "the Menu trigger",
+      option: alpha,
+      waitingFor: "the real tap that reopens the menu for the twin row"
+    )
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: alpha,
+        echo: Echo.menuPick,
+        expected: "alpha",
+        waitingFor: "the real tap on the row \"\(alpha)\""
+      ),
+      "alpha",
+      "the enabled row, tapped the same way, should report a pick - so the silence above "
+        + "measured a refusal and not a screen that stopped answering"
+    )
+    XCTAssertEqual(
+      try read(Echo.menuEvents),
+      "select bravo > select alpha",
+      "two picks should report two picks, in order, with no open/close between them"
     )
   }
 
