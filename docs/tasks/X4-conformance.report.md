@@ -46,11 +46,12 @@ its own numbers.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1278 tests / 48 suites | `a68b9f868f0b` | 2 m 41 s | start 3.4 / med 4.9 / max 5.5 |
-| `harness:ios` | **PASS** | 196 tests / 14 suites | `a68b9f868f0b` (ios tree) | 2 m 57 s | start 5.0 / med 4.1 / max 6.3 |
-| `harness:android` | **PASS** | 245 tests / 14 suites | `a68b9f868f0b` (android tree) | 7 m 01 s | start 5.5 / med 4.4 / max 5.8 |
-| `real-input:ios` | **PASS** | — | `a68b9f868f0b` (ios tree) | 11 m 26 s | start 2.4 / med 6.8 / max 20.7 |
-| `real-input:android` | **PASS** | — | `a68b9f868f0b` (android tree) | 19 m 17 s | start 5.0 / med 2.7 / max 5.0 |
+| `check` | **PASS** | 1322 tests / 49 suites | `f21b8a191a4e` | 2 m 35 s | start 5.3 / med 4.5 / max 6.3 |
+| `harness:ios` | **PASS** | 203 tests / 14 suites | `f21b8a191a4e` (ios tree) | 3 m 10 s | start 4.6 / med 3.0 / max 4.6 |
+| `harness:android` | **PASS** | 252 tests / 14 suites | `f21b8a191a4e` (android tree) | 7 m 16 s | start 3.0 / med 2.5 / max 3.6 |
+| `real-input:ios` | **PASS** | — | `f21b8a191a4e` (ios tree) | 13 m 28 s | start 2.6 / med 5.3 / max 29.9 |
+| `real-input:android` | **PASS** | — | `f21b8a191a4e` (android tree) | 19 m 29 s | start 5.1 / med 2.5 / max 5.1 |
+| `harness:ios:Conformance` | **PASS** | 35 tests / 1 suites | `f21b8a191a4e` (ios tree) | 1 m 10 s | start 4.8 / med 4.9 / max 6.3 |
 
 ## Bench
 
@@ -235,3 +236,24 @@ recorded debt, and it would exit red if a fifth appeared or one of these four st
 - `real-input:ios` is not required for this round (nothing iOS real-input was added), and it
   was run anyway as a regression check on `support.mjs`: `Suite.finish` is shared and the
   `auxiliary` list now prints in its summary on both platforms. Green, 11 m 26 s.
+
+## Fix round 1
+
+M1: iOS a11y measures in Swift, the rule lives in `a11y.mjs`, wrapper excluded, debt per
+platform. M2: every control has a residue probe or a stated reason. M3: the ledger must rise
+by K before "returned to baseline" means anything. M5: registration is read once, before any
+seed. N1 bounds an actionable home by area (gap measured: 1.5× vs 17.6×); N2 scans component
+sources; N3 parses FIXTURES rows, looks numbers up inside a test; N4/N5 say what the code
+cannot do; N7 lists HEAD's tree; N8 makes a blocked scan a problem; N9 gone. N6: new scripts
+accepted.
+
+Red proofs — mutation → line that went red:
+
+- recycle ×4, each `prepareForRecycle` losing displayed value + one-shot → Switch `reads
+  conformance-switch:false where the props say …:true`; Slider `0.5 where the props say 0.0`;
+  DatePicker `1799971200000 where … 1780527600000`; Picker `…again emits reads` (empty)
+- leak, Android Switch dropping without `host.drop()` → `8 ledger entry(ies) survived 8
+  drops`, +8 registry, Switch only
+- unit → per-test registration read; comment-only fixture row; renamed FIXTURES;
+  describe-body lookups; no area bound; `ls-files`; note-shaped return; scan reporting its own
+  fixtures
