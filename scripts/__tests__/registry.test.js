@@ -631,10 +631,9 @@ describe('the generated tables cover what they claim', () => {
       ].map((m) => m[1]);
     };
     const regions = (files) =>
-      [
-        'bench/src/implementations/index.ts',
-        'scripts/bench/lib.mjs',
-      ].map((path) => [path, armIds(files[path] ?? readRepo(path))]);
+      ['bench/src/implementations/index.ts', 'scripts/bench/lib.mjs'].map(
+        (path) => [path, armIds(files[path] ?? readRepo(path))]
+      );
 
     // The tree in front of us: every hostable-and-benched control is listed, and the
     // hostable-but-not-benched one is not.
