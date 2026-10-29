@@ -16,8 +16,10 @@
 import { describe, expect, it } from '@jest/globals';
 
 import {
+  expandOnly,
   isRepoPath,
   missingReportPaths,
+  ONLY_GROUPS,
   reportCandidates,
   reportTableProblems,
   summarise,
@@ -308,12 +310,108 @@ describe("the report's gate table against the ledger", () => {
     ).toEqual([]);
   });
 
+  it('ignores inline-code markup around a cell, which is not a changed result', () => {
+    // `gate.mjs table` writes the gate name as `` `check` ``; a report that pastes it and a
+    // report that retypes it without the ticks have the same row. Insisting on byte equality
+    // would send a person back to re-paste markup, which is not what this check is for.
+    const ticked = generated.map((line) =>
+      line.replace('| check |', '| `check` |')
+    );
+    const unadorned = [
+      '| Gate | Result | Tree | Notes |',
+      '| --- | --- | --- | --- |',
+      '| check | PASS | `abc1234` | 41 s |',
+      '| harness:ios | PASS | `abc1234` | 3 m 12 s |',
+    ];
+    expect(reportTableProblems(unadorned.join('\n'), ticked)).toEqual([]);
+  });
+
+  it('still reads a changed number inside a backticked cell as a changed row', () => {
+    // The other half: normalising *markup* must not become normalising *content*, or a
+    // different code tree hides inside the same-looking ticks.
+    const ticked = generated.map((line) =>
+      line.replace('| check |', '| `check` |')
+    );
+    const report = [
+      '| Gate | Result | Tree | Notes |',
+      '| --- | --- | --- | --- |',
+      '| `check` | PASS | `deadbee` | 41 s |',
+      '| harness:ios | PASS | `abc1234` | 3 m 12 s |',
+    ].join('\n');
+    expect(reportTableProblems(report, ticked).join('\n')).toContain(
+      'A stale row is a claim'
+    );
+  });
+
+  it('quotes a gate name without doubling the markup it is already in', () => {
+    // The message puts the name in backticks of its own; passing the raw cell through printed
+    // `` ``check`` `` in a terminal, which reads like a typo in the tool.
+    const report = '| Gate | Result |\n| --- | --- |\n| check | PASS |';
+    const ticked = ['| `harness:ios` | PASS |'];
+    expect(reportTableProblems(report, ticked)[0]).toContain(
+      'no row for `harness:ios`'
+    );
+  });
+
   it('compares the whole row, so a different code tree cannot pass as the same gate', () => {
     const report = '| harness:ios | PASS | `abc1234` | 3 m 12 s |';
     const moved = generated.map((line) =>
       line === report ? '| harness:ios | STALE | `abc9999` | 3 m 12 s |' : line
     );
     expect(reportTableProblems(report, moved).join('\n')).toContain('STALE');
+  });
+});
+
+/* --------------------------------- the `--only` groups ---------------------------- */
+
+describe('the `--only` groups', () => {
+  it('expands a group into the section names the command checks', () => {
+    expect(expandOnly(['report'])).toEqual(['report-paths', 'report-table']);
+  });
+
+  it('keeps the order a person typed, so the output matches the flag', () => {
+    expect(expandOnly(['coverage', 'report'])).toEqual([
+      'coverage',
+      'report-paths',
+      'report-table',
+    ]);
+    expect(expandOnly(['report', 'coverage'])).toEqual([
+      'report-paths',
+      'report-table',
+      'coverage',
+    ]);
+  });
+
+  it('passes an unknown name through, so the caller can still refuse it', () => {
+    // Silently dropping a typo is how a flag stops meaning anything: `--only coverage,covrag`
+    // must not quietly become `--only coverage`.
+    expect(expandOnly(['bogus'])).toEqual(['bogus']);
+    expect(expandOnly(['report', 'nope'])).toEqual([
+      'report-paths',
+      'report-table',
+      'nope',
+    ]);
+  });
+
+  it('leaves an explicit list of sections alone', () => {
+    expect(expandOnly(['registry', 'need'])).toEqual(['registry', 'need']);
+    expect(expandOnly([])).toEqual([]);
+  });
+
+  it('names only real sections in its groups', () => {
+    // The command validates against its own section list; a group pointing at a section that
+    // has since been renamed would fail at run time with a message about itself.
+    const sections = [
+      'registry',
+      'coverage',
+      'markers',
+      'report-paths',
+      'need',
+      'report-table',
+    ];
+    for (const members of Object.values(ONLY_GROUPS)) {
+      for (const member of members) expect(sections).toContain(member);
+    }
   });
 });
 

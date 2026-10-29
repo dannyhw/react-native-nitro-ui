@@ -141,11 +141,13 @@ export function isRepoPath(cited) {
 }
 
 /**
- * The report's own gate table, as the lines `gate.mjs table` prints.
+ * The report's own gate table, against the lines `gate.mjs table` prints.
  *
- * Compared against the freshly generated table so a report cannot keep claiming a gate
- * passed on a tree the report no longer describes. Only the `| Gate |` rows are compared:
- * a report is prose around the table, and pasting is allowed to be wrapped.
+ * Compared so a report cannot keep claiming a gate passed on a tree the report no longer
+ * describes. Only the table *rows* are compared — a report is prose around them — and cells
+ * are compared with inline-code markup stripped from their ends, because the ledger writes
+ * ``| `check` |`` and a report may render `| check |`. Everything inside a cell, including
+ * the numbers, must still agree exactly.
  *
  * @param {string} reportText
  * @param {string[]} generatedTable the lines `gate.mjs table` printed
@@ -167,10 +169,13 @@ export function reportTableProblems(reportText, generatedTable) {
   }
   const problems = [];
   for (const row of generated) {
-    if (inReport.includes(row)) continue;
-    const gate = row.split('|')[1]?.trim() ?? row;
+    // Compared on normalized cells, not raw text: `gate.mjs table` writes ``| `check` |``
+    // and a report may render `| check |`. Which markup a gate name is wrapped in is
+    // cosmetic; the numbers, the verdict and the code tree are what must agree exactly.
+    if (inReport.some((line) => sameRow(line, row))) continue;
+    const gate = unwrapGate(row.split('|')[1]?.trim() ?? row);
     const stale = inReport.find(
-      (line) => (line.split('|')[1]?.trim() ?? '') === gate
+      (line) => unwrapGate(line.split('|')[1]?.trim() ?? '') === gate
     );
     problems.push(
       stale == null
@@ -183,6 +188,66 @@ export function reportTableProblems(reportText, generatedTable) {
     );
   }
   return problems;
+}
+
+/**
+ * Shorthand groups for `--only`, and the expander that applies them.
+ *
+ * `report` exists because the two report checks are never wanted apart — one reads the
+ * report's citations, the other its gate table, and both need the file to exist. The
+ * CONTRIBUTING example says `--only coverage,report`, so either that line or the person
+ * typing it would otherwise be the bug.
+ *
+ * Expansion is deliberately *not* a whitelist: an unknown name comes back unchanged so the
+ * caller's unknown-name check still fires and prints the real section names. Silently
+ * dropping a typo is how a flag stops meaning anything.
+ *
+ * @type {Readonly<Record<string, ReadonlyArray<string>>>}
+ */
+export const ONLY_GROUPS = Object.freeze({
+  report: Object.freeze(['report-paths', 'report-table']),
+});
+
+/**
+ * @param {ReadonlyArray<string>} names as typed, comma-split and trimmed
+ * @returns {string[]} every group replaced by its members, in order
+ */
+export function expandOnly(names) {
+  return names.flatMap((name) => [...(ONLY_GROUPS[name] ?? [name])]);
+}
+
+/**
+ * Are these two table rows the same row, ignoring inline code markup?
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function sameRow(a, b) {
+  const cells = (row) =>
+    row
+      .split('|')
+      .map((cell) => cell.trim().replace(/^`+|`+$/g, ''))
+      .filter((cell) => cell !== '');
+  const left = cells(a);
+  const right = cells(b);
+  return left.length === right.length && left.every((c, i) => c === right[i]);
+}
+
+/**
+ * The gate name out of a table cell, without the markup around it.
+ *
+ * `gate.mjs table` writes `` | `check` | … `` — backticks inside the cell — and the message
+ * quotes the gate in backticks of its own, so passing the cell through produced
+ * ``` ``check`` ``` in a terminal. Names are also matched across a report that chose
+ * different markup than the ledger's, which is a cosmetic difference and not the mismatch
+ * this function is looking for; the *rest of the row* is what has to agree exactly.
+ *
+ * @param {string} cell
+ * @returns {string}
+ */
+function unwrapGate(cell) {
+  return cell.replace(/^`+|`+$/g, '');
 }
 
 /**
