@@ -140,6 +140,19 @@ describe('which backtick content counts as a repo path', () => {
     expect(isRepoPath('package.json')).toBe(false);
   });
 
+  it('declines a branch name, which is written exactly like a path', () => {
+    // X4's own first report cited `task/X4-conformance` in the header and this check called
+    // it a missing file. A branch has no extension and no reader tries to open it, and every
+    // citable file here has an extension, so the leaf's dot is what separates the two.
+    expect(isRepoPath('task/X4-conformance')).toBe(false);
+    expect(isRepoPath('origin/task/X4-conformance')).toBe(false);
+    expect(isRepoPath('refs/heads/main')).toBe(false);
+    // The cost, stated so it is a decision and not an oversight: an extensionless file or a
+    // directory is not checked either.
+    expect(isRepoPath('LICENSE')).toBe(false);
+    expect(isRepoPath('src/components')).toBe(false);
+  });
+
   it("accepts a path with a line citation, the repo's own shape", () => {
     expect(isRepoPath('Button.harness.tsx:283-290')).toBe(false);
     expect(isRepoPath('example/__tests__/Button.harness.tsx:283-290')).toBe(

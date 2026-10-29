@@ -107,11 +107,20 @@ export function missingReportPaths(reportText, existing, touched = new Set()) {
 /**
  * Is this backtick content a repo path rather than a symbol, a script name or prose?
  *
- * Conservative on purpose. A path has to contain a `/`, which is what distinguishes
- * `example/src/App.tsx` from `App.tsx`, `test:native`, `hybridRef` or `fillWidth` — and the
- * bare-name cases are not the failure mode: an invented `Foo.kt` in a report is invisible
- * either way, while an invented directory-qualified path is the thing a reviewer goes to
- * read and cannot find.
+ * Conservative on purpose, because a check that cries wolf is switched off. Two things have
+ * to be true:
+ *
+ * 1. it contains a `/`, which is what distinguishes `example/src/App.tsx` from `App.tsx`,
+ *    `test:native`, `hybridRef` or `fillWidth` — the bare-name cases are not the failure
+ *    mode: an invented `Foo.kt` in a report is invisible either way, while an invented
+ *    directory-qualified path is the thing a reviewer goes to read and cannot find.
+ * 2. its last segment carries an extension. This is the part that took a real report to
+ *    find: X4's own first line cites the branch as `task/X4-conformance`, which is
+ *    repo-shaped, does not exist as a directory, and is not a mistake — a branch is written
+ *    exactly like a path. Every citable file in this repo has an extension (`.mjs`, `.tsx`,
+ *    `.kt`, `.md`, `.json`), so requiring one keeps the branch names and the occasional
+ *    `origin/task/…` out, at the cost of not checking extensionless files (`LICENSE`) or
+ *    directories, which a reader is not going to "open" and find missing anyway.
  *
  * A trailing line citation (`path.tsx:12-20`, the repo's own citation shape) is stripped
  * first, since it is a citation *of* a path.
@@ -126,7 +135,9 @@ export function isRepoPath(cited) {
   // outside it is somebody's local machine, which `existing` can never contain.
   if (!path.includes('/') || path.startsWith('/')) return false;
   if (path.startsWith('~') || path.split('/').includes('..')) return false;
-  return /^[\w.@-]+(\/[\w.@-]+)+$/.test(path);
+  if (!/^[\w.@-]+(\/[\w.@-]+)+$/.test(path)) return false;
+  const leaf = path.slice(path.lastIndexOf('/') + 1);
+  return leaf.includes('.') && !leaf.startsWith('.');
 }
 
 /**
