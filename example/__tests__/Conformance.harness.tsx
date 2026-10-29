@@ -842,6 +842,13 @@ type Fixture = {
   testId: string;
   /** One owner's element. Every prop is always passed: nitro#1184. */
   owner: (second: boolean) => ReactElement;
+  /**
+   * The same control under a caller-chosen `testID`, for the leak rule's positive control,
+   * which mounts K of them *at once* — `owner` reuses one testID, and K controls sharing an
+   * identity is a different test (and a broken query). `variant` flips a prop so the rows are
+   * visibly distinct, the way the other suites' churn does (`Sizing.harness.tsx:504`).
+   */
+  control: (testId: string, variant: boolean) => ReactElement;
   /** What the control reports about itself, for the recycle rule. */
   state: (
     handle: Handle,
@@ -879,6 +886,13 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           second ? `Conformance switch, ${SECOND}` : 'Conformance switch'
         }
         hybridRef={captureFor('conformance-switch')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Switch
+        value={variant}
+        testID={testId}
+        accessibilityLabel={`Leak switch ${String(variant)}`}
       />
     ),
     state: (handle, second) => [
@@ -951,6 +965,13 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           second ? `Conformance slider, ${SECOND}` : 'Conformance slider'
         }
         hybridRef={captureFor('conformance-slider')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Slider
+        value={variant ? 0.6 : 0.2}
+        testID={testId}
+        accessibilityLabel={`Leak slider ${String(variant)}`}
       />
     ),
     state: (handle, second) => [
@@ -1047,6 +1068,13 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         hybridRef={captureFor('conformance-button')}
       />
     ),
+    control: (testId, variant) => (
+      <Button
+        title={variant ? 'Leak B' : 'Leak A'}
+        testID={testId}
+        accessibilityLabel={`Leak button ${String(variant)}`}
+      />
+    ),
     state: (handle, second) => [
       {
         label: 'accessibilityLabel',
@@ -1079,6 +1107,13 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           second ? `Conformance progress, ${SECOND}` : 'Conformance progress'
         }
         hybridRef={captureFor('conformance-progress')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Progress
+        value={variant ? 0.6 : 0.2}
+        testID={testId}
+        accessibilityLabel={`Leak progress ${String(variant)}`}
       />
     ),
     state: (handle, second) => [
@@ -1114,6 +1149,14 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           second ? `Conformance segmented, ${SECOND}` : 'Conformance segmented'
         }
         hybridRef={captureFor('conformance-segmented')}
+      />
+    ),
+    control: (testId, variant) => (
+      <SegmentedControl
+        options={['One', 'Two', 'Three']}
+        selectedIndex={variant ? 1 : 0}
+        testID={testId}
+        accessibilityLabel={`Leak segmented ${String(variant)}`}
       />
     ),
     state: (handle, second) => [
@@ -1160,6 +1203,13 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             : 'Conformance date picker'
         }
         hybridRef={captureFor('conformance-date-picker')}
+      />
+    ),
+    control: (testId, variant) => (
+      <DatePicker
+        value={new Date(variant ? 1735700000000 : 1735600000000)}
+        testID={testId}
+        accessibilityLabel={`Leak date picker ${String(variant)}`}
       />
     ),
     state: (handle, second) => [
@@ -1244,6 +1294,14 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           second ? `Conformance picker, ${SECOND}` : 'Conformance picker'
         }
         hybridRef={captureFor('conformance-picker')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Picker
+        options={['One', 'Two', 'Three']}
+        selectedIndex={variant ? 1 : 0}
+        testID={testId}
+        accessibilityLabel={`Leak picker ${String(variant)}`}
       />
     ),
     state: (handle, second) => [
@@ -1407,11 +1465,96 @@ describe('conformance · every control, four rules', () => {
         warm.unmount();
       });
 
-      it('leaves the engine where it started after N mounts and drops', async () => {
-        // Warm-up first: the component's own registry row is created by the first measure,
-        // not by a drop, so a baseline taken before it would count one legitimate entry as
-        // a leak — and the first green-ish run of a wrongly-based rule is how a rule gets
-        // exempted for the wrong reason.
+      it('is known to the engine while mounted, and unknown after', async () => {
+        // The positive control, which is the half round 1's leak rule was missing. It churned
+        // 50 mount/unmount pairs with no settle between them and read `ledger 0→0`, a number a
+        // control that never registered an instance in the first place produces just as well as
+        // one that registers and forgets correctly. So this mounts K controls, waits for each to
+        // be laid out — an instance reaches the engine on its first measure, which is what
+        // `laidOut` records — and requires the ledger to have risen by K. Only then does it drop
+        // them and require the rise to have gone away.
+        //
+        // Both halves are needed and they fail for different reasons: without the first, "back
+        // to baseline" is unfalsifiable; without the second, a control that registers and never
+        // forgets is invisible.
+        const MOUNTS = 8;
+        const before = stats();
+        const many = await render(
+          <View>
+            {Array.from({ length: MOUNTS }, (_, row) => row).map((row) =>
+              // `testID` per row so every one is its own Fabric node, and alternating
+              // `defaultValue` because the wrappers memoise on props: 8 identical elements
+              // would be 8 nodes either way, but this is what the other suites' churn uses
+              // (`Sizing.harness.tsx:504`).
+              fixture.control(`leak-mounted-${String(row)}`, row % 2 === 0)
+            )}
+          </View>,
+          RENDER
+        );
+        // The layout has to have happened for all K, or the ledger rise being asserted below is
+        // a race rather than a fact. The last row's box is the witness: Fabric lays out in
+        // order, so a measured last row means all rows were measured.
+        await waitFor(
+          () => {
+            const box = harnessUi.queryByTestId(
+              `leak-mounted-${String(MOUNTS - 1)}`
+            );
+            if (box == null || box.height <= 0) {
+              throw new Error(`row ${String(MOUNTS - 1)} not laid out yet`);
+            }
+          },
+          { timeout: 20000 }
+        );
+        const mounted = stats();
+        many.unmount();
+        // A settle, then the read: `onDropView` runs on the mounting transaction that removes
+        // the view, and `host.drop()` is where the instance is released
+        // (`NitroSwiftUIHost.swift:327`), so this waits for the drops rather than assuming they
+        // were synchronous with `unmount()`.
+        await settle(700);
+        const after = stats();
+        console.log(
+          `    · ledger ${String(before.ledgerEntries)}→` +
+            `${String(mounted.ledgerEntries)}→${String(after.ledgerEntries)} ` +
+            `registry ${String(before.registryEntries)}→` +
+            `${String(mounted.registryEntries)}→${String(after.registryEntries)} ` +
+            `across ${String(MOUNTS)} mounted together`
+        );
+        const problems: Finding[] = [];
+        const rose = mounted.ledgerEntries - before.ledgerEntries;
+        if (rose < MOUNTS) {
+          // Said as a finding rather than a thrown error, because the reason matters: a control
+          // whose instances never reach the engine cannot leak there, and this rule would be
+          // vacuous for it — which is a fact about the control worth printing.
+          problems.push({
+            component: fixture.name,
+            rule: 'no-leak-on-drop',
+            problem:
+              `${MOUNTS} controls were mounted and laid out together and the ledger rose ` +
+              `by ${String(rose)}, so this control does not hold ${
+                rose === 0 ? 'an' : 'enough'
+              } engine entry per instance — the drop half below can return to ` +
+              'baseline without anything having been released, which is the same ' +
+              'vacuity a churn loop with no settle between mounts had',
+          });
+        }
+        problems.push(
+          ...leakFindings({
+            component: fixture.name,
+            baseline: mounted,
+            after,
+            instances: MOUNTS,
+          })
+        );
+        expectConformance(problems);
+      });
+
+      it('leaves the engine where it started across a churn of drops', async () => {
+        // The churn, kept because it is a different shape from the one above: instances that
+        // come and go over time, in a process that has already measured this component. The
+        // warm-up is what makes its baseline honest — the component's own registry row is
+        // created by the first measure, not by a drop, so a baseline taken before it would
+        // count one legitimate entry as a leak.
         const warmUp = await render(fixture.owner(false), RENDER);
         await settle();
         warmUp.unmount();
