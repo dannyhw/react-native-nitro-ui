@@ -300,7 +300,9 @@ export const A11Y_EXEMPTIONS = Object.freeze([
  */
 export function checkControlA11y(control, tree) {
   const problems = a11yProblems(control, tree);
-  const exemptions = A11Y_EXEMPTIONS.filter((entry) => entry.control === control.id);
+  const exemptions = A11Y_EXEMPTIONS.filter(
+    (entry) => entry.control === control.id
+  );
   const known = problems.filter((problem) =>
     exemptions.some((entry) => entry.matches.test(problem))
   );
@@ -487,7 +489,9 @@ function nearestActable(named, tree) {
     ? 'nothing on screen'
     : `a ${homes[0].className} ${box(homes[0].bounds)} ` +
         `${describeActors(homes[0])}` +
-        (homes[0].scrollable === 'true' ? ', which is the page, not the control' : '');
+        (homes[0].scrollable === 'true'
+          ? ', which is the page, not the control'
+          : '');
 }
 
 /** Points: both boxes come from the same dump, so a difference at whole-pixel scale is
@@ -529,7 +533,5 @@ function describeActors(node) {
  * @returns {string}
  */
 export function describeNode(node) {
-  return (
-    `${node.className} ${describeActors(node)} ${box(node.bounds)}`
-  );
+  return `${node.className} ${describeActors(node)} ${box(node.bounds)}`;
 }
