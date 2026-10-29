@@ -127,10 +127,22 @@ export function repoRoot() {
  * @property {Applies} applies
  */
 
+/**
+ * Two names for the accessibility rule, because two things need to key on it.
+ *
+ * {@link A11Y_RULE_ID} is the matrix's cell — every key in {@link failingKeys} and every
+ * column in {@link formatMatrix}. {@link A11Y_FINDING_RULE} is what a *finding* carries, and
+ * it is short because a finding's `rule` is a category, and the a11y rule is the only one
+ * whose findings are produced on the host rather than in-app. Keeping both as constants is
+ * what stops the two spellings from drifting apart in an `===` nobody notices.
+ */
+export const A11Y_RULE_ID = 'a11y-name-on-focusable-node';
+export const A11Y_FINDING_RULE = 'a11y';
+
 /** @type {ReadonlyArray<ConformanceRule>} */
 export const CONFORMANCE_RULES = Object.freeze([
   {
-    id: 'a11y-name-on-focusable-node',
+    id: A11Y_RULE_ID,
     title: 'named on the node a person can act on, and only there',
     runs: ['harness:ios', 'real-input:android'],
     applies: (manifest, { components }) =>
@@ -239,7 +251,7 @@ export function classifyFindings(findings, tables = {}) {
       exemptions.find(
         (candidate) => findingKey(candidate.component, candidate.rule) === key
       ) ??
-      (finding.rule === 'a11y'
+      (finding.rule === A11Y_FINDING_RULE
         ? a11yExemptions.find(
             (candidate) =>
               candidate.control === finding.controlId &&
@@ -840,6 +852,144 @@ export function recycleFindings(input) {
     });
   }
   return problems;
+}
+
+/* ------------------------------ the in-app fixtures -------------------------- */
+
+/**
+ * The harness suite's fixture table, cross-checked against the manifests.
+ *
+ * The other half of "a new manifest is covered automatically". `checkA11yTable` guards the
+ * host-side sweep; this guards `example/__tests__/Conformance.harness.tsx`, whose fixtures
+ * are the only way the three in-app rules reach a control. A control with no fixture would
+ * otherwise be silently absent from every assertion in that file — the exact gap the suite
+ * exists to close, in the file that was written to close it.
+ *
+ * A text scan, because the harness file is a React Native module jest cannot render here
+ * (no Nitro, no device), and the same reason `component-coverage.test.js` scans the bench
+ * arms: what actually goes missing is whether the table has a row for the control at all.
+ *
+ * @param {any[]} manifests
+ * @param {string | null} harnessText
+ * @returns {string[]} problems
+ */
+export function checkInAppFixtures(manifests, harnessText) {
+  if (harnessText == null) {
+    return [
+      'example/__tests__/Conformance.harness.tsx: not found — the three in-app ' +
+        'rules have no suite, so no control is checked by them',
+    ];
+  }
+  const problems = [];
+  for (const manifest of manifests) {
+    // `name: 'Switch'` is the fixture's own row; a control whose fixture exists under a
+    // stale name would render the wrong component and assert nothing about this one.
+    if (!harnessText.includes(`name: '${manifest.name}'`)) {
+      problems.push(
+        `example/__tests__/Conformance.harness.tsx: no fixture for ` +
+          `${manifest.name} (${manifest.id}). Every control the registry declares ` +
+          'has to be in the conformance table, or it is silently outside all three ' +
+          'in-app rules — add the fixture, do not skip the control'
+      );
+      continue;
+    }
+    if (!harnessText.includes(`component: '${manifest.hybridView}'`)) {
+      problems.push(
+        `example/__tests__/Conformance.harness.tsx: the ${manifest.name} fixture ` +
+          `does not name ${manifest.hybridView}, so the sizing rules ask the engine ` +
+          'about a component that is not this one'
+      );
+    }
+  }
+  // And the reverse: a fixture for a control that no longer exists is a test of nothing.
+  const fixtureNames = [
+    ...harnessText.matchAll(/^\s+name: '([A-Z][A-Za-z]*)',$/gm),
+  ].map((match) => match[1]);
+  for (const name of fixtureNames) {
+    if (manifests.some((manifest) => manifest.name === name)) continue;
+    problems.push(
+      `example/__tests__/Conformance.harness.tsx: a fixture guards "${name}" ` +
+        'and no manifest declares that control — the suite is asserting about a ' +
+        'component that is not in the registry'
+    );
+  }
+  return problems;
+}
+
+/**
+ * The `component|rule` keys the debt lists mark as failing today, in **matrix** keys.
+ *
+ * Feeds `coverageMatrix`'s `failing` context, so the report's matrix says *failing* rather
+ * than *covered* for a rule the current code does not pass. Deriving it from the debt lists
+ * rather than writing it out is what keeps the matrix and the exemptions from being two
+ * lists that can disagree.
+ *
+ * Two key spaces exist because two things are keyed differently: the a11y debt rows are keyed
+ * on a *case* id (one component has two cases — its own screen and inside a `<Host>`) and
+ * their findings carry the short rule name `a11y`, while the matrix is keyed on control and
+ * full rule id. This function is the bridge, and the one place the translation happens; the
+ * a11y rows of several cases for one component collapse to a single matrix cell, which is
+ * right — the matrix is about controls.
+ *
+ * @param {ReadonlyArray<any>} [a11yRows]
+ * @param {ReadonlyArray<any>} [rows]
+ * @param {ReadonlyArray<any>} [table]
+ * @returns {string[]}
+ */
+export function failingKeys(
+  a11yRows = A11Y_EXEMPTIONS,
+  rows = CONFORMANCE_EXEMPTIONS,
+  table = A11Y_CONTROLS
+) {
+  const keys = new Set(rows.map((row) => findingKey(row.component, row.rule)));
+  for (const row of a11yRows) {
+    const component =
+      table.find((entry) => entry.id === row.control)?.component ?? row.control;
+    keys.add(findingKey(component, A11Y_RULE_ID));
+  }
+  return [...keys];
+}
+
+/**
+ * The resolver {@link checkCoverage} and {@link formatMatrix} ask for a failing cell's line.
+ *
+ * A failing cell has to point at a line that exists in `docs/tasks/FOLLOWUPS.md`, and this is
+ * where that is proved: each debt row's `followups` text is compared with the document, so
+ * debt cannot cite a line somebody deleted or never wrote. It returns `null` when the cell has
+ * no row or the row's line is not in the file, which is what makes {@link checkCoverage}
+ * report it as debt with no owner.
+ *
+ * @param {string | null} followupsText the text of `docs/tasks/FOLLOWUPS.md`
+ * @param {object} [tables] the debt lists to read (default: the real ones)
+ * @param {ReadonlyArray<any>} [tables.a11y]
+ * @param {ReadonlyArray<any>} [tables.conformance]
+ * @param {ReadonlyArray<any>} [tables.table] the a11y case table, for case-id → component
+ * @returns {(key: string) => string | null}
+ */
+export function followupsResolver(followupsText, tables = {}) {
+  const a11yRows = tables.a11y ?? A11Y_EXEMPTIONS;
+  const rows = tables.conformance ?? CONFORMANCE_EXEMPTIONS;
+  const table = tables.table ?? A11Y_CONTROLS;
+  const componentOf = (controlId) =>
+    table.find((entry) => entry.id === controlId)?.component ?? controlId;
+  return (key) => {
+    const [component, rule] = key.split('|');
+    const cited = [
+      ...rows
+        .filter((row) => findingKey(row.component, row.rule) === key)
+        .map((row) => row.followups),
+      ...(rule === A11Y_RULE_ID || rule === A11Y_FINDING_RULE
+        ? a11yRows
+            .filter((row) => componentOf(row.control) === component)
+            .map((row) => row.followups)
+        : []),
+    ];
+    if (cited.length === 0 || followupsText == null) return null;
+    const unique = [...new Set(cited)];
+    return unique.every((line) => followupsText.includes(line))
+      ? unique.join(' · ')
+      : null;
+  };
 }
 
 /* ---------------------------------- coverage --------------------------------- */
