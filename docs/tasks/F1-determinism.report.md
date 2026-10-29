@@ -149,3 +149,49 @@ Options, with my recommendation:
 `pressDwell` stays **0.15 s** either way — the shortest shape with no observed losses on either machine
 state, and the one every green run of this suite used. If Q1's answer changes it, the retry counts now
 in every gate log (M2) will show it within a run or two.
+
+## Fix round 1
+
+**M1** ladder in `docs/tasks/F1/dwell-probe.md`: 0 s → 0–1/12 busy (RN `Pressable` 3/3), 0.03 s → 12/12
+light / 1/12 busy, ≥ 0.12 s → 12/12 both. `pressDwell` stays 0.15 s, floor noted on the constant.
+**M2** iOS suite logs reach the gate log per case, and runs print their retry count (0 here, 1 on
+Android). **M3** both platforms read the control's native state before re-pressing and refuse to retry
+when it moved but the echo did not. **N1/N2** `waitForNoDateWindows` replaces the ignored baseline; the
+2 s grace is polled, not read once. **N3–N7** counts and claims corrected, the `aim` regression fixed,
+parsers extracted and tested device-free.
+
+Red proofs: gate → drop each platform's first `onChange` → "lost the event … Not retried"; witness
+removed → PASS "answered on tap 3/3" + "retried 1 press sequence(s)". `HostPopups` → 4000 ms delay →
+"still composed 2000 ms later". `ios-log` → anchor `^` / over-count retries / drop a push / early
+attribution / duplicate lists → 4/2/1/2/1 red. `android-tree` → labelled node / first checkable /
+no containment / `'off'` for null → 3/1/1 red.
+
+Q1: **ruled, option 1** — own task, starting from `docs/tasks/F1/dwell-probe.md`.
+
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1125 tests / 44 suites | `fb64962da88c` | 2 m 34 s | start 3.0 / med 3.3 / max 8.8 |
+| `harness:ios` | **PASS** | 168 tests / 13 suites | `fb64962da88c` (ios tree) | 2 m 07 s | start 1.8 / med 2.3 / max 2.4 |
+| `harness:android` | **PASS** | 217 tests / 13 suites | `fb64962da88c` (android tree) | 6 m 12 s | start 2.9 / med 2.3 / max 3.3 |
+| `real-input:ios` | **PASS** | — | `fb64962da88c` (ios tree) | 9 m 38 s | start 2.8 / med 3.2 / max 5.6 |
+| `real-input:android` | **PASS** | — | `fb64962da88c` (android tree) | 15 m 48 s | start 4.0 / med 3.6 / max 24.6 |
+| `harness:android:HostPopups` | **PASS** | 24 tests / 1 suites | `fb64962da88c` (android tree) | 43.0 s | start 2.5 / med 2.3 / max 2.5 |
+| `harness:android:HostPopups:--background` | stale | — | f1b38a24acd6 (not this tree) | 0.5 s | start 2.1 / med 2.1 / max 2.1 |
+| `harness:android:Picker` | **PASS** | 38 tests / 2 suites | `fb64962da88c` (android tree) | 38.8 s | start 2.9 / med 2.7 / max 2.9 |
+| `harness:android:Slider` | **FAIL** | 1 failed of 22 tests / 1 suites | `fb64962da88c` (android tree) | 17.3 s | start 3.4 / med 2.9 / max 3.4 |
+| `harness:ios:Picker` | **PASS** | 38 tests / 2 suites | `fb64962da88c` (ios tree) | 38.9 s | start 2.8 / med 2.6 / max 2.8 |
+| `real-input:android:--control:switch` | stale | — | 10d2e70cbea0 (not this tree) | 50.5 s | start 2.2 / med 2.5 / max 2.5 |
+| `real-input:ios:--control:switch` | **PASS** | — | `fb64962da88c` (ios tree) | 35.2 s | start 6.0 / med 5.8 / max 6.0 |
+
+
+## Appendix — fix round 1 run notes
+
+`harness:ios` was red once on this tree from an orphaned Metro of mine on the lease's port: the timing
+gate refused the app ("published for Metro port 8295, not this run's 8296"), then went green on a
+settled re-run. The one **FAIL** is the filtered `Slider` characterisation run, which records under its
+own name and satisfies nothing: `Slider > steps to the next legal value when a screen reader asks` →
+"The accessibility step probe never reported." against a 5 s poll in `accessibilityStepReport`; 1 of 10
+filtered repeats at any load, and it fails the same way on `f2/merge` with no F1 commits in the tree.
+`check` shows twice because a run before commit 4c0eb8f shares this code tree. Round 1's table is
+superseded — it was taken on `f1b38a24acd6`.
