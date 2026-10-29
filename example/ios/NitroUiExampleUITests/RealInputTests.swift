@@ -211,6 +211,126 @@ final class RealInputTests: XCTestCase {
       "off",
       "a second real tap should flip it back, so the check is not one fluke"
     )
+
+    // F7: the same screen, every press counted, no retries. See the phase's own
+    // comment for why this belongs to this check rather than to its own method.
+    try assertBusyScreenDeliversEveryPress()
+  }
+
+  /// Every press the suite delivers on the *busy* Switch screen has to be delivered
+  /// to the control, with no second chance.
+  ///
+  /// `testRealInputSwitch` presses the same screen through `tapUntilValue`, which
+  /// taps up to three times and passes if any one of them lands. That is the right
+  /// shape for a functional check and the wrong shape for this question: F7 measured
+  /// that this screen loses a 50 ms press roughly every time (`0/12`, and `1/12` for
+  /// React Native's own `Switch` in the same list), so a check that taps until one
+  /// works cannot see a screen that drops most of what it is given. Here each press
+  /// is delivered once and has to count, which is the property the suite's press
+  /// length actually rests on: `pressDwell` is chosen because the probe measured it
+  /// arriving, and if that ever stops being true, the suite would otherwise carry on
+  /// passing by retrying its way past a regression.
+  ///
+  /// The dwell is not a literal here. Inlining one would let this check drift from
+  /// the value every other press in the suite uses, and the two agreeing is the
+  /// point — it is `RealInputTests.pressDwell` that the probe measured, and it is
+  /// `pressDwell` that an app inherits through every other gesture in this file.
+  /// `docs/tasks/F7-quick-tap.report.md` has the ladder; the safe band starts above
+  /// the 80 ms this screen was measured to drop, and the shipped value is 150 ms.
+  ///
+  /// It also fails if the screen is not actually busy, because a guard that silently
+  /// measures a calm screen passes for the wrong reason: the F1 ladder is 12/12 at
+  /// 30 ms when the 200-row list is absent, so this case would then be testing
+  /// nothing. Hence the row count is asserted before any press.
+  /// Asserts that every press this suite delivers on the busy Switch screen arrives,
+  /// and calls it from `testRealInputSwitch`.
+  ///
+  /// A phase of that check rather than its own method because the runner's coverage
+  /// guard pairs every `testRealInput*` with a control row in
+  /// `scripts/real-input/controls.mjs` — and that table is generated from the
+  /// component manifests, so a check that is about a *screen* rather than a control
+  /// has no row to be paired with. It belongs to the Switch check anyway: the screen
+  /// being busy is a property of the Switch screen.
+  ///
+  /// - Note: Fails red if `RealInputTests.pressDwell` is lowered into the band F7
+  ///   measured as dropped. That is the proof this guard can fail; see
+  ///   `docs/tasks/F7-quick-tap.report.md`.
+  private func assertBusyScreenDeliversEveryPress() throws {
+    let rows = app.descendants(matching: .any).matching(
+      NSPredicate(format: "identifier BEGINSWITH %@", "switch-list-")
+    )
+    XCTAssertGreaterThanOrEqual(
+      rows.count,
+      Self.busyScreenMinimumRows,
+      "the Switch screen has to carry its 200-row list for this check to mean "
+        + "anything: with the list absent, the same press was measured arriving at "
+        + "30 ms, so this case would pass on a calm screen and report nothing "
+        + "about the busy one."
+    )
+
+    let target = "switch-uncontrolled"
+    var delivered = 0
+    for _ in 1...Self.busyScreenPresses {
+      let before = nativeSwitchState(of: target) ?? ""
+      // Delivered once, deliberately: `fingerTap` at the suite's dwell, no retry, no
+      // `tapUntilValue`. `scrollIntoView` is not called because this control sits at
+      // the top of the screen, above the list, and moving the page would change the
+      // hit-test workload this check exists to measure.
+      pressOnce(target)
+      if waitForNativeValueToChange(target, from: before) {
+        delivered += 1
+      }
+    }
+    XCTAssertEqual(
+      delivered,
+      Self.busyScreenPresses,
+      "the busy Switch screen dropped \(Self.busyScreenPresses - delivered) of "
+        + "\(Self.busyScreenPresses) presses at \(RealInputTests.pressDwell)s dwell. "
+        + "That is the property every other tap in this file depends on; see "
+        + "docs/tasks/F7-quick-tap.report.md for the measured ladder and "
+        + "docs/tasks/F1/dwell-probe.md for the tool that produced it."
+    )
+  }
+
+  /// How many mounted rows make the Switch screen "the busy one", for the guard.
+  ///
+  /// The screen renders 200, so this is not the interesting number; it is the guard's
+  /// proof that it is not pressing a stripped screen. It is not 200 because the tree
+  /// exposes the rows that are realised, and that count is not something a test
+  /// should depend on. It is well above the dozen-odd controls the calm screens carry,
+  /// which is where F1 measured delivery already working at 30 ms.
+  private static let busyScreenMinimumRows = 100
+  /// Presses the guard delivers. Twelve is what every F1 and F7 ladder cell used, so
+  /// a regression here can be compared with those tables press for press.
+  private static let busyScreenPresses = 12
+
+  /// Delivers exactly one press, at the suite's dwell, and never a second one.
+  ///
+  /// Separate from `tap`/`tapUntilValue` because those exist to make a control answer;
+  /// this exists to count how often it does. A control that moved between the aim and
+  /// the press is the reason the element is looked up here rather than held across the
+  /// loop.
+  private func pressOnce(_ identifier: String) {
+    guard let element = try? required(identifier, as: "the uncontrolled Switch") else {
+      return
+    }
+    element.fingerTap()
+  }
+
+  /// Waits for the control's own value to move away from `before`.
+  ///
+  /// The window is the same short one the dwell probe uses: this measures whether the
+  /// touch reached the control, not whether React re-rendered, and a long window would
+  /// credit a press whose value arrived while the next was already being aimed.
+  private func waitForNativeValueToChange(_ identifier: String, from before: String) -> Bool {
+    let until = Date().addingTimeInterval(1.5)
+    while Date() < until {
+      if nativeSwitchState(of: identifier) != before {
+        return true
+      }
+      Thread.sleep(forTimeInterval: 0.05)
+    }
+    return false
   }
 
   /// Measures how long a synthesised press has to last before the busy Switch screen
