@@ -26,9 +26,10 @@ import { Menu } from 'react-native-nitro-ui';
 
 `Menu` is `Button`'s sibling, not `Picker`'s: a menu has **no value**, so there is no
 controlled prop and no event-count handshake (`docs/architecture/core.md` §12). Open
-state is native-owned and observed through `onOpen`/`onClose`; there is no imperative
-`open()`/`close()` (DECISIONS D29). The trigger is a Button — same `variant`s, same
-`size`s, same box — and the items are data, never child views.
+state is native-owned and observed through `onOpen`/`onClose` — on Android; iOS never
+fires either one (DECISIONS D32) — and there is no imperative `open()`/`close()`
+(DECISIONS D29). The trigger is a Button — same `variant`s, same `size`s, same box — and
+the items are data, never child views.
 
 ## API
 
@@ -41,9 +42,9 @@ state is native-owned and observed through `onOpen`/`onClose`; there is no imper
 | `disabled`           | `boolean \| undefined`                | `false`    | Disables the trigger. An open menu closes — Android; see [Open and close](#open-and-close). |
 | `systemImage`        | `string \| undefined`                 | —          | **iOS only.** Leading SF Symbol on the trigger.                         |
 | `tintColor`          | `ColorValue \| undefined`             | platform   | SwiftUI `.tint()` / the variant's container colour.                     |
-| `onSelect`           | `((id: string) => void) \| undefined` | —          | One call per picked row, with that row's `id`.                          |
-| `onOpen`             | `(() => void) \| undefined`           | —          | **Android only** today — see [Open and close](#open-and-close).         |
-| `onClose`            | `(() => void) \| undefined`           | —          | **Android only** today — see [Open and close](#open-and-close).         |
+| `onSelect`           | `((id: string) => void) \| undefined` | —          | One call per picked row, with that row's `id`; on a pick it fires **before** `onClose`. |
+| `onOpen`             | `(() => void) \| undefined`           | —          | **Android only** — iOS never fires it: [Open and close](#open-and-close). |
+| `onClose`            | `(() => void) \| undefined`           | —          | **Android only** — iOS never fires it: [Open and close](#open-and-close). |
 | `primaryAction`      | `(() => void) \| undefined`           | —          | **iOS only.** Tap runs it; long-press opens the menu.                   |
 | `style`              | `ViewStyle`                           | —          | Overrides the measured box (see Sizing).                                |
 | `testID`             | `string \| undefined`                 | —          | iOS: RN's `accessibilityIdentifier`. Android: the host `View.tag`.      |
@@ -104,27 +105,26 @@ these on Android only, for the reason given below.
 
 | Event         | Fires                                                            | iOS | Android |
 | ------------- | ------------------------------------------------------------------ | ------- | --------- |
-| `onSelect`    | once per picked row, with that row's `id`                            | yes     | yes       |
-| `onOpen`      | when the menu opens                                                 | no      | yes       |
-| `onClose`     | when the menu closes, whichever way it closed                        | no      | yes       |
+| `onSelect`    | once per picked row, with that row's `id`; on a pick it fires before `onClose` | yes | yes |
+| `onOpen`      | when the menu opens                                                 | never   | yes       |
+| `onClose`     | when the menu closes, whichever way it closed                        | never   | yes       |
 | `primaryAction` | on a trigger press while the menu is closed                          | yes     | no        |
 
-`onOpen`/`onClose` are Android-only in this release, and that is a platform limit
-rather than a choice: SwiftUI's `Menu` keeps its own open state, and the iPhoneOS 27.0
-SDK gives it no expansion binding — `isExpanded:` exists on `Section`,
-`DisclosureGroup` and table rows, not on `Menu`. Our `UIHostingController` therefore
-never learns that the system presented the menu, which is the same thing `Picker`
-already reports (`docs/components/picker.md`: `-1` for every popup field, never a `0`
-that reads as "checked"). The Android popup is our own window, so it can be witnessed:
-`onOpen` and `onClose` fire once each per open, including dismissal by outside tap,
-back gesture, a pick, or `disabled` arriving while open. **A pick fires `onClose`
-before `onSelect`** — the popup closes first, then the choice is reported — so a
-listener never sees an open that was never closed. `docs/tasks/Q1-menu-design.md` §5
-words the same rule as "never for a pick"; the reading taken here is that what to
-refuse is an *unpaired* open, and the pair plus its order is asserted on-device
-(`Menu.harness.tsx`, "opens once, closes once, and pairs every open with a close"). Whether a pick should fire
-`onClose` at all, and in which order, is an open owner decision
-(`docs/tasks/G7a-menu.review.md` decision 3).
+`onOpen`/`onClose` are Android-only, and that is a platform limit rather than a choice:
+SwiftUI's `Menu` keeps its own open state, and the iPhoneOS 27.0 SDK gives it no
+expansion binding — `isExpanded:` exists on `Section`, `DisclosureGroup` and table rows,
+not on `Menu`. Our `UIHostingController` therefore never learns that the system presented
+the menu, which is the same thing `Picker` already reports (`docs/components/picker.md`:
+`-1` for every popup field, never a `0` that reads as "checked"). iOS never fires either
+one (DECISIONS D32). The Android popup is our own window, so it can be witnessed:
+`onOpen` and `onClose` fire once each per open, including dismissal by outside tap, back
+gesture, a pick, or `disabled` arriving while open. **A pick fires `onSelect` first and
+`onClose` after it** — the choice is reported, then the window comes down — so a listener
+that acts on the pick never does so while the menu is still up, and never sees an open
+that was never closed (DECISIONS D32). `docs/tasks/Q1-menu-design.md` §5 worded the pair
+as "never for a pick"; D32 supersedes that, and the pair plus its order is asserted
+on-device (`Menu.harness.tsx`, "opens once, closes once, and pairs every open with a
+close") and off-device (`android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt`).
 
 `primaryAction` is iOS-only (DECISIONS D29) and follows the native idiom: with it set,
 a tap runs it and a long-press opens the menu; without it, a tap opens the menu.
@@ -139,8 +139,8 @@ close it and report it. **On iOS this is neither enforced nor observable** — S
 owns the presentation, `.disabled(true)` on a `Menu` is not documented to dismiss one
 that is open, and we get no signal that one is open to act on. Nothing checks that an
 iOS menu goes away when it is disabled while open, and nothing would notice if it did
-not. Treat DECISIONS D29's rule as Android-side in this release (owner decision 2 in
-`docs/tasks/G7a-menu.review.md`).
+not. DECISIONS D32 accepts that as a platform limit, so read DECISIONS D29's rule as
+Android-side.
 
 ## Inside a `Host`
 
@@ -259,11 +259,13 @@ this list with VoiceOver and TalkBack is G7b's real-input pass.
 
 ## Limits
 
-- **`onOpen`/`onClose` are Android-only** in this release, for the SDK reason above. Do
-  not build app state on them if iOS has to agree; use `onSelect`.
+- **`onOpen`/`onClose` are Android-only** — iOS never fires either one, for the SDK
+  reason above (DECISIONS D32). Do not build app state on them if iOS has to agree; use
+  `onSelect`.
 - **A `disabled` that arrives while the menu is open closes it on Android only.** On
   iOS it is neither enforced nor observable, for the same SDK reason — so an iOS menu
-  can stay on screen over a disabled trigger. Do not rely on it going away.
+  can stay on screen over a disabled trigger (D32 accepts this as a platform limit). Do
+  not rely on it going away.
 - **No submenus on Android.** A submenu's items appear inline under a divider, in place.
   Ask for a submenu only where that is acceptable, and expect a flat list there — the
   same kind of documented split as `Picker`'s iOS-only `wheel`.

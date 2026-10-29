@@ -99,12 +99,13 @@ export interface NitroUiMenuProps
   size: string;
   /**
    * Disable interaction. No row is reachable, no event fires, and an open menu
-   * closes (DECISIONS D29) - a control that answers nothing cannot own a live
+   * closes (DECISIONS D29, D32) - a control that answers nothing cannot own a live
    * popup, the rule Picker and DatePicker already keep.
    *
-   * Closing an open menu is **Android only** today. There the popup is our own
-   * window; on iOS SwiftUI owns the presentation, so nothing here can dismiss it and
-   * nothing can report that it did. See `docs/components/menu.md` ("Limits").
+   * Closing an open menu is **Android only**. There the popup is our own window; on
+   * iOS SwiftUI owns the presentation, so nothing here can dismiss it and nothing can
+   * report that it did. That is a platform limit, not a choice, and D32 accepts it as
+   * one - see `docs/components/menu.md` ("Limits").
    */
   disabled: boolean;
   /**
@@ -154,22 +155,24 @@ export interface NitroUiMenuProps
    */
   onSelect?: (id: string) => void;
   /**
-   * Called when the menu opens. **Android only** today: a Compose `Popup` is our
-   * own window, so `expanded` is model state we set. SwiftUI hands a `Menu` to the
+   * Called when the menu opens. **Android only**: a Compose `Popup` is our own
+   * window, so `expanded` is model state we set. SwiftUI hands a `Menu` to the
    * system's presentation and its `Menu` has no open binding in the iPhoneOS SDK,
-   * so there is nothing here to observe - see `docs/components/menu.md`.
+   * so **iOS never fires this** - see `docs/components/menu.md` and DECISIONS D32.
    */
   onOpen?: () => void;
   /**
    * Called when the menu closes, whichever way it closed - a pick, an outside
    * tap, the back gesture, a layout move, or the control being disabled while it
-   * was open. **Android only**, for the same reason as `onOpen`.
+   * was open. **Android only**, for the same reason as `onOpen`: **iOS never fires
+   * either of them** (DECISIONS D32).
    *
-   * A pick fires it too, so an open never goes unpaired. It fires *before*
-   * `onSelect`: the popup goes away first, and the choice is reported after it.
-   * Whether the pair belongs to a pick at all, and in which order, is open with
-   * the owner (`docs/tasks/G7a-menu.review.md` decision 3) against
-   * `docs/tasks/Q1-menu-design.md` §5, which words it as "never for a pick".
+   * A pick fires it too, so an open never goes unpaired. It fires *after*
+   * `onSelect`: the choice is reported first, then the close, so a listener that
+   * acts on the pick is never handed a menu that is still up (DECISIONS D32).
+   * `docs/tasks/Q1-menu-design.md` §5 worded the pairing as "never for a pick" and
+   * D32 supersedes that: every open is paired with one close, including the open a
+   * pick ends.
    */
   onClose?: () => void;
   /**
@@ -193,9 +196,10 @@ export interface NitroUiMenuMethods extends HybridViewMethods {
    * an id that is not there - so a harness can assert a *real* pick without a
    * touch injector that can reach a row in a popup.
    *
-   * Goes through the *selection* path, not the props path, and on Android it
-   * closes the popup first, like the row does. Runs on the UI thread like a real
-   * press (core.md §5), so a call from JS hops there.
+   * Goes through the *selection* path, not the props path, and on Android it is the
+   * row's own pick: the choice is reported, then the popup closes (DECISIONS D32).
+   * Runs on the UI thread like a real press (core.md §5), so a call from JS hops
+   * there.
    *
    * @internal Not app API (DECISIONS D14). Deleted when the harness can press a
    * popup row.

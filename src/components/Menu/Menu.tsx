@@ -92,24 +92,28 @@ export interface MenuProps extends ViewProps {
   /** Trigger size, shared with Button. Default: `'medium'`. */
   size?: ButtonSize | undefined;
   /**
-   * Disable interaction. Default: `false`. An open menu closes — on Android; on
-   * iOS the presentation is SwiftUI's, so it is neither enforced nor observable.
+   * Disable interaction. Default: `false`. An open menu closes — on Android only; on
+   * iOS the presentation is SwiftUI's, so it is neither enforced nor observable
+   * (DECISIONS D32).
    */
   disabled?: boolean | undefined;
   /** Leading SF Symbol name on the trigger. iOS only in v0.1. */
   systemImage?: string | undefined;
   /** Trigger colour: SwiftUI `.tint()` / the variant's container colour. */
   tintColor?: ColorValue | undefined;
-  /** Called with the picked row's `id`. */
+  /**
+   * Called with the picked row's `id`. Fires before `onClose`, which a pick also
+   * fires (DECISIONS D32).
+   */
   onSelect?: ((id: string) => void) | undefined;
   /**
-   * Called when the menu opens. **Android only** today - see
-   * `docs/components/menu.md`.
+   * Called when the menu opens. **Android only** — iOS never fires it; see
+   * `docs/components/menu.md` and DECISIONS D32.
    */
   onOpen?: (() => void) | undefined;
   /**
-   * Called when the menu closes. **Android only** today - see
-   * `docs/components/menu.md`.
+   * Called when the menu closes. **Android only** — iOS never fires it; see
+   * `docs/components/menu.md` and DECISIONS D32. A pick fires `onSelect` first.
    */
   onClose?: (() => void) | undefined;
   /**
