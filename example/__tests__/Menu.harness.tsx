@@ -1584,6 +1584,17 @@ describe('Menu · inside a Host', () => {
     expect(Math.abs(mLeft - aLeft)).toBeLessThan(40);
     expect(first.rows).toBe(PICKABLE);
     const gap = mTop - aBottom;
+    // The upper bound, which the line above does not give. `mTop + 24 >= aBottom`
+    // only refuses a popup that comes up *above* the button, so a list opened 200 px
+    // below it passed - and that is precisely what a plain `DropdownMenu` composed
+    // inside a `<Host>` does: its position provider is handed the composition's own
+    // view, so its list opens under the *Host's* 300 px box rather than under this
+    // Menu's button. `menuAnchor` is the fix (`HybridNitroUiMenu.kt`), and the number
+    // it has to satisfy is this one: the list's top sits just under the trigger. The
+    // same 48 px the reopened half below uses, so the two halves ask one question.
+    // Proven red by swapping `ExposedDropdownMenuBox`/`menuAnchor` for a plain
+    // `DropdownMenu`, which lands the popup ~300 px down instead of here.
+    expect(gap).toBeLessThan(48);
 
     // Move the `<Host>`. Compose is never told: a popup positions itself against the
     // anchor's box inside its own composition, so a window left standing would point
