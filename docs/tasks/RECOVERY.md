@@ -33,7 +33,7 @@
 >
 > **Owner away from 2026-10-29 (autonomous):** mac-1 runs G7a, then F2 (`HANDOFF-mac1-2026-10-29.md`; F2 merged, PR #6), and
 > opens a PR per task. mac-2 runs F1, X13 and X4, and merges mac-1's PRs after re-running gates here
-> (T3 schedule `nitroui-pr-watch`, every 45 min). It merges the 0.3.2 Version Packages PR once CI is
+> (the `nitroui-pr-watch` schedule ran until F2 merged and G7a went draft; it was deleted 2026-10-29). It merges the 0.3.2 Version Packages PR once CI is
 > green; npm staging still needs the owner's approval on npmjs.com.
 >
 > **Components:** 0.4 is a button-anchored Menu (G7a/G7b), after X4; TextField moved to 0.5 (D30;
