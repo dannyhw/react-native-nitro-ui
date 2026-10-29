@@ -20,8 +20,7 @@ import { A11Y_CONTROLS } from '../real-input/a11y.mjs';
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
 
 const serial = process.env.ANDROID_SERIAL ?? 'emulator-5570';
-const outDir =
-  process.argv[2] ?? 'scripts/__tests__/fixtures/a11y';
+const outDir = process.argv[2] ?? 'scripts/__tests__/fixtures/a11y';
 
 const TAB_LABEL = {
   switch: 'Switch',
@@ -91,9 +90,7 @@ function subtree(xml, label) {
     a.bounds.y1 <= b.bounds.y1 &&
     a.bounds.x2 >= b.bounds.x2 &&
     a.bounds.y2 >= b.bounds.y2;
-  const kept = nodes.filter(
-    (node) => node === named || inside(node, named)
-  );
+  const kept = nodes.filter((node) => node === named || inside(node, named));
   const raw = [...xml.matchAll(/<node\b[^>]*?\/?>/g)];
   const lines = kept.map((node) => {
     const index = nodes.indexOf(node);

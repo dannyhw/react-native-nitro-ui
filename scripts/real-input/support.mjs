@@ -312,6 +312,13 @@ export class Suite {
     this.controls = controls;
     /** @type {Array<{ control: (typeof REAL_INPUT_CONTROLS)[number], log: CheckLog | null, missing: boolean }>} */
     this.results = [];
+    /**
+     * Logs for checks that are not about one control, so they cannot inflate the
+     * control totals. See {@link beginAuxiliary}.
+     *
+     * @type {Array<{ id: string, log: CheckLog }>}
+     */
+    this.auxiliary = [];
   }
 
   /**
@@ -334,6 +341,28 @@ export class Suite {
     const log = new CheckLog(control.title);
     console.log(`\n  ${control.id}: ${control.title}`);
     this.results.push({ control, log, missing: false });
+    return log;
+  }
+
+  /**
+   * A check that is not one control's press-sequence assertion, and must not be counted
+   * as a control.
+   *
+   * `finish` reports `passed/expected` over the shared control table, so a log pushed into
+   * `results` would make the totals lie: `real-input` would claim eleven controls passed
+   * when the table has ten. The X4 a11y sweep is the first user — thirteen cases that are
+   * about the accessibility tree rather than about a control responding to a press. They
+   * get their own section and their own line in the verdict, which keeps `10/10` meaning
+   * what it has always meant while still failing the run.
+   *
+   * @param {string} id
+   * @param {string} title
+   * @returns {CheckLog}
+   */
+  beginAuxiliary(id, title) {
+    const log = new CheckLog(title);
+    console.log(`\n  ${id}: ${title}`);
+    this.auxiliary.push({ id, log });
     return log;
   }
 
@@ -370,14 +399,29 @@ export class Suite {
       (sum, entry) => sum + (entry.log?.retries.length ?? 0),
       0
     );
+    // The auxiliary checks, printed after the controls so the control table's totals stay
+    // readable and their own failures still decide the exit code below.
+    const auxFailed = this.auxiliary.filter((entry) => !entry.log.passed);
+    for (const entry of this.auxiliary) {
+      if (entry.log.passed) continue;
+      for (const failure of entry.log.failures) {
+        console.log(`${entry.id}: failed: ${failure}`);
+      }
+    }
     console.log(
       `\nreal-input (${this.platform}): ${String(passed.length)}/${String(expected)} controls passed` +
         ` · ${String(totalRetries)} press sequence(s) needed a retry` +
         (totalRetries === 0
           ? ''
-          : ' - see the "answered on tap" notes above for which')
+          : ' - see the "answered on tap" notes above for which') +
+        (this.auxiliary.length === 0
+          ? ''
+          : ` · ${String(this.auxiliary.length - auxFailed.length)}/` +
+            `${String(this.auxiliary.length)} auxiliary checks passed`)
     );
-    return passed.length === expected && this.results.length === expected
+    return passed.length === expected &&
+      this.results.length === expected &&
+      auxFailed.length === 0
       ? 0
       : 1;
   }

@@ -39,7 +39,9 @@ function tree(id) {
   if (!parsed.has(id)) {
     parsed.set(
       id,
-      parseHierarchy(readFileSync(`${__dirname}/fixtures/a11y/${id}.xml`, 'utf8'))
+      parseHierarchy(
+        readFileSync(`${__dirname}/fixtures/a11y/${id}.xml`, 'utf8')
+      )
     );
   }
   return parsed.get(id);
@@ -66,7 +68,9 @@ function named(id) {
 
 /** The measured tree with one node replaced by a patched copy, the rest verbatim. */
 function mutate(id, target, patch) {
-  return tree(id).map((node) => (node === target ? { ...node, ...patch } : node));
+  return tree(id).map((node) =>
+    node === target ? { ...node, ...patch } : node
+  );
 }
 
 const ZERO_BOX = {
@@ -100,9 +104,9 @@ describe('the a11y rule, on measured trees', () => {
       'hosted-progress',
     ]);
     // The rest are not silently passing: each is a finding, printed, with a debt row.
-    expect(
-      verdicts.filter((v) => v.known.length > 0).map((v) => v.id)
-    ).toEqual(['slider', 'segmented-control', 'hosted-slider', 'hosted-segmented']);
+    expect(verdicts.filter((v) => v.known.length > 0).map((v) => v.id)).toEqual(
+      ['slider', 'segmented-control', 'hosted-slider', 'hosted-segmented']
+    );
     // And nothing *fails*, which is the difference between landing green and hiding: a new
     // failure on a control with a debt row still goes red, because rows match findings.
     for (const verdict of verdicts) {
@@ -133,7 +137,8 @@ describe('the a11y rule, on measured trees', () => {
     expect(wrapper).toBeDefined();
     const mutated = tree('switch').map((node) => {
       if (node === target) return { ...node, contentDesc: '' };
-      if (node === wrapper) return { ...node, contentDesc: control('switch').label };
+      if (node === wrapper)
+        return { ...node, contentDesc: control('switch').label };
       return node;
     });
     const problems = a11yProblems(control('switch'), mutated);
@@ -170,7 +175,9 @@ describe('the a11y rule, on measured trees', () => {
   it('goes red when the name disappears', () => {
     const problems = a11yProblems(
       control('date-picker'),
-      mutate('date-picker', named('date-picker'), { contentDesc: 'Something else' })
+      mutate('date-picker', named('date-picker'), {
+        contentDesc: 'Something else',
+      })
     );
     expect(problems.length).toBe(1);
     expect(problems[0]).toContain('announces this control as nothing');
@@ -185,7 +192,9 @@ describe('the a11y rule, on measured trees', () => {
     expect(problems.length).toBe(1);
     expect(problems[0]).toContain('is not actionable');
     // …and the message names the nearest thing it did find, so the failure is a lead.
-    expect(problems[0]).toContain('The nearest actionable box containing it is');
+    expect(problems[0]).toContain(
+      'The nearest actionable box containing it is'
+    );
     expect(problems[0]).toContain('which is the page, not the control');
   });
 
@@ -208,7 +217,8 @@ describe('the a11y rule, on measured trees', () => {
     // A control whose name had slid onto the page would be announced as the whole screen.
     const scroller = tree('switch').find((node) => node.scrollable === 'true');
     const mutated = tree('switch').map((node) => {
-      if (node === scroller) return { ...node, contentDesc: control('switch').label };
+      if (node === scroller)
+        return { ...node, contentDesc: control('switch').label };
       if (node === named('switch')) return { ...node, contentDesc: '' };
       return node;
     });
@@ -241,7 +251,9 @@ describe('the a11y rule, on measured trees', () => {
       checkable: 'false',
       focusable: 'false',
     });
-    expect(a11yProblems(control('switch'), stripped)[0]).toContain('is not actionable');
+    expect(a11yProblems(control('switch'), stripped)[0]).toContain(
+      'is not actionable'
+    );
   });
 });
 
@@ -291,7 +303,10 @@ describe('the debt list', () => {
     // Every row the run covered is reported, not just the one that was fixed: a run that
     // saw all four controls and found nothing is four pieces of evidence.
     expect(
-      staleExemptions(A11Y_CONTROLS.map((entry) => entry.id), []).length
+      staleExemptions(
+        A11Y_CONTROLS.map((entry) => entry.id),
+        []
+      ).length
     ).toBe(A11Y_EXEMPTIONS.length);
   });
 

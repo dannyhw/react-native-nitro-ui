@@ -66,8 +66,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
 import {
   A11Y_CONTROLS,
@@ -80,10 +79,31 @@ import { SCREEN_FILE } from './real-input/screens.mjs';
 // both this module and that one.
 import { manifestsFromEntries } from './registry-core.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
+/**
+ * The repo root.
+ *
+ * Derived from the working directory rather than `import.meta.url`, for the same reason
+ * `gate-core.mjs`, `lease-core.mjs` and `app-stamp-core.mjs` all do it that way: those
+ * files say so in their headers because `import.meta` makes a module unimportable from a
+ * Jest suite, and this one is imported by `scripts/__tests__/conformance.test.js`. Every
+ * script and gate in this repo runs from the repo root; a caller that is not can pass its
+ * own root to {@link readerFor}.
+ *
+ * @returns {string}
+ */
+function defaultRepoRoot() {
+  return resolve(process.cwd());
+}
 
-/** Repo root, from `scripts/`. */
-export const REPO_ROOT = resolve(here, '..');
+/**
+ * The repo root, from the working directory. See {@link defaultRepoRoot} for why this is
+ * not `import.meta.url`.
+ *
+ * @returns {string}
+ */
+export function repoRoot() {
+  return defaultRepoRoot();
+}
 
 /* ---------------------------------- the rules --------------------------------- */
 
@@ -121,7 +141,8 @@ export const CONFORMANCE_RULES = Object.freeze([
   },
   {
     id: 'declared-fallback',
-    title: 'a declared fallback exists before the first measure, and is its own',
+    title:
+      'a declared fallback exists before the first measure, and is its own',
     runs: ['harness:ios', 'harness:android'],
     applies: (manifest) =>
       manifest.sizing == null
@@ -141,7 +162,8 @@ export const CONFORMANCE_RULES = Object.freeze([
   },
   {
     id: 'recycle-reset',
-    title: 'a control that comes back under one identity shows no previous owner',
+    title:
+      'a control that comes back under one identity shows no previous owner',
     runs: ['harness:ios', 'harness:android'],
     applies: () => null,
   },
@@ -189,18 +211,23 @@ export function findingKey(component, rule) {
 /**
  * Split raw findings into failures and known debt.
  *
- * A finding is `{component, rule, problem}`; `rule: 'a11y'` is exempted through
- * `A11Y_EXEMPTIONS`, which matches on the *problem text* rather than on the control,
- * so a second and different a11y failure on an already-exempt control still goes red.
+ * A finding is `{component, rule, problem}`; `rule: 'a11y'` is exempted through the a11y
+ * table, which matches on the *problem text* rather than on the control, so a second and
+ * different a11y failure on an already-exempt control still goes red.
  *
  * @param {Array<{component: string, rule: string, problem: string, controlId?: string}>} findings
- * @param {ReadonlyArray<any>} [a11yExemptions] only a test passes this: the harness
- *   bundle cannot import the Node-side table, so the in-app copy is handed in
- * @returns {{failures: string[], known: string[], matched: string[]}} `matched` is
- *   the `component|rule` keys an exemption covered, which is what
- *   {@link staleExemptions} clears the list against.
+ * @param {object} [tables] the debt lists to consult. Production leaves this empty and
+ *   reads the two real lists; a test passes rows, because both are frozen arrays and
+ *   freezing them is the point.
+ * @param {ReadonlyArray<any>} [tables.a11y]
+ * @param {ReadonlyArray<ConformanceExemption>} [tables.conformance]
+ * @returns {{failures: string[], known: string[], matched: string[]}} `matched` is the
+ *   `component|rule` keys an exemption covered, which is what {@link staleExemptions}
+ *   clears the lists against.
  */
-export function classifyFindings(findings, a11yExemptions = A11Y_EXEMPTIONS) {
+export function classifyFindings(findings, tables = {}) {
+  const a11yExemptions = tables.a11y ?? A11Y_EXEMPTIONS;
+  const exemptions = tables.conformance ?? CONFORMANCE_EXEMPTIONS;
   const failures = [];
   const known = [];
   /** @type {string[]} */
@@ -209,7 +236,7 @@ export function classifyFindings(findings, a11yExemptions = A11Y_EXEMPTIONS) {
   for (const finding of findings) {
     const key = findingKey(finding.component, finding.rule);
     const exemption =
-      CONFORMANCE_EXEMPTIONS.find(
+      exemptions.find(
         (candidate) => findingKey(candidate.component, candidate.rule) === key
       ) ??
       (finding.rule === 'a11y'
@@ -221,7 +248,9 @@ export function classifyFindings(findings, a11yExemptions = A11Y_EXEMPTIONS) {
         : undefined);
 
     if (exemption == null) {
-      failures.push(`${finding.component} × ${finding.rule}: ${finding.problem}`);
+      failures.push(
+        `${finding.component} × ${finding.rule}: ${finding.problem}`
+      );
       continue;
     }
     if (!matched.includes(key)) matched.push(key);
@@ -246,7 +275,11 @@ export function classifyFindings(findings, a11yExemptions = A11Y_EXEMPTIONS) {
  * @param {ReadonlyArray<{component: string, rule: string, followups: string}>} [rows]
  * @returns {string[]} one line per stale exemption
  */
-export function staleExemptions(coveredKeys, matchedKeys, rows = CONFORMANCE_EXEMPTIONS) {
+export function staleExemptions(
+  coveredKeys,
+  matchedKeys,
+  rows = CONFORMANCE_EXEMPTIONS
+) {
   const covered = new Set(coveredKeys);
   const matched = new Set(matchedKeys);
   return rows
@@ -264,48 +297,36 @@ export function staleExemptions(coveredKeys, matchedKeys, rows = CONFORMANCE_EXE
 }
 
 /**
- * Stale rows from both lists, given what one run covered and matched.
+ * Every stale row, from both lists, in one call.
  *
- * The a11y list is keyed on `A11yControl.id` while everything else is keyed on
- * component, so this maps through the table instead of making each caller do it. A
- * `<Host>` case and a screen case guard the same component, so the sets are deduped
- * through the table rather than concatenated.
+ * The two lists are keyed differently on purpose — the a11y one on a *case* id, because
+ * its rows match findings and one component has two cases (its own screen and inside a
+ * `<Host>`), the in-app one on `component|rule` — so each has its own sweeper and this is
+ * the single place a caller goes to ask the question. It is deliberately not a merge into
+ * one key space: mapping a11y rows onto components would report the same piece of debt
+ * twice whenever a component has two cases, and a run that prints one bug as two teaches
+ * people to skim the failures.
  *
  * @param {object} run
- * @param {Iterable<string>} run.a11yCovered the `A11yControl.id`s a run read
+ * @param {Iterable<string>} run.a11yCovered the `A11yControl.id`s the run read
  * @param {Iterable<string>} run.a11yMatched the ids whose problems matched a row
- * @param {Iterable<string>} run.coveredKeys `component|rule` keys the in-app run exercised
+ * @param {Iterable<string>} run.coveredKeys `component|rule` keys the run exercised
  * @param {Iterable<string>} run.matchedKeys keys that matched an in-app row
+ * @param {ReadonlyArray<any>} [run.conformanceRows] the in-app rows to sweep (default:
+ *   the real list). An argument because that list is frozen — deliberately, so nothing can
+ *   add debt at runtime — and a test of the sweeper cannot push to a frozen array. The
+ *   a11y half needs no such argument: its real list is not empty, so it is sweepable as
+ *   it stands.
  * @returns {string[]}
  */
 export function staleDebt(run) {
-  const a11yCovered = new Set(run.a11yCovered);
-  const a11yMatched = new Set(run.a11yMatched);
-  const components = new Set(
-    A11Y_CONTROLS.filter((entry) => a11yCovered.has(entry.id)).map(
-      (entry) => entry.component
-    )
-  );
-  const matchedComponents = new Set(
-    A11Y_CONTROLS.filter((entry) => a11yMatched.has(entry.id)).map(
-      (entry) => entry.component
-    )
-  );
-  const a11yRows = A11Y_EXEMPTIONS.map((entry) => ({
-    component:
-      A11Y_CONTROLS.find((control) => control.id === entry.control)?.component ??
-      entry.control,
-    rule: 'a11y',
-    followups: entry.followups,
-  }));
   return [
-    ...staleA11yExemptions(a11yCovered, a11yMatched),
+    ...staleA11yExemptions(run.a11yCovered, run.a11yMatched),
     ...staleExemptions(
-      [...components].map((name) => findingKey(name, 'a11y')),
-      [...matchedComponents].map((name) => findingKey(name, 'a11y')),
-      a11yRows
+      run.coveredKeys,
+      run.matchedKeys,
+      run.conformanceRows ?? CONFORMANCE_EXEMPTIONS
     ),
-    ...staleExemptions(run.coveredKeys, run.matchedKeys),
   ];
 }
 
@@ -576,7 +597,11 @@ export function checkSharedTableMirror(harnessText) {
  * @param {Readonly<Record<string, any>>} [declared]
  * @returns {string[]} problems
  */
-export function checkFallbackTable(manifests, sizingTable, declared = DECLARED_FALLBACKS) {
+export function checkFallbackTable(
+  manifests,
+  sizingTable,
+  declared = DECLARED_FALLBACKS
+) {
   const problems = [];
   const selfSizing = manifests.filter((manifest) => manifest.sizing != null);
 
@@ -702,6 +727,16 @@ export function fallbackFindings(input) {
     report('a warm mount settled at nothing, so there is no size to compare');
     return problems;
   }
+  const poison = poisoned ? poisonSizes[platform] : null;
+  if (poison != null && near(measured, poison, tolerance)) {
+    // The most specific diagnosis wins, and reporting the generic one as well would bury
+    // it: "the fallback is not the measured size" is also true here, and says much less.
+    report(
+      `settled at the poisoned ${fmt(poison)} — the guess was never corrected, ` +
+        'and every cold mount of this control is laid out at a size it never declared'
+    );
+    return problems;
+  }
   if (!near(measured, expected, tolerance)) {
     report(
       `the fallback ${fmt(expected)} is not the measured ${fmt(measured)} ` +
@@ -717,20 +752,12 @@ export function fallbackFindings(input) {
         'the declaration is not reaching the engine'
     );
   }
-  if (poisoned) {
-    const poison = poisonSizes[platform];
-    if (near(measured, poison, tolerance)) {
-      report(
-        `settled at the poisoned ${fmt(poison)} — the guess was never corrected, ` +
-          'and every cold mount of this control is laid out at a size it never declared'
-      );
-    } else if (corrections === 0) {
-      report(
-        `settled at ${fmt(measured)} with no correction, having been poisoned ` +
-          `to ${fmt(poison)} — that size can only have come from the component, so ` +
-          'the correction went missing while the ledger stayed quiet'
-      );
-    }
+  if (poison != null && corrections === 0) {
+    report(
+      `settled at ${fmt(measured)} with no correction, having been poisoned ` +
+        `to ${fmt(poison)} — that size can only have come from the component, so ` +
+        'the correction went missing while the ledger stayed quiet'
+    );
   }
   return problems;
 }
@@ -947,7 +974,7 @@ export function formatMatrix(matrix, rules = CONFORMANCE_RULES, followupsFor) {
 export function repoManifests(readFile = readerFor(), directories = null) {
   const names =
     directories ??
-    readdirSync(join(REPO_ROOT, 'src', 'components'), { withFileTypes: true })
+    readdirSync(join(repoRoot(), 'src', 'components'), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .sort();
@@ -968,7 +995,7 @@ export function repoManifests(readFile = readerFor(), directories = null) {
  * @param {string} [root]
  * @returns {(path: string) => string | null}
  */
-export function readerFor(root = REPO_ROOT) {
+export function readerFor(root = repoRoot()) {
   return (path) => {
     const absolute = join(root, path);
     return existsSync(absolute) ? readFileSync(absolute, 'utf8') : null;
