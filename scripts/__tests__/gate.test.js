@@ -16,7 +16,7 @@
  *   - the generated table saying FAIL/stale where a hand-written one said PASS.
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -1267,7 +1267,57 @@ describe('summarizeLoad rounding (N5)', () => {
  * throwaway checkout with a fake runner on `PATH` that prints a jest summary and
  * exits 0, so the assertions are about what lands in the ledger and what `need`
  * answers - the two things a round actually reads.
+ *
+ * Those fixtures put `node` and `bun` shims on `PATH` and expect the CLI to reach
+ * them. On a Node the gates do not run on, `gate.mjs` starts by re-execing itself
+ * under the `.nvmrc` major (`node-version.mjs`), and that re-exec resolves a *real*
+ * node from the fnm-exported PATH - so the fixture's fake runner is skipped
+ * entirely and `bun run check` runs against a tree that is not this repo's.
+ * FOLLOWUPS 57 saw two cases go red that way on Node 25/26. The answer comes from
+ * the shipped module rather than a copy of its supported list, so this guard cannot
+ * drift from the rule it defers to. (`node-version.mjs` cannot be imported here:
+ * it uses `import.meta`, which jest's CJS transform rejects - the same reason
+ * `gate-core.mjs` has none.)
  */
+const runtime = (() => {
+  const probeFile = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'x2-gate-node-')),
+    'probe.mjs'
+  );
+  fs.writeFileSync(
+    probeFile,
+    'import { isSupportedNodeVersion } from ' +
+      JSON.stringify(path.join(process.cwd(), 'scripts', 'node-version.mjs')) +
+      ';\n' +
+      'process.stdout.write(JSON.stringify({' +
+      'supported: isSupportedNodeVersion(process.versions.node),' +
+      'version: process.versions.node' +
+      '}));\n'
+  );
+  const probe = spawnSync(process.execPath, [probeFile], {
+    encoding: 'utf8',
+  });
+  fs.rmSync(path.dirname(probeFile), { recursive: true, force: true });
+  try {
+    return JSON.parse(String(probe.stdout));
+  } catch {
+    // Could not ask the module. Running the fixtures is the honest default:
+    // they are what catches a real ledger bug.
+    return { supported: true, version: process.versions.node };
+  }
+})();
+
+const describeCli = runtime.supported ? describe : describe.skip;
+
+if (!runtime.supported) {
+  describe('gate.mjs (the CLI) cannot be tested on this runtime', () => {
+    // Loud rather than silent: a skip nobody notices is how a guard becomes
+    // decoration (the same reasoning as `emulator-launch.test.js`).
+    it(`SKIPPED: the CLI fixtures need the Node the gates run on, and this is ${runtime.version}, where gate.mjs re-execs past the fake runner`, () => {
+      expect(runtime.supported).toBe(false);
+    });
+  });
+}
 
 const CLI = path.join(process.cwd(), 'scripts', 'gate.mjs');
 
@@ -1345,6 +1395,17 @@ function writeFakeRunner(dir) {
     // not inherit the launcher's log path, so a nested `gate.mjs` cannot write into
     // its parent's log and mark its parent's record done.
     'if [ -n "$FAKE_SHOW_GATE_LOG_ENV" ]; then echo "child sees gate-log env [${NITRO_UI_GATE_LOG-unset}]"; fi\n' +
+    // For the signal-forwarding cases (FOLLOWUPS 57): a gate that says it is ready, then
+    // waits to be signalled and reports which signal it *actually received*. Only the
+    // child can evidence a forward: anything asserted on the parent's side of the
+    // process boundary would also be true when the child is merely killed by the OS.
+    'if [ -n "$FAKE_TRAP" ]; then\n' +
+    '  trap \'echo "fake: caught $FAKE_TRAP"; exit 3\' "$FAKE_TRAP"\n' +
+    '  echo "fake: ready"\n' +
+    '  i=0\n' +
+    '  while [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done\n' +
+    '  exit 0\n' +
+    'fi\n' +
     'if [ -n "$FAKE_SLEEP" ]; then sleep "$FAKE_SLEEP"; fi\n' +
     'if [ -n "$FAKE_PROGRESS_AFTER" ]; then echo "$FAKE_PROGRESS_AFTER"; fi\n' +
     'exit ${FAKE_EXIT:-0}\n';
@@ -1370,6 +1431,69 @@ function runCli(dir, args, extraEnv = {}) {
   });
 }
 
+/**
+ * `runCli`, but running: the signal-forwarding cases have to reach into the
+ * running CLI, which `spawnSync` cannot do.
+ */
+function spawnCli(dir, args, extraEnv = {}) {
+  const bin = writeFakeRunner(dir);
+  const child = spawn(process.execPath, [CLI, ...args], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      ...extraEnv,
+    },
+  });
+  const output = { stdout: '', stderr: '' };
+  child.stdout.on('data', (chunk) => {
+    output.stdout += String(chunk);
+  });
+  child.stderr.on('data', (chunk) => {
+    output.stderr += String(chunk);
+  });
+  return { child, output };
+}
+
+/** Resolves when `text` appears in `output`, or rejects with what was seen. */
+async function waitUntil(output, text, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (output.stdout.includes(text) || output.stderr.includes(text)) return;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `never saw ${JSON.stringify(text)} in:\n${output.stdout}\n${output.stderr}`
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+/**
+ * `child`'s close, but bounded: a gate that hangs instead of exiting has to show up
+ * as this error, with everything it said, not as a Jest timeout that arrived with no
+ * idea where it stalled. Attach it before signalling - `close` fires once, and a
+ * listener attached after the output has already arrived can miss it entirely.
+ */
+function closed(child, output, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `the gate did not exit within ${timeoutMs} ms. stdout:\n${output.stdout}\nstderr:\n${output.stderr}`
+          )
+        ),
+      timeoutMs
+    );
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code, signal });
+    });
+  });
+}
+
 function ledgerLines(dir) {
   const file = path.join(dir, '.gates', 'task', 'x2-fixture.jsonl');
   if (!fs.existsSync(file)) return [];
@@ -1380,7 +1504,7 @@ function ledgerLines(dir) {
     .map((raw) => JSON.parse(raw));
 }
 
-describe('gate.mjs (the CLI, in a throwaway checkout)', () => {
+describeCli('gate.mjs (the CLI, in a throwaway checkout)', () => {
   const cleanup = [];
 
   function checkout(files, onBranch) {
@@ -1665,7 +1789,7 @@ describe('decideWait / pidMayBeRunning', () => {
  * nothing, or a `wait` that reported a failed gate as passed, is worse than the
  * polling loop it replaces.
  */
-describe('gate.mjs --background and wait', () => {
+describeCli('gate.mjs --background and wait', () => {
   const cleanup = [];
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -2004,7 +2128,7 @@ describe('gate.mjs --background and wait', () => {
  * reaper guessing from timestamps alone. The assertions are on `pool.json` - the file the reaper
  * reads - not on the run's output.
  */
-describe('gate.mjs claims the device it runs on', () => {
+describeCli('gate.mjs claims the device it runs on', () => {
   const IOS_ONLY = {
     'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
   };
@@ -2159,3 +2283,65 @@ describe('gate.mjs claims the device it runs on', () => {
     expect(fs.existsSync(path.join(dir, 'state', 'pool.json'))).toBe(false);
   }, 90_000);
 });
+
+/**
+ * N4's other half: a task runner or a person that stops `gate.mjs` by PID must
+ * not leave a harness holding the leased device. What makes this a forwarding
+ * test rather than a "did something die" test is who reports it: the assertion is
+ * on the *child's* own output, so a gate.mjs that simply died first (which is what
+ * orphaning looks like) goes red.
+ */
+describeCli(
+  'gate.mjs forwards a signal to the gate it started (FOLLOWUPS 57)',
+  () => {
+    const cleanup = [];
+    const IOS_ONLY = {
+      'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
+    };
+
+    afterAll(() => {
+      for (const dir of cleanup)
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    for (const [signal, trap] of [
+      ['SIGINT', 'INT'],
+      ['SIGTERM', 'TERM'],
+    ]) {
+      it(`forwards ${signal} to the running gate, re-raises it, and still writes the ledger`, async () => {
+        const dir = makeCheckout(IOS_ONLY);
+        cleanup.push(dir);
+        const { child, output } = spawnCli(dir, ['check'], { FAKE_TRAP: trap });
+        // Attached before anything is waited on: `close` fires once, and under a
+        // full-suite load the gate can be gone before its output has been read.
+        const ended = closed(child, output, 20_000);
+        // Marks the promise handled so a timeout that fires while an earlier
+        // `waitUntil` is still polling reports itself at the `await` below rather
+        // than as an unhandled rejection that fails an unrelated test.
+        ended.catch(() => {});
+        // A signal-only kill of this test's own child: the fake runner's shell
+        // exits on its own after a few seconds, so a mutation cannot leak a
+        // process into the next test.
+        try {
+          await waitUntil(output, 'fake: ready', 20_000);
+          child.kill(signal);
+          // The gate itself saying it was signalled. Nothing on the parent's side
+          // of the boundary can show this.
+          await waitUntil(output, `fake: caught ${trap}`, 20_000);
+          const end = await ended;
+          // Re-raised on self, so the caller's status still reads "interrupted"
+          // rather than a code that hides why the run stopped.
+          expect(end.signal).toBe(signal);
+          // And the evidence of the run survives an interrupt: one line, saying it
+          // did not pass.
+          const lines = ledgerLines(dir);
+          expect(lines.map((row) => [row.gate, row.result])).toEqual([
+            ['check', 'fail'],
+          ]);
+        } finally {
+          child.kill('SIGKILL');
+        }
+      }, 90_000);
+    }
+  }
+);
