@@ -177,6 +177,12 @@ const CHECKS = {
       ),
       'off'
     );
+    // No "every press at a short dwell arrives" counterpart here, unlike iOS:
+    // `adb shell input tap` injects a fixed-duration press and has no dwell knob,
+    // so there is no press length for this suite to hold still. F7 measured the
+    // question separately with `input swipe` at zero distance (a press whose length
+    // the caller sets) and Android delivered 12/12 at 5, 20, 50 and 100 ms — see
+    // docs/tasks/F7/probe-android-busy-hosted.json and the report's Android table.
   },
 
   /**
