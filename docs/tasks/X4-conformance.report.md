@@ -32,7 +32,8 @@ mean a correction arrived.
 per *finding*, and `staleDebt` goes red when a row stops matching something real: the list
 clears itself with a failing test rather than a reviewer noticing.
 
-**What the runs cost.** Three of five commits fix what this suite's first device runs broke:
+**What the runs cost.** Three of this branch's thirteen commits fix what the suite's first device
+runs broke:
 the fallback rule assumed `measured ≈ declared`, false by design for a `fillWidth` control's
 width and for Button (see the box-rule section under Red proofs); the harness's 1 s mount
 default, which every other suite works around; and two ways `task-ready` disagreed with its own
@@ -44,14 +45,28 @@ its own numbers.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1278 tests / 48 suites | `a68b9f868f0b` | 2 m 41 s | start 3.4 / med 4.9 / max 5.5 |
+| `harness:ios` | **PASS** | 196 tests / 14 suites | `a68b9f868f0b` (ios tree) | 2 m 57 s | start 5.0 / med 4.1 / max 6.3 |
+| `harness:android` | **PASS** | 245 tests / 14 suites | `a68b9f868f0b` (android tree) | 7 m 01 s | start 5.5 / med 4.4 / max 5.8 |
+| `real-input:ios` | **PASS** | — | `a68b9f868f0b` (ios tree) | 11 m 26 s | start 2.4 / med 6.8 / max 20.7 |
+| `real-input:android` | **PASS** | — | `a68b9f868f0b` (android tree) | 19 m 17 s | start 5.0 / med 2.7 / max 5.0 |
 
 ## Bench
 
 No bench numbers: this round adds no control and touches no rendering path, and `gate.mjs
-need` does not ask for a bench (AGENTS: benches belong to the bench host). The one cost the
-suite could plausibly add is at *build* time — it registers no component, so
-`app.stamp`'s component count is unchanged at 8, and the new harness file is 28 tests in one
-of 14 suites (47 s of a 167 s iOS run).
+need` does not ask for a bench (AGENTS: benches belong to the bench host). The cost the suite
+does add is in the harness run, and the ledger's per-suite sidecar measures it exactly —
+`Conformance.harness.tsx`, 28 tests, 47 s on both platforms:
+
+| Gate | Total | This suite | Share | Rank in the run |
+| --- | --- | --- | --- | --- |
+| `harness:ios` | 2 m 50 s | 47.1 s | 28 % | slowest of 14 |
+| `harness:android` | 6 m 56 s | 47.9 s | 12 % | 4th of 14 |
+
+The 50-mount leak fixture is most of it (4 of the 28 tests are 4 rules × 7 controls, and the
+leak one is 50 mount/unmount pairs per control). `MountChurn.harness.tsx` already pays 35 s for
+the same shape on one control, so this is the known cost of the rule, not a new kind of cost —
+and the sweep's ~20 dumps ride a real-input run that was already paying for them.
 
 
 ## The rule the device run corrected
@@ -155,6 +170,28 @@ mount at the harness's 1 s default; and a run with an orphaned Metro went red on
 wall-clock assertions because the timing gate refused to trust a port that was not its own. All
 three are in the commits above, with the reason in each message.
 
+## What the Android sweep found on device
+
+13 cases, one pass at the end of `real-input:android`, after the control checks. Nine clean,
+four `known failing` — precisely the four the fixtures predicted, and the run prints each one's
+FOLLOWUPS line so the debt is in the transcript, not only in a source file:
+
+```
+a11y:slider: the node that carries "Controlled slider" is not actionable, and nothing whose box
+  is the control's is either (android.widget.SeekBar no actions [42,738][1038,864]) … The nearest
+  actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable,
+  which is the page, not the control
+a11y:segmented-control / a11y:hosted-slider / a11y:hosted-segmented: same shape
+```
+
+Two things that measurement alone settled. The name *is* published — `content-desc` carries the
+label on a real `SeekBar`/`View`, so this is not the missing-label bug, it is the label-and-action
+split the G5/G6 reviews found by hand. And the containing actionable node is the page's
+`ScrollView` every time, which is why the rule rejects "something actionable contains it" and asks
+for a box that *is* the control's. `staleExemptions` matched all four rows, so the debt list is
+describing real findings and nothing else; the run still exits green because these four are the
+recorded debt, and it would exit red if a fifth appeared or one of these four stopped matching.
+
 ## Files changed
 
 - `scripts/conformance-core.mjs` — the four rules as data, the fallback/poison/box-rule tables, the coverage matrix, the debt lists and their self-clearing checks, the shared-table mirror.
@@ -171,16 +208,22 @@ three are in the commits above, with the reason in each message.
 - Android a11y: the four exempted nodes may be a dump artefact — `uiautomator dump` runs without touch exploration, so Compose may mark a node focusable only once TalkBack is up. `FOLLOWUPS.md` names the measurement that settles it.
 - Android a11y: Progress's own screen can never be dumped (indeterminate indicators never idle), so what a screen reader announces for an *animating* indicator is unasserted; `hosted-progress` covers the determinate one.
 - The recycle rule measures identity, not recycling — `enableViewRecycling` appears nowhere in `src/` or `example/`, so the fixture hands one `testID` to a second owner rather than reaching `prepareForRecycle`.
-- `harness.mjs` falls back to the next Metro port and keeps going; only the wall-clock timing
-  guard noticed (it compares the port in `harness-timing/state.json` with the run's own). Both
-  harness gates were lost that way when a Metro orphaned by a SIGTERM'd real-input run held
-  the lease's port — a cheap `gate.mjs` pre-flight that refuses a leased Metro port already
-  serving someone else would turn a lost 3-minute run into a 1-second message.
+- Two ways the same run went wrong, both fixable in front of the run rather than after it:
+  `harness.mjs` falls back to the next Metro port and keeps going (only the wall-clock timing
+  guard noticed, by comparing the port in `harness-timing/state.json` with its own), and
+  `lease.mjs` hands out the first pair *no lease* holds without asking whether a gate process is
+  live on it — F7's harness outlived its own lease, so pair-a read as free and the pool gave it
+  to me twice. A `gate.mjs` pre-flight that refuses a leased Metro port already serving someone
+  else turns a lost 3-minute run into a 1-second message; I wrote that check into my own wrapper
+  and it fired immediately on the first retry. The sharpest symptom, worth recording: with two
+  tasks pointed at one Metro port, the harness fails as
+  `The app bridge was replaced by a newer app connection` — F7's iOS app joined my Android
+  run's Metro (`platform (prewarm=android, app=ios)`) and its files died mid-suite with zero
+  failed assertions.
 - Two pre-existing ESLint warnings are on `main` and in files this branch does not touch:
   `scripts/harness-suite-timing.mjs:25` (`join` unused) and
   `scripts/__tests__/registry.test.js:651` (`manifests` shadowed).
 - `scripts/conformance-core.mjs` and friends count as both platforms in `gate.mjs` (they are not in `TOOLING_FILES`), so a rules-only edit owes two harness runs. Deliberate for `real-input/*`; arguable for `conformance-core.mjs` alone, and left as the expensive-but-honest default.
-- `real-input:ios` is not run by this task's `need`, and this round adds no iOS real-input
-  check — the sweep is Android-only, because the in-app query already reaches the name on
-  iOS. It is worth one run anyway as a regression check on `support.mjs`: `Suite.finish` is
-  shared, and the `auxiliary` list now prints in its summary on both platforms.
+- `real-input:ios` is not required for this round (nothing iOS real-input was added), and it
+  was run anyway as a regression check on `support.mjs`: `Suite.finish` is shared and the
+  `auxiliary` list now prints in its summary on both platforms. Green, 11 m 26 s.
