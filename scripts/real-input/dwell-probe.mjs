@@ -381,9 +381,7 @@ async function main() {
                 ...(PROBE_STALL === ''
                   ? {}
                   : { TEST_RUNNER_NUI_PROBE_STALL: PROBE_STALL }),
-                ...(PROBE_RESCUE
-                  ? { TEST_RUNNER_NUI_PROBE_RESCUE: '1' }
-                  : {}),
+                ...(PROBE_RESCUE ? { TEST_RUNNER_NUI_PROBE_RESCUE: '1' } : {}),
               }),
           ...(WATCHDOG ? { TEST_RUNNER_NUI_PROBE_WATCHDOG: '1' } : {}),
         }
