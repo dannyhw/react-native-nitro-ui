@@ -1310,7 +1310,16 @@ if (Platform.OS === 'android') {
       // dialog - and the dialog used to read `presented=1;live=1` here, a window still
       // hanging over a row that was no longer there. That was the bug, not the contract.
       log.setPickerPresent?.(false);
-      const moved = await waitForDate(first, (r) => !r.presented);
+      // Both halves in one wait. `presented` is model state and falls with the
+      // props batch; the count falls when Compose disposes the dialog's subtree,
+      // a frame or two later. Waiting on `presented` and then reading the count
+      // measured the frame in between - which is the same mistake the gate above
+      // says it fixed, and the `expected 1 to be +0` this gate threw at load 28.
+      // The contract is "the window is gone", and that is the pair, not the flag.
+      const moved = await waitForDate(
+        first,
+        (r) => !r.presented && r.livePresentations === live0
+      );
       expect(moved.livePresentations).toBe(live0);
       // A change that leaves the row where it is must not close it either: this is the
       // guard against "tear the window down whenever the Host recomposes". A sibling's
