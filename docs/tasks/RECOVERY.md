@@ -20,11 +20,10 @@
 > (the Version Packages commit) with its GitHub release. F3's three fixes are what it ships. `Stage on npm` treats
 > npm's `E409 Cannot stage previously published version` as already known (`c235180`).
 >
-> **G7a (Menu), draft PR #7: the owner ruled (D32)**: `onOpen`/`onClose` Android-only; iOS `disabled`-while-open is a
-> documented limit; a pick fires `onSelect` then `onClose` (an Android reorder). Fix round 2 runs on maintainer-mac-2 in
-> `nitro-ui-worktrees/G7a` (branch `task/G7a-menu`, main merged in at `7a1d830`). Then: Menu conformance rows if X4 has
-> landed, full merge gates here, mark the PR ready and merge. `menuAnchor` (accepted, G7b proves it) and mac-1's
-> Host-suite failures (not reproduced here, 232/232) were settled earlier.
+> **G7a (Menu) merged (2026-10-29, `41e30c5`, PR #7)** with the owner's D32 rulings; all five merge gates green on
+> maintainer-mac-2. Its minor changeset makes the next release **0.4.0**. Hold the Version Packages PR until G7b
+> (Menu's bench arm, real-input case, story) and X4 have landed, then release (sequencing call, D31). Whichever of
+> X4/G7b merges after the other must cover Menu in X4's conformance tables (`check` refuses an uncovered manifest).
 >
 > **Owner away from 2026-10-29 (autonomous):** mac-1 runs G7a, then F2 (`HANDOFF-mac1-2026-10-29.md`; F2 merged, PR #6), and
 > opens a PR per task. mac-2 runs F1, X13 and X4, and merges mac-1's PRs after re-running gates here
