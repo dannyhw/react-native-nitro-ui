@@ -1035,11 +1035,25 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
     ],
     probe: {
+      // Round 1's version of this probe — a controlled Switch, pressed by the first owner —
+      // cannot show anything, and the reason is the handshake: a press paints `true`, the
+      // echo, then the next `value={false}` write reverts it, and that same write arrives on
+      // the second mount anyway. `NitroUiControlledValue.reconcile()`
+      // (`ios/core/NitroUiModel.swift:77`) applies a React write whenever `jsEvents >=
+      // nativeEvents`, and the counters move together, so the write is never stale and the
+      // display is always repaired. Proved by deleting the reset: still green.
+      //
+      // So the second owner is *uncontrolled*. With no `value` in flight there is no write
+      // to repair the display, and the only thing that can restore it is the one-shot the
+      // reset owns: `didApplyDefault` gates the `defaultValue` pass
+      // (`HybridNitroUiSwitch.swift:842`'s equivalent), so a control that still believes it
+      // already applied its default is left showing the previous owner's tap.
       leaveBehind:
-        'a tap the app rejected, which leaves the Switch *displayed* on',
+        'a tap on an uncontrolled Switch, which leaves it displayed on, and a ' +
+        '`didApplyDefault` that says its default has already been applied',
       first: () => (
         <Switch
-          value={false}
+          defaultValue={false}
           onValueChange={recordRecycle('conformance-switch')}
           testID="conformance-switch"
           accessibilityLabel="Conformance switch"
@@ -1048,16 +1062,13 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       act: async () => {
         await pressControl('conformance-switch');
-        // The handshake: native paints `true` immediately, JS refuses to move off
-        // `value={false}`, and the next commit reverts the display. Waiting for the event
-        // rather than a pause, because the revert is only real once the echo has arrived.
         await waitFor(() =>
           expect(eventsSince(0)).toEqual(['conformance-switch:true'])
         );
       },
       second: () => (
         <Switch
-          value={false}
+          defaultValue={false}
           onValueChange={recordRecycle('conformance-switch')}
           testID="conformance-switch"
           accessibilityLabel="Conformance switch"
@@ -1067,10 +1078,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       read: async () => {
         const from = recycleEvents.length;
         await pressControl('conformance-switch');
-        // A fresh Switch at `value={false}` has one thing to say when pressed: `true`. A
-        // display left on by the previous owner says `false` instead - the tap-twice oracle
-        // `Switch.harness.tsx:8` uses for the same reason, pointed at the reset rather than at
-        // the revert it sits behind.
+        // A second owner whose default was applied shows `false`, so its first press reports
+        // `true`. A control left on by the previous owner presses *off* and reports `false`.
+        // The tap-twice oracle `Switch.harness.tsx:8` uses, pointed at the reset.
         return [
           {
             label: 'the first press after the second mount reports',
