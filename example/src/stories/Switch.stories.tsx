@@ -5,7 +5,7 @@
  * are harness/benchmark handles, not app API (DECISIONS D14).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { Switch } from 'react-native-nitro-ui';
 import { fn } from 'storybook/test';
 
@@ -199,34 +199,53 @@ export const Sizing: Story = {
 };
 
 /**
- * Both appearances on one screen. The controls resolve their own colours from
- * the OS appearance (so they look right on a user&apos;s light or dark screen);
- * the two cards are the same row drawn on each surface for comparison.
+ * The switches as the current appearance draws them, plus the note about why a
+ * story cannot show two appearances at once. A component (not an inline
+ * `render`) because it reads the appearance with a hook.
  */
-export const Appearances: Story = {
-  render: () => (
+function AppearancePanel() {
+  const scheme = useColorScheme();
+  return (
     <Showcase>
-      <Column label="on a light surface">
-        <View style={[styles.card, styles.light]}>
-          <Switch defaultValue />
-          <Switch />
-          <Switch disabled />
-        </View>
-      </Column>
-      <Column label="on a dark surface">
-        <View style={[styles.card, styles.dark]}>
-          <Switch defaultValue />
-          <Switch />
-          <Switch disabled />
-        </View>
+      <Column
+        label={`palette as drawn on the ${scheme == null ? 'light' : scheme} appearance`}
+      >
+        <Switch defaultValue />
+        <Switch />
+        <Switch disabled />
       </Column>
       <Note>
-        Order in every card: on, off, disabled off. Flip the device appearance
-        to change the controls&apos; own palette; the cards only change what is
-        behind them.
+        Order: on, off, disabled off. These are drawn by the toolkit in the
+        appearance the device is in. This is one appearance, not two surfaces:
+        React Native cannot override the appearance for a subtree, so a black
+        card behind a light-scheme switch is a black card, not dark mode - and a
+        disabled switch painted light-on-light against it is invisible rather
+        than dark. Switch the device to Dark Mode to see this story dark -
+        `xcrun simctl ui &lt;udid&gt; appearance dark` on iOS, `adb -s
+        &lt;serial&gt; shell cmd uimode night yes` on Android.
       </Note>
     </Showcase>
-  ),
+  );
+}
+
+/**
+ * The switch palette comes from the OS appearance, and this story shows the one
+ * the device is set to.
+ *
+ * It used to draw the same row twice, the second time on a black card labelled
+ * "on a dark surface". That was not dark mode: only the card's background
+ * changed, so the light-palette switches - a *disabled* one most of all - were
+ * near-invisible against the black. React Native 0.88 has no per-subtree
+ * appearance override (no `overrideAppearance` prop;
+ * `Appearance.setColorScheme()` is app-wide), so a story cannot honestly paint
+ * a dark panel. Change the device appearance instead - `xcrun simctl ui <udid>
+ * appearance dark` on iOS, `adb -s <serial> shell cmd uimode night yes` on
+ * Android - and this screen follows. Among the component docs only
+ * `docs/components/button.md` carries a captured light/dark pair; this control's
+ * doc does not.
+ */
+export const Appearances: Story = {
+  render: () => <AppearancePanel />,
 };
 
 const styles = StyleSheet.create({
@@ -252,16 +271,5 @@ const styles = StyleSheet.create({
   },
   stretch: {
     alignSelf: 'stretch',
-  },
-  card: {
-    borderRadius: 12,
-    gap: 12,
-    padding: 14,
-  },
-  dark: {
-    backgroundColor: '#000000',
-  },
-  light: {
-    backgroundColor: '#ffffff',
   },
 });
