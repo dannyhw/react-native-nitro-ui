@@ -1,0 +1,167 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-10-29T03:18:32.529Z on code tree `c2e1a8cea936` at HEAD `530f88b` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 123160 ms
+- Load: start 5.80, end 2.82, median 4.06, max 5.80
+- Device: android / device `emulator-5574` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+android+Menu-2026-10-29T03-18-32.529Z.log` (<store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-18-32.529Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › opens once, closes once, and pairs every open with a close`
+- `● Menu · G7a › closes when it is disabled while the menu is open`
+- `● Menu · G7a › renders a submenu inline on Android and nested on iOS`
+- `● Menu · G7a › relays the rows when the group changes while it is open`
+- `● Menu · G7a › leaves nothing behind when a Menu with an open menu is dropped`
+- `● Menu · G7a › carries no old state across a remount`
+- `● Menu · inside a Host › opens under its own button, and follows it when the Host moves`
+- `● Menu · inside a Host › comes down when its hosted child leaves the Host`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-18-32.529Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.82 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 116 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c2e1a8cea936, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.49/6.32 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-18-32.529Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › opens once, closes once, and pairs every open with a close
+
+    Menu report for "events" never matched within 12000ms; last read {"expanded":true,"live":0,"anchor":[0,0,236,126],"menu":[-1,-1,-1,-1],"rows":4}.
+
+      [0m [90m 347 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 348 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 349 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 350 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 351 |[39m           [32m`last read ${seen}.`[39m
+       [90m 352 |[39m       )[33m;[39m[0m
+
+  ● Menu · G7a › closes when it is disabled while the menu is open
+
+    Menu report for "disable" never matched within 12000ms; last read {"expanded":true,"live":0,"anchor":[0,0,248,126],"menu":[-1,-1,-1,-1],"rows":4}.
+
+      [0m [90m 347 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 348 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 349 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 350 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 351 |[39m           [32m`last read ${seen}.`[39m
+       [90m 352 |[39m       )[33m;[39m[0m
+
+  ● Menu · G7a › renders a submenu inline on Android and nested on iOS
+
+    Menu report for "submenu" never matched within 12000ms; last read {"expanded":true,"live":0,"anchor":[0,0,221,126],"menu":[-1,-1,-1,-1],"rows":4}.
+
+      [0m [90m 347 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 348 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 349 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 350 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 351 |[39m           [32m`last read ${seen}.`[39m
+       [90m 352 |[39m       )[33m;[39m[0m
+
+  ● Menu · G7a › relays the rows when the group changes while it is open
+
+    Menu report for "shrink" never matched within 12000ms; last read {"expanded":true,"live":0,"anchor":[0,0,232,126],"menu":[-1,-1,-1,-1],"rows":4}.
+
+      [0m [90m 347 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 348 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 349 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 350 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 351 |[39m           [32m`last read ${seen}.`[39m
+       [90m 352 |[39m       )[33m;[39m[0m
+
+  ● Menu · G7a › leaves nothing behind when a Menu with an open menu is dropped
+
+    Menu report for "drop-open" never matched within 12000ms; last read {"expanded":true,"live":0,"anchor":[0,0,265,126],"menu":[-1,-1,-1,-1],"rows":4}.
+
+      [0m [90m 347 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 348 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 349 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 350 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 351 |[39m           [32m`last read ${seen}.`[39m
+       [90m 352 |[39m       )[33m;[39m[0m
+
+  ● Menu · G7a › carries no old state across a remount
+
+    Menu report for "recycle" never matched within 12000ms; last read {"expanded":true,"live":0,"anchor":[0,0,275,126],"menu":[-1,-1,-1,-1],"rows":4}.
+
+      [0m [90m 347 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 348 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 349 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 350 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 351 |[39m           [32m`last read ${seen}.`[39m
+       [90m 352 |[39m       )[33m;[39m[0m
+
+  ● Menu · inside a Host › opens under its own button, and follows it when the Host moves
+
+    Menu report for "hosted-menu" never matched within 12000ms; last read {"expanded":true,"live":0,"anchor":[0,0,245,126],"menu":[-1,-1,-1,-1],"rows":4}.
+
+      [0m [90m 347 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 348 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 349 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 350 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 351 |[39m           [32m`last read ${seen}.`[39m
+       [90m 352 |[39m       )[33m;[39m[0m
+
+  ● Menu · inside a Host › comes down when its hosted child leaves the Host
+
+    Menu report for "hosted-removal" never matched within 12000ms; last read {"expanded":true,"live":0,"anchor":[0,0,245,126],"menu":[-1,-1,-1,-1],"rows":4}.
+
+      [0m [90m 347 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 348 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 349 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 350 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 351 |[39m           [32m`last read ${seen}.`[39m
+       [90m 352 |[39m       )[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       8 failed, 5 passed, 13 total
+Snapshots:   0 total
+Time:        122.362 s
+Ran all test suites matching Menu.
+
+
+
+```

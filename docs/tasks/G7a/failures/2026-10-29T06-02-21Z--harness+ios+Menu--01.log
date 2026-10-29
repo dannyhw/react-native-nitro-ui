@@ -1,0 +1,100 @@
+# Failure excerpt — harness:ios:Menu
+
+- Ran: 2026-10-29T06:02:21.843Z on code tree `1480a6a01b99` at HEAD `cb7c2fa` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Menu`
+- Result: fail, exit 1, 25830 ms
+- Load: start 7.60, end 5.58, median 6.41, max 7.60
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G7a-424pv`
+- Full log: `task/G7a-menu/harness+ios+Menu-2026-10-29T06-02-21.561Z.log` (<store>/task/G7a-menu/harness+ios+Menu-2026-10-29T06-02-21.561Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › carries no old state across a remount`
+- `● Menu · inside a Host › reports what React sent, and what the trigger is for a screen reader`
+- `expected null not to be null`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T06-02-21.561Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-424pv (still live)
+  |   G7a-424pv                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.58 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 55 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: harness:ios:Menu
+gate: node ../scripts/harness.mjs --harnessRunner ios Menu (cwd example)
+gate: code tree 1480a6a01b99 at HEAD cb7c2fa
+gate: git tree 73430241f807 with a DIRTY worktree (not reusable)
+gate: log task/G7a-menu/harness+ios+Menu-2026-10-29T06-02-21.561Z.log
+gate:       <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T06-02-21.561Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Menu
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 1480a6a01b99, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.60/7.31 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T06-02-21.561Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › carries no old state across a remount
+
+    "recycle" (the remounted menu) never measured on its new mount - the handle that answers is the old mount, measureContent() says 96.00x34.33, box 96.00x34.33.
+
+      [0m [90m 373 |[39m     }[33m,[39m
+       [90m 374 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 375 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 376 |[39m         [32m`"${testId}" (${what}) never measured on its new mount - the handle that `[39m [33m+[39m
+       [90m 377 |[39m           [32m`answers is ${[39m
+       [90m 378 |[39m [32m            handles.get(testId) === stale ? 'the old mount' : 'absent'[39m[0m
+
+  ● Menu · inside a Host › reports what React sent, and what the trigger is for a screen reader
+
+    expected null not to be null
+
+      [0m [90m 1783 |[39m       expect(namedElement)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m
+       [90m 1784 |[39m       expect([33mMath[39m[33m.[39mabs(namedElement[33m![39m[33m.[39mwidth [33m-[39m namedBox[33m.[39mwidth))[33m.[39mtoBeLessThan([35m2[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1785 |[39m       expect(fallbackElement)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m
+       [90m      |[39m                                           [31m[1m^[22m[39m
+       [90m 1786 |[39m       expect([33mMath[39m[33m.[39mabs(fallbackElement[33m![39m[33m.[39mwidth [33m-[39m fallbackBox[33m.[39mwidth))[33m.[39mtoBeLessThan(
+       [90m 1787 |[39m         [35m2[39m
+       [90m 1788 |[39m       )[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 13 passed, 15 total
+Snapshots:   0 total
+Time:        24.786 s
+Ran all test suites matching Menu.
+gate: harness:ios:Menu FAIL in 25.8 s
+gate: recorded in .gates/task/G7a-menu.jsonl
+
+
+gate: appended the device context to task/G7a-menu/harness+ios+Menu-2026-10-29T06-02-21.561Z.log (4 probe(s))
+
+```

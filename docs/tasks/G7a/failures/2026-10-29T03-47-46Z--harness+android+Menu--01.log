@@ -1,0 +1,76 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-10-29T03:47:46.537Z on code tree `34f8aac9e738` at HEAD `bacca69` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 29221 ms
+- Load: start 7.82, end 6.80, median 7.19, max 7.82
+- Device: android / device `emulator-5574` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+android+Menu-2026-10-29T03-47-46.537Z.log` (<store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-47-46.537Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › lays each configuration out at the size the control measured`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-47-46.537Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.80 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 32 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 34f8aac9e738, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.82/5.17 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-47-46.537Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › lays each configuration out at the size the control measured
+
+    PROBE sizes :: cfg-filled=92.57x48.00 cfg-tonal=92.57x48.00 cfg-outlined=92.57x48.00 cfg-text=68.95x48.00 cfg-elevated=92.57x48.00 cfg-size-small=57.90x48.00 cfg-size-large=108.57x50.29
+
+      [0m [90m 597 |[39m         [32m`measurements=${String(cold.measurements)}`[39m
+       [90m 598 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 599 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`PROBE sizes :: ${lines.join(' ')}`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 600 |[39m     [90m// Seven poisoned configurations, seven corrections. This is the strict half:[39m
+       [90m 601 |[39m     [90m// unlike a *new* configuration, which Android can settle inside the layout[39m
+       [90m 602 |[39m     [90m// pass that first measures it (Picker's shrink gate records that), a poisoned[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 13 passed, 14 total
+Snapshots:   0 total
+Time:        28.384 s
+Ran all test suites matching Menu.
+
+
+
+```

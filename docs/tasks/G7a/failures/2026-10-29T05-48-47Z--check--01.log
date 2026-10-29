@@ -1,0 +1,171 @@
+# Failure excerpt — check
+
+- Ran: 2026-10-29T05:48:47.195Z on code tree `abe07317a379` at HEAD `b817df2` (branch `task/G7a-menu`)
+- Command: `bun run check`
+- Result: fail, exit 1, 104755 ms
+- Load: start 4.50, end 6.27, median 8.31, max 11.20
+- Device: none recorded (not a device gate)
+- Full log: `task/G7a-menu/check-2026-10-29T05-48-46.881Z.log` (<store>/task/G7a-menu/check-2026-10-29T05-48-46.881Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `error: script "lint" exited with code 1`
+- `error: script "format" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 316 — the rest is in the full log above)
+
+```
+  ok    the counts look caught up
+  ok    a write is refused while native holds an un-emitted sample
+  ok    what was last emitted is still what is shown
+  ok    once the sample is emitted, the write is judged by the count alone
+  ok    an interaction is not blocked by an un-emitted sample
+  ok    with nothing from React there is still nothing to apply
+  ok    an un-emitted sample still refuses the write
+  ok    and clearing it lets the write through
+handshake.test: all checks passed
+── sizing.test (C++)
+sizing.test.cpp
+  268 checks passed
+── slider-value.test (Swift)
+NitroUiSliderValue
+  ok    continuous keeps a value in range (got 0.4, want 0.4)
+  ok    continuous clamps below the minimum (got 0.0, want 0.0)
+  ok    continuous clamps above the maximum (got 1.0, want 1.0)
+  ok    a negative step is continuous (got 0.4, want 0.4)
+  ok    a NaN step is continuous (got 0.4, want 0.4)
+  ok    the float noise is real (fixture sanity)
+  ok    three tenths are 0.3 (got 0.3, want 0.3)
+  ok    0.34 snaps down to 0.3 (got 0.3, want 0.3)
+  ok    0.36 snaps up to 0.4 (got 0.4, want 0.4)
+  ok    the minimum is reachable (got 0.0, want 0.0)
+  ok    the maximum of a range that ends on a step (got 1.0, want 1.0)
+  ok    clamped before it is snapped (got 1.0, want 1.0)
+  ok    snapping is measured from the minimum (got 0.25, want 0.25)
+  ok    0.1 is nearer 0 than 0.3 (got 0.0, want 0.0)
+  ok    0.2 snaps to the first step (got 0.3, want 0.3)
+  ok    0.85 snaps to the last whole step (got 0.9, want 0.9)
+  ok    the maximum is reachable... (got 1.0, want 1.0)
+  ok    ...including at the very end (got 1.0, want 1.0)
+  ok    mid-range still snaps to a step (got 0.6, want 0.6)
+  ok    a step bigger than the range: below the middle (got 0.0, want 0.0)
+  ok    a step bigger than the range: above it (got 1.0, want 1.0)
+  ok    a tie goes up (got 1.0, want 1.0)
+  ok    an empty range answers its minimum (got 2.0, want 2.0)
+  ok    an inverted range answers its minimum (got 5.0, want 5.0)
+  ok    a NaN in does not come out as NaN (got 0.0, want 0.0)
+  ok    an infinity clamps high (got 1.0, want 1.0)
+  ok    a negative infinity clamps low (got -5.0, want -5.0)
+  ok    a NaN lands on the minimum (got 2.0, want 2.0)
+  ok    an unbounded range keeps the value (got 0.4, want 0.4)
+  ok    a noisy hundredth tidies (got 512.34, want 512.34)
+  ok    seven tenths plus a tenth is 0.8 (got 0.8, want 0.8)
+  ok    a huge value keeps its 15 digits (got 1.00000000000001e+20, want 1.00000000000001e+20)
+  ok    a 16th significant digit is the one shed (got 1e+20, want 1e+20)
+  ok    tidying leaves a clean huge value alone (got 1e+20, want 1e+20)
+  ok    0.5 goes to 1, not to the even 0 (got 1.0, want 1.0)
+  ok    2.5 goes to 3, not to the even 2 (got 3.0, want 3.0)
+  ok    a negative tie goes away from zero (got -1.0, want -1.0)
+  ok    ...all the way down (got -3.0, want -3.0)
+  ok    a non-tie still rounds to nearest (got 0.0, want 0.0)
+  ok    ...in either direction (got 1.0, want 1.0)
+  ok    ...including below zero (got -1.0, want -1.0)
+  ok    a mid-range tie goes up (got 1.0, want 1.0)
+  ok    a mid-range tie goes up, not to the even 2 (got 3.0, want 3.0)
+  ok    a tie in a negative range counts steps up from the minimum (got -2.0, want -2.0)
+  ok    a tie in a fraction goes up to the next stop (got 0.5, want 0.5)
+  ok    an integer-valued tie is the same either way (got 2.0, want 2.0)
+  ok    0...1 by tenths ends on a step
+  ok    0...1 by 0.3 does not
+  ok    one whole step ends on a step
+  ok    a step past the range does not end on a step
+  ok    ...and has no whole steps
+  ok    a range far shorter than a step is not one step wide
+  ok    step 0 is continuous
+  ok    an empty range is not stepped
+  ok    0...10 step 3: up from the bottom (got 3.0, want 3.0)
+  ok    0...10 step 3: up again (got 6.0, want 6.0)
+  ok    0...10 step 3: up again (got 9.0, want 9.0)
+  ok    0...10 step 3: the last move is to the maximum (got 10.0, want 10.0)
+  ok    0...10 step 3: nothing above the maximum (got 10.0, want 10.0)
+  ok    0...10 step 3: down from the maximum (got 9.0, want 9.0)
+  ok    0...10 step 3: down again (got 6.0, want 6.0)
+  ok    0...10 step 3: down again (got 3.0, want 3.0)
+  ok    0...10 step 3: down to the bottom (got 0.0, want 0.0)
+  ok    0...10 step 3: nothing below the minimum (got 0.0, want 0.0)
+  ok    a step is always a whole step, whatever it starts from (got 3.0, want 3.0)
+  ok    0...100 step 25: up (got 25.0, want 25.0)
+  ok    0...100 step 25: up from the middle (got 75.0, want 75.0)
+  ok    0...100 step 25: up to the top (got 100.0, want 100.0)
+  ok    0...100 step 25: no overshoot (got 100.0, want 100.0)
+  ok    0...100 step 25: down (got 75.0, want 75.0)
+  ok    0...100 step 25: no undershoot (got 0.0, want 0.0)
+  ok    tenths: up from 0.3 clears the binary fraction (got 0.4, want 0.4)
+  ok    tenths: down from 0.3 (got 0.2, want 0.2)
+  ok    tenths: up to the top (got 1.0, want 1.0)
+  ok    continuous: one twentieth of the range up (got 0.05, want 0.05)
+  ok    continuous: back down to the bottom (got 0.0, want 0.0)
+  ok    continuous: down from the top (got 0.95, want 0.95)
+  ok    continuous: nothing above the top (got 1.0, want 1.0)
+  ok    continuous: nothing below the bottom (got 0.0, want 0.0)
+  ok    an empty range cannot be incremented (got 0.0, want 0.0)
+  ok    an inverted range cannot be incremented (got 5.0, want 5.0)
+  ok    a step past the range has two stops: up (got 1.0, want 1.0)
+  ok    ...and down (got 0.0, want 0.0)
+  ok    ...and nothing past the top (got 1.0, want 1.0)
+  ok    -10...-1 step 3: up (got -7.0, want -7.0)
+  ok    -10...-1 step 3: up to the maximum (got -1.0, want -1.0)
+  ok    -10...-1 step 3: down (got -4.0, want -4.0)
+  ok    -10...-1 step 3: nothing below (got -10.0, want -10.0)
+  ok    a step down from off-grid lands on a stop, not between (got -10.0, want -10.0)
+slider-value.test: PASS
+── sizing.test (C++ / ASan + UBSan)
+sizing.test.cpp
+  268 checks passed
+test:native: PASS
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — skipped, 0.0s ──────────────────────────────────────────
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 5 passed, 2 failed, 9 skipped in 104.6s
+check: failed step(s): lint, format
+check: not started after the first failure: perf:renders, nitrogen:check, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: lint ──────────────────────────────────────────────────────────
+$ eslint "**/*.{js,mjs,ts,tsx}"
+
+<repo>/example/__tests__/Menu.harness.tsx
+  1029:27  error  Insert `,`  prettier/prettier
+
+<repo>/scripts/__tests__/registry.test.js
+  634:8   error    Replace `⏎········'bench/src/implementations/index.ts',⏎········'scripts/bench/lib.mjs',` with `'bench/src/implementations/index.ts',·'scripts/bench/lib.mjs'].map(`  prettier/prettier
+  637:7   error    Replace `].map((path)·=>·[path,·armIds(files[path]·??·readRepo(path))]` with `··(path)·=>·[path,·armIds(files[path]·??·readRepo(path))]⏎······`                       prettier/prettier
+  649:13  warning  'manifests' is already declared in the upper scope on line 441 column 11                                                                                              no-shadow
+  697:11  warning  'manifests' is already declared in the upper scope on line 441 column 11                                                                                              no-shadow
+
+<repo>/scripts/harness-suite-timing.mjs
+  25:19  warning  'join' is defined but never used  no-unused-vars
+
+✖ 6 problems (3 errors, 3 warnings)
+  3 errors and 0 warnings potentially fixable with the `--fix` option.
+
+error: script "lint" exited with code 1
+──────── full log: format ────────────────────────────────────────────────────────
+$ prettier --check .
+Checking formatting...
+[warn] example/__tests__/Menu.harness.tsx
+[warn] scripts/__tests__/registry.test.js
+[warn] Code style issues found in 2 files. Run Prettier with --write to fix.
+error: script "format" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 104.8 s
+gate: recorded in .gates/task/G7a-menu.jsonl
+
+```

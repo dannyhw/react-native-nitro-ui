@@ -1,0 +1,201 @@
+# Failure excerpt — harness:android:Host
+
+- Ran: 2026-10-29T04:23:42.830Z on code tree `7ac4d0bd4961` at HEAD `6dc29cd` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Host`
+- Result: fail, exit 1, 276825 ms
+- Load: start 3.84, end 3.04, median 3.85, max 4.86
+- Device: android / device `emulator-5574` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+android+Host-2026-10-29T04-23-42.830Z.log` (<store>/task/G7a-menu/harness+android+Host-2026-10-29T04-23-42.830Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostControls.harness.tsx`
+- `● Console`
+- `● Host · four kinds of control, one composition › follows mixed children that are removed and added`
+- `Error: Promise created`
+- `FAIL __tests__/HostPopups.harness.tsx`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › comes down with its row, and leaves nothing when the Host is dropped`
+- `expected 1 to be +0 // Object.is equality`
+- `FAIL __tests__/Host.harness.tsx`
+- `● Host · hosted controls are still controls › lays a re-framed hosted child at its Yoga frame, not its drawing (F8)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Host-2026-10-29T04-23-42.830Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.04 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 203 — the rest is in the full log above)
+
+```
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26501:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26515:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88599:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:57)
+      at tryCallOne (address at InternalBytecode.js:1:27784)
+      at anonymous (address at InternalBytecode.js:1:37199)
+      Promise #1086, created 29797ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88539:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88559:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88674:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26512:25)
+      at apply (native)
+      at pressAt (http:/localhost:8295/__tests__/HostControls.harness.bundle/&modulesOnly=true&platform=android:113283:29)
+      at anonymous (http:/localhost:8295/__tests__/HostControls.harness.bundle/&modulesOnly=true&platform=android:90414:85)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26501:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26515:29)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26520:14)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88679:23)
+      at tryCallTwo (address at InternalBytecode.js:1:27817)
+      at Promise (address at InternalBytecode.js:1:27928)
+      at construct (native)
+      at construct (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88677:38)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26512:25)
+      at apply (native)
+      at probeAt (http:/localhost:8295/__tests__/HostControls.harness.bundle/&modulesOnly=true&platform=android:90408:26)
+      at probeIn (http:/localhost:8295/__tests__/HostControls.harness.bundle/&modulesOnly=true&platform=android:90428:19)
+      at anonymous (http:/localhost:8295/__tests__/HostControls.harness.bundle/&modulesOnly=true&platform=android:91399:36)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26501:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26515:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88599:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:57)
+      at tryCallOne (address at InternalBytecode.js:1:27784)
+      at anonymous (address at InternalBytecode.js:1:37199)
+      Promise #1088, created 29964ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88539:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88559:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88674:43)
+      at proxy trap (native)
+      at flushEvents (http:/localhost:8295/__tests__/HostControls.harness.bundle/&modulesOnly=true&platform=android:113251:23)
+      at anonymous (http:/localhost:8295/__tests__/HostControls.harness.bundle/&modulesOnly=true&platform=android:113280:28)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26501:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26515:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88599:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:57)
+      at tryCallOne (address at InternalBytecode.js:1:27784)
+      at anonymous (address at InternalBytecode.js:1:37199)
+
+FAIL __tests__/HostPopups.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › comes down with its row, and leaves nothing when the Host is dropped
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 1210 |[39m       log[33m.[39msetPickerPresent[33m?[39m[33m.[39m([36mfalse[39m)[33m;[39m
+       [90m 1211 |[39m       [36mconst[39m moved [33m=[39m [36mawait[39m waitForDate(first[33m,[39m (r) [33m=>[39m [33m![39mr[33m.[39mpresented)[33m;[39m
+      [31m[1m>[22m[39m[90m 1212 |[39m       expect(moved[33m.[39mlivePresentations)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                           [31m[1m^[22m[39m
+       [90m 1213 |[39m       [90m// A change that leaves the row where it is must not close it either: this is the[39m
+       [90m 1214 |[39m       [90m// guard against "tear the window down whenever the Host recomposes". A sibling's[39m
+       [90m 1215 |[39m       [90m// key changing takes *that sibling's* group out and moves nothing else, and the[39m[0m
+
+FAIL __tests__/Host.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+  ● Host · hosted controls are still controls › lays a re-framed hosted child at its Yoga frame, not its drawing (F8)
+
+    Test timed out after 30000ms: Host · hosted controls are still controls lays a re-framed hosted child at its Yoga frame, not its drawing (F8)
+
+    Pending promises at timeout: 3
+
+    Promise #511, created 20463ms after test start:
+      Error: Promise created
+
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88539:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88559:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88674:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26512:25)
+      at apply (native)
+      at drawnColumns (http:/localhost:8295/__tests__/Host.harness.bundle/&modulesOnly=true&platform=android:112063:29)
+      at anonymous (http:/localhost:8295/__tests__/Host.harness.bundle/&modulesOnly=true&platform=android:112078:90)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26501:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26515:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88599:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:57)
+      at tryCallOne (address at InternalBytecode.js:1:27784)
+      at anonymous (address at InternalBytecode.js:1:37199)
+      Promise #577, created 29412ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88539:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88559:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88674:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26512:25)
+      at apply (native)
+      at probeAt (http:/localhost:8295/__tests__/Host.harness.bundle/&modulesOnly=true&platform=android:111534:26)
+      at probeIn (http:/localhost:8295/__tests__/Host.harness.bundle/&modulesOnly=true&platform=android:111554:19)
+      at anonymous (http:/localhost:8295/__tests__/Host.harness.bundle/&modulesOnly=true&platform=android:112056:31)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26501:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26515:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88599:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:57)
+      at tryCallOne (address at InternalBytecode.js:1:27784)
+      at anonymous (address at InternalBytecode.js:1:37199)
+      Promise #581, created 30040ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88539:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88559:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88674:43)
+      at proxy trap (native)
+      at settle (http:/localhost:8295/__tests__/Host.harness.bundle/&modulesOnly=true&platform=android:111482:23)
+      at anonymous (http:/localhost:8295/__tests__/Host.harness.bundle/&modulesOnly=true&platform=android:111541:19)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26501:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:26515:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88599:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=android&dev=true&lazy=true&minify=false&app=nitroui.example&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:88608:57)
+      at tryCallOne (address at InternalBytecode.js:1:27784)
+      at anonymous (address at InternalBytecode.js:1:37199)
+
+Test Suites: 3 failed, 3 total
+Tests:       3 failed, 24 skipped, 42 passed, 69 total
+Snapshots:   0 total
+Time:        275.843 s
+Ran all test suites matching Host.
+
+
+
+```

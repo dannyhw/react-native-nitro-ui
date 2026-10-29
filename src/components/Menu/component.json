@@ -1,0 +1,14 @@
+{
+  "name": "Menu",
+  "hybridView": "NitroUiMenu",
+  "implementation": "HybridNitroUiMenu",
+  "id": "menu",
+  "sizing": "intrinsic",
+  "hostable": true,
+  "exampleTab": "menu",
+  "exampleLabel": "Menu",
+  "bench": false,
+  "benchUnsuffixed": false,
+  "smoke": false,
+  "realInput": false
+}

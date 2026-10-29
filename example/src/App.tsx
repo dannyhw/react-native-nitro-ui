@@ -17,6 +17,7 @@ import ProgressScreen from './ProgressScreen';
 import SegmentedControlScreen from './SegmentedControlScreen';
 import SliderScreen from './SliderScreen';
 import SwitchScreen from './SwitchScreen';
+import MenuScreen from './MenuScreen';
 // @end-generated
 // `Host` has no manifest (it is a container, not a control), so its screen is the
 // one import the registry does not write.
@@ -31,6 +32,7 @@ type Screen =
   | 'segmented'
   | 'datepicker'
   | 'picker'
+  | 'menu'
   // @end-generated
   // The shared-composition screen, which is not a control and has no manifest.
   | 'host';
@@ -76,6 +78,7 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'segmented', label: 'Segments' },
   { id: 'datepicker', label: 'Dates' },
   { id: 'picker', label: 'Picker' },
+  { id: 'menu', label: 'Menu' },
   // @end-generated
   // The shared-`<Host>` screen: real-input taps it (iOS included, where `Host` is the
   // passthrough) and `Host.harness.tsx` measures it. `Host` composes on Android only.
@@ -130,6 +133,7 @@ export default function App() {
         {screen === 'segmented' ? <SegmentedControlScreen /> : null}
         {screen === 'datepicker' ? <DatePickerScreen /> : null}
         {screen === 'picker' ? <PickerScreen /> : null}
+        {screen === 'menu' ? <MenuScreen /> : null}
         {/* @end-generated */}
         {screen === 'host' ? <HostScreen /> : null}
       </View>
