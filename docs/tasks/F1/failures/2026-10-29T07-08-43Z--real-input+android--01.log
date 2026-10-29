@@ -1,0 +1,195 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-10-29T07:08:43.705Z on code tree `2f0609aab2c1` at HEAD `a8c17b3` (branch `task/F1-determinism`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 948069 ms
+- Load: start 2.94, end 2.69, median 2.47, max 5.07
+- Device: android / device `emulator-5574` / lease `F1-4m8nr`
+- Full log: `task/F1-determinism/real-input+android-2026-10-29T07-08-43.705Z.log` (<store>/task/F1-determinism/real-input+android-2026-10-29T07-08-43.705Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ a second real tap to register: 3 real taps left real-input-segmented-index at "1" rather than "0" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes.`
+- `✗ a second real tap to register: 3 real taps left host-segmented-index at "1" rather than "2" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes.`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/real-input+android-2026-10-29T07-08-43.705Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-4m8nr (still live)
+  |   F1-4m8nr                 F1           both              pair-a
+  |   F2merge-7t70v            F2merge      both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.72 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 252 — the rest is in the full log above)
+
+```
+    · "Real-input drop picker" occupies 42,1682 → 777,1829
+    ✓ cycle 1: the drop picker's menu is open as a popup window — expected 1, saw 1
+    ✓ cycle 1: unmounting with the menu open leaves no popup window — expected 0, saw 0
+    · "Real-input drop picker" occupies 42,1682 → 777,1829
+    · "Real-input drop picker" occupies 42,1682 → 777,1829
+    ✓ cycle 2: the drop picker's menu is open as a popup window — expected 1, saw 1
+    ✓ cycle 2: unmounting with the menu open leaves no popup window — expected 0, saw 0
+    · "Real-input drop picker" occupies 42,1682 → 777,1829
+    · "Real-input drop picker" occupies 42,1682 → 777,1829
+    ✓ cycle 3: the drop picker's menu is open as a popup window — expected 1, saw 1
+    ✓ cycle 3: unmounting with the menu open leaves no popup window — expected 0, saw 0
+    · "Real-input disabled picker" needed 1 scroll to come on screen
+    · "Real-input disabled picker" occupies 42,1653 → 777,1821
+    ✓ a real tap on the disabled picker opens no menu — expected 0, saw 0
+    · "Real-input enabled picker" occupies 42,1837 → 777,2005
+    ✓ the ordinary picker, tapped the same way, opens one - so the line above measured a refusal — expected 1, saw 1
+    ✓ and that menu goes away again — expected 0, saw 0
+    ✓ one node carries the enabled picker's name, so it is announced once — expected 1, saw 1
+    ✓ and that same node carries the value it shows — expected Mica, saw Mica
+    ✓ it is the node a tap is aimed at, too (the name is not parked on a container) — expected true, saw true
+    ✓ the node announces the role of a list of choices — expected android.widget.Spinner, saw android.widget.Spinner
+    ✓ the disabled picker is one node as well — expected 1, saw 1
+    ✓ and that node is the one that says it is disabled — expected false, saw false
+    · name node reports focusable=false - kept as evidence, not asserted
+
+  hosted-switch: real tap toggles a Switch inside a <Host>, where the control has no view of its own
+    ✓ the hosted Switch starts off — expected off, saw off
+    · "Hosted switch 0" occupies 42,899 → 179,983
+    ✓ one real tap flips a hosted Switch (React renders "on") — expected on, saw on
+    · "Hosted switch 0" occupies 42,899 → 179,983
+    ✓ a second real tap flips it back, so the check is not one fluke — expected off, saw off
+    ✓ the Host reported both changes it was asked for — expected 2, saw 2
+    · tree positions — section=31, hosted=37/41/45, note=48; named nodes: 10:Switch | 11:Switch | 12:Slider | 13:Slider | 14:Button | 15:Button | 16:Progress | 17:Progress | 18:Segments | 19:Segments | 20:Dates | 21:Dates | 22:Picker | 23:Picker | 24:Host | 25:Host | 29:react-native-nitro-ui  | 30:Everything inside a Ho | 31:THREE SWITCHES, ONE CO | 37:Hosted switch 0 | 41:Hosted switch 1 | 45:Hosted switch 2 | 48:The Host has a height; | 49:first switch, as JS se | 50:off | 51:changes JS has accepte | 52:2 | 53:flip the first from JS | 54:flip the first from JS | 55:A SLIDER AND A BUTTON, | 56:hosted Slider, as JS s | 57:0.40 | 58:presses the hosted But | 59:0 | 64:Hosted slider | 66:Hosted button | 67:Hosted action | 70:Hosted disabled button | 71:Hosted action, disable
+    ✓ the tree carries the RN text above the Host — expected true, saw true
+    ✓ the tree carries the RN note below the Host — expected true, saw true
+    ✓ the tree carries a node for each hosted Switch — expected true,true,true, saw true,true,true
+    ✓ each hosted Switch is its own labelled node, in mount order — expected 37,41,45, saw 37,41,45
+    ✓ the RN text above the Host is read before every hosted Switch — expected true,true,true, saw true,true,true
+    ✓ the RN note below the Host is read after every hosted Switch — expected true,true,true, saw true,true,true
+
+  hosted-button: real tap presses a Button inside a <Host>, and a disabled one beside it stays unpressed
+    · "Hosted button" occupies 42,2191 → 397,2296
+    · "Hosted disabled button" occupies 42,2317 → 551,2422
+    ✓ the hosted Buttons start with no presses recorded — expected 0, saw 0
+    · "Hosted button" occupies 42,2191 → 397,2296
+    ✓ one real tap on a hosted Button reaches onPress — expected 1, saw 1
+    ✓ a real tap on the disabled hosted Button does not press it — expected 1, saw 1
+    · "Hosted button" occupies 42,2191 → 397,2296
+    ✓ a second real tap presses the hosted Button again — expected 2, saw 2
+
+  hosted-slider: real drag moves a Slider inside a <Host>, whose width is the track
+    · "Hosted slider" occupies 42,2054 → 1038,2180
+    ✓ the hosted Slider starts at 0.40 — expected 0.4, saw 0.4
+    ✓ the hosted Slider fills the Host (996 of 1080 px wide)
+    ✓ the hosted Slider is a track rather than a square
+    ✓ a real drag moves a hosted Slider and React renders it (0.4 -> 0.88)
+    ✓ dragging back moves a hosted Slider the other way (0.88 -> 0.12)
+
+  hosted-mixed: one <Host> composes four kinds of control, and each keeps its own node, order and geometry
+    · "Mixed button" needed 1 scroll to come on screen
+    · "Mixed button" occupies 42,2046 → 377,2151
+    ✓ the mixed Host starts with nothing answered — expected off 0.50 0, saw off 0.50 0
+    · named nodes in the tree: 10:Switch | 11:Switch | 12:Slider | 13:Slider | 14:Button | 15:Button | 16:Progress | 17:Progress | 18:Segments | 19:Segments | 20:Dates | 21:Dates | 22:Picker | 23:Picker | 24:Host | 25:Host | 29:The Host has a height; | 30:first switch, as JS se | 31:off | 32:changes JS has accepte | 33:2 | 34:flip the first from JS | 35:flip the first from JS | 36:A SLIDER AND A BUTTON, | 37:hosted Slider, as JS s | 38:0.12 | 39:presses the hosted But | 40:2 | 45:Hosted slider | 47:Hosted button | 48:Hosted action | 51:Hosted disabled button | 52:Hosted action, disable | 54:The Slider fills the H | 55:FOUR KINDS OF CONTROL, | 56:mixed Host, as JS sees | 57:off 0.50 0 | 63:Mixed switch | 66:Mixed slider | 67:Mixed linear progress | 68:Mixed circular progres | 70:Mixed button | 71:Mixed action
+    ✓ the mixed Host publishes a node for each of its five children — expected true,true,true,true,true, saw true,true,true,true,true
+    ✓ each kind of control is its own node, in mount order — expected 63,66,67,68,70, saw 63,66,67,68,70
+    · widths in px - slider=996, bar=996, indicator=105, switch=137
+    ✓ the linear bar is as wide as the Slider (996 vs 996)
+    ✓ the circular indicator keeps its own width (105 vs 996)
+    ✓ the Switch keeps its own width too (137 vs 996)
+    ✓ the indicator is drawn as a square, not stretched across the Host (105 x 105)
+    · "Mixed button" occupies 42,2046 → 377,2151
+    ✓ the Button in a mixed Host presses, and nothing else in it moved — expected off 0.50 1, saw off 0.50 1
+    · "Mixed switch" occupies 42,1688 → 179,1772
+    ✓ the Switch in the same Host answers too, and the press count stays — expected on 0.50 1, saw on 0.50 1
+
+  hosted-segmented: real tap selects a segment of a SegmentedControl inside a <Host>, which owns no window
+    · "Hosted segmented" needed 2 scrolls to come on screen
+    · "Hosted segmented" occupies 42,1987 → 714,2113
+    ✓ the hosted SegmentedControl shows the index JS gave it — expected 0, saw 0
+    ✓ no window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted segmented" occupies 42,1987 → 714,2113
+    ✓ a real tap on the middle segment of a hosted SegmentedControl reaches JS as index 1 — expected 1, saw 1
+    · "Hosted segmented" occupies 42,1987 → 714,2113
+    ✓ the drawing did not move out from under the finger — expected 42,1987 → 714,2113, saw 42,1987 → 714,2113
+    · "Hosted segmented" occupies 42,1987 → 714,2113
+    · a second real tap to register: tap 1/3 on "host-segmented-index" left "1" - tapping again
+    · "Hosted segmented" occupies 42,1987 → 714,2113
+    · a second real tap to register: tap 2/3 on "host-segmented-index" left "1" - tapping again
+    · "Hosted segmented" occupies 42,1987 → 714,2113
+    · a second real tap to register: tap 3/3 on "host-segmented-index" left "1" - tapping again
+    ✗ a second real tap to register: 3 real taps left host-segmented-index at "1" rather than "2" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes.
+
+  hosted-picker: real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS
+    · "Hosted picker" needed 2 scrolls to come on screen
+    · "Hosted picker" occupies 42,1413 → 777,1581
+    ✓ the hosted Picker shows the index JS gave it — expected 1, saw 1
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted picker" occupies 42,1413 → 777,1581
+    ✓ a real tap on the hosted anchor opens the menu as a popup window — expected 1, saw 1
+    · menu row "Gamma" at 74,1891 -> 202,1944; hosted anchor at 42,1413 -> 777,1581
+    ✓ the menu opens below the top of the box the Host drew, not at the top of the screen
+    ✓ the hosted menu marks the current choice ("Beta") selected to TalkBack
+    ✓ and the row reaches JS as index 2 — expected 2, saw 2
+    ✓ a real tap on a hosted menu row closes the popup — expected 0, saw 0
+    · "Hosted picker" occupies 42,1413 → 777,1581
+    ✓ Back shuts the hosted popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no selection - a menu is not a choice — expected 2, saw 2
+
+  hosted-date-picker: real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, and OK, Cancel, Back and removing the child each close it
+    · "Hosted date picker" needed 3 scrolls to come on screen - after 1 naming with no box (composed outside the clip)
+    · "Hosted date picker" occupies 42,1169 → 386,1295
+    ✓ the hosted DatePicker shows the day JS gave it — expected 2026-05-17, saw 2026-05-17
+    · "Hosted date picker" occupies 42,1169 → 386,1295
+    ✓ the hosted dialog's day cells are in the accessibility tree (31 of them, clickable and named with a year)
+    ✓ the dialog opens on the month the Host is drawing, not on a default
+    ✓ while the hosted dialog is up it is a window of its own - the app's own echo is not in the same dump
+    ✓ Back closes the hosted dialog and reports no day — expected 2026-05-17, saw 2026-05-17
+    ✓ and the app text is readable again once the dialog is gone
+    · "Hosted date picker" occupies 42,1169 → 386,1295
+    ✓ Cancel closes the hosted dialog and reports no day — expected 2026-05-17, saw 2026-05-17
+    · "Hosted date picker" occupies 42,1169 → 386,1295
+    · tapping dialog day "Saturday, May 16, 2026"
+    ✓ a real tap on a dialog day ("Saturday, May 16, 2026") reaches JS through the Host as a new day
+    ✓ and OK closed it: the app text is readable again
+    ✓ and no popup window of any kind is left owned by the app — expected 0, saw 0
+    · "Hosted date picker" occupies 42,1190 → 386,1316
+    ✓ removing only the hosted DatePicker child leaves no dialog window behind
+    ✓ a teardown is not a choice - the day JS holds is the one it was given — expected 2026-05-16, saw 2026-05-16
+    · "Hosted date picker" occupies 42,1169 → 386,1295
+
+switch: PASS (no retries)
+slider: PASS (no retries)
+button: PASS (no retries)
+segmented-control: FAIL (no retries)
+    failed: a second real tap to register: 3 real taps left real-input-segmented-index at "1" rather than "0" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes.
+date-picker: PASS (no retries)
+picker: PASS (no retries)
+hosted-switch: PASS (no retries)
+hosted-button: PASS (no retries)
+hosted-slider: PASS (no retries)
+hosted-mixed: PASS (no retries)
+hosted-segmented: FAIL (no retries)
+    failed: a second real tap to register: 3 real taps left host-segmented-index at "1" rather than "2" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes.
+hosted-picker: PASS (no retries)
+hosted-date-picker: PASS (no retries)
+
+real-input (android): 11/13 controls passed · 0 press sequence(s) needed a retry
+
+
+
+```
