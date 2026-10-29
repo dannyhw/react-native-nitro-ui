@@ -28,7 +28,8 @@
 > (3) a pick fires `onClose` then `onSelect` — keep the pairing and amend Q1 §5?
 > Decided here (implementation, not API): (4) Android anchors with `menuAnchor`/`ExposedDropdownMenuBox`, accepted on
 > condition G7b commits a red run with a plain `DropdownMenu` and an upper-bound test; (5) mac-2 re-runs `harness:android`
-> on the merged tree to see whether mac-1's Host-suite failures are machine-specific. Merges once (1)–(3) are ruled.
+> on the merged tree: 232/232 green here (and `harness:ios` 182 + 1 skipped), so mac-1's Host-suite failures are
+> machine-specific. Merges once (1)–(3) are ruled, after `real-input:*` on the then-current merge tree.
 >
 > **Owner away from 2026-10-29 (autonomous):** mac-1 runs G7a, then F2 (`HANDOFF-mac1-2026-10-29.md`; F2 merged, PR #6), and
 > opens a PR per task. mac-2 runs F1, X13 and X4, and merges mac-1's PRs after re-running gates here
