@@ -1440,13 +1440,20 @@ afterEach(() => {
 describe('conformance · every control, four rules', () => {
   for (const fixture of FIXTURES) {
     describe(`· ${fixture.name}`, () => {
-      const expected = declaredFallback(fixture.component);
-      // From the mirrored table, because which axes a control's declaration describes is a
-      // host-side fact about its sizing policy — the suite that asserts does not get to
-      // decide it. See `boxRuleFor` in scripts/conformance-core.mjs.
-      const boxRule = boxRuleFor(fixture.component);
+      // Both lookups are done *inside* the one test that uses them, not here (X4 review N3).
+      // In the `describe` body they ran while Jest was collecting the file, so a fixture whose
+      // component has no row in the shared table took every other control's suite down with it:
+      // one stale row became a collection error and the run reported nothing about the six
+      // controls that were fine. Here it is one red test with its name on it.
+      // `checkInAppFixtures` is what refuses such a fixture at all, on the host, in `check`.
 
       it('has its own declared fallback, and still corrects a wrong guess', async () => {
+        // Which axes this control's declaration describes comes from the mirrored table,
+        // because that is a host-side fact about its sizing policy — the suite that asserts
+        // does not get to decide it. See `boxRuleFor` in scripts/conformance-core.mjs.
+        const expected = declaredFallback(fixture.component);
+        const boxRule = boxRuleFor(fixture.component);
+
         // 1. The engine knows a fallback at all — read once for the whole file, before any
         //    poison here has had the chance to write one. See `readRegistrationOnce` for why a
         //    per-test read is not evidence, and for what a `false` means on a warm process.

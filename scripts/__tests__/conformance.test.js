@@ -789,7 +789,9 @@ describe('the debt ledger', () => {
     // nothing. The iOS rows for the same controls are not in this count — an Android run
     // never read those trees, so it has no evidence that they still reproduce.
     expect(debt.length).toBe(3);
-    expect(debt.join('\n')).toContain('the android entry for "segmented-control"');
+    expect(debt.join('\n')).toContain(
+      'the android entry for "segmented-control"'
+    );
     expect(debt.join('\n')).not.toContain('the android entry for "slider"');
     expect(debt.join('\n')).not.toContain('the ios entry');
 
@@ -972,7 +974,7 @@ describe('the debt, as the matrix sees it', () => {
     expect(resolve(findingKey('Switch', 'recycle-reset'))).toBeNull();
   });
 
-  it('refuses to name a line when only one of a control\'s two platform rows is written down', () => {
+  it("refuses to name a line when only one of a control's two platform rows is written down", () => {
     // The shape the iOS rows introduced: one control, debt on both platforms. A resolver
     // that answered with whichever citation it found first would send a reviewer to one
     // line and leave the other bug unowned.
@@ -980,7 +982,8 @@ describe('the debt, as the matrix sees it', () => {
       {
         control: 'slider',
         platform: 'android',
-        followups: 'X4 a11y: Compose RangeInfo nodes are not actionable in a dump',
+        followups:
+          'X4 a11y: Compose RangeInfo nodes are not actionable in a dump',
         matches: /not actionable/,
       },
       {
@@ -1069,12 +1072,95 @@ describe('the in-app fixture table cross-check', () => {
     );
     expect(renamed).not.toBe(harness());
     expect(checkInAppFixtures(repoManifests(), renamed).join('\n')).toContain(
-      'does not name NitroUiPicker'
+      'says NitroUiComboBox'
+    );
+  });
+
+  it('is not satisfied by a comment that mentions the control', () => {
+    // The scan reads the FIXTURES table's rows, not the file's text (X4 review N3). Round 1
+    // asked whether `name: 'Picker'` appeared anywhere, so a row whose members are prose used
+    // to pass it. Anything a `// TODO` can satisfy is not a coverage claim.
+    const commentedOut = harness().replace(
+      ['  {', "    name: 'Picker',", "    component: 'NitroUiPicker',"].join(
+        '\n'
+      ),
+      [
+        '  {',
+        "    // name: 'Picker',",
+        "    // component: 'NitroUiPicker',",
+      ].join('\n')
+    );
+    expect(commentedOut).not.toBe(harness());
+    const wholeRow = checkInAppFixtures(repoManifests(), commentedOut).join(
+      '\n'
+    );
+    expect(wholeRow).toContain('no fixture for Picker');
+    // The leftover row is not silently ignored either: an unnamed row in the table is one no
+    // manifest declares, which is the same bug reported from the other end.
+    expect(wholeRow).toContain('a fixture guards');
+
+    // The subtler half. The row is real and only its `component` has become a comment, so a
+    // text scan still finds `name: 'Picker'` while the sizing rules ask the engine about a
+    // component this fixture never names.
+    const noComponent = harness().replace(
+      "    component: 'NitroUiPicker',",
+      "    // component: 'NitroUiPicker',"
+    );
+    expect(noComponent).not.toBe(harness());
+    const rowOnly = checkInAppFixtures(repoManifests(), noComponent).join('\n');
+    expect(rowOnly).toContain('says null');
+  });
+
+  it('looks the shared numbers up inside a test, not while collecting', () => {
+    // The other half of N3. `declaredFallback` and `boxRuleFor` throw on a missing row, and
+    // round 1 called them in the `describe` body — Jest runs that while collecting, so one
+    // fixture whose component had no shared-table row aborted the whole file and reported
+    // nothing about the six controls that were fine. Inside an `it` the same throw is one red
+    // test with its control's name on it. Device-only code, so this proves the shape rather
+    // than the behaviour: no lookup between the loop's `describe(` and its first `it(`.
+    // The suite's own loop. Anchored on its `describe`, because `readRegistrationOnce` above
+    // it iterates the same table and is allowed to call things at module scope.
+    const anchor = harness().indexOf(
+      "describe('conformance · every control, four rules'"
+    );
+    expect(anchor).toBeGreaterThan(-1);
+    const body = harness().slice(anchor);
+    const firstTest = body.indexOf('it(');
+    expect(firstTest).toBeGreaterThan(-1);
+    const collection = body.slice(0, firstTest);
+    for (const lookup of ['declaredFallback(', 'boxRuleFor(']) {
+      expect(collection).not.toContain(lookup);
+    }
+    // …and they really are called, or this guard is guarding nothing.
+    expect(body).toContain('declaredFallback(');
+    expect(body).toContain('boxRuleFor(');
+  });
+
+  it('says so when the fixture table itself cannot be found', () => {
+    // The failure mode of a scan that quietly finds nothing: rename the table and the old
+    // substring check reported every control covered, because a doc comment elsewhere in the
+    // file still said `name: 'Switch'`. An unreadable table has to be its own problem.
+    const renamed = harness().replace(
+      'const FIXTURES: ReadonlyArray<Fixture> = [',
+      'const CASES: ReadonlyArray<Fixture> = ['
+    );
+    expect(renamed).not.toBe(harness());
+    expect(checkInAppFixtures(repoManifests(), renamed).join('\n')).toContain(
+      'could not be found'
     );
   });
 
   it('goes red for a fixture guarding a control nobody declares', () => {
-    const extra = `${harness()}\nconst STRAY = {\n  name: 'Ghost',\n  component: 'NitroUiGhost',\n};\n`;
+    // A row *of the table*, which is the shape the bug has: the control leaves the registry,
+    // its fixture stays, still rendering and still green. An object appended after the table
+    // is not a fixture, and the old scan reporting it as one was the too-much-reading that
+    // the test above refuses from the other side.
+    const extra = harness().replace(
+      'const FIXTURES: ReadonlyArray<Fixture> = [\n',
+      'const FIXTURES: ReadonlyArray<Fixture> = [\n  {\n    name: ' +
+        "'Ghost',\n    component: 'NitroUiGhost',\n  },\n"
+    );
+    expect(extra).not.toBe(harness());
     expect(checkInAppFixtures(repoManifests(), extra).join('\n')).toContain(
       'a fixture guards "Ghost"'
     );
