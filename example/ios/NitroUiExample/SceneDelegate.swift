@@ -22,6 +22,9 @@ class SceneDelegate: RCTDefaultReactNativeFactoryDelegate, UIWindowSceneDelegate
 
     // F7 dwell probe only: a launch that asks for the no-React-Native shape gets
     // that window instead, and React is never started for it. NitroUiProbe.swift.
+    NitroUiProbe.startWatchdogIfNeeded(
+      environment: ProcessInfo.processInfo.environment
+    )
     if let probe = NitroUiProbe.rootViewController(
       environment: ProcessInfo.processInfo.environment
     ) {

@@ -101,6 +101,18 @@ const PROBE_ROWS = flag('--rows', '200');
  */
 const PROBE_STALL = flag('--stall', '');
 /**
+ * For the no-React-Native arm: attach a tap recogniser to every row's hosting view
+ * and publish how often one fires, which is how the arm tests whether a library-side
+ * recogniser could rescue a short press at all.
+ */
+const PROBE_RESCUE = args.includes('--rescue');
+/**
+ * Log how long the app's main thread goes without running any work (a gap over 40 ms
+ * is one log line), for the arm that has to show the React Native screen really does
+ * stall for the length the stall arm had to set by hand to lose a press.
+ */
+const WATCHDOG = args.includes('--watchdog');
+/**
  * Read the witness twice instead of polling it: press, then read once. For the
  * case where the concern is that the probe's own accessibility traffic into a busy
  * app is what disturbs the answer. Needs a counting witness to say how many
@@ -369,7 +381,11 @@ async function main() {
                 ...(PROBE_STALL === ''
                   ? {}
                   : { TEST_RUNNER_NUI_PROBE_STALL: PROBE_STALL }),
+                ...(PROBE_RESCUE
+                  ? { TEST_RUNNER_NUI_PROBE_RESCUE: '1' }
+                  : {}),
               }),
+          ...(WATCHDOG ? { TEST_RUNNER_NUI_PROBE_WATCHDOG: '1' } : {}),
         }
       );
       const log = fs.readFileSync(logFile, 'utf8');
