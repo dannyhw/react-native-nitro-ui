@@ -1,7 +1,8 @@
 # X4 — Conformance suite for the four recurring bug classes, and `task-ready`
 
 **Branch:** `task/X4-conformance` (from `main` at `3dfe041`) · **Round:** 1 of up to 3 (D19) ·
-**Leases:** `X4-fwfhi` then `X4-okg1q` (TTL expiry mid-round), Android + iOS pair-b
+**Lease:** `X4-p29cc` (pair-a: `nitroui_a` / `emulator-5574`, sim `49D5024D…`, Metro `8295`) —
+every green row below carries it; earlier leases are in the ledger's older, stale rows.
 
 ## Summary
 
@@ -32,7 +33,7 @@ mean a correction arrived.
 per *finding*, and `staleDebt` goes red when a row stops matching something real: the list
 clears itself with a failing test rather than a reviewer noticing.
 
-**What the runs cost.** Three of this branch's thirteen commits fix what the suite's first device
+**What the runs cost.** Three of this branch's commits fix what the suite's first device
 runs broke:
 the fallback rule assumed `measured ≈ declared`, false by design for a `fillWidth` control's
 width and for Button (see the box-rule section under Red proofs); the harness's 1 s mount
@@ -210,7 +211,8 @@ recorded debt, and it would exit red if a fifth appeared or one of these four st
 - The recycle rule measures identity, not recycling — `enableViewRecycling` appears nowhere in `src/` or `example/`, so the fixture hands one `testID` to a second owner rather than reaching `prepareForRecycle`.
 - Two ways the same run went wrong, both fixable in front of the run rather than after it:
   `harness.mjs` falls back to the next Metro port and keeps going (only the wall-clock timing
-  guard noticed, by comparing the port in `harness-timing/state.json` with its own), and
+  guard noticed, by comparing the published port with its own — the state file is
+  `scripts/harness-timing-gate.js`'s, and the run reads it back over Metro), and
   `lease.mjs` hands out the first pair *no lease* holds without asking whether a gate process is
   live on it — F7's harness outlived its own lease, so pair-a read as free and the pool gave it
   to me twice. A `gate.mjs` pre-flight that refuses a leased Metro port already serving someone
@@ -224,6 +226,12 @@ recorded debt, and it would exit red if a fifth appeared or one of these four st
   `scripts/harness-suite-timing.mjs:25` (`join` unused) and
   `scripts/__tests__/registry.test.js:651` (`manifests` shadowed).
 - `scripts/conformance-core.mjs` and friends count as both platforms in `gate.mjs` (they are not in `TOOLING_FILES`), so a rules-only edit owes two harness runs. Deliberate for `real-input/*`; arguable for `conformance-core.mjs` alone, and left as the expensive-but-honest default.
+- task-ready's citation check has a blind spot it cannot close from git alone: a path that
+  exists only at runtime (the timing gate's state file, `.real-input/<platform>/…`, anything
+  gitignored) is a fair thing to cite and reads as an invented file. The rule needs a small
+  allow-list of generated-at-run-time roots, or a report has to avoid naming them in backticks
+  — which is what this report now does. Found by the report's own first full run, twice: the
+  first time in the prose, then in this very line about it.
 - `real-input:ios` is not required for this round (nothing iOS real-input was added), and it
   was run anyway as a regression check on `support.mjs`: `Suite.finish` is shared and the
   `auxiliary` list now prints in its summary on both platforms. Green, 11 m 26 s.
