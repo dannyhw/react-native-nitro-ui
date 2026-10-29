@@ -8,13 +8,18 @@
 
 **The dropped tap is real, and it is not in our controls.** XCUITest's `tap()` sends a touch with zero
 dwell, and on the Switch screen — 200 `switch-list-*` switches in a scroller, plus the hosted ones —
-it is never delivered. Measured by the toggle's own native `value:` read after the press:
-`switch-uncontrolled` stayed at `value: 0` through repeated instant taps over 30 s, and
-`switch-rejected-count` ("events JS saw") never moved, so nothing reached JS. The same instant `tap()`
-*is* delivered to the `js-toggle` `Pressable` there and to `host-switch-0`, and a press held 0.15 s
-flipped them 4/4 on two controls. The defect is the gesture's shape, not the control: every
-iOS tap now goes through `fingerTap` (`pressDwell = 0.15`). Android already delivered, so it needed
-the wait, not the dwell. No product bug.
+it is **nearly never** delivered: 0/12 and 1/12 presses moved a control's own native `value:` at zero
+dwell, calm and loaded (`docs/tasks/F1/dwell-probe.md`). Fix round 1 corrected "never" — the claim
+contradicted this project's own `main` run at 23:15Z, where zero-dwell tap 1 flipped
+`switch-controlled` and only tap 2 was lost, and X6's 10/10 green with `tap()`. The drop is
+**intermittent**, which is precisely why a check that asserts after one un-witnessed press passed for
+months and then failed 11 runs in a row. At the time it was measured: `switch-uncontrolled` stayed at
+`value: 0` through repeated instant taps over 30 s, and `switch-rejected-count` ("events JS saw")
+never moved, so nothing reached JS. The same instant `tap()` *is* delivered to the `js-toggle`
+`Pressable` there (3/3) and to `host-switch-0`, and a press held 0.15 s flipped them 4/4 on two
+controls. Every iOS tap now goes through `fingerTap` (`pressDwell = 0.15`). Android already delivered,
+so it needed the wait, not the dwell. Whether the *product* drops a person's quick tap is now a
+measured open question, not a closed one — see `## Questions for orchestrator`.
 
 The suite now proves the touch landed before blaming the control: `pressUntil` retries a press keyed
 on the **rendered value**, so one swallowed tap costs a retry and every tap swallowed stays red.
@@ -65,13 +70,13 @@ which brackets the 28.3 that caught the race below), **`harness:ios:Picker` 10/1
 
 ## Red proofs
 
-- iOS tap delivery -> swallow the Toggle binding's *first* write (`HybridNitroUiSwitch.swift`) -> suite green with `"switch-controlled" answered on tap 2/3` and `host-switch-0` likewise; swallow *every* write -> `3 presses left switch-controlled at 0` — stays red, as it must.
-- Android tap delivery -> swallow the first press per control (`HybridNitroUiSwitch.kt`) -> suite green with `tap 1/3 … left "off" - tapping again` / `answered on tap 2/3`; swallow every write -> `3 real taps left switch-controlled-value at "off" rather than "on"` — red.
+- iOS tap delivery -> swallow the Toggle binding's *first* write (`HybridNitroUiSwitch.swift`) -> suite green with `"switch-controlled" answered on tap 2/3` and `host-switch-0` likewise; swallow *every* write -> `3 presses left switch-controlled at 0` — stays red, as it must. **[Superseded in fix round 1: with M3's native-state witness armed, that same mutation is RED on both platforms — see the fix-round proofs. This line records what the round-1 code did, which is exactly the hole M3 closes.]**
+- Android tap delivery -> swallow the first press per control (`HybridNitroUiSwitch.kt`) -> suite green with `tap 1/3 … left "off" - tapping again` / `answered on tap 2/3`; swallow every write -> `3 real taps left switch-controlled-value at "off" rather than "on"` — red. **[Superseded in fix round 1: with M3's native-state witness armed, that same mutation is RED on both platforms — see the fix-round proofs. This line records what the round-1 code did, which is exactly the hole M3 closes.]**
 - Picker variant re-measure -> pre-fix predicate plus one dropped-host `0x0` read at the rerender -> `variant menu->wheel: menu=72.00x34.67 wheel=0.00x0.00 box=330.00x60.00`, both box assertions fail — the historical signature on demand. Same fixture with the fix: 38/38 green.
 - HostPopups sweep leak -> `for (const id of opened)` restored + `popupIsUp` blind to a frame-late dialog -> `follows all seven when two of them trade places: expected 1 to be +0`.
 - HostPopups baseline -> revert `livePresentations.decrementAndGet()` so disposal never lands -> `"comes-down-with-its-row" could not earn a zero baseline: 6 DatePicker window(s) were live before it opened anything, and they did not come down when it closed its own` — the leak names itself instead of arriving as a wrong count.
 - `lease.test.js` ttl -> `leaseIsLive` returns `true` always -> red: the poll never sees the short lease expire.
-- `gate.test.js` Node guard -> guard forced off on Node 25 -> 9 red, and the log shows the *real* `bun run check` (391 tests) running past the fixture — the re-exec the guard exists for. Guard on, same Node: 19 skipped, 66 passed, plus the named SKIPPED case.
+- `gate.test.js` Node guard -> guard forced off on Node 25 -> 9 red: the CLI fixtures' fake runner on `PATH` is bypassed, because `gate.mjs` re-execs under a *real* fnm node and `bun run check` then runs against the fixture tree. What the guard actually produces is the shipped module's own line, not a jest count (`node-version.mjs` under Node 25): `reexec-evidence: ran under Node 24 from .nvmrc (this shell is on Node 25.9.0; `fnm use` to match it)`. Guard on, same Node: 19 skipped, 66 passed, plus the named SKIPPED case. (The "391 tests" this line first quoted is the *fake runner's* echo at `gate.test.js:1380`; the real `check` prints 1113 — corrected in fix round 1, N4.)
 - `gate.test.js` signal test -> `child.kill(signal)` removed from the forwarder -> `never saw "fake: caught INT"`, both signals red.
 
 ## Files changed
@@ -83,7 +88,7 @@ which brackets the 28.3 that caught the race below), **`harness:ios:Picker` 10/1
 - `example/src/PickerScreen.tsx`, `example/src/HostScreen.tsx` — drop timers long enough that a 2 s dump cannot outrun an app-side close.
 - `scripts/__tests__/lease.test.js`, `scripts/__tests__/gate.test.js` — sleeps → `waitFor`, Node-major guard, signal-forwarding test.
 
-## Fix round 1
+## Round 1 addendum — a race the repeats caught in this task's own code
 
 The round-1 determinism proof caught one more race, in code this task had just written: the 3rd
 `harness:android:HostPopups` repeat went red at load 28.3 — the same `expected 1 to be +0` the gate
@@ -106,3 +111,41 @@ genuine ones there are the deliberate mutations above and the round-1 HostPopups
 - HostPopups: the popup gates that are not fresh-mount readers still assume a zero baseline; only the four Q3 named were converted.
 - gate.test.js: the CLI guard skips 19 cases on Node 25+; CI pins `.nvmrc` so CI is unaffected, but a local run on a new Node loses them silently.
 - scripts: `check` is ~157 s of which `test` is ~147 s — X10's ceiling note stands, unchanged by this work.
+
+## Questions for orchestrator
+
+**Q1 (fix round 1, M1) — is a quick tap on a hosted Switch in a busy list a product bug?** The brief's
+stop condition was: if only a press of ≥ 0.1 s is delivered, stop and ask rather than pick a dwell.
+That is what the measurement says. `docs/tasks/F1/dwell-probe.md` presses `switch-uncontrolled` on the
+Switch screen and reads *its own* native `value:` (not an echo, which cannot tell a dropped touch from
+a lost event):
+
+| Press held | Busy screen, calm | Busy screen, load1 ≈ 25 | Host screen (a dozen controls), calm |
+| --- | --- | --- | --- |
+| 0 s | 0/12 | 0/12 | 1/12 |
+| 0.03 s | 1/12 | 0/12 | 12/12 |
+| 0.05 s | 1/12 | 0/12 | 12/12 |
+| 0.08 s | 7/12 | 6/12 | 12/12 |
+| 0.12 s | 12/12 | 12/12 | — |
+
+A person's tap is measured elsewhere at roughly 40–120 ms, which is inside the band that loses presses
+on the busy screen and *not* inside it on the light one, at comparable load. RN's own `Pressable` on the
+same screen takes every one of the same zero-dwell presses 3/3, so the event path is alive: what stops
+seeing the touch is the hosted control's recogniser on a screen with ~200 controls mounted. The
+`switch-disabled` negative control reads 0/12 with the same presses at dwell values the busy screen
+delivers, so the witness is not inventing the losses.
+
+Options, with my recommendation:
+
+1. **(Recommended)** Treat it as a real product bug and open a task for it: the two candidate
+   mechanisms are `delaysContentTouches`/scroll-view touch delay and hit-test cost with 200 mounted
+   rows, and the probe's own footer says the one-line experiment that separates them. F1 should not
+   decide it: both fixes change app behaviour, outside a determinism task's scope.
+2. Accept it and document that hosted controls want a ≥ 120 ms press — which reads badly as a library
+   contract, and this report should not launder a measurement into a promise.
+3. Tell me to hold the suite at a dwell below 0.1 s and accept flakiness as the visible symptom of the
+   product bug. I would not: it makes every future iOS run's red ambiguous.
+
+`pressDwell` stays **0.15 s** either way — the shortest shape with no observed losses on either machine
+state, and the one every green run of this suite used. If Q1's answer changes it, the retry counts now
+in every gate log (M2) will show it within a run or two.
