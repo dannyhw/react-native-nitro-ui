@@ -1021,7 +1021,12 @@ describe('Menu · G7a', () => {
     console.log(`open/close: ${JSON.stringify(stateLog)}`);
     // Leave nothing up for the next test.
     await pickRow('events', 'copy');
-    await waitForMenu('events', (r) => r.expanded === false && r.live === 0);
+    // A delta, not `=== 0`: `live` is process-wide, so a menu an earlier gate left
+    // open would make this line blame the wrong control (Q3 §2).
+    await waitForMenu(
+      'events',
+      (r) => r.expanded === false && r.live === (liveBefore ?? 0)
+    );
   });
 
   it('closes when it is disabled while the menu is open', async () => {
