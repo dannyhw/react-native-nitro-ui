@@ -105,7 +105,16 @@ const PAIR_OPTIONS = ['Cinder', 'Mica', 'Shale'];
 // timer, element queries being that slow. The delay therefore has to outlast the
 // check's own reading of the open menu, or the row disappears out from under the tap
 // that is meant to close the menu.
-const DROP_DELAY_MS = Platform.OS === 'ios' ? 12000 : 2500;
+//
+// Android's number used to be 2500, which was enough when the check pressed this
+// button and the anchor back to back with nothing in between. It now proves the arm
+// press landed before aiming at the anchor - the same screen's own echo, read out of
+// the accessibility tree, because a swallowed tap used to leave nothing scheduled and
+// the check read the Picker's survival as a leaked menu. That proof costs a dump, a
+// dump is about two seconds on a loaded emulator, and the check needs one more after
+// it to find the anchor. So both platforms now get the same generous window; the
+// check waits for the `picker unmounted` echo rather than a guessed delay either way.
+const DROP_DELAY_MS = 12000;
 
 /**
  * Every Picker configuration G6 has to prove, on one screen: a real tap pair, a
