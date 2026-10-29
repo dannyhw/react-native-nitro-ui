@@ -21,8 +21,91 @@
 import SwiftUI
 import UIKit
 
+/// A watchdog that reports how long the main thread goes without running any work.
+///
+/// The stall arm proves that a *known* block of 80–120 ms loses a 50 ms press. What
+/// it cannot say is whether the React Native screen actually blocks that long, which
+/// is the last link in the chain: without it, "a busy main thread" is the best
+/// available explanation rather than a measured one. This closes the gap without
+/// touching the thing under measurement — the probe only reads a log line the app
+/// writes itself, so unlike an accessibility query it costs the app's main thread
+/// nothing while a press is in flight.
+///
+/// It works the way a hang detector does: a background timer schedules a block on the
+/// main queue and timestamps the moment that block actually runs. The difference
+/// between the two is how long the main thread was not free, which is the same
+/// quantity the stall arm sets deliberately.
+final class ProbeMainThreadWatchdog {
+  private let timer: DispatchSourceTimer
+
+  /// - Parameters:
+  ///   - interval: how often a probe block is offered to the main queue. Every 20 ms
+  ///     is well under the 50 ms press being studied, so a block that hides a gap
+  ///     would have to be longer than the thing it measures.
+  ///   - threshold: only gaps at least this long are logged, so a healthy 16 ms
+  ///     frame does not fill the log. It is below the press length under test on
+  ///     purpose: a gap that matters has to be visible.
+  ///
+  /// Nothing is accumulated here on purpose. Each gap is one log line, and the
+  /// runner aggregates the lines; keeping a counter would mean shared mutable state
+  /// between the main thread and a background one, in the middle of the measurement,
+  /// for a number that is easier and truer to compute from the log.
+  init(interval: TimeInterval = 0.02, threshold: TimeInterval = 0.008) {
+    let thresholdMs = Int(threshold * 1_000)
+    // Announced, so a run reporting no gaps can be told apart from a run where the
+    // watchdog never started. The stall arm has a readout for the same reason.
+    print("real-input (ios): main-thread-watchdog started threshold=\(thresholdMs)ms")
+    let source = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+    source.schedule(deadline: .now() + interval, repeating: interval)
+    source.setEventHandler {
+      let scheduledAt = DispatchTime.now().uptimeNanoseconds
+      DispatchQueue.main.async {
+        let ranAt = DispatchTime.now().uptimeNanoseconds
+        let gapMs = Int((ranAt - scheduledAt) / 1_000_000)
+        guard gapMs >= thresholdMs else {
+          return
+        }
+        // Measured on the main thread, logged off it. Writing to stdout from the
+        // block whose own latency is being timed would make the log part of the
+        // load it reports, and at fifty samples a second that is not small.
+        //
+        // `NSLog`, not `print`: the app is a separate process from the test runner,
+        // and its stdout is not the runner's stdout, so a `print` here is invisible
+        // to the log the probe parses. `NSLog` goes through os_log, which shows up
+        // both in the runner's output for a simulator launch and in `log show`.
+        DispatchQueue.global(qos: .utility).async {
+          NSLog("real-input (ios): main-thread-gap %dms", gapMs)
+        }
+      }
+    }
+    self.timer = source
+    source.resume()
+  }
+
+  deinit {
+    timer.cancel()
+  }
+}
+
 /// Builds the probe's root view controller, or returns nil for a normal launch.
 enum NitroUiProbe {
+  /// Keeps the watchdog alive when a launch turns it on: a dispatch source timer
+  /// stops firing the moment it is released, and nothing else owns it.
+  private static var watchdog: ProbeMainThreadWatchdog?
+
+  /// Starts the main-thread watchdog when `NUI_PROBE_WATCHDOG` is set.
+  ///
+  /// Called from both launch paths — the React Native one and the probe's own —
+  /// because the number worth having is the app's, not the probe's: the probe arm
+  /// already sets its block length deliberately, while the React Native screen is
+  /// the one whose stalls have only been inferred.
+  static func startWatchdogIfNeeded(environment: [String: String]) {
+    guard environment["NUI_PROBE_WATCHDOG"] != nil, watchdog == nil else {
+      return
+    }
+    watchdog = ProbeMainThreadWatchdog()
+  }
+
   /// `NUI_PROBE_UI` names the shape, `NUI_PROBE_ROWS` how many controls it mounts.
   ///
   /// Shapes are one difference apart from each other and from the app's own Switch
@@ -51,7 +134,8 @@ enum NitroUiProbe {
     }
     let rows = environment["NUI_PROBE_ROWS"].flatMap(Int.init) ?? 200
     let stall = environment["NUI_PROBE_STALL"].flatMap(Int.init) ?? 0
-    return ProbeViewController(kind: kind, rows: rows, stallMs: stall)
+    let rescue = environment["NUI_PROBE_RESCUE"] == "1"
+    return ProbeViewController(kind: kind, rows: rows, stallMs: stall, rescue: rescue)
   }
 }
 
@@ -88,6 +172,10 @@ private final class ProbeViewController: UIViewController {
   /// it is in the same container as the rows — the outer one deliberately is not.
   private let innerButton = UIButton(type: .system)
   private let innerCountReport = UILabel()
+  /// Witness for the rescue experiment: how many times a tap recogniser on a row
+  /// fired. Non-zero means UIKit recognised the short press even though the control
+  /// beneath it never acted.
+  private let rescueCountReport = UILabel()
   /// Says what the stall really blocked for, so a run can prove it stalled instead
   /// of trusting the flag it was given. The stall observer writes it.
   private let stallReport = UILabel()
@@ -105,11 +193,32 @@ private final class ProbeViewController: UIViewController {
   private var innerPresses = 0 {
     didSet { innerCountReport.text = "\(innerPresses)" }
   }
+  private var rescueFirings = 0 {
+    didSet { rescueCountReport.text = "\(rescueFirings)" }
+  }
 
-  init(kind: String, rows: Int, stallMs: Int) {
+  /// `NUI_PROBE_RESCUE=1` attaches a `UITapGestureRecognizer` to each row's Toggle
+  /// host, with `delaysTouchesEnded` off, and counts how often one fires.
+  ///
+  /// This is the candidate fix measured before anyone is asked whether to ship it.
+  /// The question it answers is narrow and it is the one that decides the task: a
+  /// recogniser's own action also runs on the main thread, so if a blocked main
+  /// thread discards a short press on its way in, no recogniser can rescue it and
+  /// the library has nothing to offer but the workaround. If one does fire, then a
+  /// library-side fix exists and shipping it is a product decision rather than a
+  /// guess. Counting recogniser firings, rather than having the recogniser flip the
+  /// Toggle, keeps this a measurement of the touch path and not of SwiftUI's
+  /// response to a programmatic write.
+  private let rescue: Bool
+  /// Held for the life of the screen, because a recogniser is weakly held by the
+  /// view it is attached to.
+  private var rescuers: [UITapGestureRecognizer] = []
+
+  init(kind: String, rows: Int, stallMs: Int, rescue: Bool) {
     self.kind = kind
     self.rows = rows
     self.stallMs = stallMs
+    self.rescue = rescue
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -245,18 +354,19 @@ private final class ProbeViewController: UIViewController {
     return button
   }
 
-  /// The three readouts, in a strip under the positive control so none of them can
-  /// be under a finger.
+  /// The readouts, in a strip under the positive control so none of them can be
+  /// under a finger.
   private func addReports(below button: UIButton) {
     configure(toggleCountReport, identifier: "probe-toggle-count", text: "0")
     configure(buttonCountReport, identifier: "probe-button-count", text: "0")
+    configure(rescueCountReport, identifier: "probe-rescue-count", text: "0")
     configure(
       stallReport,
       identifier: "probe-stall",
       text: stallMs > 0 ? "stall=\(stallMs)ms (none yet)" : "stall=none"
     )
     let reports = UIStackView(arrangedSubviews: [
-      toggleCountReport, buttonCountReport, stallReport,
+      toggleCountReport, buttonCountReport, rescueCountReport, stallReport,
     ])
     // Vertical, not horizontal: the stall readout is a sentence, and a truncated
     // label would be read back truncated by the probe that checks it ran.
@@ -324,7 +434,29 @@ private final class ProbeViewController: UIViewController {
         control.heightAnchor.constraint(equalToConstant: height),
       ])
       stack.addArrangedSubview(row)
+
+      if rescue {
+        // Attached to the hosting view, not the row, so it covers the control and
+        // nothing else, and `delaysTouchesEnded = false` so it is not the recogniser
+        // that holds the up-event back — the point is to see whether UIKit recognises
+        // this press at all while the thread is blocked.
+        let recogniser = UITapGestureRecognizer(
+          target: self,
+          action: #selector(ProbeViewController.rescueRecogniserFired)
+        )
+        recogniser.delaysTouchesEnded = false
+        recogniser.cancelsTouchesInView = false
+        control.addGestureRecognizer(recogniser)
+        rescuers.append(recogniser)
+      }
     }
+  }
+
+  /// Counts a recogniser firing. Deliberately does not flip the Toggle: whether a
+  /// programmatic write would then take effect is a different question from whether
+  /// the touch arrived, and conflating them would make this read as a fix.
+  @objc private func rescueRecogniserFired() {
+    rescueFirings += 1
   }
 
   /// The positive control's own state, written back as the value the probe reads.

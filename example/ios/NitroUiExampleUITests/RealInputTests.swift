@@ -128,21 +128,24 @@ final class RealInputTests: XCTestCase {
     // failure in one control cannot be explained away by the one before it.
     continueAfterFailure = false
     app = XCUIApplication()
-    // The dwell probe's no-React-Native arm (F7): when the runner is told which
-    // shape to build, the app starts that window instead of React Native. See
-    // `NitroUiProbe.swift`.
-    if let probeUI = ProcessInfo.processInfo.environment["NUI_PROBE_UI"] {
-      app.launchEnvironment["NUI_PROBE_UI"] = probeUI
-      if let rows = ProcessInfo.processInfo.environment["NUI_PROBE_ROWS"] {
-        app.launchEnvironment["NUI_PROBE_ROWS"] = rows
+    // The dwell probe's knobs (F7), forwarded to the app by name. A list rather
+    // than a chain of optionals: an earlier version of this block forwarded two of
+    // the three stall variables and not the third, and the result read as a clean
+    // "a busy main thread loses nothing" when in fact nothing had been stalled.
+    for key in [
+      "NUI_PROBE_UI",
+      "NUI_PROBE_ROWS",
+      "NUI_PROBE_STALL",
+      "NUI_PROBE_RESCUE",
+      "NUI_PROBE_WATCHDOG",
+    ] {
+      if let value = ProcessInfo.processInfo.environment[key] {
+        app.launchEnvironment[key] = value
       }
-      // Forwarded like the other two. The probe's own `probe-stall` readout is what
-      // catches a miss here: it reports the longest block the app actually
-      // performed, so a stall that was asked for and not forwarded shows up as
-      // `stall=none` rather than as a clean "a busy main thread loses nothing".
-      if let stall = ProcessInfo.processInfo.environment["NUI_PROBE_STALL"] {
-        app.launchEnvironment["NUI_PROBE_STALL"] = stall
-      }
+    }
+    if ProcessInfo.processInfo.environment["NUI_PROBE_UI"] != nil {
+      // The no-React-Native arm: the app built a probe window instead of a React
+      // Native one, so there is no tab bar to wait for. See `NitroUiProbe.swift`.
       app.launch()
       _ = try required(
         "probe-button",
@@ -289,12 +292,19 @@ final class RealInputTests: XCTestCase {
       // Under a stall the arm is slow on purpose, so the witness has to be a count:
       // a toggling value that is merely late to report is indistinguishable from one
       // whose presses were lost, and the whole point of the arm is to tell those two
-      // apart. The probe window publishes both counters as plain numbers for this.
+      // apart. The probe window publishes its counters as plain numbers for this, and
+      // `--witness echo:<identifier>` picks any of them — which is how the rescue
+      // cell reads the recogniser's own firing count rather than the Toggle's state.
       // Without a stall the original witnesses are kept, so the cells already
       // measured stay comparable with this file's own earlier logs.
-      let rowsReading: (String) -> String? = quiet
-        ? { _ in self.publishedNumber("probe-toggle-count") }
-        : { self.nativeSwitchState(of: $0) }
+      let rowsReading: (String) -> String? = { _ in
+        if let echoID {
+          return self.publishedNumber(echoID)
+        }
+        return self.quiet
+          ? self.publishedNumber("probe-toggle-count")
+          : self.nativeSwitchState(of: target)
+      }
       let buttonReading: (String) -> String? = quiet
         ? { _ in self.publishedNumber("probe-button-count") }
         : { element in
@@ -319,6 +329,18 @@ final class RealInputTests: XCTestCase {
       print(
         "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(nativeDelivered)/\(taps) js-toggle=\(positiveDelivered)/\(quiet ? taps : 3)"
       )
+      // Every counter the window publishes, read after the presses. One launch that
+      // reports them together is what turns "the recogniser fired" and "the control
+      // did not act" into one fact rather than two runs that have to be believed to
+      // agree; under a stall the two can only be compared if they were measured in
+      // the same launch, on the same frames, at the same block lengths.
+      let counters = [
+        "toggle-flips=\(publishedNumber("probe-toggle-count") ?? "?")",
+        "outer-button=\(publishedNumber("probe-button-count") ?? "?")",
+        "inner-button=\(publishedNumber("probe-inner-count") ?? "?")",
+        "recogniser=\(publishedNumber("probe-rescue-count") ?? "?")",
+      ]
+      print("real-input (ios): dwell-probe: counters \(counters.joined(separator: " "))")
       return
     }
     try goToTab(tab, showing: anchor)
