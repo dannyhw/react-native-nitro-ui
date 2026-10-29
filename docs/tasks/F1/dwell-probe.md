@@ -74,9 +74,9 @@ delivers, it reports 0/12. The witness does not see movement that is not there.
    by the product*, which is the brief's stop condition — see `## Questions for orchestrator` in
    `F1-determinism.report.md`.
 5. **120 ms is the measured floor for the test press.** 12/12 calm and 12/12 loaded, versus 0/12 to
-   1/12 at a human's quick tap. The suite's `pressDwell` is therefore 0.12 s: the shortest value
-   measured to deliver, on both machines states, replacing a 0.15 s value that had never been
-   measured. It is not below the reliable band, so it cannot make the suite flaky, and because every
+   1/12 at a human's quick tap. The suite's `pressDwell` stays 0.15 s, just above that floor
+   (`RealInputTests.swift:115`): the shortest value with no observed losses on either machine
+   state, and the one every green run used. It is not below the reliable band, so it cannot make the suite flaky, and because every
    retry is now counted in the gate log (F1 M2), a floor that rises will show up as retry lines
    rather than as silence.
 
