@@ -1508,12 +1508,16 @@ internal fun NitroUiMeasuredRoot(
     // composition-time copy would always be a pass late. The two stamps are plain fields,
     // and that matters: a measure block that observes what it writes dirties the node it
     // runs in, which here would be a measure → arm → measure loop that never settles.
-    // [NitroUiOverWidePlacement.armed] is the one snapshot value read here. Observing it is
-    // safe because every write is a verdict written once: the unbounded pass that finds an
-    // overrun arms, the unbounded pass that finds a fit releases, and a pass confirming the
-    // verdict already held writes the same value, which is not a state write. So the only
-    // recomposition this read can cause is the one that places at the box, and the bounded
-    // pass that answers it writes nothing here.
+    // [NitroUiOverWidePlacement.armed] is the one placement value read here that is snapshot
+    // state. Observing it is safe because every write from a pass is a verdict written once:
+    // the unbounded pass that finds an overrun arms, the unbounded pass that finds a fit
+    // releases, and a pass confirming the verdict it already held writes the same value, which
+    // is not a state write. [NitroUiOverWidePlacement.reset] writes `false` outside any pass,
+    // from [onLayout], [onConfigurationChanged], [prepareForRecycle] and [drop], and is the
+    // same no-op unless the host was armed - which is the case that has to be heard. So the
+    // most this read can cost is one further measure of this node: a measure block dirties the
+    // node it runs in, not the composition, and the group restart that starts observing the
+    // revision is the read above. The bounded pass that places at the box writes nothing here.
     //
     // The one write that has to reach Compose is the ask for the next measure, and that
     // goes through [remeasureToken], which this block already reads.
