@@ -755,12 +755,60 @@ function poison(component: string): void {
 }
 
 /**
- * Put the declared fallback back, exactly.
+ * The engine's own answer, for every control, read **before this file seeds anything**.
  *
- * Exact because the suite's own first assertion is that the engine's fallback equals
- * `SHARED.declaredFallbacks`, and that table is checked against
- * `scripts/conformance-core.mjs` on every `check` — so a restored number cannot be a wrong
- * number the rest of the process then quietly trusts.
+ * `prewarmSizing` is the only way to ask from JS whether the engine has a declared fallback for
+ * a name, and its answer is just "the name is in `fallbacks_`" (`NitroUiSizingEngine.cpp:855`).
+ * That is a question with an expiry date: `seedSizingSize` writes `fallbacks_` too — not only
+ * the guess, the declaration (`NitroUiSizingEngine.cpp:512`) — so after any seed in a process,
+ * the answer is `true` whether or not the library's startup table ever had a row for the
+ * control. Reading it once per test, as round 1 did, means the first poison in this file makes
+ * every later read in this file evidence of nothing; and it is why Button's row can read `true`
+ * in a whole-suite run even though `Button.harness.tsx` was the one that seeded it
+ * (`Button.harness.tsx:297`).
+ *
+ * So the read is done once, in the file's first test, before any poison here has run, and every
+ * later assertion takes its `declared` from this table rather than re-asking. On a warm process
+ * even that first read is not the startup table's answer, and the log says which of the two it
+ * is — the same `measurements === 0` witness `ColdSizing.harness.tsx` uses, for the same reason.
+ */
+const registration: Record<string, boolean> = {};
+
+function readRegistrationOnce(): void {
+  if (Object.keys(registration).length > 0) return;
+  const cold = stats().measurements === 0;
+  for (const fixture of FIXTURES) {
+    registration[fixture.component] = hasDeclaredFallback(fixture.component);
+  }
+  const declared = Object.values(registration).filter(Boolean).length;
+  console.log(
+    `    · registration (${cold ? 'COLD' : 'NOT COLD'} process): ` +
+      `${String(declared)}/${String(Object.keys(registration).length)} controls ` +
+      `have an engine fallback` +
+      (cold
+        ? ' — read before any seed in this process, so this is the startup ' +
+          "table's own answer"
+        : ' — something has already measured in this process, so a `true` here ' +
+          'is the engine’s current state and not proof of the startup table. ' +
+          'That claim is `bun run harness:cold:*` and `checkFallbackTable` ' +
+          "in `check`, which don't seed at all")
+  );
+}
+
+/**
+ * Put the declared *number* back.
+ *
+ * This does not, and cannot, restore the startup declaration: `seedSizingSize` writes
+ * `fallbacks_` (`NitroUiSizingEngine.cpp:512`), so from the first poison onward this component's
+ * engine row is JS-supplied, and there is no JS seam that re-runs the startup table's
+ * `setFallback` pass. What it does is leave a sane fallback for the suites that run after this
+ * one — the obligation `ColdSizing.harness.tsx`'s header states for the same reason — and the
+ * number is exact because the table it writes is the mirror checked against
+ * `scripts/conformance-core.mjs` on every `check`, so a restored number cannot be a wrong number
+ * the rest of the process then quietly trusts.
+ *
+ * Round 1 called this `restore` as if it undid the poison. It does not: what protects the
+ * registration claim is {@link readRegistrationOnce} running first, not anything undone here.
  */
 function restore(component: string): void {
   const declared =
@@ -1399,9 +1447,11 @@ describe('conformance · every control, four rules', () => {
       const boxRule = boxRuleFor(fixture.component);
 
       it('has its own declared fallback, and still corrects a wrong guess', async () => {
-        // 1. The engine knows a fallback at all. `prewarmSizing` answers from the
-        //    registry, so this is the half a warm process cannot fake.
-        const registered = hasDeclaredFallback(fixture.component);
+        // 1. The engine knows a fallback at all — read once for the whole file, before any
+        //    poison here has had the chance to write one. See `readRegistrationOnce` for why a
+        //    per-test read is not evidence, and for what a `false` means on a warm process.
+        readRegistrationOnce();
+        const registered = registration[fixture.component] === true;
 
         // 2. Poisoned mount, first: the correction has to arrive, and the box that results
         //    has to be the declared one. Done before the warm case so the seed cannot be
