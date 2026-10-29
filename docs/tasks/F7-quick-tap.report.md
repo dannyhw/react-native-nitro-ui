@@ -41,9 +41,26 @@ stays **0.15**: nothing was fixed, and the measured boundary is between **80 ms 
 
 ## Gates
 
-<!-- regenerate with `node scripts/gate.mjs table` -->
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1161 tests / 45 suites | `eada65983c29` | 2 m 36 s | start 3.3 / med 3.6 / max 7.5 |
+| `harness:ios` | **PASS** | 168 tests / 13 suites | `eada65983c29` (ios tree) | 2 m 09 s | start 2.7 / med 3.2 / max 4.0 |
+| `harness:android` | **PASS** | 217 tests / 13 suites | `2d6b9f063bea` (android tree) | 6 m 13 s | start 3.3 / med 3.7 / max 7.3 |
+| `real-input:ios` | **PASS** | — | `eada65983c29` (ios tree) | 10 m 56 s | start 3.7 / med 4.5 / max 21.5 |
+| `real-input:android` | **PASS** | — | `2d6b9f063bea` (android tree) | 15 m 14 s | start 1.5 / med 2.7 / max 5.7 |
 
-`need --for review`: `need: review is satisfied on this code tree.` (regenerate with the table)
+The two Android rows sit on the earlier tree because everything committed after it
+touches iOS and docs only, and `gate.mjs` matches a device run against that
+platform's half of the tree.
+
+`real-input:ios:--control:switch` — the guard's red proof — is in the ledger as three `FAIL`s and
+one `PASS`: two at the mutated trees (the global-dwell mutation, then the guard-only mutation that
+produced the line quoted under Red proofs), one at the guard mutation as well but for an unrelated
+cause (the lease expired mid-run and the app never rendered), and the `PASS` after the revert.
+`gate.mjs status` prints the row `stale` above because a mutation run is not evidence about the
+committed tree by design.
+
+`need --for review`: `need: review is satisfied on this code tree.`
 
 ## Measurements
 
