@@ -482,6 +482,7 @@ exit 0
     return {
       dir,
       at,
+      fakePod,
       read: (rel) => readFileSync(join(dir, rel), 'utf8'),
       exists: (rel) => existsSync(join(dir, rel)),
       /**
@@ -578,6 +579,82 @@ exit 0
     expect(out.stderr).toContain(
       'React-Core: 9999999999999999999999999999999999999999'
     );
+  });
+
+  it('refuses a refresh on a machine whose json gem would rewrite every checksum', () => {
+    // X13 end to end. The same fake pod, answering the serialisation probe the way
+    // a `json` gem before 2.8.0 does. Its lock would otherwise pass the churn
+    // guard unchanged - the guard compares NitroUi's two lines, and json's
+    // whitespace moves the *other* 95 pods, which this fake does not rewrite. So
+    // only the probe can stop it, and the refusal has to name the mechanism
+    // rather than the "could not be read" fallback, or a broken probe would look
+    // like the guard working.
+    const repo = scratchCheckout();
+    const out = repo.status(['--fix'], { FAKE_POD_JSON_STYLE: 'expanded' });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toContain('refusing to refresh');
+    expect(out.stderr).toContain('blank line inside them');
+    expect(out.stderr).toContain('SPEC CHECKSUMS');
+    expect(repo.read('example/ios/Podfile.lock')).toBe(LOCK);
+    expect(repo.dirty()).toBe('');
+  });
+
+  it('refuses at preflight on that machine, before `changeset version` runs', () => {
+    // Same machine, same command, one stage earlier: `release:version` asks the
+    // serialisation question in `--preflight`, so a preview on a runner with the
+    // wrong gem leaves no half-versioned tree behind. The witness is what makes
+    // this more than the test above - `--fix` refusing after the bump is the
+    // failure X9 was about.
+    const releaseCommand = JSON.parse(
+      readFileSync(resolve(root, 'package.json'), 'utf8')
+    ).scripts['release:version'];
+    const repo = scratchCheckout({ witness: true });
+    const out = repo.runRelease(releaseCommand, {
+      FAKE_POD_JSON_STYLE: 'expanded',
+    });
+    expect(out.status).not.toBe(0);
+    expect(out.stderr).toContain('blank line inside them');
+    expect(repo.exists('changeset-ran')).toBe(false);
+    expect(repo.read('example/ios/Podfile.lock')).toBe(LOCK);
+    expect(repo.dirty()).toBe('');
+  });
+
+  it('refuses the install itself when it is asked to be strict', () => {
+    // The last of the three places, and the one the two above never reach:
+    // `--fix` and `--preflight` both ask before they get here, so a mutation that
+    // makes `installPods` warn and carry on stays green under them. It matters on
+    // its own terms - this is the only refusal between a caller that did not ask
+    // first and a rewritten lock - so it is tested against the module directly.
+    // The fake pod *would* have written a lock here: without the strict return,
+    // the lock assertion below goes red on the content, not on the exit code.
+    const repo = scratchCheckout();
+    const driver = join(repo.dir, 'strict-driver.mjs');
+    writeFileSync(
+      driver,
+      `import { installPods } from './scripts/pod-install.mjs';
+const { status } = installPods({
+  dir: new URL('./example/ios', import.meta.url).pathname,
+  strict: true,
+  log: () => {},
+  error: (m) => process.stdout.write(m + '\\n'),
+});
+process.stdout.write('STATUS ' + status + '\\n');
+`
+    );
+    const out = spawnSync(process.execPath, [driver], {
+      cwd: repo.dir,
+      encoding: 'utf8',
+      timeout: 120_000,
+      env: {
+        ...process.env,
+        COCOAPODS_BIN: repo.fakePod,
+        FAKE_POD_JSON_STYLE: 'expanded',
+      },
+    });
+    expect(out.stdout).toContain('STATUS 1');
+    expect(out.stdout).toContain('blank line inside them');
+    // The fake pod never ran, so the lock is the one that started the test.
+    expect(repo.read('example/ios/Podfile.lock')).toBe(LOCK);
   });
 
   it('refuses up front when CocoaPods is missing, without touching the tree', () => {
