@@ -752,7 +752,10 @@ process.stdout.write('STYLE ' + style + ' BUDGET ' + PROBE_TIMEOUT_MS + '\\n');
     // module. Their lock has never been compared with anything, so a warning
     // that "installing here would rewrite example/ios/Podfile.lock across almost
     // every pod" is about a file that app's author is not writing, and the
-    // serialisation contract is not theirs to satisfy.
+    // serialisation contract is not theirs to satisfy. The scratch tree holds
+    // its own copy of pod-install.mjs, so its REPO_LOCK is its own
+    // example/ios/Podfile.lock and the contract does apply there - which is what
+    // makes the consumer half below a real difference rather than a tautology.
     const repo = scratchCheckout();
     const { status, stdout, stderr } = repo.driver(
       `import { installPods } from './scripts/pod-install.mjs';
@@ -772,6 +775,21 @@ process.stdout.write('STATUS ' + status + '\\n');
     expect(stdout).toContain('STATUS 0');
     expect(stdout + stderr).not.toContain('SPEC CHECKSUMS');
     expect(stdout + stderr).not.toContain('Podfile.lock was written');
+
+    // The control: the same fake pod, the same expanded style, the same module -
+    // only the directory is the governed one. Without this, "said nothing" would
+    // be indistinguishable from a probe that never runs, and the test above would
+    // pass even if the whole serialisation check had been deleted.
+    const governedRun = repo.driver(
+      `import { installPods } from './scripts/pod-install.mjs';
+const dir = new URL('./example/ios', import.meta.url).pathname;
+const { status } = installPods({ dir, strict: true });
+process.stdout.write('STATUS ' + status + '\\n');
+`,
+      { env: { FAKE_POD_JSON_STYLE: 'expanded' } }
+    );
+    expect(governedRun.stdout).toContain('STATUS 1');
+    expect(governedRun.stdout + governedRun.stderr).toContain('SPEC CHECKSUMS');
   });
 
   it('asks the machine once per --fix, not once per stage (N6)', () => {
