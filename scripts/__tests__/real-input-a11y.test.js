@@ -258,12 +258,19 @@ describe('the a11y rule, on measured trees', () => {
 });
 
 describe('the debt list', () => {
-  it('is the four measured findings, and nothing else', () => {
-    expect(A11Y_EXEMPTIONS.map((entry) => entry.control)).toEqual([
-      'slider',
-      'segmented-control',
-      'hosted-slider',
-      'hosted-segmented',
+  it('is the measured findings, per platform, and nothing else', () => {
+    // Four Android rows (two controls, one finding each) and three iOS rows: the Slider's
+    // name is announced as the wrong kind of control, and a hosted Picker's name is
+    // announced twice. A row that named no platform would let one measurement excuse both
+    // halves, so each row says which one it was measured on.
+    expect(A11Y_EXEMPTIONS.map((entry) => `${entry.platform}:${entry.control}`)).toEqual([
+      'android:slider',
+      'android:segmented-control',
+      'android:hosted-slider',
+      'android:hosted-segmented',
+      'ios:slider',
+      'ios:hosted-slider',
+      'ios:hosted-picker',
     ]);
     for (const entry of A11Y_EXEMPTIONS) {
       // Each row names the FOLLOWUPS line that owns the fix, so debt has an address.
@@ -296,27 +303,37 @@ describe('the debt list', () => {
       )
     ).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('the entry for "slider"'),
+        expect.stringContaining('the android entry for "slider"'),
         expect.stringContaining('delete the exemption'),
       ])
     );
-    // Every row the run covered is reported, not just the one that was fixed: a run that
-    // saw all four controls and found nothing is four pieces of evidence.
+    // Every Android row the run covered is reported, not just the one that was fixed: a
+    // run that saw all four controls and found nothing is four pieces of evidence. The
+    // iOS rows are not in the count, because this call asked about Android — clearing the
+    // Android list says nothing about whether the iOS half still reproduces its own bugs.
     expect(
       staleExemptions(
         A11Y_CONTROLS.map((entry) => entry.id),
-        []
+        [],
+        'android'
       ).length
-    ).toBe(A11Y_EXEMPTIONS.length);
+    ).toBe(A11Y_EXEMPTIONS.filter((e) => e.platform === 'android').length);
+    expect(
+      staleExemptions(
+        A11Y_CONTROLS.map((entry) => entry.id),
+        [],
+        'ios'
+      ).length
+    ).toBe(A11Y_EXEMPTIONS.filter((e) => e.platform === 'ios').length);
   });
 
   it('says nothing about a control the run never read', () => {
-    // A filtered `--control slider` run must not report the three rows it skipped as
-    // stale, or a partial run would look like three fixes.
+    // A filtered `--control slider` run must not report the rows it skipped as stale, or a
+    // partial run would look like several fixes.
     expect(staleExemptions(['slider'], ['slider'])).toEqual([]);
     expect(staleExemptions([], [])).toEqual([]);
     expect(staleExemptions(['slider'], [])).toEqual([
-      expect.stringContaining('the entry for "slider"'),
+      expect.stringContaining('the android entry for "slider"'),
     ]);
   });
 });

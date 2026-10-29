@@ -114,7 +114,6 @@ export function repoRoot() {
  *
  * @typedef {(manifest: any, context: ConformanceContext) => string | null} Applies
  * @typedef {object} ConformanceContext
- * @property {Set<string>} components the manifest names the a11y table covers
  * @property {Record<string, string>} sizing the `nitro-ui.sizing.json` rows
  */
 
@@ -144,12 +143,15 @@ export const CONFORMANCE_RULES = Object.freeze([
   {
     id: A11Y_RULE_ID,
     title: 'named on the node a person can act on, and only there',
-    runs: ['harness:ios', 'real-input:android'],
-    applies: (manifest, { components }) =>
-      components.has(manifest.name)
-        ? null
-        : `scripts/real-input/a11y.mjs has no case for ${manifest.name}, so no ` +
-          'tree is read for its name — add a case once the control has a screen',
+    runs: ['real-input:ios', 'real-input:android'],
+    // Applies to every control, with no reason attached — and it used to carry one, which
+    // was the bug. The reason read "a11y.mjs has no case for this control", and it was
+    // unreachable: `checkA11yTable` already fails the run when a manifest has no case, so
+    // the matrix could never reach a cell that wanted to explain an omission. A branch
+    // that cannot fire is not a guard, it is a guess about the future that reads as
+    // evidence — the missing case is a red test in `component-coverage.test.js`, which is
+    // where the omission is actually caught.
+    applies: () => null,
   },
   {
     id: 'declared-fallback',
@@ -322,6 +324,11 @@ export function staleExemptions(
  * @param {object} run
  * @param {Iterable<string>} run.a11yCovered the `A11yControl.id`s the run read
  * @param {Iterable<string>} run.a11yMatched the ids whose problems matched a row
+ * @param {'android'|'ios'} [run.a11yPlatform] which platform's a11y rows this run read.
+ *   Each half has its own debt for some controls — the Slider's Android name is on a node
+ *   nothing can act on, its iOS name is announced as the wrong kind of control — so an
+ *   Android run must not report the iOS rows as stale, or clearing one bug reads as
+ *   clearing both.
  * @param {Iterable<string>} run.coveredKeys `component|rule` keys the run exercised
  * @param {Iterable<string>} run.matchedKeys keys that matched an in-app row
  * @param {ReadonlyArray<any>} [run.conformanceRows] the in-app rows to sweep (default:
@@ -333,7 +340,11 @@ export function staleExemptions(
  */
 export function staleDebt(run) {
   return [
-    ...staleA11yExemptions(run.a11yCovered, run.a11yMatched),
+    ...staleA11yExemptions(
+      run.a11yCovered,
+      run.a11yMatched,
+      run.a11yPlatform ?? 'android'
+    ),
     ...staleExemptions(
       run.coveredKeys,
       run.matchedKeys,
@@ -425,7 +436,11 @@ export function checkA11yTable(
     }
     if (
       entry.anchorTestId != null &&
-      !screen.includes(`testID="${entry.anchorTestId}"`)
+      !screen.includes(
+        entry.anchorTestIdAttribute != null
+          ? entry.anchorTestIdAttribute
+          : `testID="${entry.anchorTestId}"`
+      )
     ) {
       problems.push(
         `${screenPath}: no testID "${entry.anchorTestId}", so the a11y rule for ` +
@@ -1168,25 +1183,17 @@ export function followupsResolver(followupsText, tables = {}) {
  *
  * @param {any[]} validated manifests
  * @param {object} [context]
- * @param {Iterable<string>} [context.components] manifest names the a11y table
- *   covers — keyed on the component rather than on a case id because one control is
- *   covered twice, on its own screen and inside a `<Host>`, and the matrix is about
- *   controls rather than cases.
  * @param {Record<string, string>} [context.sizing]
  * @param {Iterable<string>} [context.failing] `component|rule` keys exempted today
  * @returns {Array<{name: string, rules: Record<string, {state: string, reason?: string}>}>}
  */
 export function coverageMatrix(manifests, context = {}) {
-  const components = new Set(
-    context.components ?? A11Y_CONTROLS.map((entry) => entry.component)
-  );
   const failing = new Set(context.failing ?? []);
   return manifests.map((manifest) => {
     /** @type {Record<string, {state: string, reason?: string}>} */
     const rules = {};
     for (const rule of CONFORMANCE_RULES) {
       const reason = rule.applies(manifest, {
-        components,
         sizing: context.sizing ?? {},
       });
       rules[rule.id] =

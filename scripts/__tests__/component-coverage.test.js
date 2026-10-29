@@ -277,10 +277,17 @@ describe('every component is covered by the conformance suite', () => {
     // Two views of the same debt: the matrix prints `failing`, and the device run prints
     // `known failing` lines from the exemption lists. Deriving one from the other is what
     // keeps a report's coverage table honest when a row is added or removed.
+    //
+    // Three controls, and each one is a measurement rather than a guess: the Slider and
+    // SegmentedControl names are on nodes a screen reader cannot act on in a dump
+    // (Android), and the Slider is announced as the wrong kind of control (iOS), and a
+    // hosted Picker announces its name twice. The two platforms fail some of the same
+    // controls for different reasons, which is why `A11Y_EXEMPTIONS` rows carry a platform.
     const keys = failingKeys();
     expect(keys).toEqual([
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
+      'Picker|a11y-name-on-focusable-node',
     ]);
     // …and every one of those cells really is marked failing in the matrix.
     const matrix = coverageMatrix(manifests, {

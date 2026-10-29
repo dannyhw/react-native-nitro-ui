@@ -22,6 +22,34 @@ const GENERATED_END = '@end-generated';
 const FALLBACK_FILE = /DeclaredFallbacks\.(kt|swift|ts|tsx)$/;
 
 /**
+ * A line that *declares* a fallback size, wherever it lives.
+ *
+ * The review's N2: the number each control falls back to is written in the component's own
+ * source (`fallbackSize` in Swift, `FALLBACK_WIDTH_DP` in Kotlin), and the generated
+ * `DeclaredFallbacks` tables are made from it — so a `TODO` beside one of those declarations
+ * is exactly the undecided fallback the check exists to catch, and it used to be scanned as
+ * ordinary hand-written code. `ios/components/Switch/HybridNitroUiSwitch.swift` and its five
+ * siblings, plus `android/src/main/java/…/HybridNitroUi*.kt`, are where the answer lives.
+ *
+ * Matched on the declaration rather than on the filename, because those files are ordinary
+ * 1 300-line component sources that carry legitimate notes: the rule stays "a `TODO` about a
+ * fallback number", and the window below is what keeps it from reporting every note in the
+ * file.
+ */
+const FALLBACK_DECLARATION =
+  /\b(?:fallbackSize|FALLBACK_[A-Z0-9_]*_DP)\b\s*(?::\s*[\w.]+\s*)?=/;
+
+/**
+ * How close to a fallback declaration a `TODO` has to be to be about it.
+ *
+ * Two lines: the comment above the constant and the line below it are where somebody writes
+ * "measure on iPad" or "matches Compose's touch target". Further away, and a note is about
+ * the control rather than about the number, which is the case the check has always left
+ * alone.
+ */
+const FALLBACK_CONTEXT_LINES = 2;
+
+/**
  * `TODO` / `FIXME` in a declared-fallback file or inside a generated region.
  *
  * Generated regions are found by the marker `registry-core.mjs` writes, not by line
@@ -29,6 +57,10 @@ const FALLBACK_FILE = /DeclaredFallbacks\.(kt|swift|ts|tsx)$/;
  * offsets would silently scan the wrong lines. The anchored regions (`nitro.json`, the two
  * declared-fallback tables) have no marker, so those files are covered by name — which is
  * also the more honest rule: nobody hand-writes a fallback anywhere else.
+ *
+ * A file that is not a fallback table still gets one look: the lines around a fallback
+ * declaration ({@link FALLBACK_DECLARATION}), which is where the number this repo argues
+ * about is actually written.
  *
  * @param {Map<string, string> | Array<[string, string]>} files path → text, of the files
  *   the branch touched. Passing only the diff's files is deliberate: a legacy `TODO` in a
@@ -40,25 +72,50 @@ export function todoFindings(files) {
   const problems = [];
   for (const [path, text] of files) {
     const lines = text.split('\n');
+    const inFallback = FALLBACK_FILE.test(path);
+    const declared = inFallback ? [] : fallbackDeclarationLines(lines);
     let insideGenerated = false;
     lines.forEach((line, index) => {
       if (GENERATED_MARKER.test(line)) insideGenerated = true;
       else if (line.includes(GENERATED_END)) insideGenerated = false;
-      const inFallback = FALLBACK_FILE.test(path);
-      if (!insideGenerated && !inFallback) return;
+      const nearFallback =
+        inFallback || declared.some((at) => Math.abs(at - index) <= FALLBACK_CONTEXT_LINES);
+      if (!insideGenerated && !nearFallback) return;
       if (!/\b(TODO|FIXME)\b/.test(line)) return;
+      const marker = /\bFIXME\b/.test(line) ? 'FIXME' : 'TODO';
+      // Which of the three things this hit is, in the order the scan found them. A note
+      // inside a generated region is the generator's problem even when the file also
+      // declares a fallback, so that branch comes first.
+      const about = insideGenerated
+        ? 'a generated region'
+        : inFallback
+          ? 'a declared fallback'
+          : 'a fallback number';
+      const why = insideGenerated
+        ? 'is a decision the generator will overwrite the next time anyone ' +
+          'runs `regen`'
+        : 'is a decision nobody made; the engine lays this control out at ' +
+          'whatever number is here';
       problems.push(
-        `${path}:${String(index + 1)}: ${line.trim()} — a ${
-          inFallback ? 'declared fallback' : 'generated region'
-        } with a ${/\bFIXME\b/.test(line) ? 'FIXME' : 'TODO'} is a decision ` +
-          (inFallback
-            ? 'nobody made; the engine lays this control out at whatever ' +
-              'number is here'
-            : 'the generator will overwrite the next time anyone runs `regen`')
+        `${path}:${String(index + 1)}: ${line.trim()} — ${about} with a ${marker} ${why}`
       );
     });
   }
   return problems;
+}
+
+/**
+ * Which lines of a file declare a fallback size.
+ *
+ * @param {string[]} lines
+ * @returns {number[]} 0-based line numbers
+ */
+function fallbackDeclarationLines(lines) {
+  const found = [];
+  lines.forEach((line, index) => {
+    if (FALLBACK_DECLARATION.test(line)) found.push(index);
+  });
+  return found;
 }
 
 /**
