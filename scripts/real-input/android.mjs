@@ -636,7 +636,7 @@ const CHECKS = {
         ECHO.hostSegmentedIndex,
         '1',
         'a real tap on a hosted segment to register',
-        (node) => t.tapControlAt(node, 0.5)
+        { aim: (node) => t.tapControlAt(node, 0.5) }
       ),
       '1'
     );
@@ -655,7 +655,7 @@ const CHECKS = {
         ECHO.hostSegmentedIndex,
         '2',
         'a second real tap to register',
-        (node) => t.tapControlAt(node, 0.9)
+        { aim: (node) => t.tapControlAt(node, 0.9) }
       ),
       '2'
     );
@@ -1203,7 +1203,7 @@ const CHECKS = {
         ECHO.segmentedIndex,
         '1',
         'a real tap to register',
-        (node) => t.tapControlAt(node, 0.5)
+        { aim: (node) => t.tapControlAt(node, 0.5) }
       ),
       '1'
     );
@@ -1229,7 +1229,7 @@ const CHECKS = {
         ECHO.segmentedIndex,
         '0',
         'a second real tap to register',
-        (node) => t.tapControlAt(node, 0.12)
+        { aim: (node) => t.tapControlAt(node, 0.12) }
       ),
       '0'
     );
@@ -1258,7 +1258,7 @@ const CHECKS = {
         ECHO.rejectEvents,
         '1',
         'the controlled tap to register',
-        (node) => t.tapControlAt(node, 0.5)
+        { aim: (node) => t.tapControlAt(node, 0.5) }
       ),
       '1'
     );
@@ -1277,7 +1277,7 @@ const CHECKS = {
         ECHO.rejectEvents,
         '2',
         'the repeated tap to register',
-        (node) => t.tapControlAt(node, 0.5)
+        { aim: (node) => t.tapControlAt(node, 0.5) }
       ),
       '2'
     );
@@ -3146,6 +3146,24 @@ function makeContext(harness, log) {
      *   exactly what a retry turns green.
      */
     async tapUntilValue(lookUp, testID, expected, waitingFor, options = {}) {
+      // Fail loudly on a mis-shaped option rather than reading it as "no aim":
+      // this helper's fifth argument changed from a positional `aim` to an
+      // options object, and a callsite left behind would keep tapping the
+      // middle of the control - which is a wrong-place tap, not a dropped one,
+      // and it showed up as two segmented checks going red for the wrong reason.
+      const known = ['aim', 'attempts', 'nativeLabel'];
+      const unknown = Object.keys(options).filter((k) => !known.includes(k));
+      if (typeof options === 'function' || unknown.length > 0) {
+        log.abort(
+          `${waitingFor}: tapUntilValue was given ${
+            typeof options === 'function'
+              ? 'a positional aim function (it is now { aim })'
+              : `unknown option(s) ${unknown.join(', ')} - the fifth argument is ` +
+                '{ aim, attempts, nativeLabel }'
+          }. Refusing to tap: an ignored aim presses the middle of the control, ` +
+            'which fails a segment check and blames delivery.'
+        );
+      }
       const { aim, attempts = 3, nativeLabel } = options;
       const { delivered, shown } = await this.pressUntil({
         what: `"${testID}"`,
