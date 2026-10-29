@@ -1,0 +1,73 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-29T07:09:38.869Z on code tree `a6e684776190` at HEAD `a5d7e2b` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 3874 ms
+- Load: start 5.18, end 5.18, median 5.18, max 5.18
+- Device: android
+- Full log: `task/G7a-menu/harness+android-2026-10-29T07-09-38.869Z.log` (<store>/task/G7a-menu/harness+android-2026-10-29T07-09-38.869Z.log)
+- Scrubbed: 7 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android-2026-10-29T07-09-38.869Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G7a-799n1                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.00 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 29 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a6e684776190, 9 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.18/5.96 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android-2026-10-29T07-09-38.869Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Creating Android emulator nitroui...
+Test Suites: 0 of 14 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        3.144 s, estimated 75 s
+Ran all test suites.
+SubprocessError: Command failed with exit code 1: bash -lc 'printf '\''no
+'\'' | "~/Library/Android/sdk/cmdline-tools/latest/bin/avdmanager" create avd --force --name "nitroui" --package "system-images;android-35;default;arm64-v8a" --device "pixel_9" -p "~/.android/avd/nitroui.avd"'
+    at checkFailure (file://<repo>/node_modules/nano-spawn/source/result.js:40:9)
+    at getResult (file://<repo>/node_modules/nano-spawn/source/result.js:17:3)
+    at async Module.createAvd (file:[scrubbed]@react-native-harness/platform-android/dist/adb.js:305:5)
+    at async recreateAvd (file:[scrubbed]@react-native-harness/platform-android/dist/instance.js:56:5)
+    at async file:[scrubbed]@react-native-harness/platform-android/dist/instance.js:131:21
+    at async getAndroidEmulatorPlatformInstance (file:[scrubbed]@react-native-harness/platform-android/dist/instance.js:127:15)
+    at async Object.work (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:414:32)
+    at async withPlatformReadyTimeout (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:99:16)
+    at async Promise.all (index 1)
+    at async createHarnessSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:372:49)
+
+
+
+```

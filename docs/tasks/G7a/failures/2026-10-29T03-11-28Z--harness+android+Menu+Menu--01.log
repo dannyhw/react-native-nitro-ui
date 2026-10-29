@@ -1,0 +1,99 @@
+# Failure excerpt — harness:android:Menu:Menu
+
+- Ran: 2026-10-29T03:11:28.506Z on code tree `27009f2a63ac` at HEAD `c6fa4ec` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu Menu`
+- Result: fail, exit 1, 29657 ms
+- Load: start 3.77, end 5.13, median 5.13, max 5.30
+- Device: android / device `emulator-5574` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+android+Menu+Menu-2026-10-29T03-11-28.276Z.log` (<store>/task/G7a-menu/harness+android+Menu+Menu-2026-10-29T03-11-28.276Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › relays the rows when the group changes while it is open`
+- `expected +0 to be 6 // Object.is equality`
+- `● Menu · inside a Host › opens under its own button, and follows it when the Host moves`
+- `expected 16 to be less than 2`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Menu+Menu-2026-10-29T03-11-28.276Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.13 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 52 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:Menu:Menu
+gate: node ../scripts/harness.mjs --harnessRunner android Menu Menu (cwd example)
+gate: code tree 27009f2a63ac at HEAD c6fa4ec
+gate: git tree b3f90541af32 with a DIRTY worktree (not reusable)
+gate: log task/G7a-menu/harness+android+Menu+Menu-2026-10-29T03-11-28.276Z.log
+gate:       <store>/task/G7a-menu/harness+android+Menu+Menu-2026-10-29T03-11-28.276Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 27009f2a63ac, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.77/3.83 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android+Menu+Menu-2026-10-29T03-11-28.276Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › relays the rows when the group changes while it is open
+
+    expected +0 to be 6 // Object.is equality
+
+      [0m [90m 1043 |[39m     )[33m;[39m
+       [90m 1044 |[39m     [36mawait[39m waitForTestId([32m'shrink'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1045 |[39m     expect(report([32m'shrink'[39m)[33m.[39mrows)[33m.[39mtoBe([33mPICKABLE[39m)[33m;[39m
+       [90m      |[39m                                       [31m[1m^[22m[39m
+       [90m 1046 |[39m
+       [90m 1047 |[39m     [36mconst[39m shrinkTo [33m=[39m (
+       [90m 1048 |[39m       [33m<[39m[33mMenu[39m[0m
+
+  ● Menu · inside a Host › opens under its own button, and follows it when the Host moves
+
+    expected 16 to be less than 2
+
+      [0m [90m 1360 |[39m     )[33m.[39mtoBeLessThan([35m6[39m)[33m;[39m
+       [90m 1361 |[39m     [90m// Same gap and same leading edge at the new place: the anchoring rule, twice.[39m
+      [31m[1m>[22m[39m[90m 1362 |[39m     expect([33mMath[39m[33m.[39mabs(nextMenuTop [33m-[39m nextBottom [33m-[39m gap))[33m.[39mtoBeLessThan([35m2[39m)[33m;[39m
+       [90m      |[39m                                                                  [31m[1m^[22m[39m
+       [90m 1363 |[39m     expect([33mMath[39m[33m.[39mabs(nextMenuLeft [33m-[39m nextLeft))[33m.[39mtoBeLessThan([35m40[39m)[33m;[39m
+       [90m 1364 |[39m     expect(reopened[33m.[39mrows)[33m.[39mtoBe([33mPICKABLE[39m)[33m;[39m
+       [90m 1365 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 11 passed, 13 total
+Snapshots:   0 total
+Time:        28.73 s
+Ran all test suites matching Menu|Menu.
+gate: harness:android:Menu:Menu FAIL in 29.7 s
+gate: recorded in .gates/task/G7a-menu.jsonl
+
+
+gate: appended the device context to task/G7a-menu/harness+android+Menu+Menu-2026-10-29T03-11-28.276Z.log (5 probe(s))
+
+```

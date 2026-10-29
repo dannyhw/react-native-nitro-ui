@@ -128,7 +128,8 @@ export const MANIFEST_SCHEMA = {
   hostable: {
     type: 'boolean',
     readBy:
-      'HOSTABLE_CONTROLS in HostChildren.ts and the nitro-ui-host bench arm, in two places',
+      'HOSTABLE_CONTROLS in HostChildren.ts, and - paired with `bench` - the two ' +
+      'host-arm-components lists, because an arm is only scoped for a control it has cells for',
   },
   exampleTab: {
     type: 'string',
@@ -600,6 +601,23 @@ export function regionsFor(manifests) {
     manifests.filter((m) => m.bench === true && m.benchUnsuffixed !== true);
   /** The self-sizing components: the ones with a row in the sizing table. */
   const selfSizing = () => manifests.filter((m) => m.sizing != null);
+  /**
+   * The controls the `nitro-ui-host` arm is listed for: hostable *and* benched.
+   *
+   * Two lists take this set — `bench/src/implementations/index.ts`'s `components`
+   * and `scripts/bench/lib.mjs`'s `ARM_SCOPES` — and both are about *cells*: the
+   * arm's `components` says which cells it will render rather than skip, and
+   * `ARM_SCOPES` is what the scheduler builds cells from. A control that is
+   * hostable but not benched (`bench: false`: G7a's Menu, whose bench arm is G7b)
+   * has no cells to scope, so listing it would make the scheduler promise cells
+   * the plan does not have, and would name a `ComponentName` the bench union does
+   * not carry (`bench:typecheck`).
+   *
+   * What a control's `hostable` really promises — that a `<Host>` composes it — is
+   * read by `HostChildren.ts` and guarded by `src/__tests__/host.test.tsx`, not here.
+   */
+  const hostArm = () =>
+    manifests.filter((m) => m.hostable === true && m.bench === true);
   const withManifests = (spec) => ({
     ...spec,
     manifests,
@@ -790,7 +808,7 @@ export function regionsFor(manifests) {
       path: 'bench/src/implementations/index.ts',
       marker: 'host-arm-components',
       describe: 'the nitro-ui-host arm components',
-      entries: where('hostable'),
+      entries: hostArm(),
       keyOf: ID,
       entryStart: /^ {6}'([a-z0-9-]+)',$/,
       render: (m) => `      '${m.id}',`,
@@ -799,7 +817,7 @@ export function regionsFor(manifests) {
       path: 'scripts/bench/lib.mjs',
       marker: 'host-arm-components',
       describe: 'the nitro-ui-host arm components',
-      entries: where('hostable'),
+      entries: hostArm(),
       keyOf: ID,
       entryStart: /^ {6}'([a-z0-9-]+)',$/,
       render: (m) => `      '${m.id}',`,

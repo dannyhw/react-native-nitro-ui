@@ -1,0 +1,170 @@
+# Failure excerpt — check
+
+- Ran: 2026-10-29T03:51:06.448Z on code tree `37505c968a12` at HEAD `80d5f60` (branch `task/G7a-menu`)
+- Command: `bun run check`
+- Result: fail, exit 1, 117919 ms
+- Load: start 3.53, end 5.98, median 8.86, max 12.39
+- Device: android / device `emulator-5574` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/check-2026-10-29T03-51-06.211Z.log` (<store>/task/G7a-menu/check-2026-10-29T03-51-06.211Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `error: script "manifest:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 469 — the rest is in the full log above)
+
+```
+| Button: mount, 3 title changes, 2 unrelated parent renders                      | 6        | 6       | mount+0 redundant[] | ok     |
+| DatePicker: mount, 3 value changes, 2 bound changes, 2 unrelated parent renders | 8        | 8       | mount+0 redundant[] | ok     |
+| Picker: mount, 3 selection changes, 2 unrelated parent renders                  | 6        | 6       | mount+0 redundant[] | ok     |
+| Progress: mount, 3 value changes, 2 unrelated parent renders, 1 variant change  | 7        | 7       | mount+0 redundant[] | ok     |
+| SegmentedControl: mount, 3 selection changes, 2 unrelated parent renders        | 6        | 6       | mount+0 redundant[] | ok     |
+| Slider: mount, 3 value changes, 2 unrelated parent renders                      | 6        | 6       | mount+0 redundant[] | ok     |
+| Switch: mount, 3 flips, 2 unrelated parent renders                              | 6        | 6       | mount+0 redundant[] | ok     |
+
+PASS - 7 wrapper(s) render exactly as many times as the baseline says, with no redundant renders.
+──────── nitrogen:check — pass, 2.6s ─────────────────────────────────────────────
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 10/10 HybridObjects in 1.8s!
+💡  Your code is in <tmp>/nitrogen-check-sshkIe/nitrogen/generated
+‼️   Added 298 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: no drift (226 generated files match, 33 view(s) patched).
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (8 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.7s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+check: ✓ prepare             pass        1.7s
+──────── prepare — pass, 1.7s ────────────────────────────────────────────────────
+$ bob build
+ℹ [module] Cleaning up previous build at lib/module
+ℹ [typescript] Cleaning up previous build at lib/typescript
+ℹ [custom] Cleaning up nitrogen
+ℹ [typescript] Generating type definitions with tsc
+ℹ [custom] Running bun run nitrogen
+ℹ [module] Compiling 61 files in src with babel
+$ nitrogen src && node scripts/patch-nitrogen.mjs
+✔ [module] Wrote files to lib/module
+✔ [typescript] Wrote definition files to lib/typescript
+✔ [custom] Ran the nitrogen script succesfully
+check: ✓ publint             pass        1.1s
+check: ✓ api-extractor:check pass        1.2s
+──────── api-extractor:check — pass, 1.2s ────────────────────────────────────────
+$ api-extractor run --config etc/api-extractor.json
+
+[1mapi-extractor 7.59.4 [36m - https://api-extractor.com/[39m
+[22m
+Analysis will use the bundled TypeScript version 5.9.3
+*** The target project appears to use TypeScript 6.0.3 which is newer than the bundled compiler engine; consider upgrading API Extractor.
+
+API Extractor completed successfully
+──────── publint — pass, 1.1s ────────────────────────────────────────────────────
+$ publint --strict
+Running publint v0.3.25 for react-native-nitro-ui...
+Packing files with `bun pack`...
+Linting...
+All good!
+check: ✗ manifest:check      fail        1.7s - exit 1
+──────── manifest:check — fail, 1.7s ─────────────────────────────────────────────
+──────── readme:check — pass, 0.1s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 8 blocks match example/src/readme-examples.tsx
+check: 15 passed, 1 failed in 117.6s
+check: failed step(s): manifest:check
+──────── full log: manifest:check ────────────────────────────────────────────────
+$ node scripts/package-files.mjs
+package-files: +android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt would be published (not in the manifest).
+package-files: +ios/components/Menu/HybridNitroUiMenu.swift would be published (not in the manifest).
+package-files: +lib/module/components/Menu/Menu.js would be published (not in the manifest).
+package-files: +lib/module/components/Menu/Menu.js.map would be published (not in the manifest).
+package-files: +lib/module/components/Menu/Menu.nitro.js would be published (not in the manifest).
+package-files: +lib/module/components/Menu/Menu.nitro.js.map would be published (not in the manifest).
+package-files: +lib/module/components/Menu/NativeNitroUiMenu.js would be published (not in the manifest).
+package-files: +lib/module/components/Menu/NativeNitroUiMenu.js.map would be published (not in the manifest).
+package-files: +lib/module/components/Menu/NitroUiMenuConfig.js would be published (not in the manifest).
+package-files: +lib/module/components/Menu/NitroUiMenuConfig.js.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Menu/Menu.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Menu/Menu.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Menu/Menu.nitro.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Menu/Menu.nitro.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Menu/NativeNitroUiMenu.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Menu/NativeNitroUiMenu.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Menu/NitroUiMenuConfig.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Menu/NitroUiMenuConfig.d.ts.map would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JFunc_void_std__string.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JNitroUiMenuRow.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JNitroUiMenuSize.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_std__string.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiMenuSpec.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiMenuRow.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiMenuSize.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiMenuManager.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiMenuStateUpdater.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiMenuSpecSwift.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiMenuSpecSwift.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/views/HybridNitroUiMenuComponent.mm would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/Func_void_std__string.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiMenuSpec.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiMenuSpec_cxx.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/NitroUiMenuRow.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/NitroUiMenuSize.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/NitroUiMenuRow.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/NitroUiMenuSize.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/json/NitroUiMenuConfig.json would be published (not in the manifest).
+package-files: +src/components/Menu/Menu.nitro.ts would be published (not in the manifest).
+package-files: +src/components/Menu/Menu.tsx would be published (not in the manifest).
+package-files: +src/components/Menu/NativeNitroUiMenu.ts would be published (not in the manifest).
+package-files: +src/components/Menu/NitroUiMenuConfig.ts would be published (not in the manifest).
+package-files: tarball differs from <repo>/etc/package-files.txt (50 added, 0 removed). If intended, run `bun run manifest:update`.
+error: script "manifest:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 117.9 s
+gate: recorded in .gates/task/G7a-menu.jsonl
+
+```
