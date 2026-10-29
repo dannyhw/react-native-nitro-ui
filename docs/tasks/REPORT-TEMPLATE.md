@@ -23,6 +23,10 @@
   Device hygiene is not reported. Leases and the scripts enforce it (X1): a device gate runs
   under `scripts/lease.mjs`, refuses an unstamped app, and refuses the reserved emulator
   serial, so a report no longer has to say it did none of the bad things.
+
+  Before the final commit, run `bun run task-ready`: it checks this file's citations against
+  HEAD and its gate table against `gate.mjs table`, so a report cannot be handed in describing
+  a tree it no longer matches.
 -->
 
 **Branch:** `task/<ID>` (from `main` at `<sha>`) · **Round:** 1 of up to 3 (D19) ·
