@@ -77,6 +77,30 @@ export default function SwitchScreen() {
     []
   );
 
+  // F7 probe pair: two switches that are as identical as two controls can be —
+  // same place on the screen, same controlled shape, same "count what JS was
+  // told" witness — except that one is this library's hosted SwiftUI `Toggle`
+  // and the other is React Native's own native `Switch`.
+  //
+  // The pair exists because the earlier cells of the matrix could not tell those
+  // two apart: a control's accessibility `value:` and a rendered count are
+  // different witnesses, and reading a busy tree through the first is itself
+  // expensive. Here both switches are read the same way, in the same launch, so
+  // which of them loses a 50 ms press is a fact about the control and not about
+  // the probe.
+  const [probeHosted, setProbeHosted] = useState(false);
+  const [probeHostedEvents, setProbeHostedEvents] = useState(0);
+  const [probeNative, setProbeNative] = useState(false);
+  const [probeNativeEvents, setProbeNativeEvents] = useState(0);
+  const acceptHosted = useCallback((next: boolean) => {
+    setProbeHosted(next);
+    setProbeHostedEvents((count) => count + 1);
+  }, []);
+  const acceptNative = useCallback((next: boolean) => {
+    setProbeNative(next);
+    setProbeNativeEvents((count) => count + 1);
+  }, []);
+
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
   // F7 dwell probe only — see `./probeVariant`. Variant 3 drops the 200-row
@@ -101,6 +125,37 @@ export default function SwitchScreen() {
           testID="switch-controlled"
           accessibilityLabel="Controlled switch"
         />
+      </Row>
+      <Text style={[styles.section, { color: ink.ink }]}>Probe pair</Text>
+      <Row label="hosted · events JS saw">
+        <Switch
+          value={probeHosted}
+          onValueChange={acceptHosted}
+          testID="probe-hosted-switch"
+        />
+      </Row>
+      <Row label="">
+        <Text
+          testID="probe-hosted-events"
+          style={[styles.value, { color: ink.ink }]}
+        >
+          {probeHostedEvents}
+        </Text>
+      </Row>
+      <Row label="react native · events JS saw">
+        <RNSwitch
+          value={probeNative}
+          onValueChange={acceptNative}
+          testID="probe-native-switch"
+        />
+      </Row>
+      <Row label="">
+        <Text
+          testID="probe-native-events"
+          style={[styles.value, { color: ink.ink }]}
+        >
+          {probeNativeEvents}
+        </Text>
       </Row>
       <Row label="value shown to JS">
         <Text
