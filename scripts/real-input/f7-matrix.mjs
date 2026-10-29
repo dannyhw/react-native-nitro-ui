@@ -219,13 +219,13 @@ const CELLS = [
 
 function writeVariant(value) {
   const src = fs.readFileSync(VARIANT_FILE, 'utf8');
+  if (!/export const SWITCH_SCREEN_VARIANT: SwitchScreenVariant = \d+;/.test(src)) {
+    throw new Error('f7-matrix: could not find the variant constant to set');
+  }
   const next = src.replace(
     /export const SWITCH_SCREEN_VARIANT: SwitchScreenVariant = \d+;/,
     `export const SWITCH_SCREEN_VARIANT: SwitchScreenVariant = ${value};`
   );
-  if (next === src) {
-    throw new Error('f7-matrix: could not find the variant constant to set');
-  }
   fs.writeFileSync(VARIANT_FILE, next);
 }
 
