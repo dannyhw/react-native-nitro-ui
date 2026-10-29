@@ -1,0 +1,87 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-10-29T05:44:17.934Z on code tree `b65316f3df4e` at HEAD `f5cc5e4` (branch `task/F2-followups-sweep`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 347 ms
+- Load: start 20.00, end 20.00, median 20.00, max 20.00
+- Device: ios / device `331EF109-21DD-422B-AEF8-DFFFC6998DC3` / lease `F2-3hxh8`
+- Full log: `task/F2-followups-sweep/harness+ios-2026-10-29T05-44-17.216Z.log` (<store>/task/F2-followups-sweep/harness+ios-2026-10-29T05-44-17.216Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F2-followups-sweep/harness+ios-2026-10-29T05-44-17.216Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F2-3hxh8 (still live)
+  |   F2-3hxh8                 F2           both              pair-b
+  |   G7a-424pv                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 20.00 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:331EF109-21DD-422B-AEF8-DFFFC6998DC3 for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree b65316f3df4e at HEAD f5cc5e4
+gate: git tree 8d429a0040d9
+gate: log task/F2-followups-sweep/harness+ios-2026-10-29T05-44-17.216Z.log
+gate:       <store>/task/F2-followups-sweep/harness+ios-2026-10-29T05-44-17.216Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+bun run harness:ios: refusing to run against a stale app.
+       - no app.stamp for ios at <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app: nothing proves this binary was built from this checkout
+       - 8 registered component(s) are not in the binary: Button, DatePicker, Host, Picker, Progress, SegmentedControl, Slider, Switch - the suite cannot exercise what the app does not contain (on Android this is gradle calling packageDebug up-to-date over a stale dex)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: refusing to run against a stale app.
+       - no app.stamp for ios at <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app: nothing proves this binary was built from this checkout
+       - 8 registered component(s) are not in the binary: Button, DatePicker, Host, Picker, Progress, SegmentedControl, Slider, Switch - the suite cannot exercise what the app does not contain (on Android this is gradle calling packageDebug up-to-date over a stale dex)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+gate: harness:ios FAIL in 0.3 s
+gate: recorded in .gates/task/F2-followups-sweep.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/F2-followups-sweep/harness+ios-2026-10-29T05-44-17.216Z.log (4 probe(s))
+
+```
