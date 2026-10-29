@@ -22,6 +22,23 @@ const GENERATED_END = '@end-generated';
 const FALLBACK_FILE = /DeclaredFallbacks\.(kt|swift|ts|tsx)$/;
 
 /**
+ * A test file, which the *proximity* branch skips.
+ *
+ * Found by the tool biting itself: `task-ready.test.js` proves this scan works by holding
+ * fixture strings that are component sources in miniature — a `// TODO: re-measure on iPad`
+ * two lines above a `fallbackSize` — and `bun run task-ready` reported the scan's own tests
+ * as two undecided fallbacks. A rule that reports the fixture written to prove it is a rule
+ * that will be turned off, so the branch is scoped rather than dropped:
+ *
+ * - a file named as a fallback table ({@link FALLBACK_FILE}) is still scanned wherever it
+ *   is, including under `__tests__/`;
+ * - a hit inside a generated region is still reported in any file;
+ * - only "this line is *near* a fallback declaration" is not applied to a test file, because
+ *   that inference is about the number a control ships with, and a test file ships nothing.
+ */
+const TEST_FILE = /(^|\/)__tests__(\/|$)|\.(test|spec)\.[cm]?[jt]sx?$/;
+
+/**
  * A line that *declares* a fallback size, wherever it lives.
  *
  * The review's N2: the number each control falls back to is written in the component's own
@@ -73,7 +90,8 @@ export function todoFindings(files) {
   for (const [path, text] of files) {
     const lines = text.split('\n');
     const inFallback = FALLBACK_FILE.test(path);
-    const declared = inFallback ? [] : fallbackDeclarationLines(lines);
+    const declared =
+      inFallback || TEST_FILE.test(path) ? [] : fallbackDeclarationLines(lines);
     let insideGenerated = false;
     lines.forEach((line, index) => {
       if (GENERATED_MARKER.test(line)) insideGenerated = true;
