@@ -233,10 +233,14 @@ async function mount(ui: Parameters<typeof render>[0], timeoutMs = 30000) {
  * Press at an absolute point and report which control answered, or `null`.
  *
  * "Answered" is an event reaching JS from one of `allowed`. On Android a hosted control
- * declines to measure, so its own view is laid out at `0 x 0` and is neither a hit
- * target nor visible-to-user: the only way an answer can arrive is through the Host's
- * composition, which is the property under test rather than an assumption. Two answers
- * for one press fails on its own (overlapping hit areas between hosted children).
+ * declines to measure, so *at mount* its own view is laid out at `0 x 0` and is neither a
+ * hit target nor visible-to-user: the only way an answer can arrive is through the Host's
+ * composition, which is the property under test rather than an assumption. Mount is the
+ * whole sentence, though - a later layout pass over that child writes its Yoga frame into
+ * the view, and that frame is never the rect Compose drew (`docs/components/host.md`,
+ * F8), so a press aimed at a hosted child's own box is aimed at a rectangle drawn around
+ * the drawing rather than at the drawing. Two answers for one press fails on its own
+ * (overlapping hit areas between hosted children).
  */
 async function probeAt(
   x: number,
