@@ -736,7 +736,12 @@ function expectConformance(findings: Finding[]): void {
         `${finding.rule}: ${finding.problem}`
     );
   }
-  expect(failures).toEqual([]);
+  // `toBe('')` on the joined text, not `toEqual([])` (the convention `HostControls.harness.tsx`
+  // already uses). Jest abbreviates an array it expects to be empty — every run of this file
+  // printed `expected [ …(2) ] to deeply equal []` for nine failures and not one word of what
+  // the rules had actually found, which turns a red gate into a re-run just to learn which
+  // assertion moved. A string is printed whole.
+  expect(failures.join('\n')).toBe('');
 }
 
 /* ------------------------------- the shared tables --------------------------- */
