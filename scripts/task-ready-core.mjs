@@ -79,7 +79,8 @@ export function todoFindings(files) {
       if (GENERATED_MARKER.test(line)) insideGenerated = true;
       else if (line.includes(GENERATED_END)) insideGenerated = false;
       const nearFallback =
-        inFallback || declared.some((at) => Math.abs(at - index) <= FALLBACK_CONTEXT_LINES);
+        inFallback ||
+        declared.some((at) => Math.abs(at - index) <= FALLBACK_CONTEXT_LINES);
       if (!insideGenerated && !nearFallback) return;
       if (!/\b(TODO|FIXME)\b/.test(line)) return;
       const marker = /\bFIXME\b/.test(line) ? 'FIXME' : 'TODO';
@@ -159,6 +160,30 @@ export function missingReportPaths(reportText, existing, touched = new Set()) {
     );
   }
   return problems;
+}
+
+/**
+ * The line a check says when it could not look, so "nothing found" cannot read as "nothing wrong".
+ *
+ * A scan that read zero files reports zero markers, which is the same output as a scan that
+ * read a thousand and found none. So the three places this tool can fail to see — no
+ * merge-base to diff, `git ls-tree` refusing, a report that is not there — return this rather
+ * than an empty list and a note: `summarise` turns a non-empty list into `not ready`, and an
+ * empty one into `ok`. That is the whole of it: an unavailable check must be a problem, because
+ * the alternative is a tool that says "ready" about the checks it could not run.
+ *
+ * @param {string} what the thing that could not be read, e.g. "the TODO scan"
+ * @param {string} why why not, e.g. "no merge-base with `main`"
+ * @param {string} [fix] what to do about it, when a caller can
+ * @returns {string[]} exactly one problem
+ */
+export function unscannedProblem(what, why, fix) {
+  return [
+    `${why}, so ${what} could not run and checked nothing — its silence ` +
+      'means "nothing to look at", not "nothing wrong", and this tool reports those ' +
+      'differently on purpose' +
+      (fix == null ? '.' : `. ${fix}`),
+  ];
 }
 
 /**
@@ -258,9 +283,7 @@ export function reportTableProblems(reportText, generatedTable) {
   // prose are out — and second cell verdict-shaped, so the cost table's durations and a
   // coverage matrix's `covered` are out. A row that reads "this gate, this verdict" has to
   // have a run behind it.
-  const known = new Set(
-    generated.map((line) => gateNameOf(line) ?? '')
-  );
+  const known = new Set(generated.map((line) => gateNameOf(line) ?? ''));
   for (const row of inReport) {
     const gate = gateNameOf(row);
     if (gate == null || known.has(gate)) continue;
@@ -283,7 +306,11 @@ function gateNameOf(row) {
   const cells = tableCells(row);
   if (cells.length < 2) return null;
   if (!/^[a-z][a-z0-9-]*(?::[A-Za-z0-9-]+)*$/.test(cells[0])) return null;
-  if (!/^\*{0,2}(PASS|FAIL|green|red|stale|skipped|pending|missing|not run)\*{0,2}$/i.test(cells[1]))
+  if (
+    !/^\*{0,2}(PASS|FAIL|green|red|stale|skipped|pending|missing|not run)\*{0,2}$/i.test(
+      cells[1]
+    )
+  )
     return null;
   return cells[0];
 }

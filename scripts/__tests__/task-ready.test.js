@@ -24,7 +24,12 @@ import {
   reportTableProblems,
   summarise,
   todoFindings,
+  unscannedProblem,
 } from '../task-ready-core.mjs';
+import { readerFor } from '../conformance-core.mjs';
+
+/** Reads the tool's own source, for the checks that are about the script rather than a helper. */
+const read = readerFor();
 
 /* --------------------------------- the TODO scan -------------------------------- */
 
@@ -94,7 +99,9 @@ describe('the TODO/FIXME scan', () => {
       '',
       '  // TODO: this is fine, it is about something else entirely',
     ].join('\n');
-    const problems = todoFindings(files('ios/components/Switch/HybridNitroUiSwitch.swift', swift));
+    const problems = todoFindings(
+      files('ios/components/Switch/HybridNitroUiSwitch.swift', swift)
+    );
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('HybridNitroUiSwitch.swift:2');
     expect(problems[0]).toContain('a fallback number');
@@ -108,7 +115,12 @@ describe('the TODO/FIXME scan', () => {
       '    private const val FALLBACK_HEIGHT_DP = 48.0',
       '  }',
     ].join('\n');
-    const problems = todoFindings(files('android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt', kotlin));
+    const problems = todoFindings(
+      files(
+        'android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt',
+        kotlin
+      )
+    );
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('HybridNitroUiSwitch.kt:3');
     expect(problems[0]).toContain('FIXME');
@@ -124,7 +136,9 @@ describe('the TODO/FIXME scan', () => {
       '  // TODO: nothing to do with the fallback',
     ].join('\n');
     expect(
-      todoFindings(files('ios/components/Button/HybridNitroUiButton.swift', swift))
+      todoFindings(
+        files('ios/components/Button/HybridNitroUiButton.swift', swift)
+      )
     ).toEqual([]);
   });
 
@@ -445,9 +459,9 @@ describe("the report's gate table against the ledger", () => {
     // the shape that actually happens, and the first loop finds nothing to complain about.
     const report = generated.slice();
     report.push('| test:native | **PASS** | `abc1234` | 55 s |');
-    expect(reportTableProblems(report.join('\n'), generated).join('\n')).toContain(
-      'no run of that gate is recorded'
-    );
+    expect(
+      reportTableProblems(report.join('\n'), generated).join('\n')
+    ).toContain('no run of that gate is recorded');
   });
 
   it('leaves a cost table alone, because a duration is not a verdict', () => {
@@ -538,6 +552,66 @@ describe('the `--only` groups', () => {
     for (const members of Object.values(ONLY_GROUPS)) {
       for (const member of members) expect(sections).toContain(member);
     }
+  });
+});
+
+/* ------------------------- a check that could not look -------------------------- */
+
+describe('an unavailable check is a problem, not silence', () => {
+  it('refuses to let an unscanned section read as a pass', () => {
+    // X4 review N8: round 1 pushed "no merge-base with `main`" into the notes and returned
+    // `[]`, so the scan that read zero files printed `ok` and the run's last line said
+    // `ready`. Zero markers and zero files looked identical, and only one of them is a pass.
+    const problems = unscannedProblem(
+      'the TODO scan',
+      'no merge-base with `main`',
+      'Run it on a branch that has one.'
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('could not run and checked nothing');
+    expect(problems[0]).toContain('Run it on a branch that has one.');
+    // The whole point: that one line is enough to make the summary refuse.
+    const { ok, lines } = summarise({
+      registry: [],
+      markers: problems,
+    });
+    expect(ok).toBe(false);
+    expect(lines.join('\n')).toContain('1 problem(s)  markers');
+  });
+
+  it('is how the script reports a scan its git state blocked', () => {
+    // The rule the script has to follow, checked on the script's own source because the
+    // failure needs a git state (no merge-base, a failing `ls-tree`) a unit run cannot make.
+    const script = read('scripts/task-ready.mjs');
+    for (const fn of ['markerProblems', 'reportPathProblems']) {
+      const body = script.slice(
+        script.indexOf(`function ${fn}(`),
+        script.indexOf('\n}\n', script.indexOf(`function ${fn}(`))
+      );
+      expect(body).not.toBe('');
+      // Both git reads it depends on are handled, and handled as a problem.
+      expect(body).toContain('unscannedProblem(');
+      expect(body).not.toMatch(/return \[\];/);
+    }
+    // The one remaining "note and return []" is allowed, and pinned here so it stays the
+    // one: the missing-report case, where `report paths exist` already fails for the same
+    // report. A section that would otherwise be the *only* evidence must never do this.
+    const notesAndPass = [
+      ...script.matchAll(/notes\.push\([\s\S]{0,240}?\n\s*return \[\];/g),
+    ];
+    expect(notesAndPass).toHaveLength(1);
+    expect(notesAndPass[0][0]).toContain('no report to read');
+  });
+
+  it('lists the committed tree, not the index, for the citation check', () => {
+    // X4 review N7. `git ls-files` reads the index, so the set called `existing` — the one
+    // the failure message calls "HEAD" — was HEAD plus whatever happens to be staged, and
+    // minus whatever is staged-deleted. Proved on a real state: a file that is `git add`ed
+    // and then deleted from the worktree is in the index and not in HEAD, and the two sets
+    // answer the same citation differently.
+    const script = read('scripts/task-ready.mjs');
+    expect(script).toContain("['ls-tree', '-r', '--name-only', 'HEAD'");
+    expect(script).not.toContain("git(['ls-files']");
   });
 });
 
