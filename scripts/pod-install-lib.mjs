@@ -131,6 +131,14 @@ export const PINNED_JSON_GEM = '2.18.0';
 /** How a machine's CocoaPods renders an empty array inside a stored podspec. */
 export const EMPTY_ARRAY_COMPACT = 'compact';
 export const EMPTY_ARRAY_EXPANDED = 'expanded';
+/**
+ * Some spacing this repo has never seen: `[ ]`, `[\n]`, `[\n\t]`. It is its own
+ * answer rather than `null`, because `null` means "there was nothing to read"
+ * and a machine that writes a *novel* shape is a fact about that machine - the
+ * X13 lesson is that guessing about an unmeasured serialiser is what cost the
+ * release. Both refuse; only the message differs.
+ */
+export const EMPTY_ARRAY_OTHER = 'other';
 
 /** The style the committed `Podfile.lock` checksums were produced with. */
 export const EXPECTED_EMPTY_ARRAY_STYLE = EMPTY_ARRAY_COMPACT;
@@ -173,8 +181,19 @@ end
  * spec - which is also what lets the same reader be pointed at a real stored
  * podspec to check the answer against something nobody authored.
  *
+ * The compact case matches `[]` exactly, with no newline allowed inside (M1).
+ * An earlier `/:\s*\[\s*\]/` let `[ ]`, `[\n]` and `[\n    ]` read as compact,
+ * which is exactly backwards: agreement means the same *bytes*, and bytes are
+ * what the checksum hashes. A shape that is neither of the two known ones is
+ * `EMPTY_ARRAY_OTHER`, which refuses.
+ *
  * @param {string | null} specJson the `to_pretty_json` of some podspec
- * @returns {typeof EMPTY_ARRAY_COMPACT | typeof EMPTY_ARRAY_EXPANDED | null}
+ * @returns {
+ *   | typeof EMPTY_ARRAY_COMPACT
+ *   | typeof EMPTY_ARRAY_EXPANDED
+ *   | typeof EMPTY_ARRAY_OTHER
+ *   | null
+ * }
  */
 export function emptyArrayStyleOf(specJson) {
   if (specJson == null) return null;
@@ -182,8 +201,13 @@ export function emptyArrayStyleOf(specJson) {
   // blank line, the closer. Tested first, because it is the answer that refuses
   // an install and the one a false positive costs anything.
   if (/\[[ \t]*\n[ \t]*\n[ \t]*\]/.test(specJson)) return EMPTY_ARRAY_EXPANDED;
-  // json >= 2.8.0: an empty array is `[]` on the line that opened it.
-  if (/:\s*\[\s*\]/.test(specJson)) return EMPTY_ARRAY_COMPACT;
+  // json >= 2.8.0, byte for byte: `[]` on the line that opened it, nothing in
+  // between. Nothing else may read as agreement, because nothing else hashes the
+  // same - see the M1 note above.
+  if (/:[ \t]*\[\]/.test(specJson)) return EMPTY_ARRAY_COMPACT;
+  // Any other spacing of an empty array: `[ ]`, `[\n]`, `[\n\t  ]`. Refuses, but
+  // says what it saw rather than reporting an unreadable probe.
+  if (/:[ \t]*\[[\s]*\]/.test(specJson)) return EMPTY_ARRAY_OTHER;
   return null;
 }
 
@@ -200,8 +224,13 @@ export function podSerialisationProblem({
   if (style === EXPECTED_EMPTY_ARRAY_STYLE) return null;
   const seen =
     style == null
-      ? 'the probe could not be read'
-      : `it writes empty arrays ${style === EMPTY_ARRAY_EXPANDED ? 'with a blank line inside them (the `json` gem before 2.8.0)' : 'a different way again'}`;
+      ? 'the probe could not be read (no `pod ipc spec` answer, or nothing ' +
+        'recognisable in it)'
+      : style === EMPTY_ARRAY_EXPANDED
+        ? 'it writes empty arrays with a blank line inside them (the `json` ' +
+          'gem before 2.8.0)'
+        : 'it writes them some other way (`[ ]` or `[\n]`), a spacing this ' +
+          'repo has never seen';
   return (
     `this CocoaPods does not serialise podspecs the way ${lockPath} was ` +
     `written: ${seen}, and the lock needs ${EXPECTED_EMPTY_ARRAY_STYLE}.\n` +
@@ -210,9 +239,10 @@ export function podSerialisationProblem({
     'a formatting opinion - installing here would rewrite that lock across ' +
     'almost every pod. X13: a release runner on json 2.7.2 against Macs on ' +
     '2.18.0 moved 87 of 96 checksums and the churn guard stopped the release.\n' +
-    `  Fix: use a Ruby whose \`json\` is ${PINNED_JSON_GEM} or newer-but-still-compact ` +
-    '(`gem list json`), or run the refresh on a machine that matches. The ' +
-    'release job installs that version before it installs CocoaPods.'
+    `  Fix: use a Ruby whose \`json\` is ${PINNED_JSON_GEM} or newer-but-still-compact, ` +
+    'as loaded rather than as installed - check with `ruby -rjson -e ' +
+    "'print JSON::VERSION'`, not `gem list json`. The release job installs that " +
+    'version before it installs CocoaPods, and says what loads.'
   );
 }
 
@@ -243,6 +273,7 @@ export const POD_INSTALL_CONTRACT = [
   {
     name: 'USE_FRAMEWORKS',
     value: null,
+    emptyCountsAsSet: true,
     why: "`if ENV['USE_FRAMEWORKS']` is in dozens of podspecs and adds header search paths and xcconfig entries; `detect_use_frameworks` (cocoapods/utils.rb:310) returns early when it is already set, so an inherited value is never recomputed from the target's real build type.",
   },
   {
@@ -251,33 +282,44 @@ export const POD_INSTALL_CONTRACT = [
     why: 'codegen.rb:24 short-circuits codegen and its build-folder cleanup, which is what the ReactCodegen and ReactAppDependencyProvider pods are built from.',
   },
   {
+    name: 'RCT_IGNORE_PODS_DEPRECATION',
+    value: null,
+    why: "react_native_pods.rb:112 folds it into RCT_SKIP_CODEGEN (`RCT_SKIP_CODEGEN == '1' || RCT_IGNORE_PODS_DEPRECATION == '1'`), so setting it skips codegen through the same path while looking, from the environment alone, like a deprecation-warning switch.",
+  },
+  {
     name: 'IS_REANIMATED_PROFILING',
     value: null,
+    emptyCountsAsSet: true,
     why: 'RNReanimated.podspec:10 adds -DREANIMATED_PROFILING to its compiler_flags.',
   },
   {
     name: 'IS_WORKLETS_PROFILING',
     value: null,
+    emptyCountsAsSet: true,
     why: 'RNWorklets.podspec:18, same shape.',
   },
   {
     name: 'RCT_USE_LOCAL_RN_DEP',
     value: null,
+    emptyCountsAsSet: true,
     why: 'rndependencies.rb:72 points ReactNativeDependencies at a local xcframework instead of the published artifact.',
   },
   {
     name: 'RCT_TESTONLY_RNCORE_TARBALL_PATH',
     value: null,
+    emptyCountsAsSet: true,
     why: 'rncore.rb:60, same shape for React-Core-prebuilt.',
   },
   {
     name: 'RCT_TESTONLY_RNCORE_VERSION',
     value: null,
+    emptyCountsAsSet: true,
     why: 'rncore.rb:47 overrides the prebuilt React Native core version.',
   },
   {
     name: 'RCT_DEPS_VERSION',
     value: null,
+    emptyCountsAsSet: true,
     why: 'rndependencies.rb:106 overrides the prebuilt third-party version.',
   },
 ];
@@ -309,6 +351,14 @@ export const POD_INSTALL_CONTRACT = [
  * `$NODE_BINARY` inside a script phase, never expanded, so its value cannot
  * move a checksum.
  *
+ * How each reader treats `NAME=` (set, but empty). Ruby has two answers and the
+ * contract has both in it (N4): `ENV['X'] ? a : b` and `if ENV['X']` take the
+ * truthy branch on an empty string, while `ENV['X'] != nil` and `ENV['X'] == '1'`
+ * do not. So an empty value is *not* uniformly "unset" - `IS_REANIMATED_PROFILING=`
+ * really does add `-DREANIMATED_PROFILING`, and `RCT_TESTONLY_RNCORE_VERSION=`
+ * really does replace the version with the empty string. Each entry says which it
+ * is in `emptyCountsAsSet`, taken from the line in its own `why`.
+ *
  * @param {Record<string, string | undefined>} env the caller's environment
  * @param {{ contract?: typeof POD_INSTALL_CONTRACT }} [options]
  * @returns {{ env: Record<string, string | undefined>, pinned: string[], deviations: {name: string, value: string, expected: string | null, why: string}[] }}
@@ -323,7 +373,9 @@ export function podInstallEnvironment(
 
   for (const entry of contract) {
     const current = next[entry.name];
-    if (current === undefined || current === '') {
+    const isSet =
+      current !== undefined && (current !== '' || entry.emptyCountsAsSet);
+    if (!isSet) {
       if (entry.value != null) {
         next[entry.name] = entry.value;
         pinned.push(`${entry.name}=${entry.value}`);

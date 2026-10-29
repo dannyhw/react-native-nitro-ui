@@ -281,7 +281,17 @@ export function run({
   const before = treeState();
   const stampBefore = cocoapodsStamp(lockText);
 
-  const status = installPods({ dir: iosDir, log, strict: true, env }).status;
+  const status = installPods({
+    dir: iosDir,
+    log,
+    strict: true,
+    // The answer measured just above, not a second measurement of the same
+    // question (N6). They are the same call with the same arguments, so asking
+    // twice only spends the time twice - and if the two answers ever disagreed,
+    // this function would have refused on one and installed on the other.
+    serialStyle: serialisation.style,
+    env,
+  }).status;
   if (status !== 0) {
     error(
       `example-lock: pod install exited ${status}, so ${LOCK_REL} was not ` +
