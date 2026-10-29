@@ -86,8 +86,12 @@ describe('the iOS a11y rule', () => {
     const tree = [wrapper()];
     const problems = iosA11yProblems(control('switch'), tree);
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('no element other than the React Native wrapper');
-    expect(problems[0]).toContain('a name on a wrapper rather than on the control');
+    expect(problems[0]).toContain(
+      'no element other than the React Native wrapper'
+    );
+    expect(problems[0]).toContain(
+      'a name on a wrapper rather than on the control'
+    );
   });
 
   it('goes red when the named element is not at the control’s box', () => {
@@ -177,7 +181,9 @@ describe('the iOS a11y rule', () => {
       wrapper(),
       node({ frame: { x: 0, y: 0, width: 0, height: 0 } }),
     ];
-    expect(iosA11yProblems(control('switch'), tree)[0]).toContain('zero-sized box');
+    expect(iosA11yProblems(control('switch'), tree)[0]).toContain(
+      'zero-sized box'
+    );
   });
 });
 
@@ -263,7 +269,9 @@ describe('the iOS debt rows', () => {
       }),
     ];
     const problems = iosA11yProblems(picker, tree);
-    expect(problems[0]).toContain('no element other than the React Native wrapper');
+    expect(problems[0]).toContain(
+      'no element other than the React Native wrapper'
+    );
     const result = checkIosControlA11y(picker, tree);
     expect(result.known).toHaveLength(1);
     expect(result.exempt).toBe(true);
@@ -354,7 +362,9 @@ describe('reading the pass out of an xcodebuild log', () => {
     // The point of parsing rather than asserting in Swift: this is the same call
     // `ios.mjs` makes against a simulator's log, so a fixture proves the device path.
     const trees = parseIosA11yLog(LOG);
-    expect(checkIosControlA11y(control('switch'), trees.get('switch'))).toMatchObject({
+    expect(
+      checkIosControlA11y(control('switch'), trees.get('switch'))
+    ).toMatchObject({
       failures: [],
       known: [],
     });

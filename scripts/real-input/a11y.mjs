@@ -503,7 +503,9 @@ const IOS_FRAME_TOLERANCE_PT = 0.5;
  */
 export function iosA11yProblems(control, tree) {
   if (control.anchorTestId == null) {
-    return [`${control.hybridView}: no anchorTestId, so the iOS rule has no box to read`];
+    return [
+      `${control.hybridView}: no anchorTestId, so the iOS rule has no box to read`,
+    ];
   }
   const anchor = tree.find((node) => node.id === control.anchorTestId);
   if (anchor == null) {
@@ -527,12 +529,12 @@ export function iosA11yProblems(control, tree) {
     problems.push(
       unboxed.length > 0
         ? `${control.hybridView}: ${String(unboxed.length)} element(s) under ` +
-          `"${control.anchorTestId}" are announced as "${control.label}" and every ` +
-          'one has a zero-sized box, so the name is in the tree with nothing drawn under it'
+            `"${control.anchorTestId}" are announced as "${control.label}" and every ` +
+            'one has a zero-sized box, so the name is in the tree with nothing drawn under it'
         : `${control.hybridView}: no element other than the React Native wrapper is ` +
-          `announced as "${control.label}" — the only node that carries the name is ` +
-          'the box React Native made, which is a name on a wrapper rather than on the ' +
-          `control (wrapper: ${describeIosNode(anchor)})`
+            `announced as "${control.label}" — the only node that carries the name is ` +
+            'the box React Native made, which is a name on a wrapper rather than on the ' +
+            `control (wrapper: ${describeIosNode(anchor)})`
     );
     // Nothing to grade on name, but a doubled name is still a doubled name, and the
     // message above would otherwise be the whole story.
@@ -553,7 +555,7 @@ export function iosA11yProblems(control, tree) {
     problems.push(
       `${control.hybridView}: "${control.label}" is announced by the element at ` +
         `${iosBox(node.frame)} while the control is drawn at ${iosBox(anchor.frame)} ` +
-        '— the name is on a box that is not the control\'s, so VoiceOver stops ' +
+        "— the name is on a box that is not the control's, so VoiceOver stops " +
         'somewhere else than the thing a person presses'
     );
   }
@@ -632,7 +634,10 @@ export function parseIosA11yLog(log) {
     };
     // A line whose box did not parse is a format change, and silently dropping the
     // element would make the case pass on nothing.
-    if (!Number.isFinite(node.frame.width) || !Number.isFinite(node.frame.height)) {
+    if (
+      !Number.isFinite(node.frame.width) ||
+      !Number.isFinite(node.frame.height)
+    ) {
       throw new Error(
         `real-input: an a11y line from the iOS run carries no readable box: ${line.trim()}`
       );
@@ -663,9 +668,7 @@ export function parseIosA11yLog(log) {
 function fieldsOf(line) {
   const fields = new Map();
   for (const match of line.matchAll(/(\w+)=("(?:[^"\\]|\\.)*"|\S+)/g)) {
-    const value = match[2].startsWith('"')
-      ? JSON.parse(match[2])
-      : match[2];
+    const value = match[2].startsWith('"') ? JSON.parse(match[2]) : match[2];
     if (!fields.has(match[1])) fields.set(match[1], value);
   }
   return fields;
@@ -700,9 +703,11 @@ function article(word) {
  * @param {IosA11yNode} node
  */
 function describeIosNode(node) {
-  return `${node.type} "${node.label}" at ${iosBox(node.frame)}` +
+  return (
+    `${node.type} "${node.label}" at ${iosBox(node.frame)}` +
     `${node.value === '' ? '' : ` value "${node.value}"`}` +
-    `${node.enabled ? '' : ' disabled'}`;
+    `${node.enabled ? '' : ' disabled'}`
+  );
 }
 
 /**

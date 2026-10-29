@@ -514,7 +514,10 @@ function reportA11yPass({ log, suite, status, testLog }) {
     // A line whose box did not parse means the format moved under the parser. That is a
     // broken measurement, not a control's failure, so it fails the run outright rather
     // than reporting thirteen cases as unmeasured.
-    const check = suite.beginAuxiliary(A11Y_ID, 'the accessibility rule (XCUITest)');
+    const check = suite.beginAuxiliary(
+      A11Y_ID,
+      'the accessibility rule (XCUITest)'
+    );
     check.abort(`${String(error?.message ?? error)} — see ${testLog}`);
     return;
   }
@@ -557,7 +560,9 @@ function reportA11yPass({ log, suite, status, testLog }) {
     check.check(
       result.failures.length === 0
         ? `${entry.hybridView} is named on one element, at the control's own box, as ${
-            entry.iosTrait == null ? 'a control' : `the ${entry.iosTrait} it claims to be`
+            entry.iosTrait == null
+              ? 'a control'
+              : `the ${entry.iosTrait} it claims to be`
           }`
         : result.failures.join(' | '),
       result.failures.length === 0
