@@ -21,8 +21,9 @@
  *      [--out docs/tasks/F1/dwell-probe.md] [--json /tmp/dwell.json]
  *
  * It builds for testing with the same arguments `ios.mjs` uses, so the binary is
- * the one the gate runs; it does not write an app stamp, because it installs
- * nothing new - it reuses the build the gate would.
+ * the one the gate runs. Because it compiles into the same derived data, it
+ * records the build (`recordBuild`) and installs it on the leased simulator, so
+ * the next gate run can tell which tree the binary came from.
  */
 
 import { spawn } from 'node:child_process';
