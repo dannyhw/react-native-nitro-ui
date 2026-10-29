@@ -417,12 +417,31 @@ final class RealInputTests: XCTestCase {
       // cell reads the recogniser's own firing count rather than the Toggle's state.
       // Without a stall the original witnesses are kept, so the cells already
       // measured stay comparable with this file's own earlier logs.
+      //
+      // The default counter follows the pressed control rather than being one
+      // constant, because that mistake was made and it produced a wrong result: an
+      // earlier `probe-inner-button` cell ran with no `--witness`, quietly read the
+      // *Toggle's* counter while pressing the *button*, and reported 0/12 for a
+      // control whose own counter said 12/12. Ask a control and it answers for
+      // itself, or the cell says nothing about the thing it pressed.
+      let counterForTarget: String? = {
+        if target == "probe-inner-button" {
+          return "probe-inner-count"
+        }
+        if target.hasPrefix("probe-toggle-") {
+          return "probe-toggle-count"
+        }
+        return nil
+      }()
       let rowsReading: (String) -> String? = { _ in
         if let echoID {
           return self.publishedNumber(echoID)
         }
+        if self.quiet, let counterForTarget {
+          return self.publishedNumber(counterForTarget)
+        }
         return self.quiet
-          ? self.publishedNumber("probe-toggle-count")
+          ? nil
           : self.nativeSwitchState(of: target)
       }
       let buttonReading: (String) -> String? = quiet
