@@ -35,6 +35,14 @@ enum NitroUiProbe {
   ///   `delaysContentTouches = NO` in its initialiser.
   /// - `view` — no scroll view at all: the same rows in a plain view, so no pan
   ///   recogniser anywhere and nothing that can delay a touch.
+  ///
+  /// `NUI_PROBE_STALL=<ms>` additionally blocks the main thread for that long on
+  /// every run-loop pass. That is the causal test for the one explanation the
+  /// React Native matrix leaves standing: a screen with two hundred mounted
+  /// controls keeps its main thread busy, so if "the main thread is busy while the
+  /// finger comes up" is what loses a short press, stalling a plain UIKit screen
+  /// the same way has to lose it too. If it does not, the stall is not the
+  /// mechanism and the explanation is inside React Native's own touch path.
   static func rootViewController(
     environment: [String: String]
   ) -> UIViewController? {
@@ -42,7 +50,8 @@ enum NitroUiProbe {
       return nil
     }
     let rows = environment["NUI_PROBE_ROWS"].flatMap(Int.init) ?? 200
-    return ProbeViewController(kind: kind, rows: rows)
+    let stall = environment["NUI_PROBE_STALL"].flatMap(Int.init) ?? 0
+    return ProbeViewController(kind: kind, rows: rows, stallMs: stall)
   }
 }
 
@@ -54,19 +63,53 @@ enum NitroUiProbe {
 /// the Toggle's own fitting size on the right, in a 34 pt row. That is what makes
 /// the two comparable — same control, same geometry, same number of mounted
 /// targets — rather than merely similar.
+///
+/// Two things are counted and published as plain numbers at the bottom of the
+/// screen: how many times a row's Toggle has flipped, and how many times the
+/// positive control has been pressed. A count is the witness the probe's quiet
+/// shape needs — press twelve times, read once, the delta is how many arrived —
+/// and under a main-thread stall it is the only shape that cannot be misread: a
+/// toggling witness that is merely *slow* to report looks exactly like one whose
+/// presses were lost.
 private final class ProbeViewController: UIViewController {
   /// How the test finds the positive control.
   static let buttonID = "probe-button"
 
   private let kind: String
   private let rows: Int
+  private let stallMs: Int
+  /// Witness for the rows: a bare number, because the probe parses it as one.
+  private let toggleCountReport = UILabel()
+  /// Witness for the positive control, same shape.
+  private let buttonCountReport = UILabel()
+  /// A UIKit control *inside* the scroll view, for the question the outer one cannot
+  /// answer: under a stall, is it SwiftUI's Toggle that loses the press, or any
+  /// control that fires on touch-up-inside? A plain `UIButton` answers that only if
+  /// it is in the same container as the rows — the outer one deliberately is not.
+  private let innerButton = UIButton(type: .system)
+  private let innerCountReport = UILabel()
+  /// Says what the stall really blocked for, so a run can prove it stalled instead
+  /// of trusting the flag it was given. The stall observer writes it.
+  private let stallReport = UILabel()
   /// Held because a child view controller's view is a subview, and the containment
   /// has to outlive `viewDidLoad`.
   private var hosted: [UIHostingController<ProbeToggleRow>] = []
+  /// Keeps the stall alive for the life of the screen; see `ProbeMainLoopStall`.
+  private var stallSource: ProbeMainLoopStall?
+  private var toggleFlips = 0 {
+    didSet { toggleCountReport.text = "\(toggleFlips)" }
+  }
+  private var buttonPresses = 0 {
+    didSet { buttonCountReport.text = "\(buttonPresses)" }
+  }
+  private var innerPresses = 0 {
+    didSet { innerCountReport.text = "\(innerPresses)" }
+  }
 
-  init(kind: String, rows: Int) {
+  init(kind: String, rows: Int, stallMs: Int) {
     self.kind = kind
     self.rows = rows
+    self.stallMs = stallMs
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -82,6 +125,7 @@ private final class ProbeViewController: UIViewController {
     let stack = UIStackView()
     stack.axis = .vertical
     stack.spacing = 2
+    addInnerControl(to: stack)
     mountRows(in: stack)
 
     if kind == "view" {
@@ -127,13 +171,57 @@ private final class ProbeViewController: UIViewController {
       ])
     }
 
-    // The positive control for this arm, added last so it is what hit-testing
-    // returns in its own band: a plain UIKit button that reports its own state back
-    // through the accessibility value the probe reads. Without it, a run of drops
-    // here could still be "the app answers nothing at all", which is the thing the
-    // React Native arm's `js-toggle` row rules out over there. Being outside the
-    // scroll view is the point — it is the baseline that has to answer every shape,
-    // so anything the rows lose can be read against it.
+    // Built last so it is what hit-testing returns in its own band. Being outside
+    // the scroll view is the point: it is the baseline that has to answer every
+    // shape, so anything the rows lose can be read against it.
+    let button = makePositiveControl()
+    addReports(below: button)
+
+    if stallMs > 0 {
+      let stall = ProbeMainLoopStall(milliseconds: stallMs)
+      let asked = stallMs
+      // Written from the stall observer itself, on the main thread, from inside the
+      // iteration it just blocked: what it reports is the longest block it actually
+      // performed, not what it was asked to do.
+      stall.onIteration = { [weak self] longestMs, iterations in
+        self?.stallReport.text =
+          "stall=\(asked)ms measured-max=\(longestMs)ms iterations=\(iterations)"
+      }
+      stallSource = stall
+      stall.start()
+    }
+  }
+
+  /// A plain UIKit button placed as the stack's first arranged view, so it sits in
+  /// exactly the container the rows sit in and is pressed the same way. Under a
+  /// stall this says whether *SwiftUI* is what loses the press or whether any
+  /// touch-up-inside control does, which is the difference between "host a `UISwitch`
+  /// instead" being a fix and being a guess.
+  private func addInnerControl(to stack: UIStackView) {
+    configure(innerCountReport, identifier: "probe-inner-count", text: "0")
+    innerButton.setTitle("Inner UIKit button", for: .normal)
+    innerButton.accessibilityIdentifier = "probe-inner-button"
+    innerButton.accessibilityLabel = "probe-inner-button"
+    innerButton.addTarget(
+      self,
+      action: #selector(ProbeViewController.innerButtonPressed),
+      for: .touchUpInside
+    )
+    innerButton.translatesAutoresizingMaskIntoConstraints = false
+    let row = UIStackView(arrangedSubviews: [innerButton, innerCountReport])
+    row.axis = .horizontal
+    row.alignment = .center
+    row.spacing = 8
+    stack.addArrangedSubview(row)
+    row.heightAnchor.constraint(equalToConstant: 44).isActive = true
+  }
+
+  /// The positive control for this arm: a plain UIKit button that reports its own
+  /// state back through the accessibility value the probe reads, and counts its
+  /// presses for the quiet shape. Without it, a run of drops here could still be
+  /// "the app answers nothing at all", which is the thing the React Native arm's
+  /// `probe-pressable` row rules out over there.
+  private func makePositiveControl() -> UIButton {
     let button = UIButton(type: .system)
     button.setTitle("Probe button", for: .normal)
     button.accessibilityIdentifier = Self.buttonID
@@ -145,19 +233,65 @@ private final class ProbeViewController: UIViewController {
       for: .touchUpInside
     )
     button.translatesAutoresizingMaskIntoConstraints = false
+    // Added here, before its constraints are activated: a constraint between the
+    // button and the screen's root view cannot be installed while the two have no
+    // common ancestor, which is an exception out of Auto Layout, not a warning.
     view.addSubview(button)
     NSLayoutConstraint.activate([
       button.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
       button.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-      button.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
       button.heightAnchor.constraint(equalToConstant: 44),
     ])
+    return button
+  }
+
+  /// The three readouts, in a strip under the positive control so none of them can
+  /// be under a finger.
+  private func addReports(below button: UIButton) {
+    configure(toggleCountReport, identifier: "probe-toggle-count", text: "0")
+    configure(buttonCountReport, identifier: "probe-button-count", text: "0")
+    configure(
+      stallReport,
+      identifier: "probe-stall",
+      text: stallMs > 0 ? "stall=\(stallMs)ms (none yet)" : "stall=none"
+    )
+    let reports = UIStackView(arrangedSubviews: [
+      toggleCountReport, buttonCountReport, stallReport,
+    ])
+    // Vertical, not horizontal: the stall readout is a sentence, and a truncated
+    // label would be read back truncated by the probe that checks it ran.
+    reports.axis = .vertical
+    reports.alignment = .leading
+    reports.spacing = 2
+    reports.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(reports)
+    NSLayoutConstraint.activate([
+      reports.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+      reports.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+      reports.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+      button.bottomAnchor.constraint(equalTo: reports.topAnchor, constant: -8),
+    ])
+  }
+
+  /// A readout label. Deliberately no `accessibilityLabel`: the probe reads these by
+  /// identifier and parses the text as a number, and `echoText` prefers a label over
+  /// a value, so a friendly name here would be read instead of the count.
+  private func configure(_ label: UILabel, identifier: String, text: String) {
+    label.accessibilityIdentifier = identifier
+    label.text = text
+    label.font = .systemFont(ofSize: 10)
+    label.textColor = .secondaryLabel
+    label.numberOfLines = 1
   }
 
   /// One row per control: a label and a real SwiftUI Toggle, sized like the app's.
   private func mountRows(in stack: UIStackView) {
     for index in 0..<rows {
-      let controller = UIHostingController(rootView: ProbeToggleRow(index: index))
+      let controller = UIHostingController(
+        rootView: ProbeToggleRow(index: index) { [weak self] in
+          self?.toggleFlips += 1
+        }
+      )
       addChild(controller)
       controller.didMove(toParent: self)
       hosted.append(controller)
@@ -177,9 +311,7 @@ private final class ProbeViewController: UIViewController {
       // The Toggle's own fitting size — the same unbounded proposal
       // `NitroSwiftUIHost` asks with for an intrinsic control — and a row height
       // matching the app's, so a press aims at the same size target in both apps.
-      let fitting = controller.sizeThatFits(
-        in: CGSize(width: 10_000, height: 10_000)
-      )
+      let fitting = controller.sizeThatFits(in: CGSize(width: 10_000, height: 10_000))
       let width = fitting.width > 0 ? fitting.width : 61
       let height = fitting.height > 0 ? fitting.height : 28
       NSLayoutConstraint.activate([
@@ -199,19 +331,103 @@ private final class ProbeViewController: UIViewController {
   @objc private func probeButtonPressed(_ button: UIButton) {
     let on = button.accessibilityValue != "on"
     button.accessibilityValue = on ? "on" : "off"
+    buttonPresses += 1
+  }
+
+  /// The in-scroller UIKit control's press count, published as a bare number.
+  @objc private func innerButtonPressed() {
+    innerPresses += 1
   }
 }
 
 /// One row's control: a real SwiftUI `Toggle` with `.switch` style holding its own
-/// state, identifiable the way the app's controls are for the test.
+/// state, identifiable the way the app's controls are for the test, and reporting
+/// each flip so the screen can publish a count.
+///
+/// The flip is reported from the binding's setter rather than `.onChange(of:)`,
+/// which is iOS 17+ and this target still builds for earlier. A setter works on
+/// every version and fires exactly when the Toggle's own state moves, which is the
+/// moment the probe cares about.
 private struct ProbeToggleRow: View {
   let index: Int
+  let onFlip: () -> Void
   @State private var on = false
 
   var body: some View {
-    Toggle("", isOn: $on)
-      .labelsHidden()
-      .toggleStyle(.switch)
-      .accessibilityIdentifier("probe-toggle-\(index)")
+    Toggle(
+      "",
+      isOn: Binding(
+        get: { on },
+        set: { next in
+          on = next
+          onFlip()
+        }
+      )
+    )
+    .labelsHidden()
+    .toggleStyle(.switch)
+    .accessibilityIdentifier("probe-toggle-\(index)")
+  }
+}
+
+/// Blocks the main thread on every run-loop pass, for as long as a busy React
+/// Native screen's would be.
+///
+/// A `CFRunLoopObserver` at `.beforeSources` fires after the loop has woken and
+/// before it runs any timer or input source, and UIKit picks touches up through a
+/// source — so blocking there holds the thread across the part of a pass in which
+/// the app would have taken the finger. It is the one place that can do this for a
+/// known time on every iteration without being a timer of its own, which would be
+/// one more thing scheduled whose cadence would then be part of what is measured.
+///
+/// It stops after a bounded number of iterations. The probe presses for about a
+/// minute, so the bound is generous, and it exists because a stall that cannot stop
+/// would leave the app permanently unresponsive if a run ever failed to tear the
+/// window down.
+private final class ProbeMainLoopStall {
+  private let microseconds: UInt32
+  private var remainingIterations: Int
+  private var observer: CFRunLoopObserver?
+  /// Called on the main thread from inside the stalled iteration, with the longest
+  /// block performed so far and how many iterations have been stalled.
+  var onIteration: ((Int, Int) -> Void)?
+  private var longestMs = 0
+  private var iterations = 0
+
+  init(milliseconds: Int) {
+    self.microseconds = UInt32(max(1, milliseconds) * 1_000)
+    self.remainingIterations = 4_000
+  }
+
+  func start() {
+    let observer = CFRunLoopObserverCreateWithHandler(
+      nil,
+      CFRunLoopActivity.beforeSources.rawValue,
+      true,
+      0
+    ) { [weak self] _, _ in
+      guard let self, self.remainingIterations > 0 else {
+        return
+      }
+      self.remainingIterations -= 1
+      let startedAt = DispatchTime.now().uptimeNanoseconds
+      usleep(self.microseconds)
+      let blockedMs = Int(
+        (DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000
+      )
+      self.iterations += 1
+      if blockedMs > self.longestMs {
+        self.longestMs = blockedMs
+      }
+      self.onIteration?(self.longestMs, self.iterations)
+    }
+    self.observer = observer
+    CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+  }
+
+  deinit {
+    if let observer {
+      CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
+    }
   }
 }
