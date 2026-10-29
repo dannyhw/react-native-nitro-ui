@@ -1,0 +1,58 @@
+# Failure excerpt — harness:android:HostPopups:--background
+
+- Ran: 2026-10-29T02:54:13.416Z on code tree `f1b38a24acd6` at HEAD `afe46f8` (branch `task/F1-determinism`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android HostPopups --background`
+- Result: fail, exit 1, 545 ms
+- Load: start 2.14, end 2.13, median 2.13, max 2.14
+- Device: android / device `emulator-5574` / lease `F1-q325w`
+- Full log: `task/F1-determinism/harness+android+HostPopups+--background-2026-10-29T02-54-13.416Z.log` (<store>/task/F1-determinism/harness+android+HostPopups+--background-2026-10-29T02-54-13.416Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Unrecognized CLI Parameter:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/harness+android+HostPopups+--background-2026-10-29T02-54-13.416Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-q325w (still live)
+  |   F1-q325w                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.13 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 15 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android HostPopups --background
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree f1b38a24acd6, 8 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.14/2.41 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F1-determinism/harness+android+HostPopups+--background-2026-10-29T02-54-13.416Z.log.suites.json
+● Unrecognized CLI Parameter:
+
+  Unrecognized option "background".
+
+  CLI Options Documentation:
+  https://jestjs.io/docs/cli
+
+
+
+
+```
