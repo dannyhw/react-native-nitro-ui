@@ -100,7 +100,8 @@ Added by fix round 1, each from a run on the branch:
   mid re-measure -> the wait times out naming `0.00x0.00` (`…android+Menu-05-56-58.091Z`).
 - `opens once, closes once, and pairs every open with a close` -> report the pick before
   closing the popup in Kotlin `applyPick` -> only `expect(orderLog)` red
-  (`…android…-t+opens+20once-05-59-57.018Z`).
+  (`…android…-t+opens+20once-05-59-57.018Z`). **Superseded by D32**: that order is what
+  ships now, so round 2 pinned the opposite with `MenuModelTest` — see Fix round 2.
 - the host-arm case -> drop `&& m.bench === true` from `hostArm()` -> `registry.test.js:643`
   red with `menu` present in the region (`1 failed / 36`).
 - Not a red proof, recorded because it is what M3 was for: with a leftover `live: 1` planted,
@@ -134,6 +135,7 @@ otherwise post, which is why the suite's counts are exact rather than eventually
 - `README.md`'s component table has no Menu row; adding one needs a version number this release does not have yet.
 - Q3-family: the four Host/DatePicker Android tests need their own task (Summary and Questions).
 - Two lint warnings predate this task and were left alone: `no-shadow` in `scripts/__tests__/registry.test.js:651`, unused `join` in `scripts/harness-suite-timing.mjs:25`.
+- Fix round 2 changed `Menu.harness.tsx`'s `orderLog` expectation without a device run (both lease pairs busy), so `harness:ios` and `harness:android` at merge are what prove the new order on-device; `MenuModelTest` proves it off-device meanwhile.
 
 ## Questions for orchestrator
 
@@ -195,6 +197,13 @@ Four points change what D29 or Q1 promise rather than filling a gap in them, so 
 owner rather than being decided here. Nothing below edits `docs/DECISIONS.md` or
 `docs/tasks/Q1-menu-design.md`.
 
+**Ruled since, in D32** (2026-10-29): 1 and 2 as recommended — `onOpen`/`onClose` are
+Android-only and iOS never fires them, and `disabled`-while-open closes the menu on
+Android only, both as documented platform limits. 3 was ruled the other way from what
+this section describes as shipping: **a pick fires `onSelect` first, then `onClose`**,
+and every open is paired with one close including a pick's. 4 is still open. Fix round 2
+below carries the change.
+
 1. **iOS `onOpen`/`onClose`.** D29 says open state is "observed through `onOpen`/`onClose`",
    with no platform split. iPhoneOS SDK 27.0 gives SwiftUI's `Menu` no expansion binding
    (checked in the swiftinterface), so neither ever fires on iOS and the harness asserts the
@@ -209,11 +218,40 @@ owner rather than being decided here. Nothing below edits `docs/DECISIONS.md` or
 3. **A pick fires `onClose`, before `onSelect`.** Q1 §5 words the pair as "exactly once each
    and never for a pick". The popup's teardown is what reports the close, so not firing would
    leave an unpaired open, which is worse for a listener than an extra close. **Recommend keep
-   the pairing and amend Q1, and choose the order on purpose:** `onClose` first is what ships
-   (set in `MenuModel.applyPick`, held by the `orderLog` assertion); `onSelect` first reads
-   more naturally to an app and costs one line per platform plus that assertion.
+   the pairing and amend Q1, and choose the order on purpose.** What shipped at round 1 was
+   `onClose` first (set in `MenuModel.applyPick`, held by the `orderLog` assertion); **D32
+   rules the other order** — `onSelect` first, then `onClose` — which fix round 2 implements.
 4. **`menuAnchor` / `ExposedDropdownMenuBox` on Android**, reversing Q1 §3's explicit "no
    `menuAnchor`". **Recommend accept**, with the review's N5 caveat attached: the evidence is
    thin — the plain-`DropdownMenu` comparison was measured and not committed, and the hosted
    test's first half does not discriminate — so the sign-off rests on the reasoning written at
    `docs/components/menu.md:143` until a committed comparison exists.
+
+## Fix round 2 (maintainer-mac-2)
+
+**Round:** 2 of 2 (D19) · re-review `docs/tasks/G7a-menu.rereview.md` (`e6cf340`). No
+lease: both pairs busy; device gates run at merge.
+
+| D32 ruling | What changed |
+| --- | --- |
+| `onOpen`/`onClose` Android-only — iOS never fires them | Spec, `Menu.tsx`, `src/index.ts`, `menu.md` (those rows read "never", not "no"), changeset, example screen. Docs only. |
+| `disabled` while open closes on Android only | Same documents, as an accepted limit, not an open question. Docs only. |
+| A pick fires `onSelect`, then `onClose` | `MenuModel.applyPick` reports, then `setOpen(false)` — this round's only behaviour change. Its KDoc, the iOS `applyPick` comment, the spec, `menu.md` and the harness `orderLog` (`open`, `select`, `close`) follow. |
+
+The close still happens on every path — pick, disabled control, disabled row, submenu
+header, unknown id.
+
+**Red proof.** That order needs a device, so it is pinned off-device too: new
+`MenuModelTest.kt` (4 tests, `test:native:android` — not in `check`), each red then
+reverted. Pre-D32 order restored -> `expected <[select:copy, close]> but was
+<[close, select:copy]>`, the close-on-every-path test still green; a refusal
+returning early -> `row "paste" … expected <[close]> but was <[]>`; `setOpen` dropped ->
+all 4. Final: 58 JVM tests, 0 failures. M1–M3 and N1–N3 stay open.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1163 tests / 45 suites | `0b60a6a10edd` | 2 m 36 s | start 2.5 / med 4.0 / max 5.7 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
