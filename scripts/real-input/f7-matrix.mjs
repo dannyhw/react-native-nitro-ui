@@ -262,6 +262,25 @@ const CELLS = [
     noLookup: true,
     label: 'busy screen, hosted Switch, no per-press lookup',
   },
+  // The same control, the same counting witness, the same quiet read, and the press
+  // delivered *through the element* rather than at a fixed window point. Without this
+  // cell the no-lookup number has nothing to be read against: round 1's `0/12` rows
+  // pressed `switch-uncontrolled` and read its native value, which is a different
+  // control and a toggling rather than counting witness, so a difference there would not
+  // isolate the aim. Note what does and does not differ: the quiet shape resolves the
+  // identifier once, before the loop, but pressing an element still makes XCUITest ask
+  // the app for that element's frame, so this cell is "press the element" versus "press
+  // the point", not "one lookup" versus "twelve".
+  {
+    name: 'rn-lookup-hosted',
+    arm: 'rn',
+    variant: 0,
+    target: 'probe-hosted-switch',
+    witness: 'echo:probe-hosted-events',
+    quiet: true,
+    label:
+      'busy screen, hosted Switch, pressed through its element (XCTest resolves it per press)',
+  },
   {
     name: 'rn-nolookup-rn-switch',
     arm: 'rn',
