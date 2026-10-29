@@ -36,3 +36,9 @@ nitro.json
 
 # Storybook's generated requires file (S1) - see .gitignore.
 example/.rnstorybook/storybook.requires.*
+
+# X13's fixtures are the byte-exact `Pods/Local Podspecs/*.podspec.json` files a
+# maintainer Mac wrote, and the test asserts `sha1(file)` equals the checksum in
+# the committed Podfile.lock. Prettier reflows the JSON, which changes those
+# bytes and makes the proof of the root cause false. Byte-exact is the fixture.
+scripts/__tests__/fixtures/x13-json-empty-array/*.podspec.json

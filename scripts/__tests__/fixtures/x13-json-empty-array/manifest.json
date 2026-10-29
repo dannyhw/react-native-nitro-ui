@@ -1,0 +1,30 @@
+{
+  "source": {
+    "run": "40789293108",
+    "job": "Version Packages pull request",
+    "runnerImage": "macos-26-arm64 (20261021.0445)",
+    "ruby": "3.3.9 (hostedtoolcache, json 2.7.2)",
+    "cocoapods": "1.17.0 (installed from the Podfile.lock COCOAPODS: trailer)",
+    "maintainerMac": "ruby 4.0.5 (json 2.18.0), CocoaPods 1.17.0"
+  },
+  "pods": {
+    "React-Core": {
+      "committedChecksum": "a831be15fcea0e345a24cb10d6cc0b87e9913d03",
+      "runnerChecksum": "f9dd5e5a1c462c8bed235c305c2e2309dfc105f8",
+      "storedBytes": 2081,
+      "emptyArrays": 15
+    },
+    "RCT-Folly": {
+      "committedChecksum": "82921e585c0400eda46fac1068297aa9dfb035e4",
+      "runnerChecksum": "d173e541eeb78cad5c81011c1bbf62d5b86b9778",
+      "storedBytes": 724,
+      "emptyArrays": 3
+    },
+    "NitroModules": {
+      "committedChecksum": "c32f969b7c536e0b6b401a9dfdb35bb4eba071ef",
+      "runnerChecksum": "57c6bdff1e712bc8bab07077f25c27c3e3e7fe04",
+      "storedBytes": 2787,
+      "emptyArrays": 23
+    }
+  }
+}
