@@ -74,6 +74,37 @@ const serial = process.env.ANDROID_SERIAL;
 if (serial == null || serial === '') {
   throw new Error('android-dwell-probe: ANDROID_SERIAL is not set.');
 }
+
+/**
+ * Mounts the probe's witnesses on the Switch screen for the length of this run and
+ * returns the function that takes them back down. Same borrowing as the iOS probe
+ * does, for the same reason: `SWITCH_SCREEN_PROBE_CONTROLS` is committed `false` so
+ * the app the gates exercise keeps the geometry it shipped with. See
+ * `dwell-probe.mjs`'s own copy of this for the measurement behind that flag.
+ *
+ * @returns {() => void}
+ */
+function mountProbeControls() {
+  const file = path.resolve(REPO, 'example/src/probeVariant.ts');
+  const original = fs.readFileSync(file, 'utf8');
+  const declaration =
+    /export const SWITCH_SCREEN_PROBE_CONTROLS = (true|false);/;
+  if (!declaration.test(original)) {
+    throw new Error(
+      'android-dwell-probe: example/src/probeVariant.ts has no ' +
+        'SWITCH_SCREEN_PROBE_CONTROLS to set, so this would press witnesses the ' +
+        'screen does not render.'
+    );
+  }
+  fs.writeFileSync(
+    file,
+    original.replace(
+      declaration,
+      'export const SWITCH_SCREEN_PROBE_CONTROLS = true;'
+    )
+  );
+  return () => fs.writeFileSync(file, original);
+}
 // Same discipline the suite has: an adb server sees every emulator on the box,
 // including the human's, so the lease's own checks run before anything is pressed.
 checkEmulatorEnv(process.env);
@@ -271,6 +302,9 @@ async function main() {
     artifact: apk,
     command: 'scripts/real-input/android-dwell-probe.mjs',
   });
+  // Mounted before Metro starts, so the very first bundle this run asks for already
+  // carries the witnesses, and the app's own first render has something to press.
+  const unmountProbeControls = mountProbeControls();
   const stopMetro = await ensureMetro({
     port: metroPort,
     logFile: path.join(out, 'metro.log'),
@@ -349,6 +383,7 @@ async function main() {
     return 0;
   } finally {
     shell(`am force-stop ${BUNDLE_ID}`);
+    unmountProbeControls();
     stopMetro();
   }
 }

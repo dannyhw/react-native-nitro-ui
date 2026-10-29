@@ -46,6 +46,15 @@ const SCHEME = 'NitroUiExampleUITests';
 const TEST_CLASS = 'RealInputTests';
 const PROBE = 'testMeasureSwitchDwellDelivery';
 const BUNDLE_ID = 'nitroui.example';
+/**
+ * The one line in the example that decides whether the Switch screen mounts the
+ * probe's witnesses at all. Committed `false`, and owned by this file: the rows it
+ * adds sit above the shipped content and move every frame below them, which is
+ * enough to fail a geometry check in the real-input suite that has nothing to do
+ * with dwell. So the probe borrows them for the length of a run and gives them
+ * back, the same way it borrows and restores the JS location.
+ */
+const PROBE_CONTROLS_FILE = 'example/src/probeVariant.ts';
 
 const args = process.argv.slice(2);
 
@@ -137,6 +146,48 @@ function iosDir() {
     path.dirname(new URL(import.meta.url).pathname),
     '../../example/ios'
   );
+}
+
+/**
+ * Mounts the probe's witnesses on the Switch screen for the length of this run and
+ * returns the function that takes them back down.
+ *
+ * `SWITCH_SCREEN_PROBE_CONTROLS` is committed `false` because those rows sit above
+ * the shipped content and shift every frame below them; the real-input suite
+ * compares a control's frame before and after a tap, and F7's first gate run failed
+ * that pre-existing check on a hosted Switch whose height was reported as
+ * `28.000015258789062` on one read and `28.0` on the next. The probe has to press
+ * those witnesses and read them, and it is the only thing that may have them: so it
+ * borrows them, and puts them back in the same `finally` that restores the JS
+ * location. If this ever fails to restore — a Ctrl-C mid-run — `git diff` on that
+ * one line is the evidence and `git checkout` the fix.
+ *
+ * @returns {() => void}
+ */
+function mountProbeControls() {
+  const file = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '../..',
+    PROBE_CONTROLS_FILE
+  );
+  const original = fs.readFileSync(file, 'utf8');
+  const declaration =
+    /export const SWITCH_SCREEN_PROBE_CONTROLS = (true|false);/;
+  if (!declaration.test(original)) {
+    throw new Error(
+      `dwell-probe: ${PROBE_CONTROLS_FILE} has no ` +
+        'SWITCH_SCREEN_PROBE_CONTROLS to set, so the probe would press witnesses ' +
+        'the screen does not render.'
+    );
+  }
+  fs.writeFileSync(
+    file,
+    original.replace(
+      declaration,
+      'export const SWITCH_SCREEN_PROBE_CONTROLS = true;'
+    )
+  );
+  return () => fs.writeFileSync(file, original);
 }
 
 /**
@@ -256,6 +307,7 @@ async function main() {
     port: metroPort,
     logFile: path.join(out, 'metro.log'),
   });
+  const unmountProbeControls = mountProbeControls();
   try {
     const settings = [
       'CODE_SIGNING_ALLOWED=NO',
@@ -431,6 +483,7 @@ async function main() {
     }
   } finally {
     clearJsLocation(udid);
+    unmountProbeControls();
     stopMetro();
   }
   return 0;

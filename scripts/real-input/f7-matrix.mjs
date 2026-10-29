@@ -220,7 +220,6 @@ const CELLS = [
 /** The one line in `probeVariant.ts` that says which shape the screen renders. */
 const VARIANT_LINE =
   /export const SWITCH_SCREEN_VARIANT: SwitchScreenVariant = [0-9]+;/;
-
 function writeVariant(value) {
   const src = fs.readFileSync(VARIANT_FILE, 'utf8');
   if (!VARIANT_LINE.test(src)) {
@@ -235,9 +234,18 @@ function writeVariant(value) {
   );
 }
 
+/**
+ * Which variant is currently written into the file.
+ *
+ * Matched on the constant's own name rather than on the first `= <digit>;` in the
+ * file, which is what it used to be: the file now carries a second constant, and
+ * whichever one a regex happened to reach first would depend on their order.
+ */
 function currentVariant() {
   const src = fs.readFileSync(VARIANT_FILE, 'utf8');
-  return Number(/= (\d+);/.exec(src)?.[1]);
+  return Number(
+    /SWITCH_SCREEN_VARIANT: SwitchScreenVariant = (\d+);/.exec(src)?.[1]
+  );
 }
 
 function load1() {
