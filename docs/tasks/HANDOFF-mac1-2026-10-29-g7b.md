@@ -1,5 +1,7 @@
 # Work for maintainer-mac-1 (2026-10-29, second queue): autonomous, PR-based
 
+> **Withdrawn:** maintainer-mac-2 started G7b itself once a device pair freed up. There is nothing queued for mac-1 here.
+
 The owner is away. maintainer-mac-1 works through this queue **on its own**, and maintainer-mac-2's
 orchestrator reviews and merges the results. G7a and F2 are merged; mac-2 meanwhile runs X4 and F7.
 
