@@ -2061,6 +2061,22 @@ final class RealInputTests: XCTestCase {
       waitingFor: "the real tap on the trigger"
     )
     _ = try waitForOption(bravo, "the menu to open")
+    // The picture, because one claim here cannot be read from the accessibility tree:
+    // whether the trigger's `.buttonStyle` leaks into the rows. `styledMenu` sets a
+    // button style on the whole `Menu`, and an environment value reaches a presented
+    // menu's content too, so a row could have been drawn as a filled button inside the
+    // list. `Menu.harness.tsx` cannot see this at all (nothing it injects opens the
+    // menu) and an accessibility tree says nothing about chrome, so this screenshot is
+    // the measurement. It came back showing three plain system rows — the tinted
+    // trigger's capsule does not follow them — so no `.buttonStyle(.plain)` was added
+    // to `rowButton`, and this is the evidence for that. `docs/components/menu.md`
+    // makes the same claim from a screenshot; this keeps it re-measurable.
+    let openShot = XCUIScreen.main.screenshot()
+    let openShotURL = URL(fileURLWithPath: "/tmp/g7b-menu-open.png")
+    try? openShot.pngRepresentation.write(to: openShotURL)
+    print(
+      "real-input (ios): menu: open menu screenshot written to \(openShotURL.path)"
+    )
     XCTAssertEqual(
       try read(Echo.menuPick),
       "-",
@@ -2081,8 +2097,7 @@ final class RealInputTests: XCTestCase {
     )
 
     // 4. The disabled row takes no pick. Pressed once, deliberately: the correct
-    //    outcome is that nothing is reported, so there is no witness to retry towards,
-    //    and a second press would land somewhere else in whatever the first left open.
+    //    outcome is that nothing is reported, so there is no witness to retry towards.
     //    The step after this one is what turns the silence into a refusal.
     try optionRow(locked).fingerTap()
     XCTAssertEqual(
@@ -2090,10 +2105,28 @@ final class RealInputTests: XCTestCase {
       "-",
       "a real tap on the disabled row should report no pick"
     )
+    // Whether the menu survives that tap is SwiftUI's choice and nobody has written it
+    // down, so it is measured rather than assumed — and it has to be settled before the
+    // next press, for a reason the first run of this check found the hard way: this
+    // presentation is drawn *over* its own trigger, so pressing the trigger while the
+    // menu is still up presses whichever row happens to cover it. Measured here: the
+    // tap on the disabled row left the menu open, the next press landed on "Alpha", and
+    // the pick below came back as `select alpha > select bravo`. So the menu is put
+    // away, and away is waited for, before anything aims at the trigger again.
+    let stayedUp = optionLabels(containing: locked) > 0
+    print(
+      "real-input (ios): menu: a real tap on the disabled row left the presentation "
+        + (stayedUp ? "open" : "closed")
+    )
+    if stayedUp {
+      // Tapping away is the platform's own way out that cannot land on a row: the point
+      // is in the screen's own description text, above the popup, below the tab bar,
+      // and nowhere near a control.
+      app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+      waitUntilOptionGone(locked, "the tap away from the menu to close it")
+    }
 
-    // 5. The pick that does arrive. Re-opened first, because the tap above may have
-    //    closed the presentation (Material does; SwiftUI's answer is not asserted) and
-    //    `tapOptionUntilValue` needs the row to be there to press.
+    // 5. The pick that does arrive.
     try tapUntilOption(
       "real-input-menu",
       as: "the Menu trigger",
