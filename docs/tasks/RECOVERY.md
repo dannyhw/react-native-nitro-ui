@@ -38,8 +38,10 @@
 >
 > **Components:** 0.4 is a button-anchored Menu (G7a/G7b), after X4; TextField moved to 0.5 (D30;
 > T18/T18b kept as branches). F3 (0.3.x-visible fixes) merged from maintainer-mac-1.
-> **X11 and A4 merged (2026-10-28); next device task: F1** (`F1-determinism.md`): `real-input:ios` fails the Switch
-> check 11/11 on `main` on this machine, so it blocks merges that owe real input.
+> **F1 merged (2026-10-29, `2d58ca6`):** `real-input:ios` is green on this machine again (tap-delivery witness,
+> retry counts in every gate log). Its dwell probe found a product bug: a hosted Switch on the busy Switch screen
+> drops presses shorter than ~0.1 s (a human tap), while RN's `Pressable` takes them; **F7** (`F7-quick-tap.md`) owns
+> it. The suite presses for 0.15 s meanwhile. Next device task: **X4**.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
