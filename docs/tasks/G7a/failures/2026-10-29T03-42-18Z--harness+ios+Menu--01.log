@@ -1,0 +1,89 @@
+# Failure excerpt — harness:ios:Menu
+
+- Ran: 2026-10-29T03:42:18.211Z on code tree `a1bb7c3fcdd9` at HEAD `5dbd732` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Menu`
+- Result: fail, exit 1, 18696 ms
+- Load: start 2.92, end 3.84, median 3.84, max 4.09
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+ios+Menu-2026-10-29T03-42-18.211Z.log` (<store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-42-18.211Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › lays each configuration out at the size the control measured`
+- `● Menu · inside a Host › opens under its own button, and follows it when the Host moves`
+- `expected false to be true // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-42-18.211Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.84 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Menu
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree a1bb7c3fcdd9, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.92/4.71 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-42-18.211Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › lays each configuration out at the size the control measured
+
+    PROBE ios sizes :: cfg-filled=77.33x34.33 cfg-tonal=77.33x34.33 cfg-outlined=77.33x34.33 cfg-text=53.33x20.33 cfg-elevated=77.33x34.33 cfg-size-small=58.00x28.00 cfg-size-large=82.00x50.33
+
+      [0m [90m 597 |[39m         [32m`measurements=${String(cold.measurements)}`[39m
+       [90m 598 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 599 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`PROBE ios sizes :: ${lines.join(' ')}`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 600 |[39m     [90m// Seven poisoned configurations, seven corrections. This is the strict half:[39m
+       [90m 601 |[39m     [90m// unlike a *new* configuration, which Android can settle inside the layout[39m
+       [90m 602 |[39m     [90m// pass that first measures it (Picker's shrink gate records that), a poisoned[39m[0m
+
+  ● Menu · inside a Host › opens under its own button, and follows it when the Host moves
+
+    expected false to be true // Object.is equality
+
+      [0m [90m 1315 |[39m         [32m'the hosted trigger'[39m
+       [90m 1316 |[39m       )[33m;[39m
+      [31m[1m>[22m[39m[90m 1317 |[39m       expect(sameSize(box[33m,[39m content))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m      |[39m                                          [31m[1m^[22m[39m
+       [90m 1318 |[39m       expectUnanswerable(report([32m'hosted-menu'[39m))[33m;[39m
+       [90m 1319 |[39m       console[33m.[39mlog(
+       [90m 1320 |[39m         [32m`iOS hosted box: ${describeSize(box)} measured ${describeSize(content)}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 12 passed, 14 total
+Snapshots:   0 total
+Time:        17.784 s
+Ran all test suites matching Menu.
+
+
+
+```
