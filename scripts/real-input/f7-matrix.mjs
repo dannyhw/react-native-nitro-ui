@@ -292,6 +292,10 @@ async function runCell(cell) {
   // witness and the variant the screen itself reported. Parsing both rather than
   // widening the RESULT format keeps the line `docs/tasks/F1/dwell-probe.md` and
   // `readResult` in `dwell-probe.mjs` already describe.
+  //
+  // Group order here is the order the line prints them in: delivered, taps, then
+  // the positive control's two. Reading them from 1, not 2, matters — the first
+  // pass of this driver did and printed every busy-screen cell as "12/3".
   const result =
     /RESULT target=\S+ dwell=[\d.]+s switch=(\d+)\/(\d+) js-toggle=(\d+)\/(\d+)/.exec(
       log
