@@ -229,9 +229,31 @@ title. On Android the trigger carries a single node built with `clearAndSetSeman
 `uiautomator dump` report one named node instead of a named one beside a nameless one
 (the G6 lesson, applied as it was applied to `Picker`).
 
-While the menu is open the rows are reachable and speak their own titles; a destructive
-row is announced as such on iOS, and a disabled row is not focusable. The popup's rows
-are the platform's own elements — we do not re-label them.
+What this release can show, per platform:
+
+- **iOS** — the harness' a11y walk finds an element named `accessibilityLabel` at the
+  trigger's box, and that is asserted (`example/__tests__/Menu.harness.tsx`). Two
+  measurements say how far that reaches. Deleting the SwiftUI `.accessibilityLabel` from
+  the trigger leaves the query answering: the element it lands on is the one React Native
+  makes for the view, and RN puts `accessibilityLabel` on the component view itself, so
+  the assertion holds *the name is where the trigger is* and not which of the two paths
+  put it there. Clearing the label off that view instead — leaving the prop, the model and
+  the SwiftUI element alone — is what makes the run go red. A `title` fallback is not
+  observable this way at all: a trigger with no `accessibilityLabel` answers no node for
+  its title on iOS, and on Android the query answers `null` for every Compose control.
+- **Android** — the label reaching the control is what is asserted, and nothing more:
+  Compose publishes `SemanticsNode`s rather than Views, so the harness' View walk answers
+  `null` however correct the component is (`example/__tests__/Slider.harness.tsx`
+  documents that asymmetry with its measurements). Reading the semantics tree is
+  `uiautomator dump`, which is the harness' `realInput` mode, and G7b's.
+
+Everything below this paragraph is a **reading**, not a measurement. No input this
+environment can inject opens a SwiftUI `Menu`, and nothing here reads Compose semantics,
+so no announcement has been observed on either platform: that the rows are reachable while
+the menu is open and speak their own titles, that a destructive row is announced as such on
+iOS, and that a disabled row is not focusable are what the code asks for, not what has been
+heard. The popup's rows are the platform's own elements — we do not re-label them. Hearing
+this list with VoiceOver and TalkBack is G7b's real-input pass.
 
 ## Limits
 
