@@ -1,0 +1,152 @@
+# Failure excerpt — real-input:ios
+
+- Ran: 2026-10-28T23:15:48.418Z on code tree `2f8eccc5b7b1` at HEAD `c8ac6dd` (branch `task/F1-determinism`)
+- Command: `node scripts/real-input/ios.mjs`
+- Result: fail, exit 1, 551946 ms
+- Load: start 19.58, end 2.65, median 3.70, max 19.58
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F1-q325w`
+- Full log: `task/F1-determinism/real-input+ios-2026-10-28T23-15-48.247Z.log` (<store>/task/F1-determinism/real-input+ios-2026-10-28T23-15-48.247Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputSwitch in 27.563s`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/real-input+ios-2026-10-28T23-15-48.247Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-q325w (still live)
+  |   F1-q325w                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.65 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 112 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios
+gate: node scripts/real-input/ios.mjs (cwd .)
+gate: code tree 2f8eccc5b7b1 at HEAD c8ac6dd
+gate: git tree 4eba683c057c
+gate: log task/F1-determinism/real-input+ios-2026-10-28T23-15-48.247Z.log
+gate:       <store>/task/F1-determinism/real-input+ios-2026-10-28T23-15-48.247Z.log
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree 2f8eccc5b7b1 (549 files) head c8ac6dd9 · 8 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8295
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-10-28 23:16:02.688.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-10-28 23:16:02.689.
+    Test Suite 'RealInputTests' started at 2026-10-28 23:16:02.689.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputButton]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputButton]' passed (24.700 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDatePicker]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDatePicker]' passed (59.006 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedButton]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedButton]' passed (25.328 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedDatePicker]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedDatePicker]' passed (30.822 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedMixed]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedMixed]' passed (33.941 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedPicker]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedPicker]' passed (42.289 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSegmented]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSegmented]' passed (32.340 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSlider]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSlider]' passed (22.152 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSwitch]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSwitch]' passed (21.854 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputPicker]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputPicker]' passed (135.755 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSegmentedControl]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSegmentedControl]' passed (39.113 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSlider]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSlider]' passed (41.603 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' failed (27.563 seconds).
+    Test Suite 'RealInputTests' failed at 2026-10-28 23:24:59.172.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-10-28 23:24:59.173.
+    Test Suite 'Selected tests' failed at 2026-10-28 23:24:59.173.
+    ** TEST EXECUTE FAILED **
+
+  switch: real tap flips the Switch and JS sees the new value
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:155: error: -[NitroUiExampleUITests.RealInputTests testRealInputSwitch] : XCTAssertEqual failed: ("on") is not equal to ("off") - a second real tap should flip it back, so the check is not one fluke
+    ✗ XCUITest reported "failed" for testRealInputSwitch in 27.563s
+
+  slider: real drag moves the Slider and fires start, change and complete
+    ✓ XCUITest reported "passed" for testRealInputSlider in 41.603s
+
+  button: real tap presses the Button, and a disabled one stays pressed-out
+    ✓ XCUITest reported "passed" for testRealInputButton in 24.700s
+
+  segmented-control: real tap selects the segment under the finger, and a refused selection snaps back
+    ✓ XCUITest reported "passed" for testRealInputSegmentedControl in 39.113s
+
+  date-picker: real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back
+    ✓ XCUITest reported "passed" for testRealInputDatePicker in 59.006s
+
+  picker: real tap opens the menu, a real tap on a row reports it, and an unmount while open leaks no popup
+    ✓ XCUITest reported "passed" for testRealInputPicker in 135.755s
+
+  hosted-switch: real tap toggles a Switch inside a <Host>, where the control has no view of its own
+    ✓ XCUITest reported "passed" for testRealInputHostedSwitch in 21.854s
+
+  hosted-button: real tap presses a Button inside a <Host>, and a disabled one beside it stays unpressed
+    ✓ XCUITest reported "passed" for testRealInputHostedButton in 25.328s
+
+  hosted-slider: real drag moves a Slider inside a <Host>, whose width is the track
+    ✓ XCUITest reported "passed" for testRealInputHostedSlider in 22.152s
+
+  hosted-mixed: one <Host> composes four kinds of control, and each keeps its own node, order and geometry
+    ✓ XCUITest reported "passed" for testRealInputHostedMixed in 33.941s
+
+  hosted-segmented: real tap selects a segment of a SegmentedControl inside a <Host>, which owns no window
+    ✓ XCUITest reported "passed" for testRealInputHostedSegmented in 32.340s
+
+  hosted-picker: real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS
+    ✓ XCUITest reported "passed" for testRealInputHostedPicker in 42.289s
+
+  hosted-date-picker: real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, and OK, Cancel, Back and removing the child each close it
+    ✓ XCUITest reported "passed" for testRealInputHostedDatePicker in 30.822s
+
+switch: FAIL
+    failed: XCUITest reported "failed" for testRealInputSwitch in 27.563s
+slider: PASS
+button: PASS
+segmented-control: PASS
+date-picker: PASS
+picker: PASS
+hosted-switch: PASS
+hosted-button: PASS
+hosted-slider: PASS
+hosted-mixed: PASS
+hosted-segmented: PASS
+hosted-picker: PASS
+hosted-date-picker: PASS
+
+real-input (ios): 12/13 controls passed
+gate: real-input:ios FAIL in 551.9 s
+gate: recorded in .gates/task/F1-determinism.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/F1-determinism/real-input+ios-2026-10-28T23-15-48.247Z.log (4 probe(s))
+
+```

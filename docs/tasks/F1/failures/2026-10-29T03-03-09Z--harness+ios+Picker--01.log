@@ -1,0 +1,194 @@
+# Failure excerpt — harness:ios:Picker
+
+- Ran: 2026-10-29T03:03:09.555Z on code tree `cfc25ebfe5b8` at HEAD `c0ce8d1` (branch `task/F1-determinism`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Picker`
+- Result: fail, exit 1, 66513 ms
+- Load: start 5.02, end 3.38, median 4.37, max 5.02
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F1-q325w`
+- Full log: `task/F1-determinism/harness+ios+Picker-2026-10-29T03-03-09.370Z.log` (<store>/task/F1-determinism/harness+ios+Picker-2026-10-29T03-03-09.370Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Picker.harness.tsx`
+- `● Console`
+- `● Picker · G6 › asks a wheel the box question after a variant change`
+- `● Picker · G6 › asks a menu the unbounded question after a variant change`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/harness+ios+Picker-2026-10-29T03-03-09.370Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-q325w (still live)
+  |   F1-q325w                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.19 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 152 — the rest is in the full log above)
+
+```
+gate: node ../scripts/harness.mjs --harnessRunner ios Picker (cwd example)
+gate: code tree cfc25ebfe5b8 at HEAD c0ce8d1
+gate: git tree 55e874fb7ea1
+gate: log task/F1-determinism/harness+ios+Picker-2026-10-29T03-03-09.370Z.log
+gate:       <store>/task/F1-determinism/harness+ios+Picker-2026-10-29T03-03-09.370Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Picker
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree cfc25ebfe5b8, 8 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.02/3.10 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F1-determinism/harness+ios+Picker-2026-10-29T03-03-09.370Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Picker.harness.tsx
+  ● Console
+
+    console.log
+      three lists: short=62.67x34.67 middle(REFERENCE)=72.00x34.67 long=360.33x34.67 cold={"corrections":3,"immediate":2,"flushes":1,"measurements":6,"epoch":0,"cachedSizes":3} (load: menu, uncontrolled, no label)
+
+
+    console.log
+      same options, other title: first=70.33x34.67 last=360.33x34.67 cold={"corrections":2,"immediate":2,"flushes":1,"measurements":4,"epoch":0,"cachedSizes":2}
+
+
+    console.log
+      policies (ios): menu=82.00x34.67 box=82.00x34.67 | wheel=330.00x216.00 box=330.00x216.00
+
+
+    console.log
+      options change: short=70.00x34.67 long=360.33x34.67 cold={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} warm={"corrections":2,"immediate":2,"flushes":2,"measurements":4,"epoch":0,"cachedSizes":2}
+
+
+    console.log
+      same-size key change (ios): box=70.33x34.67 measured=70.33x34.67 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      selection change: first=70.33x34.67 widest=304.33x34.67 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      planted-equal-to-box (ios): box=360.33x34.67 measured=360.33x34.67 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      clamps: 99=360.33x34.67 2=360.33x34.67 NaN=72.00x34.67 -4=72.00x34.67
+
+
+    console.log
+      shrink: wide=360.33x34.67 narrow=87.00x34.67 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      read back: variant=menu/wheel selected=1 eventCount=0 label=Size tint=4291311531 disabled=false/true
+
+
+    console.log
+      caller width: box=240 measured=101.00x34.67 then no width: box=101.00x34.67
+
+
+    console.log
+      over-wide: box=180.00x34.67 measured=360.33x34.67
+
+
+    console.log
+      refit: measured=360.33x34.67 boxes=200/168/140 final=140.00x34.67
+
+
+    console.log
+      remount 0: 2 options seed=0 measured=304.33x34.67
+
+
+    console.log
+      remount 1: 1 options seed=1 measured=62.67x34.67
+
+
+    console.log
+      remount 2: 2 options seed=0 measured=304.33x34.67
+
+
+    console.log
+      pick re-keys: short=72.00x34.67 long=360.33x34.67 box=360.33x34.67 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":3,"epoch":0,"cachedSizes":1} events=["pick-key:2"]
+
+
+    console.log
+      cache after a pick: startedAt=72.00x34.67 picked=360.33x34.67 freshMountBox=72.00x34.67 measured=72.00x34.67 laidOut=72.00x34.67 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      uncontrolled pick: short=72.00x34.67 long=360.33x34.67 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} events=["unc:2"]
+
+
+    console.log
+      uncontrolled cache: freshMountBox=72.00x34.67 measured=72.00x34.67 laidOut=72.00x34.67 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      busy-echo pick: short=72.00x34.67 long=360.33x34.67 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      unpoisoned pick: short=80.00x34.67 long=312.33x34.67 box=312.33x34.67 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      re-tap then resize: short=72.00x34.67 long=360.33x34.67 box=360.33x34.67 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      open-then-drop: menu=72.00x34.67 after=146.67x34.67 events=[]
+
+  ● Picker · G6 › asks a wheel the box question after a variant change
+
+    "var-w" (the wheel after the remount) never measured on its new mount - measureContent() says 330.00x216.00, box 330.00x60.00.
+
+      [0m [90m 300 |[39m     }[33m,[39m
+       [90m 301 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 302 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 303 |[39m         [32m`"${testId}" (${what}) never measured on its new mount - `[39m [33m+[39m
+       [90m 304 |[39m           [32m`measureContent() says ${describeSize(measured(testId))}, box `[39m [33m+[39m
+       [90m 305 |[39m           [32m`${describeSize(sizeOf(testId))}.`[39m[0m
+
+  ● Picker · G6 › asks a menu the unbounded question after a variant change
+
+    "var-m" (the menu after the remount) never measured on its new mount - measureContent() says 360.33x34.67, box 330.00x60.00.
+
+      [0m [90m 300 |[39m     }[33m,[39m
+       [90m 301 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 302 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 303 |[39m         [32m`"${testId}" (${what}) never measured on its new mount - `[39m [33m+[39m
+       [90m 304 |[39m           [32m`measureContent() says ${describeSize(measured(testId))}, box `[39m [33m+[39m
+       [90m 305 |[39m           [32m`${describeSize(sizeOf(testId))}.`[39m[0m
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       2 failed, 36 passed, 38 total
+Snapshots:   0 total
+Time:        65.467 s
+Ran all test suites matching Picker.
+gate: harness:ios:Picker FAIL in 66.5 s
+gate: recorded in .gates/task/F1-determinism.jsonl
+
+
+gate: appended the device context to task/F1-determinism/harness+ios+Picker-2026-10-29T03-03-09.370Z.log (4 probe(s))
+
+```
