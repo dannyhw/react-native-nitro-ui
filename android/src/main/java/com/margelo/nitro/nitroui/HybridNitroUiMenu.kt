@@ -442,30 +442,37 @@ internal class MenuModel : NitroUiModel() {
   /**
    * A row was picked, however it was picked.
    *
-   * The popup closes first - it must not survive the press that made the choice, and
-   * must not stay open when the press changed nothing. A disabled control, a disabled
-   * row, a submenu header and an unknown id all report nothing. There is no value to
+   * The choice is reported first and the popup closes after it (DECISIONS D32), so a
+   * listener that acts on the pick is never handed a menu that is still up. The
+   * close itself happens on every path - a pick, a disabled control, a disabled row,
+   * a submenu header and an unknown id all take the window down, because a press is a
+   * press and the menu must not survive one. Only the reporting is refused: a disabled
+   * control, a disabled row, a submenu header and an unknown id report nothing, and a
+   * submenu header is not in [entries] as a pickable row at all. There is no value to
    * store and no handshake to answer: [onSelect] reports a gesture and that is the end
    * of it (`docs/architecture/core.md` section 12).
+   *
+   * Which is why the close is the one statement outside the refusal branches rather
+   * than a line in each of them: a press that reports nothing still takes the window
+   * down, and `MenuModelTest` in `android/src/test` keeps it that way.
    */
   fun applyPick(id: String) {
-    setOpen(false)
-    if (!enabled) {
-      return
-    }
-    for (entry in entries) {
-      val candidates: List<MenuActionItem> =
-        when (entry) {
-          is MenuEntry.Action -> listOf(entry.item)
-          is MenuEntry.Submenu -> entry.item.items
-          is MenuEntry.Section -> entry.item.items
+    if (enabled) {
+      for (entry in entries) {
+        val candidates: List<MenuActionItem> =
+          when (entry) {
+            is MenuEntry.Action -> listOf(entry.item)
+            is MenuEntry.Submenu -> entry.item.items
+            is MenuEntry.Section -> entry.item.items
+          }
+        val row = candidates.firstOrNull { it.id == id } ?: continue
+        if (!row.disabled) {
+          onSelect?.invoke(row.id)
         }
-      val row = candidates.firstOrNull { it.id == id } ?: continue
-      if (!row.disabled) {
-        onSelect?.invoke(row.id)
+        break
       }
-      return
     }
+    setOpen(false)
   }
 
   override fun reset() {

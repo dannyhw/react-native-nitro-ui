@@ -125,10 +125,10 @@ const captureButton =
 
 /**
  * All three callbacks in the one order they arrived, which `selectLog` and
- * `stateLog` cannot say between them: two arrays have no shared position, so a
- * pick that fired `onSelect` first and `onClose` second would leave both of them
- * exactly as they are now. `docs/components/menu.md` states the order, so this is
- * the line that holds it.
+ * `stateLog` cannot say between them: two arrays have no shared position, so the
+ * pick-then-close order DECISIONS D32 chose would leave both of them exactly as they
+ * are however the two callbacks were ordered. `docs/components/menu.md` states the
+ * order, so this is the line that holds it.
  */
 const orderLog: string[] = [];
 
@@ -1023,18 +1023,21 @@ describe('Menu · G7a', () => {
     );
     expect(selectLog).toEqual(['events:copy']);
     // The pairing: a pick closes the menu, and a close that is not reported is a
-    // listener that never sees the menu go away. (`Q1` §5 words this as "never for a
-    // pick"; the reading taken here is that an *unpaired* close is what to refuse -
-    // see the report.)
+    // listener that never sees the menu go away. (`Q1` §5 worded this as "never for a
+    // pick"; D32 settles it the way the report read it - an *unpaired* open is what to
+    // refuse, so a pick does fire the pair.)
     expect(stateLog).toEqual(['events:open', 'events:close']);
     // And the order between the two callbacks, which neither log above can express.
-    // `MenuModel.applyPick` closes the popup before it reports the choice, and
-    // `docs/components/menu.md` promises exactly this sequence: a listener that
-    // re-enables something on the pick never does it while the window is still up.
+    // DECISIONS D32: a pick reports the choice first and closes after it, and
+    // `MenuModel.applyPick` is written that way. `docs/components/menu.md` promises
+    // exactly this sequence, so a listener that acts on the pick is never handed a
+    // menu that is still up. The same order is pinned off-device by
+    // `android/src/test/.../MenuModelTest.kt`, which is the half that can be shown red
+    // without an emulator.
     expect(orderLog).toEqual([
       'open:events',
-      'close:events',
       'select:events:copy',
+      'close:events',
     ]);
     // The rect goes with the window, so a later gate cannot press where a closed
     // menu used to be.
