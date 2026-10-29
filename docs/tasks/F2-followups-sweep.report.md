@@ -60,8 +60,15 @@ trace showed the correction (`laidOut:40.0x20.0 … corrected:61.0x28.0`) and pr
 
 - `lease.test.js` TTL -> `EXCLUSIVE_TTL_MINUTES 960 -> 240` in `scripts/lease-core.mjs` ->
   `lease.test.js:1117` `Expected: >= 840, Received: 240` (mutation reverted).
-- `build-speed.test.js` `iosCleanTargets` -> delete the new helper -> `build-speed.test.js:220`
-  `TypeError: (0 , _buildSpeedLib.iosCleanTargets) is not a function`.
+- `build-speed.test.js` -> drop the `Pods/.nitro-ui-pod-inputs` entry from what `iosCleanTargets`
+  returns -> `build-speed.test.js:227` `Expected value: "/repo/example/ios/Pods/.nitro-ui-pod-inputs"`,
+  `Received array: ["/repo/example/ios/build"]`. Round 1's proof here deleted the helper and
+  showed a `TypeError`, which tested the import rather than the behaviour (review N1).
+- Gap this report states rather than fixes: nothing proves `buildIos` *uses* the helper. Writing
+  `removeIfPresent(derivedData, log)` back over the loop at `scripts/build-app.mjs:315` leaves
+  `build-speed.test.js` green (24/24, measured), and no test imports `build-app.mjs` - the one
+  source-text guard in the area (`scripts/__tests__/build-slot.test.js:607`) checks skip-before-slot
+  ordering. Accepted for a script; the pure function is what carries the assertion.
 - The N3 change adds no assertion (it is `await settle()` before existing taps), and the other
   thirteen commits are comments, docs and story markup, so there is nothing else to show red.
   The story change is covered by `check`'s typecheck, not by a test.
