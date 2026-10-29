@@ -360,6 +360,70 @@ describe("the report's gate table against the ledger", () => {
     );
     expect(reportTableProblems(report, moved).join('\n')).toContain('STALE');
   });
+
+  it('goes red for a gate row the ledger never printed', () => {
+    // The review's M4: only generated→report was compared, so a report could add a row of
+    // its own and nothing read it. A gate with no recorded run has no row, and a gate row
+    // in a report is a claim a reviewer will read as evidence.
+    const report = [
+      '| Gate | Result | Tree | Notes |',
+      '| --- | --- | --- | --- |',
+      generated[2],
+      generated[3],
+      '| real-input:ios | **PASS** | `abc1234` | 11 m 26 s |',
+    ].join('\n');
+    const problems = reportTableProblems(report, generated);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('real-input:ios');
+    expect(problems[0]).toContain('prints none');
+  });
+
+  it('goes red for an invented row even when every real row matches', () => {
+    // The order matters: a report that pastes the table correctly and then adds one row is
+    // the shape that actually happens, and the first loop finds nothing to complain about.
+    const report = generated.slice();
+    report.push('| test:native | **PASS** | `abc1234` | 55 s |');
+    expect(reportTableProblems(report.join('\n'), generated).join('\n')).toContain(
+      'no run of that gate is recorded'
+    );
+  });
+
+  it('leaves a cost table alone, because a duration is not a verdict', () => {
+    // The report's own "what the suite costs" table has gate names in its first column. A
+    // rule that flagged those would be wrong on X4's own report, and a check that cries
+    // wolf on a real report is a check that gets a flag added to it.
+    const report = [
+      '| Gate | Total | This suite | Share |',
+      '| --- | --- | --- | --- |',
+      '| harness:ios | 2 m 50 s | 47.1 s | 28 % |',
+      generated[2],
+      generated[3],
+    ].join('\n');
+    expect(reportTableProblems(report, generated)).toEqual([]);
+  });
+
+  it('leaves a coverage matrix alone, because `Button` is not a gate name', () => {
+    const report = [
+      '| Control | a11y | fallback |',
+      '| --- | --- | --- |',
+      '| Button | covered | covered |',
+      '| Slider | **failing** | covered |',
+      generated[2],
+      generated[3],
+    ].join('\n');
+    expect(reportTableProblems(report, generated)).toEqual([]);
+  });
+
+  it('reads a `stale` cell as a verdict, so an invented row cannot hide behind it', () => {
+    const report = [
+      generated[2],
+      generated[3],
+      '| real-input:android | stale | `abc1234` | 19 m 17 s |',
+    ].join('\n');
+    expect(reportTableProblems(report, generated).join('\n')).toContain(
+      'real-input:android'
+    );
+  });
 });
 
 /* --------------------------------- the `--only` groups ---------------------------- */

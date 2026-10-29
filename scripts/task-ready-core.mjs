@@ -187,7 +187,61 @@ export function reportTableProblems(reportText, generatedTable) {
             'A stale row is a claim; the ledger row is evidence'
     );
   }
+
+  // The same check in the other direction, because the loop above only proves the report is
+  // not *missing* evidence. A row whose gate the ledger never printed is not stale, it is
+  // invented: `gate.mjs table` prints one row per recorded run, so a gate nobody ran cannot
+  // appear. Adding a `| real-input:ios | **PASS** | … |` row to a report whose iOS run never
+  // happened passed every check — the loop walks generated rows, so the report's extra row
+  // was never looked at, and a report is read as evidence.
+  //
+  // A row counts as a *gate claim* on two shapes rather than on which table it sits in,
+  // because reports legitimately carry other tables whose first column names a gate (the
+  // cost breakdown does). First cell gate-shaped — lower-case with colons, so `Button` and
+  // prose are out — and second cell verdict-shaped, so the cost table's durations and a
+  // coverage matrix's `covered` are out. A row that reads "this gate, this verdict" has to
+  // have a run behind it.
+  const known = new Set(
+    generated.map((line) => gateNameOf(line) ?? '')
+  );
+  for (const row of inReport) {
+    const gate = gateNameOf(row);
+    if (gate == null || known.has(gate)) continue;
+    problems.push(
+      `the report's gate table has a row for \`${gate}\` and ` +
+        '`gate.mjs table` prints none, so no run of that gate is recorded for this ' +
+        `code tree — the row says ${row.trim()}. Paste the table, do not extend it`
+    );
+  }
   return problems;
+}
+
+/**
+ * The gate a table row claims a result for, or null when it claims none.
+ *
+ * @param {string} row one markdown data row
+ * @returns {string | null}
+ */
+function gateNameOf(row) {
+  const cells = tableCells(row);
+  if (cells.length < 2) return null;
+  if (!/^[a-z][a-z0-9-]*(?::[A-Za-z0-9-]+)*$/.test(cells[0])) return null;
+  if (!/^\*{0,2}(PASS|FAIL|green|red|stale|skipped|pending|missing|not run)\*{0,2}$/i.test(cells[1]))
+    return null;
+  return cells[0];
+}
+
+/**
+ * A markdown row's cells, trimmed and with the markup that only decorates them removed.
+ *
+ * @param {string} row
+ * @returns {string[]}
+ */
+function tableCells(row) {
+  return row
+    .split('|')
+    .map((cell) => cell.trim().replace(/^`+|`+$/g, ''))
+    .filter((cell) => cell !== '');
 }
 
 /**
@@ -224,13 +278,8 @@ export function expandOnly(names) {
  * @returns {boolean}
  */
 function sameRow(a, b) {
-  const cells = (row) =>
-    row
-      .split('|')
-      .map((cell) => cell.trim().replace(/^`+|`+$/g, ''))
-      .filter((cell) => cell !== '');
-  const left = cells(a);
-  const right = cells(b);
+  const left = tableCells(a);
+  const right = tableCells(b);
   return left.length === right.length && left.every((c, i) => c === right[i]);
 }
 
