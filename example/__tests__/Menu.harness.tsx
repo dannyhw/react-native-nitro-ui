@@ -348,24 +348,30 @@ async function waitForMeasured(testId: string, what: string) {
 }
 
 /**
- * Poll until *this* mount reports a size.
+ * Poll until a mount that answers as `wantTitle` reports a real size, and refuse
+ * everything else.
  *
- * `handles` outlives `unmount()` - the entry is replaced when the next mount
- * registers, never cleared when the last one goes away - so `waitForMeasured` can be
- * answered by the handle of a control that no longer exists, and the previous
- * instance's number would satisfy "the remount measured". Q3 §1's
- * `waitForFreshMeasure` is the house patch for exactly this: only a handle that is not
- * the one captured before the teardown may answer, and zero is absence, not a verdict.
+ * Q3 §1's rule for a remount is that the previous mount must not get to answer. The
+ * obvious signal - "not the handle object I had before the teardown" - is wrong here:
+ * measured on iOS at `06-02-21Z`, the remount of `recycle` answered through the *same*
+ * JS handle object, because Fabric recycles the view and Nitro hands back the wrapper
+ * it made for that tag. Object identity says nothing about which mount is talking; the
+ * props do, so the wait asks the handle what title it was given and refuses any answer
+ * still carrying the old one - the refusal is asserted where it happens, in the
+ * remount test below, which calls this while only the torn-down mount can answer.
+ * Zero is refused for Q3's other reason: a control answers `0x0` mid re-measure, and a
+ * zero read as a verdict is the historical `0.00x0.00` signature.
  */
 async function waitForFreshMeasure(
   testId: string,
-  stale: MenuHandle | undefined,
-  what: string
+  wantTitle: string,
+  what: string,
+  timeoutMs = 8000
 ): Promise<Size> {
   return await pollUntil(
     () => {
       const handle = handles.get(testId);
-      if (handle == null || handle === stale) {
+      if (handle == null || handle.title !== wantTitle) {
         return null;
       }
       const size = handle.measureContent();
@@ -373,12 +379,14 @@ async function waitForFreshMeasure(
     },
     () =>
       new Error(
-        `"${testId}" (${what}) never measured on its new mount - the handle that ` +
-          `answers is ${
-            handles.get(testId) === stale ? 'the old mount' : 'absent'
-          }, measureContent() says ${describeSize(measured(testId))}, box ` +
-          `${describeSize(sizeOf(testId))}.`
-      )
+        `"${testId}" (${what}) never answered as "${wantTitle}" on its new mount - ` +
+          `the handle says title ${JSON.stringify(
+            handles.get(testId)?.title ?? null
+          )} and measureContent() says ${describeSize(
+            measured(testId)
+          )}, box ${describeSize(sizeOf(testId))}.`
+      ),
+    timeoutMs
   );
 }
 
@@ -1377,10 +1385,38 @@ describe('Menu · G7a', () => {
         (r) => r.expanded === true && r.live === liveBefore + 1
       );
     }
-    // The handle this mount leaves behind, captured while it is still the only one.
-    const stale = handles.get('recycle');
     unmount();
     await settle(400);
+    // Q3 §1's other half, proven at the moment it is worth proving: right now the
+    // only handle that exists is the one the teardown left behind, and it is still
+    // answering. A wait that accepted "some handle has a size" would be satisfied
+    // here and report the remount as measured. The title guard refuses it, so the
+    // short wait below has to fail, and fail naming what it refused.
+    const previousTitle = handles.get('recycle')?.title ?? null;
+    const previousSize = measured('recycle');
+    let refusal = 'answered';
+    try {
+      await waitForFreshMeasure(
+        'recycle',
+        'Renamed',
+        'the previous mount',
+        1500
+      );
+    } catch (error) {
+      refusal = String(error);
+    }
+    console.log(
+      `refuse previous mount: title=${JSON.stringify(previousTitle)} ` +
+        `measured=${describeSize(previousSize)} -> ${refusal}`
+    );
+    // The leftover is the previous mount's handle, and it is still answering - with
+    // the title this mount was given, not the next one's.
+    expect(previousTitle).not.toBe('Renamed');
+    // And the wait refuses it. What does the refusing differs by platform, measured
+    // at the log quoted in the report: on Android the torn-down control answers
+    // `0.00x0.00`, so the zero rule alone refuses it. The probe after the remount
+    // holds the title rule on its own, against a handle with a real size to offer.
+    expect(refusal).toContain('never answered as "Renamed"');
     selectLog.length = 0;
     stateLog.length = 0;
     orderLog.length = 0;
@@ -1398,7 +1434,23 @@ describe('Menu · G7a', () => {
       { timeout: 20000 }
     );
     await waitForTestId('recycle');
-    await waitForFreshMeasure('recycle', stale, 'the remounted menu');
+    await waitForFreshMeasure('recycle', 'Renamed', 'the remounted menu');
+    // The title rule on its own: this handle has a real size to offer, so a wait that
+    // accepted any handle would answer here. Ask for a title no mount was given and
+    // the only thing that can refuse is the guard - drop the guard and this is the
+    // line that goes red, which is what makes the wait a check rather than a comment.
+    let wrongTitleRefusal = 'answered';
+    try {
+      await waitForFreshMeasure(
+        'recycle',
+        'NeverGiven',
+        'the live mount',
+        1000
+      );
+    } catch (error) {
+      wrongTitleRefusal = String(error);
+    }
+    expect(wrongTitleRefusal).toContain('never answered as "NeverGiven"');
     const fresh = report('recycle');
     expect(handles.get('recycle')?.title).toBe('Renamed');
     expect(fresh.rows).toBe(Platform.OS === 'android' ? 0 : 2);
