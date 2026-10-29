@@ -59,9 +59,11 @@ import {
 } from 'react-native-harness';
 import { userEvent } from '@react-native-harness/ui';
 import {
+  Button,
   Host,
   Menu,
   nitroUiCore,
+  type ButtonSize,
   type MenuGroup,
   type NitroUiSizingStats,
 } from 'react-native-nitro-ui';
@@ -1248,6 +1250,8 @@ type HostLog = {
   menu?: MenuHandle;
   /** Move the whole `<Host>` down: a layout move, with no touch in it. */
   setSpacer?: (height: number) => void;
+  /** Move a hosted control *inside* the `<Host>`, leaving the `<Host>` alone. */
+  setButtonSize?: (size: ButtonSize) => void;
 };
 
 const newHostLog = (): HostLog => ({});
@@ -1449,6 +1453,70 @@ describe('Menu · inside a Host', () => {
     await waitForMenu(
       'hosted-survivor',
       (r) => r.expanded === false && (r.live ?? 0) === liveBefore
+    );
+  });
+
+  /**
+   * Two hosted controls stacked in one `<Host>`, the one above able to grow.
+   *
+   * This is the second of the two ways an anchored window can be left pointing at
+   * nothing, and the `<Host>`-moves test above cannot see it: growing the row above
+   * moves the Menu's button *inside* the composition while the composition itself,
+   * and the `<Host>`'s React Native frame, stay exactly where they were. Only a
+   * reading of the anchor's own box can notice (`noteAnchorBox`), which is why the
+   * fixture is a pair rather than another spacer.
+   */
+  function HostedPair({ log: hostLog }: { log: HostLog }) {
+    const [buttonSize, setButtonSize] = useState<ButtonSize>('small');
+    hostLog.setButtonSize = setButtonSize;
+    return (
+      <Host testID="pair-host" style={{ width: 300, height: 300 }}>
+        <Button title="Above" size={buttonSize} testID="pair-button" />
+        <Menu
+          title="Below"
+          group={GROUP}
+          testID="pair-menu"
+          hybridRef={(view: MenuHandle): void => {
+            handles.set('pair-menu', view);
+          }}
+        />
+      </Host>
+    );
+  }
+
+  it('takes its window down when its button moves inside the Host', async () => {
+    await render(<HostedPair log={log} />, { timeout: 30000 });
+    if (Platform.OS !== 'android') {
+      // Nothing to measure: iOS hosts by passing the child through (D23), so the
+      // button and the menu are ordinary React Native views there.
+      await waitForTestId('pair-menu');
+      expectUnanswerable(report('pair-menu'));
+      return;
+    }
+    const liveBefore = report('pair-menu').live ?? 0;
+    await pressWitnessed('pair-menu');
+    const open = await waitForMenu(
+      'pair-menu',
+      (r) => r.expanded === true && r.live === liveBefore + 1
+    );
+    const [, anchorTop] = edges(open.anchor, 'anchor');
+
+    // Grow the row above. The `<Host>`'s frame does not move, so a control that only
+    // watched its own window's position would see nothing change and leave a window
+    // hanging over the wrong rows.
+    log.setButtonSize?.('large');
+    const closed = await waitForMenu(
+      'pair-menu',
+      (r) => r.expanded === false && (r.live ?? 0) === liveBefore
+    );
+    expect(closed.menu).toEqual([-1, -1, -1, -1]);
+    // And the button really did move - without this the gate above could be reading a
+    // window that closed for a reason nobody intended.
+    const [, nextAnchorTop] = edges(report('pair-menu').anchor, 'anchor');
+    expect(nextAnchorTop).toBeGreaterThan(anchorTop);
+    console.log(
+      `hosted anchor move: anchor top ${String(anchorTop)} -> ` +
+        `${String(nextAnchorTop)} px, window taken down`
     );
   });
 
