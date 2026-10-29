@@ -154,8 +154,8 @@ function BenchRunner({
         return;
       }
 
-      // An arm that implements some components and not others (T16's
-      // `nitro-ui-host`, Switch only) must be *said* to be absent on the rest, not
+      // An arm that implements some components and not others (as T16's
+      // `nitro-ui-host` arm once was, Switch only) must be *said* to be absent on the rest, not
       // launch and render an empty tree: zero controls still mounts fast, and a fast
       // mount of nothing is exactly the kind of number a table should not contain.
       if (

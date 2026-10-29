@@ -198,8 +198,10 @@ the exact thing M1 is about. Neither round-0 caption mentioned it.
   middle of the row); the 140 dp Button shows `too long for the box it w`, cut at both ends;
   the no-width row is clipped at both ends too.
 - `android-after.png` — retaken after M1: all three rows are inside their boxes, with both
-  end caps drawn and each label reduced to an ellipsis; the Button reads `A title far too…`
-  inside its pill. See "Fix round 1" for what each row proves.
+  end caps drawn. Row 1 (`width: 140`) has all four labels reduced to an ellipsis; row 2 (no
+  `width`, box clamped by the parent) keeps all four labels whole — January, February, March,
+  April — because its box is wide enough for them; the Button reads `A title far too…` inside
+  its pill. See "Fix round 1" for what each row proves.
 
 The after shot is honest about the trade: fitting is not legibility. Material 3 splits the
 row's width equally, so four segments in 140 dp each get an ellipsis, where iOS's `Picker`
@@ -237,8 +239,11 @@ again. `nitroui_t01` now draws that row inside its box with both end caps.
 `NitroUiMeasuredRoot` now takes an `onOverWide` callback beside `onMeasured`, and the measure block
 calls it in the pass that has the facts — writing the box width and the content revision it just
 measured as it goes. `noteOverWideContent` sets `armed` and bumps `remeasureToken` from inside that
-pass, which Compose routes as a request to measure the node again at the end of the traversal. The
-early return is gone, and `contentWantsMoreThanBox` and `askForBoundedPlacement` went with it.
+pass, which Compose routes as a request to measure the node again at the end of the traversal — wording
+superseded by F2's N4: the write reaches Compose through the global apply notification on
+`AndroidUiDispatcher`, which invalidates the node, and the next frame answers it
+(`docs/architecture/core.md:424-425`). The early return is gone, and `contentWantsMoreThanBox` and
+`askForBoundedPlacement` went with it.
 `onConfigurationChanged` now bumps the token as well as resetting, so a rotation or a dark-mode
 switch re-establishes the fit instead of waiting for an unrelated prop to bring the clip back.
 
@@ -328,7 +333,8 @@ The mechanism for the memory delta is a hypothesis, not a finding, and this repo
 the two builds differ in the mount path only in *where* the placement measure is asked for — round 0
 bumped its token from inside `View.onMeasure`, so `requestLayout()` bubbled through the RN tree once per
 instance across a 200-instance mount, where round 1 writes `remeasureToken` from inside the measure
-block and Compose re-measures that node at the end of the traversal — and a window-layout storm per
+block and Compose re-measures that node at the end of the traversal (same superseded wording, see
+`docs/architecture/core.md:424-425`) — and a window-layout storm per
 instance is the shape that would inflate both heaps together. I did not prove it and C1's gate is the
 shipped tree, which passes; the follow-up line is there if the next bench/memory task wants it. The
 round-0 run also carries a `(busy)` load flag (load1 12.7), which is a caveat on any absolute number

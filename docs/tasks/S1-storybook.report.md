@@ -171,6 +171,19 @@ refuse Node 25/26). Devices: iPhone 17 `F08675D3-…`, AVD `nitroui_t01`
 | `ANDROID_AVD=nitroui_t01 ANDROID_ADB_SERVER_PORT=5041 METRO_PORT=8293 bun run test:real-input:android` | PASS — 4/4 controls |
 | `bun run typecheck` / `lint` / `format`                              | PASS (also inside `check`) |
 
+> **Annotation (F2, 2026-10-29) — the `real-input:android` row above is a claim with no
+> surviving record, and A2 could not reproduce it.** No `docs/tasks/S1-storybook/gates.jsonl`
+> exists: the gate ledger that writes one (`scripts/gate.mjs`, added by `c21d754`) postdates
+> this report (`12f67e9`, 2026-10-24), so nothing in the tree says when or on what tree that
+> line was measured. A2 ran the same command and got **red twice** — at `main` and at its own
+> branch head — failing as `the app did not render its tab bar within 180000ms` with
+> `DEFAULT_SCREEN = 'progress'` committed, which is the default this branch carries too. Its
+> words, left standing: "Either something about that session differed (a `DEFAULT_SCREEN`
+> flipped for captures, a slower/quieter host) or the claim is wrong; I measured red twice, on
+> `main` and on this branch." The row below is left as written — history is not rewritten here
+> — but do not cite it as a gate result. Every other row in this table is equally
+> ledger-less; this one is singled out because it has a measured red against it.
+
 One caveat, recorded because it was not obvious: the **first** `harness:ios` run
 failed one test — `Sizing · intrinsic (T11) › lays a cold Switch out at the size
 the control measures` — on a host at load average 108 over 14 cores. The re-run

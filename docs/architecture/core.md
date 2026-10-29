@@ -416,7 +416,13 @@ Measurement cadence — this is where sizing costs performance:
       unbounded question, and since a `Measurable` is measured once per pass that pass is also what gets drawn, so a fitted
       row shows its unbounded (clipped) drawing for one traversal before the placement measure redraws it. Same shape as the
       one-frame fallback correction D17 already accepts; it is invisible unless the control is over-wide *and* the frame is
-      caught.
+      caught. **A cold mount, a reset, or a first overrun on a control that was never armed costs two, not one**: the
+      composition that drew it was not armed, so it never read `contentRevision` at all
+      (`NitroComposeHost.kt:1496`), so the arming has to stamp `NO_REVISION`, and an arming that cannot name its content
+      is never placed — so there is a second unbounded (still clipped) draw before the bounded pass. "One clipped frame" is
+      therefore the `markDirty()` case **on an already-armed host** only: what buys the extra pass is an unarmed
+      composition, not a cold process. The ask itself is also not synchronous: the state write schedules Compose's
+      global apply notification, which runs on `AndroidUiDispatcher` and invalidates the node, and the next frame answers it.
   - Policy `fillWidth` (a Slider, whose width *is* the box) keeps the maximum width, drops the minimums and lifts the
     height cap — `constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)` — which asks for the
     height the control wants at the width it got.
