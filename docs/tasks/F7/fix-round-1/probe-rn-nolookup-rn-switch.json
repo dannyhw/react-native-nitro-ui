@@ -1,0 +1,21 @@
+[
+  {
+    "dwell": 0.05,
+    "load1": 5.72,
+    "delivered": 0,
+    "taps": 12,
+    "jsToggle": 12,
+    "jsToggleTaps": 12,
+    "target": "probe-native-switch",
+    "witness": "echo:probe-native-events",
+    "quiet": true,
+    "label": "rn-nolookup-rn-switch",
+    "arm": "rn",
+    "probeUi": null,
+    "rows": null,
+    "stallMs": null,
+    "rescue": false,
+    "watchdog": false,
+    "variant": "0"
+  }
+]
