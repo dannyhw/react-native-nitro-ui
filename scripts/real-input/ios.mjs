@@ -36,6 +36,7 @@ import {
   sleep,
   Suite,
 } from './support.mjs';
+import { parseTestResults, realInputLine } from './ios-log.mjs';
 import { REAL_INPUT_CONTROLS, iosCheckName } from './controls.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { currentCodeTree, recordBuild } from '../app-stamp.mjs';
@@ -182,7 +183,8 @@ function xcodebuild(args, { logFile, what }) {
         if (
           /^\s*(Test Case|Test Suite|Testing failed|error:|warning: .*RealInput)|\*\* (TEST|BUILD)/.test(
             line
-          )
+          ) ||
+          realInputLine(line) != null
         ) {
           console.log(`    ${line.trim()}`);
         }
@@ -196,40 +198,6 @@ function xcodebuild(args, { logFile, what }) {
       out.end(() => resolve(status ?? 1));
     });
   });
-}
-
-/**
- * What each test case did, read out of an xcodebuild log.
- *
- * @param {string} log
- * @returns {Map<string, { outcome: string, notes: string[] }>} by method name
- */
-function parseTestResults(log) {
-  /** @type {Map<string, { outcome: string, notes: string[] }>} */
-  const results = new Map();
-  for (const match of log.matchAll(
-    /Test Case '-\[[\w.]+ (\w+)\]' (passed|failed|skipped) \(([\d.]+) seconds\)/g
-  )) {
-    results.set(match[1], { outcome: match[2], duration: match[3], notes: [] });
-  }
-  for (const line of log.split('\n')) {
-    if (!/error:/.test(line)) {
-      continue;
-    }
-    const named = /(testRealInput\w+)/.exec(line);
-    if (named != null && results.has(named[1])) {
-      results.get(named[1]).notes.push(line.trim());
-      continue;
-    }
-    // Anything else - a build or runner error - belongs to whichever case
-    // failed, because that is the run it explains.
-    for (const result of results.values()) {
-      if (result.outcome === 'failed') {
-        result.notes.push(line.trim());
-      }
-    }
-  }
-  return results;
 }
 
 /**
@@ -464,6 +432,9 @@ async function main() {
       }
       for (const note of outcome.notes) {
         check.note(note);
+      }
+      for (const retried of outcome.retries) {
+        check.retried(retried);
       }
       // Phrased so the line reads the same way whether the case passed or
       // failed: the suite's report prefixes failures with "failed:".

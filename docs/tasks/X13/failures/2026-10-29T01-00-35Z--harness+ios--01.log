@@ -1,0 +1,81 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-10-29T01:00:35.508Z on code tree `f5358952127f` at HEAD `43cfbe5` (branch `task/X13-release-lock-refresh`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 196 ms
+- Load: start 153.01, end 152.85, median 152.93, max 153.01
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `X13-u1t66`
+- Full log: `task/X13-release-lock-refresh/harness+ios-2026-10-29T01-00-35.138Z.log` (<store>/task/X13-release-lock-refresh/harness+ios-2026-10-29T01-00-35.138Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X13-release-lock-refresh/harness+ios-2026-10-29T01-00-35.138Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X13-u1t66 (still live)
+  |   F1-q325w                 F1           both              pair-a
+  |   X13-u1t66                X13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 152.85 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 39 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree f5358952127f at HEAD 43cfbe5
+gate: git tree f7b5f6887177
+gate: log task/X13-release-lock-refresh/harness+ios-2026-10-29T01-00-35.138Z.log
+gate:       <store>/task/X13-release-lock-refresh/harness+ios-2026-10-29T01-00-35.138Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: no app to test.
+       build it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp, which is what this check reads)
+       or point HARNESS_APP_PATH at an app built another way;
+       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite without this check.
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+gate: harness:ios FAIL in 0.2 s
+gate: recorded in .gates/task/X13-release-lock-refresh.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X13-release-lock-refresh/harness+ios-2026-10-29T01-00-35.138Z.log (4 probe(s))
+
+```

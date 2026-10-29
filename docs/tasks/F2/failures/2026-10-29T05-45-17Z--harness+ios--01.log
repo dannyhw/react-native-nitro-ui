@@ -1,0 +1,196 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-10-29T05:45:17.607Z on code tree `b65316f3df4e` at HEAD `f5cc5e4` (branch `task/F2-followups-sweep`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 129563 ms
+- Load: start 50.78, end 8.70, median 19.62, max 50.78
+- Device: ios / device `331EF109-21DD-422B-AEF8-DFFFC6998DC3` / lease `F2-3hxh8`
+- Full log: `task/F2-followups-sweep/harness+ios-2026-10-29T05-45-17.345Z.log` (<store>/task/F2-followups-sweep/harness+ios-2026-10-29T05-45-17.345Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Sizing.harness.tsx`
+- `● Console`
+- `● Sizing · intrinsic (T11) › lays a cold Switch out at the size the control measures`
+- `expected null not to be null`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F2-followups-sweep/harness+ios-2026-10-29T05-45-17.345Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F2-3hxh8 (still live)
+  |   F2-3hxh8                 F2           both              pair-b
+  |   G7a-424pv                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.70 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 199 — the rest is in the full log above)
+
+```
+      timing: cold batch of 200: one correction flush 8.4ms (limit 40ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 41.50/load5 20.14 over 14 cores · bar placed by T11; T12 attributed the Android half to the pre-draw re-layout
+
+
+    console.log
+      cold batch frames: n=100 drew=100 stale=100 corrections=100 immediate=2 batched=98 flushes=1 traceDropped=0
+
+
+    console.log
+      user styles: fixed=120.00x60.00 flexed=300.00x28.00 stretched=300.00x28.00
+
+
+    console.log
+      poison: guess=120x90 repaired=61.00x28.00 d={"corrections":1,"immediate":1,"batched":0,"flushes":1,"dropped":0,"queued":1,"measurements":2,"confirmed":0,"changedFlushes":1,"maxFlushMs":8.434833,"epoch":10} trace=["laidOut:120.0x90.0","drew:120.0x90.0","corrected:61.0x28.0"]
+
+
+    console.log
+      poison frames: drawn=1 stale=1 changedFlushes=1
+
+
+    console.log
+      modal cold: id=511 content=61.00x28.00 trace=["laidOut:511:40.0x20.0","drew:511:40.0x20.0","corrected:511:61.0x28.0"] d={"corrections":1,"immediate":1,"batched":0,"flushes":1,"dropped":0,"queued":1,"measurements":3,"confirmed":0,"changedFlushes":1,"maxFlushMs":8.434833,"epoch":11}
+
+
+    console.log
+      modal late: content=100.00x28.00 trace=["laidOut:511:40.0x20.0","corrected:511:100.0x28.0"] d={"corrections":1,"immediate":1,"batched":0,"flushes":1,"dropped":0,"queued":1,"measurements":2,"confirmed":0,"changedFlushes":1,"maxFlushMs":8.434833,"epoch":11}
+
+
+    console.log
+      storm: 30 turns corrections=0 dropped=0 measures=0 queued=0 flushes=0 newCacheEntries=0 value=false box=61.00x28.00
+
+
+    console.log
+      value change: switch=61.00x28.00 at x=359.0 label=347.00x17.00 measured=61.00x28.00 d={"corrections":0,"immediate":0,"batched":0,"flushes":0,"dropped":0,"queued":0,"measurements":1,"confirmed":0,"changedFlushes":0,"maxFlushMs":8.434833,"epoch":13}
+
+
+    console.log
+      slider value change: box=420.00x31.00 label=420.00x17.00 d={"corrections":0,"immediate":0,"batched":0,"flushes":0,"dropped":0,"queued":0,"measurements":1,"confirmed":0,"changedFlushes":0,"maxFlushMs":8.434833,"epoch":14}
+
+
+    console.log
+      key change start: box=61.00x28.00
+
+
+    console.log
+      key change: box=100.00x28.00 want=100x28 d={"corrections":0,"immediate":0,"batched":0,"flushes":0,"dropped":2,"queued":0,"measurements":2,"confirmed":2,"changedFlushes":0,"maxFlushMs":8.434833,"epoch":15}
+
+
+    console.log
+      first commit wide: box=100.00x28.00 measured=100.00x28.00 d={"corrections":1,"immediate":1,"batched":0,"flushes":1,"dropped":0,"queued":1,"measurements":2,"confirmed":0,"changedFlushes":1,"maxFlushMs":8.434833,"epoch":16} trace=["laidOut:61.0x28.0","drew:61.0x28.0","corrected:100.0x28.0"]
+
+
+    console.log
+      after recycle: box=61.00x28.00 measured=61.00x28.00 d={"corrections":0,"immediate":0,"batched":0,"flushes":0,"dropped":1,"queued":0,"measurements":1,"confirmed":1,"changedFlushes":0,"maxFlushMs":8.434833,"epoch":16}
+
+
+    console.log
+      env change while mounted: d={"corrections":0,"immediate":0,"batched":0,"flushes":0,"dropped":0,"queued":0,"measurements":0,"confirmed":0,"changedFlushes":0,"maxFlushMs":8.434833,"epoch":18}
+
+
+    console.log
+      env change then a real size change: d={"corrections":1,"immediate":1,"batched":0,"flushes":1,"dropped":0,"queued":1,"measurements":2,"confirmed":0,"changedFlushes":1,"maxFlushMs":8.434833,"epoch":18}
+
+
+    console.log
+      pre-warm wrong: d={"corrections":1,"immediate":1,"batched":0,"flushes":1,"dropped":0,"queued":1,"measurements":2,"confirmed":0,"changedFlushes":1,"maxFlushMs":8.434833,"epoch":19}
+
+
+    console.log
+      churn: ledger=0->0 registry=0->0 cached=1->1
+
+
+    console.log
+      drop storm: ledger=0 registry=0 flushes=16
+
+
+    console.log
+      storm list: survivors=7 of 7 d={"corrections":0,"immediate":0,"batched":0,"flushes":1,"dropped":15,"queued":12,"measurements":27,"confirmed":27,"changedFlushes":0,"maxFlushMs":8.434833,"epoch":25}
+
+
+    console.log
+      bench: provisional n=1 24.3ms (24.30ms each) corrections=0 confirmed=1 flushes=0 maxFlushMs=8.435
+
+
+    console.log
+      bench: rightGuess n=1 32.2ms (32.15ms each) corrections=0 confirmed=1 flushes=0 maxFlushMs=8.435
+
+
+    console.log
+      bench: wrongGuess n=1 33.5ms (33.48ms each) corrections=1 confirmed=0 flushes=1 maxFlushMs=8.435
+
+
+    console.log
+      bench: provisional n=50 59.9ms (1.20ms each) corrections=0 confirmed=50 flushes=1 maxFlushMs=8.435
+
+
+    console.log
+      bench: rightGuess n=50 38.8ms (0.78ms each) corrections=0 confirmed=50 flushes=1 maxFlushMs=8.435
+
+
+    console.log
+      bench: wrongGuess n=50 41.8ms (0.84ms each) corrections=50 confirmed=0 flushes=1 maxFlushMs=8.435
+
+
+    console.log
+      timing: bench: mount a batch of 1 24.3ms (limit 4000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 39.22/load5 20.02 over 14 cores · the batch below it, whatever the starting guess
+
+
+    console.log
+      timing: bench: mount a batch of 1 32.2ms (limit 4000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 39.22/load5 20.02 over 14 cores · the batch below it, whatever the starting guess
+
+
+    console.log
+      timing: bench: mount a batch of 1 33.5ms (limit 4000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 39.22/load5 20.02 over 14 cores · the batch below it, whatever the starting guess
+
+
+    console.log
+      timing: bench: mount a batch of 50 59.9ms (limit 12000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 39.22/load5 20.02 over 14 cores · the batch below it, whatever the starting guess
+
+
+    console.log
+      timing: bench: mount a batch of 50 38.8ms (limit 12000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 39.22/load5 20.02 over 14 cores · the batch below it, whatever the starting guess
+
+
+    console.log
+      timing: bench: mount a batch of 50 41.8ms (limit 12000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 39.22/load5 20.02 over 14 cores · the batch below it, whatever the starting guess
+
+  ● Sizing · intrinsic (T11) › lays a cold Switch out at the size the control measures
+
+    expected null not to be null
+
+      [0m [90m 369 |[39m     )[33m;[39m
+       [90m 370 |[39m
+      [31m[1m>[22m[39m[90m 371 |[39m     expect(content)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m
+       [90m     |[39m                                 [31m[1m^[22m[39m
+       [90m 372 |[39m     expect(boxMatches(box[33m,[39m expectedBox[33m![39m))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 373 |[39m     expect([33mMath[39m[33m.[39mabs(content[33m![39m[33m.[39mwidth [33m-[39m expectedBox[33m![39m[33m.[39mwidth))[33m.[39mtoBeLessThan([35m1.5[39m)[33m;[39m
+       [90m 374 |[39m     expect([33mMath[39m[33m.[39mabs(content[33m![39m[33m.[39mheight [33m-[39m expectedBox[33m![39m[33m.[39mheight))[33m.[39mtoBeLessThan([35m1.5[39m)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 1 skipped, 11 passed, 12 of 13 total
+Tests:       1 failed, 1 skipped, 166 passed, 168 total
+Snapshots:   0 total
+Time:        128.492 s
+Ran all test suites.
+gate: harness:ios FAIL in 129.6 s
+gate: recorded in .gates/task/F2-followups-sweep.jsonl
+
+
+gate: appended the device context to task/F2-followups-sweep/harness+ios-2026-10-29T05-45-17.345Z.log (4 probe(s))
+
+```

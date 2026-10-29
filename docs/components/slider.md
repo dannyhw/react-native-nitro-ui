@@ -143,6 +143,15 @@ no track, overflowing its neighbours. The gate is the box's *width* only
 - **Native owns the displayed value during a drag.** The thumb follows the finger
   with no JS round trip, and it keeps doing so when the JS thread is busy — the
   example screen has a slider behind a deliberately expensive handler to show it.
+- **On iOS a drag has to start on the thumb.** SwiftUI's `Slider` ignores a touch that
+  lands on the track beside its thumb, so tapping the track does nothing there, while
+  Compose's `Slider` does move to a track touch. T15 measured the pair (Finding 2 in
+  `docs/tasks/T15-real-input.report.md`): on iOS a track tap and three track drags each
+  produced no callbacks at all, and one drag begun on the thumb produced 40 value
+  changes. It is what `UISlider` does, so nothing intercepts it — but it is a
+  user-visible platform difference, it is why the real-input checks press where the
+  value echo says the thumb is on iOS and start a quarter of the track along on
+  Android, and whether it should stay that way is still an open product question.
 - **At most one `onValueChange` per frame.** Coalescing is native: samples
   accumulate and a frame tick (iOS `CADisplayLink`, Android `Choreographer`) emits
   the newest one. Every emission is a JS entry plus the app's handler plus a React

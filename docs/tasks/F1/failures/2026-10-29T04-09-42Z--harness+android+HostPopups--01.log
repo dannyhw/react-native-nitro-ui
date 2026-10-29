@@ -1,0 +1,77 @@
+# Failure excerpt — harness:android:HostPopups
+
+- Ran: 2026-10-29T04:09:42.562Z on code tree `3b6e71c47002` at HEAD `1fcbcf7` (branch `task/F1-determinism`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android HostPopups`
+- Result: fail, exit 1, 80379 ms
+- Load: start 13.27, end 22.80, median 22.80, max 28.27
+- Device: android / device `emulator-5574` / lease `F1-q325w`
+- Full log: `task/F1-determinism/harness+android+HostPopups-2026-10-29T04-09-42.562Z.log` (<store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T04-09-42.562Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostPopups.harness.tsx`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › comes down with its row, and leaves nothing when the Host is dropped`
+- `expected 1 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T04-09-42.562Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-q325w (still live)
+  |   F1-q325w                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 22.80 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 32 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android HostPopups
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 3b6e71c47002, 8 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 13.27/52.92 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T04-09-42.562Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/HostPopups.harness.tsx
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › comes down with its row, and leaves nothing when the Host is dropped
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 1312 |[39m       log[33m.[39msetPickerPresent[33m?[39m[33m.[39m([36mfalse[39m)[33m;[39m
+       [90m 1313 |[39m       [36mconst[39m moved [33m=[39m [36mawait[39m waitForDate(first[33m,[39m (r) [33m=>[39m [33m![39mr[33m.[39mpresented)[33m;[39m
+      [31m[1m>[22m[39m[90m 1314 |[39m       expect(moved[33m.[39mlivePresentations)[33m.[39mtoBe(live0)[33m;[39m
+       [90m      |[39m                                           [31m[1m^[22m[39m
+       [90m 1315 |[39m       [90m// A change that leaves the row where it is must not close it either: this is the[39m
+       [90m 1316 |[39m       [90m// guard against "tear the window down whenever the Host recomposes". A sibling's[39m
+       [90m 1317 |[39m       [90m// key changing takes *that sibling's* group out and moves nothing else, and the[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 23 passed, 24 total
+Snapshots:   0 total
+Time:        78.773 s
+Ran all test suites matching HostPopups.
+
+
+
+```
