@@ -68,3 +68,16 @@ export {
   type DatePickerProps,
   type DatePickerVariant,
 } from './components/DatePicker/DatePicker';
+
+// A button that opens a list of actions (G7a). Its trigger is a Button's label and
+// its items are data, not children. `primaryAction` is iOS-only and
+// `onOpen`/`onClose` fire on Android only today - `docs/components/menu.md` says which
+// prop is which platform's, as Picker's `wheel` and Button's `systemImage` do.
+export {
+  Menu,
+  type MenuAction,
+  type MenuGroup,
+  type MenuProps,
+  type MenuSection,
+  type MenuSubmenu,
+} from './components/Menu/Menu';

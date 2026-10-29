@@ -28,6 +28,7 @@ import { Progress } from '../Progress/Progress';
 import { SegmentedControl } from '../SegmentedControl/SegmentedControl';
 import { Slider } from '../Slider/Slider';
 import { Switch } from '../Switch/Switch';
+import { Menu } from '../Menu/Menu';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -61,6 +62,7 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
   [SegmentedControl, 'SegmentedControl'],
   [Slider, 'Slider'],
   [Switch, 'Switch'],
+  [Menu, 'Menu'],
 ]);
 
 /**

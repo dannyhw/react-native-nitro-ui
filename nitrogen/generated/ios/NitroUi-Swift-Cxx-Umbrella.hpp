@@ -14,6 +14,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiDatePickerSpec; }
 // Forward declaration of `HybridNitroUiHostSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiHostSpec; }
+// Forward declaration of `HybridNitroUiMenuSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiMenuSpec; }
 // Forward declaration of `HybridNitroUiPickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiPickerSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
@@ -28,6 +30,10 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
 // Forward declaration of `NitroUiDatePickerSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiDatePickerSize; }
+// Forward declaration of `NitroUiMenuRow` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiMenuRow; }
+// Forward declaration of `NitroUiMenuSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiMenuSize; }
 // Forward declaration of `NitroUiPickerSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiPickerSize; }
 // Forward declaration of `NitroUiSegmentedControlSize` to properly resolve imports.
@@ -41,6 +47,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 #include "HybridNitroUiButtonSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
 #include "HybridNitroUiHostSpec.hpp"
+#include "HybridNitroUiMenuSpec.hpp"
 #include "HybridNitroUiPickerSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
@@ -48,6 +55,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "NitroUiButtonSize.hpp"
 #include "NitroUiDatePickerSize.hpp"
+#include "NitroUiMenuRow.hpp"
+#include "NitroUiMenuSize.hpp"
 #include "NitroUiPickerSize.hpp"
 #include "NitroUiSegmentedControlSize.hpp"
 #include "NitroUiSize.hpp"
@@ -78,6 +87,8 @@ namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
 namespace NitroUi { class HybridNitroUiDatePickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiHostSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiHostSpec_cxx; }
+// Forward declaration of `HybridNitroUiMenuSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiMenuSpec_cxx; }
 // Forward declaration of `HybridNitroUiPickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiPickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
