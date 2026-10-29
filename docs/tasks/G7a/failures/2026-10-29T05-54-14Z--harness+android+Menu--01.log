@@ -1,0 +1,84 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-10-29T05:54:14.705Z on code tree `cf0778c995e8` at HEAD `cb7c2fa` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 3898 ms
+- Load: start 6.70, end 6.89, median 6.80, max 6.89
+- Device: android
+- Full log: `task/G7a-menu/harness+android+Menu-2026-10-29T05-54-14.451Z.log` (<store>/task/G7a-menu/harness+android+Menu-2026-10-29T05-54-14.451Z.log)
+- Scrubbed: 7 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Menu-2026-10-29T05-54-14.451Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   F2-3hxh8                 F2           both              pair-b
+  |   G7a-424pv                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.89 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 39 log line(s)
+
+```
+gate: harness:android:Menu
+gate: node ../scripts/harness.mjs --harnessRunner android Menu (cwd example)
+gate: code tree cf0778c995e8 at HEAD cb7c2fa
+gate: git tree 73430241f807 with a DIRTY worktree (not reusable)
+gate: log task/G7a-menu/harness+android+Menu-2026-10-29T05-54-14.451Z.log
+gate:       <store>/task/G7a-menu/harness+android+Menu-2026-10-29T05-54-14.451Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree cf0778c995e8, 9 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.70/11.33 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android+Menu-2026-10-29T05-54-14.451Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Creating Android emulator nitroui...
+Test Suites: 0 of 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        3.159 s, estimated 12 s
+Ran all test suites matching Menu.
+SubprocessError: Command failed with exit code 1: bash -lc 'printf '\''no
+'\'' | "~/Library/Android/sdk/cmdline-tools/latest/bin/avdmanager" create avd --force --name "nitroui" --package "system-images;android-35;default;arm64-v8a" --device "pixel_9" -p "~/.android/avd/nitroui.avd"'
+    at checkFailure (file://<repo>/node_modules/nano-spawn/source/result.js:40:9)
+    at getResult (file://<repo>/node_modules/nano-spawn/source/result.js:17:3)
+    at async Module.createAvd (file:[scrubbed]@react-native-harness/platform-android/dist/adb.js:305:5)
+    at async recreateAvd (file:[scrubbed]@react-native-harness/platform-android/dist/instance.js:56:5)
+    at async file:[scrubbed]@react-native-harness/platform-android/dist/instance.js:131:21
+    at async getAndroidEmulatorPlatformInstance (file:[scrubbed]@react-native-harness/platform-android/dist/instance.js:127:15)
+    at async Object.work (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:414:32)
+    at async withPlatformReadyTimeout (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:99:16)
+    at async Promise.all (index 1)
+    at async createHarnessSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:372:49)
+gate: harness:android:Menu FAIL in 3.9 s
+gate: recorded in .gates/task/G7a-menu.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G7a-menu/harness+android+Menu-2026-10-29T05-54-14.451Z.log (5 probe(s))
+
+```

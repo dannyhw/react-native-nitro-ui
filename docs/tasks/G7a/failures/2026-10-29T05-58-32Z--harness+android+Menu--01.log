@@ -1,0 +1,101 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-10-29T05:58:32.262Z on code tree `4b16bb0d8030` at HEAD `cb7c2fa` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 48273 ms
+- Load: start 3.55, end 6.11, median 6.09, max 6.35
+- Device: android / device `emulator-5574` / lease `G7a-424pv`
+- Full log: `task/G7a-menu/harness+android+Menu-2026-10-29T05-58-32.013Z.log` (<store>/task/G7a-menu/harness+android+Menu-2026-10-29T05-58-32.013Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › re-measures when the title changes (R3)`
+- `● Menu · G7a › carries no old state across a remount`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Menu-2026-10-29T05-58-32.013Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-424pv (still live)
+  |   F2-3hxh8                 F2           both              pair-b
+  |   G7a-424pv                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.11 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 54 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:Menu
+gate: node ../scripts/harness.mjs --harnessRunner android Menu (cwd example)
+gate: code tree 4b16bb0d8030 at HEAD cb7c2fa
+gate: git tree 73430241f807 with a DIRTY worktree (not reusable)
+gate: log task/G7a-menu/harness+android+Menu-2026-10-29T05-58-32.013Z.log
+gate:       <store>/task/G7a-menu/harness+android+Menu-2026-10-29T05-58-32.013Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 4b16bb0d8030, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.55/6.90 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android+Menu-2026-10-29T05-58-32.013Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › re-measures when the title changes (R3)
+
+    "title" (the long title) still measures 80.76x48.00 after the change - control now measures 0.00x0.00, so it never re-measured.
+
+      [0m [90m 414 |[39m     }[33m,[39m
+       [90m 415 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 416 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 417 |[39m         [32m`"${testId}" (${what}) still measures ${describeSize(previous)} after the `[39m [33m+[39m
+       [90m 418 |[39m           [32m`change - control now measures ${describeSize(measured(testId))}, so it `[39m [33m+[39m
+       [90m 419 |[39m           [32m'never re-measured.'[39m[0m
+
+  ● Menu · G7a › carries no old state across a remount
+
+    "recycle" (the remounted menu) never measured on its new mount - the handle that answers is the old mount, measureContent() says 0.00x0.00, box 106.67x48.00.
+
+      [0m [90m 377 |[39m     }[33m,[39m
+       [90m 378 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 379 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 380 |[39m         [32m`"${testId}" (${what}) never measured on its new mount - the handle that `[39m [33m+[39m
+       [90m 381 |[39m           [32m`answers is ${[39m
+       [90m 382 |[39m [32m            handles.get(testId) === stale ? 'the old mount' : 'absent'[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 13 passed, 15 total
+Snapshots:   0 total
+Time:        47.313 s, estimated 52 s
+Ran all test suites matching Menu.
+gate: harness:android:Menu FAIL in 48.3 s
+gate: recorded in .gates/task/G7a-menu.jsonl
+
+
+gate: appended the device context to task/G7a-menu/harness+android+Menu-2026-10-29T05-58-32.013Z.log (5 probe(s))
+
+```

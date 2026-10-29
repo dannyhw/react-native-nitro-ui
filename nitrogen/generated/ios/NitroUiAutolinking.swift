@@ -107,4 +107,16 @@ public final class NitroUiAutolinking {
   public static func isNitroUiPickerRecyclable() -> Bool {
     return HybridNitroUiPicker.self is any RecyclableView.Type
   }
+  
+  public static func createNitroUiMenu() -> bridge.std__shared_ptr_HybridNitroUiMenuSpec_ {
+    let hybridObject = HybridNitroUiMenu()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiMenuSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiMenuRecyclable() -> Bool {
+    return HybridNitroUiMenu.self is any RecyclableView.Type
+  }
 }

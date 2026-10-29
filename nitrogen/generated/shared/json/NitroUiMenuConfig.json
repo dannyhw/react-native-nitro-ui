@@ -1,0 +1,26 @@
+{
+  "uiViewClassName": "NitroUiMenu",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "title": true,
+    "variant": true,
+    "size": true,
+    "disabled": true,
+    "rows": true,
+    "tintColor": true,
+    "systemImage": true,
+    "hasPrimaryAction": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onSelect": true,
+    "onOpen": true,
+    "onClose": true,
+    "primaryAction": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}

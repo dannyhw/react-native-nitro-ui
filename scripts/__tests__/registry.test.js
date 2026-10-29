@@ -614,6 +614,51 @@ describe('the generated tables cover what they claim', () => {
     );
   });
 
+  it('the host-arm regions list the hostable *and* benched controls', () => {
+    // `hostArm()` in scripts/registry-core.mjs fills two regions - the arm's own
+    // `components` list and `ARM_SCOPES` - and both are about cells: an arm is only
+    // scheduled for a control it has cells to render. `hostable` alone means "a
+    // `<Host>` composes this", which `HostChildren.ts` reads; a control that is
+    // hostable with `bench: false` (G7a's Menu, whose bench arm is G7b) has no cell
+    // to scope, so listing it would make the scheduler promise a cell the plan does
+    // not have and name a `ComponentName` the bench union does not carry.
+    const armIds = (text) => {
+      const begin = text.indexOf('region: host-arm-components');
+      expect(begin).toBeGreaterThan(-1);
+      const end = text.indexOf('@end-generated', begin);
+      return [
+        ...text.slice(begin, end).matchAll(/^ {6}'([a-z0-9-]+)',$/gm),
+      ].map((m) => m[1]);
+    };
+    const regions = (files) =>
+      ['bench/src/implementations/index.ts', 'scripts/bench/lib.mjs'].map(
+        (path) => [path, armIds(files[path] ?? readRepo(path))]
+      );
+
+    // The tree in front of us: every hostable-and-benched control is listed, and the
+    // hostable-but-not-benched one is not.
+    const shipped = runPlan();
+    for (const [path, ids] of regions(shipped.files)) {
+      expect([path, ids.length > 0]).toEqual([path, true]);
+      expect([path, ids.includes('menu')]).toEqual([path, false]);
+    }
+
+    // And the rule itself: flip a hostable control's `bench` off and its row leaves
+    // both regions, while `HostChildren.ts` keeps it (that half is `hostable`'s).
+    const { manifests } = shipped;
+    const flipped = manifests.map((m) =>
+      m.name === 'Switch' ? { ...m, bench: false } : m
+    );
+    const after = runPlan(flipped);
+    for (const [path, ids] of regions(after.files)) {
+      expect([path, ids.includes('switch')]).toEqual([path, false]);
+    }
+    const host =
+      after.files['src/components/Host/HostChildren.ts'] ??
+      readRepo('src/components/Host/HostChildren.ts');
+    expect(host).toContain("[Switch, 'Switch']");
+  });
+
   it('an entry already in a shipped region is copied, not re-rendered', () => {
     // The published-bytes rule, and the one shipped region where it is not a no-op:
     // `nitro.json` accepts two spellings of an entry (`checkAutolinking` reads either

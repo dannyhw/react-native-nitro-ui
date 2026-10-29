@@ -252,13 +252,18 @@ private object ButtonColorsCache {
  * The Button's colours for [tint] (an ARGB int, or `null` for the scheme's own),
  * served by [ButtonColorsCache].
  *
+ * `internal`, not `private`, because `HybridNitroUiMenu.kt` builds its trigger from
+ * the same three helpers ([buttonColors], [ButtonLabelStyles], [contentPaddingFor]):
+ * a Menu's box is documented to *be* a Button's box, and a second copy of these
+ * numbers is how that sentence stops being true.
+ *
  * The tint replaces only what [tintRole] says: the container for the three filled
  * variants, the label (and the border that follows it) for `outlined` and `text`,
  * whose container is transparent by design. Everything else keeps the M3 role
  * colours, which is the same trade the Switch's `tintColor` makes.
  */
 @Composable
-private fun buttonColors(
+internal fun buttonColors(
   variant: ButtonVariant,
   tint: Int?,
 ): ButtonColors {
@@ -294,7 +299,7 @@ private fun buttonColors(
  * as [ButtonColorsCache]: an object derived from the theme is shared, not built
  * inline in the composable.
  */
-private object ButtonLabelStyles {
+internal object ButtonLabelStyles {
   private var typography: Typography? = null
   private var small: TextStyle? = null
   private var medium: TextStyle? = null
@@ -325,7 +330,7 @@ private object ButtonLabelStyles {
 }
 
 /** The label's own padding. `medium` is `null`, which means "keep the M3 default". */
-private fun contentPaddingFor(
+internal fun contentPaddingFor(
   variant: ButtonVariant,
   scale: ButtonScale,
 ): PaddingValues? =
@@ -368,43 +373,70 @@ private class ButtonHost(
 
   @Composable
   override fun Component(model: ButtonModel) {
-    val variant = model.variant
-    val scale = model.scale
-    val tint = model.tintColor
     val label = model.accessibilityLabel
-    val enabled = model.enabled
     val press = model.onPress
     // The label goes on the control, which is the node TalkBack focuses (M3 gives
     // it `Role.Button`). On the container instead, the empty box becomes a second
     // focus stop and the button announces itself nameless.
     val labelModifier =
       if (label != null) Modifier.semantics { contentDescription = label } else Modifier
-    // `medium` keeps Material's own minimum, which for a Button is 40 dp and is
-    // applied inside the control where a caller's modifier cannot shrink it -
-    // documented rather than fought. `large` raises the floor.
-    val scaleModifier =
-      if (scale == ButtonScale.Large) Modifier.heightIn(min = 48.dp) else Modifier
-    val colors = buttonColors(variant, tint)
-    val padding = contentPaddingFor(variant, scale)
-    val labelStyle = ButtonLabelStyles.get(MaterialTheme.typography, scale)
-    val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-      // One line, tail-truncated: the control's intrinsic width is the title's
-      // width, and a caller who wants a narrower box gives it a `width` - then the
-      // label truncates instead of painting outside its box (the iOS content does
-      // the same).
-      Text(
-        text = model.title,
-        style = labelStyle,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-    }
-    val onClick: () -> Unit = { press?.invoke() }
-    when (variant) {
+    NitroUiM3Button(
+      title = model.title,
+      variant = model.variant,
+      scale = model.scale,
+      enabled = model.enabled,
+      tint = model.tintColor,
+      modifier = labelModifier,
+      onClick = { press?.invoke() },
+    )
+  }
+}
+
+/**
+ * The five Material 3 button components, drawn from one set of trigger fields.
+ *
+ * `internal`, not `private`, because `HybridNitroUiMenu.kt` draws its trigger with
+ * this: `docs/components/menu.md` says a Menu's box *is* a Button's box, and one
+ * composition is what keeps that sentence true as the numbers move. The three
+ * helpers it is built from ([buttonColors], [ButtonLabelStyles],
+ * [contentPaddingFor]) are `internal` for the same reason.
+ */
+@Composable
+internal fun NitroUiM3Button(
+  title: String,
+  variant: ButtonVariant,
+  scale: ButtonScale,
+  enabled: Boolean,
+  tint: Int?,
+  modifier: Modifier,
+  onClick: () -> Unit,
+) {
+  // `medium` keeps Material's own minimum, which for a Button is 40 dp and is
+  // applied inside the control where a caller's modifier cannot shrink it -
+  // documented rather than fought. `large` raises the floor.
+  val scaleModifier =
+    if (scale == ButtonScale.Large) Modifier.heightIn(min = 48.dp) else Modifier
+  val colors = buttonColors(variant, tint)
+  val padding = contentPaddingFor(variant, scale)
+  val labelStyle = ButtonLabelStyles.get(MaterialTheme.typography, scale)
+  val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+    // One line, tail-truncated: the control's intrinsic width is the title's
+    // width, and a caller who wants a narrower box gives it a `width` - then the
+    // label truncates instead of painting outside its box (the iOS content does
+    // the same).
+    Text(
+      text = title,
+      style = labelStyle,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
+  val target: Modifier = modifier.then(scaleModifier)
+  when (variant) {
       ButtonVariant.Filled ->
         Button(
           onClick = onClick,
-          modifier = labelModifier.then(scaleModifier),
+          modifier = target,
           enabled = enabled,
           colors = colors,
           contentPadding = padding ?: ButtonDefaults.ContentPadding,
@@ -413,7 +445,7 @@ private class ButtonHost(
       ButtonVariant.Tonal ->
         FilledTonalButton(
           onClick = onClick,
-          modifier = labelModifier.then(scaleModifier),
+          modifier = target,
           enabled = enabled,
           colors = colors,
           contentPadding = padding ?: ButtonDefaults.ContentPadding,
@@ -422,7 +454,7 @@ private class ButtonHost(
       ButtonVariant.Outlined ->
         OutlinedButton(
           onClick = onClick,
-          modifier = labelModifier.then(scaleModifier),
+          modifier = target,
           enabled = enabled,
           colors = colors,
           contentPadding = padding ?: ButtonDefaults.ContentPadding,
@@ -431,7 +463,7 @@ private class ButtonHost(
       ButtonVariant.Text ->
         TextButton(
           onClick = onClick,
-          modifier = labelModifier.then(scaleModifier),
+          modifier = target,
           enabled = enabled,
           colors = colors,
           contentPadding = padding ?: ButtonDefaults.TextButtonContentPadding,
@@ -440,14 +472,13 @@ private class ButtonHost(
       ButtonVariant.Elevated ->
         ElevatedButton(
           onClick = onClick,
-          modifier = labelModifier.then(scaleModifier),
+          modifier = target,
           enabled = enabled,
           colors = colors,
           contentPadding = padding ?: ButtonDefaults.ContentPadding,
           content = content,
         )
     }
-  }
 }
 
 /** The Hybrid View React renders as `NitroUiButton`. */
