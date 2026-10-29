@@ -266,11 +266,12 @@ async function waitForMeasured(testId: string, what: string) {
 }
 
 /**
- * Poll until *this* mount reports a size, after one that replaced it.
+ * Poll until the control reports a size that could only have come from after the
+ * rerender.
  *
  * `waitForRemeasure` asks only that the number differ from the one before the
- * change, and a variant change is a remount (`Picker.tsx` keys the native view on
- * `variantKey`), so three answers that all mean "not done" can satisfy it: the new
+ * change. A variant change is a remount (`Picker.tsx` keys the native view on
+ * `variantKey`), and four answers that all mean "not done" satisfy it: the new
  * host has not measured yet (`measureContent()` is the host cache, 0 when empty),
  * the old host was dropped (`drop()` nils the cached size) while `handles` still
  * points at it - `hybridRef` fires only on the new view's first props batch - or
@@ -278,30 +279,37 @@ async function waitForMeasured(testId: string, what: string) {
  * previous size, and the box assertion below it compares a real box with nothing:
  * that is the `wheel=0.00x0.00` red X3 saw at load 35.6-57.2.
  *
- * So this wait is one only the live mount can answer - a handle that is neither
- * missing nor the one from before the rerender - and it refuses a zero, which is
- * absence and never a verdict. `waitForMeasured` already refused zero; it had just
- * never learned about the mount.
+ * So this refuses all four: no handle, a zero (absence, never a verdict), and the
+ * size from before the rerender (Android re-measures on the UI thread, so the old
+ * number is what the first frames answer with - the reason `waitForRemeasure`
+ * waits for a difference at all). `waitForMeasured` already refused zero; it had
+ * just never learned about the mount.
+ *
+ * The witness is the *size*, not the handle object. It cannot be the object: on
+ * iOS the same hybrid answers for both mounts of a keyed rerender (measured - the
+ * handle captured before the rerender is still what `handles` holds, reporting the
+ * new variant's 330.00x216.00), so requiring a different one fails a run that
+ * succeeded. Refusing a missing handle and a zero covers the dropped-old-host
+ * state, because a dropped host reports nothing but zero.
  */
 async function waitForFreshMeasure(
   testId: string,
-  stale: PickerHandle | undefined,
+  stale: Size | null,
   what: string,
   timeoutMs = 12000
 ): Promise<Size> {
   return await pollUntil(
     () => {
-      const handle = handles.get(testId);
-      if (handle == null || handle === stale) {
-        return null; // only the live mount may answer
-      }
-      const size = handle.measureContent();
-      return size.width > 0 && size.height > 0 ? size : null; // 0x0 is absence
+      const size = measured(testId);
+      if (size == null) return null; // no mount to ask yet
+      if (size.width <= 0 || size.height <= 0) return null; // 0x0 is absence
+      return stale != null && sameSize(size, stale) ? null : size;
     },
     () =>
       new Error(
-        `"${testId}" (${what}) never measured on its new mount - ` +
-          `measureContent() says ${describeSize(measured(testId))}, box ` +
+        `"${testId}" (${what}) never reported a size of its new mount - ` +
+          `measureContent() says ${describeSize(measured(testId))}, was ` +
+          `${describeSize(stale)} before the rerender, box ` +
           `${describeSize(sizeOf(testId))}.`
       ),
     timeoutMs
@@ -1731,9 +1739,9 @@ describe('Picker · G6', () => {
     expect(asMenu.width).not.toBeCloseTo(BOX.width, 0);
     await settle(200);
 
-    // The handle this mount leaves behind, so the wait after the rerender can
-    // refuse to let the dead one answer for the new one.
-    const staleWheel = handles.get('var-w');
+    // What this mount measures before the rerender, so the wait after it can
+    // refuse the pre-change number and a zero.
+    const staleWheel = asMenu;
     await rerender(
       <Picker
         options={OPTIONS}
@@ -1783,9 +1791,9 @@ describe('Picker · G6', () => {
     expect(Math.abs(asWheel.width - BOX.width) < 1).toBe(true);
     await settle(200);
 
-    // The handle this mount leaves behind, so the wait after the rerender can
-    // refuse to let the dead one answer for the new one.
-    const staleMenu = handles.get('var-m');
+    // What this mount measures before the rerender, so the wait after it can
+    // refuse the pre-change number and a zero.
+    const staleMenu = asWheel;
     await rerender(
       <Picker
         options={OPTIONS}
