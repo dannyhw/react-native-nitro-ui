@@ -1,0 +1,76 @@
+# Failure excerpt — harness:ios:Menu
+
+- Ran: 2026-10-29T03:35:55.590Z on code tree `08b11e8f36ce` at HEAD `530f88b` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Menu`
+- Result: fail, exit 1, 15398 ms
+- Load: start 7.57, end 7.79, median 7.79, max 7.79
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+ios+Menu-2026-10-29T03-35-55.590Z.log` (<store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-35-55.590Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › lays each configuration out at the size the control measured`
+- `expected 7 to be greater than or equal to 107`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-35-55.590Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.79 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Menu
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 08b11e8f36ce, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.57/6.43 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-35-55.590Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › lays each configuration out at the size the control measured
+
+    expected 7 to be greater than or equal to 107
+
+      [0m [90m 601 |[39m     [90m// pass that first measures it (Picker's shrink gate records that), a poisoned[39m
+       [90m 602 |[39m     [90m// entry is provisional and is laid out, so it has to be replaced.[39m
+      [31m[1m>[22m[39m[90m 603 |[39m     expect(cold[33m.[39mcorrections)[33m.[39mtoBeGreaterThanOrEqual(
+       [90m     |[39m                                                    [31m[1m^[22m[39m
+       [90m 604 |[39m       [33mVARIANTS[39m[33m.[39mlength [33m+[39m [33mTRIGGER_SIZES[39m[33m.[39mlength [33m+[39m [35m100[39m
+       [90m 605 |[39m     )[33m;[39m
+       [90m 606 |[39m   })[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 13 passed, 14 total
+Snapshots:   0 total
+Time:        14.556 s, estimated 25 s
+Ran all test suites matching Menu.
+
+
+
+```

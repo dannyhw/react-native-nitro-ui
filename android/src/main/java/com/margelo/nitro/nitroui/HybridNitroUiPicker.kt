@@ -919,8 +919,12 @@ private class PickerHost(
  * own frames never change and a layout listener on them would never fire. Above them is
  * the view Fabric moves when the control or its `<Host>` moves, and that is the frame
  * the anchor's screen box has to follow.
+ *
+ * `internal`, not `private`, because `HybridNitroUiMenu.kt` walks the same chain for
+ * the same reason. Two copies of "which ancestor does React Native place" is how two
+ * popup controls start disagreeing about where their own window should be.
  */
-private fun placedViewOf(start: View): View {
+internal fun placedViewOf(start: View): View {
   var view = start
   while (view.parent is View && isComposeView(view)) {
     view = view.parent as View
@@ -935,7 +939,7 @@ private fun placedViewOf(start: View): View {
  * that survives a refactor of the class hierarchy - and it is the prefix every view in
  * that chain carries, including the `AbstractComposeView` above it.
  */
-private fun isComposeView(view: View): Boolean =
+internal fun isComposeView(view: View): Boolean =
   view is AbstractComposeView ||
     view.javaClass.name.startsWith("androidx.compose.")
 

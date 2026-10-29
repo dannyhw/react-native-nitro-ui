@@ -1,0 +1,90 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-10-29T03:16:46.906Z on code tree `10b444e8351b` at HEAD `530f88b` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 38193 ms
+- Load: start 5.97, end 5.38, median 5.94, max 6.41
+- Device: android / device `emulator-5574` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+android+Menu-2026-10-29T03-16-46.906Z.log` (<store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-16-46.906Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › lays each configuration out at the size the control measured`
+- `● Menu · G7a › re-measures when the title changes (R3)`
+- `expected 1 to be greater than or equal to 2`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-16-46.906Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.38 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 10b444e8351b, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.97/6.39 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-16-46.906Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › lays each configuration out at the size the control measured
+
+    testID "cfg-filled" (cfg-filled) never reached 92.57x48.00 - last box 108.57x50.29, control measured 92.57x48.00.
+
+      [0m [90m 281 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 282 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 283 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 284 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 285 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 286 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+  ● Menu · G7a › re-measures when the title changes (R3)
+
+    expected 1 to be greater than or equal to 2
+
+      [0m [90m 703 |[39m     [90m// The list is not in the key, and the trigger is: the second title cost a[39m
+       [90m 704 |[39m     [90m// configuration of its own.[39m
+      [31m[1m>[22m[39m[90m 705 |[39m     expect(delta(before[33m,[39m stats())[33m.[39mcachedSizes)[33m.[39mtoBeGreaterThanOrEqual([35m2[39m)[33m;[39m
+       [90m     |[39m                                                                      [31m[1m^[22m[39m
+       [90m 706 |[39m     console[33m.[39mlog(
+       [90m 707 |[39m       [32m`title R3: short=${describeSize(shortSize)} long=${describeSize(longSize)}`[39m
+       [90m 708 |[39m     )[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 11 passed, 13 total
+Snapshots:   0 total
+Time:        37.341 s
+Ran all test suites matching Menu.
+
+
+
+```

@@ -1,0 +1,89 @@
+# Failure excerpt — harness:android:Menu:-t:opens%20once
+
+- Ran: 2026-10-29T05:59:57.278Z on code tree `d3ac5d7c66a9` at HEAD `cb7c2fa` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu -t opens once`
+- Result: fail, exit 1, 19771 ms
+- Load: start 4.49, end 4.48, median 4.49, max 4.61
+- Device: android / device `emulator-5574` / lease `G7a-424pv`
+- Full log: `task/G7a-menu/harness+android+Menu+-t+opens+20once-2026-10-29T05-59-57.018Z.log` (<store>/task/G7a-menu/harness+android+Menu+-t+opens+20once-2026-10-29T05-59-57.018Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › opens once, closes once, and pairs every open with a close`
+- `expected [ 'open:events', …(2) ] to deeply equal [ 'open:events', 'close:events', …(1) ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Menu+-t+opens+20once-2026-10-29T05-59-57.018Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-424pv (still live)
+  |   F2-3hxh8                 F2           both              pair-b
+  |   G7a-424pv                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.48 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:Menu:-t:opens%20once
+gate: node ../scripts/harness.mjs --harnessRunner android Menu -t opens once (cwd example)
+gate: code tree d3ac5d7c66a9 at HEAD cb7c2fa
+gate: git tree 73430241f807 with a DIRTY worktree (not reusable)
+gate: log task/G7a-menu/harness+android+Menu+-t+opens+20once-2026-10-29T05-59-57.018Z.log
+gate:       <store>/task/G7a-menu/harness+android+Menu+-t+opens+20once-2026-10-29T05-59-57.018Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu -t opens once
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree d3ac5d7c66a9, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.49/6.66 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android+Menu+-t+opens+20once-2026-10-29T05-59-57.018Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › opens once, closes once, and pairs every open with a close
+
+    expected [ 'open:events', …(2) ] to deeply equal [ 'open:events', 'close:events', …(1) ]
+
+      [0m [90m 1024 |[39m     [90m// `docs/components/menu.md` promises exactly this sequence: a listener that[39m
+       [90m 1025 |[39m     [90m// re-enables something on the pick never does it while the window is still up.[39m
+      [31m[1m>[22m[39m[90m 1026 |[39m     expect(orderLog)[33m.[39mtoEqual([
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 1027 |[39m       [32m'open:events'[39m[33m,[39m
+       [90m 1028 |[39m       [32m'close:events'[39m[33m,[39m
+       [90m 1029 |[39m       [32m'select:events:copy'[39m[33m,[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 skipped, 15 total
+Snapshots:   0 total
+Time:        18.766 s, estimated 33 s
+Ran all test suites matching Menu with tests matching "opens once".
+gate: harness:android:Menu:-t:opens%20once FAIL in 19.8 s
+gate: recorded in .gates/task/G7a-menu.jsonl
+
+
+gate: appended the device context to task/G7a-menu/harness+android+Menu+-t+opens+20once-2026-10-29T05-59-57.018Z.log (5 probe(s))
+
+```

@@ -16,20 +16,14 @@
 > and one more exclusive window. It was delegated once X3 and X9 had released their leases (this machine is a
 > dedicated spare: benches need an idle machine, not a time of day). Step 3 (X3) is merged, and so is X9.
 >
-> **0.3.2 staged on npm (2026-10-29, stage id `4642b5ea-5878-4442-a9d0-48f9b1b6ac01`)**: F3's three fixes.
-> **Waiting on the owner's approval** on npmjs.com (Staged Packages, or `npm stage approve <id>`); `Release tag`
-> then creates `v0.3.2`. X13 fixed the release lock refresh (json 2.18.0 pin); Version Packages PR #5 merged.
-> Pushes while it waits re-run **Stage on npm**; npm answers `E409 Cannot stage previously published
-> version`, which `c235180` taught the job to treat as already known (it went red once, on `d677dbd`).
+> **0.3.2 published (2026-10-29):** approved by the owner; `latest` is 0.3.2, and `v0.3.2` is tagged at `54dcaf5`
+> (the Version Packages commit) with its GitHub release. F3's three fixes are what it ships. `Stage on npm` treats
+> npm's `E409 Cannot stage previously published version` as already known (`c235180`).
 >
-> **G7a (Menu) is draft PR #7, waiting on three owner API rulings** (its body has the detail and recommendations):
-> (1) iOS `onOpen`/`onClose` never fire (SwiftUI `Menu` has no expansion binding) — accept as Android-only and amend D29?
-> (2) iOS `disabled` while open does not close the menu — accept and amend D29's third bullet?
-> (3) a pick fires `onClose` then `onSelect` — keep the pairing and amend Q1 §5?
-> Decided here (implementation, not API): (4) Android anchors with `menuAnchor`/`ExposedDropdownMenuBox`, accepted on
-> condition G7b commits a red run with a plain `DropdownMenu` and an upper-bound test; (5) mac-2 re-runs `harness:android`
-> on the merged tree: 232/232 green here (and `harness:ios` 182 + 1 skipped), so mac-1's Host-suite failures are
-> machine-specific. Merges once (1)–(3) are ruled, after `real-input:*` on the then-current merge tree.
+> **G7a (Menu) merged (2026-10-29, `41e30c5`, PR #7)** with the owner's D32 rulings; all five merge gates green on
+> maintainer-mac-2. Its minor changeset makes the next release **0.4.0**. Hold the Version Packages PR until G7b
+> (Menu's bench arm, real-input case, story) and X4 have landed, then release (sequencing call, D31). Whichever of
+> X4/G7b merges after the other must cover Menu in X4's conformance tables (`check` refuses an uncovered manifest).
 >
 > **Owner away from 2026-10-29 (autonomous):** mac-1 runs G7a, then F2 (`HANDOFF-mac1-2026-10-29.md`; F2 merged, PR #6), and
 > opens a PR per task. mac-2 runs F1, X13 and X4, and merges mac-1's PRs after re-running gates here
@@ -41,7 +35,10 @@
 > **F1 merged (2026-10-29, `2d58ca6`):** `real-input:ios` is green on this machine again (tap-delivery witness,
 > retry counts in every gate log). Its dwell probe found a product bug: a hosted Switch on the busy Switch screen
 > drops presses shorter than ~0.1 s (a human tap), while RN's `Pressable` takes them; **F7** (`F7-quick-tap.md`) owns
-> it. The suite presses for 0.15 s meanwhile. Next device task: **X4**.
+> it. The suite presses for 0.15 s meanwhile. **X4 and F7 started 2026-10-29 from `3dfe041`**, one device pair each
+> (worktrees `nitro-ui-worktrees/X4`, `/F7`). **F7 merged** the same day: the drop is RN-level, not ours (FOLLOWUPS F7);
+> a real-device thumb check is the open item. X4 is in fix round 1. G7b brief written; offered to mac-1
+> (`HANDOFF-mac1-2026-10-29-g7b.md`), otherwise it runs here when a pair frees.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure

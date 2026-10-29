@@ -1,0 +1,141 @@
+# Failure excerpt — harness:ios:Menu
+
+- Ran: 2026-10-29T03:23:15.035Z on code tree `c0be3535e64b` at HEAD `530f88b` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Menu`
+- Result: fail, exit 1, 14207 ms
+- Load: start 7.80, end 8.85, median 8.32, max 8.85
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+ios+Menu-2026-10-29T03-23-15.035Z.log` (<store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-23-15.035Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › opens once, closes once, and pairs every open with a close`
+- `expected false to be null`
+- `● Menu · G7a › closes when it is disabled while the menu is open`
+- `● Menu · G7a › leaves nothing behind when a Menu with an open menu is dropped`
+- `● Menu · G7a › carries no old state across a remount`
+- `● Menu · inside a Host › opens under its own button, and follows it when the Host moves`
+- `● Menu · inside a Host › comes down when its hosted child leaves the Host`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-23-15.035Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.85 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 93 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Menu
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree c0be3535e64b, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.80/6.71 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-23-15.035Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › opens once, closes once, and pairs every open with a close
+
+    expected false to be null
+
+      [0m [90m 177 |[39m [90m/** `-1` for every geometry field, which is what iOS answers and what iOS asserts. */[39m
+       [90m 178 |[39m [36mfunction[39m expectUnanswerable(current[33m:[39m [33mMenuReport[39m)[33m:[39m [36mvoid[39m {
+      [31m[1m>[22m[39m[90m 179 |[39m   expect(current[33m.[39mexpanded)[33m.[39mtoBeNull()[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 180 |[39m   expect(current[33m.[39mlive)[33m.[39mtoBeNull()[33m;[39m
+       [90m 181 |[39m   expect(current[33m.[39manchor)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 182 |[39m   expect(current[33m.[39mmenu)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m[0m
+
+  ● Menu · G7a › closes when it is disabled while the menu is open
+
+    expected false to be null
+
+      [0m [90m 177 |[39m [90m/** `-1` for every geometry field, which is what iOS answers and what iOS asserts. */[39m
+       [90m 178 |[39m [36mfunction[39m expectUnanswerable(current[33m:[39m [33mMenuReport[39m)[33m:[39m [36mvoid[39m {
+      [31m[1m>[22m[39m[90m 179 |[39m   expect(current[33m.[39mexpanded)[33m.[39mtoBeNull()[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 180 |[39m   expect(current[33m.[39mlive)[33m.[39mtoBeNull()[33m;[39m
+       [90m 181 |[39m   expect(current[33m.[39manchor)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 182 |[39m   expect(current[33m.[39mmenu)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m[0m
+
+  ● Menu · G7a › leaves nothing behind when a Menu with an open menu is dropped
+
+    expected false to be null
+
+      [0m [90m 177 |[39m [90m/** `-1` for every geometry field, which is what iOS answers and what iOS asserts. */[39m
+       [90m 178 |[39m [36mfunction[39m expectUnanswerable(current[33m:[39m [33mMenuReport[39m)[33m:[39m [36mvoid[39m {
+      [31m[1m>[22m[39m[90m 179 |[39m   expect(current[33m.[39mexpanded)[33m.[39mtoBeNull()[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 180 |[39m   expect(current[33m.[39mlive)[33m.[39mtoBeNull()[33m;[39m
+       [90m 181 |[39m   expect(current[33m.[39manchor)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 182 |[39m   expect(current[33m.[39mmenu)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m[0m
+
+  ● Menu · G7a › carries no old state across a remount
+
+    expected false to be null
+
+      [0m [90m 177 |[39m [90m/** `-1` for every geometry field, which is what iOS answers and what iOS asserts. */[39m
+       [90m 178 |[39m [36mfunction[39m expectUnanswerable(current[33m:[39m [33mMenuReport[39m)[33m:[39m [36mvoid[39m {
+      [31m[1m>[22m[39m[90m 179 |[39m   expect(current[33m.[39mexpanded)[33m.[39mtoBeNull()[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 180 |[39m   expect(current[33m.[39mlive)[33m.[39mtoBeNull()[33m;[39m
+       [90m 181 |[39m   expect(current[33m.[39manchor)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 182 |[39m   expect(current[33m.[39mmenu)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m[0m
+
+  ● Menu · inside a Host › opens under its own button, and follows it when the Host moves
+
+    expected false to be null
+
+      [0m [90m 177 |[39m [90m/** `-1` for every geometry field, which is what iOS answers and what iOS asserts. */[39m
+       [90m 178 |[39m [36mfunction[39m expectUnanswerable(current[33m:[39m [33mMenuReport[39m)[33m:[39m [36mvoid[39m {
+      [31m[1m>[22m[39m[90m 179 |[39m   expect(current[33m.[39mexpanded)[33m.[39mtoBeNull()[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 180 |[39m   expect(current[33m.[39mlive)[33m.[39mtoBeNull()[33m;[39m
+       [90m 181 |[39m   expect(current[33m.[39manchor)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 182 |[39m   expect(current[33m.[39mmenu)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m[0m
+
+  ● Menu · inside a Host › comes down when its hosted child leaves the Host
+
+    expected false to be null
+
+      [0m [90m 177 |[39m [90m/** `-1` for every geometry field, which is what iOS answers and what iOS asserts. */[39m
+       [90m 178 |[39m [36mfunction[39m expectUnanswerable(current[33m:[39m [33mMenuReport[39m)[33m:[39m [36mvoid[39m {
+      [31m[1m>[22m[39m[90m 179 |[39m   expect(current[33m.[39mexpanded)[33m.[39mtoBeNull()[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 180 |[39m   expect(current[33m.[39mlive)[33m.[39mtoBeNull()[33m;[39m
+       [90m 181 |[39m   expect(current[33m.[39manchor)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 182 |[39m   expect(current[33m.[39mmenu)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       6 failed, 7 passed, 13 total
+Snapshots:   0 total
+Time:        12.663 s, estimated 14 s
+Ran all test suites matching Menu.
+
+
+
+```

@@ -1,0 +1,68 @@
+[
+  {
+    "cell": "native-uikit-switch-200",
+    "label": "no RN, no SwiftUI: UIScrollView at UIKit defaults, 200 UISwitches",
+    "delivered": 12,
+    "taps": 12,
+    "control": 3,
+    "controlTaps": 3,
+    "variant": "?",
+    "load1": 2.66,
+    "status": 1
+  },
+  {
+    "cell": "native-uikit-switch-rn-200",
+    "label": "no RN, no SwiftUI: same, RN's scroll configuration",
+    "delivered": 12,
+    "taps": 12,
+    "control": 3,
+    "controlTaps": 3,
+    "variant": "?",
+    "load1": 3.38,
+    "status": 0
+  },
+  {
+    "cell": "rn-nolookup-hosted",
+    "label": "busy screen, hosted Switch, no per-press lookup",
+    "delivered": 0,
+    "taps": 12,
+    "control": 12,
+    "controlTaps": 12,
+    "variant": "0",
+    "load1": 9.1,
+    "status": 0
+  },
+  {
+    "cell": "rn-lookup-hosted",
+    "label": "busy screen, hosted Switch, pressed through its element (XCTest resolves it per press)",
+    "delivered": 1,
+    "taps": 12,
+    "control": 12,
+    "controlTaps": 12,
+    "variant": "0",
+    "load1": 6.08,
+    "status": 0
+  },
+  {
+    "cell": "rn-nolookup-rn-switch",
+    "label": "busy screen, RN's own Switch, no per-press lookup",
+    "delivered": 0,
+    "taps": 12,
+    "control": 12,
+    "controlTaps": 12,
+    "variant": "0",
+    "load1": 5.79,
+    "status": 0
+  },
+  {
+    "cell": "rn-nolookup-hosted-noquiescence",
+    "label": "busy screen, hosted Switch, no per-press lookup, XCTest idle-wait disabled",
+    "delivered": 1,
+    "taps": 12,
+    "control": 12,
+    "controlTaps": 12,
+    "variant": "0",
+    "load1": 4.74,
+    "status": 0
+  }
+]

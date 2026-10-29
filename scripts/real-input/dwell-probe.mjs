@@ -46,6 +46,15 @@ const SCHEME = 'NitroUiExampleUITests';
 const TEST_CLASS = 'RealInputTests';
 const PROBE = 'testMeasureSwitchDwellDelivery';
 const BUNDLE_ID = 'nitroui.example';
+/**
+ * The one line in the example that decides whether the Switch screen mounts the
+ * probe's witnesses at all. Committed `false`, and owned by this file: the rows it
+ * adds sit above the shipped content and move every frame below them, which is
+ * enough to fail a geometry check in the real-input suite that has nothing to do
+ * with dwell. So the probe borrows them for the length of a run and gives them
+ * back, the same way it borrows and restores the JS location.
+ */
+const PROBE_CONTROLS_FILE = 'example/src/probeVariant.ts';
 
 const args = process.argv.slice(2);
 
@@ -68,6 +77,87 @@ const TAPS = Number(flag('--taps', '12'));
 const TARGET = flag('--target', 'switch-uncontrolled');
 const TAB = flag('--tab', 'tab-switch');
 const ANCHOR = flag('--anchor', 'switch-controlled-value');
+/**
+ * What counts as "delivered". `native` (the default, and F1's shape) reads the
+ * control's own accessibility `value:`, which only a control that publishes one
+ * has. `echo:<testID>` reads a rendered text instead, for the controls that do
+ * not - a Button's press count, a SegmentedControl's event count. It is the
+ * weaker witness: it cannot tell a dropped touch from a lost event, so an echo
+ * row is read next to the same launch's `js-toggle` row, not on its own.
+ */
+const WITNESS = flag('--witness', 'native');
+/** Free text naming the shape of the app this cell measured, carried into the log. */
+const LABEL = flag('--label', '');
+/**
+ * Reuse the binary in `example/ios/build` instead of compiling: for a probe whose
+ * variants differ only in JS, which comes from Metro, the compile would rebuild
+ * the same native code once per cell. Nothing is stamped in this mode, so the
+ * binary's own stamp keeps naming the tree it was really built from.
+ */
+const SKIP_BUILD = args.includes('--skip-build');
+/**
+ * Where across the control to press, cycled one press per entry. For a segmented
+ * control, whose binding reports nothing when the same segment is chosen twice.
+ */
+const FRACTIONS = flag('--fractions', '');
+/** The no-React-Native arm: a shape from `NitroUiProbe.swift`, and its row count. */
+const PROBE_UI = flag('--probe-ui', '');
+const PROBE_ROWS = flag('--rows', '200');
+/**
+ * For the no-React-Native arm: hold its main thread for this many milliseconds on
+ * every run-loop pass, so the arm can be asked whether a busy main thread alone is
+ * enough to lose a short press.
+ */
+const PROBE_STALL = flag('--stall', '');
+/**
+ * For the no-React-Native arm: attach a tap recogniser to every row's hosting view
+ * and publish how often one fires, which is how the arm tests whether a library-side
+ * recogniser could rescue a short press at all.
+ */
+const PROBE_RESCUE = args.includes('--rescue');
+/**
+ * Have the app log every main-queue delay of 8 ms or more, one line each, for the arm
+ * that wants to know whether the React Native screen really does block for the length
+ * the stall arm had to set by hand to lose a press.
+ *
+ * What the lines are is worth being exact about, because a summary of them is not the
+ * quantity its name suggests: a block that lasts 400 ms has a 20 ms timer waiting
+ * behind it, so it produces roughly twenty logged gaps of decreasing size, and the
+ * median of the logged lines is the median *of those samples*, not the app's typical
+ * main-queue latency. Two screens with the same typical block but different block
+ * frequency therefore print different medians for reasons that have nothing to do with
+ * either one. `--watchdog` is good at answering "does this process ever block at all,
+ * and how badly at its worst"; it is not a latency histogram, and the F7 report's
+ * comparison of two medians is the mistake this comment exists to prevent repeating.
+ */
+const WATCHDOG = args.includes('--watchdog');
+/**
+ * F7 measurement (a): press a fixed screen point and read the witness once at the end,
+ * with no accessibility lookup of the target between presses.
+ *
+ * Every iOS number F7 first reported came from a loop that resolved the control by
+ * identifier before each press — an accessibility query answered on the app's main
+ * thread over a two-hundred-control tree — and XCTest also waits for the app to go idle
+ * before it posts an event (`-[XCUIApplication _waitForQuiescenceAsPreEvent:]`, in
+ * `XCUIAutomation.framework`). So the measurements never separated "a 50 ms press is
+ * lost" from "the harness put load on the app's main thread right before pressing it,
+ * then waited for it to settle". This flag is the arm that separates them, and until it
+ * is measured, "an XCUITest artefact" is not ruled out.
+ */
+const NO_LOOKUP = args.includes('--no-lookup');
+/**
+ * With `--no-lookup`: additionally ask XCTest not to wait for the app to be idle around
+ * each event, through the private interaction option that does it. Used to price the
+ * idle wait itself once the lookups are out of the way.
+ */
+const SKIP_QUIESCENCE = args.includes('--skip-quiescence');
+/**
+ * Read the witness twice instead of polling it: press, then read once. For the
+ * case where the concern is that the probe's own accessibility traffic into a busy
+ * app is what disturbs the answer. Needs a counting witness to say how many
+ * presses landed rather than merely whether any did.
+ */
+const QUIET = args.includes('--quiet');
 const DWELLS = flag('--dwells', '0,0.03,0.05,0.08,0.12,0.15')
   .split(',')
   .map((value) => Number(value.trim()))
@@ -86,6 +176,48 @@ function iosDir() {
     path.dirname(new URL(import.meta.url).pathname),
     '../../example/ios'
   );
+}
+
+/**
+ * Mounts the probe's witnesses on the Switch screen for the length of this run and
+ * returns the function that takes them back down.
+ *
+ * `SWITCH_SCREEN_PROBE_CONTROLS` is committed `false` because those rows sit above
+ * the shipped content and shift every frame below them; the real-input suite
+ * compares a control's frame before and after a tap, and F7's first gate run failed
+ * that pre-existing check on a hosted Switch whose height was reported as
+ * `28.000015258789062` on one read and `28.0` on the next. The probe has to press
+ * those witnesses and read them, and it is the only thing that may have them: so it
+ * borrows them, and puts them back in the same `finally` that restores the JS
+ * location. If this ever fails to restore — a Ctrl-C mid-run — `git diff` on that
+ * one line is the evidence and `git checkout` the fix.
+ *
+ * @returns {() => void}
+ */
+function mountProbeControls() {
+  const file = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '../..',
+    PROBE_CONTROLS_FILE
+  );
+  const original = fs.readFileSync(file, 'utf8');
+  const declaration =
+    /export const SWITCH_SCREEN_PROBE_CONTROLS = (true|false);/;
+  if (!declaration.test(original)) {
+    throw new Error(
+      `dwell-probe: ${PROBE_CONTROLS_FILE} has no ` +
+        'SWITCH_SCREEN_PROBE_CONTROLS to set, so the probe would press witnesses ' +
+        'the screen does not render.'
+    );
+  }
+  fs.writeFileSync(
+    file,
+    original.replace(
+      declaration,
+      'export const SWITCH_SCREEN_PROBE_CONTROLS = true;'
+    )
+  );
+  return () => fs.writeFileSync(file, original);
 }
 
 /**
@@ -205,34 +337,54 @@ async function main() {
     port: metroPort,
     logFile: path.join(out, 'metro.log'),
   });
+  // Assigned once the binary is stamped; see `mountProbeControls` for why the
+  // borrow cannot start earlier than that. A no-op default so the `finally` below
+  // always has something safe to call, including on a path that throws before the
+  // assignment.
+  let unmountProbeControls = () => {};
   try {
     const settings = [
       'CODE_SIGNING_ALLOWED=NO',
       ...iosModuleCacheArgs({ derivedData: derived, ccache: false }),
     ];
-    const buildLog = path.join(out, 'dwell-probe-build.log');
-    console.log(`dwell-probe: building (log: ${buildLog})`);
-    const built = await xcodebuild(
-      [
-        'build-for-testing',
-        '-workspace',
-        WORKSPACE,
-        '-scheme',
-        SCHEME,
-        '-configuration',
-        'Debug',
-        '-destination',
-        `platform=iOS Simulator,id=${udid}`,
-        '-derivedDataPath',
-        derived,
-        ...settings,
-      ],
-      buildLog,
-      {}
+    const app = path.join(
+      derived,
+      'Build/Products/Debug-iphonesimulator/NitroUiExample.app'
     );
-    if (built !== 0) {
-      throw new Error(
-        `dwell-probe: build-for-testing failed (${String(built)})`
+    if (!SKIP_BUILD) {
+      const buildLog = path.join(out, 'dwell-probe-build.log');
+      console.log(`dwell-probe: building (log: ${buildLog})`);
+      const built = await xcodebuild(
+        [
+          'build-for-testing',
+          '-workspace',
+          WORKSPACE,
+          '-scheme',
+          SCHEME,
+          '-configuration',
+          'Debug',
+          '-destination',
+          `platform=iOS Simulator,id=${udid}`,
+          '-derivedDataPath',
+          derived,
+          ...settings,
+        ],
+        buildLog,
+        {}
+      );
+      if (built !== 0) {
+        throw new Error(
+          `dwell-probe: build-for-testing failed (${String(built)})`
+        );
+      }
+    } else {
+      // The variants of a JS-only matrix differ in what Metro serves, not in the
+      // binary, so the compile would produce the same one every cell. The stamp
+      // written by the build that *did* run still says which tree it came from,
+      // and this mode deliberately does not overwrite it with a newer tree.
+      console.log(
+        'dwell-probe: --skip-build reusing ' +
+          `${app}; no stamp is written by this run.`
       );
     }
 
@@ -240,16 +392,14 @@ async function main() {
     // does this: the probe drives the same binary the gate does. Same stamp guard,
     // because it compiles into the same derived data - the next harness run has to
     // be able to tell that this binary came from this tree.
-    const app = path.join(
-      derived,
-      'Build/Products/Debug-iphonesimulator/NitroUiExample.app'
-    );
-    recordBuild({
-      platform: 'ios',
-      artifact: app,
-      treeBefore,
-      log: (message) => console.log(`  ${message}`),
-    });
+    if (!SKIP_BUILD) {
+      recordBuild({
+        platform: 'ios',
+        artifact: app,
+        treeBefore,
+        log: (message) => console.log(`  ${message}`),
+      });
+    }
     const installed = run('xcrun', ['simctl', 'install', udid, app]);
     if (installed.status !== 0) {
       throw new Error(
@@ -262,6 +412,17 @@ async function main() {
     // Without this the app asks Metro on 8081, renders nothing, and every probe
     // question times out on `tab-switch` - which would read as a dropped touch and
     // is really an empty app.
+    // Borrowed here rather than at the top of `main`, next to `setJsLocation`,
+    // because that is where the probe stops caring which sources produced the
+    // binary and starts caring only about what Metro serves: this flag changes the
+    // React tree the app renders and nothing in the compiled target, so flipping it
+    // before the compile made the tree differ between the two `currentCodeTree()`
+    // readings that bracket the build, and `recordBuild` refused to stamp a binary
+    // it believed had been edited mid-compile — "Run the build again with nothing
+    // else writing to the tree", from the script that was itself the something
+    // else. The stamp it refuses to write is the next gate run's proof about this
+    // app, so the borrow has to begin after the stamp is written.
+    unmountProbeControls = mountProbeControls();
     setJsLocation(udid, metroPort);
 
     /** @type {Array<Record<string, number>>} */
@@ -271,7 +432,10 @@ async function main() {
       console.log(
         `\ndwell-probe: dwell ${dwell.toFixed(2)}s · ${String(TAPS)} taps · load1 ${at.toFixed(2)}`
       );
-      const logFile = path.join(out, `dwell-probe-${dwell.toFixed(2)}.log`);
+      const logFile = path.join(
+        out,
+        `dwell-probe-${LABEL.replace(/[^a-zA-Z0-9._-]/g, '_') || 'cell'}-${dwell.toFixed(2)}.log`
+      );
       const status = await xcodebuild(
         [
           'test-without-building',
@@ -300,6 +464,27 @@ async function main() {
           TEST_RUNNER_NUI_PROBE_TARGET: TARGET,
           TEST_RUNNER_NUI_PROBE_TAB: TAB,
           TEST_RUNNER_NUI_PROBE_ANCHOR: ANCHOR,
+          TEST_RUNNER_NUI_PROBE_WITNESS: WITNESS,
+          TEST_RUNNER_NUI_PROBE_LABEL: LABEL,
+          TEST_RUNNER_NUI_PROBE_FRACTIONS: FRACTIONS,
+          ...(QUIET ? { TEST_RUNNER_NUI_PROBE_QUIET: '1' } : {}),
+          // Only this arm of the probe builds a window with no React Native in
+          // it; an empty value leaves the app's own launch untouched.
+          ...(PROBE_UI === ''
+            ? {}
+            : {
+                TEST_RUNNER_NUI_PROBE_UI: PROBE_UI,
+                TEST_RUNNER_NUI_PROBE_ROWS: PROBE_ROWS,
+                ...(PROBE_STALL === ''
+                  ? {}
+                  : { TEST_RUNNER_NUI_PROBE_STALL: PROBE_STALL }),
+                ...(PROBE_RESCUE ? { TEST_RUNNER_NUI_PROBE_RESCUE: '1' } : {}),
+              }),
+          ...(WATCHDOG ? { TEST_RUNNER_NUI_PROBE_WATCHDOG: '1' } : {}),
+          ...(NO_LOOKUP ? { TEST_RUNNER_NUI_PROBE_NO_LOOKUP: '1' } : {}),
+          ...(SKIP_QUIESCENCE
+            ? { TEST_RUNNER_NUI_PROBE_SKIP_QUIESCENCE: '1' }
+            : {}),
         }
       );
       const log = fs.readFileSync(logFile, 'utf8');
@@ -317,6 +502,24 @@ async function main() {
         taps: result.taps,
         jsToggle: result.control,
         jsToggleTaps: result.controlTaps,
+        // The rest of what this cell was. A row of numbers with no shape attached is
+        // how a wrong-witness cell survived into a table: `delivered: 0` from a cell
+        // that had pressed a UIButton while counting Toggles is indistinguishable, in
+        // the file, from a real drop, and the JSON outlives whoever typed the command.
+        // The variant is read back from the line the app itself prints rather than from
+        // what this run meant to ask, so a cell whose JS was not the one requested can
+        // still be thrown out.
+        target: TARGET,
+        witness: WITNESS,
+        quiet: QUIET,
+        label: LABEL,
+        arm: PROBE_UI === '' ? 'rn' : 'no-rn',
+        probeUi: PROBE_UI === '' ? null : PROBE_UI,
+        rows: PROBE_UI === '' ? null : Number(PROBE_ROWS),
+        stallMs: PROBE_STALL === '' ? null : Number(PROBE_STALL),
+        rescue: PROBE_RESCUE,
+        watchdog: WATCHDOG,
+        variant: /probe variant-(\d+)/.exec(log)?.[1] ?? null,
       });
       console.log(
         `dwell-probe:   switch ${String(result.delivered)}/${String(result.taps)} · js-toggle ` +
@@ -347,6 +550,7 @@ async function main() {
     }
   } finally {
     clearJsLocation(udid);
+    unmountProbeControls();
     stopMetro();
   }
   return 0;

@@ -1,0 +1,76 @@
+# Failure excerpt — harness:ios:Menu
+
+- Ran: 2026-10-29T03:24:45.309Z on code tree `148b073ac2d9` at HEAD `530f88b` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Menu`
+- Result: fail, exit 1, 17233 ms
+- Load: start 8.50, end 8.10, median 8.10, max 8.50
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+ios+Menu-2026-10-29T03-24-45.309Z.log` (<store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-24-45.309Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › reports one onSelect per pick and nothing for a row that cannot be picked`
+- `expected [ 'pick:paste' ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-24-45.309Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.10 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Menu
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 148b073ac2d9, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.50/7.26 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+ios+Menu-2026-10-29T03-24-45.309Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › reports one onSelect per pick and nothing for a row that cannot be picked
+
+    expected [ 'pick:paste' ] to deeply equal []
+
+      [0m [90m 772 |[39m     [36mawait[39m pickRow([32m'pick'[39m[33m,[39m [32m'share'[39m)[33m;[39m
+       [90m 773 |[39m     [36mawait[39m pickRow([32m'pick'[39m[33m,[39m [32m'no-such-row'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 774 |[39m     expect(selectLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                              [31m[1m^[22m[39m
+       [90m 775 |[39m
+       [90m 776 |[39m     [90m// The barrier: the twin answers, so an empty log above was a refusal.[39m
+       [90m 777 |[39m     [36mawait[39m pickRow([32m'twin'[39m[33m,[39m [32m'copy'[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 12 passed, 13 total
+Snapshots:   0 total
+Time:        15.655 s
+Ran all test suites matching Menu.
+
+
+
+```

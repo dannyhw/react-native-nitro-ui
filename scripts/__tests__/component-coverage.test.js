@@ -173,12 +173,22 @@ describe('every bench component is implemented by every arm', () => {
     // The nitro-ui-host arm refuses anything outside its `components` list, and the
     // plan may only ask for what the arm accepts. Both sides come from the manifests
     // now, so the pair has to be compared once.
-    const hostable = manifests.filter((m) => m.hostable === true);
+    //
+    // `hostable` alone is not that set: it means "a `<Host>` composes this control",
+    // and is read by `HostChildren.ts` and guarded by `src/__tests__/host.test.tsx`.
+    // What the *arm* is scheduled for is hostable *and* benched - the same rule
+    // `hostArm()` in scripts/registry-core.mjs uses to fill the two
+    // `host-arm-components` regions. A control can be one without the other: G7a's
+    // Menu is hostable with `bench: false` (its bench arm is G7b), so the plan never
+    // asks the host arm for a Menu cell and the arm has no `menu` branch to be missing.
+    const hostArm = manifests.filter(
+      (m) => m.hostable === true && m.bench === true
+    );
     expect(
       missingFrom(
         readRepo('bench/src/implementations/nitroUi.tsx'),
         mentionsId,
-        hostable
+        hostArm
       )
     ).toEqual([]);
   });

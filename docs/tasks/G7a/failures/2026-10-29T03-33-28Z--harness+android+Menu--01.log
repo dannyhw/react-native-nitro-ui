@@ -1,0 +1,91 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-10-29T03:33:28.696Z on code tree `19c9baa7b076` at HEAD `530f88b` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 30038 ms
+- Load: start 5.89, end 5.86, median 5.87, max 6.47
+- Device: android / device `emulator-5574` / lease `G7a-wpvyy`
+- Full log: `task/G7a-menu/harness+android+Menu-2026-10-29T03-33-28.696Z.log` (<store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-33-28.696Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › keeps the trigger when only the list changes`
+- `expected 1 to be +0 // Object.is equality`
+- `● Menu · G7a › relays the rows when the group changes while it is open`
+- `expected false to be true // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-33-28.696Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-wpvyy (still live)
+  |   G7a-wpvyy                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.19 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 19c9baa7b076, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.22/5.90 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android+Menu-2026-10-29T03-33-28.696Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › keeps the trigger when only the list changes
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 651 |[39m     [90m// Zero new configurations: the key did not change, so the engine was never[39m
+       [90m 652 |[39m     [90m// asked about this menu again...[39m
+      [31m[1m>[22m[39m[90m 653 |[39m     expect(after[33m.[39mcachedSizes)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                                   [31m[1m^[22m[39m
+       [90m 654 |[39m     [90m// ...and nothing had to chase a box that never moved.[39m
+       [90m 655 |[39m     expect(after[33m.[39mcorrections)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m 656 |[39m[0m
+
+  ● Menu · G7a › relays the rows when the group changes while it is open
+
+    expected false to be true // Object.is equality
+
+      [0m [90m 1091 |[39m     [90m// The same window, not a new one: the menu did not close and reopen to change[39m
+       [90m 1092 |[39m     [90m// its contents, so the press that opened it still stands.[39m
+      [31m[1m>[22m[39m[90m 1093 |[39m     expect(shrunk[33m.[39mexpanded)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m      |[39m                                 [31m[1m^[22m[39m
+       [90m 1094 |[39m     expect(shrunk[33m.[39mlive)[33m.[39mtoBe(liveBefore [33m+[39m [35m1[39m)[33m;[39m
+       [90m 1095 |[39m     [90m// And the new list is the live one: `first` exists only in the shrunk group.[39m
+       [90m 1096 |[39m     [36mawait[39m pickRow([32m'shrink'[39m[33m,[39m [32m'first'[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 12 passed, 14 total
+Snapshots:   0 total
+Time:        29.142 s
+Ran all test suites matching Menu.
+
+
+
+```

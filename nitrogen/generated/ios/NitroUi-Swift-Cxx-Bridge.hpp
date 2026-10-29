@@ -14,6 +14,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiDatePickerSpec; }
 // Forward declaration of `HybridNitroUiHostSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiHostSpec; }
+// Forward declaration of `HybridNitroUiMenuSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiMenuSpec; }
 // Forward declaration of `HybridNitroUiPickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiPickerSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
@@ -28,6 +30,10 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
 // Forward declaration of `NitroUiDatePickerSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiDatePickerSize; }
+// Forward declaration of `NitroUiMenuRow` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiMenuRow; }
+// Forward declaration of `NitroUiMenuSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiMenuSize; }
 // Forward declaration of `NitroUiPickerSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiPickerSize; }
 // Forward declaration of `NitroUiSegmentedControlSize` to properly resolve imports.
@@ -44,6 +50,8 @@ namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
 namespace NitroUi { class HybridNitroUiDatePickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiHostSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiHostSpec_cxx; }
+// Forward declaration of `HybridNitroUiMenuSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiMenuSpec_cxx; }
 // Forward declaration of `HybridNitroUiPickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiPickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
@@ -59,6 +67,7 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 #include "HybridNitroUiButtonSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
 #include "HybridNitroUiHostSpec.hpp"
+#include "HybridNitroUiMenuSpec.hpp"
 #include "HybridNitroUiPickerSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
@@ -66,6 +75,8 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "NitroUiButtonSize.hpp"
 #include "NitroUiDatePickerSize.hpp"
+#include "NitroUiMenuRow.hpp"
+#include "NitroUiMenuSize.hpp"
 #include "NitroUiPickerSize.hpp"
 #include "NitroUiSegmentedControlSize.hpp"
 #include "NitroUiSize.hpp"
@@ -289,6 +300,90 @@ namespace margelo::nitro::nitroui::bridge::swift {
   // pragma MARK: std::weak_ptr<HybridNitroUiHostSpec>
   using std__weak_ptr_HybridNitroUiHostSpec_ = std::weak_ptr<HybridNitroUiHostSpec>;
   inline std__weak_ptr_HybridNitroUiHostSpec_ weakify_std__shared_ptr_HybridNitroUiHostSpec_(const std::shared_ptr<HybridNitroUiHostSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: std::optional<std::variant<nitro::NullType, std::string>>
+  /**
+   * Specialized version of `std::optional<std::variant<nitro::NullType, std::string>>`.
+   */
+  using std__optional_std__variant_nitro__NullType__std__string__ = std::optional<std::variant<nitro::NullType, std::string>>;
+  inline std::optional<std::variant<nitro::NullType, std::string>> create_std__optional_std__variant_nitro__NullType__std__string__(const std::variant<nitro::NullType, std::string>& value) noexcept {
+    return std::optional<std::variant<nitro::NullType, std::string>>(value);
+  }
+  inline bool has_value_std__optional_std__variant_nitro__NullType__std__string__(const std::optional<std::variant<nitro::NullType, std::string>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::variant<nitro::NullType, std::string> get_std__optional_std__variant_nitro__NullType__std__string__(const std::optional<std::variant<nitro::NullType, std::string>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::vector<NitroUiMenuRow>
+  /**
+   * Specialized version of `std::vector<NitroUiMenuRow>`.
+   */
+  using std__vector_NitroUiMenuRow_ = std::vector<NitroUiMenuRow>;
+  inline std::vector<NitroUiMenuRow> create_std__vector_NitroUiMenuRow_(size_t size) noexcept {
+    std::vector<NitroUiMenuRow> vector;
+    vector.reserve(size);
+    return vector;
+  }
+  
+  // pragma MARK: std::function<void(const std::string& /* id */)>
+  /**
+   * Specialized version of `std::function<void(const std::string&)>`.
+   */
+  using Func_void_std__string = std::function<void(const std::string& /* id */)>;
+  /**
+   * Wrapper class for a `std::function<void(const std::string& / * id * /)>`, this can be used from Swift.
+   */
+  class Func_void_std__string_Wrapper final {
+  public:
+    explicit Func_void_std__string_Wrapper(std::function<void(const std::string& /* id */)>&& func): _function(std::make_unique<std::function<void(const std::string& /* id */)>>(std::move(func))) {}
+    inline void call(std::string id) const noexcept {
+      _function->operator()(id);
+    }
+  private:
+    std::unique_ptr<std::function<void(const std::string& /* id */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_std__string_Wrapper wrap_Func_void_std__string(Func_void_std__string value) noexcept {
+    return Func_void_std__string_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(const std::string& /* id */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(const std::string& / * id * /)>>`.
+   */
+  using std__optional_std__function_void_const_std__string_____id______ = std::optional<std::function<void(const std::string& /* id */)>>;
+  inline std::optional<std::function<void(const std::string& /* id */)>> create_std__optional_std__function_void_const_std__string_____id______(const std::function<void(const std::string& /* id */)>& value) noexcept {
+    return std::optional<std::function<void(const std::string& /* id */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_const_std__string_____id______(const std::optional<std::function<void(const std::string& /* id */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(const std::string& /* id */)> get_std__optional_std__function_void_const_std__string_____id______(const std::optional<std::function<void(const std::string& /* id */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiMenuSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiMenuSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiMenuSpec_ = std::shared_ptr<HybridNitroUiMenuSpec>;
+  std::shared_ptr<HybridNitroUiMenuSpec> create_std__shared_ptr_HybridNitroUiMenuSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiMenuSpec_(std__shared_ptr_HybridNitroUiMenuSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiMenuSpec>
+  using std__weak_ptr_HybridNitroUiMenuSpec_ = std::weak_ptr<HybridNitroUiMenuSpec>;
+  inline std__weak_ptr_HybridNitroUiMenuSpec_ weakify_std__shared_ptr_HybridNitroUiMenuSpec_(const std::shared_ptr<HybridNitroUiMenuSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiMenuSize>
+  using Result_NitroUiMenuSize_ = Result<NitroUiMenuSize>;
+  inline Result_NitroUiMenuSize_ create_Result_NitroUiMenuSize_(const NitroUiMenuSize& value) noexcept {
+    return Result<NitroUiMenuSize>::withValue(value);
+  }
+  inline Result_NitroUiMenuSize_ create_Result_NitroUiMenuSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiMenuSize>::withError(error);
+  }
   
   // pragma MARK: std::vector<std::string>
   /**
