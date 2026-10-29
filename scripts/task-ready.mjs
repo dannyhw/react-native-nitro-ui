@@ -32,6 +32,10 @@
  *
  * It reports every problem rather than the first one, because the point is to hand in once.
  *
+ * And a check it could not run is a problem, not a note: a scan blocked by git state (no
+ * merge-base to diff, `git ls-tree` refusing) reads zero files, which prints exactly like a
+ * scan that read a thousand and found nothing. `unscannedProblem` is how each one says so.
+ *
  * ## Usage
  *
  *   bun run task-ready                # task id from the branch name
@@ -66,6 +70,7 @@ import {
   reportTableProblems,
   summarise,
   todoFindings,
+  unscannedProblem,
 } from './task-ready-core.mjs';
 
 const repoRoot = resolve(process.cwd());
@@ -267,11 +272,15 @@ function coverageProblems() {
 function markerProblems() {
   const base = git(['merge-base', 'main', 'HEAD'], null);
   if (base == null) {
-    notes.push(
-      'no merge-base with `main`, so the TODO scan could not read a diff — ' +
-        'the scan reported nothing, which is not the same as reporting nothing found'
+    // A problem, not a note (X4 review N8). As a note this printed and the run still said
+    // `ready`, which is the one outcome the tool exists to refuse: the scan read zero files
+    // and reported zero markers, and the two are indistinguishable in its output. Whether a
+    // branch has no merge-base is not something this can fix, so the line says what to pass.
+    return unscannedProblem(
+      'the TODO scan',
+      'no merge-base with `main`',
+      'Run it on a branch that has one, or point it at a base that does.'
     );
-    return [];
   }
   const paths = new Set();
   for (const args of [
@@ -299,9 +308,20 @@ function reportPathProblems() {
         'before a round is handed in, and the two report checks below depend on it',
     ];
   }
-  const existing = new Set(
-    (git(['ls-files'], '') ?? '').split('\n').filter((line) => line !== '')
-  );
+  // `ls-tree -r HEAD`, not `ls-files` (X4 review N7). `ls-files` reads the *index*, so a
+  // `git add` of a file that is not in any commit makes its citations pass a check whose own
+  // sentence says "exists at HEAD" — and the report is reviewed from HEAD, where the file is
+  // not. The index is also dirty in the middle of a round in exactly the way that flatters:
+  // half-staged work-in-progress files exist for the scan and not for the reviewer.
+  const listing = git(['ls-tree', '-r', '--name-only', 'HEAD', '--'], null);
+  if (listing == null) {
+    return unscannedProblem(
+      "the report's citations could not be checked against HEAD",
+      'git ls-tree -r HEAD failed',
+      'The alternative is calling a tool failure a pass.'
+    );
+  }
+  const existing = new Set(listing.split('\n').filter((line) => line !== ''));
   const touched = new Set(diffPaths());
   return missingReportPaths(text, existing, touched);
 }
