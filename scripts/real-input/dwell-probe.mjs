@@ -307,7 +307,11 @@ async function main() {
     port: metroPort,
     logFile: path.join(out, 'metro.log'),
   });
-  const unmountProbeControls = mountProbeControls();
+  // Assigned once the binary is stamped; see `mountProbeControls` for why the
+  // borrow cannot start earlier than that. A no-op default so the `finally` below
+  // always has something safe to call, including on a path that throws before the
+  // assignment.
+  let unmountProbeControls = () => {};
   try {
     const settings = [
       'CODE_SIGNING_ALLOWED=NO',
@@ -378,6 +382,17 @@ async function main() {
     // Without this the app asks Metro on 8081, renders nothing, and every probe
     // question times out on `tab-switch` - which would read as a dropped touch and
     // is really an empty app.
+    // Borrowed here rather than at the top of `main`, next to `setJsLocation`,
+    // because that is where the probe stops caring which sources produced the
+    // binary and starts caring only about what Metro serves: this flag changes the
+    // React tree the app renders and nothing in the compiled target, so flipping it
+    // before the compile made the tree differ between the two `currentCodeTree()`
+    // readings that bracket the build, and `recordBuild` refused to stamp a binary
+    // it believed had been edited mid-compile — "Run the build again with nothing
+    // else writing to the tree", from the script that was itself the something
+    // else. The stamp it refuses to write is the next gate run's proof about this
+    // app, so the borrow has to begin after the stamp is written.
+    unmountProbeControls = mountProbeControls();
     setJsLocation(udid, metroPort);
 
     /** @type {Array<Record<string, number>>} */
