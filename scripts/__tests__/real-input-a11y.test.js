@@ -211,6 +211,60 @@ describe('the a11y rule, on measured trees', () => {
     expect(problems[0]).toContain('which is the page, not the control');
   });
 
+  it('goes red when the only actionable ancestor is a region, not the control', () => {
+    // The bound the failure message promises (X4 review N1): `hasActableHome` used to
+    // accept *any* actionable node whose box contained the name, so a screen-deep
+    // `focusable` wrapper — a card, a list row, a section container — counted as the
+    // control's own actionable box. The scrollable flag alone does not catch that shape;
+    // only size does. Measured, the real gap: touch targets are 1.0–1.5× the named box,
+    // and the next actionable container of any kind is the page at 17.6×.
+    //
+    // Built from the Switch, whose named track (137×84) sits in a Material touch target
+    // (137×126) that must stay accepted — so this fixture *removes* that target and hands
+    // the control a 4×-area ancestor instead.
+    const nodes = tree('switch');
+    const target = nodes.find(
+      (node) =>
+        node !== named('switch') &&
+        node.clickable === 'true' &&
+        node.bounds.width === named('switch').bounds.width
+    );
+    expect(target).toBeDefined();
+    const namedBox = named('switch').bounds;
+    const region = {
+      ...target,
+      // ~16× the named area: the size of a section container, and well under a page's,
+      // so this test fails on the size rule alone rather than on the scroll filter.
+      bounds: {
+        ...namedBox,
+        x1: namedBox.x1 - 100,
+        y1: namedBox.y1 - 100,
+        x2: namedBox.x2 + 100,
+        y2: namedBox.y2 + 100,
+        width: namedBox.width + 200,
+        height: namedBox.height + 200,
+        cx: namedBox.cx,
+        cy: namedBox.cy,
+      },
+      scrollable: 'false',
+    };
+    const withRegion = nodes.map((node) =>
+      node === target ? region : node
+    );
+    expect(
+      region.bounds.width * region.bounds.height >
+        namedBox.width * namedBox.height * 4
+    ).toBe(true);
+    const problems = a11yProblems(control('switch'), withRegion);
+    expect(problems.length).toBe(1);
+    expect(problems[0]).toContain('nothing whose box is the control');
+    // …and the same node at touch-target size is still accepted, which is the other half:
+    // without this, the bound is just a number that makes the test above pass.
+    const realTarget = nodes.find((node) => node === target);
+    expect(a11yProblems(control('switch'), nodes)).toEqual([]);
+    expect(realTarget.clickable).toBe('true');
+  });
+
   it('goes red when a name lands on the scroll container itself', () => {
     // The inverse of the last test, and the reason `scrollable` is parsed at all: the
     // scroll view is focusable, so "the name is on an actionable node" is *true* here.

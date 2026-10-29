@@ -836,7 +836,7 @@ function isActable(node) {
 
 /**
  * Whether some node a person can act on *is* this control: the named node's own box, or
- * one that contains it.
+ * one that contains it **and is roughly its size**.
  *
  * Containment is the measured shape of "the name is on the control". A Switch's named
  * track is 137×84 inside a `clickable|checkable|focusable` node 137×126 — the Material
@@ -845,11 +845,15 @@ function isActable(node) {
  * report every control with a proper touch target as broken, and the next person to trip
  * over it would delete the check.
  *
- * What it does reject is measured too. Containment is what makes the search mean
- * "the control's own actionable box" rather than "a screen with a button on it": strip
- * the Switch's touch target and the only actionable node left is the page's scroll view,
- * and a rule that accepted any actionable node anywhere in the tree would call that a
- * pass.
+ * Containment alone is too small a claim, though, and said "whose box is the control's"
+ * without delivering it (X4 review N1): any `focusable` wrapper a screen deep would
+ * qualify. So the candidate also has to be within {@link ACTABLE_HOME_AREA_RATIO} of the
+ * named box's area. That bound is the gap in the dumps, not a taste — across all thirteen
+ * Android cases the actionable node containing a control's name is between 1.0× (a
+ * DatePicker and its field, same box) and 1.5× (a Switch's touch target over its track),
+ * and the next actionable container of any kind is the page at 17.6×. A control that
+ * grew a focusable wrapper 4× its size is a control whose press target is a region, not
+ * the control, and that is what the ratio now refuses.
  *
  * @param {import('./uiautomator.mjs').UiautomatorNode} named
  * @param {ReadonlyArray<import('./uiautomator.mjs').UiautomatorNode>} tree
@@ -857,6 +861,13 @@ function isActable(node) {
 function hasActableHome(named, tree) {
   return actableHomes(named, tree).length > 0;
 }
+
+/**
+ * Area multiple of the named box beyond which a containing actionable node is a region of
+ * the screen rather than the control. Measured: real touch targets are 1.0–1.5×, the page
+ * is 17.6×+, so this sits in the gap and either side of it can be shown to matter.
+ */
+const ACTABLE_HOME_AREA_RATIO = 4;
 
 /**
  * @param {import('./uiautomator.mjs').UiautomatorNode} named
@@ -870,7 +881,11 @@ function actableHomes(named, tree) {
         node !== named &&
         isActable(node) &&
         node.scrollable !== 'true' &&
-        covers(node.bounds, named.bounds)
+        covers(node.bounds, named.bounds) &&
+        // The scroll filter above removes the page when the dump labels it scrollable;
+        // this one removes a page, a list, or a card that happens to be `focusable` and
+        // not scrollable, which the dump's flag does not cover.
+        area(node) <= area(named) * ACTABLE_HOME_AREA_RATIO
     )
     .sort((a, b) => area(a) - area(b));
 }
