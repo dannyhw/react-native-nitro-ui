@@ -99,6 +99,72 @@ export interface HostProps extends ViewProps {
 }
 
 // @public
+export function Menu(input: MenuProps): JSX.Element;
+
+// @public
+export interface MenuAction {
+    destructive?: boolean | undefined;
+    disabled?: boolean | undefined;
+    id: string;
+    systemImage?: string | undefined;
+    title: string;
+}
+
+// @public
+export interface MenuGroup {
+    actions?: (MenuAction | MenuSubmenu)[] | undefined;
+    sections?: MenuSection[] | undefined;
+}
+
+// @public
+export interface MenuProps extends ViewProps {
+    disabled?: boolean | undefined;
+    group: MenuGroup;
+    // @internal
+    hybridRef?: ((view: {
+        readonly title: string;
+        readonly variant: string;
+        readonly size: string;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly systemImage: string | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestSelectRow(id: string): void;
+        nuiTestMenuReport(): string;
+    }) => void) | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onClose?: (() => void) | undefined;
+    onOpen?: (() => void) | undefined;
+    onSelect?: ((id: string) => void) | undefined;
+    primaryAction?: (() => void) | undefined;
+    size?: ButtonSize | undefined;
+    systemImage?: string | undefined;
+    tintColor?: ColorValue | undefined;
+    title: string;
+    variant?: ButtonVariant | undefined;
+}
+
+// @public
+export interface MenuSection {
+    id: string;
+    items: MenuAction[];
+    title?: string | undefined;
+}
+
+// @public
+export interface MenuSubmenu {
+    id: string;
+    items: MenuAction[];
+    systemImage?: string | undefined;
+    title: string;
+}
+
+// @public
 export interface NitroUiCore extends HybridObject<{
     ios: 'c++';
     android: 'c++';
