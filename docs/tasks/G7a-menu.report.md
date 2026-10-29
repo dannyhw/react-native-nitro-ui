@@ -43,11 +43,15 @@ witness/`Host` diagnostic runs made on the pre-parity tree; every row that matte
 `HostPopups > comes down with its row, and leaves nothing when the Host is dropped`
 (`expected 1 to be 0`) and
 `HostPopups > presents a dialog for the time and datetime modes too`
-(`expected 0 to be 1`). None is Menu. Three of the four fail identically **at the base
-commit on this machine**: `747debc` was checked out, built and run in full
-(`3 failed / 190 passed / 217`, 13 suites), so this is not a G7a regression, and the
-fourth (`HostControls`) passed in a 3-suite run both at the base and at this head. The
-house record agrees on the mechanism: `docs/tasks/Q3-flaky-tests.md` section 2 documents
+(`expected 0 to be 1`). None is Menu. All four fail **at the base commit on this
+machine**: the review checked `747debc` into a throwaway worktree, built it from scratch and
+ran the Host suites there — `4 failed / 24 skipped / 41 passed of 69`, the same four
+messages, store log `detached/harness+android+Host-2026-10-29T05-28-11.725Z.log` — so this is
+not a G7a regression. The `3 failed / 190 passed / 217` base run quoted here in round 1 has no
+committed log and is withdrawn: the review's run is the evidence, and it says `HostControls`
+fails at the base too. Nor is this load — the review counted these four failing in 6 of 6 runs
+here at load 3 and above, with a constant 24 skipped where X3 and X11 saw none. The house
+record agrees on the mechanism: `docs/tasks/Q3-flaky-tests.md` section 2 documents
 that HostPopups case as `expected 1 to be 0` from the process-wide
 `DatePickerModel.livePresentations` assertion, and its follow-ups say the other Host
 observations "are the same family, not this task's"; `docs/tasks/FOLLOWUPS.md` lists
@@ -82,6 +86,27 @@ The measurements in the Summary are probes, not tests: each was read out of a te
 throwing assertion (`expected 'SIZES cfg-filled=53.33x20.33 ...' to be 'PROBE'`, iOS
 `03-38-11Z`; `cfg-filled=92.57x48.00`, Android `03-37-12Z`) and reverted.
 
+
+Added by fix round 1, each from a run on the branch:
+
+- `reports what React sent, and what the trigger is for a screen reader` -> clear
+  `accessibilityLabel` off the component view in `afterUpdate()`, leaving the prop, the model
+  and the SwiftUI element alone -> `expect(namedElement).not.toBeNull()` red with all six
+  getters green (`…ios+Menu-06-20-03.611Z`).
+- `carries no old state across a remount` -> drop `|| handle.title !== wantTitle` from
+  `waitForFreshMeasure` -> `expected 'answered' to contain 'never answered as
+  "NeverGiven"'` (`…android…06-14-44.443Z`, `…ios+Menu-06-20-03.611Z`).
+- `re-measures when the title changes (R3)` -> plant `measureContent()` answering `0x0`
+  mid re-measure -> the wait times out naming `0.00x0.00` (`…android+Menu-05-56-58.091Z`).
+- `opens once, closes once, and pairs every open with a close` -> report the pick before
+  closing the popup in Kotlin `applyPick` -> only `expect(orderLog)` red
+  (`…android…-t+opens+20once-05-59-57.018Z`).
+- the host-arm case -> drop `&& m.bench === true` from `hostArm()` -> `registry.test.js:643`
+  red with `menu` present in the region (`1 failed / 36`).
+- Not a red proof, recorded because it is what M3 was for: with a leftover `live: 1` planted,
+  the old absolute `live === 0` read goes red (`05-56-58Z`) and the `liveBefore` delta stays
+  green (`05-58-32Z`).
+
 ## Item 4 - the perf contract
 
 A **reading**, no new code and no measurement: every setter stores then marks the host
@@ -112,7 +137,7 @@ otherwise post, which is why the suite's counts are exact rather than eventually
 
 ## Questions for orchestrator
 
-1. **`harness:android` is unreachable on this machine, not merely unrun.** Three of its four failures reproduce at `747debc` here. Options: accept G7a on `check` + `harness:ios` + `harness:android:Menu` (15/15) + the base-run evidence; or open a fix task for the Q3-family tests first; or move G7a to another machine. **Recommend accept here and file the task** - a third machine has the same house-documented intermitcents.
+1. **`harness:android` is unreachable on this machine, not merely unrun.** All four of its failures reproduce at `747debc` here - including `HostControls`, which round 1 of this report wrongly said had passed at the base; see the correction in Gates. Options: accept G7a on `check` + `harness:ios` + `harness:android:Menu` (15/15) + the base-run evidence; or open a fix task for the Q3-family tests first; or move G7a to another machine. **Recommend accept here and file the task** - a third machine has the same house-documented intermitcents.
 2. **iOS `onOpen`/`onClose` cannot be observed**, for the two measured reasons in the Summary, so both props are Android-only today and `docs/components/menu.md` says so. Options: accept; or ship an own-drawn UIKit trigger with `UIContextMenuInteraction` to keep observation (a different control from the one Q1 section 2 chose); or drop the props. **Recommend accept + the documentation as written.**
 3. **A pick fires `onClose`.** Q1 section 5 says `onOpen`/`onClose` "exactly once each and never for a pick". A pick dismisses the popup, and the popup's teardown is what reports the close, so refusing to fire would leave the open unpaired - which is worse for a listener than an extra close. The suite asserts the pairing (`['events:open', 'events:close']`) and says so at `example/__tests__/Menu.harness.tsx:960`. **Recommend keeping the pairing and amending Q1.**
 4. **`menuAnchor` deviation from Q1 section 3** - documented at `docs/components/menu.md` and above. Needs sign-off, since it is the one place the implementation visibly contradicts the design document rather than filling a gap in it.
