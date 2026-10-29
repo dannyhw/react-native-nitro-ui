@@ -34,9 +34,12 @@ const IMPLEMENTATIONS: readonly ImplementationName[] = [
   'expo-ui-host-per-control',
   'expo-ui-shared-host',
   'nitro-ui',
-  // The library's own controls in one shared composition (`Host`). It is a
-  // cell the arm itself refuses for any component but Switch
-  // (`BenchImplementation.components`), which is why it can sit in the shared plan.
+  // The library's own controls in one shared composition (`Host`). The arm lists the
+  // controls it can host (`BenchImplementation.components`), and `BenchApp` records a
+  // `skip` for a component outside that list rather than launching an empty tree, which
+  // is what lets it sit in the shared plan. Since H2a/H2b widened it, the list is every
+  // component this plan has, so no cell of ours skips it; a non-hostable child (an RN
+  // view, a nested `Host`) is still refused at render time.
   'nitro-ui-host',
 ];
 
