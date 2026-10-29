@@ -1584,16 +1584,23 @@ describe('Menu · inside a Host', () => {
     expect(Math.abs(mLeft - aLeft)).toBeLessThan(40);
     expect(first.rows).toBe(PICKABLE);
     const gap = mTop - aBottom;
-    // The upper bound, which the line above does not give. `mTop + 24 >= aBottom`
-    // only refuses a popup that comes up *above* the button, so a list opened 200 px
-    // below it passed - and that is precisely what a plain `DropdownMenu` composed
-    // inside a `<Host>` does: its position provider is handed the composition's own
-    // view, so its list opens under the *Host's* 300 px box rather than under this
-    // Menu's button. `menuAnchor` is the fix (`HybridNitroUiMenu.kt`), and the number
-    // it has to satisfy is this one: the list's top sits just under the trigger. The
-    // same 48 px the reopened half below uses, so the two halves ask one question.
-    // Proven red by swapping `ExposedDropdownMenuBox`/`menuAnchor` for a plain
-    // `DropdownMenu`, which lands the popup ~300 px down instead of here.
+    // The upper bound, which the line above does not give: `mTop + 24 >= aBottom` only
+    // refuses a popup that comes up *above* the button, so a list opened 200 px below
+    // it would pass. The number is the same 48 the reopened half below uses, so both
+    // halves ask one question.
+    //
+    // How this was shown able to fail, and what that proved. Inverting the guard on the
+    // same measured number (`gap > 400`) went red on this line, which is what makes it
+    // a live reading rather than a number that always happens to be small. Removing
+    // `menuAnchor` from the trigger did NOT: on this Material version the plain
+    // `DropdownMenu` still opened at the button, because the box it is composed in is
+    // itself the button's size even inside a `<Host>` (three variants tried - anchor
+    // dropped inside the box, a `clickable` + `DropdownMenu`, and one inside a
+    // `fillMaxSize` Box; all three measured a popup at the trigger, and the report
+    // records the numbers). So this bound is a guard on behaviour `menuAnchor`
+    // provides, not a reproduction of a failure a plain `DropdownMenu` would cause, and
+    // the code comment in `HybridNitroUiMenu.kt` claiming the latter is a reading
+    // rather than a measurement.
     expect(gap).toBeLessThan(48);
 
     // Move the `<Host>`. Compose is never told: a popup positions itself against the
