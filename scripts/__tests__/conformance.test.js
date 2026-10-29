@@ -46,7 +46,7 @@ import {
   staleExemptions,
 } from '../conformance-core.mjs';
 import { A11Y_CONTROLS, A11Y_EXEMPTIONS } from '../real-input/a11y.mjs';
-import { runA11ySweep } from '../real-input/a11y-sweep.mjs';
+import { runA11ySweep, SCROLL_PROBE_LIMIT } from '../real-input/a11y-sweep.mjs';
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -966,6 +966,40 @@ describe('the a11y sweep, against a fake device', () => {
       expect(dumps).toBe(2);
       expect(navigation.scrolls).toBe(1);
       expect(logs[0].log.failures).toEqual([]);
+    });
+  });
+
+  it('keeps scrolling past a name with no box, and judges the tree that has one', () => {
+    // The other half of that scroll, and the case a `contentDesc === label` test would
+    // pass without ever exercising: a named node drawn at nothing. It is the same finding
+    // the rule reports when it gives up (`zero-sized box`), so a sweep that stopped here
+    // would exempt a control that merely needed one more swipe — and the box check in the
+    // scroll loop would be dead code that reads like a guard.
+    let dumps = 0;
+    const { begin, logs } = collector();
+    const navigation = fakeNavigation(() => {
+      dumps += 1;
+      return dumps === 1
+        ? [node('Controlled switch', { width: 0, height: 0 })]
+        : [node('Controlled switch')];
+    });
+    return runA11ySweep(begin, navigation, switchCase()).then(() => {
+      expect(dumps).toBe(2);
+      expect(navigation.scrolls).toBe(1);
+      expect(logs[0].log.failures).toEqual([]);
+    });
+  });
+
+  it('judges the last tree after the scroll budget runs out, and says what it saw', () => {
+    // Named but never boxed: the budget ends and the rule still has to speak, because
+    // "I could not find it" and "it is drawn at nothing" are different bugs.
+    const { begin, logs } = collector();
+    const navigation = fakeNavigation(() => [
+      node('Controlled switch', { width: 0, height: 0 }),
+    ]);
+    return runA11ySweep(begin, navigation, switchCase()).then(() => {
+      expect(navigation.scrolls).toBe(SCROLL_PROBE_LIMIT);
+      expect(logs[0].log.failures.join('\n')).toContain('zero-sized box');
     });
   });
 
