@@ -36,7 +36,9 @@
 > retry counts in every gate log). Its dwell probe found a product bug: a hosted Switch on the busy Switch screen
 > drops presses shorter than ~0.1 s (a human tap), while RN's `Pressable` takes them; **F7** (`F7-quick-tap.md`) owns
 > it. The suite presses for 0.15 s meanwhile. **X4 and F7 started 2026-10-29 from `3dfe041`**, one device pair each
-> (worktrees `nitro-ui-worktrees/X4`, `/F7`).
+> (worktrees `nitro-ui-worktrees/X4`, `/F7`). **F7 merged** the same day: the drop is RN-level, not ours (FOLLOWUPS F7);
+> a real-device thumb check is the open item. X4 is in fix round 1. G7b brief written; offered to mac-1
+> (`HANDOFF-mac1-2026-10-29-g7b.md`), otherwise it runs here when a pair frees.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
