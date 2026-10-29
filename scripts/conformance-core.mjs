@@ -1080,7 +1080,35 @@ export function checkInAppFixtures(manifests, harnessText) {
           'about a component that is not this one'
       );
     }
+    // And the recycle rule's oracle for this control, or the reason it has none. The check is
+    // per row rather than one scan for either word, because the failure it exists for is a
+    // probe quietly *leaving* one control's row while the other six keep theirs — a suite that
+    // prints seven green lines, one of which asserts nothing, is the exact shape this whole
+    // file was written to refuse.
+    const row = harnessText.slice(
+      harnessText.indexOf(`name: '${manifest.name}'`)
+    );
+    const rowEnd = row.search(/\n {2}\{\n {4}name: '/);
+    const fixture = rowEnd === -1 ? row : row.slice(0, rowEnd);
+    if (!/probe: \{/.test(fixture)) {
+      problems.push(
+        `example/__tests__/Conformance.harness.tsx: the ${manifest.name} ` +
+          'fixture has no `probe`, so this control has no recycle rule that can ' +
+          'fail — add the residue probe, or say why it cannot have one with ' +
+          '`probe: { noProbe: … }`'
+      );
+    } else if (
+      !/leaveBehind:/.test(fixture) &&
+      !/noProbe:/.test(fixture)
+    ) {
+      problems.push(
+        `example/__tests__/Conformance.harness.tsx: the ${manifest.name} ` +
+          'fixture has a `probe` that is neither a residue probe (`leaveBehind`) ' +
+          'nor a reason it cannot be one (`noProbe`)'
+      );
+    }
   }
+
   // And the reverse: a fixture for a control that no longer exists is a test of nothing.
   const fixtureNames = [
     ...harnessText.matchAll(/^\s+name: '([A-Z][A-Za-z]*)',$/gm),
