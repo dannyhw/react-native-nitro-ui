@@ -336,6 +336,8 @@ describe('release workflow', () => {
     expect(stage).toMatch(
       /cannot publish over the previously published versions/
     );
+    // Staged but not yet approved: npm's 409 wording for a re-stage.
+    expect(stage).toMatch(/cannot stage previously published version/);
   });
 
   it('has the action version the Changesets v3 CLI needs, for versioning only', () => {

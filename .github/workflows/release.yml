@@ -213,7 +213,10 @@ jobs:
 
           # Re-running this run, or a run that raced with one already approved:
           # npm already knows this version, which is the outcome we wanted.
-          if printf '%s' "$OUTPUT" | grep -qiF 'cannot publish over the previously published versions'; then
+          # A version that is staged but not yet approved is refused with
+          # `E409 ... Cannot stage previously published version "x.y.z"` (seen
+          # 2026-10-29, 0.3.2); one already live gets the older wording.
+          if printf '%s' "$OUTPUT" | grep -qiE 'cannot publish over the previously published versions|cannot stage previously published version'; then
             say "**$PACKAGE@$VERSION** is already known to the registry — staged or published, nothing more to do."
             exit 0
           fi
