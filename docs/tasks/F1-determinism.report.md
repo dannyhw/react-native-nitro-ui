@@ -111,6 +111,9 @@ genuine ones there are the deliberate mutations above and the round-1 HostPopups
 - HostPopups: the popup gates that are not fresh-mount readers still assume a zero baseline; only the four Q3 named were converted.
 - gate.test.js: the CLI guard skips 19 cases on Node 25+; CI pins `.nvmrc` so CI is unaffected, but a local run on a new Node loses them silently.
 - scripts: `check` is ~157 s of which `test` is ~147 s — X10's ceiling note stands, unchanged by this work.
+- harness Android `Slider`: "steps to the next legal value when a screen reader asks" reports "The
+  accessibility step probe never reported." about 1 run in 10, unchanged by this round and present on
+  `f2/merge`; the 5 s poll in `accessibilityStepReport` wants the same idle-tolerant read path as A2.
 
 ## Questions for orchestrator
 
@@ -187,11 +190,15 @@ Q1: **ruled, option 1** — own task, starting from `docs/tasks/F1/dwell-probe.m
 
 ## Appendix — fix round 1 run notes
 
-`harness:ios` was red once on this tree from an orphaned Metro of mine on the lease's port: the timing
-gate refused the app ("published for Metro port 8295, not this run's 8296"), then went green on a
-settled re-run. The one **FAIL** is the filtered `Slider` characterisation run, which records under its
-own name and satisfies nothing: `Slider > steps to the next legal value when a screen reader asks` →
+`harness:ios` and `harness:android` were each red once on this tree from an orphaned Metro of mine on
+the lease's port: the timing gate refused the app ("published for Metro port 8295, not this run's
+8296"), and both went green on a settled re-run once the stray `react-native start` was killed. The one
+**FAIL** is the filtered `Slider` characterisation run, which records under its own name and satisfies
+nothing: `Slider > steps to the next legal value when a screen reader asks` →
 "The accessibility step probe never reported." against a 5 s poll in `accessibilityStepReport`; 1 of 10
 filtered repeats at any load, and it fails the same way on `f2/merge` with no F1 commits in the tree.
 `check` shows twice because a run before commit 4c0eb8f shares this code tree. Round 1's table is
 superseded — it was taken on `f1b38a24acd6`.
+
+`docs/tasks/F1/failures/` is mostly red-proof runs (the mutations above) plus the stale-Metro rows
+named just above and the pre-fix runs they replaced.
