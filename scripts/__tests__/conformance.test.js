@@ -25,7 +25,9 @@ import {
   POISON_SIZES,
   repoRoot,
   RULE_IDS,
+  boxRuleFor,
   checkA11yTable,
+  checkContentSizedBox,
   checkCoverage,
   checkFallbackTable,
   failingKeys,
@@ -40,6 +42,7 @@ import {
   readerFor,
   recycleFindings,
   repoManifests,
+  repoSizingTable,
   fallbackFindings,
   sharedInAppTable,
   staleDebt,
@@ -445,6 +448,156 @@ describe('the declared-fallback rule', () => {
   });
 });
 
+/* ---------------------- the box rule: which axes are the control's ------------- */
+
+/* The three cases below are not theoretical: the first device run of this suite went red on
+ * Slider, Progress and Button, and the rule was wrong rather than the controls. A `fillWidth`
+ * control's width is its parent's, and a content-sized control's declaration is a documented
+ * middle of a measured table. Each mode is therefore tested at both ends — the difference it
+ * must allow, and the one it must still refuse. */
+
+describe('which axes a declared fallback describes', () => {
+  it('reads the axis from the generated sizing policy', () => {
+    const sizing = repoSizingTable();
+    // `intrinsic` and content-sized disagree about the same policy, so Button is listed
+    // explicitly and the policy alone cannot be the whole answer.
+    expect(boxRuleFor('NitroUiSwitch', sizing)).toBe('both');
+    expect(boxRuleFor('NitroUiSlider', sizing)).toBe('height');
+    expect(boxRuleFor('NitroUiProgress', sizing)).toBe('height');
+    expect(boxRuleFor('NitroUiButton', sizing)).toBe('none');
+    // An unknown control keeps the strictest rule: a policy the table lost should cost a
+    // red run, not a widened assertion.
+    expect(boxRuleFor('NitroUiMenu', sizing)).toBe('both');
+  });
+
+  it('lets a fillWidth control be wider than its declaration, and still checks its height', () => {
+    // Measured on device: Slider declared 351 and settled at 420 wide on a 420 dp screen.
+    const declared = DECLARED_FALLBACKS.NitroUiSlider.ios;
+    const parentWidth = { width: 420, height: declared.height };
+    expect(
+      fallbackFindings({
+        component: 'Slider',
+        platform: 'ios',
+        declared,
+        measured: parentWidth,
+        corrections: 0,
+        boxRule: 'height',
+      })
+    ).toEqual([]);
+
+    const staleHeight = fallbackFindings({
+      component: 'Slider',
+      platform: 'ios',
+      declared,
+      measured: { width: 420, height: 12 },
+      corrections: 0,
+      boxRule: 'height',
+    });
+    expect(staleHeight[0].problem).toContain('width is its parent');
+    expect(staleHeight[0].problem).toContain('12');
+  });
+
+  it('does not claim a fillWidth control needed no correction, because its width always does', () => {
+    // The warm assertion is only true of a control whose declaration is its whole box.
+    expect(
+      fallbackFindings({
+        component: 'Slider',
+        platform: 'ios',
+        declared: DECLARED_FALLBACKS.NitroUiSlider.ios,
+        measured: { width: 420, height: 31 },
+        corrections: 1,
+        boxRule: 'height',
+      })
+    ).toEqual([]);
+  });
+
+  it('asks a content-sized control for a box that is its own, not its declaration', () => {
+    // Button: 33.3 to 103.2 wide across titles per docs/components/button.md, so the
+    // declared pair matches nothing measured. This is the device run's 57.3x34.3.
+    const declared = DECLARED_FALLBACKS.NitroUiButton.ios;
+    expect(
+      fallbackFindings({
+        component: 'Button',
+        platform: 'ios',
+        declared,
+        measured: { width: 57.3, height: 34.3 },
+        corrections: 1,
+        boxRule: 'none',
+      })
+    ).toEqual([]);
+  });
+
+  it('goes red when the content-sized exemption earns nothing', () => {
+    // The exemption's own proof: a control that measures exactly its declaration has
+    // stopped sizing itself from its content, and the exemption should have been removed.
+    // Injected rather than achieved by editing a number in this repo: Button's box really
+    // does vary with its title, so the only honest way to produce "measured == declared"
+    // here is a table that says so.
+    const declared = DECLARED_FALLBACKS.NitroUiButton.ios;
+    const table = { NitroUiButton: { ios: declared, android: declared } };
+    const findings = fallbackFindings({
+      component: 'Button',
+      platform: 'ios',
+      declared,
+      measured: declared,
+      corrections: 0,
+      boxRule: 'none',
+      declaredTable: table,
+    });
+    expect(findings[0].problem).toContain('exempt from the box comparison');
+    expect(findings[0].problem).toContain('no longer true');
+    // And the same inputs without the exemption go red for a different reason: skipping the
+    // comparison is the only thing that made this box acceptable at all.
+    const strict = fallbackFindings({
+      component: 'Button',
+      platform: 'ios',
+      declared,
+      measured: { width: declared.width + 20, height: declared.height },
+      corrections: 0,
+      declaredTable: table,
+    });
+    expect(strict[0].problem).toContain('is not the measured');
+  });
+
+  it('still catches a poisoned fallback for both narrowed modes', () => {
+    // The poison is an exact pair that nothing declares, so it needs no policy to detect:
+    // a box that survives it is a missing correction whichever axes the control owns.
+    for (const [component, boxRule] of [
+      ['Slider', 'height'],
+      ['Button', 'none'],
+    ]) {
+      const findings = fallbackFindings({
+        component,
+        platform: 'ios',
+        declared: DECLARED_FALLBACKS[`NitroUi${component}`].ios,
+        measured: POISON_SIZES.ios,
+        corrections: 1,
+        poisoned: true,
+        boxRule,
+      });
+      expect(findings[0].problem).toContain('settled at the poisoned 97x11');
+    }
+  });
+
+  it('goes red for a CONTENT_SIZED_BOX entry that is not an intrinsic control', () => {
+    // Adding a name here skips a comparison, so membership is checked against the manifests
+    // rather than trusted. The interesting case cannot be produced by this repo's tree —
+    // Progress really is `fillWidth` — so the list is injected, which is exactly what the
+    // mistake looks like: somebody puts a fillWidth control in the list to skip its height
+    // comparison.
+    expect(
+      checkContentSizedBox(repoManifests(), ['NitroUiProgress']).join('\n')
+    ).toContain('sizing: "fillWidth"');
+    expect(
+      checkContentSizedBox(repoManifests(), ['NitroUiGhost']).join('\n')
+    ).toContain('no manifest declares that control');
+    // And the real list is legitimate on the real tree, which is the assertion the two
+    // mutations above are measured against.
+    expect(checkContentSizedBox(repoManifests())).toEqual([]);
+    expect(checkFallbackTable(repoManifests(), repoSizingTable())).toEqual([]);
+  });
+});
+
 /* --------------------------------- leak findings ------------------------------ */
 
 describe('the no-leak-on-drop rule', () => {
@@ -752,9 +905,21 @@ describe('the in-app table mirror', () => {
       'declaredFallbacks',
       'poisonSizes',
       'tolerance',
+      'boxRules',
       'exemptions',
     ]);
     expect(shared.declaredFallbacks).toEqual(DECLARED_FALLBACKS);
+    // The box rule is in the mirror for the same reason the numbers are: which axes a
+    // control's declaration describes comes from the generated sizing policy, and a suite
+    // that decided that on the device could decide it wrongly and go green.
+    expect(shared.boxRules).toEqual(
+      Object.fromEntries(
+        Object.keys(DECLARED_FALLBACKS).map((hybridView) => [
+          hybridView,
+          boxRuleFor(hybridView, repoSizingTable()),
+        ])
+      )
+    );
     // And it is JSON-safe: a `Date` or a function would round-trip into `null`, which
     // would make the mirror check above compare two different things and pass.
     expect(JSON.parse(JSON.stringify(shared))).toEqual(shared);
