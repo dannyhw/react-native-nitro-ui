@@ -28,6 +28,9 @@ import {
   checkA11yTable,
   checkCoverage,
   checkFallbackTable,
+  failingKeys,
+  followupsResolver,
+  checkInAppFixtures,
   checkSharedTableMirror,
   classifyFindings,
   coverageMatrix,
@@ -42,7 +45,7 @@ import {
   staleDebt,
   staleExemptions,
 } from '../conformance-core.mjs';
-import { A11Y_CONTROLS } from '../real-input/a11y.mjs';
+import { A11Y_CONTROLS, A11Y_EXEMPTIONS } from '../real-input/a11y.mjs';
 import { runA11ySweep } from '../real-input/a11y-sweep.mjs';
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
 import { readFileSync } from 'node:fs';
@@ -755,6 +758,121 @@ describe('the in-app table mirror', () => {
     // And it is JSON-safe: a `Date` or a function would round-trip into `null`, which
     // would make the mirror check above compare two different things and pass.
     expect(JSON.parse(JSON.stringify(shared))).toEqual(shared);
+  });
+});
+
+/* ------------------------------ the in-app fixtures -------------------------- */
+
+describe('the debt, as the matrix sees it', () => {
+  const followups = () => read('docs/tasks/FOLLOWUPS.md');
+
+  it('collapses the a11y cases onto their components, once per control', () => {
+    // Four cases, two controls: `slider` and `hosted-slider` both guard `Slider`. The
+    // matrix is about controls, so four rows of debt make two failing cells.
+    expect(failingKeys()).toEqual([
+      'Slider|a11y-name-on-focusable-node',
+      'SegmentedControl|a11y-name-on-focusable-node',
+    ]);
+  });
+
+  it('names the FOLLOWUPS line for a failing cell, when the line exists', () => {
+    const resolve = followupsResolver(followups());
+    for (const key of failingKeys()) {
+      expect(resolve(key)).not.toBeNull();
+      expect(followups()).toContain(resolve(key));
+    }
+    // A cell no debt row claims has no line, which is what `checkCoverage` reports as debt
+    // with no owner — so the resolver cannot answer for it.
+    expect(resolve(findingKey('Switch', 'recycle-reset'))).toBeNull();
+  });
+
+  it('goes red when a debt row cites a line that is not in FOLLOWUPS.md', () => {
+    // The citation is the only thing tying the exemption to a person's task list. A row
+    // whose line was renamed or never written has no owner, and this is where that shows.
+    const row = {
+      control: 'slider',
+      followups: 'X4: a line nobody wrote',
+      matches: /x/,
+    };
+    const resolve = followupsResolver(followups(), { a11y: [row] });
+    expect(
+      resolve(findingKey('Slider', 'a11y-name-on-focusable-node'))
+    ).toBeNull();
+    // …and `checkCoverage` then refuses the matrix rather than printing the cell as fine.
+    const manifests = repoManifests();
+    const matrix = coverageMatrix(manifests, {
+      failing: failingKeys(),
+      sizing: JSON.parse(read('nitro-ui.sizing.json')),
+    });
+    expect(checkCoverage(manifests, matrix, resolve).join('\n')).toContain(
+      'Slider × a11y-name-on-focusable-node'
+    );
+  });
+
+  it('picks up a debt row on the in-app side too', () => {
+    // `failingKeys` reads both lists, so a new in-app exemption reaches the matrix without
+    // anyone editing a second table — the same reason the a11y rows are read from the list.
+    const row = {
+      component: 'Switch',
+      rule: 'recycle-reset',
+      followups: 'X4: Switch keeps a recycled owner',
+      detail: 'checked survives',
+    };
+    expect(failingKeys(A11Y_EXEMPTIONS, [row])).toContain(
+      findingKey('Switch', 'recycle-reset')
+    );
+    // And it does not disturb the rows that already exist.
+    expect(failingKeys(A11Y_EXEMPTIONS, [row]).length).toBe(
+      failingKeys().length + 1
+    );
+  });
+});
+
+describe('the in-app fixture table cross-check', () => {
+  const harness = () => read('example/__tests__/Conformance.harness.tsx');
+
+  it('has a fixture for every control the registry declares', () => {
+    expect(checkInAppFixtures(repoManifests(), harness())).toEqual([]);
+  });
+
+  it('goes red for a manifest with no fixture, and names it', () => {
+    const withMenu = [
+      ...repoManifests(),
+      manifest({
+        id: 'menu',
+        name: 'Menu',
+        hybridView: 'NitroUiMenu',
+        sizing: 'intrinsic',
+        exampleTab: 'menu',
+      }),
+    ];
+    expect(checkInAppFixtures(withMenu, harness()).join('\n')).toContain(
+      'no fixture for Menu'
+    );
+  });
+
+  it('goes red for a fixture whose hybridView name drifted from the manifest', () => {
+    const renamed = harness().replace(
+      "    component: 'NitroUiPicker',",
+      "    component: 'NitroUiComboBox',"
+    );
+    expect(renamed).not.toBe(harness());
+    expect(checkInAppFixtures(repoManifests(), renamed).join('\n')).toContain(
+      'does not name NitroUiPicker'
+    );
+  });
+
+  it('goes red for a fixture guarding a control nobody declares', () => {
+    const extra = `${harness()}\nconst STRAY = {\n  name: 'Ghost',\n  component: 'NitroUiGhost',\n};\n`;
+    expect(checkInAppFixtures(repoManifests(), extra).join('\n')).toContain(
+      'a fixture guards "Ghost"'
+    );
+  });
+
+  it('goes red when the whole suite is missing', () => {
+    expect(checkInAppFixtures(repoManifests(), null)[0]).toContain(
+      'no suite, so no control is checked'
+    );
   });
 });
 

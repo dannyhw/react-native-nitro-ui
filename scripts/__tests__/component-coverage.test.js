@@ -22,6 +22,19 @@ import {
   manifestsFromEntries,
   renderedTabs,
 } from '../registry-core.mjs';
+import {
+  checkA11yTable,
+  checkCoverage,
+  checkInAppFixtures,
+  coverageMatrix,
+  failingKeys,
+  followupsResolver,
+} from '../conformance-core.mjs';
+
+/** Where the conformance suite keeps its per-control fixtures, and its tables. */
+const HARNESS_FILE = 'example/__tests__/Conformance.harness.tsx';
+/** The document every `failing` cell has to be able to cite. */
+const FOLLOWUPS_FILE = 'docs/tasks/FOLLOWUPS.md';
 
 const repoRoot = resolve(process.cwd());
 
@@ -235,6 +248,52 @@ describe('every real-input control has a check on both platforms', () => {
       ).toBe(true);
     });
   }
+});
+
+describe('every component is covered by the conformance suite', () => {
+  // X4's four rules are manifest-driven, which is only worth something if a manifest
+  // nothing checks is impossible. This is the one place that asks the question for all
+  // three tables at once — the rule × control matrix, the host-side a11y sweep's case
+  // table, and the harness suite's fixture table — so a new control cannot land in the
+  // registry without landing in the suite. The mechanism each check uses is tested in
+  // `conformance.test.js`; this is the guard that runs it on the real tree.
+  it('every manifest is covered, or has a stated reason', () => {
+    const read = (p) => readRepo(p);
+    const sizing = JSON.parse(read('nitro-ui.sizing.json') ?? '{}');
+    const matrix = coverageMatrix(manifests, {
+      sizing,
+      failing: failingKeys(),
+    });
+    // A `failing` cell needs a line that exists in FOLLOWUPS.md, which is what
+    // `followupsResolver` proves by returning null when the text is not there.
+    expect(
+      checkCoverage(manifests, matrix, followupsResolver(read(FOLLOWUPS_FILE)))
+    ).toEqual([]);
+    expect(checkA11yTable(manifests, read)).toEqual([]);
+    expect(checkInAppFixtures(manifests, read(HARNESS_FILE))).toEqual([]);
+  });
+
+  it('the debt the matrix reports is the debt the runner reports', () => {
+    // Two views of the same debt: the matrix prints `failing`, and the device run prints
+    // `known failing` lines from the exemption lists. Deriving one from the other is what
+    // keeps a report's coverage table honest when a row is added or removed.
+    const keys = failingKeys();
+    expect(keys).toEqual([
+      'Slider|a11y-name-on-focusable-node',
+      'SegmentedControl|a11y-name-on-focusable-node',
+    ]);
+    // …and every one of those cells really is marked failing in the matrix.
+    const matrix = coverageMatrix(manifests, {
+      sizing: JSON.parse(readRepo('nitro-ui.sizing.json') ?? '{}'),
+      failing: keys,
+    });
+    for (const key of keys) {
+      const [name, rule] = key.split('|');
+      expect(matrix.find((row) => row.name === name).rules[rule].state).toBe(
+        'failing'
+      );
+    }
+  });
 });
 
 describe('every component has the hand-written files behind its generated rows', () => {
