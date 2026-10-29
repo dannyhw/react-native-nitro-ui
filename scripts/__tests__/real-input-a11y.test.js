@@ -248,9 +248,7 @@ describe('the a11y rule, on measured trees', () => {
       },
       scrollable: 'false',
     };
-    const withRegion = nodes.map((node) =>
-      node === target ? region : node
-    );
+    const withRegion = nodes.map((node) => (node === target ? region : node));
     expect(
       region.bounds.width * region.bounds.height >
         namedBox.width * namedBox.height * 4
@@ -317,7 +315,9 @@ describe('the debt list', () => {
     // name is announced as the wrong kind of control, and a hosted Picker's name is
     // announced twice. A row that named no platform would let one measurement excuse both
     // halves, so each row says which one it was measured on.
-    expect(A11Y_EXEMPTIONS.map((entry) => `${entry.platform}:${entry.control}`)).toEqual([
+    expect(
+      A11Y_EXEMPTIONS.map((entry) => `${entry.platform}:${entry.control}`)
+    ).toEqual([
       'android:slider',
       'android:segmented-control',
       'android:hosted-slider',
