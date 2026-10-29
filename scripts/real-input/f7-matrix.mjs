@@ -288,8 +288,12 @@ async function runCell(cell) {
     `dwell-probe-${cell.name}-${Number(DWELL).toFixed(2)}.log`
   );
   const log = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '';
+  // The RESULT line carries the counts; the header line carries the label, the
+  // witness and the variant the screen itself reported. Parsing both rather than
+  // widening the RESULT format keeps the line `docs/tasks/F1/dwell-probe.md` and
+  // `readResult` in `dwell-probe.mjs` already describe.
   const result =
-    /RESULT target=\S+ dwell=[\d.]+s label=(\S*) switch=(\d+)\/(\d+) js-toggle=(\d+)\/(\d+)/.exec(
+    /RESULT target=\S+ dwell=[\d.]+s switch=(\d+)\/(\d+) js-toggle=(\d+)\/(\d+)/.exec(
       log
     );
   const variant = /probe variant-(\d+)/.exec(log)?.[1] ?? '?';
