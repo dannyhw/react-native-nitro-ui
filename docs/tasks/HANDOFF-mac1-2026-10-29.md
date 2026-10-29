@@ -1,13 +1,29 @@
-# Work for maintainer-mac-1 (2026-10-29)
+# Work for maintainer-mac-1 (2026-10-29): autonomous, PR-based
 
-maintainer-mac-2 is running F1 (tap delivery and flaky tests) and X13 (the release lock refresh). On
-maintainer-mac-1:
+The owner is away. maintainer-mac-1 works through this queue **on its own**, and maintainer-mac-2's
+orchestrator reviews and merges the results. mac-2 meanwhile runs F1, X13 and X4.
 
-- **G7a** Menu: `docs/tasks/G7a-menu.md`, with context pack `docs/tasks/G7a/context.md`.
+## Queue (in order)
 
-Setup: `git pull` on `main` (it now has X11's warm device pool, so acquire with `--boot` and leave
-devices warm), `node scripts/doctor.mjs`, `export NITRO_UI_MACHINE_LABEL=maintainer-mac-1`,
-`git worktree add ../nitro-ui-worktrees/G7a -b task/G7a-menu main`. Delegate to Codex Apex
-(`codex_callstack`, `reasoningEffort: xhigh`) using the ORCHESTRATOR template. Have it reviewed blind
-by Claude Opus, with the reviewer running checks in the foreground. When review passes, push only the
-task branch and tell maintainer-mac-2, which merges and keeps STATUS/RECOVERY.
+1. **G7a** Menu: `docs/tasks/G7a-menu.md` (context pack `docs/tasks/G7a/context.md`).
+2. **F2** follow-ups sweep: `docs/tasks/F2-followups-sweep.md`. Start it while G7a is in review if a
+   device pair is free.
+
+## How
+
+- Setup: `git pull` on `main`, `node scripts/doctor.mjs`, `export NITRO_UI_MACHINE_LABEL=maintainer-mac-1`,
+  and one worktree per task (`git worktree add ../nitro-ui-worktrees/<ID> -b task/<ID>-<slug> main`).
+- Implementers: Codex Apex (`codex_callstack`, `reasoningEffort: xhigh`, full-access), using the
+  ORCHESTRATOR template. Tell them to commit after each item.
+- Review: a blind Claude Opus review, with checks run in the foreground. Fix rounds go to the same
+  implementer thread, within the D19 cap.
+- **When a task passes review**:
+  1. Run `gate.mjs export --task <ID>`, commit, and push the task branch.
+  2. Open a PR against `main` with `gh pr create`. Use a title in the conventional-commit style. The
+     body is the report's summary plus the gate table, and says it ran on maintainer-mac-1. Describe
+     the change only; never say who or what wrote it.
+  3. Don't merge. maintainer-mac-2 merges PRs (it re-runs gates on its own devices first).
+- If review needs an owner decision, or the round cap runs out with open M items, still open the PR,
+  marked **draft**, with the open questions at the top of the body.
+- Don't edit STATUS, RECOVERY, PLAN or DECISIONS on mac-1; mac-2 keeps them.
+- Leases: acquire with `--boot`, leave devices warm, and never touch `emulator-5560`.
