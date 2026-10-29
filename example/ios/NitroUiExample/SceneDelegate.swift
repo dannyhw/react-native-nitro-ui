@@ -19,6 +19,16 @@ class SceneDelegate: RCTDefaultReactNativeFactoryDelegate, UIWindowSceneDelegate
     dependencyProvider = RCTAppDependencyProvider()
     reactNativeFactory = RCTReactNativeFactory(delegate: self)
     window = UIWindow(windowScene: windowScene)
+
+    // F7 dwell probe only: a launch that asks for the no-React-Native shape gets
+    // that window instead, and React is never started for it. NitroUiProbe.swift.
+    if let probe = NitroUiProbe.rootViewController(
+      environment: ProcessInfo.processInfo.environment
+    ) {
+      window?.rootViewController = probe
+      window?.makeKeyAndVisible()
+      return
+    }
     
     #if DEBUG
     let devMenuConfiguration = RCTDevMenuConfiguration(
