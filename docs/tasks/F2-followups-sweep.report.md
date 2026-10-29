@@ -105,3 +105,34 @@ line for F1-style determinism. Excerpts in `docs/tasks/F2/failures/`.
 - T11 minors: the three engine behaviours in `FOLLOWUPS.md`, each a behaviour change.
 - Docs: only `button.md` has a captured light/dark pair; the other six controls' appearance
   claims live in prose only. Capturing the pair is someone's task, not F2's.
+## Fix round 1
+
+Both must-fixes and all six nits, in ten commits.
+
+**M1** — the F10 line no longer calls shown→hidden untested: `HostPopups.harness.tsx:1135`
+mounts a drawn DatePicker, opens its dialog and hides the child; the line now names the hit-test
+half as the gap and cites that coverage. The Summary carries the same correction. **M2** — the
+`armed` comment now reads "the one *placement* value read here that is snapshot state", says a
+further *measure* where it said recomposition, and covers `reset()`'s out-of-pass write. Comment-only, but it moves
+the Android tree. **N1** — the `--clean` proof above is now a behaviour mutation, and the use-site
+gap is stated. **N2** — the store-log line the reading rests on is quoted there, the diagnosis
+stops at what it shows, and the flake sits on F1's determinism line. **N3** — C1's two timing
+claims point at `core.md:424-425`. **N4** — one clipped frame is the already-armed `markDirty()`
+case, real cause named. **N5** — citation moved onto the bump. **N6** — T16's arm in the past
+tense. Pruned beyond the list: B1's line still claimed a stale comment remained, which F2's own N2
+fix removed.
+
+`harness:ios` did not re-run: the iOS tree is unchanged (`41a31720d618`), so its row still cites
+the round-1 tree.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1113 tests / 42 suites | `6f4bc4b427e5` | 2 m 02 s | start 5.6 / med 11.2 / max 14.4 |
+| `harness:ios` | **PASS** | 168 tests / 13 suites | `b65316f3df4e` (ios tree) | 2 m 05 s | start 11.2 / med 7.8 / max 11.2 |
+| `harness:android` | **PASS** | 217 tests / 13 suites | `6f4bc4b427e5` (android tree) | 6 m 01 s | start 4.0 / med 6.7 / max 13.8 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+```
+need: review is satisfied on this code tree.
+```
