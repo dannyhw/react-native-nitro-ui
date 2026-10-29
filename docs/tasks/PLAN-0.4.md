@@ -27,4 +27,5 @@ menu that wraps arbitrary RN children.
 G7a and T18 run in parallel, one device pair each. That is safe once X3's registry makes the
 registration lists generated.
 
-Also landed for 0.4: **F3**, three fixes visible to 0.3.x apps (merged from maintainer-mac-1, patch changesets).
+Also landed for 0.4: **F3**, three fixes visible to 0.3.x apps (merged from maintainer-mac-1, patch changesets), and
+**F2**, the follow-ups sweep (PR #6, no changeset).
