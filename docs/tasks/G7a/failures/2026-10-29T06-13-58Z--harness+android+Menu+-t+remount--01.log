@@ -1,0 +1,88 @@
+# Failure excerpt — harness:android:Menu:-t:remount
+
+- Ran: 2026-10-29T06:13:58.681Z on code tree `eae1bf3080d9` at HEAD `cb7c2fa` (branch `task/G7a-menu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu -t remount`
+- Result: fail, exit 1, 16880 ms
+- Load: start 5.54, end 5.32, median 5.54, max 5.61
+- Device: android / device `emulator-5574` / lease `G7a-424pv`
+- Full log: `task/G7a-menu/harness+android+Menu+-t+remount-2026-10-29T06-13-58.415Z.log` (<store>/task/G7a-menu/harness+android+Menu+-t+remount-2026-10-29T06-13-58.415Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › carries no old state across a remount`
+- `expected 'title="Recycled" size=0.00x0.00 refus…' to be '<<never>>' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7a-menu/harness+android+Menu+-t+remount-2026-10-29T06-13-58.415Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  |     iPhone 17 (RNSB 26.4) (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7a-424pv (still live)
+  |   G7a-424pv                G7a          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.32 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:Menu:-t:remount
+gate: node ../scripts/harness.mjs --harnessRunner android Menu -t remount (cwd example)
+gate: code tree eae1bf3080d9 at HEAD cb7c2fa
+gate: git tree 73430241f807 with a DIRTY worktree (not reusable)
+gate: log task/G7a-menu/harness+android+Menu+-t+remount-2026-10-29T06-13-58.415Z.log
+gate:       <store>/task/G7a-menu/harness+android+Menu+-t+remount-2026-10-29T06-13-58.415Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu -t remount
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree eae1bf3080d9, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.54/5.43 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7a-menu/harness+android+Menu+-t+remount-2026-10-29T06-13-58.415Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › carries no old state across a remount
+
+    expected 'title="Recycled" size=0.00x0.00 refus…' to be '<<never>>' // Object.is equality
+
+      [0m [90m 1415 |[39m [32m        previousSize[39m
+       [90m 1416 |[39m [32m      )} refusal=${refusal.slice(0, 40)}`[39m
+      [31m[1m>[22m[39m[90m 1417 |[39m     )[33m.[39mtoBe([32m'<<never>>'[39m)[33m;[39m
+       [90m      |[39m           [31m[1m^[22m[39m
+       [90m 1418 |[39m     selectLog[33m.[39mlength [33m=[39m [35m0[39m[33m;[39m
+       [90m 1419 |[39m     stateLog[33m.[39mlength [33m=[39m [35m0[39m[33m;[39m
+       [90m 1420 |[39m     orderLog[33m.[39mlength [33m=[39m [35m0[39m[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 skipped, 15 total
+Snapshots:   0 total
+Time:        15.745 s
+Ran all test suites matching Menu with tests matching "remount".
+gate: harness:android:Menu:-t:remount FAIL in 16.9 s
+gate: recorded in .gates/task/G7a-menu.jsonl
+
+
+gate: appended the device context to task/G7a-menu/harness+android+Menu+-t+remount-2026-10-29T06-13-58.415Z.log (5 probe(s))
+
+```
