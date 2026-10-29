@@ -16,6 +16,10 @@
 > and one more exclusive window. It was delegated once X3 and X9 had released their leases (this machine is a
 > dedicated spare: benches need an idle machine, not a time of day). Step 3 (X3) is merged, and so is X9.
 >
+> **0.3.2 staged on npm (2026-10-29, stage id `4642b5ea-5878-4442-a9d0-48f9b1b6ac01`)**: F3's three fixes.
+> **Waiting on the owner's approval** on npmjs.com (Staged Packages, or `npm stage approve <id>`); `Release tag`
+> then creates `v0.3.2`. X13 fixed the release lock refresh (json 2.18.0 pin); Version Packages PR #5 merged.
+>
 > **Owner away from 2026-10-29 (autonomous):** mac-1 runs G7a, then F2 (`HANDOFF-mac1-2026-10-29.md`), and
 > opens a PR per task. mac-2 runs F1, X13 and X4, and merges mac-1's PRs after re-running gates here
 > (T3 schedule `nitroui-pr-watch`, every 45 min). It merges the 0.3.2 Version Packages PR once CI is
