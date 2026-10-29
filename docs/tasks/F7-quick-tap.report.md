@@ -7,42 +7,30 @@
 ## Summary
 
 **A 50 ms press is not delivered on the busy screen — under XCUITest, on a simulator.** On the
-shipped Switch screen (200 hosted Switches in a `ScrollView`) it arrives **0–1 times in 12**. That
-is the whole of what was measured: nothing here involves a finger, a real device, or any harness
-other than XCUITest, and XCUITest resolves the control by accessibility identifier and waits for
-the app to go idle before it posts each event. Whether a real thumb is affected is therefore
-**still unmeasured**, and an XCUITest artefact is not ruled out (see Fix round 1). What is ruled
-out, narrowly, is that the difference between our Switch and React Native's is ours: the same press
-in the same launch hits both equally. Every number below is 12 presses at 50 ms unless stated, with
-`load1` recorded.
-
-**Quieter, but not silent.** `--quiet` reads its witness twice instead of polling it, which removes
-the *witness* traffic — hosted Switch **0/12**, React Native's own `Switch` on the same screen
-**0/12**, RN's `Pressable` **12/12**, positive control **12/12** (load 1.8 / 4.8 / 3.8), both read
-as a JS event count so the loss is visible through JS's own render. It does **not** remove the
-traffic of aiming: each press still resolves its element, and XCTest still waits for idle per
-event, so an accessibility query of a 200-control tree runs on the app's main thread right before
-every press. The claim that no accessibility traffic enters the app between presses was wrong, and
-the review caught it.
+shipped Switch screen (200 hosted Switches in a `ScrollView`) it arrives **0–1 times in 12**. All of
+what was measured, in both rounds, is XCUITest on a simulator — no finger, no real device. Fix round
+1 took the harness out of the loop (no per-press accessibility lookup; XCTest's own wait-for-idle
+switched off and verified off) and the screen still lost the press, **0/12** and **1/12**, while the
+same fixed point at the shipped dwell delivered **12/12**. So it is not the probe's queries and not
+XCTest settling the app, and 200 plain `UISwitch`es with no React Native and no SwiftUI in the
+process deliver **12/12**. A thumb on a real device remains unmeasured. Every number below is 12
+presses at 50 ms unless stated, `load1` recorded.
 
 **Whose it is.** `RCTScrollViewComponentView.mm:145` already sets `delaysContentTouches = NO`, so
 the brief's experiment 1 was moot; measured anyway — `canCancelContentTouches=false` **0/12**,
 `scrollEnabled=false` **0/12**, no `ScrollView` at all **0/12**. The list is the variable: remove it
 **12/12**; keep its geometry and swap the 200 hosted Switches for plain boxes **12/12**; swap them
 for **RN's own** 200 Switches **0/12**. Button and SegmentedControl take the press **12/12** on
-their 200-row screens and inside a `<Host>`. A plain SwiftUI `Toggle` in a `UIHostingController`
-inside a bare `UIScrollView`, no React Native in the process, is **12/12** in all four shapes.
+their 200-row screens and inside a `<Host>`. With no React Native in the process, 200 SwiftUI
+`Toggle`s and 200 plain `UISwitch`es are both **12/12**, in every scroll shape.
 
 **A mechanism that reproduces the symptom, not a demonstration that this screen uses it.**
-`--stall <ms>` blocks the no-RN window's main thread on every run-loop pass, and the window
-publishes the longest block it actually performed
-(`measured-max=122ms`). Toggle rows, acted/12: no stall **12**, 40 ms **4**, 80 ms **0–1**, 120 ms
-**0**, and the scroller is not required (the `view` shape drops too). In the same launches a
-`UITapGestureRecognizer` on the very view whose Toggle never acted fired **12/12**, so a press can
-be hit-tested and recognised and still never reach the control beneath. A plain `UIButton` in the
-same scroller under the same stall takes them all, **12/12**. That is *a* way to lose a Toggle
-press; it is not shown to be this screen's way — the watchdog row below argues against it. Android
-is not affected: 5 / 20 / 50 / 100 ms all **12/12**, control 3/3 (load 3.8–5.2).
+`--stall <ms>` blocks the no-RN window's main thread on every run-loop pass (published as
+`measured-max=122ms`). Toggle rows, acted/12: no stall **12**, 40 ms **4**, 80 ms **0–1**, 120 ms
+**0**. In the same launches a `UITapGestureRecognizer` on the view whose Toggle never acted fired
+**12/12** — a press can be recognised and still never reach the control — while a plain `UIButton`
+in the same scroller takes them all. That is *a* way to lose a press; the watchdog row argues
+against it being this screen's way. Android is not affected: 5 / 20 / 50 / 100 ms all **12/12**.
 
 **Guard.** `testRealInputSwitch` now also delivers twelve presses once each with no retry and
 asserts all twelve moved the control, and asserts the 200-row list is mounted first. `pressDwell`
@@ -53,22 +41,29 @@ stays **0.15**: nothing was fixed, and the measured boundary is between **80 ms 
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1161 tests / 45 suites | `eada65983c29` | 2 m 36 s | start 3.3 / med 3.6 / max 7.5 |
-| `harness:ios` | **PASS** | 168 tests / 13 suites | `eada65983c29` (ios tree) | 2 m 09 s | start 2.7 / med 3.2 / max 4.0 |
-| `harness:android` | **PASS** | 217 tests / 13 suites | `2d6b9f063bea` (android tree) | 6 m 13 s | start 3.3 / med 3.7 / max 7.3 |
-| `real-input:ios` | **PASS** | — | `eada65983c29` (ios tree) | 10 m 56 s | start 3.7 / med 4.5 / max 21.5 |
-| `real-input:android` | **PASS** | — | `2d6b9f063bea` (android tree) | 15 m 14 s | start 1.5 / med 2.7 / max 5.7 |
+| `check` | **PASS** | 1161 tests / 45 suites | `ad1b4ce92306` | 2 m 36 s | start 2.5 / med 3.3 / max 4.7 |
+| `harness:ios` | **PASS** | 168 tests / 13 suites | `ad1b4ce92306` (ios tree) | 4 m 10 s | start 3.4 / med 3.0 / max 4.4 |
+| `harness:android` | **PASS** | 217 tests / 13 suites | `ad1b4ce92306` (android tree) | 6 m 14 s | start 2.3 / med 3.0 / max 4.6 |
+| `real-input:ios` | **PASS** | — | `ad1b4ce92306` (ios tree) | 10 m 59 s | start 1.4 / med 5.4 / max 8.5 |
+| `real-input:android` | **PASS** | — | `ad1b4ce92306` (android tree) | 15 m 12 s | start 5.0 / med 2.9 / max 10.2 |
+| `real-input:ios:--control:switch` | **PASS** | — | `ad1b4ce92306` (ios tree) | 1 m 34 s | start 5.2 / med 5.0 / max 6.4 |
 
-The two Android rows sit on the earlier tree because everything committed after it
-touches iOS and docs only, and `gate.mjs` matches a device run against that
-platform's half of the tree.
+Fix round 1 re-ran everything, on lease `F7-xbddv`: the diff touches `example/ios`, the example's
+JS and `scripts/real-input/*`, which `need` treats as both platforms. Two runs are not the gate's
+first word on this tree:
 
-`real-input:ios:--control:switch` — the guard's red proof — is in the ledger as three `FAIL`s and
-one `PASS`: two at the mutated trees (the global-dwell mutation, then the guard-only mutation that
-produced the line quoted under Red proofs), one at the guard mutation as well but for an unrelated
-cause (the lease expired mid-run and the app never rendered), and the `PASS` after the revert.
-`gate.mjs status` prints the row `stale` above because a mutation run is not evidence about the
-committed tree by design.
+- `check` first failed with `A jest worker process (pid=68337) was terminated by another process:
+  signal=SIGSEGV` in `scripts/__tests__/patch-nitrogen.test.js` — one suite, zero failing tests, and
+  the same suite passes on every run since. That run's ledger line also records
+  `worktreeClean: false`, because a docs commit landed under it.
+- `harness:android` failed once with `The accessibility step probe never reported`
+  (`Slider › steps to the next legal value when a screen reader asks`) and passed unchanged on the
+  re-run, so the row above is the pass. Nothing in the diff reaches `android/` or `cpp/`.
+- `harness:ios` failed once because of this task's own probe: the dwell probe had started a Metro on
+  port 8293 and left the device's `RCT_jsLocation` pointing at it, so the harness's timing gate saw a
+  `state.json` published for the wrong Metro port and refused to trust its own numbers — which is
+  the assertion behaving exactly as designed. Both were cleared (`kill` of the two PIDs this task
+  started, `defaults delete` for the bundle id) and the re-run is clean.
 
 `need --for review`: `need: review is satisfied on this code tree.`
 
@@ -214,9 +209,12 @@ what it is.
 - `scripts/real-input/android-dwell-probe.mjs` — zero-distance `input swipe` at a caller-set dwell;
   aims by `testID` or `desc:<accessibilityLabel>`, because hosted Compose controls publish the latter.
 - `example/ios/NitroUiExample/NitroUiProbe.swift` — the no-React-Native arm: three shapes, counting
-  witnesses, stall observer, in-scroller `UIButton`, recogniser counter, watchdog.
+  witnesses, stall observer, in-scroller `UIButton`, recogniser counter, watchdog; fix round 1 adds
+  the `uikit-switch` / `uikit-switch-rn` shapes (rows of plain `UISwitch`es).
 - `example/ios/NitroUiExampleUITests/RealInputTests.swift` — the guard, `publishedNumber`, the
-  stall/rescue recognisers, probe env forwarded as a list, per-target quiet witnesses.
+  stall/rescue recognisers, probe env forwarded as a list, per-target quiet witnesses; fix round 1
+  adds `measureDeliveryWithoutLookups` (a point fixed from the window root), the private
+  skip-quiescence arm, and the delivered / dropped / unreadable witness.
 - `example/src/probeVariant.ts`, `example/src/SwitchScreen.tsx` — probe variants and witnesses,
   committed off, borrowed by the probe for the length of a run.
 - `example/ios/NitroUiExample.xcodeproj/project.pbxproj` — `NitroUiProbe.swift` as explicit file
@@ -237,6 +235,14 @@ what it is.
   printed `taps` as `delivered`); fixed here. The per-cell JSON files were always parsed correctly.
 - example: mounted-kind vs pressed-kind is answered only by inference — a variant mounting 200
   hosted Switches while pressing a Button would pin it directly.
+- probe: `f7-matrix.mjs --out` does not create its directory, so the first cell into a fresh output
+  dir runs and then dies writing its per-cell JSON (the aggregate still parses from the log). One
+  `mkdirSync` at the top of `runCell`.
+- tooling (this task's own doing, recorded so the next person recognises it): killing a
+  `gate.mjs`/probe run with `kill` reaps the wrapper but not the Metro it started, and the orphan
+  keeps serving its port with the device pointed at it. The next `harness:ios` in that worktree then
+  fails its timing gate on a wrong-port `state.json` — the refusal is correct, and clearing is two
+  commands, but it cost a run here. Kill the run's own `stopMetro`, not its parent pid.
 - tooling: `f7-matrix.mjs` treats the variant file as global state; two probes on one checkout would
   fight over it.
 - example: `assertStillInPlace`'s exact-`CGRect` comparison is genuinely fragile at fractional
@@ -244,30 +250,26 @@ what it is.
 
 ## Questions for orchestrator
 
-1. **Should the library do anything itself?** The measured options:
-   - **(a) Ship nothing; document it.** App authors keep presses above ~100 ms (measured 0/12 at
-     80 ms, 12/12 at 100 ms) or reduce mounted switch count (list removed = 12/12; 200 plain boxes =
-     12/12). Costs nothing, changes no behaviour, matches "if it's RN's or the platform's, don't
-     patch around it blind".
-   - **(b) A library-side recogniser rescue.** *Measured and not supported:* under a stall a tap
-     recogniser on the host view fires 12/12 while the control beneath acts 0/12, so a recogniser
-     rescues the *event*, not the control. Making the control act would mean synthesising its action
-     — the blind patch the brief forbids — and it would fire during scrolls for anything that also
-     drives one.
-   - **(c) Upstream to React Native.** The evidence is ready: the busy screen loses a 50 ms press
-     for RN's own `Switch` (0/12) and ours (0/12) in the same launch, RN's `Pressable` (12/12) does
-     not, and a no-RN process of the same shape never loses one.
-   - **Recommendation: (a) now, plus (c) as a bug report.** I cannot file it (AGENTS.md: no
-     outward-facing actions); say the word and I will write the report text and minimal repro as a
-     file for you to post.
-2. **The brief's 50 ms real-input case.** With no fix landing, a case that presses 50 ms and asserts
-   delivery is a permanently red test, so I guarded the shipped dwell and showed red at 50 ms by
-   mutation. Options: keep as is (recommended); add a 50 ms case that measures and logs without
-   asserting, which duplicates the probe; or an expected-failure case, for which this repo has no
-   mechanism. Which do you want?
-3. **`pressDwell` stays 0.15** because no fix landed, per the brief's condition. If you want it
-   lowered anyway, 0.12 is 12/12 busy and calm; 0.10 is the lowest value measured 12/12 on the busy
-   screen and is my floor recommendation.
+Round 1's three questions were answered with the review (MERGE WITH FIXES at `229a481`); they are
+recorded here with what the fix round then measured, because (1) has changed shape.
+
+1. **Should the library do anything itself?** Ruled: ship nothing, and prepare no upstream report
+   yet. Round 1's option (a) also offered app-level advice ("keep presses above ~100 ms", "mount
+   fewer switches"), which is withdrawn — press length is not something an author sets for a thumb.
+   Option (b), a recogniser rescue, stays measured-and-unsupported: under a stall a tap recogniser
+   fires 12/12 while the control beneath acts 0/12. The review's live doubt was that the whole thing
+   is an XCUITest artefact, and fix round 1 answers the part of it that can be answered from inside
+   XCUITest: with no per-press lookup, and with XCTest's idle wait switched off and verified on, the
+   busy screen still loses the 50 ms press (0/12, 1/12), while the same fixed point at the shipped
+   dwell delivers 12/12 and a no-RN, no-SwiftUI `UISwitch` list delivers 12/12. What still cannot be
+   said from this machine is anything about a finger on a device — no harness here but XCUITest was
+   used, and the review's "not real for users until it is measured outside XCUITest" stands open
+   until someone runs a UI-test-free repro. Nothing in the library changes either way.
+2. **The brief's 50 ms asserting case.** Ruled: keep the guard at the shipped dwell, no asserting
+   50 ms case. Kept as shipped; the red proof at 50 ms is by mutation, as before.
+3. **`pressDwell`.** Ruled: stays 0.15. Unchanged.
+
+No new questions.
 
 ## Fix round 1
 
