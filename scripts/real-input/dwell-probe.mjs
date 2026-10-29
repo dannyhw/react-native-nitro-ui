@@ -94,6 +94,13 @@ const FRACTIONS = flag('--fractions', '');
 /** The no-React-Native arm: a shape from `NitroUiProbe.swift`, and its row count. */
 const PROBE_UI = flag('--probe-ui', '');
 const PROBE_ROWS = flag('--rows', '200');
+/**
+ * Read the witness twice instead of polling it: press, then read once. For the
+ * case where the concern is that the probe's own accessibility traffic into a busy
+ * app is what disturbs the answer. Needs a counting witness to say how many
+ * presses landed rather than merely whether any did.
+ */
+const QUIET = args.includes('--quiet');
 const DWELLS = flag('--dwells', '0,0.03,0.05,0.08,0.12,0.15')
   .split(',')
   .map((value) => Number(value.trim()))
@@ -345,6 +352,7 @@ async function main() {
           TEST_RUNNER_NUI_PROBE_WITNESS: WITNESS,
           TEST_RUNNER_NUI_PROBE_LABEL: LABEL,
           TEST_RUNNER_NUI_PROBE_FRACTIONS: FRACTIONS,
+          ...(QUIET ? { TEST_RUNNER_NUI_PROBE_QUIET: '1' } : {}),
           // Only this arm of the probe builds a window with no React Native in
           // it; an empty value leaves the app's own launch untouched.
           ...(PROBE_UI === ''

@@ -92,6 +92,15 @@ export default function SwitchScreen() {
   const [probeHostedEvents, setProbeHostedEvents] = useState(0);
   const [probeNative, setProbeNative] = useState(false);
   const [probeNativeEvents, setProbeNativeEvents] = useState(0);
+  // A counting witness for the probe's own positive control. `js-toggle` flips a
+  // boolean, so "how many of twelve presses landed" cannot be read from it as a
+  // delta — an even number looks identical to none. This one counts, which is what
+  // the quiet probe shape needs: press twelve times, read once, the delta is the
+  // answer.
+  const [probePressEvents, setProbePressEvents] = useState(0);
+  const countProbePress = useCallback(() => {
+    setProbePressEvents((count) => count + 1);
+  }, []);
   const acceptHosted = useCallback((next: boolean) => {
     setProbeHosted(next);
     setProbeHostedEvents((count) => count + 1);
@@ -155,6 +164,23 @@ export default function SwitchScreen() {
           style={[styles.value, { color: ink.ink }]}
         >
           {probeNativeEvents}
+        </Text>
+      </Row>
+      <Row label="pressable · events JS saw">
+        <Pressable
+          onPress={countProbePress}
+          testID="probe-pressable"
+          hitSlop={8}
+        >
+          <Text style={styles.link}>count me</Text>
+        </Pressable>
+      </Row>
+      <Row label="">
+        <Text
+          testID="probe-press-events"
+          style={[styles.value, { color: ink.ink }]}
+        >
+          {probePressEvents}
         </Text>
       </Row>
       <Row label="value shown to JS">

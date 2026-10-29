@@ -326,7 +326,7 @@ final class RealInputTests: XCTestCase {
     // otherwise read as a result; this line is what lets it be thrown out.
     let variant = echoText("probe-variant")
     print(
-      "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) tab=\(tab) witness=\(witness) label=\(label.isEmpty ? "-" : label) \(variant.isEmpty ? "variant=?" : variant)"
+      "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) tab=\(tab) witness=\(witness) quiet=\(quiet) label=\(label.isEmpty ? "-" : label) \(variant.isEmpty ? "variant=?" : variant)"
     )
 
     let delivered = try measureDelivery(
@@ -345,21 +345,42 @@ final class RealInputTests: XCTestCase {
     )
 
     // Positive control, same launch, same press shape.
+    //
+    // The default shape presses `js-toggle`, which flips a boolean: three presses,
+    // each confirmed by the echo moving. The quiet shape cannot use it — an even
+    // number of flips looks like none when the witness is read once at the end — so
+    // there the control is `probe-pressable`, whose witness counts, pressed as many
+    // times as the target was. If that does not report every press, the launch was
+    // not healthy and the target's number says nothing.
     var controlDelivered = 0
-    let controlTaps = 3
+    var controlTaps = 3
     if let toggle {
-      for _ in 1...controlTaps {
-        let before = echoText(Echo.switchValue)
-        toggle.centre.fingerTap(duration: dwell)
-        let until = Date().addingTimeInterval(2)
-        while Date() < until {
-          if echoText(Echo.switchValue) != before {
-            controlDelivered += 1
-            break
+      if quiet {
+        controlTaps = taps
+        controlDelivered = try measureDelivery(
+          target: "probe-pressable",
+          dwell: dwell,
+          taps: taps,
+          fractions: [],
+          reading: { _ in
+            let shown = echoText("probe-press-events")
+            return shown.isEmpty ? nil : shown
           }
-          Thread.sleep(forTimeInterval: 0.05)
+        )
+      } else {
+        for _ in 1...controlTaps {
+          let before = echoText(Echo.switchValue)
+          toggle.centre.fingerTap(duration: dwell)
+          let until = Date().addingTimeInterval(2)
+          while Date() < until {
+            if echoText(Echo.switchValue) != before {
+              controlDelivered += 1
+              break
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+          }
+          Thread.sleep(forTimeInterval: 0.3)
         }
-        Thread.sleep(forTimeInterval: 0.3)
       }
     }
 
@@ -373,6 +394,12 @@ final class RealInputTests: XCTestCase {
   /// no-React-Native probe window) so the two are pressed identically and only the
   /// app under the finger differs.
   ///
+  /// Set by `NUI_PROBE_QUIET=1` to switch ``measureDelivery`` to the low-
+  /// interference shape described by ``measureDeliveryQuietly``.
+  private var quiet: Bool {
+    ProcessInfo.processInfo.environment["NUI_PROBE_QUIET"] == "1"
+  }
+
   /// - Parameter reading: what the witness says right now, for one control. It is
   ///   passed the identifier so the same closure can serve a control and the
   ///   positive control.
@@ -383,6 +410,15 @@ final class RealInputTests: XCTestCase {
     fractions: [Double],
     reading: (String) -> String?
   ) throws -> Int {
+    if quiet {
+      return try measureDeliveryQuietly(
+        target: target,
+        dwell: dwell,
+        taps: taps,
+        fractions: fractions,
+        reading: reading
+      )
+    }
     var delivered = 0
     for index in 1...taps {
       let before = reading(target)
@@ -421,6 +457,57 @@ final class RealInputTests: XCTestCase {
       Thread.sleep(forTimeInterval: 0.4)
     }
     return delivered
+  }
+
+  /// The same presses with the probe's own interference taken out of the run.
+  ///
+  /// The default loop above consults the witness up to thirty times per press, and
+  /// every consultation is an accessibility query that goes into the app under test
+  /// and is answered on its main thread. On a screen with two hundred mounted
+  /// controls that is a load the probe itself is imposing on the thing it is
+  /// measuring, and it is exactly the kind of thing that could turn "the press was
+  /// lost" into "the press was lost because I was asking too loudly".
+  ///
+  /// Here the probe reads the witness twice: once before the first press and once
+  /// after the last. A witness that counts (a rendered event count) then reports the
+  /// number of delivered presses directly, as a delta, with no polling at all and no
+  /// per-pass deadline that a slow-but-real delivery could miss. A witness that only
+  /// toggles can still say whether anything arrived, which is the weaker claim, and
+  /// is labelled as such by the caller passing a count witness whenever it has one.
+  ///
+  /// The trade is that this arm cannot say *which* press was lost, and it aims once
+  /// rather than re-aiming, so it is only valid while the control does not move.
+  private func measureDeliveryQuietly(
+    target: String,
+    dwell: TimeInterval,
+    taps: Int,
+    fractions: [Double],
+    reading: (String) -> String?
+  ) throws -> Int {
+    let before = reading(target)
+    let element = try required(target, as: "the control under the probe")
+    for index in 1...taps {
+      if let fraction = fractions.isEmpty ? nil : fractions[(index - 1) % fractions.count] {
+        element
+          .atFraction(CGFloat(fraction))
+          .fingerTap(duration: dwell)
+      } else {
+        element.fingerTap(duration: dwell)
+      }
+      print("real-input (ios): dwell-probe: quiet tap \(index)/\(taps) pressed")
+      Thread.sleep(forTimeInterval: 0.4)
+    }
+    // One read, after the last press has had time to be applied and rendered.
+    Thread.sleep(forTimeInterval: 1.0)
+    let after = reading(target)
+    print("real-input (ios): dwell-probe: quiet \(before ?? "?") -> \(after ?? "?")")
+    // A counting witness says exactly how many arrived.
+    if let start = Int(before ?? ""), let end = Int(after ?? "") {
+      return max(0, end - start)
+    }
+    // Anything else can only answer "did any of them land", and the caller's
+    // positive control is what keeps that honest.
+    return before == after ? 0 : 1
   }
 
   /// A real tap must toggle a Switch that sits inside a `<Host>`.
