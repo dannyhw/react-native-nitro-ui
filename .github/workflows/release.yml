@@ -267,6 +267,25 @@ jobs:
         with:
           ruby-version: '3.3'
 
+      # `json` is a default gem, so `setup-ruby` hands it to CocoaPods at whatever
+      # version that Ruby shipped - 2.7.2 for Ruby 3.3 - and that version decides
+      # how `JSON.pretty_generate` renders an empty collection. CocoaPods hashes
+      # exactly those bytes for every pod pulled `from:` a path, so this one
+      # transitive dependency is the difference between a release and 87 changed
+      # `SPEC CHECKSUMS` lines: run 40789293108, where the runner serialised
+      # `"React-cxxstableapi": [\n\n]` and the maintainer Macs write
+      # `"React-cxxstableapi": []`. Install it *before* cocoapods so the gem set
+      # resolves with it in place. See scripts/pod-install-lib.mjs.
+      #
+      # Deliberately a json pin rather than a Ruby pin: `cocoapods-core` only
+      # requires `ruby >= 2.6`, so json is the variable and pinning it lets
+      # `ruby-version` above keep tracking the iOS harness job.
+      - name: Pin the json gem CocoaPods serialises podspecs with
+        run: |
+          set -euo pipefail
+          gem install json -v 2.18.0 --no-document
+          gem list json
+
       - name: Install the pinned CocoaPods
         run: |
           set -euo pipefail
@@ -277,6 +296,12 @@ jobs:
           fi
           gem install cocoapods -v "$PIN" --no-document
           pod --version
+
+      # No separate "does this runner serialise podspecs like the lock" step:
+      # `release:version` begins with `sync-example-lock.mjs --preflight`, which
+      # asks `pod ipc spec` exactly that and refuses before `changeset version`
+      # runs, so the answer is already in the log above the churn guard's own
+      # report. One question, one place that asks it.
 
       # `publish-script` is unset on purpose: with none, the action only ever
       # versions and opens or updates the pull request, and never publishes —
