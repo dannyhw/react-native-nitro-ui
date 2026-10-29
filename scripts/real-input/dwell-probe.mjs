@@ -1,0 +1,375 @@
+#!/usr/bin/env node
+/**
+ * Measures how long a synthesised press has to last before the Switch screen
+ * delivers it to a hosted SwiftUI Toggle, and writes the table.
+ *
+ * Why this is a script and not a gate: the number it produces is a measurement
+ * about this machine and this iOS, not a contract the library promises. What it
+ * settles is a design decision - the dwell `fingerTap` holds - and the review
+ * that asked for it (F1 M1) is right that a dwell above a human tap would hide a
+ * product bug rather than fix a test. So the answer has to be a table someone
+ * can read, with the machine's load on each row, and not a green tick.
+ *
+ * One `xcodebuild` launch per dwell, because a press's shape is only meaningful
+ * against a settled app: the probe re-launches so each dwell starts from the same
+ * first-render state the suite's own cases get.
+ *
+ * Usage (same environment the real-input gate needs):
+ *
+ *   IOS_SIM_UDID=<udid> METRO_PORT=<port> \
+ *     node scripts/real-input/dwell-probe.mjs [--taps 12] [--dwells 0,0.03,0.05,0.08,0.15]
+ *      [--out docs/tasks/F1/dwell-probe.md] [--json /tmp/dwell.json]
+ *
+ * It builds for testing with the same arguments `ios.mjs` uses, so the binary is
+ * the one the gate runs; it does not write an app stamp, because it installs
+ * nothing new - it reuses the build the gate would.
+ */
+
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+
+import { artifactsDir, ensureMetro, run } from './support.mjs';
+import { assertSupportedNodeOrReexec } from '../node-version.mjs';
+import { currentCodeTree, recordBuild } from '../app-stamp.mjs';
+import { iosModuleCacheArgs } from '../build-speed-lib.mjs';
+
+assertSupportedNodeOrReexec({
+  command: 'node scripts/real-input/dwell-probe.mjs',
+  entryUrl: import.meta.url,
+});
+
+const WORKSPACE = 'NitroUiExample.xcworkspace';
+const SCHEME = 'NitroUiExampleUITests';
+const TEST_CLASS = 'RealInputTests';
+const PROBE = 'testMeasureSwitchDwellDelivery';
+const BUNDLE_ID = 'nitroui.example';
+
+const args = process.argv.slice(2);
+
+/**
+ * @param {string} name
+ * @param {string} fallback
+ * @returns {string}
+ */
+function flag(name, fallback) {
+  const index = args.indexOf(name);
+  return index >= 0 && args[index + 1] != null ? args[index + 1] : fallback;
+}
+
+const TAPS = Number(flag('--taps', '12'));
+// Which control to press, and which screen to find it on. The default is the busy
+// Switch screen (200 switches in a scroller); pointing this at `host-switch-0` on
+// the Host screen measures the same kind of control where far less is mounted, and
+// the pair is what says whether a dropped press is about the gesture's shape or
+// about how much the app has on screen.
+const TARGET = flag('--target', 'switch-uncontrolled');
+const TAB = flag('--tab', 'tab-switch');
+const ANCHOR = flag('--anchor', 'switch-controlled-value');
+const DWELLS = flag('--dwells', '0,0.03,0.05,0.08,0.12,0.15')
+  .split(',')
+  .map((value) => Number(value.trim()))
+  .filter((value) => Number.isFinite(value));
+const OUT = flag('--out', '');
+const JSON_OUT = flag('--json', '');
+
+function load1() {
+  const out = run('sysctl', ['-n', 'vm.loadavg']);
+  const parts = out.stdout.trim().split(/\s+/);
+  return Number(parts[1] ?? '0');
+}
+
+function iosDir() {
+  return path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '../../example/ios'
+  );
+}
+
+/**
+ * Point the debug build at this task's Metro, the way `ios.mjs` does. Without it the
+ * app looks for a bundler on 8081, renders nothing, and every probe question times
+ * out on `tab-switch` - which reads like a dropped touch and is really an empty app.
+ *
+ * @param {string} udid
+ * @param {number} port
+ */
+function setJsLocation(udid, port) {
+  run('xcrun', [
+    'simctl',
+    'spawn',
+    udid,
+    'defaults',
+    'write',
+    BUNDLE_ID,
+    'RCT_jsLocation',
+    '-string',
+    `localhost:${String(port)}`,
+  ]);
+}
+
+/**
+ * @param {string} udid
+ */
+function clearJsLocation(udid) {
+  run('xcrun', [
+    'simctl',
+    'spawn',
+    udid,
+    'defaults',
+    'delete',
+    BUNDLE_ID,
+    'RCT_jsLocation',
+  ]);
+}
+
+/**
+ * @param {ReadonlyArray<string>} argv
+ * @param {string} logFile
+ * @param {Record<string, string>} extraEnv
+ * @returns {Promise<number>}
+ */
+function xcodebuild(argv, logFile, extraEnv) {
+  const out = fs.createWriteStream(logFile, { flags: 'w' });
+  return new Promise((resolve, reject) => {
+    const child = spawn('xcodebuild', [...argv], {
+      cwd: iosDir(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...extraEnv },
+    });
+    let done = false;
+    const show = (chunk) => {
+      if (done) {
+        return;
+      }
+      out.write(chunk);
+      for (const line of String(chunk).split('\n')) {
+        if (
+          /^\s*(Test Case|Testing failed|error:)/.test(line) ||
+          /real-input \(ios\): dwell-probe/.test(line)
+        ) {
+          console.log(`    ${line.trim()}`);
+        }
+      }
+    };
+    child.stdout.on('data', show);
+    child.stderr.on('data', show);
+    child.on('error', reject);
+    // Same reason as `ios.mjs`: xcodebuild leaves helpers holding the write end
+    // of the pipe after it is finished, so waiting for `close` would hang.
+    child.on('exit', (status) => {
+      done = true;
+      out.end(() => resolve(status ?? 1));
+    });
+  });
+}
+
+/**
+ * @param {string} log
+ * @returns {{delivered: number, taps: number, control: number, controlTaps: number} | null}
+ */
+function readResult(log) {
+  // `target=` is part of the line so a log of several ladders can be told apart;
+  // the parse does not need it, and matching without it keeps this working for a
+  // log written before the tag existed.
+  const match =
+    /RESULT target=\S+ dwell=([\d.]+)s switch=(\d+)\/(\d+) js-toggle=(\d+)\/(\d+)/.exec(
+      log
+    );
+  if (match == null) {
+    return null;
+  }
+  return {
+    dwell: Number(match[1]),
+    delivered: Number(match[2]),
+    taps: Number(match[3]),
+    control: Number(match[4]),
+    controlTaps: Number(match[5]),
+  };
+}
+
+async function main() {
+  const udid = process.env.IOS_UDID ?? process.env.IOS_SIM_UDID;
+  if (udid == null) {
+    throw new Error('dwell-probe: IOS_SIM_UDID (or IOS_UDID) is not set.');
+  }
+  const metroPort = Number(process.env.METRO_PORT ?? 8291);
+  const derived = path.join(iosDir(), 'build');
+  // Taken before the compile, so the stamp written afterwards can claim only what
+  // this tree actually produced.
+  const treeBefore = currentCodeTree();
+  const out = artifactsDir('ios');
+  const stopMetro = await ensureMetro({
+    port: metroPort,
+    logFile: path.join(out, 'metro.log'),
+  });
+  try {
+    const settings = [
+      'CODE_SIGNING_ALLOWED=NO',
+      ...iosModuleCacheArgs({ derivedData: derived, ccache: false }),
+    ];
+    const buildLog = path.join(out, 'dwell-probe-build.log');
+    console.log(`dwell-probe: building (log: ${buildLog})`);
+    const built = await xcodebuild(
+      [
+        'build-for-testing',
+        '-workspace',
+        WORKSPACE,
+        '-scheme',
+        SCHEME,
+        '-configuration',
+        'Debug',
+        '-destination',
+        `platform=iOS Simulator,id=${udid}`,
+        '-derivedDataPath',
+        derived,
+        ...settings,
+      ],
+      buildLog,
+      {}
+    );
+    if (built !== 0) {
+      throw new Error(
+        `dwell-probe: build-for-testing failed (${String(built)})`
+      );
+    }
+
+    // The suite installs its own app because it needs the UI-test bundle, and so
+    // does this: the probe drives the same binary the gate does. Same stamp guard,
+    // because it compiles into the same derived data - the next harness run has to
+    // be able to tell that this binary came from this tree.
+    const app = path.join(
+      derived,
+      'Build/Products/Debug-iphonesimulator/NitroUiExample.app'
+    );
+    recordBuild({
+      platform: 'ios',
+      artifact: app,
+      treeBefore,
+      log: (message) => console.log(`  ${message}`),
+    });
+    const installed = run('xcrun', ['simctl', 'install', udid, app]);
+    if (installed.status !== 0) {
+      throw new Error(
+        `dwell-probe: installing ${app} failed: ` +
+          (installed.stderr.trim() === ''
+            ? installed.stdout.trim()
+            : installed.stderr.trim())
+      );
+    }
+    // Without this the app asks Metro on 8081, renders nothing, and every probe
+    // question times out on `tab-switch` - which would read as a dropped touch and
+    // is really an empty app.
+    setJsLocation(udid, metroPort);
+
+    /** @type {Array<Record<string, number>>} */
+    const rows = [];
+    for (const dwell of DWELLS) {
+      const at = load1();
+      console.log(
+        `\ndwell-probe: dwell ${dwell.toFixed(2)}s · ${String(TAPS)} taps · load1 ${at.toFixed(2)}`
+      );
+      const logFile = path.join(out, `dwell-probe-${dwell.toFixed(2)}.log`);
+      const status = await xcodebuild(
+        [
+          'test-without-building',
+          '-workspace',
+          WORKSPACE,
+          '-scheme',
+          SCHEME,
+          '-configuration',
+          'Debug',
+          '-destination',
+          `platform=iOS Simulator,id=${udid}`,
+          '-derivedDataPath',
+          derived,
+          '-collect-test-diagnostics',
+          'never',
+          `-only-testing:${SCHEME}/${TEST_CLASS}/${PROBE}`,
+          ...settings,
+        ],
+        logFile,
+        {
+          // Xcode forwards its own environment to the test runner under this
+          // prefix; `TEST_RUNNER_FOO=1 xcodebuild ...` puts `FOO=1` in the
+          // process under test.
+          TEST_RUNNER_NUI_PROBE_DWELL: dwell.toFixed(2),
+          TEST_RUNNER_NUI_PROBE_TAPS: String(TAPS),
+          TEST_RUNNER_NUI_PROBE_TARGET: TARGET,
+          TEST_RUNNER_NUI_PROBE_TAB: TAB,
+          TEST_RUNNER_NUI_PROBE_ANCHOR: ANCHOR,
+        }
+      );
+      const log = fs.readFileSync(logFile, 'utf8');
+      const result = readResult(log);
+      if (result == null) {
+        throw new Error(
+          `dwell-probe: dwell ${dwell.toFixed(2)}s produced no RESULT line ` +
+            `(xcodebuild exit ${String(status)}). See ${logFile}.`
+        );
+      }
+      rows.push({
+        dwell,
+        load1: Number(at.toFixed(2)),
+        delivered: result.delivered,
+        taps: result.taps,
+        jsToggle: result.control,
+        jsToggleTaps: result.controlTaps,
+      });
+      console.log(
+        `dwell-probe:   switch ${String(result.delivered)}/${String(result.taps)} · js-toggle ` +
+          `${String(result.control)}/${String(result.controlTaps)}`
+      );
+    }
+
+    const table = renderTable(rows);
+    console.log(`\n${table}`);
+    if (OUT !== '') {
+      const target = path.resolve(OUT);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(
+        target,
+        `# F1 dwell probe — delivery vs press duration\n\n` +
+          `Generated by \`node scripts/real-input/dwell-probe.mjs --out ${OUT}\` on ` +
+          `${new Date().toISOString()} against \`${TARGET}\` (${TAB}). ` +
+          `Witness: its own native ` +
+          `\`value:\` on the Switch screen (200 \`switch-list-*\` switches mounted), one ` +
+          `\`xcodebuild\` launch per dwell, ${String(TAPS)} presses each. \`js-toggle\` is RN's ` +
+          `own \`Pressable\` on the same screen, pressed with the same shape: it says the ` +
+          `event path was alive for that launch.\n\n${table}\n`
+      );
+      console.log(`dwell-probe: wrote ${OUT}`);
+    }
+    if (JSON_OUT !== '') {
+      fs.writeFileSync(JSON_OUT, `${JSON.stringify(rows, null, 2)}\n`);
+    }
+  } finally {
+    clearJsLocation(udid);
+    stopMetro();
+  }
+  return 0;
+}
+
+/**
+ * @param {Array<Record<string, number>>} rows
+ * @returns {string}
+ */
+function renderTable(rows) {
+  const lines = [
+    '| Dwell | Delivered | `js-toggle` | load1 at start |',
+    '| --- | --- | --- | --- |',
+  ];
+  for (const row of rows) {
+    lines.push(
+      `| ${row.dwell.toFixed(2)} s | ${String(row.delivered)}/${String(row.taps)} | ` +
+        `${String(row.jsToggle)}/${String(row.jsToggleTaps)} | ${row.load1.toFixed(2)} |`
+    );
+  }
+  return lines.join('\n');
+}
+
+process.exitCode = await main().catch((error) => {
+  console.error(`\ndwell-probe: ${String(error)}`);
+  return 1;
+});

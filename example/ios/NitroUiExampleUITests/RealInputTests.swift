@@ -100,10 +100,18 @@ final class RealInputTests: XCTestCase {
 
   /// How long a synthesized press is held, for every tap this suite delivers.
   ///
-  /// Zero is what `XCUIElement.tap()` does, and a zero-dwell touch is dropped by the
-  /// hosted controls on a busy screen - see `XCUIElement.fingerTap`. Measured there,
-  /// 0.15 s was enough on every control tried; the number is a floor for the event's
-  /// shape rather than a wait, so it is not scaled by machine load.
+  /// Measured, not guessed: `docs/tasks/F1/dwell-probe.md` presses the Switch screen
+  /// at 0, 0.03, 0.05, 0.08, 0.12 and 0.15 s, twelve times each, calm and loaded, and
+  /// reads the control's own native `value:` as the witness. Delivery is 0/12 to 1/12
+  /// at zero dwell, 1/12 to 7/12 across 0.03-0.08 s, and 12/12 at 0.12 s and at 0.15 s.
+  ///
+  /// It stays at 0.15 s rather than dropping to the measured floor of 0.12 s for one
+  /// reason: nothing reliable exists below it, so the value is a choice inside a band
+  /// the product question decides (a person's quick tap is *inside* the dropped band -
+  /// see the report's Questions section), and 0.15 s is the value every green run of
+  /// this suite on this branch used. Shortening it is a one-line change the answer to
+  /// that question should drive, and the retry counts now printed in the gate log (F1
+  /// M2) will say immediately if it was the wrong one.
   fileprivate static let pressDwell: TimeInterval = 0.15
 
   /// A debug build loads its bundle from Metro, so the first render is not
@@ -174,6 +182,131 @@ final class RealInputTests: XCTestCase {
       ),
       "off",
       "a second real tap should flip it back, so the check is not one fluke"
+    )
+  }
+
+  /// Measures how long a synthesised press has to last before the busy Switch screen
+  /// delivers it, and prints the table.
+  ///
+  /// Not a check: nothing here asserts, and the suite's own coverage guard does not
+  /// see it, because its name does not start `testRealInput`. It exists because the
+  /// dwell `fingerTap` holds was justified by "a person's tap lasts tens of
+  /// milliseconds" while the value chosen was 150 ms and the only measurements were
+  /// 0 s (dropped) and 0.15 s (delivered). Whether a *human-scale* press is delivered
+  /// decides something this suite must not get wrong: if only a 150 ms press arrives,
+  /// a quick thumb on a real Switch in a busy list is dropped by the product, and no
+  /// test press should hide that.
+  ///
+  /// Run one dwell per launch, through the environment. Xcode forwards a variable to
+  /// the test runner when it is named `TEST_RUNNER_<NAME>` in its own environment, so
+  /// the probe reads `NUI_PROBE_DWELL` and is launched with:
+  ///
+  ///   TEST_RUNNER_NUI_PROBE_DWELL=0.05 TEST_RUNNER_NUI_PROBE_TAPS=12 \
+  ///     xcodebuild test-without-building \
+  ///       -only-testing:NitroUiExampleUITests/RealInputTests/testMeasureSwitchDwellDelivery ...
+  ///
+  /// `scripts/real-input/dwell-probe.mjs` does that for a ladder of dwells and writes
+  /// the table; `docs/tasks/F1/dwell-probe.md` is the last one it wrote.
+  ///
+  /// The witness is the control's own native `value:` - not an echo - because the
+  /// question is whether the touch reached the recogniser at all. Each dwell is
+  /// followed by the `js-toggle` row as a positive control: RN's own `Pressable`
+  /// taking the same press says the event path was alive for that launch, which is
+  /// what makes a run of drops a fact about the dwell rather than about a stalled app.
+  func testMeasureSwitchDwellDelivery() throws {
+    let env = ProcessInfo.processInfo.environment
+    // No default for the dwell: a probe that silently measures the wrong one is how
+    // a table of 0.00 s rows gets reported as a ladder.
+    guard let dwellText = env["NUI_PROBE_DWELL"], let dwell = Double(dwellText) else {
+      XCTFail(
+        "dwell-probe: NUI_PROBE_DWELL is not set to a number, so this run would press "
+          + "at some default dwell and print it as though it were the one asked for. "
+          + "Launch it as TEST_RUNNER_NUI_PROBE_DWELL=<seconds>."
+      )
+      return
+    }
+    let taps = env["NUI_PROBE_TAPS"].flatMap(Int.init) ?? 10
+    // Which control, and which screen it lives on. The busy/calm pair is the
+    // second half of the question: a dwell that arrives on a screen with a dozen
+    // controls and not on one with two hundred says the drop is about how much is
+    // mounted, not about the gesture alone - which changes what to do about it.
+    let target = env["NUI_PROBE_TARGET"] ?? "switch-uncontrolled"
+    let tab = env["NUI_PROBE_TAB"] ?? Tab.switchTab
+    let anchor = env["NUI_PROBE_ANCHOR"] ?? Echo.switchValue
+    try goToTab(tab, showing: anchor)
+    // The positive control lives on the Switch screen; on another tab, the check
+    // that the event path is alive is the screen's own anchor being there at all,
+    // which `goToTab` already proved by finding it.
+    let toggle = anchor == Echo.switchValue
+      ? try required("js-toggle", as: "the RN Pressable that flips the controlled Switch")
+      : nil
+    // A probe that cannot read its witness has not measured anything, and printing
+    // zeros for it would be worse than saying the witness is unreadable.
+    guard nativeSwitchState(of: target) != nil else {
+      XCTFail(
+        "dwell-probe: \(target) answers no native value, so delivery cannot be read "
+          + "from the control. The probe measures the touch, not React's render, and "
+          + "an echo would not tell a dropped press from a lost event."
+      )
+      return
+    }
+    print(
+      "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) tab=\(tab)"
+    )
+
+    var delivered = 0
+    for index in 1...taps {
+      let before = nativeSwitchState(of: target)
+      // Re-aimed each press rather than pressing a coordinate held from the start:
+      // the app can lay the row out again while the probe runs, and a stale point
+      // would measure the empty space where the Switch used to be.
+      try required(target, as: "the uncontrolled Switch").centre
+        .fingerTap(duration: dwell)
+      // "Delivered" is the control's own state moving. The wait is short on purpose:
+      // this measures the touch, not React's round trip, and a long window would
+      // credit a press whose value arrived while the next one was already aimed.
+      let until = Date().addingTimeInterval(1.5)
+      var moved = false
+      while Date() < until {
+        if nativeSwitchState(of: target) != before {
+          moved = true
+          break
+        }
+        Thread.sleep(forTimeInterval: 0.05)
+      }
+      if moved {
+        delivered += 1
+      }
+      print(
+        "real-input (ios): dwell-probe: tap \(index)/\(taps) \(before ?? "?") -> \(nativeSwitchState(of: target) ?? "?") delivered=\(moved)"
+      )
+      // Leave the app settled for the next press: an uncontrolled Toggle keeps its
+      // value, so a press that lands while the last one is still being painted would
+      // measure the app's queue rather than the gesture's shape.
+      Thread.sleep(forTimeInterval: 0.4)
+    }
+
+    // Positive control, same launch, same press shape.
+    var controlDelivered = 0
+    let controlTaps = 3
+    if let toggle {
+      for _ in 1...controlTaps {
+        let before = echoText(Echo.switchValue)
+        toggle.centre.fingerTap(duration: dwell)
+        let until = Date().addingTimeInterval(2)
+        while Date() < until {
+          if echoText(Echo.switchValue) != before {
+            controlDelivered += 1
+            break
+          }
+          Thread.sleep(forTimeInterval: 0.05)
+        }
+        Thread.sleep(forTimeInterval: 0.3)
+      }
+    }
+
+    print(
+      "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(delivered)/\(taps) js-toggle=\(controlDelivered)/\(controlTaps)"
     )
   }
 
@@ -1791,9 +1924,11 @@ final class RealInputTests: XCTestCase {
   /// is still absent, and each witness below is unreachable without a delivered
   /// touch. What a retry does cost is that an echo which arrives *late* rather than
   /// never can be overtapped - a real but far rarer fault (the drop is measured, the
-  /// late echo is not, and every attempt waits three whole seconds first). It shows
-  /// up as the failure text quoting a reading that moved past what was expected,
-  /// which is a different sentence from the one a drop produces.
+  /// late echo is not, and each attempt first waits the whole `reactTimeout`, eight
+  /// seconds). It shows up as the failure text quoting a reading that moved past what
+  /// was expected, which is a different sentence from the one a drop produces, and the
+  /// native-state check above is what catches the version where the control moved and
+  /// the echo did not.
   ///
   /// When every attempt fails, the message names both readings and says which of the
   /// two faults it is: taps that were never delivered, or a control that ignores a
@@ -1898,6 +2033,50 @@ final class RealInputTests: XCTestCase {
     ) { shown in
       shown == expected
     }
+  }
+
+  /// A Switch's own state, as iOS answers it: the toggle's `value`, not the echo.
+  ///
+  /// The dwell probe's witness (`testMeasureSwitchDwellDelivery`), and the read that
+  /// settled the drop question: an echo can only move if the touch reached SwiftUI
+  /// *and* the event reached JS, so it cannot tell a dropped touch from a lost event.
+  /// The control's own state can.
+  ///
+  /// The `testID` is on the React Native component view, which answers with no value
+  /// of its own; the SwiftUI `Toggle` that holds the state sits *inside* it, so this
+  /// asks the inner element first and falls back to the container. Measured here: the
+  /// container's `value` is the empty string on every control in this suite, so
+  /// reading only the container would read "nothing moved" forever, and a witness that
+  /// can never move is worse than no witness - it turns every retry into a claim that
+  /// nothing arrived.
+  ///
+  /// Returns nil when nothing answers with a value, and only ever "on"/"off" when
+  /// something does: a witness consulted between attempts must not be the thing that
+  /// fails a run, and it must not report a shape the comparison cannot use.
+  private func nativeSwitchState(of identifier: String) -> String? {
+    let container = app.descendants(matching: .any)[identifier].firstMatch
+    guard container.exists else {
+      return nil
+    }
+    for candidate in [
+      container.descendants(matching: .`switch`).firstMatch, container,
+    ] {
+      guard candidate.exists, let raw = candidate.value else {
+        continue
+      }
+      let text = (raw as? NSNumber)?.stringValue
+        ?? (raw as? String)
+        ?? String(describing: raw)
+      switch text {
+      case "0", "0.0", "false", "FALSE":
+        return "off"
+      case "1", "1.0", "true", "TRUE":
+        return "on"
+      default:
+        continue
+      }
+    }
+    return nil
   }
 
   /// Tap a `compact` field until it presents something.
@@ -2264,20 +2443,26 @@ extension XCUIElement {
 
   /// A finger's tap: a touch that *lasts*, rather than `tap()`'s zero-dwell one.
   ///
-  /// Measured on the Switch screen (F1): `tap()` puts touch down and touch up inside
-  /// a single frame, and on a screen with much mounted on it the control never sees
-  /// it. Four instant taps left `switch-uncontrolled` at its own native `value: 0`
-  /// for thirty seconds each - a control with no JS round trip to lose, so nothing
-  /// about the app's state explains it - while four presses held for 0.15 s flipped
-  /// it, on two different controls on that screen. A React Native `Pressable` beside
-  /// them took the same instant tap, so the touch path was alive: the *shape* of the
-  /// event is what a hosted control's recogniser refuses.
+  /// Measured (F1, `docs/tasks/F1/dwell-probe.md`): `tap()` puts touch down and touch
+  /// up inside a single frame, and the hosted controls on a screen with much mounted on
+  /// it almost never take it - 0/12 and 1/12 presses moved `switch-uncontrolled`'s own
+  /// native `value:` at zero dwell, calm and loaded, while the same instant tap reached
+  /// the React Native `Pressable` beside it 3/3, so the touch path was alive. It is
+  /// *nearly* never, not never: the base `main` run at 23:15Z had a zero-dwell tap flip
+  /// that Switch on its first try and lose only the second, and X6 saw 10/10 green with
+  /// `tap()`. The drop is intermittent, which is exactly why a check that asserts after
+  /// one un-witnessed press could pass for months and then fail 11 runs in a row.
   ///
-  /// It is also the honest gesture. A person's tap always lasts tens of milliseconds,
-  /// so this asks the question the check means to ask, and it is what makes the
-  /// refusal assertions below (a disabled Button, a disabled Picker) measurements at
-  /// all: on a screen whose instant taps are dropped, "nothing happened" was not
-  /// evidence that the control refused the touch.
+  /// How much is mounted matters as much as the shape: 0.03 s delivers 12/12 on the
+  /// Host screen and 1/12 on the 200-switch one. So this is not "SwiftUI ignores short
+  /// touches" - it is a recogniser that stops seeing the touch when the screen is busy,
+  /// and a person's quick tap lives in that band. That product question is in the
+  /// report; this helper's job is only to make the suite ask the same question every
+  /// time, and 0.15 s is the shortest shape with no observed losses.
+  ///
+  /// It is also the honest gesture for the refusal assertions (a disabled Button, a
+  /// disabled Picker): on a screen whose instant taps are usually dropped, "nothing
+  /// happened" was not evidence that the control refused the touch.
   func fingerTap(duration: TimeInterval = RealInputTests.pressDwell) {
     centre.fingerTap(duration: duration)
   }
