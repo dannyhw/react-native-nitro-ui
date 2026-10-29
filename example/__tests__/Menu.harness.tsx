@@ -1026,7 +1026,7 @@ describe('Menu · G7a', () => {
     expect(orderLog).toEqual([
       'open:events',
       'close:events',
-      'select:events:copy'
+      'select:events:copy',
     ]);
     // The rect goes with the window, so a later gate cannot press where a closed
     // menu used to be.
