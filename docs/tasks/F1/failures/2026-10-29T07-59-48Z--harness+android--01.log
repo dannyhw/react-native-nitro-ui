@@ -1,0 +1,202 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-29T07:59:48.528Z on code tree `fb64962da88c` at HEAD `b475219` (branch `task/F1-determinism`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 371348 ms
+- Load: start 7.96, end 5.16, median 3.19, max 7.96
+- Device: android / device `emulator-5574` / lease `F1-4m8nr`
+- Full log: `task/F1-determinism/harness+android-2026-10-29T07-59-48.528Z.log` (<store>/task/F1-determinism/harness+android-2026-10-29T07-59-48.528Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Console`
+- `● Slider › mounts many instances at once`
+- `FAIL __tests__/Sizing.harness.tsx`
+- `● Sizing · intrinsic (T11) › corrects a cold batch of 200 with one correction each, few of them immediate`
+- `● Sizing · intrinsic (T11) › mounts the same batch from every starting guess, at the right size`
+- `FAIL __tests__/Progress.harness.tsx`
+- `● Progress › mounts many instances at once`
+- `FAIL __tests__/Switch.harness.tsx`
+- `● Switch · core runtime › mounts many instances at once`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/harness+android-2026-10-29T07-59-48.528Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-4m8nr (still live)
+  |   F1-4m8nr                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.99 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 398 — the rest is in the full log above)
+
+```
+
+
+    console.log
+      bench: rightGuess n=1 33.5ms (33.45ms each) corrections=0 confirmed=1 flushes=1 maxFlushMs=14.746
+
+
+    console.log
+      bench: wrongGuess n=1 31.9ms (31.86ms each) corrections=1 confirmed=0 flushes=1 maxFlushMs=14.746
+
+
+    console.log
+      bench: provisional n=50 65.3ms (1.31ms each) corrections=0 confirmed=50 flushes=1 maxFlushMs=14.746
+
+
+    console.log
+      bench: rightGuess n=50 81.1ms (1.62ms each) corrections=0 confirmed=50 flushes=1 maxFlushMs=14.746
+
+
+    console.log
+      bench: wrongGuess n=50 89.0ms (1.78ms each) corrections=50 confirmed=0 flushes=1 maxFlushMs=14.746
+
+  ● Sizing · intrinsic (T11) › corrects a cold batch of 200 with one correction each, few of them immediate
+
+    timing gate for "cold batch of 200: one correction flush" cannot be trusted: http://localhost:8296/harness-timing/state.json was published for Metro port 8295, not this run's 8296 - an earlier run left it behind. Fix the run (every harness run publishes its machine state) rather than removing the assertion.
+
+      [0m [90m 252 |[39m
+       [90m 253 |[39m   [36mif[39m (read[33m.[39mkind [33m===[39m [32m'unreadable'[39m) {
+      [31m[1m>[22m[39m[90m 254 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 255 |[39m       [32m`timing gate for "${label}" cannot be trusted: ${read.reason}. `[39m [33m+[39m
+       [90m 256 |[39m         [32m'Fix the run (every harness run publishes its machine state) rather '[39m [33m+[39m
+       [90m 257 |[39m         [32m'than removing the assertion.'[39m[0m
+
+  ● Sizing · intrinsic (T11) › mounts the same batch from every starting guess, at the right size
+
+    timing gate for "bench: mount a batch of 1" cannot be trusted: http://localhost:8296/harness-timing/state.json was published for Metro port 8295, not this run's 8296 - an earlier run left it behind. Fix the run (every harness run publishes its machine state) rather than removing the assertion.
+
+      [0m [90m 252 |[39m
+       [90m 253 |[39m   [36mif[39m (read[33m.[39mkind [33m===[39m [32m'unreadable'[39m) {
+      [31m[1m>[22m[39m[90m 254 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 255 |[39m       [32m`timing gate for "${label}" cannot be trusted: ${read.reason}. `[39m [33m+[39m
+       [90m 256 |[39m         [32m'Fix the run (every harness run publishes its machine state) rather '[39m [33m+[39m
+       [90m 257 |[39m         [32m'than removing the assertion.'[39m[0m
+
+FAIL __tests__/Progress.harness.tsx
+  ● Console
+
+    console.log
+      progress sizes: linearBox=300.19x4.19 linearMeasured=300.19x4.19 expectedHeight=4.19 | circularBox=40.00x40.00 circularMeasured=40.00x40.00 expectedSize=40
+
+
+    console.log
+      60 Hz box: linear=300.19x4.19->300.19x4.19 circular=40.00x40.00->40.00x40.00 correctionsBefore=980 correctionsAfter=980
+
+
+    console.log
+      poison: guess=137x23 linearBox=300.19x4.19 circularBox=40.00x40.00 linearMeasured=300.19x4.19 circularMeasured=40.00x40.00 epoch=68
+
+
+    console.log
+      repaired: linear=300.19x4.19 circular=40.00x40.00
+
+
+    console.log
+      variant: linear=300.19x4.19 circularMeasured=40.00x40.00
+
+
+    console.log
+      variant poison: linear=300.19x4.19 box=40.00x40.00 measured=40.00x40.00 guess=137x23
+
+
+    console.log
+      user style: box=180.19x60.19 measured=180.19x4.19
+
+
+    console.log
+      a11y: box=300.19x4.19 labelBox=null handleLabel=Upload
+
+
+    console.log
+      gate: reused=false animating=false
+
+
+    console.log
+      perf: updates=20 propsApplied=20 firstFrame=0
+
+  ● Progress › mounts many instances at once
+
+    timing gate for "Progress stress: mount 40 instances" cannot be trusted: http://localhost:8296/harness-timing/state.json was published for Metro port 8295, not this run's 8296 - an earlier run left it behind. Fix the run (every harness run publishes its machine state) rather than removing the assertion.
+
+      [0m [90m 252 |[39m
+       [90m 253 |[39m   [36mif[39m (read[33m.[39mkind [33m===[39m [32m'unreadable'[39m) {
+      [31m[1m>[22m[39m[90m 254 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 255 |[39m       [32m`timing gate for "${label}" cannot be trusted: ${read.reason}. `[39m [33m+[39m
+       [90m 256 |[39m         [32m'Fix the run (every harness run publishes its machine state) rather '[39m [33m+[39m
+       [90m 257 |[39m         [32m'than removing the assertion.'[39m[0m
+
+FAIL __tests__/Switch.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      [dbg] warm-up: render begin
+
+
+    console.log
+      [dbg] warm-up: done
+
+
+    console.log
+      Switch box: fabric=52.19047546386719x48 at 0,0 hosted=52.19047619047619x48 expected=52x48
+
+
+    console.log
+      Switch size: measureContent=52.19047619047619x48 box=52.19047546386719x48
+
+
+    console.log
+      Switch in a roomy box: measureContent=52.19047619047619x48 box=90.28571319580078x50.28571319580078
+
+
+    console.log
+      Switch stress: 40 hosted controls mounted in 59.6ms
+
+  ● Switch · core runtime › mounts many instances at once
+
+    timing gate for "Switch stress: mount 40 instances" cannot be trusted: http://localhost:8296/harness-timing/state.json was published for Metro port 8295, not this run's 8296 - an earlier run left it behind. Fix the run (every harness run publishes its machine state) rather than removing the assertion.
+
+      [0m [90m 252 |[39m
+       [90m 253 |[39m   [36mif[39m (read[33m.[39mkind [33m===[39m [32m'unreadable'[39m) {
+      [31m[1m>[22m[39m[90m 254 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 255 |[39m       [32m`timing gate for "${label}" cannot be trusted: ${read.reason}. `[39m [33m+[39m
+       [90m 256 |[39m         [32m'Fix the run (every harness run publishes its machine state) rather '[39m [33m+[39m
+       [90m 257 |[39m         [32m'than removing the assertion.'[39m[0m
+
+
+Test Suites: 4 failed, 9 passed, 13 total
+Tests:       5 failed, 212 passed, 217 total
+Snapshots:   0 total
+Time:        370.289 s
+Ran all test suites.
+
+
+
+```

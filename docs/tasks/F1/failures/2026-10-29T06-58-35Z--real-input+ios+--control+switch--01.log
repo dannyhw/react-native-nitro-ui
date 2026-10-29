@@ -1,0 +1,73 @@
+# Failure excerpt — real-input:ios:--control:switch
+
+- Ran: 2026-10-29T06:58:35.466Z on code tree `9fce495437a8` at HEAD `2149f3f` (branch `task/F1-determinism`)
+- Command: `node scripts/real-input/ios.mjs --control switch`
+- Result: fail, exit 1, 156104 ms
+- Load: start 5.68, end 14.99, median 17.76, max 26.63
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F1-4m8nr`
+- Full log: `task/F1-determinism/real-input+ios+--control+switch-2026-10-29T06-58-35.466Z.log` (<store>/task/F1-determinism/real-input+ios+--control+switch-2026-10-29T06-58-35.466Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputSwitch in 36.520s`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/real-input+ios+--control+switch-2026-10-29T06-58-35.466Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-4m8nr (still live)
+  |   F1-4m8nr                 F1           both              pair-a
+  |   F2merge-6f8up            F2merge      both              pair-b
+gate: load
+  |   load1 at the moment of failure: 14.99 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 31 log line(s)
+
+```
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree 9fce495437a8 (552 files) head 2149f3f1 · 8 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8295
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-10-29 07:00:34.187.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-10-29 07:00:34.187.
+    Test Suite 'RealInputTests' started at 2026-10-29 07:00:34.187.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' started.
+    real-input (ios): accessibility hierarchy - the first real tap: the controlled Switch (switch-controlled) changed natively but its echo did not
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' failed (36.520 seconds).
+    Test Suite 'RealInputTests' failed at 2026-10-29 07:01:10.711.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-10-29 07:01:10.712.
+    Test Suite 'Selected tests' failed at 2026-10-29 07:01:10.712.
+    ** TEST EXECUTE FAILED **
+
+  switch: real tap flips the Switch and JS sees the new value
+    · real-input (ios): accessibility hierarchy - the first real tap: the controlled Switch (switch-controlled) changed natively but its echo did not
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:2037: error: -[NitroUiExampleUITests.RealInputTests testRealInputSwitch] : failed - the first real tap: the controlled Switch (switch-controlled) took the touch and lost the event - the control's own state moved from "off" to "on" and its echo is still "off", the value it had before any press, 16s later. Not retried: a further press would land the event and make a lost change look like a dropped tap.
+    ✗ XCUITest reported "failed" for testRealInputSwitch in 36.520s
+
+switch: FAIL (no retries)
+    failed: XCUITest reported "failed" for testRealInputSwitch in 36.520s
+
+real-input (ios): 0/1 controls passed · 0 press sequence(s) needed a retry
+
+
+
+```

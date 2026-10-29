@@ -1,4 +1,3 @@
-/* global Atomics, SharedArrayBuffer */
 /**
  * Device leases have to be right in the ways a prose rule is not.
  *
@@ -819,8 +818,12 @@ describe('the CLI, in a real state directory', () => {
    * `cli`, but concurrently: a promise of `{code, stdout, stderr}`. The race
    * and the wait-then-succeed cases need children that actually run at the same
    * time, which `spawnSync` in a loop does not give them.
+   *
+   * `onStderr` sees the accumulated stderr on every chunk, so a test can wait
+   * for the child to *say* it reached the state it is about to perturb, instead
+   * of sleeping for a guess at when it got there.
    */
-  const spawnLease = (args, env = {}) =>
+  const spawnLease = (args, env = {}, onStderr) =>
     new Promise((resolve) => {
       const child = spawn(process.execPath, [CLI, ...args], {
         env: {
@@ -837,6 +840,7 @@ describe('the CLI, in a real state directory', () => {
       });
       child.stderr.on('data', (chunk) => {
         stderr += String(chunk);
+        onStderr?.(stderr);
       });
       child.on('close', (code) => resolve({ code, stdout, stderr }));
     });
@@ -846,13 +850,6 @@ describe('the CLI, in a real state directory', () => {
     config = join(home, 'devices.json');
     copyFileSync(EXAMPLE_CONFIG, config);
   });
-
-  /**
-   * Block this thread, the same way the lease CLI waits (and the way `withLock`
-   * sleeps). Only safe where no concurrent child has to make progress.
-   */
-  const sleepMs = (ms) =>
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
   const stateFile = () => statePaths(home).leases;
   const readState = () => JSON.parse(readFileSync(stateFile(), 'utf8'));
@@ -1037,7 +1034,7 @@ describe('the CLI, in a real state directory', () => {
     expect(result.stderr).toContain(out);
   });
 
-  it('lets a short ttl and a long one coexist (review M1)', () => {
+  it('lets a short ttl and a long one coexist (review M1)', async () => {
     // The exact scenario from the review: a long lease is in the file, a short
     // acquire happens afterwards, and the short one's ttl must not be used to
     // judge the long one. One ttl for every lease is what deleted a bench run's
@@ -1070,9 +1067,16 @@ describe('the CLI, in a real state directory', () => {
         .sort()
     ).toEqual(['LONG', 'SHORT']);
 
-    // Past the short lease's own ttl, and still nowhere near the long one's:
-    // `list` shows one row, and it is the 900-minute lease.
-    sleepMs(1_500);
+    // Past the short lease's own ttl, and still nowhere near the long one's.
+    // Polled against the shipped expiry rule rather than sleeping for it:
+    // `Atomics.wait` is allowed to return before its timeout, and on a loaded
+    // runner that woke here with `SHORT` still live, so `list` showed two rows
+    // and this test failed on its own timing rather than on the rule.
+    const short = readState().leases.find((entry) => entry.task === 'SHORT');
+    await waitFor(() => {
+      const live = pruneExpired(readState(), Date.now()).leases;
+      return !live.some((entry) => entry.id === short.id);
+    }, 10_000);
     const midList = cli(['list']).stdout;
     expect(midList).not.toContain('SHORT');
     expect(midList).toMatch(/LONG[\s\S]*900m ttl left/);
@@ -1098,7 +1102,10 @@ describe('the CLI, in a real state directory', () => {
 
     // And the long lease still shows its own ttl in `list`, not the probe's.
     expect(cli(['list']).stdout).toMatch(/LONG[\s\S]*900m ttl left/);
-  });
+    // The 30_000 below is above the poll's own 10 s: what this test waits for
+    // is a ttl, so a loaded runner must not run out of Jest's default first and
+    // report a timeout that says nothing about which wait failed.
+  }, 30_000);
 
   it('gives an exclusive lease a ttl that outlasts a bench run (review M1)', () => {
     // Nothing passed `--ttl-minutes` here: the default is what protects a 14 h
@@ -1192,15 +1199,23 @@ describe('the CLI, in a real state directory', () => {
     const lockFile = statePaths(home).lock;
     writeFileSync(lockFile, `999999 ${Date.now()} busy\n`);
 
+    let progress = '';
     const waiting = spawnLease(
       ['acquire', '--task', 'G7', '--wait-minutes', '1', '--config', config],
-      { NITRO_UI_LEASE_LOCK_TIMEOUT_MS: '200' }
+      { NITRO_UI_LEASE_LOCK_TIMEOUT_MS: '200' },
+      (stderr) => {
+        progress = stderr;
+      }
     );
 
-    // Let it burn a couple of lock timeouts. Then clear the way: the lock goes
-    // away first, because a release that has to queue behind the lock it is
-    // testing would block for its own ten-second timeout.
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    // Until it has *said* it burned a couple of lock timeouts. The fixed sleep
+    // this replaces guessed at that from the clock, so on a loaded runner the
+    // lock could go away before the acquire ever reached it: the child then
+    // acquired on its first try and the test passed without testing the retry.
+    // Then clear the way: the lock goes away first, because a release that has
+    // to queue behind the lock it is testing would block for its own ten-second
+    // timeout.
+    await waitFor(() => (progress.match(/lock busy/g) ?? []).length >= 2);
     unlinkSync(lockFile);
     expect(cli(['release', 'G6']).status).toBe(0);
 
@@ -1208,7 +1223,11 @@ describe('the CLI, in a real state directory', () => {
     expect(result.stderr).toContain('lock busy');
     expect(result.code).toBe(0);
     expect(readState().leases.map((entry) => entry.task)).toEqual(['G7']);
-  });
+    // The wait above has a 20 s budget of its own, and Jest's default for the
+    // test is 5 s, so without this a slow machine reports a bare Jest timeout
+    // instead of the `waitFor` message that says which wait gave up. Same reason
+    // the ttl test above carries 30_000 (F1 N6).
+  }, 30_000);
 
   it('hands one stale lock to one stealer, and no pair to both', async () => {
     // A corpse from a task that died mid-write, plus two tasks asking at the

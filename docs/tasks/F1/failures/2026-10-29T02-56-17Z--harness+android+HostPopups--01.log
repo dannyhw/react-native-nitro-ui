@@ -1,0 +1,105 @@
+# Failure excerpt — harness:android:HostPopups
+
+- Ran: 2026-10-29T02:56:17.215Z on code tree `048f244a6b27` at HEAD `68ed539` (branch `task/F1-determinism`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android HostPopups`
+- Result: fail, exit 1, 39811 ms
+- Load: start 2.49, end 2.05, median 2.41, max 2.61
+- Device: android / device `emulator-5574` / lease `F1-q325w`
+- Full log: `task/F1-determinism/harness+android+HostPopups-2026-10-29T02-56-17.215Z.log` (<store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T02-56-17.215Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostPopups.harness.tsx`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › presents a dialog for the time and datetime modes too`
+- `expected +0 to be 1 // Object.is equality`
+- `● Host · all seven controls, one composition › follows all seven when two of them trade places`
+- `expected 1 to be +0 // Object.is equality`
+- `● Host · all seven controls, one composition › follows all seven when one is removed and another added back`
+- `expected 0 to be greater than 0`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T02-56-17.215Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-q325w (still live)
+  |   F1-q325w                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.05 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 56 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android HostPopups
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 048f244a6b27, 8 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.49/2.63 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T02-56-17.215Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/HostPopups.harness.tsx
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › presents a dialog for the time and datetime modes too
+
+    expected +0 to be 1 // Object.is equality
+
+      [0m [90m 1369 |[39m         date[33m.[39mnuiTestPresent()[33m;[39m
+       [90m 1370 |[39m         [36mconst[39m open [33m=[39m [36mawait[39m waitForDate(date[33m,[39m (r) [33m=>[39m r[33m.[39mpresented)[33m;[39m
+      [31m[1m>[22m[39m[90m 1371 |[39m         expect(open[33m.[39mlivePresentations)[33m.[39mtoBe(live0 [33m+[39m [35m1[39m)[33m;[39m
+       [90m      |[39m                                            [31m[1m^[22m[39m
+       [90m 1372 |[39m         unmount()[33m;[39m
+       [90m 1373 |[39m         [36mawait[39m settle([35m400[39m)[33m;[39m
+       [90m 1374 |[39m         expect([0m
+
+  ● Host · all seven controls, one composition › follows all seven when two of them trade places
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 1720 |[39m           need(log[33m.[39mdates[[32m'mix-dp-6'[39m][33m,[39m [32m'reordered date'[39m)[33m.[39mnuiTestStateReport()
+       [90m 1721 |[39m         )[33m.[39mlivePresentations
+      [31m[1m>[22m[39m[90m 1722 |[39m       )[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m             [31m[1m^[22m[39m
+       [90m 1723 |[39m     })[33m;[39m
+       [90m 1724 |[39m
+       [90m 1725 |[39m     it([32m'takes a hosted menu down when a reorder moves the row under it'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● Host · all seven controls, one composition › follows all seven when one is removed and another added back
+
+    expected 0 to be greater than 0
+
+      [0m [90m 1779 |[39m       [36mconst[39m withoutPicker [33m=[39m [36mawait[39m sweepOrder(host[33m,[39m minusPicker)[33m;[39m
+       [90m 1780 |[39m       expect(withoutPicker[33m.[39morder)[33m.[39mtoEqual([[32m'mix-sw-0'[39m[33m,[39m [32m'mix-btn-3'[39m])[33m;[39m
+      [31m[1m>[22m[39m[90m 1781 |[39m       expect(withoutPicker[33m.[39mwindows)[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+       [90m      |[39m                                                    [31m[1m^[22m[39m
+       [90m 1782 |[39m       expect(log[33m.[39mpickers[[32m'mix-pk-5'[39m])[33m.[39mtoBeDefined()[33m;[39m
+       [90m 1783 |[39m       [36mconst[39m withNew [33m=[39m [
+       [90m 1784 |[39m         [32m'mix-sw-0'[39m[33m,[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 21 passed, 24 total
+Snapshots:   0 total
+Time:        38.92 s
+Ran all test suites matching HostPopups.
+
+
+
+```

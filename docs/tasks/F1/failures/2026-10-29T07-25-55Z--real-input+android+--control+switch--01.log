@@ -1,0 +1,60 @@
+# Failure excerpt — real-input:android:--control:switch
+
+- Ran: 2026-10-29T07:25:55.678Z on code tree `10d2e70cbea0` at HEAD `cd89ff7` (branch `task/F1-determinism`)
+- Command: `node scripts/real-input/android.mjs --control switch`
+- Result: fail, exit 1, 50511 ms
+- Load: start 2.18, end 2.48, median 2.48, max 2.52
+- Device: android / device `emulator-5574` / lease `F1-4m8nr`
+- Full log: `task/F1-determinism/real-input+android+--control+switch-2026-10-29T07-25-55.678Z.log` (<store>/task/F1-determinism/real-input+android+--control+switch-2026-10-29T07-25-55.678Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the first real tap: "switch-controlled-value" took the touch and lost the event - the control's own state moved from "off" to "on" and its echo is still "off", the value it had before any press, 16000ms later. Not retried: a further press would land the event and make a lost change look like a dropped tap.`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/real-input+android+--control+switch-2026-10-29T07-25-55.678Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-4m8nr (still live)
+  |   F1-4m8nr                 F1           both              pair-a
+  |   F2merge-7t70v            F2merge      both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.48 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 16 log line(s)
+
+```
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  switch: real tap flips the Switch and JS sees the new value
+    ✓ the Switch starts off — expected off, saw off
+    · "Controlled switch" occupies 901,759 → 1038,843
+    ✗ the first real tap: "switch-controlled-value" took the touch and lost the event - the control's own state moved from "off" to "on" and its echo is still "off", the value it had before any press, 16000ms later. Not retried: a further press would land the event and make a lost change look like a dropped tap.
+
+switch: FAIL (no retries)
+    failed: the first real tap: "switch-controlled-value" took the touch and lost the event - the control's own state moved from "off" to "on" and its echo is still "off", the value it had before any press, 16000ms later. Not retried: a further press would land the event and make a lost change look like a dropped tap.
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry
+
+
+
+```

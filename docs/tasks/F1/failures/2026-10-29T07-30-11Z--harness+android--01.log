@@ -1,0 +1,183 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-29T07:30:11.936Z on code tree `05fa17baa86a` at HEAD `cd89ff7` (branch `task/F1-determinism`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 375706 ms
+- Load: start 6.23, end 2.91, median 2.91, max 6.23
+- Device: android / device `emulator-5574` / lease `F1-4m8nr`
+- Full log: `task/F1-determinism/harness+android-2026-10-29T07-30-11.936Z.log` (<store>/task/F1-determinism/harness+android-2026-10-29T07-30-11.936Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Console`
+- `● Slider › steps to the next legal value when a screen reader asks`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/harness+android-2026-10-29T07-30-11.936Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-4m8nr (still live)
+  |   F1-4m8nr                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.91 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 138 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 05fa17baa86a, 8 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.23/4.05 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F1-determinism/harness+android-2026-10-29T07-30-11.936Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      slider size: box=300.19x48.00 measured=300.19x48.00 expectedHeight=48
+
+
+    console.log
+      height vs width: wide=300.19x48.00/300.19x48.00 narrow=180.19x48.00/180.19x48.00
+
+
+    console.log
+      squashed box: box=180.19x12.19 measured=180.19x48.00
+
+
+    console.log
+      zero-height box: measured=180.19x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 measured=200.00x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 scroller box=240.00x923.43 measured=240.00x48.00 declared=240
+
+
+    console.log
+      poison: guess=200x12 box=300.19x48.00 measured=300.19x48.00 epoch=27->26 corrections=1
+
+
+    console.log
+      user style: box=180.19x60.19 measured=180.19x48.00
+
+
+    console.log
+      coalesce: same-turn moves=8 events=1
+
+
+    console.log
+      coalesce: spread moves=5 events=5
+
+
+    console.log
+      quantise tenths: [0.3]
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=false
+
+
+    console.log
+      a11y: box=300.19x48.00 labelBox=null handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed SetProgress(3.0) on #34704 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 49.2ms last=411.43x48.00
+
+
+    console.log
+      timing: Slider stress: mount 40 instances 49.2ms (limit 15000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 1.97/load5 2.79 over 10 cores · the bar is headroom for a debug build, not a target
+
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    The accessibility step probe never reported.
+
+      [0m [90m 93 |[39m       [36mreturn[39m report [33m===[39m before [33m?[39m [36mnull[39m [33m:[39m report[33m;[39m
+       [90m 94 |[39m     }[33m,[39m
+      [31m[1m>[22m[39m[90m 95 |[39m     () [33m=>[39m [36mnew[39m [33mError[39m([32m'The accessibility step probe never reported.'[39m)[33m,[39m
+       [90m    |[39m                    [31m[1m^[22m[39m
+       [90m 96 |[39m     [35m5000[39m
+       [90m 97 |[39m   )[33m;[39m
+       [90m 98 |[39m }[0m
+
+
+Test Suites: 1 failed, 12 passed, 13 total
+Tests:       1 failed, 216 passed, 217 total
+Snapshots:   0 total
+Time:        374.672 s
+Ran all test suites.
+
+
+
+```

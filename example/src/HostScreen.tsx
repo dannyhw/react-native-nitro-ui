@@ -58,8 +58,15 @@ const BATCH = 24;
  * picker" and reads like a broken Host but is a stopwatch. The check now waits for this
  * screen's own `field unmounted` echo instead of a guessed delay, so the delay only has to
  * be long enough never to fire before the dialog is up.
+ *
+ * It has to be long enough for the *proof* too. That check no longer presses the button
+ * and the field back to back: it waits for this screen's own `unmount armed` text between
+ * them, and that text lives in the accessibility tree. Two dumps, at two seconds each on
+ * this machine's loaded emulator, went on top of the scroll the field needs to come back
+ * on screen, and at 9000 the field left mid-flight again — the same stopwatch, one notch
+ * later. A dump cannot be made cheaper from out here, so the timer gives way.
  */
-const POP_DATE_DROP_MS = 9000;
+const POP_DATE_DROP_MS = 15000;
 
 /**
  * The row pitch a hosted `Switch` occupies, in dp.
