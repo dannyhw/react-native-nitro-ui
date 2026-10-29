@@ -190,7 +190,11 @@ final class MenuModel: NitroUiModel {
   /// A row was picked, however it was picked.
   ///
   /// A disabled row cannot be pressed, and a menu reports a pick and forgets it:
-  /// there is no value to store, so nothing else happens here.
+  /// there is no value to store, so nothing else happens here. Nothing else happens
+  /// *after* here either, which is the other half of DECISIONS D32's order rule: on
+  /// Android `applyPick` reports the choice and then closes the popup, because the
+  /// close is a thing that happens there. On iOS we own no presentation, so `onClose`
+  /// never fires and there is no close to order the pick against.
   func applyPick(_ id: String) {
     guard let row = actionableRow(id: id), !row.disabled else { return }
     onSelect?(row.id)
@@ -641,7 +645,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     set { model.onSelect = newValue }
   }
 
-  /// Whether the menu opened. **Never called on iOS.**
+  /// Whether the menu opened. **Never called on iOS**, and DECISIONS D32 rules that
+  /// this is the shipped behaviour rather than a gap.
   ///
   /// SwiftUI's `Menu` has no expansion binding in the iPhoneOS 27.0 SDK - `Menu`'s
   /// inits take `content`, `label` and `primaryAction` (`SwiftUI.swiftinterface:8767`

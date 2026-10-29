@@ -167,8 +167,10 @@ export default function MenuScreen() {
           {String(closes)}× · primary action {String(primary)}×
         </Text>
         <Text style={styles.note}>
-          `onOpen`/`onClose` fire on Android only today; a SwiftUI Menu keeps
-          its open state to itself. The counts above are the platform's answer.
+          `onOpen`/`onClose` fire on Android only - a SwiftUI Menu keeps its
+          open state to itself, so iOS never reports either (DECISIONS D32). A
+          pick reports `onSelect` first and `onClose` after it. The counts above
+          are the platform's answer.
         </Text>
 
         <Text style={[styles.section, { color: ink.ink }]}>
