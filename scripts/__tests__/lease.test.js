@@ -1220,7 +1220,11 @@ describe('the CLI, in a real state directory', () => {
     expect(result.stderr).toContain('lock busy');
     expect(result.code).toBe(0);
     expect(readState().leases.map((entry) => entry.task)).toEqual(['G7']);
-  });
+    // The wait above has a 20 s budget of its own, and Jest's default for the
+    // test is 5 s, so without this a slow machine reports a bare Jest timeout
+    // instead of the `waitFor` message that says which wait gave up. Same reason
+    // the ttl test above carries 30_000 (F1 N6).
+  }, 30_000);
 
   it('hands one stale lock to one stealer, and no pair to both', async () => {
     // A corpse from a task that died mid-write, plus two tasks asking at the
