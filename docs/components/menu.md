@@ -205,8 +205,10 @@ pair.
 
 ## Recycling and cleanup
 
-`RecyclableView`: a recycle resets the open state first, then the rows, then the
-trigger, so a reused control cannot reopen with the previous instance's menu.
+`RecyclableView`: on Android a recycle's `reset()` clears `expanded` before the rows and
+the trigger, so a reused control cannot reopen with the previous instance's menu. iOS has
+no open state of ours to clear — the system owns the presentation — so its reset covers
+the title, the rows and the flags only.
 `onDropView` drops the callbacks and — on Android — disposes the composition, which is
 what closes the window (Q1 §5). A menu left open across a drop is the leak this catches.
 

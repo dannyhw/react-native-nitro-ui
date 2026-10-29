@@ -469,6 +469,11 @@ internal class MenuModel : NitroUiModel() {
   }
 
   override fun reset() {
+    // First, ahead of the rows and the trigger (`docs/tasks/Q1-menu-design.md` §5): a
+    // popup that survived a recycle would hang over the next row's content, and the
+    // next mount would find it already open. Everything below is closed by the time
+    // this model answers anything again.
+    expanded = false
     title = ""
     variant = ButtonVariant.Filled
     scale = ButtonScale.Medium
@@ -479,9 +484,6 @@ internal class MenuModel : NitroUiModel() {
     rawRows = emptyArray()
     hasPrimaryAction = false
     accessibilityLabel = null
-    // First among the rest: a popup that survived a recycle would hang over the next
-    // row's content, and the next mount would find it already open.
-    expanded = false
     clearMenuFrame()
     anchorLeft = -1f
     anchorTop = -1f
