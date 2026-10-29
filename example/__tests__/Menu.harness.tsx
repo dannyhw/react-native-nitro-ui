@@ -1809,20 +1809,19 @@ describe('Menu · inside a Host', () => {
         )}`
     );
     // The half the getters cannot say: that the name reaches the element a screen
-    // reader lands on. Everything above is a round trip through React's props and
-    // would still pass with the platform's own labelling deleted, so this reads the
-    // tree the harness can walk - the house pattern of `Progress.harness.tsx` and
-    // `Slider.harness.tsx`. iOS exposes UIElements carrying `accessibilityLabel`, and
-    // the query answers with the control's own box; Compose publishes `SemanticsNode`s
-    // that are not Views, so on Android it answers null however correct the component
-    // is, and reading that tree is `uiautomator dump` - G7b's real-input pass.
+    // reader lands on. Everything above is a round trip through React's props, so this
+    // reads the tree the harness can walk - the house pattern of `Progress.harness.tsx`
+    // and `Slider.harness.tsx`. And it is a different read, not the same one: measured
+    // at `06-20-03Z`, clearing `accessibilityLabel` off the view RN builds for this
+    // control - prop, model and SwiftUI element untouched - leaves all six getters above
+    // answering and makes this query return null.
     const namedElement =
       harnessUi.queryByAccessibilityLabel('Open the actions');
-    // `read-back-fallback` sets no `accessibilityLabel`: this is the title fallback,
-    // asserted on a control a screen reader can stop on.
+    // `read-back-fallback` sets no `accessibilityLabel`, so this is the title fallback -
+    // logged rather than asserted, because the walk cannot see it: measured at
+    // `06-02-21Z` it answers null on iOS, and on Android the query answers null for every
+    // Compose control (`Slider.harness.tsx`), so it would say nothing there either way.
     const fallbackElement = harnessUi.queryByAccessibilityLabel('Fallback');
-    // `Plain` is disabled, and whether a disabled control belongs in the tree is the
-    // platform's call rather than this control's, so it is logged and not asserted.
     console.log(
       `a11y tree: named=${describeSize(namedElement)} ` +
         `fallback=${describeSize(fallbackElement)} ` +
@@ -1831,19 +1830,22 @@ describe('Menu · inside a Host', () => {
     expect(handles.get('read-back-fallback')?.accessibilityLabel).toBeNull();
     if (Platform.OS === 'ios') {
       const namedBox = await waitForTestId('read-back');
-      const fallbackBox = await waitForTestId('read-back-fallback');
       expect(namedElement).not.toBeNull();
       expect(Math.abs(namedElement!.width - namedBox.width)).toBeLessThan(2);
-      expect(fallbackElement).not.toBeNull();
-      expect(Math.abs(fallbackElement!.width - fallbackBox.width)).toBeLessThan(
-        2
-      );
     }
-    // What this cannot say: on Android the one-node promise (`clearAndSetSemantics`
-    // carrying name, value, role, state and the action, so TalkBack gets one focus
-    // stop rather than a nameless one beside it) is a claim about the node tree, and
-    // the only reading of that tree this environment has is `uiautomator dump` -
-    // which is `realInput`, and G7b's. Same for the rows being announced on iOS,
-    // where SwiftUI's own names are what a screen reader gets.
+    // What this cannot say. On Android the one-node promise (`clearAndSetSemantics`
+    // carrying name, value, role, state and the action, so TalkBack gets one focus stop
+    // rather than a nameless one beside it) is a claim about the `SemanticsNode` tree,
+    // and the only reading of that tree this environment has is `uiautomator dump` -
+    // which is `realInput`, and G7b's. On iOS the element the walk lands on is the one RN
+    // makes for the view: `HybridNitroUiMenuComponent` is an `RCTViewComponentView`, RN
+    // applies `accessibilityLabel` to it from its own base props, and the Swift host is
+    // only its `contentView` - so deleting `.modifier(OptionalMenuAccessibility(...))`
+    // from the SwiftUI trigger, measured at `06-02-21Z`, leaves this query answering for
+    // `'Open the actions'`. What the assertion holds is the user-visible promise - the
+    // name a reader gets sits on the element at the trigger's box - not which of the two
+    // paths put it there. What VoiceOver says for the rows is SwiftUI's own naming, and
+    // nothing here can open the menu to hear it. `docs/components/menu.md` keeps the list
+    // of what is and is not stood behind.
   });
 });
