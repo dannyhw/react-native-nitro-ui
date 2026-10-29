@@ -1,0 +1,5 @@
+---
+'react-native-nitro-ui': minor
+---
+
+`Menu` — a button that opens a list of actions. The trigger is a `Button` (same `variant`s, same `size`s, same box); the items are a typed `group` of actions, sections and one level of submenu, never JSON and never child views. A pick reports `onSelect` with that row's `id`; there is no value, so there is nothing to keep in sync, and no imperative `open()`/`close()`. iOS is SwiftUI `Menu` and nests a submenu; Android anchors a Material 3 `DropdownMenu` to the trigger inside its own window and renders a submenu's items inline under a divider. Three splits are documented rather than papered over: `systemImage` is iOS-only, as it is on `Button`; `primaryAction` (tap runs it, long-press opens) is iOS-only, following the native idiom; and `onOpen`/`onClose` are **Android-only in this release** — the iPhoneOS 27.0 SDK gives SwiftUI's `Menu` no expansion binding, so our host never learns that the system presented the menu, which is the same answer `Picker` already gives for its popup. Android's popup is ours to witness, so it also closes on a layout move and on `disabled` arriving while open, as `Picker` and `DatePicker` do.

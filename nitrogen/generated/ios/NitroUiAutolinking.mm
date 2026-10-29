@@ -19,6 +19,7 @@
 #include "HybridNitroUiDatePickerSpecSwift.hpp"
 #include "HybridNitroUiSegmentedControlSpecSwift.hpp"
 #include "HybridNitroUiPickerSpecSwift.hpp"
+#include "HybridNitroUiMenuSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -91,6 +92,13 @@
     "NitroUiPicker",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiPickerSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiPicker();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiMenu",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiMenuSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiMenu();
       return hybridObject;
     }
   );

@@ -23,6 +23,9 @@
 #include "views/JHybridNitroUiDatePickerStateUpdater.hpp"
 #include "JHybridNitroUiHostSpec.hpp"
 #include "views/JHybridNitroUiHostStateUpdater.hpp"
+#include "JHybridNitroUiMenuSpec.hpp"
+#include "JFunc_void_std__string.hpp"
+#include "views/JHybridNitroUiMenuStateUpdater.hpp"
 #include "JHybridNitroUiPickerSpec.hpp"
 #include "views/JHybridNitroUiPickerStateUpdater.hpp"
 #include "JHybridNitroUiProgressSpec.hpp"
@@ -109,6 +112,14 @@ struct JHybridNitroUiPickerSpecImpl: public jni::JavaClass<JHybridNitroUiPickerS
     return javaPart->getJHybridNitroUiPickerSpec();
   }
 };
+struct JHybridNitroUiMenuSpecImpl: public jni::JavaClass<JHybridNitroUiMenuSpecImpl, JHybridNitroUiMenuSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiMenu;";
+  static std::shared_ptr<JHybridNitroUiMenuSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiMenuSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiMenuSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiMenuSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -123,6 +134,9 @@ void registerAllNatives() {
   margelo::nitro::nitroui::views::JHybridNitroUiDatePickerStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiHostSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiHostStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiMenuSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_std__string_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiMenuStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiPickerSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiPickerStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiProgressSpec::CxxPart::registerNatives();
@@ -191,6 +205,12 @@ void registerAllNatives() {
     "NitroUiPicker",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiPickerSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiMenu",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiMenuSpecImpl::create();
     }
   );
 }
