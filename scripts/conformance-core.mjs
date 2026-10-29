@@ -559,9 +559,18 @@ export const CONTENT_SIZED_BOX = Object.freeze(['NitroUiButton']);
  * can say it out loud.
  *
  * `NitroUiSwitch.swift` declares 51×31 under `#if compiler(<6.2)` and 61×28 for the
- * SDKs that ship. The table records what a current toolchain compiles, and the harness
- * asks the *engine* for its number before comparing, so building with an older
- * compiler does not silently pass: engine and table disagree, and the failure says so.
+ * SDKs that ship. The table records what a current toolchain compiles.
+ *
+ * What that leaves unguarded, said plainly (X4 review N5): **the harness never learns the
+ * engine's number.** The only JS seam is `prewarmSizing`, which answers how many names have
+ * a fallback (`HybridNitroUiCore.cpp:84`) — a count, not a size — so an older-compiler build
+ * registers 51×31, the table says 61×28, and the *only* thing that can notice is the warm
+ * comparison of the measured box against the table's number, which then reports a control
+ * whose declaration looks stale. That is a real red, but it is filed as a declaration drift
+ * rather than as "you built with Swift <6.2", and a reader who does not know this row exists
+ * would chase the component. So this entry is documentation of a known false-red shape, not
+ * a check — it is not read by the suite at all, and the string should not be quoted in a
+ * failure message as though it were.
  */
 export const DECLARED_FALLBACK_EXCEPTIONS = Object.freeze([
   'NitroUiSwitch ios: 51x31 under Swift <6.2 (UINavigationBar API changed)',

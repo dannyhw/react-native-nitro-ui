@@ -32,9 +32,8 @@
  *
  * ## What makes these able to fail
  *
- * Each rule body is shown red in `scripts/__tests__/conformance.test.js` against the pure
- * decision function, and each has a device-side counterpart here that is not satisfied by
- * the same number twice:
+ * Each rule's decision logic is shown red in `scripts/__tests__/conformance.test.js`, and
+ * each has a device-side counterpart here that is not satisfied by the same number twice:
  *
  * - the fallback rule compares the control's measured size with a table written from the
  *   component's source, then **poisons** the engine's guess with a size no control declares
@@ -523,11 +522,25 @@ const PLATFORM = Platform.OS === 'ios' ? 'ios' : 'android';
 const RENDER = { timeout: 20000 } as const;
 
 /* ------------------------------ the rule bodies ------------------------------ */
-/* Mirrors of `fallbackFindings`, `leakFindings` and `recycleFindings` in
- * `scripts/conformance-core.mjs`: the harness cannot import a Node module, so the wording
- * is duplicated and the *tables* are not — they are the mirror above. The originals are
- * driven line by line in `scripts/__tests__/conformance.test.js`, which is where a
- * divergence between the two halves is caught. */
+/* The device-side shape of `fallbackFindings`, `leakFindings` and `recycleFindings` in
+ * `scripts/conformance-core.mjs`. Round 1 called these "mirrors" and said a divergence
+ * between the halves was caught by `conformance.test.js` (X4 review N4). It is not, and
+ * calling them mirrors oversells what is here:
+ *
+ * - The harness cannot import a Node module, so this file re-implements the branches. It
+ *   takes its *numbers* from the shared table below, which `checkSharedTableMirror` does
+ *   prove equal to `sharedInAppTable()` on every `check` — tolerance, poison sizes,
+ *   declared fallbacks and box rules cannot disagree between the halves.
+ * - The *wording* is free to drift, and has: three of these strings already differ from the
+ *   originals by a clause. `conformance.test.js` drives the originals, not these, so no test
+ *   reads this file's messages at all. What that risks is not a wrong verdict — the branches
+ *   are short and the numbers are shared — it is a device failure whose sentence no longer
+ *   matches the one in the report, so the two say the same bug in different words.
+ * - Recorded as debt rather than fixed by loosening the claim: see the FOLLOWUPS row
+ *   "X4 conformance: the in-app rule bodies are a re-implementation, not a mirror".
+ *
+ * What is asserted about these bodies is that a control's fixture row exists and carries a
+ * probe (`checkInAppFixtures`), and that the tables match. Nothing asserts their prose. */
 
 type Finding = { component: string; rule: string; problem: string };
 
