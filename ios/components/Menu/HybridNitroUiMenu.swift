@@ -211,7 +211,7 @@ struct MenuContent: NitroUIContent {
   }
 
   var body: some View {
-    menu
+    styledMenu
       // `.menuIndicator(.hidden)` is iOS 15 (SwiftUI.swiftinterface:25910), which the
       // pod's 15.1 floor already satisfies, so it needs no gate. Without it the
       // trigger draws the system's chevron, and a Button-sized trigger with a
@@ -221,6 +221,43 @@ struct MenuContent: NitroUIContent {
       .disabled(model.disabled)
       .modifier(OptionalMenuTint(color: model.tint))
       .modifier(OptionalMenuAccessibility(label: model.accessibilityLabel))
+  }
+
+  /// The trigger with Button's chrome, one branch per variant.
+  ///
+  /// `.menuStyle(.button)` makes the label a button, but the *style* of that button
+  /// is a separate environment value: without a `.buttonStyle` the trigger is the
+  /// automatic (borderless) style, and the measured box is the title's text box -
+  /// 53.33 x 20.33 pt for a medium `filled` "Variant" on iPhone 17, against Button's
+  /// 61.0 x 34.3 for "Cancel" (`docs/components/button.md`). The whole sizing story of
+  /// this control is that its box is a Button's box, so the same per-variant style
+  /// Button picks is applied here, in Button's shape: the switch carries the style
+  /// and everything shared stays outside it, so a variant change costs one style.
+  ///
+  /// The rows are unaffected: the menu's content is presented by the system, which
+  /// draws its own rows rather than the SwiftUI buttons they are written as - and
+  /// that claim is a reading, not a measurement, because no touch this environment
+  /// can inject opens a SwiftUI `Menu` (`docs/tasks/G2-button.report.md` measured that
+  /// for every Button style). It is on G7b's real-input list to confirm visually.
+  @ViewBuilder private var styledMenu: some View {
+    switch model.variant {
+    case .filled:
+      menu.buttonStyle(.borderedProminent)
+    case .tonal:
+      menu.buttonStyle(.bordered)
+    case .outlined:
+      menu
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .overlay(
+          Capsule()
+            .strokeBorder(Color(UIColor.separator), lineWidth: 1)
+        )
+    case .text:
+      menu.buttonStyle(.borderless)
+    case .elevated:
+      menu.buttonStyle(.borderedProminent)
+    }
   }
 
   /// The `Menu` itself, in the one branch its caller asked for.
