@@ -9,7 +9,7 @@
  * observe instead.
  */
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { Progress } from 'react-native-nitro-ui';
 
 import type { Meta, StoryObj } from '@storybook/react-native';
@@ -200,44 +200,56 @@ export const Sizing: Story = {
 };
 
 /**
- * Both surfaces on one screen, so the platform palettes can be compared without
- * changing the device appearance (which still decides the controls' own colours).
+ * The bars as the current appearance draws them, plus the note about why a story
+ * cannot show two appearances at once. A component (not an inline `render`)
+ * because it reads the appearance with a hook.
+ */
+function AppearancePanel() {
+  const scheme = useColorScheme();
+  return (
+    <Showcase>
+      <Column
+        label={`palette as drawn on the ${scheme == null ? 'light' : scheme} appearance`}
+      >
+        <Progress value={0.65} variant="linear" />
+        <Progress variant="linear" />
+        <Progress tintColor="#ff375f" value={0.65} variant="circular" />
+      </Column>
+      <Note>
+        These are drawn by the toolkit in the appearance the device is in. This
+        is one appearance, not two surfaces: React Native cannot override the
+        appearance for a subtree, so a black card behind a light-scheme track is
+        a black card, not dark mode - the unfilled track and the indeterminate
+        bar all but vanish against it. Switch the device to Dark Mode to see
+        this story dark - `xcrun simctl ui &lt;udid&gt; appearance dark` on iOS,
+        `adb -s &lt;serial&gt; shell cmd uimode night yes` on Android.
+      </Note>
+    </Showcase>
+  );
+}
+
+/**
+ * The progress palette comes from the OS appearance, and this story shows the
+ * one the device is set to.
+ *
+ * It used to draw the same row twice, the second time on a black card labelled
+ * "on a dark surface". That was not dark mode: only the card's background
+ * changed, so the light-palette tracks were near-invisible against the black.
+ * React Native 0.88 has no per-subtree appearance override (no
+ * `overrideAppearance` prop; `Appearance.setColorScheme()` is app-wide), so a
+ * story cannot honestly paint a dark panel. Change the device appearance
+ * instead - `xcrun simctl ui <udid> appearance dark` on iOS, `adb -s <serial>
+ * shell cmd uimode night yes` on Android - and this screen follows. Among the
+ * component docs only `docs/components/button.md` carries a captured light/dark
+ * pair; this control's doc does not.
  */
 export const Appearances: Story = {
-  render: () => (
-    <Showcase>
-      <Column label="on a light surface">
-        <View style={[styles.card, styles.light]}>
-          <Progress value={0.65} variant="linear" />
-          <Progress variant="linear" />
-          <Progress tintColor="#ff375f" value={0.65} variant="circular" />
-        </View>
-      </Column>
-      <Column label="on a dark surface">
-        <View style={[styles.card, styles.dark]}>
-          <Progress value={0.65} variant="linear" />
-          <Progress variant="linear" />
-          <Progress tintColor="#ff375f" value={0.65} variant="circular" />
-        </View>
-      </Column>
-    </Showcase>
-  ),
+  render: () => <AppearancePanel />,
 };
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 12,
-    gap: 14,
-    padding: 14,
-  },
   centre: {
     alignSelf: 'center',
-  },
-  dark: {
-    backgroundColor: '#000000',
-  },
-  light: {
-    backgroundColor: '#ffffff',
   },
   playground: {
     alignSelf: 'stretch',

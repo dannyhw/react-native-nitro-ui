@@ -6,7 +6,7 @@
  * harness/benchmark handles, not app API (DECISIONS D14).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { SegmentedControl } from 'react-native-nitro-ui';
 import { fn } from 'storybook/test';
 
@@ -268,53 +268,63 @@ export const Sizing: Story = {
 };
 
 /**
- * Both surfaces on one screen. The controls resolve their own colours from the OS
- * appearance; the cards only change what is behind them.
+ * The rows as the current appearance draws them, plus the note about why a story
+ * cannot show two appearances at once. A component (not an inline `render`)
+ * because it reads the appearance with a hook.
+ */
+function AppearancePanel({ options }: { options: string[] }) {
+  const scheme = useColorScheme();
+  return (
+    <Showcase>
+      <Column
+        label={`palette as drawn on the ${scheme == null ? 'light' : scheme} appearance`}
+      >
+        <SegmentedControl options={options} />
+        <SegmentedControl defaultSelectedIndex={2} options={options} />
+        <SegmentedControl
+          accessibilityLabel="Disabled group"
+          disabled
+          options={options}
+        />
+      </Column>
+      <Note>
+        Order: unselected, third selected, the group disabled. These are drawn
+        by the toolkit in the appearance the device is in. This is one
+        appearance, not two surfaces: React Native cannot override the
+        appearance for a subtree, so a black card behind a light-scheme row is a
+        black card, not dark mode - the unselected segments and their hairlines
+        disappear into it. Switch the device to Dark Mode to see this story dark
+        - `xcrun simctl ui &lt;udid&gt; appearance dark` on iOS, `adb -s
+        &lt;serial&gt; shell cmd uimode night yes` on Android.
+      </Note>
+    </Showcase>
+  );
+}
+
+/**
+ * The row palette comes from the OS appearance, and this story shows the one the
+ * device is set to.
+ *
+ * It used to draw the same row twice, the second time on a black card labelled
+ * "on a dark surface". That was not dark mode: only the card's background
+ * changed, so the light-palette segments - the *disabled* group most of all -
+ * were near-invisible against the black. React Native 0.88 has no per-subtree
+ * appearance override (no `overrideAppearance` prop;
+ * `Appearance.setColorScheme()` is app-wide), so a story cannot honestly paint a
+ * dark panel. Change the device appearance instead - `xcrun simctl ui <udid>
+ * appearance dark` on iOS, `adb -s <serial> shell cmd uimode night yes` on
+ * Android - and this screen follows. Among the component docs only
+ * `docs/components/button.md` carries a captured light/dark pair; this control's
+ * doc does not.
  */
 export const Appearances: Story = {
-  render: ({ options }) => (
-    <Showcase>
-      <Column label="on a light surface">
-        <View style={[styles.card, styles.light]}>
-          <SegmentedControl options={options} />
-          <SegmentedControl defaultSelectedIndex={2} options={options} />
-          <SegmentedControl
-            accessibilityLabel="Disabled group"
-            disabled
-            options={options}
-          />
-        </View>
-      </Column>
-      <Column label="on a dark surface">
-        <View style={[styles.card, styles.dark]}>
-          <SegmentedControl options={options} />
-          <SegmentedControl defaultSelectedIndex={2} options={options} />
-          <SegmentedControl
-            accessibilityLabel="Disabled group"
-            disabled
-            options={options}
-          />
-        </View>
-      </Column>
-    </Showcase>
-  ),
+  render: ({ options }) => <AppearancePanel options={options} />,
 };
 
 const styles = StyleSheet.create({
   baseline: {
     fontSize: 13,
     opacity: 0.7,
-  },
-  card: {
-    borderRadius: 12,
-    gap: 12,
-    padding: 14,
-  },
-  dark: {
-    backgroundColor: '#000000',
-  },
-  light: {
-    backgroundColor: '#ffffff',
   },
   playground: {
     alignSelf: 'stretch',
