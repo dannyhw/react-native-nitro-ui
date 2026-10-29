@@ -1,0 +1,196 @@
+# Failure excerpt — harness:android:HostPopups
+
+- Ran: 2026-10-29T07:55:16.957Z on code tree `c517e56bca51` at HEAD `25c63d7` (branch `task/F1-determinism`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android HostPopups`
+- Result: fail, exit 1, 71139 ms
+- Load: start 2.52, end 3.14, median 2.67, max 3.14
+- Device: android / device `emulator-5574` / lease `F1-4m8nr`
+- Full log: `task/F1-determinism/harness+android+HostPopups-2026-10-29T07-55-16.957Z.log` (<store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T07-55-16.957Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostPopups.harness.tsx`
+- `● Host · a hosted Picker’s menu is a window of the Host › opens two popup owners in one Host, one after the other`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › opens its dialog as a window of the Host’s composition`
+- `expected 1 to be +0 // Object.is equality`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › follows a value React writes while the dialog is open (G5)`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › closes when the control is disabled while the dialog is open (G5)`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › does not reopen a dialog that a hidden child left behind`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › takes a hosted dialog down when only its child leaves the Host`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › comes down with its row, and leaves nothing when the Host is dropped`
+- `● Host · a hosted DatePicker’s dialog is a window of the Host › presents a dialog for the time and datetime modes too`
+- `● Host · all seven controls, one composition › follows all seven when two of them trade places`
+- `● Host · all seven controls, one composition › follows all seven when one is removed and another added back`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T07-55-16.957Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F1-4m8nr (still live)
+  |   F1-4m8nr                 F1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.14 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 142 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android HostPopups
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c517e56bca51, 8 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.52/2.38 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F1-determinism/harness+android+HostPopups-2026-10-29T07-55-16.957Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Harness could not use Metro port 8295 and is using 8296 instead.
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/HostPopups.harness.tsx
+  ● Host · a hosted Picker’s menu is a window of the Host › opens two popup owners in one Host, one after the other
+
+    "hosted dialog + menu gate": the dialog's own flag came down and its window was still composed 2000 ms later (1 live DatePicker window(s), expected 0). A window that takes seconds to leave is not "coming down with its row" - it is hanging over the screen.
+
+      [0m [90m 385 |[39m   } [36mcatch[39m {
+       [90m 386 |[39m     [36mconst[39m seen [33m=[39m parseDateReport(handle[33m.[39mnuiTestStateReport())[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 387 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 388 |[39m       [32m`"${what}": the dialog's own flag came down and its window was still composed `[39m [33m+[39m
+       [90m 389 |[39m         [32m`${String(DISMISSAL_GRACE_MS)} ms later (${String(seen)} live DatePicker `[39m [33m+[39m
+       [90m 390 |[39m         [32m`window(s), expected ${String(expected)}). A window that takes seconds to `[39m [33m+[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › opens its dialog as a window of the Host’s composition
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 1170 |[39m       [36mconst[39m before [33m=[39m parseDateReport(date[33m.[39mnuiTestStateReport())[33m;[39m
+       [90m 1171 |[39m       expect(before[33m.[39mpresented)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1172 |[39m       expect(before[33m.[39mlivePresentations)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                            [31m[1m^[22m[39m
+       [90m 1173 |[39m       date[33m.[39mnuiTestPresent()[33m;[39m
+       [90m 1174 |[39m       [36mconst[39m open [33m=[39m [36mawait[39m waitForDate(
+       [90m 1175 |[39m         date[33m,[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › follows a value React writes while the dialog is open (G5)
+
+    "dialog after the value-follow gate": the dialog's own flag came down and its window was still composed 2000 ms later (1 live DatePicker window(s), expected 0). A window that takes seconds to leave is not "coming down with its row" - it is hanging over the screen.
+
+      [0m [90m 385 |[39m   } [36mcatch[39m {
+       [90m 386 |[39m     [36mconst[39m seen [33m=[39m parseDateReport(handle[33m.[39mnuiTestStateReport())[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 387 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 388 |[39m       [32m`"${what}": the dialog's own flag came down and its window was still composed `[39m [33m+[39m
+       [90m 389 |[39m         [32m`${String(DISMISSAL_GRACE_MS)} ms later (${String(seen)} live DatePicker `[39m [33m+[39m
+       [90m 390 |[39m         [32m`window(s), expected ${String(expected)}). A window that takes seconds to `[39m [33m+[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › closes when the control is disabled while the dialog is open (G5)
+
+    "disabled while open (G5)": the dialog's own flag came down and its window was still composed 2000 ms later (1 live DatePicker window(s), expected 0). A window that takes seconds to leave is not "coming down with its row" - it is hanging over the screen.
+
+      [0m [90m 385 |[39m   } [36mcatch[39m {
+       [90m 386 |[39m     [36mconst[39m seen [33m=[39m parseDateReport(handle[33m.[39mnuiTestStateReport())[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 387 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 388 |[39m       [32m`"${what}": the dialog's own flag came down and its window was still composed `[39m [33m+[39m
+       [90m 389 |[39m         [32m`${String(DISMISSAL_GRACE_MS)} ms later (${String(seen)} live DatePicker `[39m [33m+[39m
+       [90m 390 |[39m         [32m`window(s), expected ${String(expected)}). A window that takes seconds to `[39m [33m+[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › does not reopen a dialog that a hidden child left behind
+
+    "hidden child leaves no window": the dialog's own flag came down and its window was still composed 2000 ms later (1 live DatePicker window(s), expected 0). A window that takes seconds to leave is not "coming down with its row" - it is hanging over the screen.
+
+      [0m [90m 385 |[39m   } [36mcatch[39m {
+       [90m 386 |[39m     [36mconst[39m seen [33m=[39m parseDateReport(handle[33m.[39mnuiTestStateReport())[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 387 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 388 |[39m       [32m`"${what}": the dialog's own flag came down and its window was still composed `[39m [33m+[39m
+       [90m 389 |[39m         [32m`${String(DISMISSAL_GRACE_MS)} ms later (${String(seen)} live DatePicker `[39m [33m+[39m
+       [90m 390 |[39m         [32m`window(s), expected ${String(expected)}). A window that takes seconds to `[39m [33m+[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › takes a hosted dialog down when only its child leaves the Host
+
+    "child leaves the Host": the dialog's own flag came down and its window was still composed 2000 ms later (1 live DatePicker window(s), expected 0). A window that takes seconds to leave is not "coming down with its row" - it is hanging over the screen.
+
+      [0m [90m 385 |[39m   } [36mcatch[39m {
+       [90m 386 |[39m     [36mconst[39m seen [33m=[39m parseDateReport(handle[33m.[39mnuiTestStateReport())[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 387 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 388 |[39m       [32m`"${what}": the dialog's own flag came down and its window was still composed `[39m [33m+[39m
+       [90m 389 |[39m         [32m`${String(DISMISSAL_GRACE_MS)} ms later (${String(seen)} live DatePicker `[39m [33m+[39m
+       [90m 390 |[39m         [32m`window(s), expected ${String(expected)}). A window that takes seconds to `[39m [33m+[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › comes down with its row, and leaves nothing when the Host is dropped
+
+    "comes down with its row": the dialog's own flag came down and its window was still composed 2000 ms later (2 live DatePicker window(s), expected 0). A window that takes seconds to leave is not "coming down with its row" - it is hanging over the screen.
+
+      [0m [90m 385 |[39m   } [36mcatch[39m {
+       [90m 386 |[39m     [36mconst[39m seen [33m=[39m parseDateReport(handle[33m.[39mnuiTestStateReport())[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 387 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 388 |[39m       [32m`"${what}": the dialog's own flag came down and its window was still composed `[39m [33m+[39m
+       [90m 389 |[39m         [32m`${String(DISMISSAL_GRACE_MS)} ms later (${String(seen)} live DatePicker `[39m [33m+[39m
+       [90m 390 |[39m         [32m`window(s), expected ${String(expected)}). A window that takes seconds to `[39m [33m+[39m[0m
+
+  ● Host · a hosted DatePicker’s dialog is a window of the Host › presents a dialog for the time and datetime modes too
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 1426 |[39m         expect(
+       [90m 1427 |[39m           parseDateReport(date[33m.[39mnuiTestStateReport())[33m.[39mlivePresentations
+      [31m[1m>[22m[39m[90m 1428 |[39m         )[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m               [31m[1m^[22m[39m
+       [90m 1429 |[39m       }
+       [90m 1430 |[39m     })[33m;[39m
+       [90m 1431 |[39m[0m
+
+  ● Host · all seven controls, one composition › follows all seven when two of them trade places
+
+    "sweep close mix-dp-6": the dialog's own flag came down and its window was still composed 2000 ms later (1 live DatePicker window(s), expected 0). A window that takes seconds to leave is not "coming down with its row" - it is hanging over the screen.
+
+      [0m [90m 385 |[39m   } [36mcatch[39m {
+       [90m 386 |[39m     [36mconst[39m seen [33m=[39m parseDateReport(handle[33m.[39mnuiTestStateReport())[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 387 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 388 |[39m       [32m`"${what}": the dialog's own flag came down and its window was still composed `[39m [33m+[39m
+       [90m 389 |[39m         [32m`${String(DISMISSAL_GRACE_MS)} ms later (${String(seen)} live DatePicker `[39m [33m+[39m
+       [90m 390 |[39m         [32m`window(s), expected ${String(expected)}). A window that takes seconds to `[39m [33m+[39m[0m
+
+  ● Host · all seven controls, one composition › follows all seven when one is removed and another added back
+
+    "sweep close mix-dp-6": the dialog's own flag came down and its window was still composed 2000 ms later (1 live DatePicker window(s), expected 0). A window that takes seconds to leave is not "coming down with its row" - it is hanging over the screen.
+
+      [0m [90m 385 |[39m   } [36mcatch[39m {
+       [90m 386 |[39m     [36mconst[39m seen [33m=[39m parseDateReport(handle[33m.[39mnuiTestStateReport())[33m.[39mlivePresentations[33m;[39m
+      [31m[1m>[22m[39m[90m 387 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 388 |[39m       [32m`"${what}": the dialog's own flag came down and its window was still composed `[39m [33m+[39m
+       [90m 389 |[39m         [32m`${String(DISMISSAL_GRACE_MS)} ms later (${String(seen)} live DatePicker `[39m [33m+[39m
+       [90m 390 |[39m         [32m`window(s), expected ${String(expected)}). A window that takes seconds to `[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       10 failed, 14 passed, 24 total
+Snapshots:   0 total
+Time:        70.19 s
+Ran all test suites matching HostPopups.
+
+
+
+```
