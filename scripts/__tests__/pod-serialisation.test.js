@@ -442,6 +442,24 @@ describe('what this task must not have weakened', () => {
     expect(workflow).toMatch(/gem install json -v\s+2\.18\.0/);
   });
 
+  /**
+   * N1. Installing the pin is not the same as it taking effect, and `gem list`
+   * cannot tell them apart: it prints every version on the gem path at once. So
+   * the job has to ask Ruby what it loads - the same default-gem activation path
+   * `pod` takes - and fail there rather than at the probe.
+   */
+  it('checks what json actually loads, not what is installed', () => {
+    const workflow = readFileSync(
+      join(ROOT, '.github/workflows/release.yml'),
+      'utf8'
+    );
+    expect(workflow).toMatch(/ruby -rjson -e/);
+    expect(workflow).toMatch(/JSON::VERSION/);
+    expect(workflow).toMatch(/2\.8\.0/);
+    // The old, uninformative check must not come back alongside it.
+    expect(workflow).not.toMatch(/^\s*gem list json\s*$/m);
+  });
+
   it('keeps `lock:check` a version comparison, so Linux can still run `check`', () => {
     // The split this task had to preserve: `check` compares a version on any
     // platform, and only the refresh can compare serialisation. Asserted by
