@@ -72,7 +72,7 @@ hosted `Slider` JS 1.11x). The four unmount cells stay ᴺ too — hosted ÷ unh
 reads 0.40x / 0.33x / 0.29x / 0.37x there, each over 10 % spread on at least one arm — so the "no
 unmount claim" below still holds. One verdict does reverse: unhosted
 `Slider`'s mount JS CPU is **1.06x** there against the 0.94x this run read, so the JS column is
-above the shared host on `Slider` in both directions, not below it unhosted. The tables below stay
+above the shared host on `Slider` on both sides of the Host (1.06x unhosted, 1.11x hosted), not below it unhosted. The tables below stay
 as H2a measured them.
 Ratios to `expo-ui-shared-host`, launch-paired; memory from the
 N=200 cell, the rest from the N=50 `mount` cell; **ᴺ** = spread over 10 % and no verdict:
@@ -111,8 +111,10 @@ Four things that table says, stated at the size they were measured:
   verdict: the honest summary is that the JS tax seen on `Switch` was not measured on the
   other three, not that they avoid it. A5's quiet run settles both flags: hosted `Slider`
   1.07x → **1.11x**, hosted `Button` 0.71x → **0.69x**. And `Slider`'s unhosted side moves
-  too, the one verdict that reverses: **1.06x** there against the 0.94x this run read, so a
-  hosted `Slider` pays the JS tax from above parity, not from below it.
+  too, a verdict that reverses: **1.06x** there against the 0.94x this run read, so a
+  hosted `Slider` pays the JS tax from above parity, not from below it. On the quiet run the
+  bullet's heading reverses too: hosting costs JS on all four (hosted ÷ unhosted 1.20x / 1.05x /
+  1.32x / 1.12x), and `Progress` lands at **0.77x**, not near parity.
 - **No unmount claim.** All four unmount UI CPU cells are ᴺ (launch spreads of 21 % to
   40 %), so this run says nothing about hosting and unmounting beyond H1's `Switch` row.
 - **Nothing here was measured on a quiet machine.** That run's load samples: 459 of them,

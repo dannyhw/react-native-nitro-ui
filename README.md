@@ -603,8 +603,9 @@ replace the indicative `quick`-plan tables those runs published. Against
 
 The `Switch` row lands near where H1's published 0.86× / 0.87× sits (0.91× / 0.84×
 on this machine), which is what makes the rest of the run readable. What it shows:
-the UI-thread win holds on all four and the memory win on three, `Progress` most of
-all, `Slider` level at 1.02×; JS costs 1.17× on `Switch` and 1.11× on `Slider`,
+the UI-thread win holds on all four, `Progress` most of all (0.40×); the memory win
+holds on `Switch` and `Button`, `Progress` reads 0.45× but `n/v`, and `Slider` is
+level at 1.02×; JS costs 1.17× on `Switch` and 1.11× on `Slider`,
 while `Progress` (0.77×) and `Button` (0.69×) are below the shared host, as unhosted
 (0.59×, 0.62×) — and the unmount cells are still spread too wide for any claim at
 all, on this machine and at 8 launches.
