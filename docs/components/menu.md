@@ -247,24 +247,43 @@ What this release can show, per platform:
   makes for the view, and RN puts `accessibilityLabel` on the component view itself, so
   the assertion holds that the prop reaches React Native's component view at the
   trigger's box, not the name VoiceOver reads. That view is not an accessibility element,
-  so the name a reader gets comes from the SwiftUI modifier, and nothing here tests it (a
-  reading of the harness' UIKit-only query; a G7b follow-up). Clearing the label off that view instead — leaving the prop, the model and
-  the SwiftUI element alone — is what makes the run go red. A `title` fallback is not
-  observable this way at all: a trigger with no `accessibilityLabel` answers no node for
-  its title on iOS, and on Android the query answers `null` for every Compose control.
+  so the name a reader gets comes from the SwiftUI modifier, and the harness cannot see
+  that (a reading of the harness' UIKit-only query). What does see it is the real-input
+  case: `testRealInputMenu` reads the *hosted* control's node out of the XCUITest tree —
+  after asserting its identifier differs from the React Native wrapper's, so reading the
+  wrapper cannot pass — and pins its name to `accessibilityLabel`. Removing
+  `.accessibilityLabel` from `MenuContent.body` makes that run red with
+  `("Actions") is not equal to ("Real-input menu")`: the control falls back to its own
+  title, which is exactly what a VoiceOver user would hear. A `title` fallback is not
+  observable through the harness at all: a trigger with no `accessibilityLabel` answers no
+  node for its title on iOS, and on Android the query answers `null` for every Compose
+  control.
 - **Android** — the label reaching the control is what is asserted, and nothing more:
   Compose publishes `SemanticsNode`s rather than Views, so the harness' View walk answers
   `null` however correct the component is (`example/__tests__/Slider.harness.tsx`
   documents that asymmetry with its measurements). Reading the semantics tree is
   `uiautomator dump`, which is the harness' `realInput` mode, and G7b's.
 
-Everything below this paragraph is a **reading**, not a measurement. No input this
-environment can inject opens a SwiftUI `Menu`, and nothing here reads Compose semantics,
-so no announcement has been observed on either platform: that the rows are reachable while
-the menu is open and speak their own titles, that a destructive row is announced as such on
-iOS, and that a disabled row is not focusable are what the code asks for, not what has been
-heard. The popup's rows are the platform's own elements — we do not re-label them. Hearing
-this list with VoiceOver and TalkBack is G7b's real-input pass.
+What real input has since seen (G7b), and what it still has not. A real finger tap does
+open both presentations, so the paragraph below is no longer the whole story:
+
+- **iOS** (`testRealInputMenu`, XCUITest) — the tap opens the presentation, the three rows
+  are in the tree while it is up, a pick reports `onSelect` alone, and the row the group
+  disables reports nothing while its enabled twin, pressed the same way, does. The same run
+  writes a screenshot that settles one styling question: the trigger's `.buttonStyle` does
+  not follow the rows into the list (three plain system rows under a tinted capsule), so
+  nothing had to be added to the row content.
+- **Android** (`CHECKS.menu`, `uiautomator dump`) — the tap opens one popup window, all
+  three rows are in its tree as `TextView`s, a pick closes it, and the echo proves the
+  order `onOpen`, `onSelect`, `onClose` (D32). The disabled row refuses the pick, and the
+  dump says why that is not an announcement: all three rows, that one included, report
+  `enabled="true"`. Behaviour and announcement are separate questions here; the announcement
+  is filed in `docs/tasks/FOLLOWUPS.md` rather than guessed at.
+
+Still a **reading**, not a measurement: that a destructive row is announced as such on iOS,
+that rows are announced in a particular order, and what TalkBack says aloud about a disabled
+row. The popup's rows are the platform's own elements — we do not re-label them — so hearing
+that list with VoiceOver and TalkBack remains a human pass.
 
 ## Limits
 
