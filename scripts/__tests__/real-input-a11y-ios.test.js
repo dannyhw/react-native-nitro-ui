@@ -269,12 +269,64 @@ describe('the iOS debt rows', () => {
       }),
     ];
     const problems = iosA11yProblems(picker, tree);
-    expect(problems[0]).toContain(
-      'no element other than the React Native wrapper'
-    );
+    expect(problems[0]).toContain("announces the control's name twice");
     const result = checkIosControlA11y(picker, tree);
     expect(result.known).toHaveLength(1);
     expect(result.exempt).toBe(true);
+  });
+
+  it('goes red when the hosted Picker’s label stops arriving at all', () => {
+    // X4 re-review M3, the reason the row's `matches` is one sentence and not a word
+    // fragment. The old row matched `/no element other than the|announced as/`, which is
+    // also the sentence a *lost* label produces — so this tree, where `accessibilityLabel`
+    // never reaches the hosted control, was excused by a row written for a stutter, and the
+    // case could not go red any way the bug could appear. The stutter has a sentence of its
+    // own now; the lost label has to fall through to it as a new failure.
+    const picker = control('hosted-picker');
+    const box = { x: 16, y: 578.67, width: 75.33, height: 34.67 };
+    const tree = [
+      node({
+        id: picker.anchorTestId,
+        label: 'Hosted picker',
+        type: 'other',
+        frame: box,
+        anchor: true,
+        value: '',
+      }),
+      node({ label: '', type: 'button', frame: box, value: '' }),
+    ];
+    const result = checkIosControlA11y(picker, tree);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]).toContain(
+      'no element other than the React Native wrapper'
+    );
+    expect(result.known).toEqual([]);
+    expect(result.exempt).toBe(false);
+  });
+
+  it('counts a doubled name by the name, not by the separator', () => {
+    // "Hosted picker Hosted picker" (no comma), a localised joiner, and a component that
+    // concatenated the strings itself are all the same finding to a person hearing it. A
+    // rule keyed on `", "` would excuse each of them.
+    const picker = control('hosted-picker');
+    const box = { x: 16, y: 578.67, width: 75.33, height: 34.67 };
+    for (const announcement of [
+      'Hosted picker Hosted picker',
+      'Hosted picker;Hosted picker',
+      'Hosted picker, Hosted picker, Hosted picker',
+    ]) {
+      const problems = iosA11yProblems(picker, [
+        node({
+          id: picker.anchorTestId,
+          label: 'Hosted picker',
+          frame: box,
+          anchor: true,
+          value: '',
+        }),
+        node({ label: announcement, type: 'button', frame: box, value: '' }),
+      ]);
+      expect(problems[0]).toContain("announces the control's name twice");
+    }
   });
 
   it('does not let one platform’s row excuse the other platform’s finding', () => {
@@ -376,7 +428,7 @@ describe('reading the pass out of an xcodebuild log', () => {
   });
 
   it('refuses a line whose box did not parse, rather than reading no elements', () => {
-    // A format change would otherwise look like "thirteen cases measured nothing" and the
+    // A format change would otherwise look like "every case measured nothing" and the
     // temptation would be to make missing lines a skip.
     // The *node* line, not the anchor's preamble, which the reader skips by design.
     const broken = LOG.replace(
@@ -411,7 +463,7 @@ describe('the Swift case list against the shared table', () => {
   };
 
   it('has one case per row of the shared table, in the same order', () => {
-    // The Swift file and `A11Y_CONTROLS` are two lists of the same thirteen controls, kept
+    // The Swift file and `A11Y_CONTROLS` are two lists of the same controls, kept
     // in two languages. Without this, a renamed case in Swift measures a control nobody
     // asked about and its own case silently reports "not measured" — and a control that
     // quietly leaves the suite is the failure this whole file is built to prevent.
