@@ -106,9 +106,9 @@ export default function MenuScreen() {
   // One string rather than three counters, because the *order* is the thing
   // `scripts/real-input` asserts (DECISIONS D32: a pick fires `onSelect` and then
   // `onClose`, and Android is the only platform that fires either). So the same
-  // echo reads `open > select Bravo > close` on Android after one real pick and
-  // `select Bravo` on iOS, and each platform's check reads it and expects its own
-  // text — the ruling is asserted rather than described.
+  // echo reads `open > select bravo > close` on Android after one real pick and
+  // `select bravo` on iOS — row ids, not titles — and each platform's check reads
+  // it and expects its own text: the ruling is asserted rather than described.
   const [events, setEvents] = useState('none');
   const [lastPick, setLastPick] = useState('-');
 

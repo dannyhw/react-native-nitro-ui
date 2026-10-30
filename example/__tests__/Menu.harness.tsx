@@ -1589,18 +1589,23 @@ describe('Menu · inside a Host', () => {
     // it would pass. The number is the same 48 the reopened half below uses, so both
     // halves ask one question.
     //
-    // How this was shown able to fail, and what that proved. Inverting the guard on the
-    // same measured number (`gap > 400`) went red on this line, which is what makes it
-    // a live reading rather than a number that always happens to be small. Removing
-    // `menuAnchor` from the trigger did NOT: on this Material version the plain
-    // `DropdownMenu` still opened at the button, because the box it is composed in is
-    // itself the button's size even inside a `<Host>` (three variants tried - anchor
-    // dropped inside the box, a `clickable` + `DropdownMenu`, and one inside a
-    // `fillMaxSize` Box; all three measured a popup at the trigger, and the report
-    // records the numbers). So this bound is a guard on behaviour `menuAnchor`
-    // provides, not a reproduction of a failure a plain `DropdownMenu` would cause, and
-    // the code comment in `HybridNitroUiMenu.kt` claiming the latter is a reading
-    // rather than a measurement.
+    // How this was shown able to fail (G7b fix round 1, M2). Baseline on this emulator:
+    // the popup's window top sat 16 px below the anchor's bottom. Replacing this
+    // `ExposedDropdownMenu` with a plain `DropdownMenu(offset = DpOffset(0.dp, 64.dp))`
+    // - a 64 dp offset handed to Material's own position provider, so the *window*
+    // moves rather than its content - made the same reading 168 px, and this line
+    // went red with `expected 168 to be less than 48` (`harness:android:Menu`, 30 Oct
+    // 01:48:49Z). So the bound does catch a popup that moves: the witness reads the
+    // window, and the window can move.
+    //
+    // What it did *not* catch, in round 1: dropping `menuAnchor` from the trigger three
+    // ways (the anchor inside the box, a `clickable` + `DropdownMenu`, that pair inside
+    // a `fillMaxSize` Box) and a 300 dp `Modifier.offset` on the list's *content*. All
+    // four passed this gate whole, which on this Material version (1.4.0) is the
+    // measurement: none of them moved the popup's window off the anchor. So this bound
+    // guards behaviour `menuAnchor` provides, and the code comment in
+    // `HybridNitroUiMenu.kt` explaining why the anchor stays is a reading of Material's
+    // contract rather than something these four mutants reproduced.
     expect(gap).toBeLessThan(48);
 
     // Move the `<Host>`. Compose is never told: a popup positions itself against the

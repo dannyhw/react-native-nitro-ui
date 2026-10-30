@@ -2072,10 +2072,19 @@ final class RealInputTests: XCTestCase {
     // to `rowButton`, and this is the evidence for that. `docs/components/menu.md`
     // makes the same claim from a screenshot; this keeps it re-measurable.
     let openShot = XCUIScreen.main.screenshot()
-    let openShotURL = URL(fileURLWithPath: "/tmp/g7b-menu-open.png")
+    let openShotAttachment = XCTAttachment(image: openShot.image)
+    openShotAttachment.name = "menu-open"
+    openShotAttachment.lifetime = .keepAlways
+    add(openShotAttachment)
+    // A per-run file too, in the process's own sandbox rather than a shared path:
+    // round 1 wrote `/tmp/g7b-menu-open.png`, which any concurrent task's run would
+    // overwrite. The copy this measurement is quoted from is committed at
+    // `docs/tasks/G7b/menu-open-ios.png`.
+    let openShotURL = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("g7b-menu-open.png")
     try? openShot.pngRepresentation.write(to: openShotURL)
     print(
-      "real-input (ios): menu: open menu screenshot written to \(openShotURL.path)"
+      "real-input (ios): menu: open menu screenshot attached, and written to \(openShotURL.path)"
     )
     XCTAssertEqual(
       try read(Echo.menuPick),
@@ -2119,9 +2128,15 @@ final class RealInputTests: XCTestCase {
         + (stayedUp ? "open" : "closed")
     )
     if stayedUp {
-      // Tapping away is the platform's own way out that cannot land on a row: the point
-      // is in the screen's own description text, above the popup, below the tab bar,
-      // and nowhere near a control.
+      // Tapping away is the platform's own way out that cannot land on a row. The point
+      // is a quarter down the screen, which on `MenuScreen` is inside the page's
+      // description text: the real-input row is the first block under the title, so the
+      // popup hangs around y ≈ 0.4 of the screen and this point is above it and below
+      // the tab bar. That is a fact about the layout above this block, not a property of
+      // the coordinate: if anything is added to `MenuScreen` before the real-input Menu,
+      // 0.25 walks down onto a control and this tap stops being harmless. The assertion
+      // below catches that only as a stuck menu, so the layout above is the thing to
+      // keep in sync with this number.
       app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
       waitUntilOptionGone(locked, "the tap away from the menu to close it")
     }

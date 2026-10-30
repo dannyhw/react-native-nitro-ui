@@ -963,14 +963,16 @@ const CHECKS = {
       t.waitForPopupCount(0, 'the pick to take that popup down'),
       0
     );
-    // The ordering D32 rules on. Read as the tail of the echo rather than the whole
-    // string: the echo is a *history* (that is what makes the order visible at all), so
-    // the step before this one left its own `open > close` in front, and asking for the
-    // whole line would pin this suite's own step count into the assertion.
+    // The ordering D32 rules on, asserted as the WHOLE echo rather than a tail of it.
+    // A three-event tail also matches `open > open > select bravo > close`, which is
+    // exactly what a retried tap or double-reporting anchor produces - the duplicate
+    // step 3's `open > close` check can only see from the front. The full string pins
+    // this suite's own steps (tap, Back, tap, pick), which is the point: the run has a
+    // deterministic shape and anything else in it, in any order, is a finding.
     t.log.checkEquals(
       'one pick reports open, then select, then close - in that order',
-      lastEvents(t.requireEcho(ECHO.menuEvents), 3),
-      'open > select bravo > close'
+      t.requireEcho(ECHO.menuEvents),
+      'open > close > open > select bravo > close'
     );
 
     // 5. The disabled row. A tap on it must report no pick.
@@ -978,13 +980,16 @@ const CHECKS = {
     //    Three things this step does not assert, each because the first real run
     //    measured the library doing something the check had invented:
     //
-    //    - **Whether the popup stays up.** A disabled row consumes no click, so any
-    //      dismissal has to come from the scrim or the back gesture. Both are measured
-    //      below and neither is required, because the refusal is the claim about the
-    //      control and the window's fate is Compose's.
-    //    - **How the popup comes down, once it has to.** The scrim tap is what a person
-    //      does; Back is what step 3 uses. Either is enough to clear the screen for the
-    //      next step and the numbers are logged.
+    //    - **Whether the popup stays up.** It does, on every run so far: the disabled row
+    //      swallows the tap and leaves the window standing. That is not asserted either
+    //      way here, because the refusal is the claim about the control and the window's
+    //      fate is Compose's.
+    //    - **How the popup comes down, once it has to.** Neither of a person's two ways
+    //      is dependable after that tap: the scrim tap left it up at 30 Oct 00:35:09Z
+    //      and closed it at 01:49:39Z, and one run's Back press timed out with the
+    //      window still standing (29 Oct 23:33:43Z). The sequence below - scrim, then
+    //      Back, then re-aiming at the trigger - is what gets the screen back, and the
+    //      log says which one did. All measured, none asserted.
     //    - **What the tree says about the row itself.** Printed in step 2. The row this
     //      check refuses read `enabled="true"` in the dump while the control refused it,
     //      so the announcement and the behaviour are different questions - see the
@@ -1044,6 +1049,25 @@ const CHECKS = {
       'so the line above measured a refusal, not a dead screen',
       t.waitForPopupCount(0, 'the twin pick to take its popup down'),
       0
+    );
+    // And the whole history again, now that the disabled-row gesture is in it: the
+    // tap on "Locked row" opened a window and closed it without reporting a pick, so
+    // its `open > close` pair belongs in the line in its own position. This is the
+    // strictest form of D32's promise on Android - every open has exactly one close,
+    // a dismissal of a disabled row still counts as a close, and nothing in the
+    // suite's four gestures was reported twice or out of order.
+    // And the whole history again, now that the last two gestures are in it. The
+    // reopen before the disabled-row tap fires an `open` and the dismissal after it
+    // fires the matching `close`, with no pick in between, and the twin pick is one
+    // more open/close pair around its own select. This is the strictest form of D32's
+    // promise on Android: every open has exactly one close, a dismissal of a disabled
+    // row still counts as a close, and nothing the suite performs is reported twice or
+    // out of order. The shape is measured, both halves at 30 Oct 00:35:09Z and again
+    // under the M1 mutation at 01:49:39Z, where every doubled `open` shows up.
+    t.log.checkEquals(
+      'the whole echo pairs every open with a close, in the order the gestures happened',
+      t.requireEcho(ECHO.menuEvents),
+      'open > close > open > select bravo > close > open > close > open > select alpha > close'
     );
   },
 
@@ -2431,25 +2455,6 @@ function isDayCell(node) {
  */
 function isConfirmLabel(node) {
   return /^(OK|Done|Set|Confirm)$/.test(node.text.trim());
-}
-
-/**
- * The last few events an accumulating echo reported.
- *
- * The Menu screen's `real-input-menu-events` is deliberately a *history* — a growing
- * `open > select bravo > close` string is the only form in which DECISIONS D32's
- * ordering rule can be asserted at all, and it is the same echo both platforms read.
- * The cost is that the line grows with every step of a check, so an assertion written
- * against the whole string would pin this suite's own step count into the library's
- * contract. `open > select bravo > close` is the claim; taking the tail is what makes
- * it mean "the last gesture, in that order" instead of "the suite performed exactly
- * two gestures before this one".
- *
- * @param {string} echo the whole line as the app renders it
- * @param {number} count how many events to keep, from the end
- */
-function lastEvents(echo, count) {
-  return echo.split(' > ').slice(-count).join(' > ');
 }
 
 /**
@@ -3850,12 +3855,18 @@ function makeContext(harness, log) {
     /**
      * Press the empty part of the screen that an open popup's scrim covers.
      *
-     * This is the other dismissal a person has, and the one a menu needs when a press
-     * on a row left it standing: the trigger is *under* this control's popup (measured
-     * in G7b: the list is drawn over its own button), so a second press there lands on
-     * a row instead of on the button. The point chosen is a fifth of the screen's height
-     * above the bottom edge, which on this suite's screens is below the control under
-     * test and outside a list that hangs from a trigger near the top.
+     * This is the other dismissal a person has. The trigger is *under* this control's
+     * popup (measured in G7b: the list is drawn over its own button), so a second press
+     * there lands on a row instead of on the button. The point chosen is a fifth of the
+     * screen's height above the bottom edge, which on this suite's screens is below the
+     * control under test and outside a list that hangs from a trigger near the top.
+     *
+     * Measured, not assumed, that it works: after a tap on a *disabled* row this tap
+     * left the popup standing (30 Oct 00:35:09Z), and so did the Back press that
+     * followed it on the run before (29 Oct 23:33:43Z). The Menu check therefore treats
+     * it as one attempt out of several and logs which dismissal actually cleared the
+     * window. A popup that survives both is a real finding, recorded in
+     * `docs/tasks/FOLLOWUPS.md`, not something this helper papered over.
      */
     async tapScrim() {
       const height = harness.displayHeight();
