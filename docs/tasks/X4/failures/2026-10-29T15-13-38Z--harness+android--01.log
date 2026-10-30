@@ -1,0 +1,184 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-29T15:13:38.101Z on code tree `a68b9f868f0b` at HEAD `a8aef55` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 420082 ms
+- Load: start 4.35, end 1.46, median 2.45, max 4.64
+- Device: android / device `emulator-5574` / lease `X4-okg1q`
+- Full log: `task/X4-conformance/harness+android-2026-10-29T15-13-38.101Z.log` (<store>/task/X4-conformance/harness+android-2026-10-29T15-13-38.101Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Console`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected [ 3, +0 ] to deeply equal [ 3, 6 ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+android-2026-10-29T15-13-38.101Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-okg1q (still live)
+  |   X4-okg1q                 X4           android           pair-a
+gate: load
+  |   load1 at the moment of failure: 1.46 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 138 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a68b9f868f0b, 8 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.35/4.95 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X4-conformance/harness+android-2026-10-29T15-13-38.101Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      slider size: box=300.19x48.00 measured=300.19x48.00 expectedHeight=48
+
+
+    console.log
+      height vs width: wide=300.19x48.00/300.19x48.00 narrow=180.19x48.00/180.19x48.00
+
+
+    console.log
+      squashed box: box=180.19x12.19 measured=180.19x48.00
+
+
+    console.log
+      zero-height box: measured=180.19x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 measured=200.00x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 scroller box=240.00x923.43 measured=240.00x48.00 declared=240
+
+
+    console.log
+      poison: guess=200x12 box=300.19x48.00 measured=300.19x48.00 epoch=71->70 corrections=1
+
+
+    console.log
+      user style: box=180.19x60.19 measured=180.19x48.00
+
+
+    console.log
+      coalesce: same-turn moves=8 events=1
+
+
+    console.log
+      coalesce: spread moves=5 events=5
+
+
+    console.log
+      quantise tenths: [0.3]
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=false
+
+
+    console.log
+      a11y: box=300.19x48.00 labelBox=null handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed SetProgress(3.0) on #41550 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 64.9ms last=411.43x48.00
+
+
+    console.log
+      timing: Slider stress: mount 40 instances 64.9ms (limit 15000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 1.37/load5 2.77 over 10 cores · the bar is headroom for a debug build, not a target
+
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected [ 3, +0 ] to deeply equal [ 3, 6 ]
+
+      [0m [90m 1516 |[39m       expectPerformed(report[33m,[39m what)[33m;[39m
+       [90m 1517 |[39m       [36mconst[39m index [33m=[39m events[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m[33m;[39m
+      [31m[1m>[22m[39m[90m 1518 |[39m       expect(events[33m.[39mcomplete)[33m.[39mtoEqual(expected[33m.[39mslice([35m0[39m[33m,[39m index [33m+[39m [35m1[39m))[33m;[39m
+       [90m      |[39m                                      [31m[1m^[22m[39m
+       [90m 1519 |[39m       [90m// The start of each step is the value it began from: the control's seed for[39m
+       [90m 1520 |[39m       [90m// the first, and each previously reported value after that. And never more[39m
+       [90m 1521 |[39m       [90m// starts than ends - the drag that never ends would show up here.[39m[0m
+
+
+Test Suites: 1 failed, 13 passed, 14 total
+Tests:       1 failed, 244 passed, 245 total
+Snapshots:   0 total
+Time:        419.277 s
+Ran all test suites.
+
+
+
+```

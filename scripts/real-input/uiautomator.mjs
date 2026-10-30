@@ -62,6 +62,11 @@ export function parseHierarchy(xml) {
       // announced - rather than asserting it from a comment.
       checked: attributes.checked ?? '',
       selected: attributes.selected ?? '',
+      // Whether the node scrolls. The a11y rule needs it because the page's own
+      // `ScrollView` is `focusable="true"` and contains every control on the screen, so
+      // without this flag a control's name that had slid onto the scroll container would
+      // look like a control a person can act on. No control in this library scrolls.
+      scrollable: attributes.scrollable ?? '',
       bounds: parseBounds(attributes.bounds ?? ''),
     };
   });
