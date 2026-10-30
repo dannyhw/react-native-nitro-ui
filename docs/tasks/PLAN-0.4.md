@@ -20,7 +20,7 @@ menu that wraps arbitrary RN children.
 | 1b | **X4** conformance suite and `task-ready.mjs` (adds the report-path check), after X11 so two device tasks can overlap again | both | X3, X11 |
 | 2 | **G7a** Menu: API, iOS SwiftUI `Menu`, Android Compose `DropdownMenu` anchored to a button, harness, sizing, a11y, Host support (Android) — merged `41e30c5` (owner rulings D32); X4's conformance covers it when it lands | both | X11 |
 | 2 | **T18** / **T18b** TextField spikes — done on maintainer-mac-1, kept as unmerged branches (D30) | both | — |
-| 3 | **G7b** Menu: bench arm, real-input case, Storybook story, smoke (brief `G7b-menu-finish.md`) | both | G7a |
+| 3 | **G7b** Menu: bench arm, real-input case, Storybook story, smoke (brief `G7b-menu-finish.md`) — merged `268859b` | both | G7a |
 | — | ~~**G8** TextField~~ — moved to 0.5 (D30) | — | — |
 | 3b | **D3** docs pass for 0.4.0: README and component docs gain Menu, the stale "workflows disabled" lines go (brief `D3-docs-0.4.md`) | docs | G7b, X4 |
 | 4 | Quiet bench re-runs (H2a, H2b, G5, G6, plus G7) in one exclusive window, then 0.4.0 through Changesets | both | A3, G7b, D3 |
