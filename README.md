@@ -14,23 +14,24 @@ the layout engine, and React never sees a native node.
 
 ## Components
 
-| Component          | iOS                                                        | Android                                                      | Status | Docs                                                         |
-| ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
-| `Switch`           | `Toggle(…).toggleStyle(.switch)`                           | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
-| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                  | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
-| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
-| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`            | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
-| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
-| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                    | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
-| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)      | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
-| `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
+| Component          | iOS                                                         | Android                                                      | Status | Docs                                                         |
+| ------------------ | ----------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| `Switch`           | `Toggle(…).toggleStyle(.switch)`                            | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
+| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                   | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
+| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)`  | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
+| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`             | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
+| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                         | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
+| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                     | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
+| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)       | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
+| `Menu`             | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)` | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
+| `Host`             | a plain `View` (passthrough, by design)                     | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It held Switches only
-in 0.1.0; `Slider`, `Progress` and `Button` joined it in 0.2.0, and
-`SegmentedControl`, `Picker` and `DatePicker` since 0.3.0, so it holds every
-control the library ships. See [Performance](#performance) for what it buys and
-what it costs.
+in 0.1.0; `Slider`, `Progress` and `Button` joined it in 0.2.0,
+`SegmentedControl`, `Picker` and `DatePicker` in 0.3.0, and `Menu` in 0.4.0, so
+it holds every control the library ships. See [Performance](#performance) for
+what it buys and what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
 monotonic clock, `CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, plus sizing
@@ -41,6 +42,7 @@ import {
   Button,
   DatePicker,
   Host,
+  Menu,
   Picker,
   Progress,
   SegmentedControl,
@@ -128,9 +130,13 @@ install. Use the tarball.
 
 The consumer smoke tests (`scripts/smoke/`) install the packed tarball with
 `npm` into a fresh app, build **Release**, launch it and check that every
-control mounts with a non-zero size - the seven controls, plus a `<Host>`
-holding two Switches. They are run by hand — the GitHub workflows are disabled
-for now. Every ticked cell below was green for the 0.1.0 tarball on 2026-10-26:
+control mounts with a non-zero size - the eight controls the app mounts today,
+plus a `<Host>` holding two Switches. The `Smoke` workflow is disabled and
+dispatch-only, so these run by hand; `CI`, `Release`, `Release tag` and
+`Changeset status` are the workflows that run on GitHub. Every ticked cell below
+was green for the 0.1.0 tarball on 2026-10-26 and nothing has been re-run since -
+`Menu` joined the smoke app after that, so no consumer run has printed a
+`menu=WxH` box:
 
 | Consumer              | iOS | Android |
 | --------------------- | --- | ------- |
@@ -284,14 +290,63 @@ export function DueDate() {
 }
 ```
 
+### Menu
+
+A trigger that opens a list of actions. It has no value, so there is nothing to
+keep in sync: `onSelect` reports the `id` of the row that was picked, and the
+items are data — never child views. The trigger is drawn like a `Button`, with
+`Button`'s variants and sizes.
+
+```tsx name=menu
+const FILE_ACTIONS: MenuGroup = {
+  actions: [
+    { id: 'rename', title: 'Rename' },
+    { id: 'duplicate', title: 'Duplicate' },
+  ],
+  sections: [
+    {
+      id: 'dangerous',
+      title: 'Dangerous',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+export function FileActions() {
+  const [last, setLast] = useState('nothing yet');
+
+  return (
+    <>
+      <Text>Last action: {last}</Text>
+      <Menu
+        accessibilityLabel="File"
+        title="File"
+        group={FILE_ACTIONS}
+        variant="tonal"
+        size="medium"
+        onSelect={setLast}
+      />
+    </>
+  );
+}
+```
+
+`onOpen`/`onClose` exist but fire on Android only — SwiftUI's `Menu` has no
+expansion binding, so iOS never reports either one (DECISIONS D32), and a pick
+fires `onSelect` before the `onClose` that follows it. `systemImage` and
+`primaryAction` (tap runs it, long-press opens the menu) are iOS-only; a
+submenu nests on iOS and appears inline under a divider on Android.
+[menu.md](docs/components/menu.md) says which prop is which platform's.
+
 ### Host
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
-iOS it is a plain `View`. Its only children may be nitro-ui controls — all seven
-since 0.3.0 (0.2.0 hosts `Switch`, `Slider`, `Progress` and `Button`); an RN
-view, plain text or a nested `<Host>` throws in development. A hosted `Picker`'s
-menu or `DatePicker`'s dialog is the Host composition's own window: it opens
-under the row the Host drew and closes with the composition. Give it a height.
+iOS it is a plain `View`. Its only children may be nitro-ui controls — all eight
+since 0.4.0 (0.2.0 hosts `Switch`, `Slider`, `Progress` and `Button`); an RN
+view, plain text or a nested `<Host>` throws in development. A hosted
+`Picker`'s menu, `DatePicker`'s dialog and `Menu`'s list are the Host
+composition's own windows: each opens under the box the Host drew and closes
+with the composition. Give it a height.
 
 ```tsx name=host
 export function NotificationSettings() {
@@ -388,8 +443,13 @@ gives it no verdict, and no mark means the run is at parity within rounding.
 | `SegmentedControl` | 0.24× `n/v`   | 0.66× ✓     | 0.83× ✓    | 0.89× ✓           | 1.39× `n/v`     | 1.10× ✗         |
 | `DatePicker`       | 1.00×         | 0.08× ✓     | 0.70× ✓    | not in this run   | not in this run | not in this run |
 
-`Picker` and the Android `DatePicker` were not part of either baseline run, so
-there are no committed numbers for them yet.
+Two things are missing from that table. `maintainer-mac-1` measured no `Picker`
+at all, and the Android `DatePicker` has no `@expo/ui` arm to divide by on any
+machine (`ARMS_WITHOUT_COMPONENT` in `scripts/bench/lib.mjs`), so that ratio
+cannot exist. `maintainer-mac-2`'s baselines do carry `Picker` on both platforms.
+`Menu` has no committed cell on either machine yet; its numbers are in
+[`G7b-menu-finish.report.md`](docs/tasks/G7b-menu-finish.report.md), quoted under
+[the Host](#host-on-android) below.
 
 Reading it honestly:
 
@@ -455,10 +515,11 @@ app opts into for a dense list rather than what every container does. On iOS
 `Host` is a passthrough `View` (DECISIONS D23).
 
 0.2.0 extends the same mechanism to `Slider`, `Progress` and `Button`, and 0.3.0
-to `SegmentedControl`, `Picker` and `DatePicker` — so a Host holds all seven. Two
-of those last three present something outside their own box: a `Picker` opens
-a menu and a `DatePicker` a dialog, and both belong to the Host's composition once
-hosted. A `SegmentedControl` owns no window at all; it is on the list because it
+to `SegmentedControl`, `Picker` and `DatePicker`; `Menu` joined them in 0.4.0, so
+a Host holds all eight. Three of those last four present something outside their
+own box: a `Picker` opens a menu, a `DatePicker` a dialog and a `Menu` its list,
+and all three belong to the Host's composition once hosted. A
+`SegmentedControl` owns no window at all; it is on the list because it
 draws itself, which is the question a Host asks. The first four were re-priced by
 one further run on the same emulator, and that machine
 was **busy — 37 % of its load samples over the ceiling — so those numbers are
@@ -508,15 +569,30 @@ memory about halved, UI thread down, and JS CPU per op unchanged. That run's `Sw
 cell reads 0.85× where the published figure is 0.86×, which is what makes the rest of
 it readable.
 
+`Menu` was priced the same way by G7b: one quiet `--plan quick` run per platform,
+plus a full plan on each. Neither machine has a committed `Menu` cell, so these
+are numbers rather than verdicts. Android is again the win — memory at N=200 from
+the quick run: 217.9 KiB per unhosted Menu against the shared host's 248.6
+(0.88×), and **77.5 KiB inside a `<Host>`**, within noise of `rn-core`'s 76.3 —
+and the full plan's N=200 mount says it louder: 64.8 ms presented hosted against
+168.9 ms unhosted, with `rn-core` at 65.5 — though that is a run
+that was not quiet (25 of its 176 load samples over the ceiling). iOS, where a Host
+is a passthrough, is
+the usual per-control story: 346.3 KiB against the shared host's 262.0 (1.32×).
+No run composed a popup — the arm never opens a menu — and that quick Android run
+was noisy on `update.UI CPU/op` (3.18× `n/v`), so that ratio carries no verdict.
+[G7b's tables](docs/tasks/G7b-menu-finish.report.md) have the whole set.
+
 ### Baselines and gating
 
 Baselines are committed per machine as well as per device —
 `bench/baselines/<machine-label>/<deviceKey>.json` — because a ratio to `rn-core`
-only cancels drift inside the machine that measured it. `maintainer-mac-1` has both
-(`bench/baselines/maintainer-mac-1/ios27-sim-iphone17.json`,
-`bench/baselines/maintainer-mac-1/android35-emu-pixel9.json`), so `bun bench --check`
-gates on both platforms there; a machine without its own directory refuses rather than
-reading another's. Each baseline stores ratios to `rn-core`, not absolute times; see
+only cancels drift inside the machine that measured it. Both machines that have
+minted one have both canonical devices
+(`bench/baselines/maintainer-mac-1/`, `bench/baselines/maintainer-mac-2/`), so
+`bun bench --check` gates on both platforms there; a machine without its own
+directory refuses rather than reading another's. Each baseline stores ratios to
+`rn-core`, not absolute times; see
 `bench/baselines/README.md` for the rules a baseline run has to meet. Measurement
 details — absolutes, per-launch spreads, noise flags and the update cells — are in the
 reports for the
@@ -552,8 +628,15 @@ The full list per control is in its doc; these are the ones that bite.
   but Material 3 has no wheel, so Android renders the menu (`Picker`) or the
   inline calendar (`DatePicker`). Android also has no combined date-and-time
   control: `mode="datetime"` opens a date dialog and then a time dialog.
+- **`Menu`'s open state is Android-only, and its splits are iOS's.** SwiftUI's
+  `Menu` has no expansion binding, so **iOS never fires `onOpen` or `onClose`**,
+  and a `disabled` that arrives while the menu is open closes it on Android only —
+  an iOS menu can stay up over a disabled trigger (DECISIONS D32). Build app state
+  on `onSelect`. A submenu nests on iOS and renders inline under a divider on
+  Android, and `primaryAction` (tap runs it, long-press opens) is iOS-only and
+  changes what a tap does there.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only.** All
-  seven since 0.3.0 (Switches only in 0.1.0; `Slider`, `Progress` and `Button`
+  eight since 0.4.0 (Switches only in 0.1.0; `Slider`, `Progress` and `Button`
   added in 0.2.0). Any other child — an RN view, text, another `<Host>` — throws
   in development. Give a Host a height; per-child sizes, `gap`, `flexDirection`
   and `alignItems` do not reach what it draws.
@@ -600,8 +683,11 @@ calls.
 ## Contributing
 
 - [Development workflow](CONTRIBUTING.md) — prerequisites, the scripts, and the
-  gates. The GitHub workflows are disabled for now, so `bun run check` and the
-  device suites, run locally, are the gates
+  gates. `CI` runs `bun run check`, the host native tests and an Android debug
+  build on every push and pull request; `Release` and `Release tag` run the release
+  path, and `Changeset status` warns on a pull request that has no changeset. The two device workflows — `Bench` and `Smoke` — are
+  disabled and dispatch-only, so the harness, real-input, smoke and bench suites a
+  change cites are the ones someone ran locally
 - [Storybook](example/README.md#storybook) - the example app is also a showcase
   app: `bun run storybook:ios` / `bun run storybook:android` starts it, and
   `bun run storybook` runs its Metro server separately

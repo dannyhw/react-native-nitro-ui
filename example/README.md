@@ -2,7 +2,7 @@
 
 The example app of `react-native-nitro-ui`: a bare React Native app (React
 Native CLI, new architecture) with one tab per component — Switch, Slider,
-Button, Progress, SegmentedControl, DatePicker, Picker and Host — in
+Button, Progress, SegmentedControl, DatePicker, Picker, Menu and Host — in
 `src/App.tsx` and the `src/*Screen.tsx` files. It is also the app the
 on-device tests run in (`__tests__/*.harness.tsx`, through
 `react-native-harness`) and a Storybook showcase (below).

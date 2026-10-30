@@ -121,7 +121,7 @@ invalidate here. See `docs/architecture/sizing.md` §9.
 ## Inside a `<Host>`
 
 `Switch` was the first control `<Host>` could hold, and the only one in 0.1.0;
-since 0.3.0 a Host holds all seven (`docs/components/host.md`). On
+since 0.4.0 a Host holds all eight (`docs/components/host.md`). On
 Android, Switches that are direct children of a `<Host>` are drawn by the Host's
 single Compose composition instead of each owning one, which is what brings
 their mount memory and UI-thread cost under `@expo/ui`'s shared host. A hosted

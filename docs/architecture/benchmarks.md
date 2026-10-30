@@ -379,7 +379,7 @@ by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:
 4. **Only the `nitro-ui` arm gates.** `rn-core` is the control and the `expo-ui-*`
    arms are reference arms: an `@expo/ui` bump is review information, not a
    failed nitro-ui pull request. The `nitro-ui-host` arm (controls inside
-   `<Host>`, scheduled on Android only, and only on the seven controls a Host can draw —
+   `<Host>`, scheduled on Android only, and only on the eight controls a Host can draw —
    `ARM_SCOPES` in `scripts/bench/lib.mjs`) is reported and not gated either. The two Android
    `expo-ui-*` arms have no DatePicker cells (`ARMS_WITHOUT_COMPONENT`).
 5. A leak fails the same way when the climb is **monotonic** and the slope ratio
@@ -568,11 +568,12 @@ unreportable by construction (`MAX_MISSING_SAMPLE_RATIO`) and each of its
 iterations pays the probe's timeout - visible in the log as
 `N without a mount signal`, which is expected rather than a fault.
 
-## CI (disabled)
+## CI (dispatch-only)
 
-All GitHub workflows are disabled for now, this one included, and
-`bench.yml` has never run; the local runs above are the only bench evidence.
-What follows is what it is written to do once it is enabled.
+`bench.yml` is the one workflow, with `smoke.yml`, that is `workflow_dispatch`
+only — its schedule and label triggers are off and it has never run, so the local
+runs above are the only bench evidence. What follows is what it is written to do
+once it is enabled.
 
 `.github/workflows/bench.yml` is **report-only**: an on-demand `bench` label or a
 `/bench` comment (restricted to `OWNER`/`MEMBER`/`COLLABORATOR` commenters) builds

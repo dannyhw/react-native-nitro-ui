@@ -55,7 +55,8 @@ for a dense list, and not what every container does by default.
 
 `Slider`, `Progress` and `Button` can be hosted since 0.2.0 (the 0.1.0 Host holds
 Switches only). `SegmentedControl`, `Picker` and `DatePicker` follow in 0.3.0 (H2b,
-"Popups and dialogs" below).
+"Popups and dialogs" below), and `Menu` in 0.4.0 (G7a/G7b) — eight controls, which is
+everything the library ships, so `UNHOSTABLE_CONTROLS` in `HostChildren.ts` is empty.
 
 H2a re-ran the same plan with them in the host arm, so the four are priced by one run
 (`quick`, ART `speed-profile`, 4 launches, one results file;
@@ -125,9 +126,10 @@ would make it a second list component.
 Each of these follows from who owns the pixels, and each is a refusal in development
 rather than a screen that draws half of itself:
 
-- **Anything that is not a hosted control.** Seven controls are hosted: `Switch` (H1);
-  `Slider`, `Progress` and `Button` (H2a); and `SegmentedControl`, `Picker` and
-  `DatePicker` (H2b), which is every control this library ships. What is left to refuse
+- **Anything that is not a hosted control.** Eight controls are hosted: `Switch`
+  (H1); `Slider`, `Progress` and `Button` (H2a); `SegmentedControl`, `Picker` and
+  `DatePicker` (H2b); and `Menu` (G7a/G7b), which is every control this library
+  ships. What is left to refuse
   is therefore not a control at all: one of our other components if a future one is not
   hosted, an RN view (`View`, `Text`, `ScrollView`, `Image`, `Modal`, …), a third-party
   native view, plain text as a direct child, or another `<Host>`. Each of those throws in
@@ -137,7 +139,7 @@ rather than a screen that draws half of itself:
   refuses what it can *name*. It cannot see through a component, so a `<Row>` that
   renders a `View` arrives at the native Host looking like a direct child, and there
   the allowlist decides: `NitroComposeHost.isHostable` is `false` on the base class and
-  `true` on those seven hosts only, so an RN view, one of our other controls, or a
+  `true` on those eight hosts only, so an RN view, one of our other controls, or a
   `<Host>` behind a wrapper is **not** composed. In a debuggable build that refusal is not only a log line — the Host
   reports it to JavaScript, where it becomes a `console.error` in Metro and LogBox that
   names the child's class. In a release build it draws nothing and says nothing, so a
@@ -194,14 +196,17 @@ is the direct child, and a `View` is what the check refuses.
 
 ## Popups and dialogs
 
-**Two** of the seven hosted controls present something outside their own box: a
-`Picker` opens an `ExposedDropdownMenu`, and a `DatePicker` on Android opens a dialog in
-each of its `compact` modes. A `SegmentedControl` presents nothing and owns no window of
+**Three** of the eight hosted controls present something outside their own box: a
+`Picker` opens an `ExposedDropdownMenu`, a `DatePicker` on Android opens a dialog in
+each of its `compact` modes, and a `Menu` opens its list — `ExposedDropdownMenuBox`
+with `menuAnchor`, so the list is positioned against the trigger rather than against
+whatever the container happens to be (`docs/components/menu.md`, "Inside a `Host`").
+A `SegmentedControl` presents nothing and owns no window of
 any kind — it is hostable because it draws itself, which is the question a Host asks, and
 a real tap on one is gated as though it were not (`example/__tests__/HostPopups.harness.tsx`
 and the `hosted-segmented` real-input case both check that it opens no window).
 
-Those two windows are **the Host composition's own**: a Compose popup opened from inside
+Those three windows are **the Host composition's own**: a Compose popup opened from inside
 an `AndroidComposeView` is attached to that view, which is the same thing that happens
 when the same control opens a menu in a composition of its own, and the same thing Expo
 UI's shared host does. That is a fact about Compose, not a workaround added for Hosts —
@@ -211,7 +216,9 @@ hosted child is `0 × 0`, so an open menu's anchor is read out of the drawing
 (`noteCompositionOrigin`) and its box watched from the nearest React-Native-placed
 ancestor (`placedViewOf` and its `OnLayoutChangeListener`), and an open menu is taken
 down by `dropOpenMenu` when that box moves out from under it. That much is engineered,
-for hosted and unhosted controls alike — and the row about a layout move below is what it
+for hosted and unhosted controls alike, in `Picker` by its model, and in `Menu` by its own
+`noteCompositionOrigin` and `dropOpenMenu` and the shared `placedViewOf` — and the row
+about a layout move below is what it
 does to a user:
 
 | Situation | What a hosted popup does |
@@ -246,6 +253,24 @@ up left the dialog live. Both are gated
 (`example/__tests__/HostPopups.harness.tsx`, "follows a value React writes while the
 dialog is open (G5)" and "closes when the control is disabled while the dialog is open
 (G5)").
+
+`Menu` is the third window. Its list is a Compose popup like `Picker`'s, anchored the
+same way — `ExposedDropdownMenuBox` with `menuAnchor` on the trigger, so the box that
+matters is the button the Host drew, read out of the drawing rather than from React
+Native's `0 × 0` frame; `exposedDropdownSize()` is deliberately not used, because a menu's
+list is as wide as its items need. G7b tried to reproduce the mis-anchoring that anchor
+exists to prevent, four ways, and none of them moved the popup on this Material version
+(1.4.0), so `menuAnchor` stays as Material's documented way to say "against *this*
+control" and what the harness proves is the bound: the gap between the trigger's box and
+the popup's window stays under 48 px, and a mutant that moves the window for certain
+(`DropdownMenu(offset = DpOffset(0.dp, 64.dp))`) turns that red. The layout-move and
+teardown dismissals above are measured for a hosted Menu too
+(`example/__tests__/Menu.harness.tsx`, "opens under its own button, and follows it when the
+Host moves", "comes down when its hosted child leaves the Host", "takes its window down
+when its button moves inside the Host"). What differs from `Picker` is that a Menu has no
+value, so the controlled handshake is not in play: a pick reports `onSelect` and then
+`onClose` (DECISIONS D32). On iOS a Host is a passthrough and SwiftUI keeps the
+presentation to itself, so that witness answers `-1` for every field but its row count.
 
 What is still refused is a **React Native** `Modal` child, or any other RN view that owns
 a window: that window is a sibling of the Host's, not a child of its composition, so the
