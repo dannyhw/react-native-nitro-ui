@@ -509,6 +509,30 @@ describe("the report's gate table against the ledger", () => {
     ).toContain('no run of that gate is recorded');
   });
 
+  it('goes red for a second row beside a gate the report also got right', () => {
+    // X4 re-review, low: "a duplicate invented row for a known gate passes". The rule used
+    // to be *naming* — a report row was refused only if no generated row named its gate — so
+    // pasting the table correctly and then adding one more `check` row with an invented tree
+    // satisfied every loop: the real row was present, and the extra one named a known gate.
+    const report = generated.slice();
+    report.push('| check | **PASS** | `deadbee` | also passed, allegedly |');
+    const problems = reportTableProblems(report.join('\n'), generated);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('second row for `check`');
+    expect(problems[0]).toContain('deadbee');
+  });
+
+  it('goes red when the same gate is listed twice, byte for byte', () => {
+    // The remaining corner: both copies match the ledger exactly, so exact matching refuses
+    // neither — and a table that names one gate twice still reads as two runs of it.
+    const report = generated.slice();
+    report.push(generated[3]);
+    const problems = reportTableProblems(report.join('\n'), generated);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('2 times');
+    expect(problems[0]).toContain('one run of it');
+  });
+
   it('leaves a cost table alone, because a duration is not a verdict', () => {
     // The report's own "what the suite costs" table has gate names in its first column. A
     // rule that flagged those would be wrong on X4's own report, and a check that cries

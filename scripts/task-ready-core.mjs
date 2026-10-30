@@ -301,14 +301,65 @@ export function reportTableProblems(reportText, generatedTable) {
   // prose are out — and second cell verdict-shaped, so the cost table's durations and a
   // coverage matrix's `covered` are out. A row that reads "this gate, this verdict" has to
   // have a run behind it.
+  //
+  // And a claim has to match a generated row *exactly*, not merely name a gate the ledger
+  // knows (X4 re-review, low: "a duplicate invented row for a known gate passes"). Naming
+  // alone left this open:
+  //
+  //     | `check` | **PASS** | 1322/49 | `abc1234` |   ← the ledger's row, kept
+  //     | `check` | **PASS** | 1322/49 | `deadbee` |   ← a second one, invented
+  //
+  // The real row satisfied the forward loop and the invented one was compared with nothing.
+  // What that costs is one row shape that used to read as honest — a
+  // `| real-input:ios | not run |` line beside the run that did happen. Deliberate: a cell
+  // that reads "this gate, this verdict" is read as evidence, and the ledger is the only
+  // place evidence comes from. What a round still owes belongs in prose, where `need`
+  // already prints it.
   const known = new Set(generated.map((line) => gateNameOf(line) ?? ''));
+  /** Gate names the report has the ledger's own row for, correctly. */
+  const faithful = new Set(
+    generated
+      .map((line) => gateNameOf(line))
+      .filter((gate) => gate != null)
+      .filter((gate) =>
+        generated.some(
+          (line) =>
+            gateNameOf(line) === gate &&
+            inReport.some((row) => sameRow(row, line))
+        )
+      )
+  );
+  const claims = new Map();
+  /** Gates already named by a problem below, so the count check does not say it twice. */
+  const reported = new Set();
   for (const row of inReport) {
     const gate = gateNameOf(row);
-    if (gate == null || known.has(gate)) continue;
+    if (gate == null) continue;
+    claims.set(gate, (claims.get(gate) ?? 0) + 1);
+    if (generated.some((line) => sameRow(line, row))) continue;
+    if (known.has(gate) && !faithful.has(gate)) continue;
+    reported.add(gate);
     problems.push(
-      `the report's gate table has a row for \`${gate}\` and ` +
-        '`gate.mjs table` prints none, so no run of that gate is recorded for this ' +
-        `code tree — the row says ${row.trim()}. Paste the table, do not extend it`
+      faithful.has(gate)
+        ? `the report's gate table carries a second row for \`${gate}\` that ` +
+            '`gate.mjs table` does not print, so no run of it looks like that — ' +
+            `the row says ${row.trim()}. A gate appears once, with the ledger's own ` +
+            'numbers: an extra row beside a correct one is as invented as one for a ' +
+            'gate that never ran'
+        : `the report's gate table has a row for \`${gate}\` and ` +
+            '`gate.mjs table` prints none, so no run of that gate is recorded for this ' +
+            `code tree — the row says ${row.trim()}. Paste the table, do not extend it`
+    );
+  }
+  // One gate named twice, where every copy is byte-identical to the ledger's row: none is
+  // refused above, and the table still reads as two runs of one gate. A gate the loop did
+  // refuse is not repeated here — it is the same row being wrong, said twice in two voices.
+  for (const [gate, count] of claims) {
+    if (count < 2 || reported.has(gate)) continue;
+    problems.push(
+      `the report's gate table lists \`${gate}\` ${String(count)} times and ` +
+        '`gate.mjs table` records one run of it — a gate named twice reads as two runs, ' +
+        'and the ledger says there is one'
     );
   }
   return problems;
