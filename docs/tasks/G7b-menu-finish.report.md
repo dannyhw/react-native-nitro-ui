@@ -284,7 +284,7 @@ None blocking. Two notes for whoever merges:
   `blindSpot` on iOS. When both land, the `real-input-menu` screen exists twice (see Follow-ups) —
   my recommendation is to keep this task's block, since it carries the pick and event echoes the
   real-input case reads, and repoint X4's fixture generator at it.
-- **D15's canonical baselines**: this is the first bench on a machine the runner calls quiet, but
-  it is a per-component quick plan, not a mint. If the orchestrator wants `menu` in
-  `bench/baselines/maintainer-mac-2/*`, it should come from your exclusive window; I have not
-  touched the baseline files.
+- **D15's canonical baselines**: the two quick runs are `quiet: true` on this machine, in the same
+  state A3's baselines were minted in, but a per-component quick plan is not a mint. If the
+  orchestrator wants `menu` in `bench/baselines/maintainer-mac-2/*`, it should come from your
+  exclusive window; I have not touched the baseline files.
