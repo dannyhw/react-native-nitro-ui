@@ -415,11 +415,10 @@ and `--check` was not run against it.
 - Bench gates: `gate.mjs bench --help` resolves to a real bench launch that exits 2 and lands a
   FAIL row in the ledger; `bench` should refuse `--help` the way `check` refuses arguments.
 - Bench leak cells: A5's quiet full plan is the only run of this component's that has produced
-  **monotonic** leak slopes —
-  Android `nitro-ui-host` on `menu` (695 KiB/cycle), `date-picker` (602), `slider` (578), `button`
-  (512), 8 launches each, `heapCollected: true`, every unhosted arm still non-monotonic. Setup
-  decisions §6 says fail on a monotonic increase, and no gate can see it because a committed
-  baseline stores no leak slope. Wants an owner with a heap dump.
+  **monotonic** leak slopes — Android `nitro-ui-host` on `menu` (695 KiB/cycle), `date-picker`
+  (602), `slider` (578), `button` (512), 8 launches each, `heapCollected: true`, every unhosted arm
+  still non-monotonic. Setup decisions §6 says fail on a monotonic increase, and no gate can see it
+  because a committed baseline stores no leak slope. Wants an owner with a heap dump.
 - X4's Menu coverage is a duplicate `real-input-menu` block: `task/X4-conformance` added
   `testID="real-input-menu"` to `MenuScreen.tsx` independently of this task's block, so merging
   the two will need the a11y case repointed at one screen (or its fixture regenerated).
