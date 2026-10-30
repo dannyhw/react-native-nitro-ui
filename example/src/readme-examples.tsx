@@ -15,6 +15,8 @@ import {
   Button,
   DatePicker,
   Host,
+  Menu,
+  type MenuGroup,
   Picker,
   Progress,
   SegmentedControl,
@@ -116,6 +118,40 @@ export function DueDate() {
 
   return (
     <DatePicker accessibilityLabel="Due date" value={date} onChange={setDate} />
+  );
+}
+// #endregion
+
+// #region menu
+const FILE_ACTIONS: MenuGroup = {
+  actions: [
+    { id: 'rename', title: 'Rename' },
+    { id: 'duplicate', title: 'Duplicate' },
+  ],
+  sections: [
+    {
+      id: 'dangerous',
+      title: 'Dangerous',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+export function FileActions() {
+  const [last, setLast] = useState('nothing yet');
+
+  return (
+    <>
+      <Text>Last action: {last}</Text>
+      <Menu
+        accessibilityLabel="File"
+        title="File"
+        group={FILE_ACTIONS}
+        variant="tonal"
+        size="medium"
+        onSelect={(id) => setLast(id)}
+      />
+    </>
   );
 }
 // #endregion

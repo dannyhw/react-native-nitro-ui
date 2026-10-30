@@ -23,14 +23,15 @@ the layout engine, and React never sees a native node.
 | `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                    | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)      | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
+| `Menu`             | `Menu { rows } label: { … }` + Button's `.buttonStyle`     | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
 | `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It held Switches only
-in 0.1.0; `Slider`, `Progress` and `Button` joined it in 0.2.0, and
-`SegmentedControl`, `Picker` and `DatePicker` since 0.3.0, so it holds every
-control the library ships. See [Performance](#performance) for what it buys and
-what it costs.
+in 0.1.0; `Slider`, `Progress` and `Button` joined it in 0.2.0,
+`SegmentedControl`, `Picker` and `DatePicker` in 0.3.0, and `Menu` in 0.4.0, so
+it holds every control the library ships. See [Performance](#performance) for
+what it buys and what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
 monotonic clock, `CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, plus sizing
@@ -41,6 +42,7 @@ import {
   Button,
   DatePicker,
   Host,
+  Menu,
   Picker,
   Progress,
   SegmentedControl,
@@ -128,9 +130,12 @@ install. Use the tarball.
 
 The consumer smoke tests (`scripts/smoke/`) install the packed tarball with
 `npm` into a fresh app, build **Release**, launch it and check that every
-control mounts with a non-zero size - the seven controls, plus a `<Host>`
-holding two Switches. They are run by hand — the GitHub workflows are disabled
-for now. Every ticked cell below was green for the 0.1.0 tarball on 2026-10-26:
+control mounts with a non-zero size - the eight controls the app mounts today,
+plus a `<Host>` holding two Switches. The `Smoke` workflow is manual-only, so
+these run by hand; `CI`, `Release`, `Release tag` and `Changeset status` are the
+workflows that run on GitHub. Every ticked cell below was green for the 0.1.0
+tarball on 2026-10-26 and nothing has been re-run since - `Menu` joined the
+smoke app after that, so no consumer run has printed a `menu=WxH` box:
 
 | Consumer              | iOS | Android |
 | --------------------- | --- | ------- |
@@ -284,14 +289,63 @@ export function DueDate() {
 }
 ```
 
+### Menu
+
+A trigger that opens a list of actions. It has no value, so there is nothing to
+keep in sync: `onSelect` reports the `id` of the row that was picked, and the
+items are data — never child views. The trigger is a `Button`, with `Button`'s
+variants and sizes.
+
+```tsx name=menu
+const FILE_ACTIONS: MenuGroup = {
+  actions: [
+    { id: 'rename', title: 'Rename' },
+    { id: 'duplicate', title: 'Duplicate' },
+  ],
+  sections: [
+    {
+      id: 'dangerous',
+      title: 'Dangerous',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+export function FileActions() {
+  const [last, setLast] = useState('nothing yet');
+
+  return (
+    <>
+      <Text>Last action: {last}</Text>
+      <Menu
+        accessibilityLabel="File"
+        title="File"
+        group={FILE_ACTIONS}
+        variant="tonal"
+        size="medium"
+        onSelect={(id) => setLast(id)}
+      />
+    </>
+  );
+}
+```
+
+`onOpen`/`onClose` exist but fire on Android only — SwiftUI's `Menu` has no
+expansion binding, so iOS never reports either one (DECISIONS D32), and a pick
+fires `onSelect` before the `onClose` that follows it. `systemImage` and
+`primaryAction` (tap runs it, long-press opens the menu) are iOS-only; a
+submenu nests on iOS and appears inline under a divider on Android.
+[menu.md](docs/components/menu.md) says which prop is which platform's.
+
 ### Host
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
-iOS it is a plain `View`. Its only children may be nitro-ui controls — all seven
-since 0.3.0 (0.2.0 hosts `Switch`, `Slider`, `Progress` and `Button`); an RN
-view, plain text or a nested `<Host>` throws in development. A hosted `Picker`'s
-menu or `DatePicker`'s dialog is the Host composition's own window: it opens
-under the row the Host drew and closes with the composition. Give it a height.
+iOS it is a plain `View`. Its only children may be nitro-ui controls — all eight
+since 0.4.0 (0.2.0 hosts `Switch`, `Slider`, `Progress` and `Button`); an RN
+view, plain text or a nested `<Host>` throws in development. A hosted
+`Picker`'s menu, `DatePicker`'s dialog and `Menu`'s list are the Host
+composition's own windows: each opens under the box the Host drew and closes
+with the composition. Give it a height.
 
 ```tsx name=host
 export function NotificationSettings() {
