@@ -284,14 +284,26 @@ learned here are worth keeping:
 
 ## Bench
 
-One run, `--platform android --plan quick`, from `e7b7dbf` + the docs commit's tree (no source
-change since `e7b7dbf`, so the measured APK *is* the shipped one — verified by dex content, not by
-`UP-TO-DATE`). Results file `bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`,
-`BENCH_EXIT=0`, `problems: []`, 4 launches, ART `speed-profile` (primed, 1 attempt),
-`durationMs` 2 965 109 (~49 min). Ratios are the runner's own launch-paired
-`pairedLaunchRatios()`, read with `bench/tools/arm-ratios.mjs --arm=…`; the denominator
-`expo-ui-shared-host` was also read directly (`--arm=expo-ui-shared-host`) to confirm it sits
-where the tables say.
+**Superseded by A5.** The tables below are A5's, not this task's. Everything this report measured
+came from one busy `--plan quick` run, and A5's exclusive window on `maintainer-mac-2` has since
+re-measured the same cells at `--plan full --launches 8` on a quiet machine; this task's own run is
+described under "What this run could not say", where what it still supports is marked against the
+quiet readings. The shape of every claim held: hosting halves memory and cuts UI CPU on all four
+controls, the JS thread is the axis it pays on, and the unmount cells still carry no verdict at 8
+launches.
+
+The run behind them: one `--platform android --plan full --launches 8` on `maintainer-mac-2` at
+`abe68a1`, results
+`bench/results/abe68a1-android-20261030T155310Z.json`, `problems: []`, 2 128 launches, ART
+`speed-profile` (primed, 1 attempt), 5 h 49 min, and 2 825 load samples against that machine's
+ceiling of 5.0 — median 1.43, p90 1.95, max 5.13, **one over (0.04 %)**, `machine.quiet: true`.
+Ratios are the runner's own launch-paired `pairedLaunchRatios()`, read through
+`scripts/bench/lib.mjs`; the number in brackets after each is that cell's launch spread (MAD /
+median of the ratios to `rn-core`) for the numerator and denominator arm, and `n/v` marks one over
+10 %. This task's own run — one `--plan quick` at 4 launches on a busy machine, `e7b7dbf-dirty`,
+37 % of its samples over the ceiling — is described under "What this run could not say, and what
+the quiet one says" below, and
+the claims it supported are marked against the quiet readings.
 
 The `nitro-ui-host` arm now carries all four hostable controls, which is what makes the D15
 question answerable per control instead of by extrapolation from the Switch.
@@ -300,45 +312,53 @@ question answerable per control instead of by extrapolation from the Switch.
 
 Mount memory (KiB per instance, N=200), and mount UI / JS CPU per op (ms, N=50):
 
-| Control    | `nitro-ui` no Host    | `nitro-ui` + `<Host>`  | `expo-ui-shared-host` | memory ratio (host ÷ shared) |
-| ---------- | --------------------- | ---------------------- | --------------------- | ---------------------------- |
-| `Switch`   | 144.1 KiB / 9.97 / 2.08 | **45.4 KiB / 5.43 / 3.08** | 51.1 KiB / 6.54 / 2.62 | **0.88x**(3%) |
-| `Slider`   | 155.0 KiB / 11.93 / 2.29 | 62.2 KiB / 6.33 / 2.56 | 62.3 KiB / 7.16 / 2.30 | 1.00x(2%) |
-| `Progress` | 130.6 KiB / 8.55 / 1.98 | **33.3 KiB / 5.00 / 2.90** | 91.2 KiB / 9.61 / 3.28 | **0.37x**(1%) |
-| `Button`   | 188.7 KiB / 13.85 / 2.13 | **61.3 KiB / 7.21 / 2.54** | 77.1 KiB / 8.37 / 3.34 | **0.80x**(2%) |
+| Control    | `nitro-ui` no Host      | `nitro-ui` + `<Host>`   | `expo-ui-shared-host`   | memory ratio (host ÷ shared) |
+| ---------- | ----------------------- | ----------------------- | ----------------------- | ---------------------------- |
+| `Switch`   | 144.3 KiB / 16.44 / 2.80 | **46.0 KiB / 7.59 / 3.34** | 50.6 KiB / 9.13 / 2.87 | **0.91x**(2%/2%)             |
+| `Slider`   | 148.2 KiB / 19.90 / 3.16 | 64.0 KiB / 9.57 / 3.32  | 62.9 KiB / 11.31 / 2.99 | 1.02x(1%/1%)                 |
+| `Progress` | 132.1 KiB / 14.67 / 2.46 | **34.7 KiB / 6.45 / 3.28** | 77.4 KiB / 15.93 / 4.21 | 0.45x(3%/16%), `n/v`         |
+| `Button`   | 188.9 KiB / 21.40 / 2.55 | **62.2 KiB / 10.63 / 2.88** | 77.0 KiB / 12.02 / 4.18 | **0.80x**(0%/1%)             |
 
 Host ÷ *unhosted*, same run (`--arm=nitro-ui-host`, `vs nitro-ui` column) — the host's own
-before/after. Memory per instance: **0.31x**(2%) / **0.41x**(3%) / **0.26x**(0%) / **0.32x**(1%) for
-Switch / Slider / Progress / Button, every cell inside spread. Mount UI CPU: 0.54x (13%, `n/v`) /
-**0.50x**(3%) / **0.56x**(9%) / 0.48x (13%, `n/v`). The memory half says the Host does what H1 said
-it does on all four; the UI-CPU half only says it on Slider and Progress — the Switch and Button
-cells are noise-flagged and carry no verdict (review S5).
+before/after. Memory per instance: **0.32x**(2%/0%) / **0.43x**(1%/1%) / **0.26x**(3%/2%) /
+**0.33x**(0%/0%) for Switch / Slider / Progress / Button, every cell inside spread. Mount UI CPU:
+**0.46x**(1%/1%) / **0.47x**(4%/2%) / **0.44x**(1%/1%) / **0.50x**(2%/2%). The memory half says
+the Host does what H1 said
+it does on all four, and on this run **the UI-CPU half says it on all four too** — this task's
+busy run could only say it on Slider and Progress, because its Switch and Button cells were
+noise-flagged (review S5); at 8 launches and a quiet machine those two cells are 0.46x and
+0.50x with 1 % and 2 % spread. Nothing else said here is reversed.
 
-### What this run cannot say
+### What this run could not say, and what the quiet one says
 
-- **It is not quiet.** 459 load samples, median 5.51, p90 15.87, max 36.18, **170 over the ceiling
-  of 7 — 37 %**, against `LOAD_OVER_CEILING_FRACTION` = 10 %, so `machine.quiet` is false. A
-  non-quiet run mints no baseline (`bench/baselines/README.md`), and this is a `quick` plan at 4
-  launches anyway. The numbers are same-run paired readings; the `Switch` row's agreement with H1's
-  quiet run (0.88x/0.84x against 0.86x/0.87x) is the evidence that they are readable.
-- **The `Slider` memory ratio is a denominator story.** Hosting halves our own footprint
-  (155.0 → 62.2 KiB) and lands exactly on the shared host, because `@expo/ui`'s shared-host Slider
-  is 62.3 KiB here while a bare RN `Slider` is 14.8 KiB. Compare H1's quiet run for the shape and
-  this run for the ratio; do not sell it as a 1.00x win.
-- **The `update` cells are mixed, and none of them carries a claim.** The aggregate (`Switch`)
-  update cells against the shared host are *inside* spread — `mountedNs` 0.99x(1%), `presentedNs`
-  1.01x(0%), `mainNsPerOp` 0.84x(5%), `jsCommitNs` 0.96x(6%) — while `jsNsPerOp` 1.10x(14%) is not;
-  per-control update spreads run 0–21 %. Round 1's sentence that every host-arm `update.*` cell was
-  over 10 % is simply wrong (review S5). Nothing was claimed from any of them.
-- **`update.progress` has `n/a` cells.** `mountedNs`/`presentedNs` do not pair with `rn-core` or
-  either `expo-ui-*` arm (they pair with `nitro-ui`: 0.96x / 1.00x); `mainNsPerOp` does not pair with
-  `rn-core` but does pair with both `expo-ui-*` arms (0.04x(2%) and 0.05x(11%));
-  `unmountMainNsPerOp` pairs with nothing. `jsCommitNs` and `jsNsPerOp` pair with all four. The gaps
-  are the missing-sample rule (`MAX_MISSING_SAMPLE_RATIO`), reported rather than interpolated —
-  round 1's "lost its `rn-core` and `expo-ui-*` pairings entirely" overstates it.
+- **This task's run is not quiet.** 459 load samples, median 5.51, p90 15.87, max 36.18, **170 over
+  the ceiling of 7 — 37 %**, against `LOAD_OVER_CEILING_FRACTION` = 10 %, so `machine.quiet` is
+  false. A non-quiet run mints no baseline (`bench/baselines/README.md`), and this is a `quick`
+  plan at 4 launches anyway. The numbers above are A5's: 8 launches, `machine.quiet: true`, one
+  sample over its ceiling. What this task read from its own run still describes the shape — the
+  `Switch` row agreed with H1's quiet run at 0.88x/0.84x against 0.86x/0.87x, and A5 reads 0.91x
+  and 0.84x for the same two cells — but every cell above is the quiet one now.
+- **The `Slider` memory ratio is still a denominator story.** Hosting halves our own footprint
+  (148.2 → 64.0 KiB) and lands on the shared host, because `@expo/ui`'s shared-host Slider is
+  62.9 KiB there while a bare RN `Slider` is 14.7 KiB. Read it as 1.02x, not as a win.
+- **The `update` cells now mostly carry verdicts, which is the one thing that moves.** On this
+  task's run none of them could. Host against the shared host at 8 launches, on the four axes
+  `mountedNs` / `presentedNs` / `mainNsPerOp` / `jsNsPerOp`: `Switch` 0.96x(2%/1%),
+  1.00x(1%/0%), 0.84x(4%/4%), 1.22x(3%/2%); `Button` 0.93x / 0.74x / 0.87x / 0.59x; `Slider`
+  0.98x / 1.00x / 0.76x (`n/v`, 31 % spread on both arms) / 1.13x. Nothing
+  claimed in this report rests on an update cell, so nothing is reversed: the JS thread is the
+  update path's cost for `Switch` (1.22x) and the win for `Button` (0.59x).
+- **`update.progress` still has `n/a` cells.** `mountedNs`/`presentedNs` do not pair with `rn-core`
+  or either `expo-ui-*` arm (they pair with `nitro-ui`: 0.95x / 1.00x); `mainNsPerOp` pairs with
+  both `expo-ui-*` arms but is `n/v` (0.06x, 23 %/24 % spread); `unmountMainNsPerOp` pairs with
+  nothing. `jsCommitNs` and `jsNsPerOp` pair with all four. The gaps are the missing-sample rule
+  (`MAX_MISSING_SAMPLE_RATIO`), reported rather than interpolated, and 8 launches does not clear
+  it either.
 - The 5-arm × 21-cell plan means 4 launches × 105 cells; the host arm self-limits to its four
   controls through `armScopeCovers()`, so 3 of the 7 components never scheduled it (the
-  `picker`/`date-picker`/`segmented-control` rows have no `nitro-ui-host` line at all).
+  `picker`/`date-picker`/`segmented-control` rows have no `nitro-ui-host` line at all). The quiet
+  full plan schedules all of them, which is why A5's tables and `README.md` carry seven hosted
+  controls rather than four.
 
 ## Known issues and follow-ups
 
@@ -363,10 +383,11 @@ cells are noise-flagged and carry no verdict (review S5).
   failed `reports a hosted drag through all three callbacks` on its first `log.sliders` lookup, in a
   test body no fix-round commit touched; the fix round's full iOS run passed it, and no cause is
   known, so it stands as an unreproduced single failure rather than a fixed one.
-* **The whole H2a run wants a quiet re-run.** 37 % of its load samples were over the ceiling, some
-  `update` cells are spread-flagged, and the `update.progress` gaps above are the missing-sample
-  rule. Fix round 1 added **no** new bench run: the re-run waits for a quiet bench machine, and
-  until then every H2a number in `README.md`, `host.md` and this report is labelled indicative.
+* **The whole H2a run wants a quiet re-run.** Closed by A5 (2026-10-30): the quiet `--plan full
+  --launches 8` window on `maintainer-mac-2` re-measured every cell in this report's Bench
+  section, and the numbers above are its. 37 % of this task's own samples were over the ceiling,
+  some `update` cells were spread-flagged, and the `update.progress` gaps above are the
+  missing-sample rule — that last one survives the re-run.
 * **H1's load-ceiling follow-up is still open**: the load-sensitive probes (heap floors, animation
   reports) have no gate that refuses a busy machine, and this bench run recorded 37 % of samples
   over the ceiling.
