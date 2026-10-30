@@ -284,17 +284,16 @@ learned here are worth keeping:
 
 ## Bench
 
-**Superseded by A5.** The tables below are the ones this task measured, and they stay for the
-record. Every number in them came from one busy `--plan quick` run, and A5's exclusive window on
-`maintainer-mac-2` has since re-measured the same cells at `--plan full --launches 8` on a quiet
-machine; the quiet numbers are in
-[`A5-quiet-bench-mac2.report.md`](A5-quiet-bench-mac2.report.md) and in `README.md`, and where a
-quiet cell reverses something said here, that line says so. The shape of every claim below held:
-hosting halves memory and cuts UI CPU on all four controls, the JS thread is the axis it pays on,
-and the unmount cells still carry no verdict at 8 launches.
+**Superseded by A5.** The tables below are A5's, not this task's. Everything this report measured
+came from one busy `--plan quick` run, and A5's exclusive window on `maintainer-mac-2` has since
+re-measured the same cells at `--plan full --launches 8` on a quiet machine; this task's own run is
+described under "What this run could not say", where what it still supports is marked against the
+quiet readings. The shape of every claim held: hosting halves memory and cuts UI CPU on all four
+controls, the JS thread is the axis it pays on, and the unmount cells still carry no verdict at 8
+launches.
 
-The tables below are from A5's quiet window, not this task's run: one `--platform android
---plan full --launches 8` run on `maintainer-mac-2` at `abe68a1`, results
+The run behind them: one `--platform android --plan full --launches 8` on `maintainer-mac-2` at
+`abe68a1`, results
 `bench/results/abe68a1-android-20261030T155310Z.json`, `problems: []`, 2 128 launches, ART
 `speed-profile` (primed, 1 attempt), 5 h 49 min, and 2 825 load samples against that machine's
 ceiling of 5.0 — median 1.43, p90 1.95, max 5.13, **one over (0.04 %)**, `machine.quiet: true`.
@@ -342,10 +341,10 @@ noise-flagged (review S5); at 8 launches and a quiet machine those two cells are
   (148.2 → 64.0 KiB) and lands on the shared host, because `@expo/ui`'s shared-host Slider is
   62.9 KiB there while a bare RN `Slider` is 14.7 KiB. Read it as 1.02x, not as a win.
 - **The `update` cells now mostly carry verdicts, which is the one thing that moves.** On this
-  task's run none of them could. Host against the shared host at 8 launches: `Switch`
-  `mountedNs` 0.96x(2%/1%), `presentedNs` 1.00x(1%/0%), `mainNsPerOp` 0.84x(4%/4%) and
-  `jsNsPerOp` 1.22x(3%/2%); `Button` 0.93x / 0.74x / 0.87x / 0.59x; `Slider` 0.98x / 1.00x /
-  1.13x on the same axes with `mainNsPerOp` 0.76x still `n/v` (31 % spread on both arms). Nothing
+  task's run none of them could. Host against the shared host at 8 launches, on the four axes
+  `mountedNs` / `presentedNs` / `mainNsPerOp` / `jsNsPerOp`: `Switch` 0.96x(2%/1%),
+  1.00x(1%/0%), 0.84x(4%/4%), 1.22x(3%/2%); `Button` 0.93x / 0.74x / 0.87x / 0.59x; `Slider`
+  0.98x / 1.00x / 0.76x (`n/v`, 31 % spread on both arms) / 1.13x. Nothing
   claimed in this report rests on an update cell, so nothing is reversed: the JS thread is the
   update path's cost for `Switch` (1.22x) and the win for `Button` (0.59x).
 - **`update.progress` still has `n/a` cells.** `mountedNs`/`presentedNs` do not pair with `rn-core`
