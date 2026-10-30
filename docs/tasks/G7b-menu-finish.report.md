@@ -227,9 +227,9 @@ So the slopes are printed and not judged: 365 KiB/cycle for nitro-ui against 306
 982/1251 for the two `@expo/ui` arms is consistent with the `memory.bytes/inst` result in the quick
 table, and no more than that.
 
-The iOS full plan was not run: this task adds no iOS bench code beyond the arm, the quick plan
-covers the three cells the D15 table reads, and a second iOS run would have had to be launched
-against pair-b while the Android full plan held it.
+An iOS full-plan run was in flight while this was written, on the same lease; its numbers, if they
+are readable, belong in a following section rather than in a sentence I have not verified. What the
+iOS quick plan covers is what the D15 table reads, and no iOS bench code beyond the arm changed.
 
 ## Files changed
 
