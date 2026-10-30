@@ -1,9 +1,9 @@
 /**
- * The public surface of `react-native-nitro-ui` (v0.1).
+ * The public surface of `react-native-nitro-ui`.
  *
  * Deliberately small (DECISIONS D14): components and the shared clock. *Not*
  * public are the Hybrid Views behind them, their settable props, and the core
- * hooks a wrapper is built from - all of those are package-internal in v0.1, so
+ * hooks a wrapper is built from - all of those are package-internal, so
  * every prop flows through React (UI thread, batched) and an imperative surface
  * can arrive later without breaking anyone. `SwitchProps.hybridRef` stays typed
  * for this repo's own harness and benchmarks; it is marked `@internal` and is
@@ -31,8 +31,10 @@ export { Switch, type SwitchProps } from './components/Switch/Switch';
 
 // An opt-in shared native composition (H1): a container whose nitro-ui children render
 // into one Compose composition instead of one each. Android only - on iOS `Host` is the
-// documented passthrough `View`, permanently (D23 and its T17 outcome). Switch is the
-// only hosted control today; hosting another one means a row in `HostChildren.ts`, a
+// documented passthrough `View`, permanently (D23 and its T17 outcome). Eight controls
+// are hosted now - Switch since 0.1.0, Slider/Progress/Button since 0.2.0,
+// SegmentedControl/Picker/DatePicker since 0.3.0 and Menu since 0.4.0 - because
+// `HostChildren.ts` has a row for each. Hosting another one still means a row there, a
 // native `isHostable` override, and a bench arm for it.
 export { Host, type HostProps } from './components/Host/Host';
 
