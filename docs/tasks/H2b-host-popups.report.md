@@ -112,7 +112,7 @@ Two mutations survived, and both say the same thing about their gate:
 
 ## Follow-ups
 
-- bench: a quiet re-run of the seven-control Host arm — this machine was not quiet, so it mints no baseline.
+- bench: a quiet re-run of the seven-control Host arm — this machine was not quiet, so it mints no baseline. Closed by A5 (2026-10-30), which re-ran the full plan quiet on `maintainer-mac-2`; see its Bench section.
 - tooling: `scripts/real-input/ios.mjs` reads `IOS_UDID` while `scripts/lease.mjs` exports `IOS_SIM_UDID`, so `gate.mjs real-input:ios` fails from a leased env until the alias is added.
 - example (iOS): `testRealInputSwitch` intermittently misses its real tap — red at `527552116ea6`
 and once at `f6bf3f8ead07`, green at `0b711fba39f3`, `d6851b858aad` and on the retry. An 8 s echo
@@ -144,6 +144,35 @@ scripts/bench/report.mjs bench/results/72315db-dirty-android-20261027T025136Z.js
 file's own render path is the `val isHostable` the unhosted arm never reads. Whether that is
 the machine or something real is unexplained here; what belongs in this report is that
 `--check` is red.
+
+**Superseded by A5.** The tables in this section are what this task measured, and they stay for the
+record.
+A5's exclusive window on `maintainer-mac-2` has since re-measured every one of these cells at
+`--plan full --launches 8` on a quiet machine: `bench/results/abe68a1-android-20261030T155310Z.json`,
+2 128 launches, 2 825 load samples against a ceiling of 5.0 with **one over (0.04 %)**,
+`machine.quiet: true`, `problems: []`, ART `speed-profile` primed. That run's tables are in
+[`A5-quiet-bench-mac2.report.md`](A5-quiet-bench-mac2.report.md) and in `README.md`. Every claim
+this section made holds there, and the cells that were `n/v` here mostly carry verdicts now:
+
+| Control            | mem host ÷ shared | mem host ÷ no Host | UI CPU host ÷ no Host | JS CPU host ÷ no Host |
+| ------------------ | ----------------- | ------------------ | --------------------- | --------------------- |
+| `Switch`           | **0.91x**(2%/2%)  | **0.32x**(2%/0%)   | **0.46x**(1%/1%)      | 1.20x(2%/1%)          |
+| `Slider`           | 1.02x(1%/1%)      | **0.43x**(1%/1%)   | **0.47x**(4%/2%)      | 1.05x(3%/1%)          |
+| `Progress`         | **0.45x**(3%/16%) `n/v` | **0.26x**(3%/2%) | **0.44x**(1%/1%)      | 1.32x(1%/1%)          |
+| `Button`           | **0.80x**(0%/1%)  | **0.33x**(0%/0%)   | **0.50x**(2%/2%)      | 1.12x(2%/2%)          |
+| `SegmentedControl` | **0.56x**(1%/1%)  | **0.49x**(1%/1%)   | **0.70x**(1%/1%)      | 1.02x(1%/1%)          |
+| `Picker`           | **0.53x**(1%/1%)  | **0.58x**(1%/0%)   | **0.53x**(0%/1%)      | 1.05x(1%/0%)          |
+| `DatePicker`       | no Android cell   | **0.49x**(1%/0%)   | **0.58x**(2%/2%)      | 1.11x(3%/1%)          |
+
+Read against that quiet run, the three claims this report cannot make are also settled: the
+unmount cells are still `n/v` — hosted ÷ unhosted `unmountMainNsPerOp` reads 0.40x for `Switch`,
+0.62x `SegmentedControl`, 0.81x `Picker` and 0.28x `DatePicker`, each over 10 % spread on at least
+one arm — so "the unmount cells carry no verdict" was right and still is at 8 launches. `Slider`
+at 1.02x is still a denominator story: hosting takes our own footprint from 148.2 to 64.0 KiB onto
+a shared-host Slider that measures 62.9 KiB. And `DatePicker` still has no shared-host comparison
+on any machine. The only number that really moves is `Picker`'s memory ratio to the shared host:
+this run read 0.50x, the quiet one 0.53x. `Menu`, which this task did not have, is the strongest
+case in the set at 0.31x.
 
 ### Hosted vs unhosted vs `expo-ui-shared-host`
 
