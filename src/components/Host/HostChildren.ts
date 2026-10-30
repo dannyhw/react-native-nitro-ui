@@ -46,13 +46,13 @@ import { Menu } from '../Menu/Menu';
  * the `isHostable` override on the control's own Android host, and the two are the same
  * decision seen from the two sides that have to agree.
  *
- * The first seven are the ones a `<Host>` was said not to be able to hold, because
- * three of them present a popup or a dialog: a window of its own. The answer H2b
+ * The H2b three are the ones a `<Host>` was said not to be able to hold, because two of
+ * them (`Picker`, `DatePicker`) present a popup or a dialog: a window of its own. The answer H2b
  * measured is that a Compose popup or dialog opened from inside the Host's
  * composition is *that composition's* window - which is what closes it when the Host
  * goes away, and what anchors it to the box the Host drew
  * (`docs/components/host.md`, "Popups and dialogs"). A control is refused only if
- * hosting it is shown to be broken, and none of these is: `Menu`'s list is a fourth
+ * hosting it is shown to be broken, and none of these is: `Menu`'s list is a third
  * such window, gated the same way for a hosted trigger (`example/__tests__/Menu.harness.tsx`).
  */
 export const HOSTABLE_CONTROLS = new Map<unknown, string>([

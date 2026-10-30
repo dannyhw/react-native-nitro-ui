@@ -1,7 +1,7 @@
 # D3 — Docs pass for 0.4.0
 
 **Branch:** `task/D3-docs-0.4` (from `main` at `13fd2e9`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** none — no device was needed, leased, or booted (brief: "No devices are needed").
+**Lease:** none — no device was needed, leased, or booted (the delegation message ruled devices out).
 
 ## Summary
 
@@ -95,6 +95,6 @@ No new test or gate is added by this round; the one gate my change rides on is
 - `example/src/stories/Host.stories.tsx`'s `Popups` story still hosts seven controls and
   says "seven controls, one composition" — a story, not a claim in the shipped docs.
 - No consumer smoke run has printed `menu=WxH` (G7b's line, still open); nothing since
-  0.1.0 has re-run the four README ticks either, which is what the paragraph now says.
+  0.1.0 has re-run the five README ticks either, which is what the paragraph now says.
 - `bench/baselines/*` have no `menu` cells; G7b's numbers are the only ones, and its
   Android N=200 pair comes from a run that was not quiet.
