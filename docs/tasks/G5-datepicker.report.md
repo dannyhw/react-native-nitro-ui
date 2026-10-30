@@ -688,6 +688,78 @@ as non-blocking. See Follow-ups.
 
 ## Bench
 
+**Superseded by A5.** The tables in this section and the fix-round ones above are what this task
+measured, and they stay for the record: every one of them was taken on a busy machine, and this
+report says so where each table sits. A5's exclusive window on `maintainer-mac-2` has since run
+the full plan quiet on both platforms — `--plan full --launches 8` at `abe68a1`, `problems: []`,
+ART `speed-profile` primed — iOS 2 387 load samples against a ceiling of 5.0 with 15 over (0.6 %),
+Android 2 825 with one over (0.04 %). Those cells:
+
+#### iOS — iPhone 17 simulator, `abe68a1`, quiet
+
+| Cell | Implementation | presented | mounted | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mount N=50 | rn-core | 16.08 ms | 5.25 ms | 2.59 ms | 2.69 ms | 2.53 ms | n/a |
+| mount N=50 | expo-ui-host-per-control | 747.24 ms | 40.94 ms | 3.01 ms | 6.68 ms | 665.98 ms | n/a |
+| mount N=50 | expo-ui-shared-host | 16.15 ms | 24.04 ms | 1.41 ms | 1.65 ms | 286.70 ms | n/a |
+| mount N=50 | nitro-ui | 39.90 ms | 29.20 ms | 2.16 ms | 2.42 ms | 29.23 ms | n/a |
+| update N=50 | rn-core | 16.13 ms | 3.83 ms | 838 us | 1.02 ms | 4.05 ms | n/a |
+| update N=50 | expo-ui-host-per-control | 132.68 ms | 20.54 ms | 1.99 ms | 7.08 ms | 120.42 ms | n/a |
+| update N=50 | expo-ui-shared-host | 119.92 ms | 18.17 ms | 1.01 ms | 1.33 ms | 102.16 ms | n/a |
+| update N=50 | nitro-ui | 16.07 ms | 2.16 ms | 1.33 ms | 1.43 ms | 8.58 ms | n/a |
+| memory N=200 | rn-core | n/a | n/a | n/a | n/a | n/a | 30.9 KiB |
+| memory N=200 | expo-ui-host-per-control | n/a | n/a | n/a | n/a | n/a | 224.0 KiB |
+| memory N=200 | expo-ui-shared-host | n/a | n/a | n/a | n/a | n/a | 221.7 KiB |
+| memory N=200 | nitro-ui | n/a | n/a | n/a | n/a | n/a | 199.2 KiB |
+
+Launch-paired ratio to `rn-core`: mount 2.48x presented (`n/v`, 18.9 % spread on our own arm),
+5.54x mounted, 0.82x JS commit, 0.90x JS CPU/op, **11.66x** UI CPU/op, 0.89x UI CPU/unmount;
+update **1.00x** presented, 0.56x mounted, 1.58x JS commit, 1.41x JS CPU/op, 2.12x UI CPU/op;
+memory **6.44x**. Against `expo-ui-shared-host`: presented 2.24x `n/v`, mounted 1.22x, UI CPU/op
+0.10x, JS CPU/op 1.49x, memory 0.90x, update presented 0.13x, update UI CPU/op 0.08x.
+
+#### Android — Pixel 9 emulator API 35, `abe68a1`, quiet
+
+Still no `expo-ui` rows: no `@expo/ui` arm has a mountable Android date field
+(`ARMS_WITHOUT_COMPONENT`), so those cells cannot exist on any machine.
+
+| Cell | Implementation | presented | mounted | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mount N=50 | rn-core | 32.56 ms | 24.70 ms | 2.31 ms | 2.76 ms | 9.95 ms | n/a |
+| mount N=50 | nitro-ui | 45.01 ms | 39.65 ms | 2.57 ms | 3.05 ms | 25.27 ms | n/a |
+| mount N=50 | nitro-ui + `<Host>` | 48.07 ms | 28.98 ms | 2.94 ms | 3.38 ms | 14.72 ms | n/a |
+| update N=50 | rn-core | 31.11 ms | 17.85 ms | 1.16 ms | 1.38 ms | 4.30 ms | n/a |
+| update N=50 | nitro-ui | 47.78 ms | 15.92 ms | 1.68 ms | 1.92 ms | 7.84 ms | n/a |
+| update N=50 | nitro-ui + `<Host>` | 47.78 ms | 15.17 ms | 1.79 ms | 2.05 ms | 6.41 ms | n/a |
+| memory N=200 | rn-core | n/a | n/a | n/a | n/a | n/a | 28.1 KiB |
+| memory N=200 | nitro-ui | n/a | n/a | n/a | n/a | n/a | 188.7 KiB |
+| memory N=200 | nitro-ui + `<Host>` | n/a | n/a | n/a | n/a | n/a | 92.0 KiB |
+
+Ratio to `rn-core`: mount 1.39x presented, 1.61x mounted, 1.12x JS commit, 1.09x JS CPU/op,
+2.54x UI CPU/op; update 1.54x presented, 0.89x mounted, 1.44x JS commit, 1.39x JS CPU/op, 1.82x
+UI CPU/op; memory **6.69x**, or **3.27x** inside a `<Host>` (188.7 → 92.0 KiB, and UI CPU/op
+2.54x → 1.49x there). No `leak.date-picker` slope is monotonic on either platform.
+
+What that settles from this report, and what it does not:
+
+- **iOS `update` presented is 1.00x `rn-core` on a quiet machine too** — 16.07 ms against 16.13.
+  That was the reading this round leaned on and it stands.
+- **The Android per-instance memory move this round could not attribute was real.** Fix round 1
+  recorded 193.9 KiB / 6.90x where the pre-review run had 135.5 KiB / 4.59x and said the cause was
+  unknown. The quiet run reads 188.7 KiB / 6.69x, so it was not load: the extra bytes came in with
+  the code between those two trees and are still there.
+- **iOS `mount` presented is machine-dependent, so the "discard" needs its machine named.** This
+  round threw away 2.02x because the pre-review run read 1.02x and `presented` is a frame stamp. On
+  `maintainer-mac-2` a quiet run reads 2.48x (39.90 ms against 16.08), so 1.00x is a
+  frame-floor artefact of the faster machine, not the truth of the mount. The cell is `n/v` there
+  and carries no verdict either way; what it does not do is support a claim that iOS mount cost
+  nothing.
+- **The memory penalty this report called "the honest penalty" is unchanged in kind and size**:
+  6.44x iOS against the 6.20x/6.26x this task read, and it is the reason `<Host>` exists on
+  Android, where the same field costs 3.27x instead of 6.69x.
+- The `leak` cells A5 ran are reported as `new arm` in `--check` (no committed cell to compare
+  against) and none is monotonic, so no leak is claimed.
+
 `bun run bench --platform ios --plan quick --component date-picker` and its Android twin (4
 launches per cell, 5 warmup + 20 measured iterations, on the assigned devices).
 
@@ -797,11 +869,9 @@ frames are from the fix-round build.
 
 ## Known issues and follow-ups
 
-- **The DatePicker rows are re-measured; the quiet run is still owed.** Fix round 1 ran both
-  platforms from a clean tree (see "Bench re-run"), so the rows are no longer two changes old — but
-  the host was over the runner's load ceiling for 100 % of both runs, so nothing in them is a
-  verdict. What release prep still owes is the same command once on an idle machine, which is also
-  when the other five components' rows should be refreshed.
+- **The DatePicker rows are re-measured; the quiet run is still owed.** Closed by A5 (2026-10-30):
+  both platforms ran the full plan quiet on `maintainer-mac-2` at `abe68a1`, and the cells are in
+  the Bench section above, together with the other seven components' rows.
 - **The whole Android suite has not been green since fix round 1** - not because of this
   component. Two full runs after the fix hit a machine at `load1` 11-44 (the human's own apps
   plus another task building): one lost `Slider` on its 1 000 ms render timeout, the second
