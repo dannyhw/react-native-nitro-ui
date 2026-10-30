@@ -37,8 +37,12 @@
 > drops presses shorter than ~0.1 s (a human tap), while RN's `Pressable` takes them; **F7** (`F7-quick-tap.md`) owns
 > it. The suite presses for 0.15 s meanwhile. **X4 and F7 started 2026-10-29 from `3dfe041`**, one device pair each
 > (worktrees `nitro-ui-worktrees/X4`, `/F7`). **F7 merged** the same day: the drop is RN-level, not ours (FOLLOWUPS F7);
-> a real-device thumb check is the open item. X4 is in fix round 1. G7b brief written; offered to mac-1
-> (`HANDOFF-mac1-2026-10-29-g7b.md`), otherwise it runs here when a pair frees.
+> a real-device thumb check is the open item.
+> **G7b merged (2026-10-30, `268859b`)** on maintainer-mac-2: 1 impl + 1 fix round, re-review MERGE WITH FIXES
+> (applied by the orchestrator, plus two commit messages scrubbed of a temp path before merge); all five merge gates
+> green. **X4 is in fix round 2** (the last under D19) on pair-a, told to merge `main` again and cover Menu as it now
+> is. Then **D3** (`D3-docs-0.4.md`: README has no Menu, stale "workflows disabled" lines), then the 0.4.0 Version
+> Packages PR. Its CI runs show `action_required` (a bot-opened PR): approve the run or re-run before merging.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
