@@ -386,7 +386,12 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     control: 'hosted-picker',
     platform: 'ios',
     followups: 'X4 a11y: a hosted Picker announces its label twice',
-    matches: /no element other than the|announced as/,
+    // Only the stutter (X4 re-review M3). `/announced as/` matched the *lost-label*
+    // sentence as well — "no element other than the React Native wrapper is announced as
+    // …" — which is what every other way of losing a name produces. So the case would
+    // stay green if `accessibilityLabel` stopped reaching the hosted Picker entirely, and
+    // `staleExemptions` could never retire the row for that either.
+    matches: /announces the control's name twice/,
   },
 ]);
 
@@ -526,6 +531,32 @@ export function iosA11yProblems(control, tree) {
     const unboxed = tree.filter(
       (node) => node.label === control.label && !node.anchor && !hasArea(node)
     );
+    // A name that arrived *twice* is its own finding, and it has to say so (X4 re-review
+    // M1). A doubled label never equals `control.label`, so it used to fall into the
+    // "no element other than the wrapper" sentence below — and the hosted Picker's debt
+    // row matched that sentence, which is a shape every other way of losing a label also
+    // produces: the exemption excused a missing name as readily as a stuttered one, and
+    // the case could not go red at all. So the stutter is named here, and only the
+    // stutter, and the lost-label sentence is left to mean what it says.
+    const doubled = tree.filter(
+      (node) =>
+        !node.anchor &&
+        hasArea(node) &&
+        announcesTwice(node.label, control.label)
+    );
+    if (doubled.length > 0) {
+      problems.push(
+        `${control.hybridView}: the element under "${control.anchorTestId}" ` +
+          `announces the control's name twice (${doubled
+            .map(describeIosNode)
+            .join(
+              '; '
+            )}): the label reaches one element along with the control's own ` +
+          'name, so a person hears it stutter, and no element carries the label alone — ' +
+          'which is also why this case cannot grade the name, box or trait'
+      );
+      return problems;
+    }
     problems.push(
       unboxed.length > 0
         ? `${control.hybridView}: ${String(unboxed.length)} element(s) under ` +
@@ -676,6 +707,27 @@ function fieldsOf(line) {
 
 function hasArea(node) {
   return node.frame.width > 1 && node.frame.height > 1;
+}
+
+/**
+ * Does this announcement say the control's name more than once?
+ *
+ * The shape X4 measured on a hosted Picker: `accessibilityLabel` and the control's own
+ * name land on one element, and VoiceOver reads "Hosted picker, Hosted picker". Matched
+ * by counting occurrences rather than by pattern-matching a separator, because the joiner
+ * is UIKit's ("Label, Label"), the platform's localisation, or the component's own
+ * concatenation, and a rule that only caught `", "`-joins would excuse a
+ * `"Label Label"` one. The name being there *once* is what the rule wants, so "twice or
+ * more" is the whole finding.
+ *
+ * @param {string} label what the element is announced as
+ * @param {string} controlLabel the `accessibilityLabel` the case looks for
+ */
+function announcesTwice(label, controlLabel) {
+  if (controlLabel === '') return false;
+  const first = label.indexOf(controlLabel);
+  if (first === -1) return false;
+  return label.indexOf(controlLabel, first + controlLabel.length) !== -1;
 }
 
 function sameBox(a, b) {
