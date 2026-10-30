@@ -38,7 +38,7 @@ chased.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1336 tests / 49 suites | `8767d2e1939d` | 2 m 41 s | start 1.3 / med 2.0 / max 3.4 |
+| `check` | **PASS** | 1336 tests / 49 suites | `8767d2e1939d` | 2 m 33 s | start 1.4 / med 2.5 / max 3.6 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
