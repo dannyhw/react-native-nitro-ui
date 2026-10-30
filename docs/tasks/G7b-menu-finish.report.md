@@ -8,12 +8,13 @@
 Menu now carries the four things a component needs to count as finished: a bench arm in every
 plan, a real-input case on both platforms, a Storybook story, and a line in the consumer smoke
 app. `component.json` flipped to `bench`/`smoke`/`realInput` and `bun run regen` is clean; the
-cells are Picker's — `mount`/`update`/`memory` quick, plus `leak` in the full plan — because a
-Menu's box is its trigger's box, so it joins the self-sizing set and `update.menu` flips the
-trigger title, the sizing key (D16). **No cell opens a popup**: no arm can price a real popup
-gesture across three runtimes, so the cells measure the mounted control, and `memory`/`leak` are
-the closest thing to a leak story. The `nitro-ui-host` arm is Android-only because iOS `<Host>`
-is a passthrough (D23), so iOS has four arms where Android has five.
+cells are Picker's — `mount`/`update`/`memory` quick, plus `leak` in the full plan — and all seven
+have a Menu equivalent, so none is dropped. What has no cell is a popup gesture: no arm can price
+one across three runtimes, so the cells measure the mounted control, and `memory`/`leak` are the
+closest thing to a leak story. A Menu's box is its trigger's box, so it joins the self-sizing set
+and `update.menu` flips the trigger title, the sizing key (D16). The `nitro-ui-host` arm is
+Android-only because iOS `<Host>` is a passthrough (D23), so iOS has four arms where Android has
+five.
 
 Two decisions a reviewer needs before the diff:
 
@@ -51,8 +52,11 @@ that visibly dismissed the menu. Not shipped; D32 stands. Item 7 does not apply 
 | `real-input:ios:--control:menu:--background` | stale | —                        | cdde3752f6f3 (not this tree) | 0.2 s     | start 7.5 / med 7.5 / max 7.5  |
 
 `need --for review` is satisfied on this code tree, and so is `need --for merge` (all five
-required gates green on `43816d4c80ef`). Three rows above need reading, not re-running:
-
+required gates green on `43816d4c80ef`). The ledger prints no per-component counts for the real-input
+gates, so the Menu share is here rather than in the table: `Menu.harness.tsx` is 15 tests on each
+platform inside the harness suites above (and 183/232 totals), `testRealInputMenu` carries 14
+assertions, and `CHECKS.menu` 31 logged checks with 17 measured notes. Three rows below need
+reading, not re-running:
 - **`bench:--help` FAIL is my own mistake, not a gate.** I typed `node scripts/gate.mjs bench
   --help` to learn the bench gate's form; `gate.mjs` resolved it as `bench:--help`, launched
   `scripts/bench/run.mjs --help`, and the runner printed its usage and exited 2. Nothing in the
