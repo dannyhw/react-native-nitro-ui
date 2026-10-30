@@ -237,6 +237,20 @@ recorded debt, and it would exit red if a fifth appeared or one of these four st
 - `real-input:ios` is not required for this round (nothing iOS real-input was added), and it
   was run anyway as a regression check on `support.mjs`: `Suite.finish` is shared and the
   `auxiliary` list now prints in its summary on both platforms. Green, 11 m 26 s.
+- `checkA11yTable` proves a case's `screen`, `anchorTestId` and `label` exist in the screen
+  file, so it caught Menu's missing case at the merge — but not what happens when a screen
+  grows a *second* node with the same `testID`. G7b's real-input block and my round-2 a11y
+  block both added `real-input-menu` to `MenuScreen.tsx`, which would have made the rule's
+  box comparison compare against whichever of the two a traversal happened to reach. I fixed
+  the collision by hand; the guard would not have. A duplicate-testID check over
+  `example/src/*.tsx` is a few lines and belongs with the other cross-checks.
+- Two device runs failed for reasons of mine, and the ledger keeps them: I started a Metro on
+  the lease's port by hand (the harness publishes its machine state over Metro, and the
+  timing gate refused the run when the state file named a different port than the one it was
+  asked for), and I ran two gates concurrently on one lease, which is what caused the port
+  fallback. Both gates go green serially on the same tree. The lesson is not for `gate.mjs`:
+  a harness run owns its Metro, so nothing outside a gate should hold the port.
+- X4 round 2 has no questions for the orchestrator.
 
 ## Fix round 1
 
