@@ -38,6 +38,12 @@ import {
 } from './support.mjs';
 import { parseTestResults, realInputLine } from './ios-log.mjs';
 import { REAL_INPUT_CONTROLS, iosCheckName } from './controls.mjs';
+import {
+  A11Y_CONTROLS,
+  checkIosControlA11y,
+  parseIosA11yLog,
+  staleExemptions,
+} from './a11y.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { currentCodeTree, recordBuild } from '../app-stamp.mjs';
 import { iosModuleCacheArgs } from '../build-speed-lib.mjs';
@@ -55,6 +61,18 @@ const BUNDLE_ID = 'nitroui.example';
 const WORKSPACE = 'NitroUiExample.xcworkspace';
 const SCHEME = 'NitroUiExampleUITests';
 const TEST_CLASS = 'RealInputTests';
+
+/**
+ * The accessibility pass's method name, and the id it reports under.
+ *
+ * It is not a control: it asserts nothing about a press, and a control's totals have to
+ * keep meaning "every control answered a real touch". `A11Y_METHOD` is exempt from the
+ * coverage guard below for the same reason `a11y-sweep.mjs` does not appear in the
+ * Android `CHECKS` table, and it is reported through `Suite.beginAuxiliary`, which is how
+ * the Android half reports its own sweep.
+ */
+const A11Y_METHOD = 'testRealInputA11y';
+const A11Y_ID = 'a11y';
 
 /**
  * Guard that the Swift file and the shared table describe one suite, then pick
@@ -76,6 +94,7 @@ function checkCoverage(swiftSource, controls) {
     [...swiftSource.matchAll(/func (testRealInput\w+)\s*\(/g)].map((m) => m[1])
   );
   for (const name of declared) {
+    if (name === A11Y_METHOD) continue;
     if (
       !REAL_INPUT_CONTROLS.some((control) => iosCheckName(control.id) === name)
     ) {
@@ -386,10 +405,16 @@ async function main() {
     }
     setJsLocation(device.udid, metroPort);
 
-    const selectors = toRun.map(
-      (control) =>
-        `-only-testing:${SCHEME}/${TEST_CLASS}/${iosCheckName(control.id)}`
-    );
+    const selectors = toRun
+      .map(
+        (control) =>
+          `-only-testing:${SCHEME}/${TEST_CLASS}/${iosCheckName(control.id)}`
+      )
+      // The a11y pass rides every run, filtered or not. `--control switch` is how a task
+      // iterates on one control, and the accessibility rule is the one thing on this
+      // platform that needs no gesture to be worth re-checking — excluding it would mean
+      // the mutation that proves it red had to be run as a full suite.
+      .concat(`-only-testing:${SCHEME}/${TEST_CLASS}/${A11Y_METHOD}`);
     status = await xcodebuild(
       [
         'test-without-building',
@@ -444,12 +469,132 @@ async function main() {
         outcome.outcome === 'passed'
       );
     }
+
+    reportA11yPass({ log, suite, status, testLog });
   } finally {
     clearJsLocation(device.udid);
     stopMetro();
   }
 
   return suite.finish();
+}
+
+/**
+ * The accessibility pass's own section of the report.
+ *
+ * One auxiliary check per case in `A11Y_CONTROLS`, decided by the rule in
+ * `a11y.mjs` — the same file the Android sweep reads — from the elements the Swift pass
+ * printed. Two reasons it is done here rather than as `XCTAssert` calls in the test file:
+ * the rule needs the shared table (which label, which trait, which debt row), and a rule
+ * decided in a log parser can be shown red with a fixture in
+ * `scripts/__tests__/real-input-a11y.test.js` instead of on a device.
+ *
+ * Three things make a case fail, and each is reported separately so a reader learns which
+ * half of the rule broke:
+ *
+ * - no elements at all for a case: the pass did not reach the screen, so the case is
+ *   *not run* and says so — a control nobody measured is never a pass.
+ * - the case's own XCUITest method failed or never reported: same reason.
+ * - the rule found problems: new ones fail the run; ones that match a debt row are
+ *   printed as `known failing`, and a debt row that matched nothing is itself reported, so
+ *   a fix has to delete its row rather than let it sit there excusing nothing.
+ *
+ * @param {object} args
+ * @param {string} args.log the xcodebuild test log
+ * @param {import('./support.mjs').Suite} args.suite
+ * @param {number} args.status xcodebuild's exit status
+ * @param {string} args.testLog where that log lives, for the failure message
+ */
+function reportA11yPass({ log, suite, status, testLog }) {
+  const outcome = parseTestResults(log).get(A11Y_METHOD);
+  let trees;
+  try {
+    trees = parseIosA11yLog(log);
+  } catch (error) {
+    // A line whose box did not parse means the format moved under the parser. That is a
+    // broken measurement, not a control's failure, so it fails the run outright rather
+    // than reporting fourteen cases as unmeasured.
+    const check = suite.beginAuxiliary(
+      A11Y_ID,
+      'the accessibility rule (XCUITest)'
+    );
+    check.abort(`${String(error?.message ?? error)} — see ${testLog}`);
+    return;
+  }
+  /** @type {string[]} */
+  const covered = [];
+  /** @type {string[]} */
+  const matched = [];
+  for (const entry of A11Y_CONTROLS) {
+    // A case with no lines was never measured. Saying `not measured` rather than staying
+    // quiet is the difference between a gap and a pass — the same rule `markMissing`
+    // applies to a control with no check.
+    const check = suite.beginAuxiliary(
+      `a11y:${entry.id}`,
+      `${entry.component} a11y (XCUITest)`
+    );
+    const nodes = trees.get(entry.id);
+    if (nodes == null || nodes.length === 0) {
+      check.check(
+        `no elements were printed for ${entry.id}, so this run never read its ` +
+          `accessibility tree (the pass reported "${String(
+            outcome?.outcome ?? 'nothing'
+          )}"; exit ${String(status)}). See ${testLog}`,
+        false
+      );
+      continue;
+    }
+    covered.push(entry.id);
+    for (const node of nodes) {
+      check.note(
+        `${node.type} id="${node.id}" label="${node.label}" ` +
+          `value="${node.value}" box ${iosBoxText(node.frame)}` +
+          `${node.anchor ? ' [the React Native wrapper]' : ''}`
+      );
+    }
+    const result = checkIosControlA11y(entry, nodes);
+    for (const problem of result.known) {
+      check.note(problem);
+    }
+    if (result.exempt) matched.push(entry.id);
+    // The line has to agree with the notes above it (X4 re-review, low). Printing "is named
+    // on one element, at the control's own box, as the slider it claims to be" with a
+    // `known failing (… announced as an other and not as a slider)` note two lines earlier
+    // is a ✓ that contradicts the finding: a reader who scans the verdict column, or a tool
+    // that greps for the ✓, gets the opposite of the run's own answer. So the passing line
+    // says which of the two kinds of pass this is, and the debt one says that the rule was
+    // answered *only* because a row excuses the finding.
+    check.check(
+      result.failures.length === 0
+        ? result.known.length === 0
+          ? `${entry.hybridView} is named on one element, at the control's own box, as ${
+              entry.iosTrait == null
+                ? 'a control'
+                : `the ${entry.iosTrait} it claims to be`
+            }`
+          : `${entry.hybridView} has no new a11y finding — and no clean pass either: ` +
+            `${String(result.known.length)} of its problems match a debt row, printed ` +
+            'above, so the rule is answered by the exemption rather than by the tree'
+        : result.failures.join(' | '),
+      result.failures.length === 0
+    );
+  }
+
+  const stale = staleExemptions(covered, matched, 'ios');
+  if (stale.length > 0) {
+    const check = suite.beginAuxiliary(
+      'a11y:ios-debt',
+      'the iOS a11y debt list still describes this code'
+    );
+    for (const line of stale) check.check(line, false);
+  }
+}
+
+/**
+ * @param {{x: number, y: number, width: number, height: number}} frame
+ */
+function iosBoxText(frame) {
+  return `(${frame.x}, ${frame.y}, ${frame.width}x${frame.height})`;
 }
 
 process.exitCode = await main().catch((error) => {

@@ -115,6 +115,8 @@ Run from the repo root.
 | `bun run publint`             | Validate `package.json` publish surface                                     |
 | `bun run manifest:check`      | Tarball contents must equal `etc/package-files.txt`                         |
 | `bun run readme:check`        | README examples must equal `example/src/readme-examples.tsx`                |
+| `bun run task-ready`          | The hand-in bar: coverage, report citations, `need --for review` (see "…")  |
+| `bun run conformance:table`   | Print the shared table the conformance harness asserts against (`--write`)  |
 | `bun run manifest:update`     | Rewrite the manifest after an **intentional** publish-surface change        |
 | `bun run harness:ios`         | On-device tests on iOS (see below)                                          |
 | `bun run harness:android`     | On-device tests on Android (see below)                                      |
@@ -234,6 +236,42 @@ The behaviour tables stay hand-written, and a test says so when one is missing:
 for a benched control (an arm falls through to rendering the `Switch`, so the cell
 would measure the wrong control and still print a number), or if the real-input
 suite has a control with no check on either platform.
+
+**The conformance suite needs nothing new when you add a control.** X4's four
+recurring bug classes — the a11y name on the node that actually takes focus, no
+leak when a view is dropped, a declared fallback that is registered and _not_ equal
+to the measured size, and a recycle that fully resets — are driven from
+`src/components/*/component.json`, so a new manifest is covered the day it lands:
+
+- `example/__tests__/Conformance.harness.tsx` runs the three in-app rules for every
+  fixture in its table, and `checkInAppFixtures` fails `check` until the table has a
+  row for your control (it also fails if the row's `component:` has drifted from your
+  manifest's `hybridView`);
+- `real-input:android` sweeps the a11y rule over the screen your tab names, and
+  `checkA11yTable` fails `check` when a manifest has no case, or its case points at a
+  tab or a label that no longer exists;
+- `coverageMatrix` prints the rule × control table for your report, and
+  `checkCoverage` refuses a cell that is neither covered nor marked `failing` with a
+  line that exists in `docs/tasks/FOLLOWUPS.md`.
+
+So the new control is _in_ the suite automatically; what it does with that depends on
+the control. If a rule fails on it, add a `FOLLOWUPS.md` line and a row to the matching
+exemption list (`A11Y_EXEMPTIONS` in `scripts/real-input/a11y.mjs`, or
+`CONFORMANCE_EXEMPTIONS` in `scripts/conformance-core.mjs`) rather than fixing the
+control in an unrelated round — the suite then reports it as known debt instead of
+red, and the row goes red on its own once someone fixes it and forgets to delete it.
+
+And before the round is handed in — `bun run task-ready`. It is the definition-of-done
+list from AGENTS.md as one command, so a reviewer is not the first to find it: the
+registry agrees with the control set, every manifest has the conformance coverage above,
+no `TODO`/`FIXME` sits in a declared fallback or a generated region, every backticked
+repo path in `docs/tasks/<ID>.report.md` exists at HEAD (unless this branch's diff adds
+or deletes it), `gate.mjs need --for review` is satisfied, and the report's gate table
+still matches `gate.mjs table` for this code tree. It reports every problem at once and
+runs nothing itself — no builds, no gates — because those belong to `gate.mjs`, whose
+ledger these checks read. `<ID>` comes from `--task` or the branch name, and
+`--only coverage,report` runs a subset while iterating and prints `PARTIAL`, so a subset
+cannot be read as a pass.
 
 ### Merging two components
 

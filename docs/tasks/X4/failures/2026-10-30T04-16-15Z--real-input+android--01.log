@@ -1,0 +1,115 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-10-30T04:16:15.937Z on code tree `7c2ce5f4c3dc` at HEAD `2e8c7b8` (branch `task/X4-conformance`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 260572 ms
+- Load: start 2.48, end 3.71, median 3.12, max 4.09
+- Device: android / device `emulator-5574` / lease `X4-5pmth`
+- Full log: `task/X4-conformance/real-input+android-2026-10-30T04-16-15.658Z.log` (<store>/task/X4-conformance/real-input+android-2026-10-30T04-16-15.658Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/real-input+android-2026-10-30T04-16-15.658Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-5pmth (still live)
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.71 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 72 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android
+gate: node scripts/real-input/android.mjs (cwd .)
+gate: code tree 7c2ce5f4c3dc at HEAD 2e8c7b8
+gate: git tree e79f807e2fcd
+gate: log task/X4-conformance/real-input+android-2026-10-30T04-16-15.658Z.log
+gate:       <store>/task/X4-conformance/real-input+android-2026-10-30T04-16-15.658Z.log
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: reusing the server already listening on 8295
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  switch: real tap flips the Switch and JS sees the new value
+    ✓ the Switch starts off — expected off, saw off
+    · "Controlled switch" occupies 901,759 → 1038,843
+    ✓ one real tap flips the Switch (React renders "on") — expected on, saw on
+    · "Controlled switch" occupies 901,759 → 1038,843
+    ✓ a second real tap flips it back (React renders "off") — expected off, saw off
+
+  slider: real drag moves the Slider and fires start, change and complete
+    · "Phases slider" occupies 42,1121 → 1038,1247
+    ✓ no gesture has been reported yet — expected start=0 change=0 complete=0, saw start=0 change=0 complete=0
+    ✓ one drag fires onSlidingStart exactly once — expected start=1, saw start=1
+    ✓ one drag fires onSlidingComplete exactly once — expected complete=1, saw complete=1
+    ✓ a drag reports the way over, not only the end (change=46)
+    ✓ the thumb lands right of centre (value=0.731)
+    ✓ a second drag fires both phases again — expected start=2 complete=2, saw start=2 complete=2
+    ✓ dragging back moves the value the other way (value=0.272)
+    · "Controlled slider" occupies 42,738 → 1038,864
+    ✓ the controlled Slider starts at 0.25 — expected 0.25, saw 0.25
+    ✓ the controlled value echo follows the real drag (0.25 → 0.78)
+
+  button: real tap presses the Button, and a disabled one stays pressed-out
+    · "Real-input button" occupies 42,792 → 332,897
+    · "Real-input disabled button" occupies 42,939 → 486,1044
+    ✓ the Button starts with no presses recorded — expected 0, saw 0
+    · "Real-input button" occupies 42,792 → 332,897
+    ✓ one real tap on the enabled Button reaches onPress — expected 1, saw 1
+    ✓ a real tap on the disabled Button does not press it — expected 1, saw 1
+    · "Real-input button" occupies 42,792 → 332,897
+    ✓ a second real tap presses the enabled Button again — expected 2, saw 2
+
+  segmented-control: real tap selects the segment under the finger, and a refused selection snaps back
+    · "Real-input segmented control" occupies 42,738 → 492,864
+    ✓ the SegmentedControl has reported no index before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    · "Real-input segmented control" occupies 42,738 → 492,864
+    ✓ a real tap on the second segment reaches JS as index 1 — expected 1, saw 1
+    ✓ one tap reports one change — expected 1, saw 1
+    · "Real-input segmented control" occupies 42,738 → 492,864
+    ✓ the control did not move out from under the finger — expected 42,738 → 492,864, saw 42,738 → 492,864
+    · "Real-input segmented control" occupies 42,738 → 492,864
+    ✓ a real tap on the first segment reaches JS as index 0 — expected 0, saw 0
+    ✓ two taps report two changes — expected 2, saw 2
+    ✓ the refusing parent pins its SegmentedControl at index 0 — expected 0, saw 0
+    ✓ nothing has been reported on the controlled control yet — expected 0, saw 0
+    · "Real-input rejecting segmented control" occupies 42,1090 → 492,1216
+    ✓ a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4) — expected 1, saw 1
+    ✓ the parent never accepted the change, so the index it sends is still 0 — expected 0, saw 0
+    · "Real-input rejecting segmented control" occupies 42,1090 → 492,1216
+    ✓ a second tap on segment 2 is a fresh selection, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ and the parent should still be refusing — expected 0, saw 0
+
+  date-picker: real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back
+
+real-input (android): Error: real-input: tapping the "Dates" tab did not bring up its screen.
+gate: real-input:android FAIL in 260.6 s
+gate: recorded in .gates/task/X4-conformance.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X4-conformance/real-input+android-2026-10-30T04-16-15.658Z.log (5 probe(s))
+
+```

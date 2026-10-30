@@ -47,6 +47,7 @@ import {
   parseHierarchy,
 } from './uiautomator.mjs';
 import { nativeChecked } from './android-tree.mjs';
+import { runA11ySweep } from './a11y-sweep.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { assertFreshApp, colorize } from '../app-stamp.mjs';
 import { checkEmulatorEnv, isReservedSerial } from '../lease-core.mjs';
@@ -2574,6 +2575,32 @@ async function main() {
         }
       }
     }
+
+    // The a11y sweep, after the checks rather than among them: it needs no gestures and a
+    // failure is about the tree rather than about a press, so sharing a control's log line
+    // would misattribute it. `a11y-sweep.mjs` says why this gate is where the rule lives —
+    // no in-app query can see a Compose control's name, and a dedicated gate is a gate
+    // nobody runs.
+    await runA11ySweep((id, title) => suite.beginAuxiliary(id, title), {
+      goToScreen: (screen) => harness.goToScreen(screen),
+      dump: () => harness.hierarchy(),
+      scrollToTop: () => harness.scrollToTop(),
+      scrollPage: async (pixels) => {
+        const width = harness.displayWidth();
+        const height = harness.displayHeight();
+        // Aimed at the empty strip at the right edge, for the reason on `scrollPage`:
+        // anywhere else the swipe can start on Material 3's own calendar scroller and
+        // turn the month instead of moving the page.
+        harness.swipe(
+          width - 8,
+          Math.round(height * 0.7),
+          width - 8,
+          Math.round(height * 0.7) - pixels,
+          400
+        );
+        await sleep(500);
+      },
+    });
   } finally {
     harness.teardown();
     stopMetro();
