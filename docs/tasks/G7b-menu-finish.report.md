@@ -371,8 +371,10 @@ None blocking. Two notes for whoever merges:
 The review's three must-fixes, two should-fixes and the nits, green on code tree `7e566bda08a6`.
 
 **M1.** `CHECKS.menu` asserts the whole echo twice — `open > close > open > select bravo > close`
-after the pick, plus `open > close > open > select alpha > close` after the twin — and `lastEvents`
-is gone. Red: `MenuScreen` firing `open` twice, run `01:49:39Z`, three `✗` lines.
+after the pick, then the whole ten-event history after the twin — and `lastEvents` is gone. Red:
+`MenuScreen` firing `open` twice, run `01:49:39Z`, three `✗` lines (the third against an earlier
+expected string that left out the disabled row's `open > close`; the final string is that run's
+output with the doubled `open`s removed, and reads green at `02:06:15Z`).
 **M2.** `DropdownMenu(offset = DpOffset(0.dp, 64.dp))` moves the popup's window; `gap` 16 px →
 168 px (64 dp at this AVD's 2.625 density), red at `01:48:49Z`. Both mutants reverted.
 **M3.** The `harness:android:Menu` tally is six round-1 lines plus two from this round; the
