@@ -14,7 +14,7 @@
 //
 //   NITRO_UI_SMOKE_READY switch=30x20 slider=310x20 button=88x36 progress=310x4 segmented-control=214x32 date-picker=138x34
 //
-// Eight entries today: the seven controls plus `host`, the shared `<Host>`
+// Nine entries today: the eight controls plus `host`, the shared `<Host>`
 // container with two Switches inside it. The hosted Switches are deliberately
 // not in the list — a hosted control is drawn by the Host's composition and its
 // own RN view is laid out at nothing (docs/components/host.md, Sizing), so the

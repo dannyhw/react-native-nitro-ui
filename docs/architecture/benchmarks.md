@@ -568,11 +568,12 @@ unreportable by construction (`MAX_MISSING_SAMPLE_RATIO`) and each of its
 iterations pays the probe's timeout - visible in the log as
 `N without a mount signal`, which is expected rather than a fault.
 
-## CI (disabled)
+## CI (dispatch-only)
 
-All GitHub workflows are disabled for now, this one included, and
-`bench.yml` has never run; the local runs above are the only bench evidence.
-What follows is what it is written to do once it is enabled.
+`bench.yml` is the one workflow, with `smoke.yml`, that is `workflow_dispatch`
+only — its schedule and label triggers are off and it has never run, so the local
+runs above are the only bench evidence. What follows is what it is written to do
+once it is enabled.
 
 `.github/workflows/bench.yml` is **report-only**: an on-demand `bench` label or a
 `/bench` comment (restricted to `OWNER`/`MEMBER`/`COLLABORATOR` commenters) builds
