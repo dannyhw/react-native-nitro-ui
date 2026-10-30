@@ -25,16 +25,16 @@ Two decisions a reviewer needs before the diff:
    menu away through a point that cannot be a row, and waits. That run's screenshot also settles
    G7a's styling question: the trigger's `.buttonStyle` does not follow the rows, so no
    `.buttonStyle(.plain)` was added.
-2. **The `menuAnchor` red proof did not go as the brief expected** (item 4). The upper bound is in
-   place, and inverting it is what goes red — but four mutants that remove the anchor, replace it
-   with a plain `DropdownMenu`, or offset the list all still measured the popup at the trigger. So
-   this bound guards behaviour `menuAnchor` provides; it is not a reproduction of a mis-anchored
-   popup, and the three places that said otherwise (`HybridNitroUiMenu.kt`, the test's own comment
-   in `Menu.harness.tsx`, `docs/components/menu.md`) now say what was measured.
+2. **The `menuAnchor` red proof did not go as the brief expected** (item 4). Four round-1 mutants
+   that remove the anchor, replace it with a plain `DropdownMenu`, or offset its content all still
+   measured the popup at the trigger. The fix round moved the popup's *window*
+   (`DropdownMenu(offset = DpOffset(0.dp, 64.dp))`) and the `gap < 48` bound went red, so the guard
+   is proven; `menuAnchor` stays on Material's contract, not on an observed misplacement, and the
+   three places that claimed otherwise now say what was measured.
 
-Item 6, the iOS open/close spike, is a decisive no: a `.onAppear`/`.onDisappear` sentinel on the
-menu content reported **one** open across two presentations and **no** close, not even for the pick
-that visibly dismissed the menu. Not shipped; D32 stands. Item 7 does not apply — X4 is not merged.
+Item 6, the iOS open/close spike, is a decisive no: a `.onAppear`/`.onDisappear` sentinel reported
+**one** open across two presentations and **no** close, not even for the pick that visibly dismissed
+the menu. Not shipped; D32 stands. Item 7 does not apply — X4 is not merged.
 
 ## Gates
 
@@ -51,12 +51,14 @@ that visibly dismissed the menu. Not shipped; D32 stands. Item 7 does not apply 
 | `real-input:ios:--control:menu`  | stale    | —                            | b13dde9a2150 (not this tree) | 2 m 07 s  | start 2.2 / med 14.0 / max 17.4 |
 | `real-input:ios:--control:menu:--background` | stale | —                        | cdde3752f6f3 (not this tree) | 0.2 s     | start 7.5 / med 7.5 / max 7.5  |
 
-`need --for review` is satisfied on this code tree, and so is `need --for merge` (all five
-required gates green on `43816d4c80ef`). The ledger prints no per-component counts for the real-input
+`need --for review` was satisfied on round 1's code tree (`43816d4c80ef`), and so was
+`need --for merge` — all five required gates green on that tree, which the table above is copied
+from. The fix round's own table is at the end of this file. The ledger prints no per-component
+counts for the real-input
 gates, so the Menu share is here rather than in the table: `Menu.harness.tsx` is 15 tests on each
 platform inside the harness suites above (and 183/232 totals), `testRealInputMenu` carries 14
-assertions, and `CHECKS.menu` 31 logged checks with 17 measured notes. Three rows below need
-reading, not re-running:
+assertions, and `CHECKS.menu` logs 18 checks with 10 measured notes (the run at 02:06:14Z). Three
+rows below need reading, not re-running:
 - **`bench:--help` FAIL is my own mistake, not a gate.** I typed `node scripts/gate.mjs bench
   --help` to learn the bench gate's form; `gate.mjs` resolved it as `bench:--help`, launched
   `scripts/bench/run.mjs --help`, and the runner printed its usage and exited 2. Nothing in the
@@ -70,16 +72,41 @@ reading, not re-running:
   while the two earlier failures on that name are the step-ordering bug (`("select alpha > select
   bravo") is not equal to ("select bravo")`) and the iOS spike (`("open > select bravo")`). Before
   those, two runs died on their own bookkeeping: the tree moved while `xcodebuild` read it, and one
-  launch put `--background` after `--`, which the runner rejects as an unknown argument.
-  `harness:android:Menu` shows five `fail` lines: one `hosted-removal` timeout (the mutant with no
-  `menuAnchor`, which also stops the anchor reporting its own dismissal), the inverted `gap` bound,
-  and three stale-app refusals where the APK predated the edit — the guard working, not a test
-  failing. Everything there is superseded by the full gates above on this tree.
+  launch put `--background` after `--`, which the runner rejects as an unknown argument. That name
+  shows six round-1 `fail` lines: one `hosted-removal` timeout (the mutant with no `menuAnchor`,
+  which also stops the anchor reporting its own dismissal), the inverted `gap` bound, and four
+  stale-app refusals where the APK predated the edit — the guard working, not a test failing. The
+  fix round adds two of its own: the window-moving mutant below, and a 0.8 s
+  `harness:android:Menu:--background` row from my putting `--background` after `--` again.
+- Two other red lines in the ledger need naming, because neither is a Menu failure. The full
+  `real-input:android` at 29 Oct 23:23:53Z died on `real-input: no "undefined" tab` — that run
+  predates `c720a48`, which added the `goToScreen` entry for `menu`, so the suite could not reach the
+  Menu screen at all; the line above it in the same log is `hosted-picker` cycle 2 timing out on
+  `real-input-drop-gone`, the drop picker's unmount teardown, which has not repeated on the two green
+  full Android runs since. The `harness:ios` at 23:46:36Z is mine killing a run whose tree still had
+  the spike file in it (`The app bridge disconnected`, then SIGTERM), immediately followed by the
+  green `harness:ios` on the reverted tree at 23:51:39Z.
 - The iOS a11y red proof and the menuAnchor red proof (below) are deliberately left as red
   **runs**, then reverted: their ledger lines are the stale ones.
 
 ## Red proofs
 
+- `scripts/real-input/android.mjs` `CHECKS.menu` (the D32 order assertions) → fire `open` twice per
+  gesture in `example/src/MenuScreen.tsx` (`noteRealOpen` calls `appendEvent('open')` twice) →
+  `real-input:android --control menu` at 30 Oct 01:49:39Z, three `✗` lines: `expected open > close,
+  saw open > open > close`, the pick line `saw open > open > close > open > open > select bravo >
+  close`, and the whole-echo line. Both new assertions are needed: the round-1 tail check would have
+  passed the middle one. Reverted; the green full run at 02:06:14Z reads the exact strings.
+- `Menu.harness.tsx` "opens under its own button" → `ExposedDropdownMenu` replaced by
+  `DropdownMenu(expanded, offset = DpOffset(0.dp, 64.dp), onDismissRequest)` (Material's own offset,
+  handed to its position provider, so the `PopupWindow` moves) and built with
+  `node scripts/build-app.mjs --platform android` → `harness:android:Menu` at 30 Oct 01:48:49Z:
+  `expected 168 to be less than 48` at `Menu.harness.tsx:1604`, with the baseline 16 px. So the bound
+  catches a moved popup, and the witness reads the window. The arithmetic is exact, which is what
+  makes it a clean mutant: this AVD's density is 2.625 (the 48 dp trigger measures 126 px in the same
+  logs), so 64 dp is 168 px, and the popup's window top landed 168 px below the anchor's bottom —
+  flush against the anchor plus the requested offset, with Material's 16 px exposed-menu inset gone
+  because a plain `DropdownMenu` does not apply it. Reverted.
 - `real-input:ios --control menu` (the a11y assertion the brief asks for) → remove
   `.modifier(OptionalMenuAccessibility(label:))` from `MenuContent.body` → `RealInputTests.swift:2032:
   ("Actions") is not equal to ("Real-input menu")`, and the guard above it
@@ -90,9 +117,12 @@ reading, not re-running:
 - `Menu.harness.tsx` (the same test) → **four mutants that the brief expected to go red, and did
   not**: `menuAnchor` dropped inside the box; `clickable` + plain `DropdownMenu`; that pair inside
   a `fillMaxSize` Box; `ExposedDropdownMenu` offset 300 dp. All four were built and run on
-  `emulator-5570` and every one reported the popup at the trigger (the offset run reported the
-  unchanged gap, so the offset never reached the rect the test reads). Recorded because it is the
-  finding, not a failure to run the proof: see item 4 in the Summary and the corrected claims.
+  `emulator-5570` and every one reported the popup at the trigger. What round 1 did not keep is the
+  recipe for the last one — the ledger logs name the run, not the diff — so the honest statement is
+  that whatever it was, it did not move the rect the witness reads (`MenuWitness` →
+  `getLocationOnScreen` on the popup's view); the window mutant above is what establishes that this
+  reading can move at all. Recorded because it is the finding, not a failure to run the proof: see
+  item 4 in the Summary and the corrected claims.
 - `Menu.harness.tsx` hosted-removal half → the earlier `menuAnchor`-less mutant, which is the run
   that went red **elsewhere** instead: `Menu report for "hosted-removal" never matched within
   12000ms … {"expanded":false,…,"rows":0}` — no `menuAnchor` also means nothing reports the
@@ -114,23 +144,27 @@ reading, not re-running:
 
 ## Bench
 
-Three runs are reported: the two quick plans (both `problems: none` on the canonical devices, and
+Four runs are reported: the two quick plans (both `problems: none` on the canonical devices, and
 both stamping the machine `quiet: true`, so comparable in kind with A3's baseline runs on this
-machine rather than with the busy runs G6 had to report) and the Android full plan, which is not
-quiet and says so where it is quoted. Load for each is sampled against a 5.0 ceiling for 10 cores:
+machine rather than with the busy runs G6 had to report), the Android full plan, which is not
+quiet and says so where it is quoted, and the iOS full plan, which the fix round added. Load for
+each is sampled against a 5.0 ceiling for 10 cores:
 iOS quick median 3.30 / p90 4.20, 0 of 58 over; Android quick median 4.17 / p90 4.67, 2 of 70 over;
-Android full median 4.03 / p90 5.35, 25 of 176 over. All three were clean-tree runs (`dirty:
-false`): the two quicks on `2dd8dd7`, the full plan on `705f651`; the only commits between them are
-report and docs files, which no bench arm imports, and the artifacts keep their own SHAs so the
+Android full median 4.03 / p90 5.35, 25 of 176 over; iOS full median 3.93 / p90 4.48, 5 of 146
+over. The first three were clean-tree runs (`dirty:
+false`): the two quicks on `2dd8dd7`, the Android full plan on `705f651`; the iOS full plan ran on a
+dirty tree whose only diff was this report. The commits between them are report and docs files,
+which no bench arm imports, and the artifacts keep their own SHAs so the
 numbers can be traced to the tree that produced them. **No baseline was minted and `--check` was
 not run**, per the brief. `nitro-ui-host` has no iOS cell at all (`ARM_SCOPES`: iOS `<Host>` is a
-passthrough), which is why iOS has 12 cells and Android 15.
+passthrough), which is why iOS has 12 quick cells and Android 15.
 
 Medians of launch medians, ratios derived from them, and `(nv)` where either arm of that ratio has
 a within-run spread over 10 % (the spread is across the four launch medians of that metric, so a
-noisy arm marks every ratio that uses it). No verdict is claimed and nothing is bolded: no
-baseline exists for this component, so `(nv)` is the only mark a row can carry, and D15's PASS/MISS
-table is the orchestrator's to mint.
+noisy arm marks every ratio that uses it). No verdict is claimed: no baseline exists for this
+component, so `(nv)` is the only mark a row can carry, and D15's PASS/MISS table is the
+orchestrator's to mint. The Android N=200 table bolds the cells the paragraph under it quotes; the
+bold marks a quiet cell, not a verdict.
 
 ### iOS — `nitro-ui B` (`ios27-sim-iphoneair`), quick — `2dd8dd7-ios-20261030T005218Z.*`
 
@@ -227,9 +261,40 @@ So the slopes are printed and not judged: 365 KiB/cycle for nitro-ui against 306
 982/1251 for the two `@expo/ui` arms is consistent with the `memory.bytes/inst` result in the quick
 table, and no more than that.
 
-An iOS full-plan run was in flight while this was written, on the same lease; its numbers, if they
-are readable, belong in a following section rather than in a sentence I have not verified. What the
-iOS quick plan covers is what the D15 table reads, and no iOS bench code beyond the arm changed.
+### iOS — `nitro-ui B`, full plan — `ae2ec53-dirty-ios-20261030T012442Z.*`
+
+The run the first draft refused to quote finished during the fix round: 28 cells, 4 launches,
+`problems: []`, sampled 146× at median 3.93 / p90 4.48 / max 5.54 with 3.4 % over the 5.0 ceiling —
+under the runner's busy bar, though the artifact carries no `quiet: true` stamp to quote. It is the
+**dirty** tree at `ae2ec53`, whose diff is docs and report files no arm imports. The four
+`memory`/`leak` cells at N=200 log `0 iterations`, which is what those two scenarios do: they ask for
+`bytesPerInstance`/`leakSlope` rather than per-iteration timings, so `samples: 0` against `expected:
+0` is whole, and their memory half did measure (4 of 4 launches). `leak.menu` records `bytesPerInstance:
+null` by the same rule. No iOS `nitro-ui-host` arm exists, so 28 cells where Android's full plan has
+35.
+
+| Cell | Metric | rn-core | expo per-control | expo shared-host | nitro-ui | ÷ shared | ÷ per-control |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mount N=200 | presented | 16.13 ms | 438.50 ms | 135.51 ms | 179.41 ms | 1.32× _(nv)_ | 0.41× |
+| mount N=200 | mounted | 18.44 ms | 150.60 ms | 64.88 ms | 123.33 ms | 1.90× _(nv)_ | 0.82× _(nv)_ |
+| mount N=200 | JS commit | 11.17 ms | 21.27 ms | 15.52 ms | 8.05 ms | 0.52× _(nv)_ | 0.38× _(nv)_ |
+| mount N=200 | JS CPU/op | 11.41 ms | 65.67 ms | 16.33 ms | 8.41 ms | 0.51× _(nv)_ | 0.13× _(nv)_ |
+| mount N=200 | UI CPU/op | 13.47 ms | 386.56 ms | 102.91 ms | 149.66 ms | 1.45× _(nv)_ | 0.39× _(nv)_ |
+| update N=1 | presented | 15.91 ms | 16.08 ms | 16.02 ms | 16.02 ms | 1.00× | 1.00× |
+| update N=1 | mounted | 1.26 ms | 0.66 ms | 1.19 ms | 2.48 ms | 2.07× _(nv)_ | 3.72× _(nv)_ |
+| update N=1 | JS commit | 0.93 ms | 0.29 ms | 0.65 ms | 0.47 ms | 0.72× _(nv)_ | 1.62× _(nv)_ |
+| memory N=200 | bytes/inst | 62.1 KiB | 357.5 KiB | 261.6 KiB | 355.7 KiB | 1.36× | 1.00× |
+| leak N=200 | leak slope | −119 KiB/c | −2021 KiB/c | −1507 KiB/c | 356 KiB/c | −0.24× | −0.18× |
+
+What this adds to the iOS story is the same two findings Android has: **N=1 is free** (`update N=1`
+presents at 16.02 ms against `rn-core`'s 15.91 ms, the only row here with no `(nv)` on either ratio)
+and **N=200 splits the shapes** — the standalone arm at 179 ms against its shared-host comparator's
+136 ms, where `rn-core` needs 16 ms. `memory.bytes/inst` at 356 KiB repeats the quick plan's 346 KiB
+to within 3 %, the least noisy cross-run agreement this component has shown. The `leak.menu` slopes
+are printed, not judged: `leakMonotonic: false` on all four arms and three of them negative, so those
+ratios are not a leak claim — the same conclusion Android's `leak` cells reached, and one more data
+point for the FOLLOWUPS line that the `leak *:N=200` cells need re-scoping. Nothing here is minted,
+and `--check` was not run against it.
 
 ## Files changed
 
@@ -241,8 +306,11 @@ iOS quick plan covers is what the D15 table reads, and no iOS bench code beyond 
 - `example/src/MenuScreen.tsx`,
   `example/ios/NitroUiExampleUITests/RealInputTests.swift`, `scripts/real-input/{android.mjs,controls.mjs}`
   — the real-input case on both platforms: one ordered event echo (`real-input-menu-events`) so
-  D32's ordering is assertable from the same screen on either, F1's witness pattern on every
-  retry, and `goToScreen`'s `menu` entry.
+  D32's ordering is assertable from the same screen on either, `goToScreen`'s `menu` entry, and on
+  Android F1's rect-witnessed presses. iOS has no `nativeState` witness on the menu taps: what
+  guards those is the presented-rows check plus the "row gone, don't press it again" rule (the same
+  shape `Picker`'s case uses), and the full-string echo assertions are what make the immediate
+  post-tap read provable rather than hopeful.
 - `example/__tests__/Menu.harness.tsx` — the hosted popup's upper bound, and the comment that
   records what the four anchor mutants measured.
 - `example/src/stories/Menu.stories.tsx` — Playground (every public prop) plus 9 showcase stories.
@@ -261,6 +329,13 @@ iOS quick plan covers is what the D15 table reads, and no iOS bench code beyond 
 
 ## Follow-ups
 
+- Menu Android: after a tap on a **disabled** row the popup stays up and the first dismissal usually
+  does nothing either — Back timed out at 29 Oct 23:33:43Z, and the scrim tap left it up at 30 Oct
+  00:35:09Z and 02:06:14Z (it worked at 01:49:39Z). The check logs which dismissal won instead of
+  asserting one, so this is a user-facing bug the suite tolerates. In `FOLLOWUPS.md`.
+- Smoke: the `menu=97.619049072265625x48` token in `smoke-ready-line.test.js`'s fractional fixture is
+  **hand-written**, and no device has printed a Menu line in a smoke run. The parser is covered; the
+  measurement is not. Running `smoke:rn-cli` once and pasting the real line closes it.
 - Menu Android a11y: a disabled `DropdownMenuItem` reports `enabled="true"` in `uiautomator dump`
   while the control refuses the pick — what TalkBack announces is unverified and possibly wrong.
 - Real-input tooling: `scripts/real-input/android.mjs`'s `goToScreen` takes a hand-written
@@ -288,3 +363,38 @@ None blocking. Two notes for whoever merges:
   state A3's baselines were minted in, but a per-component quick plan is not a mint. If the
   orchestrator wants `menu` in `bench/baselines/maintainer-mac-2/*`, it should come from your
   exclusive window; I have not touched the baseline files.
+
+## Fix round 1
+
+The review's three must-fixes, two should-fixes and the nits, all on `4b66bd4` and green on code
+tree `7e566bda08a6`.
+
+**M1.** `CHECKS.menu` now asserts the whole echo twice — `open > close > open > select bravo > close`
+after the pick, and one more `open > close > open > select alpha > close` after the twin — and
+`lastEvents` is deleted. Red proof: `MenuScreen` firing `open` twice per gesture, run
+`01:49:39Z`, three `✗` lines. **M2.** A `DropdownMenu(offset = DpOffset(0.dp, 64.dp))` moves the
+popup's window; `gap` 16 px → 168 px, red at `01:48:49Z` (64 dp × this AVD's 2.625 density, exactly).
+Both mutants reverted. **M3.** The `harness:android:Menu` tally is six round-1 lines plus two from
+this round; the 23:23:53Z Picker timeout and the SIGTERM'd `harness:ios` each have a line; the iOS
+"witness" claim now describes the presented-rows check and the don't-re-press rule. **S1.** The
+unreliable dismissal after a disabled-row tap is in `FOLLOWUPS.md` and the report, and `tapScrim`
+says what the runs show. **S2.** The smoke fixture's `menu=` token is marked hand-written.
+Nits: the screenshot is an `XCTAttachment` plus a sandbox path, and committed at
+`docs/tasks/G7b/menu-open-ios.png`; the iOS tap-away is commented against the layout; "nothing is
+bolded" is gone; `select bravo` is lower-case; the summary is 394 words. The iOS full-plan bench
+finished — `0 iterations` is what those two scenarios do, and its memory and timing halves are
+quoted above.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1165 tests / 45 suites | `7e566bda08a6` | 2 m 45 s | start 2.2 / med 5.3 / max 7.0 |
+| `harness:ios` | **PASS** | 183 tests / 14 suites | `7e566bda08a6` (ios tree) | 2 m 19 s | start 4.2 / med 4.2 / max 8.2 |
+| `harness:android` | **PASS** | 232 tests / 14 suites | `7e566bda08a6` (android tree) | 6 m 53 s | start 5.2 / med 4.8 / max 29.1 |
+| `real-input:ios` | **PASS** | — | `7e566bda08a6` (ios tree) | 12 m 55 s | start 3.5 / med 4.2 / max 20.9 |
+| `real-input:android` | **PASS** | — | `7e566bda08a6` (android tree) | 16 m 23 s | start 9.0 / med 4.0 / max 9.0 |
+| `bench:--help` | stale | — | 43816d4c80ef (not this tree) | 0.1 s | start 2.3 / med 2.3 / max 2.3 |
+| `harness:android:Menu` | stale | 1 failed of 15 tests / 1 suites | 03e53c145b6f (not this tree) | 19.7 s | start 4.6 / med 4.2 / max 4.6 |
+| `harness:android:Menu:--background` | stale | — | 03e53c145b6f (not this tree) | 0.8 s | start 4.6 / med 4.6 / max 4.6 |
+| `real-input:android:--control:menu` | stale | — | 5f50123e35e2 (not this tree) | 1 m 14 s | start 3.1 / med 3.9 / max 4.3 |
+| `real-input:ios:--control:menu` | stale | — | b13dde9a2150 (not this tree) | 2 m 07 s | start 2.2 / med 14.0 / max 17.4 |
+| `real-input:ios:--control:menu:--background` | stale | — | cdde3752f6f3 (not this tree) | 0.2 s | start 7.5 / med 7.5 / max 7.5 |
