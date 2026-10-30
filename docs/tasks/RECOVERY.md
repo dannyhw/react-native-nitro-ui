@@ -40,9 +40,9 @@
 > a real-device thumb check is the open item.
 > **G7b merged (2026-10-30, `268859b`)** on maintainer-mac-2: 1 impl + 1 fix round, re-review MERGE WITH FIXES
 > (applied by the orchestrator, plus two commit messages scrubbed of a temp path before merge); all five merge gates
-> green. **X4 is in fix round 2** (the last under D19) on pair-a, told to merge `main` again and cover Menu as it now
-> is. Then **D3** (`D3-docs-0.4.md`: README has no Menu, stale "workflows disabled" lines), then the 0.4.0 Version
-> Packages PR. Its CI runs show `action_required` (a bot-opened PR): approve the run or re-run before merging.
+> green. **X4 merged (`a31ad90`)** after two fix rounds, and **D3 (`8c42ce8`)**, the README pass, both with all five
+> merge gates green. Next: the 0.4.0 Version Packages PR (#8). Its CI runs show `action_required` (a bot-opened PR):
+> approve the run or re-run before merging. Then the quiet bench window (wave 4).
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
