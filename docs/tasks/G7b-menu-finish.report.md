@@ -33,8 +33,7 @@ Two decisions a reviewer needs before the diff:
 
 Item 6, the iOS open/close spike, is a decisive no: a `.onAppear`/`.onDisappear` sentinel on the
 menu content reported **one** open across two presentations and **no** close, not even for the pick
-that visibly dismissed the menu. Not shipped; D32 stands, and the measurement is on the callback
-that would have carried it. Item 7 does not apply — X4 is not merged.
+that visibly dismissed the menu. Not shipped; D32 stands. Item 7 does not apply — X4 is not merged.
 
 ## Gates
 
