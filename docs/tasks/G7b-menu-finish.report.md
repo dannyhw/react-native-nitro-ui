@@ -110,15 +110,17 @@ required gates green on `43816d4c80ef`). Three rows above need reading, not re-r
 
 ## Bench
 
-`NITRO_UI_MACHINE_LABEL=maintainer-mac-2 bun bench --platform <p> --plan quick --component menu`.
-Quick = 4 launches × (5 warmup + 20 measured) per cell. Both runs are `problems: none` on the
-canonical devices and both stamp the machine `quiet: true` (load sampled against a 5.0 ceiling for
-10 cores: iOS median 3.30 / p90 4.20, 0 of 58 samples over; Android median 4.17 / p90 4.67, 2 of 70
-over), so they are comparable in kind with A3's baseline runs on this machine rather than with the
-busy runs G6 had to report. Numbers are load-stamped in the artifacts
-(`2dd8dd7-ios-20261030T005218Z.*`, `2dd8dd7-android-20261030T005723Z.*`); **no baseline was minted
-and `--check` was not run**, per the brief. `nitro-ui-host` has no iOS cell at all (`ARM_SCOPES`:
-iOS `<Host>` is a passthrough), which is why iOS has 12 cells and Android 15.
+Three runs are reported: the two quick plans (both `problems: none` on the canonical devices, and
+both stamping the machine `quiet: true`, so comparable in kind with A3's baseline runs on this
+machine rather than with the busy runs G6 had to report) and the Android full plan, which is not
+quiet and says so where it is quoted. Load for each is sampled against a 5.0 ceiling for 10 cores:
+iOS quick median 3.30 / p90 4.20, 0 of 58 over; Android quick median 4.17 / p90 4.67, 2 of 70 over;
+Android full median 4.03 / p90 5.35, 25 of 176 over. All three were clean-tree runs (`dirty:
+false`): the two quicks on `2dd8dd7`, the full plan on `705f651`; the only commits between them are
+report and docs files, which no bench arm imports, and the artifacts keep their own SHAs so the
+numbers can be traced to the tree that produced them. **No baseline was minted and `--check` was
+not run**, per the brief. `nitro-ui-host` has no iOS cell at all (`ARM_SCOPES`: iOS `<Host>` is a
+passthrough), which is why iOS has 12 cells and Android 15.
 
 Medians of launch medians, ratios derived from them, and `(nv)` where either arm of that ratio has
 a within-run spread over 10 % (the spread is across the four launch medians of that metric, so a
@@ -126,7 +128,7 @@ noisy arm marks every ratio that uses it). No verdict is claimed and nothing is 
 baseline exists for this component, so `(nv)` is the only mark a row can carry, and D15's PASS/MISS
 table is the orchestrator's to mint.
 
-### iOS — `nitro-ui B` (`ios27-sim-iphoneair`), quick
+### iOS — `nitro-ui B` (`ios27-sim-iphoneair`), quick — `2dd8dd7-ios-20261030T005218Z.*`
 
 | Cell | Metric | rn-core | expo per-control | expo shared-host | nitro-ui | ÷ shared | ÷ per-control |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -154,7 +156,7 @@ Button-shaped one. No cross-machine comparison is made here: G6's Picker numbers
 `maintainer-mac-1` on a different simulator, and the runner's own D15 rule is what reserves those
 rows.
 
-### Android — `nitroui_b` (`android35-emu-pixel9`), quick
+### Android — `nitroui_b` (`android35-emu-pixel9`), quick — `2dd8dd7-android-20261030T005723Z.*`
 
 | Cell | Metric | rn-core | expo per-control | expo shared-host | nitro-ui | nitro-ui-host | ÷ shared | ÷ per-control |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -182,15 +184,48 @@ over a plain `Pressable`. Unlike `update.picker` and `update.progress`, this cel
 on any arm (`missing: null`, every metric `reportable` in all five), so it does not add to the
 FOLLOWUPS line about Android reference arms.
 
-### Full plan
+### Android — `nitroui_b`, full plan — `705f651-android-20261030T010235Z.*`
 
-`--plan full --component menu` adds `mount` at N=1 and N=200, `update` at N=1, and `leak.menu` at
-N=200 — the same seven cells Picker has, on the same sizes. `--dry-run` on this lease resolves it
-as "7 cells × 5 implementations × 4 launches = 140 launches… Dry run: OK". The Android full run
-was still in flight when this was written; if its numbers exist they are in
-`bench/results/2dd8dd7-android-<later>-*.md`, and they are not quoted here because I will not
-report a table I have not read. The iOS full plan was not run: this task adds no iOS bench code
-beyond the arm, and the quick plan covers the three cells the D15 table reads.
+`--plan full --component menu` is the seven cells Picker has: `mount` at N=1, 50 and 200, `update`
+at N=1 and 50, `memory` and `leak` at N=200. This run finished after the report's first draft, so
+it is the second Android run on this component — 35 cells, `problems: []`, artifact
+`705f651-android-20261030T010235Z.*`. It is **not** a quiet run: load sampled median 4.03 / p90
+5.35 / max 6.32 against the 5.0 ceiling, 25 of 176 samples over (the quick run above was the quiet
+one). The new cells, same rules as the tables above:
+
+| Cell | Metric | rn-core | expo per-control | expo shared-host | nitro-ui | nitro-ui-host | ÷ shared | ÷ per-control |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mount N=1 | presented | 31.92 ms | 32.36 ms | 32.53 ms | 31.79 ms | 32.02 ms | 0.98× | 0.98× |
+| mount N=1 | mounted | 16.89 ms | 18.54 ms | 18.88 ms | 17.39 ms | 17.37 ms | 0.92× _(nv)_ | 0.94× _(nv)_ |
+| mount N=1 | JS commit | 0.45 ms | 1.15 ms | 1.14 ms | 0.38 ms | 0.42 ms | 0.34× _(nv)_ | 0.33× _(nv)_ |
+| mount N=200 | presented | 65.54 ms | 532.03 ms | 140.03 ms | 168.88 ms | **64.82 ms** | 1.21× _(nv)_ | **0.32×** |
+| mount N=200 | mounted | 44.39 ms | 229.81 ms | 123.94 ms | 95.98 ms | **45.70 ms** | **0.77×** | **0.42×** |
+| mount N=200 | JS commit | 14.17 ms | 105.69 ms | 57.33 ms | **8.86 ms** | **8.76 ms** | 0.15× _(nv)_ | 0.08× _(nv)_ |
+| update N=1 | presented | 30.41 ms | 47.13 ms | 64.17 ms | **31.36 ms** | 47.06 ms | **0.49×** | **0.67×** |
+| update N=1 | mounted | 14.88 ms | 14.45 ms | 14.53 ms | 15.16 ms | 14.20 ms | 1.04× _(nv)_ | 1.05× |
+| update N=1 | JS commit | 0.35 ms | 0.57 ms | 0.54 ms | 0.36 ms | 0.36 ms | 0.66× | 0.63× |
+| leak N=200 | leak slope | 306 KiB/c | 1251 KiB/c | 982 KiB/c | 365 KiB/c | 692 KiB/c | 0.37× _(nv)_ | 0.29× _(nv)_ |
+
+What the two sizes add: **N=1 is free** — a Menu costs what a `Pressable` costs when there is only
+one of them (31.79 ms vs 31.92 ms presented, all arms within 5 %), which is the batch overhead
+showing that the N=50 gap mostly is. **N=200 is where the two shapes split**: the Host arm presents
+in 64.8 ms, indistinguishable from `rn-core`'s 65.5 ms and 8.2× faster than the per-control arm's
+532 ms, while the standalone arm takes 168.9 ms — over its shared-host comparator (1.21×, on a cell
+where that arm itself swung 10 %) and 3.1× under `@expo/ui`'s per-control cost. That is D24's
+result repeating for an eighth control, and it says the honest thing about `Menu` at scale: 200 of
+them in one `<Host>` is the shape this library is fast at, and the standalone shape pays per
+control like everyone else's.
+
+The `leak.menu` cell measured a slope on every arm but `leakMonotonic: false` on all five, which is
+the runner's own signal that the growth is run-to-run drift rather than retained memory per cycle —
+`comparableMetrics` drops a non-monotonic slope, and the report prints `not monotonic (not gated)`.
+So the slopes are printed and not judged: 365 KiB/cycle for nitro-ui against 306 for `rn-core` and
+982/1251 for the two `@expo/ui` arms is consistent with the `memory.bytes/inst` result in the quick
+table, and no more than that.
+
+The iOS full plan was not run: this task adds no iOS bench code beyond the arm, the quick plan
+covers the three cells the D15 table reads, and a second iOS run would have had to be launched
+against pair-b while the Android full plan held it.
 
 ## Files changed
 
