@@ -167,13 +167,15 @@ layout move is H2b's, unchanged.
 
 The failure mode the anchor is here to prevent — a plain `DropdownMenu` opening its list
 under the whole Host rectangle instead of under the button — is **Material's documented
-behaviour, not something this repo has observed**. G7b tried to reproduce it four ways
-inside a `<Host>` (the anchor dropped inside the box, a `clickable` + `DropdownMenu`, that
-pair inside a `fillMaxSize` Box, and this list offset 300 dp) and the hosted test read the
-popup at the trigger in every case; what did go red was the bound itself, inverted
-(`docs/tasks/G7b-menu-finish.report.md`). So keep reading the sentence above as the reason
-for the *API* choice, and look to `Menu.harness.tsx`'s `gap < 48` as the guard: that bound
-is what catches a Material that does move the popup.
+behaviour, not something this repo has observed**. G7b round 1 tried to reproduce it four
+ways inside a `<Host>` (the anchor dropped inside the box, a `clickable` + `DropdownMenu`,
+that pair inside a `fillMaxSize` Box, and this list offset 300 dp) and the hosted test read
+the popup at the trigger in every case; round 1 did not record how that last offset was
+applied, which is why the fix round ran a mutant that moves the window for certain: a plain
+`DropdownMenu(offset = DpOffset(0.dp, 64.dp))`. That one moved the popup's window from 16 px
+below the anchor's bottom to 168 px, and `Menu.harness.tsx`'s `gap < 48` went red — so the
+guard is proven able to catch a moved popup, and the sentence above stays the reason for the
+*API* choice rather than an observed failure (`docs/tasks/G7b-menu-finish.report.md`).
 
 ## Sizing
 

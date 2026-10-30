@@ -38,11 +38,16 @@ const READY_LINE =
   'date-picker=138x34 picker=72x35 menu=76x34 host=310x96';
 
 /**
- * What the two platforms actually printed the first time this gate ran on
- * devices: Android scales dp by the display density, iOS sizes a Button from its
- * font. Integer fixtures like `READY_LINE` are the common case, not the whole
- * contract, and a contract written against integers alone called both of these
- * runs a failure with every control laid out.
+ * What the two platforms printed for the eight controls this fixture predates:
+ * Android scales dp by the display density, iOS sizes a Button from its font.
+ * Integer fixtures like `READY_LINE` are the common case, not the whole contract,
+ * and a contract written against integers alone called both of these runs a
+ * failure with every control laid out.
+ *
+ * The `menu=` token is the exception: it was **written by hand** when Menu joined
+ * `SMOKE_CONTROLS` (G7b), from the same density-scaled shape as its neighbours,
+ * because no smoke run has been made since. It exercises the parser, not a
+ * measurement; a real device line for it is a one-line follow-up.
  */
 const READY_LINE_FRACTIONAL =
   'I/ReactNativeJS(13147): ' +
