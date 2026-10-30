@@ -41,8 +41,10 @@
 > **G7b merged (2026-10-30, `268859b`)** on maintainer-mac-2: 1 impl + 1 fix round, re-review MERGE WITH FIXES
 > (applied by the orchestrator, plus two commit messages scrubbed of a temp path before merge); all five merge gates
 > green. **X4 merged (`a31ad90`)** after two fix rounds, and **D3 (`8c42ce8`)**, the README pass, both with all five
-> merge gates green. Next: the 0.4.0 Version Packages PR (#8). Its CI runs show `action_required` (a bot-opened PR):
-> approve the run or re-run before merging. Then the quiet bench window (wave 4).
+> merge gates green. **0.4.0 staged on npm (2026-10-30):** Version Packages PR #8 merged (`c74ffd0`; a bot-opened PR
+> runs no CI by design, and the gate is `Release`'s `check` on `main`). Release run 41019762301 green, `Stage on npm`
+> succeeded. Waiting on the owner's approval on npmjs.com; `Release tag` then tags v0.4.0 (hourly, or dispatch it).
+> Next: the quiet bench window (wave 4).
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
