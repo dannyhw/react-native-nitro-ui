@@ -463,23 +463,24 @@ and in A5's tables, quoted under [the Host](#host-on-android) below.
 The same plan on `maintainer-mac-2`, both platforms quiet, adds the two controls
 the run above does not have and re-reads the six it does:
 
-| Component          | iOS presented | iOS UI CPU | iOS memory | Android presented  | Android UI CPU     | Android memory     |
-| ------------------ | ------------- | ---------- | ---------- | ------------------ | ------------------ | ------------------ |
-| `Switch`           | 0.80× ✓       | 0.75× ✓    | 0.99× ✓    | 1.12× ✗            | 1.80× ✗            | 2.84× ✗            |
-| `Slider`           | 0.63× ✓       | 0.90× ✓    | 1.46× ✗    | 1.23× ✗            | 1.77× ✗            | 2.37× ✗            |
-| `Progress`         | 0.40× ✓       | 1.13× ✗    | 1.35× ✗    | 0.96× ✓            | 0.92× ✓            | 1.70× ✗ `n/v`      |
-| `Button`           | 1.00×         | 1.38× ✗    | 1.36× ✗    | 1.25× ✗            | 1.77× ✗            | 2.45× ✗            |
-| `SegmentedControl` | 0.27× ✓       | 0.57× ✓    | 0.84× ✓    | 1.19× ✗            | 1.43× ✗            | 1.15× ✗            |
-| `DatePicker`       | 2.24× ✗ `n/v` | 0.10× ✓    | 0.90× ✓    | not on any machine | not on any machine | not on any machine |
-| `Picker`           | 0.21× ✓       | 0.29× ✓    | 0.76× ✓    | 1.03× ✗            | 1.47× ✗            | **0.91× ✓**        |
-| `Menu`             | 2.04× ✗ `n/v` | 1.28× ✗    | 1.34× ✗    | 0.98× ✓            | 1.26× ✗            | **0.85× ✓**        |
+| Component          | iOS presented | iOS UI CPU    | iOS memory | Android presented  | Android UI CPU     | Android memory     |
+| ------------------ | ------------- | ------------- | ---------- | ------------------ | ------------------ | ------------------ |
+| `Switch`           | 0.80× ✓       | 0.75× ✓       | 0.99× ✓    | 1.12× ✗            | 1.80× ✗            | 2.84× ✗            |
+| `Slider`           | 0.63× ✓       | 0.90× ✓       | 1.46× ✗    | 1.23× ✗            | 1.77× ✗            | 2.37× ✗            |
+| `Progress`         | 0.40× ✓       | 1.13× ✗       | 1.35× ✗    | 0.96× ✓            | 0.92× ✓            | 1.70× ✗ `n/v`      |
+| `Button`           | 1.00×         | 1.38× ✗       | 1.36× ✗    | 1.25× ✗            | 1.77× ✗            | 2.45× ✗            |
+| `SegmentedControl` | 0.27× ✓       | 0.57× ✓       | 0.84× ✓    | 1.19× ✗            | 1.43× ✗            | 1.15× ✗            |
+| `DatePicker`       | 2.24× ✗ `n/v` | 0.10× ✓ `n/v` | 0.90× ✓    | not on any machine | not on any machine | not on any machine |
+| `Picker`           | 0.21× ✓       | 0.29× ✓       | 0.76× ✓    | 1.03× ✗            | 1.47× ✗            | **0.91× ✓**        |
+| `Menu`             | 2.04× ✗ `n/v` | 1.28× ✗       | 1.34× ✗    | 0.98× ✓            | 1.26× ✗            | **0.85× ✓**        |
 
 Three things follow from reading the two together. The Android memory miss is
 real and it is _not_ universal — `Switch` 2.84×, `Button` 2.45×, `Slider` 2.37×,
-`Progress` 1.70× and `SegmentedControl` 1.15× are above the shared host, while
-`Picker` (0.91×) and `Menu` (0.85×) are _below_ it, so the bill is
-per-Compose-composition overhead on the controls that draw a row, not something
-every control pays. Mount latency moves the other way with the machine: on
+`Progress` 1.70× `n/v` and `SegmentedControl` 1.15× are above the shared host, while
+`Picker` (0.91×) and `Menu` (0.85×) are _below_ it — not because ours are
+lighter (292.2 and 213.1 KiB are heavy), but because `@expo/ui`'s `Picker` and
+`Menu` cost 320.0 and 250.4 KiB, against 50.6–77.4 KiB for its `Switch`, `Slider`,
+`Progress` and `Button` there. Mount latency moves the other way with the machine: on
 `maintainer-mac-1` `SegmentedControl` was the one control under the shared host
 (0.89×), on `maintainer-mac-2` it is 1.19× and `Progress` (0.96×) and `Menu`
 (0.98×) hold the line instead. And the iOS memory miss survives a whole machine
@@ -493,8 +494,8 @@ Reading it honestly — these read the `maintainer-mac-1` run above, cell by cel
   than the shared host per instance — `Switch` 142.7 KiB against 52.1, `Button`
   188.5 against 77.0 — because each control owns its own Compose composition.
   `maintainer-mac-2` reverses the word _every_: its `Picker` and `Menu` land
-  below the shared host (0.91×, 0.85×), which is why the fix is about the
-  row-drawing controls rather than about Compose hosting in general. Mount
+  below the shared host (0.91×, 0.85×) because `@expo/ui`'s `Picker` and `Menu` are
+  heavy, not because ours are light. Mount
   UI CPU is 1.39–1.59× on four controls; `Progress` is at 1.02×, just over the
   line. `SegmentedControl` is the one control that beats the shared host on
   mount latency (0.89×). On the update path Android `presented` is 0.32–0.61×,
@@ -573,9 +574,9 @@ app opts into for a dense list rather than what every container does. On iOS
 plan reads that hosted column on its own emulator as 0.91× memory (46.0 KiB
 against the shared host's 50.6), 0.84× UI CPU, 0.97× `mounted`, 1.01×
 `presented`, 1.17× JS CPU and 0.57× `n/v` unmount: the shape reproduces on a
-different machine, and the memory cell is 0.05 further from the shared host than
-the figure above, which is the size of the machine effect. The JS axis is the
-same ~1.2×.
+different machine, and the memory cell is 0.05 closer to the shared host than the
+figure above (0.91× against 0.86×); the runs differ in machine, plan and code, so
+the gap is not attributed. The JS axis is the same ~1.2×.
 
 0.2.0 extends the same mechanism to `Slider`, `Progress` and `Button`, and 0.3.0
 to `SegmentedControl`, `Picker` and `DatePicker`; `Menu` joined them in 0.4.0, so
@@ -590,26 +591,28 @@ median 1.43, one over (0.04 %), `problems: []`, ART `speed-profile` — so these
 replace the indicative `quick`-plan tables those runs published. Against
 `expo-ui-shared-host`, and against the same control with no Host:
 
-|                                         | `Switch`  | `Slider`  | `Progress`    | `Button`  |
-| --------------------------------------- | --------- | --------- | ------------- | --------- |
-| Mount memory (N=200)                    | **0.91×** | 1.02×     | **0.45×** n/v | **0.80×** |
-| Mount UI CPU per op                     | **0.84×** | **0.85×** | **0.40×**     | **0.88×** |
-| Mount JS CPU per op                     | 1.17×     | 1.11×     | 0.77×         | **0.69×** |
-| Unmount UI CPU per op                   | `n/v`     | `n/v`     | `n/v`         | `n/v`     |
-| Memory vs the same control with no Host | **0.32×** | **0.43×** | **0.26×**     | **0.33×** |
-| Mount UI CPU vs no Host                 | **0.46×** | **0.47×** | **0.44×**     | **0.50×** |
-| Mount JS CPU vs no Host                 | 1.20×     | 1.05×     | 1.32×         | 1.12×     |
+|                                         | `Switch`  | `Slider`  | `Progress`  | `Button`  |
+| --------------------------------------- | --------- | --------- | ----------- | --------- |
+| Mount memory (N=200)                    | **0.91×** | 1.02×     | 0.45× `n/v` | **0.80×** |
+| Mount UI CPU per op                     | **0.84×** | **0.85×** | **0.40×**   | **0.88×** |
+| Mount JS CPU per op                     | 1.17×     | 1.11×     | **0.77×**   | **0.69×** |
+| Unmount UI CPU per op                   | `n/v`     | `n/v`     | `n/v`       | `n/v`     |
+| Memory vs the same control with no Host | **0.32×** | **0.43×** | **0.26×**   | **0.33×** |
+| Mount UI CPU vs no Host                 | **0.46×** | **0.47×** | **0.44×**   | **0.50×** |
+| Mount JS CPU vs no Host                 | 1.20×     | 1.05×     | 1.32×       | 1.12×     |
 
-The `Switch` row lands where H1's published 0.86× / 0.87× sits (0.91× / 0.84× on
-this machine), which is what makes the rest of the run readable. What it shows:
-the memory and UI-thread win holds on all four controls, `Progress` most of all;
-the JS cost is about 1.1–1.2× on `Switch`, `Slider` and `Button` — `Button` is the
-exception at 0.69×, and it pays that on the unhosted side too, where it is 0.62×
-the shared host — and the unmount cells are still spread too wide for any claim at
+The `Switch` row lands near where H1's published 0.86× / 0.87× sits (0.91× / 0.84×
+on this machine), which is what makes the rest of the run readable. What it shows:
+the UI-thread win holds on all four and the memory win on three, `Progress` most of
+all, `Slider` level at 1.02×; JS costs 1.17× on `Switch` and 1.11× on `Slider`,
+while `Progress` (0.77×) and `Button` (0.69×) are below the shared host, as unhosted
+(0.59×, 0.62×) — and the unmount cells are still spread too wide for any claim at
 all, on this machine and at 8 launches.
 
-The other four cost the same shape ([`A5's
-tables`](docs/tasks/A5-quiet-bench-mac2.report.md) have every cell):
+The other four cost nearly the same shape ([`A5's
+tables`](docs/tasks/A5-quiet-bench-mac2.report.md) have every cell). `SegmentedControl`'s
+hosted mount UI CPU is the one verdict that moves here: 1.00× — parity — where the
+indicative run published 0.92×:
 
 |                                         | `SegmentedControl` | `Picker`  | `DatePicker`    | `Menu`    |
 | --------------------------------------- | ------------------ | --------- | --------------- | --------- |
@@ -621,15 +624,15 @@ tables`](docs/tasks/A5-quiet-bench-mac2.report.md) have every cell):
 | Mount JS CPU vs no Host                 | 1.02×              | 1.05×     | 1.11×           | 1.09×     |
 
 No Android `@expo/ui` arm has `DatePicker` cells, so that column is hosted-vs-unhosted
-only. Every cell above carries a verdict except the unmount ones: read against
-this machine's own baseline, `--check` on the same run **fails nothing** — 159
-rows within tolerance, 33 noisy, and the only over-threshold row is
-`update:nitro-ui:1` UI CPU at 1.26× with a 95 % CI of 0.98–1.38× that covers 1.05,
-so it is reported and not conclusive. And **no number here is about an open
-window**: the bench arm mounts the anchor row and never presses it, so no menu or
+only. Every cell above carries a verdict except the unmount ones and `Progress`
+memory: read against this machine's own baseline, `--check` on the same run **fails
+nothing** — 159 rows within tolerance, 33 noisy, and the only over-threshold row that
+is not noisy is `update:nitro-ui:1` UI CPU at 1.26× with a 95 % CI of 0.98–1.38× that
+covers 1.05, so it is reported and not conclusive. And **no number here is about an
+open window**: the bench arm mounts the anchor row and never presses it, so no menu or
 dialog is composed while these are read. What the run does show is that a control
 which can own a window hosts like the others — memory roughly halved or better,
-UI thread down, and JS CPU per op unchanged.
+UI thread down, and JS CPU per op up 2–11 %.
 
 `Menu` is the clearest case in the set: 77.6 KiB per hosted Menu against the
 shared host's 250.4 (0.31×) and `rn-core`'s 76.3, with mount UI CPU at 0.57× and

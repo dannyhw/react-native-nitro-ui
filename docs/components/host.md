@@ -65,8 +65,13 @@ quiet — 37 % of its load samples sat over the ceiling**, so the run was indica
 quiet re-run was pending. A5 has since run the plan quiet on `maintainer-mac-2`
 (`abe68a1`, 8 launches, 0.04 % of samples over the ceiling); its numbers are in
 [`A5-quiet-bench-mac2.report.md`](../tasks/A5-quiet-bench-mac2.report.md) and in `README.md`, and
-they reproduce this table's shape — `Switch` 0.91x memory / 0.84x UI CPU, `Progress` 0.45x and
-`Button` 0.80x, `Slider` level at 1.02x. The tables below stay as H2a measured them.
+they reproduce this table's shape — `Switch` 0.91x memory / 0.84x UI CPU, `Progress` 0.45x
+(`n/v`) and `Button` 0.80x, `Slider` level at 1.02x — and five of the ᴺ flags in the table below
+clear (unhosted `Switch` and `Button` UI CPU, unhosted `Button` JS, hosted `Button` JS 0.69x,
+hosted `Slider` JS 1.11x); the four unmount cells stay ᴺ. One verdict does reverse: unhosted
+`Slider`'s mount JS CPU is **1.06x** there against the 0.94x this run read, so the JS column is
+above the shared host on `Slider` in both directions, not below it unhosted. The tables below stay
+as H2a measured them.
 Ratios to `expo-ui-shared-host`, launch-paired; memory from the
 N=200 cell, the rest from the N=50 `mount` cell; **ᴺ** = spread over 10 % and no verdict:
 
@@ -102,7 +107,10 @@ Four things that table says, stated at the size they were measured:
   (0.80x → 1.23x, within spread). `Progress` lands near parity (0.92x, within spread).
   `Slider` (1.07x) and `Button` (0.71x) are both ᴺ in this run, so neither gets a
   verdict: the honest summary is that the JS tax seen on `Switch` was not measured on the
-  other three, not that they avoid it.
+  other three, not that they avoid it. A5's quiet run settles both flags: hosted `Slider`
+  1.07x → **1.11x**, hosted `Button` 0.71x → **0.69x**. And `Slider`'s unhosted side moves
+  too, the one verdict that reverses: **1.06x** there against the 0.94x this run read, so a
+  hosted `Slider` pays the JS tax from above parity, not from below it.
 - **No unmount claim.** All four unmount UI CPU cells are ᴺ (launch spreads of 21 % to
   40 %), so this run says nothing about hosting and unmounting beyond H1's `Switch` row.
 - **Nothing here was measured on a quiet machine.** That run's load samples: 459 of them,

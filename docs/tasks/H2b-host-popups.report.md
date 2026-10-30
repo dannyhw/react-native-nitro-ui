@@ -170,9 +170,10 @@ unmount cells are still `n/v` — hosted ÷ unhosted `unmountMainNsPerOp` reads 
 one arm — so "the unmount cells carry no verdict" was right and still is at 8 launches. `Slider`
 at 1.02x is still a denominator story: hosting takes our own footprint from 148.2 to 64.0 KiB onto
 a shared-host Slider that measures 62.9 KiB. And `DatePicker` still has no shared-host comparison
-on any machine. The only number that really moves is `Picker`'s memory ratio to the shared host:
-this run read 0.50x, the quiet one 0.53x. `Menu`, which this task did not have, is the strongest
-case in the set at 0.31x.
+on any machine. Two numbers move: `SegmentedControl`'s hosted mount UI CPU against the shared
+host, 0.92x as this task's run published it → 1.00x (parity rather than below), and `Picker`'s
+memory ratio to the shared host: this run read 0.50x, the quiet one 0.53x. `Menu`, which this
+task did not have, is the strongest case in the set at 0.31x.
 
 ### Hosted vs unhosted vs `expo-ui-shared-host`
 
