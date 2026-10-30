@@ -156,15 +156,24 @@ the composition's own window and the Host has to keep it honest:
 
 The Android popup hangs off the **trigger's** box, not the composition's. That is a
 deliberate departure from `docs/tasks/Q1-menu-design.md` §3, which asks for a
-`Modifier.clickable` trigger beside a plain `DropdownMenu`: a plain `DropdownMenu` composes
-a `Popup` whose position provider is handed the composition's own view as its anchor, so
-the list opens under that view — the control's box while the control owns the
-composition, and the whole Host rectangle when it does not. `ExposedDropdownMenuBox` with
-`menuAnchor` is the anchor that keeps the list under its own button in both cases, which is
-what `Menu` is for; `exposedDropdownSize()` is deliberately not used, because it sizes the
-list to the anchor and a menu's list is as wide as its items need. The anchor still reports
-through `onGloballyPositioned`, so the witness's `anchor=` rect is the trigger's box in
-composition space, and dismissal on a layout move is H2b's, unchanged.
+`Modifier.clickable` trigger beside a plain `DropdownMenu`. `ExposedDropdownMenuBox` with
+`menuAnchor` is the documented way to say "position this popup against *this* control"
+rather than relying on what a container happens to be, and `Menu` inside a `<Host>` is
+exactly the case where that distinction should matter; `exposedDropdownSize()` is
+deliberately not used, because it sizes the list to the anchor and a menu's list is as
+wide as its items need. The anchor still reports through `onGloballyPositioned`, so the
+witness's `anchor=` rect is the trigger's box in composition space, and dismissal on a
+layout move is H2b's, unchanged.
+
+The failure mode the anchor is here to prevent — a plain `DropdownMenu` opening its list
+under the whole Host rectangle instead of under the button — is **Material's documented
+behaviour, not something this repo has observed**. G7b tried to reproduce it four ways
+inside a `<Host>` (the anchor dropped inside the box, a `clickable` + `DropdownMenu`, that
+pair inside a `fillMaxSize` Box, and this list offset 300 dp) and the hosted test read the
+popup at the trigger in every case; what did go red was the bound itself, inverted
+(`docs/tasks/G7b-menu-finish.report.md`). So keep reading the sentence above as the reason
+for the *API* choice, and look to `Menu.harness.tsx`'s `gap < 48` as the guard: that bound
+is what catches a Material that does move the popup.
 
 ## Sizing
 
