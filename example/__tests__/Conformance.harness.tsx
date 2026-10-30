@@ -1043,6 +1043,27 @@ type Fixture = {
    * that is not available.
    */
   probe: RecycleProbe | RecycleNote;
+  /**
+   * The same rule's second probe, whose second owner is **controlled**, and the only way to
+   * see the other half of a reset (X4 re-review M2).
+   *
+   * A reset here has two lines and they live on different axes. `didApplyDefault = false`
+   * re-arms the *displayed value*, which is what an uncontrolled owner's props leave for the
+   * control to decide. `model.state = NitroUiControlledValue(…)` zeroes the *handshake's
+   * event counts*, which nothing an uncontrolled control does ever reads — `reconcile()` only
+   * applies a write when `js != nil` (`NitroUiModel.swift:71-79`), so with no `value` in
+   * flight the counts are state with no consequence. A controlled owner is the case that
+   * reads them: it sends `value` with `mostRecentEventCount` 0 (`useControlled.ts:56`), so
+   * counts left over from the previous owner make `jsEvents < nativeEvents` and the write is
+   * **refused as stale** — the control keeps showing what the last app left on screen, which
+   * is the bug the line exists to prevent.
+   *
+   * So each line gets the probe that can see it, and the report says so rather than
+   * repeating round 1's "they cover for each other": that was true of one fixture, where the
+   * second owner's default equalled the reset value (`defaultValue={false}` against
+   * `displayed: false`) so the two writes could not be told apart.
+   */
+  controlledProbe?: RecycleProbe;
 };
 
 const SECOND = 'second owner';
@@ -1116,23 +1137,70 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
+    // A reset in this library has two lines and each one answers to a different probe, so
+    // this control has two. The reason a single fixture cannot see both is stated on
+    // `Fixture.controlledProbe` and measured in the report; what follows is the pair.
+    //
+    // This one puts the residue on `false` and the second owner's default on `true`, which
+    // is the arrangement that separates the two lines: the residue has to be the value the
+    // *component's* reset writes (`NitroUiControlledValue<Bool>(displayed: false)`,
+    // `HybridNitroUiSwitch.swift:312`) so the display is not already right for the wrong
+    // reason, and the default has to be the third possibility — impossible for a Bool, which
+    // is exactly why round 1's fixture (`defaultValue={false}` against a `false` reset) could
+    // not tell the lines apart. Here, the second owner's default (`true`) is neither the
+    // reset's number nor the residue's.
     probe: {
-      // Round 1's version of this probe — a controlled Switch, pressed by the first owner —
-      // cannot show anything, and the reason is the handshake: a press paints `true`, the
-      // echo, then the next `value={false}` write reverts it, and that same write arrives on
-      // the second mount anyway. `NitroUiControlledValue.reconcile()`
-      // (`ios/core/NitroUiModel.swift:77`) applies a React write whenever `jsEvents >=
-      // nativeEvents`, and the counters move together, so the write is never stale and the
-      // display is always repaired. Proved by deleting the reset: still green.
-      //
-      // So the second owner is *uncontrolled*. With no `value` in flight there is no write
-      // to repair the display, and the only thing that can restore it is the one-shot the
-      // reset owns: `didApplyDefault` gates the `defaultValue` pass
-      // (`HybridNitroUiSwitch.swift:842`'s equivalent), so a control that still believes it
-      // already applied its default is left showing the previous owner's tap.
       leaveBehind:
-        'a tap on an uncontrolled Switch, which leaves it displayed on, and a ' +
-        '`didApplyDefault` that says its default has already been applied',
+        'an uncontrolled Switch that started ON and was pressed off, then a second ' +
+        'owner whose own default is ON — a number the control can only be standing on ' +
+        'because `didApplyDefault` was re-armed and let the default apply',
+      first: () => (
+        <Switch
+          defaultValue
+          onValueChange={recordRecycle('conformance-switch')}
+          testID="conformance-switch"
+          accessibilityLabel="Conformance switch"
+          hybridRef={captureFor('conformance-switch')}
+        />
+      ),
+      act: async () => {
+        // Pressed *off*: the displayed value left behind is `false`, which is also what
+        // `prepareForRecycle` writes, so the display alone can never be the evidence.
+        await pressControl('conformance-switch');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-switch:false'])
+        );
+      },
+      second: () => (
+        <Switch
+          defaultValue
+          onValueChange={recordRecycle('conformance-switch')}
+          testID="conformance-switch"
+          accessibilityLabel="Conformance switch"
+          hybridRef={captureFor('conformance-switch')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressControl('conformance-switch');
+        // The oracle is `Switch.harness.tsx:8`'s tap-twice, pointed at the one-shot: a
+        // second owner whose default was applied shows ON, so its first press reports
+        // `false`. A control still believing it applied its default shows OFF — the value
+        // its previous owner pressed — and its first press reports `true`.
+        return [
+          {
+            label: 'the first press after the second mount reports',
+            expected: 'conformance-switch:false',
+            actual: await eventsSettled(from, 'conformance-switch:false'),
+          },
+        ];
+      },
+    },
+    controlledProbe: {
+      leaveBehind:
+        'a tap on an uncontrolled Switch, then a second owner that is *controlled* ' +
+        'at `false` — the only shape that reads the handshake’s counters, which is ' +
+        'what `model.state = NitroUiControlledValue(…)` uniquely owns',
       first: () => (
         <Switch
           defaultValue={false}
@@ -1148,9 +1216,22 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           expect(eventsSince(0)).toEqual(['conformance-switch:true'])
         );
       },
+      // Controlled at `false`, so the app's own value is the opposite of the residue.
+      // `useControlled.ts:56` sends `mostRecentEventCount` 0 with it and the setter assigns
+      // it (`HybridNitroUiSwitch.swift:206`), so the only thing that can accept this write
+      // is `nativeEvents` back at 0 — which is what the struct assignment does and nothing
+      // else does. Leave it out and `reconcile()` sees `jsEvents 0 < nativeEvents 1`,
+      // refuses the write as stale, and the control keeps showing the previous app's `true`:
+      // the first press then reports `false`, which is the app's own value coming back out of
+      // a control with somebody else's counters.
+      //
+      // `didApplyDefault` cannot matter on this axis — the default pass is guarded on
+      // `model.state.js == nil` (`HybridNitroUiSwitch.swift:196`) and a controlled owner makes
+      // that false — which is the whole reason there are two probes: each puts the other
+      // reset line out of reach, so neither can be quietly covered by the other.
       second: () => (
         <Switch
-          defaultValue={false}
+          value={false}
           onValueChange={recordRecycle('conformance-switch')}
           testID="conformance-switch"
           accessibilityLabel="Conformance switch"
@@ -1160,12 +1241,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       read: async () => {
         const from = recycleEvents.length;
         await pressControl('conformance-switch');
-        // A second owner whose default was applied shows `false`, so its first press reports
-        // `true`. A control left on by the previous owner presses *off* and reports `false`.
-        // The tap-twice oracle `Switch.harness.tsx:8` uses, pointed at the reset.
         return [
           {
-            label: 'the first press after the second mount reports',
+            label: 'the first press on the controlled second mount reports',
             expected: 'conformance-switch:true',
             actual: await eventsSettled(from, 'conformance-switch:true'),
           },
@@ -1207,12 +1285,13 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     ],
     probe: {
       leaveBehind:
-        'an uncontrolled drag to 0.5, which is state only native holds (no prop ' +
-        'describes it once the second owner sends no `value`)',
+        'an uncontrolled drag to 0.5, then a second owner whose own `defaultValue` ' +
+        'is 0.75 — a number the control can only be standing on because the one-shot ' +
+        'let the default apply',
       first: () => (
         <View style={columnStyle}>
           <Slider
-            defaultValue={0}
+            defaultValue={0.25}
             step={0.25}
             onValueChange={recordRecycle('conformance-slider')}
             testID="conformance-slider"
@@ -1225,28 +1304,21 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         const before = eventsSince(0).length;
         await sliderStep(
           handleFor('conformance-slider'),
-          1,
-          'the first owner’s drag'
+          -1,
+          'the first owner’s drag down'
         );
+        // The residue is 0: the value `prepareForRecycle` itself writes
+        // (`HybridNitroUiSlider.swift:871`), so the drawn number alone can never be the
+        // evidence — see `Fixture.controlledProbe` for the probe that reads the rest. The
+        // event carries a JS number, so it records as `0`, not the report's `0.0`.
         await waitFor(() =>
-          expect(eventsSince(before)).toEqual(['conformance-slider:0.25'])
-        );
-        await sliderStep(
-          handleFor('conformance-slider'),
-          1,
-          'the first owner’s second step'
-        );
-        await waitFor(() =>
-          expect(eventsSince(before)).toEqual([
-            'conformance-slider:0.25',
-            'conformance-slider:0.5',
-          ])
+          expect(eventsSince(before)).toEqual(['conformance-slider:0'])
         );
       },
       second: () => (
         <View style={columnStyle}>
           <Slider
-            defaultValue={0}
+            defaultValue={0.75}
             step={0.25}
             onValueChange={recordRecycle('conformance-slider')}
             testID="conformance-slider"
@@ -1271,6 +1343,69 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             // and `0.0` are the same number and different strings, and a rule that can only
             // fail because of a format is a rule the next person deletes.
             label: 'the value the control was showing before any step',
+            expected: '0.75',
+            actual: stepFrom(report),
+          },
+        ];
+      },
+    },
+    controlledProbe: {
+      leaveBehind:
+        'a drag to 0.25 on an uncontrolled Slider, then a second owner that is ' +
+        '*controlled* at 0 — the counters are what decide whether that write lands',
+      first: () => (
+        <View style={columnStyle}>
+          <Slider
+            defaultValue={0}
+            step={0.25}
+            onValueChange={recordRecycle('conformance-slider')}
+            testID="conformance-slider"
+            accessibilityLabel="Conformance slider"
+            hybridRef={captureFor('conformance-slider')}
+          />
+        </View>
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        await sliderStep(
+          handleFor('conformance-slider'),
+          1,
+          'the first owner’s drag'
+        );
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual(['conformance-slider:0.25'])
+        );
+      },
+      second: () => (
+        <View style={columnStyle}>
+          <Slider
+            value={0}
+            step={0.25}
+            onValueChange={recordRecycle('conformance-slider')}
+            testID="conformance-slider"
+            accessibilityLabel="Conformance slider"
+            hybridRef={captureFor('conformance-slider')}
+          />
+        </View>
+      ),
+      read: async () => {
+        // `value={0}` is refused as stale by counters left at `nativeEvents 1`, so the
+        // control is still showing 0.25 and its next step starts there rather than at 0.
+        // One step *down* from wherever the second mount stands: from 0.25 that arrives at 0,
+        // and from 0 it cannot move — `stepped(from:up:)` returns the same value at the bound
+        // and `accessibilityStep` then does nothing at all
+        // (`HybridNitroUiSlider.swift:314-322`). So a control that accepted the controlled
+        // write reports a step from 0 to 0, and one that refused it as stale reports 0.25 to 0.
+        // Asking in this direction is what makes the two answers different strings; asking up
+        // would report `0.25` either way and the oracle would be a tautology.
+        const report = await sliderStep(
+          handleFor('conformance-slider'),
+          -1,
+          'the controlled second owner’s first step'
+        );
+        return [
+          {
+            label: 'where the controlled second mount was standing',
             expected: '0.0',
             actual: stepFrom(report),
           },
@@ -1451,7 +1586,7 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     probe: {
       leaveBehind:
         'a picked day and an opened presentation, both owned by the view rather ' +
-        'than by a prop',
+        'than by a prop, then a second owner whose own default is a third day',
       first: () => (
         <DatePicker
           defaultValue={new Date(localDay(2026, 6, 4))}
@@ -1478,7 +1613,7 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
       second: () => (
         <DatePicker
-          defaultValue={new Date(localDay(2026, 6, 4))}
+          defaultValue={new Date(localDay(2025, 3, 1))}
           onChange={(date) => recordRecycle('conformance-date-picker')(date)}
           testID="conformance-date-picker"
           accessibilityLabel="Conformance date picker"
@@ -1493,8 +1628,16 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             // the second owner passes no `value` at all, so only the control's own state can
             // answer this. No `pollReport` here — waiting for the reset before asking whether
             // it happened is how this rule would go green on a control that resets late.
+            //
+            // The expected day is the *second owner's own default*, and that is the whole
+            // point of the choice: it is neither the residue (`2027-01-15`) nor what
+            // `prepareForRecycle` writes into `displayed` (epoch 0,
+            // `HybridNitroUiDatePicker.swift:1394`), so this number can only arrive by the
+            // one-shot being re-armed and the default pass running. Round 1's fixture used
+            // the same day for the default as for the residue's neighbour, which is what made
+            // the two reset lines look interchangeable.
             label: 'the day the field shows',
-            expected: localDay(2026, 6, 4),
+            expected: localDay(2025, 3, 1),
             actual: state.millis,
           },
           {
@@ -1504,6 +1647,50 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           },
         ];
       },
+    },
+    controlledProbe: {
+      leaveBehind:
+        'a picked day on an uncontrolled DatePicker, then a second owner that is ' +
+        '*controlled* at a third day — the counters decide whether that day can be shown',
+      first: () => (
+        <DatePicker
+          defaultValue={new Date(localDay(2026, 6, 4))}
+          onChange={(date) => recordRecycle('conformance-date-picker')(date)}
+          testID="conformance-date-picker"
+          accessibilityLabel="Conformance date picker"
+          hybridRef={captureFor('conformance-date-picker')}
+        />
+      ),
+      act: async () => {
+        const picked = localDay(2027, 1, 15);
+        handleFor('conformance-date-picker').nuiTestSelect?.(2027, 1, 15, 0, 0);
+        await pollReport(
+          () => datePickerStateOf('conformance-date-picker').raw,
+          () => datePickerStateOf('conformance-date-picker').millis === picked,
+          'the controlled probe’s pick'
+        );
+      },
+      second: () => (
+        <DatePicker
+          value={new Date(localDay(2025, 3, 1))}
+          onChange={(date) => recordRecycle('conformance-date-picker')(date)}
+          testID="conformance-date-picker"
+          accessibilityLabel="Conformance date picker"
+          hybridRef={captureFor('conformance-date-picker')}
+        />
+      ),
+      read: async () => [
+        {
+          // Counters left at the previous owner's event make this write stale
+          // (`NitroUiModel.swift:71-79`), and a stale write is dropped: the field keeps
+          // showing the day the *previous* app picked. Reading `millis` rather than the
+          // handle's `value` is what makes that visible — the handle answers `state.js`,
+          // which is the day React sent either way.
+          label: 'the day the controlled second mount shows',
+          expected: localDay(2025, 3, 1),
+          actual: datePickerStateOf('conformance-date-picker').millis,
+        },
+      ],
     },
   },
   {
@@ -1594,6 +1781,65 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         // The event is the reset reporting for itself: the previous owner left this control on
         // 2, and a control that still believes it is there emits nothing for a choice that
         // would change nothing. Silence *is* the residue, so it gets reported, not waited away.
+        //
+        // What this oracle can and cannot separate, measured rather than assumed: it answers
+        // "is the control still on 2?" and nothing finer, so either reset line on its own is
+        // enough to pass it — `prepareForRecycle` writes `displayed: 0`
+        // (`HybridNitroUiPicker.swift:504`) and the one-shot would write the second owner's
+        // default, and both are "not 2". Deleting one line therefore stays green here, and it
+        // is `controlledProbe` below that goes red for the counters on their own. The other
+        // three probed controls are arranged so their second owner's default is a *third*
+        // value, which makes this one line-specific; the Picker cannot be, because its only
+        // read-out is "did picking this change anything", not the index it is standing on
+        // (`nuiTestMenuReport()` answers `expanded`/`live`/`rows` and no index).
+        return [
+          {
+            label: 'choosing the previous owner’s option again emits',
+            expected: 'conformance-picker:2',
+            actual: await eventsSettled(before, 'conformance-picker:2'),
+          },
+        ];
+      },
+    },
+    controlledProbe: {
+      leaveBehind:
+        'a pick of the last option on an uncontrolled Picker, then a second owner ' +
+        'that is *controlled* on the first one — whose index cannot be shown unless ' +
+        'the counters came back at zero',
+      first: () => (
+        <Picker
+          options={['One', 'Two', 'Three']}
+          defaultSelectedIndex={0}
+          onChange={(event) => recordRecycle('conformance-picker')(event.index)}
+          testID="conformance-picker"
+          accessibilityLabel="Conformance picker"
+          hybridRef={captureFor('conformance-picker')}
+        />
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        handleFor('conformance-picker').nuiTestSelect?.(2);
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual(['conformance-picker:2'])
+        );
+      },
+      second: () => (
+        <Picker
+          options={['One', 'Two', 'Three']}
+          selectedIndex={0}
+          onChange={(event) => recordRecycle('conformance-picker')(event.index)}
+          testID="conformance-picker"
+          accessibilityLabel="Conformance picker"
+          hybridRef={captureFor('conformance-picker')}
+        />
+      ),
+      read: async () => {
+        const before = eventsSince(0).length;
+        handleFor('conformance-picker').nuiTestSelect?.(2);
+        // Counters left at the previous owner's event make `selectedIndex={0}` stale, and a
+        // stale write is dropped, so the control is still showing option 2 — and a pick of 2
+        // changes nothing, which `applyUserSelection` reports as silence. The app asked for
+        // index 0 and the control is on 2: that is the bug the counters' reset exists to stop.
         return [
           {
             label: 'choosing the previous owner’s option again emits',
@@ -1660,7 +1906,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     },
   },
 ];
-
 /** Mounts per control in the leak fixture. */
 const CHURN = 50;
 
@@ -1944,35 +2189,50 @@ describe('conformance · every control, four rules', () => {
           );
           return;
         }
-        recycleEvents.length = 0;
-        const firstOwner = await render(probe.first(), RENDER);
-        await settle();
-        await probe.act();
-        firstOwner.unmount();
-        // Long enough for the drop to have run and, on iOS, for the instance to reach the
-        // recycle pool: `enqueueComponentViewWithComponentHandle` is what calls
-        // `prepareForRecycle` (`RCTComponentViewRegistry.mm:117`), and it happens on the
-        // mounting transaction that removes the view.
-        await settle(500);
-
-        const secondOwner = await render(probe.second(), RENDER);
-        await settle();
-        const checks = await probe.read();
-        for (const check of checks) {
+        // …and half three, for the controls that have it: the same rule read through a
+        // *controlled* second owner, which is the only shape that reads the handshake's
+        // counters. See `Fixture.controlledProbe` for why one fixture cannot see both lines.
+        for (const run of [
+          { name: 'uncontrolled', probe },
+          ...(fixture.controlledProbe == null
+            ? []
+            : [{ name: 'controlled', probe: fixture.controlledProbe }]),
+        ]) {
           console.log(
-            `    · ${fixture.testId} after the second owner: ` +
-              `${check.label}=${String(check.actual)} (expected ` +
-              `${String(check.expected)})`
+            `    · ${fixture.testId} residue probe (${run.name} second owner): ` +
+              run.probe.leaveBehind
           );
+          recycleEvents.length = 0;
+          const firstOwner = await render(run.probe.first(), RENDER);
+          await settle();
+          await run.probe.act();
+          firstOwner.unmount();
+          // Long enough for the drop to have run and, on iOS, for the instance to reach the
+          // recycle pool: `enqueueComponentViewWithComponentHandle` is what calls
+          // `prepareForRecycle` (`RCTComponentViewRegistry.mm:117`), and it happens on the
+          // mounting transaction that removes the view.
+          await settle(500);
+
+          const secondOwner = await render(run.probe.second(), RENDER);
+          await settle();
+          const checks = await run.probe.read();
+          for (const check of checks) {
+            console.log(
+              `    · ${fixture.testId} after the ${run.name} second owner: ` +
+                `${check.label}=${String(check.actual)} (expected ` +
+                `${String(check.expected)})`
+            );
+          }
+          expectConformance(
+            recycleFindings({
+              component: fixture.name,
+              identity: `testID "${fixture.testId}" (${run.name} second owner)`,
+              checks,
+            })
+          );
+          secondOwner.unmount();
+          await settle(400);
         }
-        expectConformance(
-          recycleFindings({
-            component: fixture.name,
-            identity: `testID "${fixture.testId}"`,
-            checks,
-          })
-        );
-        secondOwner.unmount();
       });
 
       it('is named on its own box, not on a wrapper around it', async () => {
