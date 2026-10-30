@@ -6,11 +6,12 @@ project's gates run. If you change one, change it here too.
 **Four of the six workflows are on; the two that need a device are off.** `gh
 workflow list --all` says `CI`, `Changeset status`, `Release` and `Release tag` are
 active: the first runs `bun run check`, the host native tests and an Android debug
-build on every push to `main` and every pull request, the second comments on a pull
-request that changes shipped code without a changeset, and the third and fourth run
+build on every push to `main` and every pull request, the second adds a warning (never a
+red check) to a pull request that changes library code without a changeset, and the
+third and fourth run
 the release path (see "Releasing"). `Bench` and `Smoke` are disabled, and their
-triggers are `workflow_dispatch` only anyway — a hosted runner has none of this
-project's devices, and a bench number from a shared machine measures nothing (D21).
+triggers are `workflow_dispatch` only anyway — hosted runners make device jobs slow
+and noisy, and the device gates that decide a task run locally (D22, D25).
 So the harness, real-input, smoke and bench suites a change cites are ones someone
 ran locally, and `bun run check` on your machine is still the first gate a change
 is judged by. A workflow file that is new to `main` is enabled as soon as it lands.
@@ -996,7 +997,7 @@ single source of truth for what a consumer must be able to render. Its rules:
   surfacing ten minutes into a smoke run.
 
 `.github/workflows/smoke.yml` is written to run the same scripts nightly and on
-demand; its schedule and label triggers are off, so it is `workflow_dispatch` only
+demand; its nightly schedule is off, so it is `workflow_dispatch` only
 and these scripts are run by hand today.
 
 ## Running the benchmarks
@@ -1324,8 +1325,8 @@ them in a `macos-latest` job instead), and an Android `assembleDebug` of the
 example. Anything that needs one of this project's devices or a Mac's simulators -
 the harness suites, the consumer smoke tests, the benchmarks, the Android release
 build - stays **manual**: those jobs are `workflow_dispatch` only, because a
-hosted runner has no device and a bench number from a shared runner measures
-nothing (D21).
+hosted runner has no device, and the device gates that decide a task run locally
+(D22, D25).
 
 Validate workflow edits locally with
 [`actionlint`](https://github.com/rhysd/actionlint)

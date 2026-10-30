@@ -216,8 +216,9 @@ hosted child is `0 × 0`, so an open menu's anchor is read out of the drawing
 (`noteCompositionOrigin`) and its box watched from the nearest React-Native-placed
 ancestor (`placedViewOf` and its `OnLayoutChangeListener`), and an open menu is taken
 down by `dropOpenMenu` when that box moves out from under it. That much is engineered,
-for hosted and unhosted controls alike, and by the same three functions in `Picker`'s and
-`Menu`'s own models — and the row about a layout move below is what it
+for hosted and unhosted controls alike, in `Picker` by its model, and in `Menu` by its own
+`noteCompositionOrigin` and `dropOpenMenu` and the shared `placedViewOf` — and the row
+about a layout move below is what it
 does to a user:
 
 | Situation | What a hosted popup does |

@@ -149,7 +149,7 @@ export function FileActions() {
         group={FILE_ACTIONS}
         variant="tonal"
         size="medium"
-        onSelect={(id) => setLast(id)}
+        onSelect={setLast}
       />
     </>
   );

@@ -294,8 +294,8 @@ export function DueDate() {
 
 A trigger that opens a list of actions. It has no value, so there is nothing to
 keep in sync: `onSelect` reports the `id` of the row that was picked, and the
-items are data — never child views. The trigger is a `Button`, with `Button`'s
-variants and sizes.
+items are data — never child views. The trigger is drawn like a `Button`, with
+`Button`'s variants and sizes.
 
 ```tsx name=menu
 const FILE_ACTIONS: MenuGroup = {
@@ -324,7 +324,7 @@ export function FileActions() {
         group={FILE_ACTIONS}
         variant="tonal"
         size="medium"
-        onSelect={(id) => setLast(id)}
+        onSelect={setLast}
       />
     </>
   );
@@ -570,17 +570,17 @@ cell reads 0.85× where the published figure is 0.86×, which is what makes the 
 it readable.
 
 `Menu` was priced the same way by G7b: one quiet `--plan quick` run per platform,
-plus one Android full plan. Neither machine has a committed `Menu` cell, so these
+plus a full plan on each. Neither machine has a committed `Menu` cell, so these
 are numbers rather than verdicts. Android is again the win — memory at N=200 from
 the quick run: 217.9 KiB per unhosted Menu against the shared host's 248.6
 (0.88×), and **77.5 KiB inside a `<Host>`**, within noise of `rn-core`'s 76.3 —
 and the full plan's N=200 mount says it louder: 64.8 ms presented hosted against
-168.9 ms unhosted, with `rn-core` at 65.5 — though that is the one run of the three
+168.9 ms unhosted, with `rn-core` at 65.5 — though that is a run
 that was not quiet (25 of its 176 load samples over the ceiling). iOS, where a Host
 is a passthrough, is
 the usual per-control story: 346.3 KiB against the shared host's 262.0 (1.32×).
 No run composed a popup — the arm never opens a menu — and that quick Android run
-was noisy on `update.UI CPU/op` (3.18× `n/v`), which nothing has re-measured.
+was noisy on `update.UI CPU/op` (3.18× `n/v`), so that ratio carries no verdict.
 [G7b's tables](docs/tasks/G7b-menu-finish.report.md) have the whole set.
 
 ### Baselines and gating
@@ -684,8 +684,8 @@ calls.
 
 - [Development workflow](CONTRIBUTING.md) — prerequisites, the scripts, and the
   gates. `CI` runs `bun run check`, the host native tests and an Android debug
-  build on every push and pull request; `Release`, `Release tag` and `Changeset
-status` run the release path. The two device workflows — `Bench` and `Smoke` — are
+  build on every push and pull request; `Release` and `Release tag` run the release
+  path, and `Changeset status` warns on a pull request that has no changeset. The two device workflows — `Bench` and `Smoke` — are
   disabled and dispatch-only, so the harness, real-input, smoke and bench suites a
   change cites are the ones someone ran locally
 - [Storybook](example/README.md#storybook) - the example app is also a showcase
