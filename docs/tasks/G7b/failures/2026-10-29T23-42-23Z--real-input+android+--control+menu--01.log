@@ -1,0 +1,387 @@
+# Failure excerpt — real-input:android:--control:menu
+
+- Ran: 2026-10-29T23:42:23.446Z on code tree `e030c74c4537` at HEAD `32575f8` (branch `task/G7b-menu-finish`)
+- Command: `node scripts/real-input/android.mjs --control menu`
+- Result: fail, exit 1, 274 ms
+- Load: start 2.70, end 2.70, median 2.70, max 2.70
+- Device: android / device `emulator-5570` / lease `G7b-27pum`
+- Full log: `task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-42-23.250Z.log` (<store>/task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-42-23.250Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-42-23.250Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7b-27pum (still live)
+  |   G7b-27pum                G7b          both              pair-b
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.70 (the ledger line carries the samples across the whole run)
+gate: logcat
+  | --------- beginning of main
+  | 10-29 23:39:31.239  5859  5859 I nitroui.example: Late-enabling -Xcheck:jni
+  | 10-29 23:39:31.255  5859  5859 I nitroui.example: Using CollectorTypeCMC GC.
+  | 10-29 23:39:31.263  5859  5859 D nativeloader: Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+  | 10-29 23:39:31.288  5859  5859 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+  | 10-29 23:39:31.288  5859  5859 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.sidecar.jar
+  | 10-29 23:39:31.289  5859  5859 W ziparchive: Unable to open '/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.dm': No such file or directory
+  | 10-29 23:39:31.289  5859  5859 W ziparchive: Unable to open '/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.dm': No such file or directory
+  | 10-29 23:39:31.669  5859  5859 D nativeloader: Configuring clns-7 for other apk /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/lib/arm64:/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand:/data/user/0/nitroui.example
+  | 10-29 23:39:31.683  5859  5859 V GraphicsEnvironment: Currently set values for:
+  | 10-29 23:39:31.683  5859  5859 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+  | 10-29 23:39:31.683  5859  5859 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+  | 10-29 23:39:31.683  5859  5859 V GraphicsEnvironment: Global.Settings values are invalid: number of packages: 0, number of values: 0
+  | 10-29 23:39:31.683  5859  5859 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+  | 10-29 23:39:31.717  5859  5859 W SoLoader: Initializing SoLoader: 0
+  | 10-29 23:39:31.719  5859  5859 W SoLoader: Recording new base apk path: /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk
+  | 10-29 23:39:31.719  5859  5859 W SoLoader: Previously recorded 0 base apk paths.
+  | 10-29 23:39:31.720  5859  5859 I SoLoader: Preparing SO source: DirectorySoSource[root = /vendor/lib64 flags = 2]
+  | 10-29 23:39:31.721  5859  5859 I SoLoader: Preparing SO source: DirectorySoSource[root = /system/lib64 flags = 2]
+  | 10-29 23:39:31.721  5859  5859 I SoLoader: Preparing SO source: DirectApkSoSource[root = [/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a]]
+  | 10-29 23:39:31.795  5859  5859 I SoLoader: Preparing SO source: ApplicationSoSource[DirectorySoSource[root = /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/lib/arm64 flags = 0]]
+  | 10-29 23:39:31.796  5859  5859 I SoLoader: init finish: 4 SO sources prepared
+  | 10-29 23:39:31.796  5859  5859 W SoLoader: SoLoader initialized: 8
+  | 10-29 23:39:31.810  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libc++_shared.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.813  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libjsi.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.815  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libfbjni.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.818  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libreactnative.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Entering merged library JNI_OnLoad.
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x74acb9f1cc
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x74ace0acc8
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 0x74ace1d55c
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 0x74aced4790
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 0x74ad1f9128
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 0x74ad20d1b0
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 0x74ad232420
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 0x74ad23e48c
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 0x74ad2c1ef4
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 0x74ad414c04
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 0x74ad42bf64
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 0x74ad43bea0
+  | 10-29 23:39:31.818  5859  5859 D jni_lib_merge: About to register 12 actual methods.
+  | 10-29 23:39:31.824  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libreact_codegen_rngesturehandler_codegen.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.826  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libreact_codegen_RNCSlider.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.829  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libreact_codegen_rnsvg.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Entering merged library JNI_OnLoad.
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x74acb9f1cc
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x74ace0acc8
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 0x74ace1d55c
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 0x74aced4790
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 0x74ad1f9128
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 0x74ad20d1b0
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 0x74ad232420
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 0x74ad23e48c
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 0x74ad2c1ef4
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 0x74ad414c04
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 0x74ad42bf64
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 0x74ad43bea0
+  | 10-29 23:39:31.829  5859  5859 D jni_lib_merge: About to register 12 actual methods.
+  | 10-29 23:39:31.832  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libreact_codegen_safeareacontext.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.833  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libappmodules.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.879  5859  5859 D AppCompatDelegate: Checking for metadata for AppLocalesMetadataHolderService : Service not found
+  | 10-29 23:39:31.950  5859  5859 I nitrouiOnLoad: Loading nitroui C++ library...
+  | 10-29 23:39:31.958  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libnitroui.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes3.dex): ok
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiCore"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiCore"!
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiButton"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiButton"!
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiProgress"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiProgress"!
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSlider"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSlider"!
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiHost"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiHost"!
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSwitch"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSwitch"!
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiDatePicker"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiDatePicker"!
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSegmentedControl"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSegmentedControl"!
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiPicker"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiPicker"!
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiMenu"...
+  | 10-29 23:39:31.958  5859  5859 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiMenu"!
+  | 10-29 23:39:31.958  5859  5859 I nitrouiOnLoad: Successfully loaded nitroui C++ library!
+  | 10-29 23:39:31.975  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libhermesvm.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.977  5859  5859 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libhermestooling.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:31.977  5859  5859 D jni_lib_merge: Entering merged library JNI_OnLoad.
+  | 10-29 23:39:31.977  5859  5859 D jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+  | 10-29 23:39:31.977  5859  5859 D jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: 0x75446e08f8
+  | 10-29 23:39:31.977  5859  5859 D jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: 0x754470f694
+  | 10-29 23:39:31.977  5859  5859 D jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: 0x754471170c
+  | 10-29 23:39:31.977  5859  5859 D jni_lib_merge: About to register 3 actual methods.
+  | 10-29 23:39:32.090  5859  5859 W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Schedule
+  | 10-29 23:39:32.090  5859  5859 W unknown:BridgelessReact: ReactHost{0}.attachSurface(surfaceId = 0)
+  | 10-29 23:39:32.091  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask()
+  | 10-29 23:39:32.092  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Start
+  | 10-29 23:39:32.093  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getJSBundleLoader()
+  | 10-29 23:39:32.094  5859  5881 W unknown:BridgelessReact: ReactHost{0}.isMetroRunning()
+  | 10-29 23:39:32.103  5859  5859 W nitroui.example: Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (unsupported, reflection, allowed)
+  | 10-29 23:39:32.103  5859  5880 D TrafficStats: tagSocket(96) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:32.103  5859  5882 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:32.107  5859  5880 W unknown:ReconnectingWebSocket: Couldn't connect to "ws://localhost:8293/message?device=sdk_gphone64_arm64%20-%2015%20-%20API%2035&app=nitroui.example&clientid=BridgelessDevSupportManager", will silently retry
+  | 10-29 23:39:32.107  5859  5882 W unknown:ReactNative: The packager does not seem to be running as we got an IOException requesting its status: Failed to connect to localhost/127.0.0.1:8293
+  | 10-29 23:39:32.107  5859  5882 W unknown:BridgelessReact: ReactHost{0}.isMetroRunning(): Async result = false
+  | 10-29 23:39:32.107  5859  5859 W unknown:BridgelessReact: ReactHost{0}.onHostResume(activity)
+  | 10-29 23:39:32.108  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating BridgelessReactContext
+  | 10-29 23:39:32.110  5859  5859 W unknown:ReactNative: Packager connection already open, nooping.
+  | 10-29 23:39:32.110  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+  | 10-29 23:39:32.111  5859  5859 W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostResume()
+  | 10-29 23:39:32.124  5859  5859 W HWUI    : Unknown dataspace 0
+  | 10-29 23:39:32.130  5859  5882 D TrafficStats: tagSocket(102) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:32.172  5859  5874 I EGL_emulation: Opening libGLESv1_CM_emulation.so
+  | 10-29 23:39:32.173  5859  5874 I EGL_emulation: Opening libGLESv2_emulation.so
+  | 10-29 23:39:32.182  5859  5874 W HWUI    : Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+  | 10-29 23:39:32.182  5859  5874 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+  | 10-29 23:39:32.198  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+  | 10-29 23:39:32.201  5859  5874 I Gralloc4: mapper 4.x is not supported
+  | 10-29 23:39:32.228  5859  5859 W unknown:BridgelessReact: ReactHost{0}.handleHostException(message = "Unable to load script.
+  | 10-29 23:39:32.228  5859  5859 W unknown:BridgelessReact: 
+  | 10-29 23:39:32.228  5859  5859 W unknown:BridgelessReact: Make sure you're running Metro or that your bundle 'index.android.bundle' is packaged correctly for release.
+  | 10-29 23:39:32.228  5859  5859 W unknown:BridgelessReact: 
+  | 10-29 23:39:32.228  5859  5859 W unknown:BridgelessReact: The device must either be USB connected (with bundler set to "localhost:8081") or be on the same Wi-Fi network as your computer (with bundler set to your computer IP) to connect to Metro.
+  | 10-29 23:39:32.228  5859  5859 W unknown:BridgelessReact: 
+  | 10-29 23:39:32.228  5859  5859 W unknown:BridgelessReact: If you're using USB on a physical device, make sure you also run this command:
+  | 10-29 23:39:32.228  5859  5859 W unknown:BridgelessReact:   adb reverse tcp:8081 tcp:8081")
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: Exception in native call
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: java.lang.RuntimeException: Unable to load script.
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: Make sure you're running Metro or that your bundle 'index.android.bundle' is packaged correctly for release.
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: The device must either be USB connected (with bundler set to "localhost:8081") or be on the same Wi-Fi network as your computer (with bundler set to your computer IP) to connect to Metro.
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: If you're using USB on a physical device, make sure you also run this command:
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative:   adb reverse tcp:8081 tcp:8081
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.ReactInstance.loadJSBundleFromAssets(Native Method)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.ReactInstance.access$loadJSBundleFromAssets(ReactInstance.kt:85)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.ReactInstance$loadJSBundle$1.loadScriptFromAssets(ReactInstance.kt:330)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.bridge.JSBundleLoader$Companion$createAssetLoader$1.loadScript(JSBundleLoader.kt:33)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.ReactInstance.loadJSBundle(ReactInstance.kt:309)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.ReactHostImpl.getOrCreateReactInstanceTask$lambda$45$lambda$41(ReactHostImpl.kt:1058)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.ReactHostImpl$$ExternalSyntheticLambda8.then(D8$$SyntheticClass:0)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task$Companion.completeImmediately$lambda$3(Task.kt:359)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task$Companion$$ExternalSyntheticLambda3.run(D8$$SyntheticClass:0)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Executors$ImmediateExecutor.execute(Executors.kt:41)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task$Companion.completeImmediately(Task.kt:357)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task$Companion.access$completeImmediately(Task.kt:253)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task.continueWith(Task.kt:134)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task.continueWith$default(Task.kt:118)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task.onSuccess$lambda$12(Task.kt:176)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task$$ExternalSyntheticLambda2.then(D8$$SyntheticClass:0)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task$Companion.completeAfterTask$lambda$5(Task.kt:393)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at com.facebook.react.runtime.internal.bolts.Task$Companion$$ExternalSyntheticLambda4.run(D8$$SyntheticClass:0)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+  | 10-29 23:39:32.235  5859  5859 E unknown:ReactNative: 	at java.lang.Thread.run(Thread.java:1012)
+  | 10-29 23:39:32.236  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask()
+  | 10-29 23:39:32.239  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Resetting createReactInstance task ref
+  | 10-29 23:39:32.277  5859  5885 D nativeloader: Load /data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!/lib/arm64-v8a/libworklets.so using ns clns-7 from class loader (caller=/data/app/~~cjtiW3RpemfLmr7r5qM-Fg==/nitroui.example-SzLJNMgeIRuz5wrOu8kVBA==/base.apk!classes19.dex): ok
+  | 10-29 23:39:32.301  5859  5859 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Starting React Native destruction
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: ReactHost{0}.raiseSoftException(getOrCreateDestroyTask()): Destroy: ReactInstance task faulted. Stage: 1: Starting destroy. Fault reason: Unable to load script.
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: 
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: Make sure you're running Metro or that your bundle 'index.android.bundle' is packaged correctly for release.
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: 
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: The device must either be USB connected (with bundler set to "localhost:8081") or be on the same Wi-Fi network as your computer (with bundler set to your computer IP) to connect to Metro.
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: 
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: If you're using USB on a physical device, make sure you also run this command:
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact:   adb reverse tcp:8081 tcp:8081. Destroy reason: handleHostException(message = "Unable to load script.
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: 
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: Make sure you're running Metro or that your bundle 'index.android.bundle' is packaged correctly for release.
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: 
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: The device must either be USB connected (with bundler set to "localhost:8081") or be on the same Wi-Fi network as your computer (with bundler set to your computer IP) to connect to Metro.
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: 
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact: If you're using USB on a physical device, make sure you also run this command:
+  | 10-29 23:39:32.302  5859  5859 W unknown:BridgelessReact:   adb reverse tcp:8081 tcp:8081")
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: Unhandled SoftException
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: com.facebook.react.bridge.ReactNoCrashSoftException: raiseSoftException(getOrCreateDestroyTask()): Destroy: ReactInstance task faulted. Stage: 1: Starting destroy. Fault reason: Unable to load script.
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: Make sure you're running Metro or that your bundle 'index.android.bundle' is packaged correctly for release.
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: The device must either be USB connected (with bundler set to "localhost:8081") or be on the same Wi-Fi network as your computer (with bundler set to your computer IP) to connect to Metro.
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: If you're using USB on a physical device, make sure you also run this command:
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost:   adb reverse tcp:8081 tcp:8081. Destroy reason: handleHostException(message = "Unable to load script.
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: Make sure you're running Metro or that your bundle 'index.android.bundle' is packaged correctly for release.
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: The device must either be USB connected (with bundler set to "localhost:8081") or be on the same Wi-Fi network as your computer (with bundler set to your computer IP) to connect to Metro.
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: If you're using USB on a physical device, make sure you also run this command:
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost:   adb reverse tcp:8081 tcp:8081")
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.raiseSoftException(ReactHostImpl.kt:906)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.raiseSoftException$default(ReactHostImpl.kt:897)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.createReactInstanceUnwrapper$lambda$50(ReactHostImpl.kt:1263)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl$$ExternalSyntheticLambda43.invoke(D8$$SyntheticClass:0)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.getOrCreateDestroyTask$lambda$61(ReactHostImpl.kt:1472)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl$$ExternalSyntheticLambda32.then(D8$$SyntheticClass:0)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.facebook.react.runtime.internal.bolts.Task$Companion.completeAfterTask$lambda$5(Task.kt:393)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.facebook.react.runtime.internal.bolts.Task$Companion$$ExternalSyntheticLambda4.run(D8$$SyntheticClass:0)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at android.os.Handler.handleCallback(Handler.java:959)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at android.os.Handler.dispatchMessage(Handler.java:100)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at android.os.Looper.loopOnce(Looper.java:232)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at android.os.Looper.loop(Looper.java:317)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at android.app.ActivityThread.main(ActivityThread.java:8705)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at java.lang.reflect.Method.invoke(Native Method)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)
+  | 10-29 23:39:32.306  5859  5859 E unknown:ReactHost: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)
+  | 10-29 23:39:32.309  5859  5859 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): DevSupportManager cleanup
+  | 10-29 23:39:32.309  5859  5859 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Move ReactHost to onHostDestroy()
+  | 10-29 23:39:32.310  5859  5859 W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostPause()
+  | 10-29 23:39:32.310  5859  5859 W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostDestroy()
+  | 10-29 23:39:32.313  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Stopping all React Native surfaces
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: Unhandled SoftException
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: java.lang.IllegalStateException: Trying to stop surface that hasn't started yet
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at com.facebook.react.fabric.FabricUIManager.stopSurface(FabricUIManager.java:413)
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at com.facebook.react.runtime.ReactInstance.stopSurface(ReactInstance.kt:414)
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at com.facebook.react.runtime.ReactHostImpl.stopAttachedSurfaces(ReactHostImpl.kt:1232)
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at com.facebook.react.runtime.ReactHostImpl.getOrCreateDestroyTask$lambda$63(ReactHostImpl.kt:1509)
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at com.facebook.react.runtime.ReactHostImpl$$ExternalSyntheticLambda33.then(D8$$SyntheticClass:0)
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at com.facebook.react.runtime.internal.bolts.Task$Companion.completeAfterTask$lambda$5(Task.kt:393)
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at com.facebook.react.runtime.internal.bolts.Task$Companion$$ExternalSyntheticLambda4.run(D8$$SyntheticClass:0)
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+  | 10-29 23:39:32.314  5859  5881 E unknown:FabricUIManager: 	at java.lang.Thread.run(Thread.java:1012)
+  | 10-29 23:39:32.362  5859  5864 I nitroui.example: Compiler allocated 5250KB to compile void android.view.ViewRootImpl.performTraversals()
+  | 10-29 23:39:32.406  5859  5859 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Destroying MemoryPressureRouter
+  | 10-29 23:39:32.407  5859  5859 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Resetting ReactContext ref
+  | 10-29 23:39:32.407  5859  5859 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Destroying ReactContext
+  | 10-29 23:39:32.409  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Resetting ReactInstance ptr
+  | 10-29 23:39:32.411  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Destroying ReactInstance
+  | 10-29 23:39:32.417  5859  5881 E unknown:ReactNative: Tried to remove non-existent frame callback
+  | 10-29 23:39:32.422  5859  5881 W unknown:BridgelessReact: ReactHost{0}.getOrCreateDestroyTask(): Resetting start/destroy task ref
+  | 10-29 23:39:32.494  5859  5864 I nitroui.example: Compiler allocated 4206KB to compile void android.widget.TextView.<init>(android.content.Context, android.util.AttributeSet, int, int)
+  | 10-29 23:39:33.920  5859  5874 D EGL_emulation: app_time_stats: avg=505.85ms min=21.69ms max=1468.23ms count=3
+  | 10-29 23:39:34.117  5859  5882 D TrafficStats: tagSocket(135) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:36.123  5859  5882 D TrafficStats: tagSocket(100) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:37.170  5859  5917 D ProfileInstaller: Installing profile for nitroui.example
+  | 10-29 23:39:38.140  5859  5882 D TrafficStats: tagSocket(100) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:40.151  5859  5882 D TrafficStats: tagSocket(100) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:42.170  5859  5882 D TrafficStats: tagSocket(100) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:44.184  5859  5882 D TrafficStats: tagSocket(100) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:46.195  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:48.203  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:50.213  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:52.219  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:54.228  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:56.242  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:39:58.263  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:00.270  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:02.284  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:04.295  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:06.307  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:08.321  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:10.335  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:12.346  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:14.356  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:16.363  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:18.373  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:20.386  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:22.396  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:24.403  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:26.416  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:28.430  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:30.441  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:32.449  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:34.464  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:36.472  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:38.491  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:40.513  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:42.527  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:44.534  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:46.546  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:48.558  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:50.575  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:52.591  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:54.609  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:56.622  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:40:58.631  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:00.641  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:02.651  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:04.671  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:06.683  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:08.696  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:10.706  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:12.714  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:14.723  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:16.731  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:18.743  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:20.756  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:22.773  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:24.785  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:26.796  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:28.802  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:30.811  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:32.825  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:34.844  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:36.853  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:38.865  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:40.879  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:42.896  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:44.908  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:46.925  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:48.936  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:50.946  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:52.958  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:54.974  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:56.985  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:41:59.003  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:01.014  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:03.019  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:05.035  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:07.045  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:09.059  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:11.078  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:13.087  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:15.106  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:17.121  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:19.135  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:21.141  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 10-29 23:42:23.145  5859  5882 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+gate: ---- end device context ----
+```
+
+## Last 23 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: real-input:android:--control:menu
+gate: node scripts/real-input/android.mjs --control menu (cwd .)
+gate: code tree e030c74c4537 at HEAD 32575f8
+gate: git tree 858d8832101e with a DIRTY worktree (not reusable)
+gate: log task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-42-23.250Z.log
+gate:       <store>/task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-42-23.250Z.log
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 32a742ab at 32575f8adf706ea598da9eaa70138866828a3023, now e030c74c at 32575f8adf706ea598da9eaa70138866828a3023)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 32a742ab at 32575f8adf706ea598da9eaa70138866828a3023, now e030c74c at 32575f8adf706ea598da9eaa70138866828a3023)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+gate: real-input:android:--control:menu FAIL in 0.3 s
+gate: recorded in .gates/task/G7b-menu-finish.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-42-23.250Z.log (5 probe(s))
+
+```
