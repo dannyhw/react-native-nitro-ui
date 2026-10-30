@@ -1,0 +1,61 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-10-29T13:37:11.804Z on code tree `938c369a9a24` at HEAD `b9cbe4b` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit null signal SIGTERM, 75041 ms
+- Load: start 10.82, end 151.73, median 138.84, max 175.53
+- Device: ios
+- Full log: `task/X4-conformance/harness+ios-2026-10-29T13-37-11.804Z.log` (<store>/task/X4-conformance/harness+ios-2026-10-29T13-37-11.804Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/DatePicker.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+ios-2026-10-29T13-37-11.804Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   F7-fnto8                 F7           both              pair-a
+  |   X4-fwfhi                 X4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 151.73 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 18 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 938c369a9a24, 8 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.82/15.27 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X4-conformance/harness+ios-2026-10-29T13-37-11.804Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Booting iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/DatePicker.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+HARNESS Shutting down iOS simulator iPhone 17...
+
+
+
+```

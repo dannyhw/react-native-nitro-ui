@@ -1,0 +1,199 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-10-29T13:38:55.317Z on code tree `938c369a9a24` at HEAD `b9cbe4b` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 108903 ms
+- Load: start 102.07, end 22.02, median 43.11, max 102.07
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `X4-fwfhi`
+- Full log: `task/X4-conformance/harness+ios-2026-10-29T13-38-55.317Z.log` (<store>/task/X4-conformance/harness+ios-2026-10-29T13-38-55.317Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Sizing.harness.tsx`
+- `● Console`
+- `● Sizing · intrinsic (T11) › corrects a cold batch of 200 with one correction each, few of them immediate`
+- `● Sizing · intrinsic (T11) › mounts the same batch from every starting guess, at the right size`
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Slider › mounts many instances at once`
+- `FAIL __tests__/Host.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+ios-2026-10-29T13-38-55.317Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-fwfhi (still live)
+  |   F7-fnto8                 F7           both              pair-a
+  |   X4-fwfhi                 X4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 22.02 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 294 — the rest is in the full log above)
+
+```
+      [0m [90m 252 |[39m
+       [90m 253 |[39m   [36mif[39m (read[33m.[39mkind [33m===[39m [32m'unreadable'[39m) {
+      [31m[1m>[22m[39m[90m 254 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 255 |[39m       [32m`timing gate for "${label}" cannot be trusted: ${read.reason}. `[39m [33m+[39m
+       [90m 256 |[39m         [32m'Fix the run (every harness run publishes its machine state) rather '[39m [33m+[39m
+       [90m 257 |[39m         [32m'than removing the assertion.'[39m[0m
+
+  ● Sizing · intrinsic (T11) › mounts the same batch from every starting guess, at the right size
+
+    timing gate for "bench: mount a batch of 1" cannot be trusted: http://localhost:8294/harness-timing/state.json was published for Metro port 8293, not this run's 8294 - an earlier run left it behind. Fix the run (every harness run publishes its machine state) rather than removing the assertion.
+
+      [0m [90m 252 |[39m
+       [90m 253 |[39m   [36mif[39m (read[33m.[39mkind [33m===[39m [32m'unreadable'[39m) {
+      [31m[1m>[22m[39m[90m 254 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 255 |[39m       [32m`timing gate for "${label}" cannot be trusted: ${read.reason}. `[39m [33m+[39m
+       [90m 256 |[39m         [32m'Fix the run (every harness run publishes its machine state) rather '[39m [33m+[39m
+       [90m 257 |[39m         [32m'than removing the assertion.'[39m[0m
+
+FAIL __tests__/Slider.harness.tsx
+  ● Console
+
+    console.log
+      slider size: box=300.00x31.00 measured=300.00x31.00 expectedHeight=31
+
+
+    console.log
+      height vs width: wide=300.00x31.00/300.00x31.00 narrow=180.00x31.00/180.00x31.00
+
+
+    console.log
+      squashed box: box=180.00x12.00 measured=180.00x31.00
+
+
+    console.log
+      zero-height box: measured=180.00x31.00
+
+
+    console.log
+      unbounded: bounded box=200.00x31.00 measured=200.00x31.00
+
+
+    console.log
+      unbounded: bounded box=200.00x31.00 scroller box=240.00x912.00 measured=240.00x31.00 declared=240
+
+
+    console.log
+      poison: guess=200x12 box=300.00x31.00 measured=300.00x31.00 epoch=48->47 corrections=1
+
+
+    console.log
+      user style: box=180.00x60.00 measured=180.00x31.00
+
+
+    console.log
+      coalesce: same-turn moves=8 events=1
+
+
+    console.log
+      coalesce: spread moves=5 events=5
+
+
+    console.log
+      quantise tenths: [0.3]
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=true
+
+
+    console.log
+      a11y: box=300.00x31.00 labelBox=300.00x31.00 handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed accessibilityIncrement on NitroUiSliderAccessibilityElement[4096] 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #3 performed accessibilityIncrement on NitroUiSliderAccessibilityElement[4096] 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #2 performed accessibilityDecrement on NitroUiSliderAccessibilityElement[4096] 12.0->9.0 disabled=false
+
+
+    console.log
+      a11y walk: starts=8 complete=8
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 26.6ms last=420.00x31.00
+
+  ● Slider › mounts many instances at once
+
+    timing gate for "Slider stress: mount 40 instances" cannot be trusted: http://localhost:8294/harness-timing/state.json was published for Metro port 8293, not this run's 8294 - an earlier run left it behind. Fix the run (every harness run publishes its machine state) rather than removing the assertion.
+
+      [0m [90m 252 |[39m
+       [90m 253 |[39m   [36mif[39m (read[33m.[39mkind [33m===[39m [32m'unreadable'[39m) {
+      [31m[1m>[22m[39m[90m 254 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 255 |[39m       [32m`timing gate for "${label}" cannot be trusted: ${read.reason}. `[39m [33m+[39m
+       [90m 256 |[39m         [32m'Fix the run (every harness run publishes its machine state) rather '[39m [33m+[39m
+       [90m 257 |[39m         [32m'than removing the assertion.'[39m[0m
+
+FAIL __tests__/Host.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+
+
+
+```

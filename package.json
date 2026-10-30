@@ -87,7 +87,9 @@
     "release:version": "node scripts/sync-example-lock.mjs --preflight && changeset version && node scripts/sync-example-lock.mjs --fix",
     "api-extractor": "api-extractor run --local --config etc/api-extractor.json",
     "api-extractor:check": "api-extractor run --config etc/api-extractor.json",
-    "readme:check": "node scripts/readme-examples-check.mjs"
+    "readme:check": "node scripts/readme-examples-check.mjs",
+    "task-ready": "node scripts/task-ready.mjs",
+    "conformance:table": "node scripts/conformance/print-shared-table.mjs"
   },
   "keywords": [
     "react-native",

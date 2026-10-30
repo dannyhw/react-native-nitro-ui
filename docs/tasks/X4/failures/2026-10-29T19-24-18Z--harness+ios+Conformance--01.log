@@ -1,0 +1,182 @@
+# Failure excerpt — harness:ios:Conformance
+
+- Ran: 2026-10-29T19:24:18.301Z on code tree `75766ebdd0df` at HEAD `49373b2` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Conformance`
+- Result: fail, exit 1, 77751 ms
+- Load: start 4.74, end 5.41, median 5.44, max 7.48
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X4-s25z9`
+- Full log: `task/X4-conformance/harness+ios+Conformance-2026-10-29T19-24-18.301Z.log` (<store>/task/X4-conformance/harness+ios+Conformance-2026-10-29T19-24-18.301Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● conformance · every control, four rules › · Switch › is known to the engine while mounted, and unknown after`
+- `expected [ …(2) ] to deeply equal []`
+- `● conformance · every control, four rules › · Slider › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · Slider › shows none of its previous owner under one identity`
+- `expected [ Array(1) ] to deeply equal []`
+- `● conformance · every control, four rules › · Button › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · Progress › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · SegmentedControl › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · DatePicker › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · DatePicker › shows none of its previous owner under one identity`
+- `● conformance · every control, four rules › · Picker › is known to the engine while mounted, and unknown after`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+ios+Conformance-2026-10-29T19-24-18.301Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-s25z9 (still live)
+  |   X4-s25z9                 X4           both              pair-a
+  |   F7-xbddv                 F7           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.41 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 129 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Conformance
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 75766ebdd0df, 8 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.74/5.29 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X4-conformance/harness+ios+Conformance-2026-10-29T19-24-18.301Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · Switch › is known to the engine while mounted, and unknown after
+
+    expected [ …(2) ] to deeply equal []
+
+      [0m [90m 737 |[39m     )[33m;[39m
+       [90m 738 |[39m   }
+      [31m[1m>[22m[39m[90m 739 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 740 |[39m }
+       [90m 741 |[39m
+       [90m 742 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+  ● conformance · every control, four rules › · Slider › is known to the engine while mounted, and unknown after
+
+    expected [ …(2) ] to deeply equal []
+
+      [0m [90m 737 |[39m     )[33m;[39m
+       [90m 738 |[39m   }
+      [31m[1m>[22m[39m[90m 739 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 740 |[39m }
+       [90m 741 |[39m
+       [90m 742 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+  ● conformance · every control, four rules › · Slider › shows none of its previous owner under one identity
+
+    expected [ Array(1) ] to deeply equal []
+
+      [0m [90m 737 |[39m     )[33m;[39m
+       [90m 738 |[39m   }
+      [31m[1m>[22m[39m[90m 739 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 740 |[39m }
+       [90m 741 |[39m
+       [90m 742 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+  ● conformance · every control, four rules › · Button › is known to the engine while mounted, and unknown after
+
+    expected [ …(2) ] to deeply equal []
+
+      [0m [90m 737 |[39m     )[33m;[39m
+       [90m 738 |[39m   }
+      [31m[1m>[22m[39m[90m 739 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 740 |[39m }
+       [90m 741 |[39m
+       [90m 742 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+  ● conformance · every control, four rules › · Progress › is known to the engine while mounted, and unknown after
+
+    expected [ …(2) ] to deeply equal []
+
+      [0m [90m 737 |[39m     )[33m;[39m
+       [90m 738 |[39m   }
+      [31m[1m>[22m[39m[90m 739 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 740 |[39m }
+       [90m 741 |[39m
+       [90m 742 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+  ● conformance · every control, four rules › · SegmentedControl › is known to the engine while mounted, and unknown after
+
+    expected [ …(2) ] to deeply equal []
+
+      [0m [90m 737 |[39m     )[33m;[39m
+       [90m 738 |[39m   }
+      [31m[1m>[22m[39m[90m 739 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 740 |[39m }
+       [90m 741 |[39m
+       [90m 742 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+  ● conformance · every control, four rules › · DatePicker › is known to the engine while mounted, and unknown after
+
+    expected [ …(2) ] to deeply equal []
+
+      [0m [90m 737 |[39m     )[33m;[39m
+       [90m 738 |[39m   }
+      [31m[1m>[22m[39m[90m 739 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 740 |[39m }
+       [90m 741 |[39m
+       [90m 742 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+  ● conformance · every control, four rules › · DatePicker › shows none of its previous owner under one identity
+
+    the first owner’s pick: report="1799971200000|0|-1|-1|0|0|-1|-1"
+
+      [0m [90m 380 |[39m       seen[33m.[39mreport [33m=[39m read()[33m;[39m
+       [90m 381 |[39m       [36mif[39m ([33m![39muntil(seen[33m.[39mreport)) {
+      [31m[1m>[22m[39m[90m 382 |[39m         [36mthrow[39m [36mnew[39m [33mError[39m([32m`${what}: report="${seen.report}"`[39m)[33m;[39m
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 383 |[39m       }
+       [90m 384 |[39m     }[33m,[39m
+       [90m 385 |[39m     { timeout[33m:[39m [35m8000[39m }[0m
+
+  ● conformance · every control, four rules › · Picker › is known to the engine while mounted, and unknown after
+
+    expected [ …(2) ] to deeply equal []
+
+      [0m [90m 737 |[39m     )[33m;[39m
+       [90m 738 |[39m   }
+      [31m[1m>[22m[39m[90m 739 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 740 |[39m }
+       [90m 741 |[39m
+       [90m 742 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       9 failed, 26 passed, 35 total
+Snapshots:   0 total
+Time:        76.453 s
+Ran all test suites matching Conformance.
+
+
+
+```

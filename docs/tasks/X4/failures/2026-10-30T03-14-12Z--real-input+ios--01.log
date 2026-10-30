@@ -1,0 +1,57 @@
+# Failure excerpt — real-input:ios
+
+- Ran: 2026-10-30T03:14:12.466Z on code tree `a7f0ef4bca65` at HEAD `1d5a625` (branch `task/X4-conformance`)
+- Command: `node scripts/real-input/ios.mjs`
+- Result: fail, exit 1, 73 ms
+- Load: start 3.27, end 3.27, median 3.27, max 3.27
+- Device: ios
+- Full log: `task/X4-conformance/real-input+ios-2026-10-30T03-14-12.280Z.log` (<store>/task/X4-conformance/real-input+ios-2026-10-30T03-14-12.280Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/real-input+ios-2026-10-30T03-14-12.280Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   X4-5pmth                 X4           both              pair-a
+  |   G7bmerge-do2kn           G7bmerge     both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.27 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 15 log line(s)
+
+```
+gate: real-input:ios
+gate: node scripts/real-input/ios.mjs (cwd .)
+gate: code tree a7f0ef4bca65 at HEAD 1d5a625
+gate: git tree 19a3a0d01a02
+gate: log task/X4-conformance/real-input+ios-2026-10-30T03-14-12.280Z.log
+gate:       <store>/task/X4-conformance/real-input+ios-2026-10-30T03-14-12.280Z.log
+
+real-input (ios): Error: real-input: neither IOS_UDID nor IOS_SIM_UDID is set. Lease a device (node scripts/lease.mjs acquire --task <id>) or point IOS_UDID at a simulator, e.g. IOS_UDID=$(xcrun simctl list devices available | grep -m1 iPhone | tr -dc 'A-F0-9-')
+gate: real-input:ios FAIL in 0.1 s
+gate: recorded in .gates/task/X4-conformance.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X4-conformance/real-input+ios-2026-10-30T03-14-12.280Z.log (4 probe(s))
+
+```

@@ -210,6 +210,14 @@ export default function MenuScreen() {
           a control cannot tell a dropped tap from a control that is off screen.
         </Text>
         <View style={styles.row}>
+          {/* Two suites read this one control. `CHECKS.menu` and
+              `testRealInputMenu` tap it and read the two echoes beside it; the
+              conformance suite's a11y case (`A11Y_CONTROLS` id `menu`) is what the
+              `accessibilityLabel` below is for — the label is the name the rule looks
+              for, the testID the box it compares the named node's box with, both
+              cross-checked against this file by `checkA11yTable`. Dropping the label
+              leaves every real-input check green and silently drops a control from the
+              a11y rule, which is the coupling worth knowing about on a shared anchor. */}
           <Menu
             title="Actions"
             group={REAL_INPUT_GROUP}

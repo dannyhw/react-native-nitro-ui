@@ -1,0 +1,197 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-10-29T13:42:37.695Z on code tree `938c369a9a24` at HEAD `b9cbe4b` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 174618 ms
+- Load: start 12.50, end 6.03, median 8.28, max 16.14
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `X4-fwfhi`
+- Full log: `task/X4-conformance/harness+ios-2026-10-29T13-42-37.459Z.log` (<store>/task/X4-conformance/harness+ios-2026-10-29T13-42-37.459Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Console`
+- `● conformance · every control, four rules › · Slider › has its own declared fallback, and still corrects a wrong guess`
+- `expected [ Array(1) ] to deeply equal []`
+- `● conformance · every control, four rules › · Button › has its own declared fallback, and still corrects a wrong guess`
+- `● conformance · every control, four rules › · Progress › has its own declared fallback, and still corrects a wrong guess`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+ios-2026-10-29T13-42-37.459Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-fwfhi (still live)
+  |   F7-fnto8                 F7           both              pair-a
+  |   X4-fwfhi                 X4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.03 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 197 — the rest is in the full log above)
+
+```
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-slider after the second owner: value=0.75 accessibilityLabel=Conformance slider, second owner
+
+
+    console.log
+          · box=420.0x31.0 labelBox=420.0x31.0
+
+
+    console.log
+          · poisoned measured=57.3x34.3 box=57.3x34.3 corrections=1 poison=97.0x11.0
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→2 across 50 mounts
+
+
+    console.log
+          · conformance-button after the second owner: accessibilityLabel=Conformance button, second owner
+
+
+    console.log
+          · box=57.3x34.3 labelBox=57.3x34.3
+
+
+    console.log
+          · poisoned measured=420.0x4.0 box=420.0x4.0 corrections=1 poison=97.0x11.0
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-progress after the second owner: value=0.8 accessibilityLabel=Conformance progress, second owner
+
+
+    console.log
+          · box=420.0x4.0 labelBox=420.0x4.0
+
+
+    console.log
+          · poisoned measured=165.0x31.0 box=165.0x31.0 corrections=1 poison=97.0x11.0
+
+
+    console.log
+          · warm measured=165.0x31.0 declared=165.0x31.0
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-segmented after the second owner: selectedIndex=2 accessibilityLabel=Conformance segmented, second owner
+
+
+    console.log
+          · box=165.0x31.0 labelBox=165.0x31.0
+
+
+    console.log
+          · poisoned measured=103.0x36.3 box=103.0x36.3 corrections=1 poison=97.0x11.0
+
+
+    console.log
+          · warm measured=103.0x36.3 declared=103.0x36.3
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-date-picker after the second owner: accessibilityLabel=Conformance date picker, second owner
+
+
+    console.log
+          · box=103.0x36.3 labelBox=103.0x36.3
+
+
+    console.log
+          · poisoned measured=72.0x34.7 box=72.0x34.7 corrections=1 poison=97.0x11.0
+
+
+    console.log
+          · warm measured=72.0x34.7 declared=72.0x35.0
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→2 across 50 mounts
+
+
+    console.log
+          · conformance-picker after the second owner: selectedIndex=2 accessibilityLabel=Conformance picker, second owner
+
+
+    console.log
+          · box=72.0x34.7 labelBox=72.0x34.7
+
+  ● conformance · every control, four rules › · Slider › has its own declared fallback, and still corrects a wrong guess
+
+    expected [ Array(1) ] to deeply equal []
+
+      [0m [90m 446 |[39m     )[33m;[39m
+       [90m 447 |[39m   }
+      [31m[1m>[22m[39m[90m 448 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 449 |[39m }
+       [90m 450 |[39m
+       [90m 451 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+  ● conformance · every control, four rules › · Button › has its own declared fallback, and still corrects a wrong guess
+
+    expected [ Array(1) ] to deeply equal []
+
+      [0m [90m 446 |[39m     )[33m;[39m
+       [90m 447 |[39m   }
+      [31m[1m>[22m[39m[90m 448 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 449 |[39m }
+       [90m 450 |[39m
+       [90m 451 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+  ● conformance · every control, four rules › · Progress › has its own declared fallback, and still corrects a wrong guess
+
+    expected [ Array(1) ] to deeply equal []
+
+      [0m [90m 446 |[39m     )[33m;[39m
+       [90m 447 |[39m   }
+      [31m[1m>[22m[39m[90m 448 |[39m   expect(failures)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 449 |[39m }
+       [90m 450 |[39m
+       [90m 451 |[39m [90m/* ------------------------------- the shared tables --------------------------- */[39m[0m
+
+
+Test Suites: 1 failed, 1 skipped, 12 passed, 13 of 14 total
+Tests:       3 failed, 1 skipped, 192 passed, 196 total
+Snapshots:   0 total
+Time:        173.312 s
+Ran all test suites.
+gate: harness:ios FAIL in 174.6 s - note: the code tree moved during the run (c9bebc3a6d4e now), so this line describes 938c369a9a24
+gate: recorded in .gates/task/X4-conformance.jsonl
+
+
+gate: appended the device context to task/X4-conformance/harness+ios-2026-10-29T13-42-37.459Z.log (4 probe(s))
+
+```
