@@ -43,7 +43,7 @@
 > green. **X4 merged (`a31ad90`)** after two fix rounds, and **D3 (`8c42ce8`)**, the README pass, both with all five
 > merge gates green. **0.4.0 staged on npm (2026-10-30):** Version Packages PR #8 merged (`c74ffd0`; a bot-opened PR
 > runs no CI by design, and the gate is `Release`'s `check` on `main`). Release run 41019762301 green, `Stage on npm`
-> succeeded. Waiting on the owner's approval on npmjs.com; `Release tag` then tags v0.4.0 (hourly, or dispatch it).
+> succeeded; the owner approved it, 0.4.0 is `latest` on npm, and `Release tag` was dispatched for v0.4.0.
 > Next: the quiet bench window (wave 4).
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
