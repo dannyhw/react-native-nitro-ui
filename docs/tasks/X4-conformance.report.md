@@ -285,7 +285,8 @@ Red proofs — mutation → line that went red:
    cannot go red — that mutation ran green — so the source names the graded site.
 3. Second owners moved off the reset value (Switch `true`, Slider `0.75`, DatePicker
    2025-03-01), and each reset line got its own probe: uncontrolled reads `didApplyDefault`,
-   controlled the counts. `didApplyDefault` alone → three `(uncontrolled)` reds;
+   controlled the counts. Picker's `didApplyDefault` line is **unprobed**, not unprobeable: its
+   second owner still defaults to the reset value (FOLLOWUPS has the recipe). `didApplyDefault` alone → three `(uncontrolled)` reds;
    `model.state = …` alone → four `(controlled)` reds.
 4. The hosted Picker's exemption matches `announces the control's name twice` only; a lost
    label is a new sentence, and a test shows it red.
@@ -312,7 +313,7 @@ ledger and leave a failure excerpt, then reverted. Unit proofs are mutations of 
 - Reset lines, `harness:ios:Conformance` 01:59 — `model.state = NitroUiControlledValue(…)`
   deleted from the same four → four `… (controlled second owner) …` reds, Picker's included.
   Neither mutation goes red for the other's probe, which is the separation round 1 lacked.
-- Menu's a11y case — `A11Y_EXEMPTIONS` given round 1's regex (`/no element other than
+- The hosted Picker's a11y case — `A11Y_EXEMPTIONS` given round 1's regex (`/no element other than
   the|announced as/`) → `✕ … a label that stops arriving`, `Expected length: 1 / Received
   length: 0`: the old row excused the lost label as readily as the stutter.
 - `checkRecycleNotes` returning `[]` unconditionally → all four of its disagreement tests red.
@@ -324,3 +325,8 @@ ledger and leave a failure excerpt, then reverted. Unit proofs are mutations of 
   gate the report also got right`.
 - Menu's coverage needed no mutation: merging `main` is what broke it, and the seven reds are
   the merge's own proof that the tables read the manifest.
+
+The unit proofs above and the merge's seven reds were run as local `bun test` mutations and are
+prose only: no failed `check` from round 2 records them. Two failed `harness:android` runs late in
+the round are not proofs either: `harness:android` 03:59 is the known Slider a11y-step flake (FOLLOWUPS), green
+on the re-run, and 02:58 is the device gate refusing an app whose stamp did not match the tree.
