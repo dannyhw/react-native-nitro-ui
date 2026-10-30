@@ -540,10 +540,11 @@ Reading it honestly — these read the `maintainer-mac-1` run above, cell by cel
 
 Against `expo-ui-host-per-control` — the same one-host-per-control shape,
 reached through `@expo/ui` — nitro-ui is below it on every cell that carries a
-verdict: iOS presented 0.05–0.45×, UI CPU 0.04–0.48×, memory 0.67–0.98×; Android
-presented 0.51–0.88×, UI CPU 0.45–0.84×, memory 0.49–0.82×. Both ranges are
-`maintainer-mac-2`'s quiet run's (8 components on iOS, 7 on Android — no Android
-`DatePicker`), each ratio launch-paired within that one run.
+verdict: iOS presented 0.16–0.45×, UI CPU 0.04–0.48×, memory 0.67–0.98×; Android
+presented 0.51–0.88×, UI CPU 0.50–0.84×, memory 0.49–0.82×. Both ranges are
+`maintainer-mac-2`'s quiet run's, over the cells that carry a verdict (the iOS
+presented range excludes `DatePicker`, whose 0.05× is `n/v`; 8 components on iOS, 7
+on Android — no Android `DatePicker`), each ratio launch-paired within that run.
 
 ### `<Host>` on Android
 
