@@ -304,6 +304,7 @@ describe('every component is covered by the conformance suite', () => {
     const keys = failingKeys();
     expect(keys).toEqual([
       'Menu|recycle-reset',
+      'SegmentedControl|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
@@ -319,6 +320,29 @@ describe('every component is covered by the conformance suite', () => {
       expect(matrix.find((row) => row.name === name).rules[rule].state).toBe(
         'failing'
       );
+    }
+    // …and the *other* half of the column, which is the cell the re-review called wrong.
+    // A control whose fixture says it holds nothing a reset could clear is `not-applicable`
+    // with those words, never `covered`: `covered` claims a check that does not exist, and
+    // it is the claim a reviewer reads as evidence. The two kinds of note cannot be
+    // confused, because `checkRecycleNotes` refuses a `blindSpot` with no row here — so
+    // swapping one for the other is a red test, in either direction.
+    const notes = recycleNotes(readRepo(HARNESS_FILE));
+    for (const [name, note] of Object.entries(notes)) {
+      const cell = matrix.find((row) => row.name === name).rules[
+        'recycle-reset'
+      ];
+      if (note.kind === 'probe') {
+        expect(`${name}: ${cell.state}`).toBe(`${name}: covered`);
+        continue;
+      }
+      expect(`${name}: ${cell.state}`).toBe(
+        note.kind === 'noProbe' ? `${name}: not-applicable` : `${name}: failing`
+      );
+      if (note.kind === 'noProbe') {
+        // The reason is the fixture's sentence, not a paraphrase written beside the matrix.
+        expect(cell.reason).toContain(note.reason.slice(0, 40));
+      }
     }
   });
 });

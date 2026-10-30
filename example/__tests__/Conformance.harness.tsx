@@ -124,6 +124,16 @@ const SHARED = {
         "height": 28
       }
     },
+    "NitroUiMenu": {
+      "android": {
+        "width": 118,
+        "height": 52
+      },
+      "ios": {
+        "width": 74,
+        "height": 38
+      }
+    },
     "NitroUiSlider": {
       "android": {
         "width": 328,
@@ -198,6 +208,7 @@ const SHARED = {
   "tolerance": 0.6,
   "boxRules": {
     "NitroUiSwitch": "both",
+    "NitroUiMenu": "none",
     "NitroUiSlider": "height",
     "NitroUiButton": "none",
     "NitroUiProgress": "height",
@@ -205,7 +216,20 @@ const SHARED = {
     "NitroUiDatePicker": "both",
     "NitroUiPicker": "both"
   },
-  "exemptions": []
+  "exemptions": [
+    {
+      "component": "Menu",
+      "rule": "recycle-reset",
+      "followups": "X4 recycle rule: Menu holds residue no read-out can show, so the rule cannot fail for it",
+      "detail": "a Menu’s open popup is native-owned state (D29), and the only read-out of it, `nuiTestMenuReport()`, answers `-1` for `expanded` on iOS — the one platform that actually recycles. Android can read it and never recycles, so nothing can survive there to be seen."
+    },
+    {
+      "component": "SegmentedControl",
+      "rule": "recycle-reset",
+      "followups": "X4 recycle rule: SegmentedControl holds residue no read-out can show, so the rule cannot fail for it",
+      "detail": "a pick moves the displayed index and the handshake counts, and neither platform reports the drawn index: the handle’s `selectedIndex` is `model.state.js`, and `nuiTestPixelReport()` answers a colour. The residue is real; the blindness is too."
+    }
+  ]
 };
 /** END CONFORMANCE SHARED TABLE */
 
@@ -1375,18 +1399,20 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
     ],
     probe: {
-      noProbe:
+      blindSpot:
         'it has residue and no way to see it. A pick really does move the ' +
         'displayed index and the handshake counts, but neither platform reports ' +
-        "the drawn index: the handle's `selectedIndex` is `model.state.js`, which " +
+        'the drawn index: the handle’s `selectedIndex` is `model.state.js`, which ' +
         'is what React sent, and `nuiTestPixelReport()` answers a colour, not a ' +
         'position. A press oracle cannot stand in either - iOS emits from the ' +
         'selection binding without asking whether the index changed ' +
         '(HybridNitroUiSegmentedControl.swift:150-156), so the same press reports ' +
         'an event whether or not the control was already there, and the answer ' +
-        "would differ per platform for reasons that are not the reset's. The fix " +
-        "is a read-out (a `nuiTestDisplayedIndex`, alongside Progress's and " +
-        "DatePicker's), not a weaker assertion.",
+        'would differ per platform for reasons that are not the reset’s. This is a ' +
+        'hole in the guard, not an exemption from it: the state is real, so the ' +
+        'coverage table says **failing** and points at the FOLLOWUPS line whose fix ' +
+        'is a read-out (a `nuiTestDisplayedIndex`, alongside Progress’s and ' +
+        'DatePicker’s).',
     },
   },
   {

@@ -582,8 +582,6 @@ export function iosA11yProblems(control, tree) {
             'the box React Native made, which is a name on a wrapper rather than on the ' +
             `control (wrapper: ${describeIosNode(anchor)})`
     );
-    // Nothing to grade on name, but a doubled name is still a doubled name, and the
-    // message above would otherwise be the whole story.
     return problems;
   }
   if (named.length > 1) {

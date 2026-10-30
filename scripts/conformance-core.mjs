@@ -210,22 +210,22 @@ export const RULE_IDS = CONFORMANCE_RULES.map((rule) => rule.id);
 /**
  * The in-app half of the debt list; the Android a11y half is `A11Y_EXEMPTIONS`.
  *
- * One row since the re-review, and *why* is the part to read. It is a `recycle-reset`
- * hole for a control whose fixture note is a `blindSpot`: the control **does** hold state a
- * recycle has to clear, and neither platform can be shown the difference. Those two facts
- * together are a failing cell, not an unapplicable one — the rule's subject exists and the
- * suite cannot reach it, which is the definition of a hole. A control with no such state
- * (`Button`, `Progress`) is `not-applicable` instead, and the difference between the two is
- * exactly what `probe: { blindSpot }` versus `probe: { noProbe }` records in
+ * Not empty since the re-review, and *why* is the part to read. Both rows are
+ * `recycle-reset` holes for a control whose `probe` is a `blindSpot`: the control **does**
+ * hold state a recycle has to clear, and neither platform can be shown the difference.
+ * Those two facts together are a failing cell, not an unapplicable one — the rule's subject
+ * exists and the suite cannot reach it, which is the definition of a hole. A control with no
+ * such state (`Button`, `Progress`) is `not-applicable` instead, and the difference between
+ * the two is exactly what `probe: { blindSpot }` versus `probe: { noProbe }` records in
  * `Conformance.harness.tsx`.
  *
  * **How a row retires.** {@link checkRecycleNotes} ties the two lists together on every
  * `check`: the fixture's note is `blindSpot` if and only if a row exists here. So the day a
- * read-out lands, whoever writes the probe changes the fixture's note, and leaving this row
- * behind goes red rather than quietly excusing a finding the new probe can produce. The
- * a11y half clears itself from a device run because its rows match *problem text*; this one
- * matches nothing, because the whole point is that no run can produce the sentence, so the
- * clearing lives where both files are readable — in `check`.
+ * `nuiTestDisplayedIndex` lands, whoever writes the probe changes the fixture's note, and
+ * leaving this row behind goes red rather than quietly excusing a finding the new probe can
+ * produce. The a11y half clears itself from a device run because its rows match *problem
+ * text*; these two match nothing, because the whole point is that no run can produce the
+ * sentence, so the clearing lives where both files are readable — in `check`.
  *
  * @type {ReadonlyArray<ConformanceExemption>}
  */
@@ -241,6 +241,17 @@ export const CONFORMANCE_EXEMPTIONS = Object.freeze([
       '`nuiTestMenuReport()`, answers `-1` for `expanded` on iOS — the one platform that ' +
       'actually recycles. Android can read it and never recycles, so nothing can survive ' +
       'there to be seen.',
+  },
+  {
+    component: 'SegmentedControl',
+    rule: 'recycle-reset',
+    followups:
+      'X4 recycle rule: SegmentedControl holds residue no read-out can show, so ' +
+      'the rule cannot fail for it',
+    detail:
+      'a pick moves the displayed index and the handshake counts, and neither platform ' +
+      'reports the drawn index: the handle’s `selectedIndex` is `model.state.js`, and ' +
+      '`nuiTestPixelReport()` answers a colour. The residue is real; the blindness is too.',
   },
 ]);
 
@@ -1245,15 +1256,21 @@ function recycleNoteOf(rowText) {
         : 'probe'
     : 'probe';
   if (kind === 'probe') return { kind };
+  // The value may start on the same line or, as prettier writes every one of these, the
+  // next — so the pattern allows whitespace rather than a space after the colon, and the
+  // unwrapping below is what turns `'a ' +` / newline / `'b'` back into one sentence.
   const literal = new RegExp(
-    `\\n {6}${kind}: ((?:.|\\n)*?)(?:\\n {6}\\w+:|\\n {4}\\},|\\n {4}\\}$)`
+    `\\n {6}${kind}:\\s((?:.|\\n)*?)(?:\\n {6}\\w+:|\\n {4}\\},|\\n {4}\\}$)`
   ).exec(rowText);
   const reason =
     literal == null
       ? '(no reason given)'
       : literal[1]
-          .replace(/\n\s*\+\s*/g, '')
+          .replace(/\r?\n\s*/g, ' ')
+          .replace(/'\s*\+\s*'/g, '')
           .replace(/['`]/g, '')
+          .replace(/\s+/g, ' ')
+          .replace(/[,;\s]+$/, '')
           .trim();
   return { kind, reason };
 }
