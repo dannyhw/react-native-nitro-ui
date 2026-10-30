@@ -1,0 +1,118 @@
+# Failure excerpt — harness:ios:Conformance
+
+- Ran: 2026-10-30T01:59:05.056Z on code tree `586f2d1f1e2d` at HEAD `158d875` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Conformance`
+- Result: fail, exit 1, 89898 ms
+- Load: start 3.93, end 3.51, median 3.93, max 5.17
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X4-5pmth`
+- Full log: `task/X4-conformance/harness+ios+Conformance-2026-10-30T01-59-05.056Z.log` (<store>/task/X4-conformance/harness+ios+Conformance-2026-10-30T01-59-05.056Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● conformance · every control, four rules › · Switch › shows none of its previous owner under one identity`
+- `● conformance · every control, four rules › · Slider › shows none of its previous owner under one identity`
+- `● conformance · every control, four rules › · DatePicker › shows none of its previous owner under one identity`
+- `● conformance · every control, four rules › · Picker › shows none of its previous owner under one identity`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+ios+Conformance-2026-10-30T01-59-05.056Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-5pmth (still live)
+  |   G7b-27pum                G7b          both              pair-b
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.51 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 72 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Conformance
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 586f2d1f1e2d, 9 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.93/3.96 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X4-conformance/harness+ios+Conformance-2026-10-30T01-59-05.056Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · Switch › shows none of its previous owner under one identity
+
+    1 conformance finding(s):
+
+        - Switch × recycle-reset: testID "conformance-switch" (controlled second owner) kept its identity across lifetimes and the first press on the controlled second mount reports reads conformance-switch:false where the props say conformance-switch:true — the view came back wearing its previous owner
+      [0m [90m 853 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 854 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 855 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 856 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 857 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 858 |[39m [32m        .join('\n')}`[39m[0m
+
+  ● conformance · every control, four rules › · Slider › shows none of its previous owner under one identity
+
+    1 conformance finding(s):
+
+        - Slider × recycle-reset: testID "conformance-slider" (controlled second owner) kept its identity across lifetimes and where the controlled second mount was standing reads 0.25 where the props say 0.0 — the view came back wearing its previous owner
+      [0m [90m 853 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 854 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 855 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 856 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 857 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 858 |[39m [32m        .join('\n')}`[39m[0m
+
+  ● conformance · every control, four rules › · DatePicker › shows none of its previous owner under one identity
+
+    1 conformance finding(s):
+
+        - DatePicker × recycle-reset: testID "conformance-date-picker" (controlled second owner) kept its identity across lifetimes and the day the controlled second mount shows reads 1799971200000 where the props say 1740787200000 — the view came back wearing its previous owner
+      [0m [90m 853 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 854 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 855 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 856 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 857 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 858 |[39m [32m        .join('\n')}`[39m[0m
+
+  ● conformance · every control, four rules › · Picker › shows none of its previous owner under one identity
+
+    1 conformance finding(s):
+
+        - Picker × recycle-reset: testID "conformance-picker" (controlled second owner) kept its identity across lifetimes and choosing the previous owner’s option again emits reads  where the props say conformance-picker:2 — the view came back wearing its previous owner
+      [0m [90m 853 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 854 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 855 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 856 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 857 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 858 |[39m [32m        .join('\n')}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       4 failed, 36 passed, 40 total
+Snapshots:   0 total
+Time:        88.716 s
+Ran all test suites matching Conformance.
+
+
+
+```

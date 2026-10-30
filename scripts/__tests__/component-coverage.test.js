@@ -22,6 +22,21 @@ import {
   manifestsFromEntries,
   renderedTabs,
 } from '../registry-core.mjs';
+import {
+  checkA11yTable,
+  checkCoverage,
+  checkInAppFixtures,
+  checkRecycleNotes,
+  coverageMatrix,
+  failingKeys,
+  followupsResolver,
+  recycleNotes,
+} from '../conformance-core.mjs';
+
+/** Where the conformance suite keeps its per-control fixtures, and its tables. */
+const HARNESS_FILE = 'example/__tests__/Conformance.harness.tsx';
+/** The document every `failing` cell has to be able to cite. */
+const FOLLOWUPS_FILE = 'docs/tasks/FOLLOWUPS.md';
 
 const repoRoot = resolve(process.cwd());
 
@@ -245,6 +260,91 @@ describe('every real-input control has a check on both platforms', () => {
       ).toBe(true);
     });
   }
+});
+
+describe('every component is covered by the conformance suite', () => {
+  // X4's four rules are manifest-driven, which is only worth something if a manifest
+  // nothing checks is impossible. This is the one place that asks the question for all
+  // three tables at once — the rule × control matrix, the host-side a11y sweep's case
+  // table, and the harness suite's fixture table — so a new control cannot land in the
+  // registry without landing in the suite. The mechanism each check uses is tested in
+  // `conformance.test.js`; this is the guard that runs it on the real tree.
+  it('every manifest is covered, or has a stated reason', () => {
+    const read = (p) => readRepo(p);
+    const sizing = JSON.parse(read('nitro-ui.sizing.json') ?? '{}');
+    const matrix = coverageMatrix(manifests, {
+      sizing,
+      failing: failingKeys(),
+      // The recycle column reads the *fixture table's* notes, so `n/a` is the suite's own
+      // sentence and not a second list here that could disagree with it (re-review: three
+      // `noProbe` controls whose cells said `covered`).
+      recycleNotes: recycleNotes(read(HARNESS_FILE)),
+    });
+    // A `failing` cell needs a line that exists in FOLLOWUPS.md, which is what
+    // `followupsResolver` proves by returning null when the text is not there.
+    expect(
+      checkCoverage(manifests, matrix, followupsResolver(read(FOLLOWUPS_FILE)))
+    ).toEqual([]);
+    expect(checkA11yTable(manifests, read)).toEqual([]);
+    expect(checkInAppFixtures(manifests, read(HARNESS_FILE))).toEqual([]);
+    expect(checkRecycleNotes(read(HARNESS_FILE))).toEqual([]);
+  });
+
+  it('the debt the matrix reports is the debt the runner reports', () => {
+    // Two views of the same debt: the matrix prints `failing`, and the device run prints
+    // `known failing` lines from the exemption lists. Deriving one from the other is what
+    // keeps a report's coverage table honest when a row is added or removed.
+    //
+    // Five cells, each a measurement rather than a guess: the Slider and SegmentedControl
+    // names are on nodes a screen reader cannot act on in a dump (Android), the Slider is
+    // announced as the wrong kind of control (iOS), a hosted Picker announces its name twice,
+    // and SegmentedControl and Menu hold recycle residue no read-out can show on the platform
+    // that recycles. The two platforms fail some of the same controls for different reasons,
+    // which is why `A11Y_EXEMPTIONS` rows carry a platform.
+    const keys = failingKeys();
+    expect(keys).toEqual([
+      'Menu|recycle-reset',
+      'SegmentedControl|recycle-reset',
+      'Slider|a11y-name-on-focusable-node',
+      'SegmentedControl|a11y-name-on-focusable-node',
+      'Picker|a11y-name-on-focusable-node',
+    ]);
+    // …and every one of those cells really is marked failing in the matrix.
+    const matrix = coverageMatrix(manifests, {
+      sizing: JSON.parse(readRepo('nitro-ui.sizing.json') ?? '{}'),
+      failing: keys,
+      recycleNotes: recycleNotes(readRepo(HARNESS_FILE)),
+    });
+    for (const key of keys) {
+      const [name, rule] = key.split('|');
+      expect(matrix.find((row) => row.name === name).rules[rule].state).toBe(
+        'failing'
+      );
+    }
+    // …and the *other* half of the column, which is the cell the re-review called wrong.
+    // A control whose fixture says it holds nothing a reset could clear is `not-applicable`
+    // with those words, never `covered`: `covered` claims a check that does not exist, and
+    // it is the claim a reviewer reads as evidence. The two kinds of note cannot be
+    // confused, because `checkRecycleNotes` refuses a `blindSpot` with no row here — so
+    // swapping one for the other is a red test, in either direction.
+    const notes = recycleNotes(readRepo(HARNESS_FILE));
+    for (const [name, note] of Object.entries(notes)) {
+      const cell = matrix.find((row) => row.name === name).rules[
+        'recycle-reset'
+      ];
+      if (note.kind === 'probe') {
+        expect(`${name}: ${cell.state}`).toBe(`${name}: covered`);
+        continue;
+      }
+      expect(`${name}: ${cell.state}`).toBe(
+        note.kind === 'noProbe' ? `${name}: not-applicable` : `${name}: failing`
+      );
+      if (note.kind === 'noProbe') {
+        // The reason is the fixture's sentence, not a paraphrase written beside the matrix.
+        expect(cell.reason).toContain(note.reason.slice(0, 40));
+      }
+    }
+  });
 });
 
 describe('every component has the hand-written files behind its generated rows', () => {

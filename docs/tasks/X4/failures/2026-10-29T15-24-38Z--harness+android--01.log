@@ -1,0 +1,81 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-29T15:24:38.691Z on code tree `a68b9f868f0b` at HEAD `a8aef55` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 259648 ms
+- Load: start 4.47, end 4.98, median 3.37, max 4.98
+- Device: android / device `emulator-5574` / lease `X4-p29cc`
+- Full log: `task/X4-conformance/harness+android-2026-10-29T15-24-38.691Z.log` (<store>/task/X4-conformance/harness+android-2026-10-29T15-24-38.691Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Host.harness.tsx`
+- `● Test suite failed to run`
+- `FAIL __tests__/HostControls.harness.tsx`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+android-2026-10-29T15-24-38.691Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-p29cc (still live)
+  |   X4-p29cc                 X4           both              pair-a
+  |   F7-p6svp                 F7           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.98 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 35 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a68b9f868f0b, 8 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.47/3.56 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X4-conformance/harness+android-2026-10-29T15-24-38.691Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+2026-10-29T15:25:31.266Z [harness][metro] Pre-warmed Metro bundle graph key does not match the app-requested bundle graph key; the pre-warm may have built a graph the app cannot reuse. Mismatched: platform (prewarm=android, app=ios)
+HARNESS replacing existing app connection with a newer client
+FAIL __tests__/Host.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge was replaced by a newer app connection. This can happen when the app reloads, restarts, or reconnects while a test file is still running.
+
+HARNESS replacing existing app connection with a newer client
+FAIL __tests__/HostControls.harness.tsx
+  ● Test suite failed to run
+
+    The native runtime disconnected while preparing to run this test file.
+
+    The runtime bridge disconnected, but the app session still appears to be running.
+
+
+Test Suites: 2 failed, 12 passed, 14 total
+Tests:       200 passed, 200 total
+Snapshots:   0 total
+Time:        258.627 s
+Ran all test suites.
+
+
+
+```

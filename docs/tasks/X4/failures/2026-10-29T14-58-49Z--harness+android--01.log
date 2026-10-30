@@ -1,0 +1,195 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-29T14:58:49.560Z on code tree `468b3b81060d` at HEAD `4543d88` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 443541 ms
+- Load: start 11.09, end 3.93, median 7.23, max 35.31
+- Device: android / device `emulator-5570` / lease `X4-fwfhi`
+- Full log: `task/X4-conformance/harness+android-2026-10-29T14-58-49.560Z.log` (<store>/task/X4-conformance/harness+android-2026-10-29T14-58-49.560Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Console`
+- `● conformance · every control, four rules › · Switch › has its own declared fallback, and still corrects a wrong guess`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+android-2026-10-29T14-58-49.560Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X4-fwfhi (still live)
+  |   X4-fwfhi                 X4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.93 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 170 — the rest is in the full log above)
+
+```
+
+
+    console.log
+          · conformance-switch after the second owner: value=true accessibilityLabel=Conformance switch, second owner
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+
+    console.log
+          · poisoned measured=411.4x48.0 box=411.4x48.0 corrections=1 poison=111.0x13.0
+
+
+    console.log
+          · warm measured=411.4x48.0 declared=328.0x48.0 boxRule=height
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-slider after the second owner: value=0.75 accessibilityLabel=Conformance slider, second owner
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+
+    console.log
+          · poisoned measured=77.0x48.0 box=77.0x48.0 corrections=1 poison=111.0x13.0
+
+
+    console.log
+          · warm measured=77.0x48.0 declared=91.0x48.0 boxRule=none
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→2 across 50 mounts
+
+
+    console.log
+          · conformance-button after the second owner: accessibilityLabel=Conformance button, second owner
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+
+    console.log
+          · poisoned measured=411.4x4.2 box=411.4x4.2 corrections=1 poison=111.0x13.0
+
+
+    console.log
+          · warm measured=411.4x4.2 declared=320.0x4.0 boxRule=height
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-progress after the second owner: value=0.8 accessibilityLabel=Conformance progress, second owner
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+
+    console.log
+          · poisoned measured=256.0x48.0 box=256.0x48.0 corrections=1 poison=111.0x13.0
+
+
+    console.log
+          · warm measured=256.0x48.0 declared=256.0x48.0 boxRule=both
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-segmented after the second owner: selectedIndex=2 accessibilityLabel=Conformance segmented, second owner
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+
+    console.log
+          · poisoned measured=131.0x48.0 box=131.0x48.0 corrections=1 poison=111.0x13.0
+
+
+    console.log
+          · warm measured=131.0x48.0 declared=131.0x48.0 boxRule=both
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-date-picker after the second owner: accessibilityLabel=Conformance date picker, second owner
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+
+    console.log
+          · poisoned measured=280.0x56.0 box=280.0x56.0 corrections=1 poison=111.0x13.0
+
+
+    console.log
+          · warm measured=280.0x56.0 declared=280.0x56.0 boxRule=both
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→2 across 50 mounts
+
+
+    console.log
+          · conformance-picker after the second owner: selectedIndex=2 accessibilityLabel=Conformance picker, second owner
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+  ● conformance · every control, four rules › · Switch › has its own declared fallback, and still corrects a wrong guess
+
+    Render timeout: Element did not mount within 1000ms
+
+      [0m [90m 21 |[39m         [36mconst[39m timeoutId [33m=[39m setTimeout(() [33m=>[39m {
+       [90m 22 |[39m             store[33m.[39mgetState()[33m.[39msetOnRenderCallback([36mnull[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 23 |[39m             reject([36mnew[39m [33mError[39m([32m`Render timeout: Element did not mount within ${timeout}ms`[39m))[33m;[39m
+       [90m    |[39m                             [31m[1m^[22m[39m
+       [90m 24 |[39m         }[33m,[39m timeout)[33m;[39m
+       [90m 25 |[39m         store[33m.[39mgetState()[33m.[39msetOnRenderCallback(() [33m=>[39m {
+       [90m 26 |[39m             clearTimeout(timeoutId)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 13 passed, 14 total
+Tests:       1 failed, 244 passed, 245 total
+Snapshots:   0 total
+Time:        441.546 s
+Ran all test suites.
+
+
+
+```
