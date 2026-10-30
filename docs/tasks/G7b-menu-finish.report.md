@@ -144,6 +144,75 @@ rows below need reading, not re-running:
 
 ## Bench
 
+**Superseded by A5.** The four runs below are what this task measured and they stay for the record.
+A5's exclusive window on `maintainer-mac-2` has since covered Menu inside the full plan on both
+platforms — `--plan full --launches 8` at `abe68a1`, all eight components in one run each,
+`problems: []`, ART `speed-profile` primed: iOS 1 792 launches with 15 of 2 387 load samples over
+the 5.0 ceiling (0.6 %), Android 2 128 launches with one of 2 825 over (0.04 %). The quiet cells,
+same table rules:
+
+### iOS — `ios27-sim-iphone17`, full plan, quiet — `abe68a1-ios-20261030T104437Z.*`
+
+| Cell | Metric | rn-core | expo per-control | expo shared-host | nitro-ui | ÷ shared | ÷ per-control |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mount N=50 | presented | 16.07 ms | 115.06 ms | 16.12 ms | 32.95 ms | 2.04× _(nv)_ | 0.29× _(nv)_ |
+| mount N=50 | mounted | 8.71 ms | 36.59 ms | 20.32 ms | 34.07 ms | 1.68× | 0.93× |
+| mount N=50 | JS commit | 5.41 ms | 6.41 ms | 4.87 ms | **2.52 ms** | **0.52×** | **0.39×** |
+| mount N=50 | JS CPU/op | 5.50 ms | 8.80 ms | 5.10 ms | **2.68 ms** | **0.53×** | **0.30×** |
+| mount N=50 | UI CPU/op | 3.27 ms | 73.40 ms | 27.53 ms | 35.08 ms | 1.28× | **0.47×** |
+| mount N=50 | UI CPU/unmount | 7.63 ms | 27.73 ms | 20.02 ms | **8.96 ms** | **0.45×** | **0.32×** |
+| update N=50 | presented | 16.14 ms | 15.65 ms | 16.12 ms | 32.79 ms | 2.03× | 2.10× |
+| update N=50 | mounted | 4.24 ms | 8.38 ms | 5.38 ms | 18.69 ms | 3.45× | 2.23× |
+| update N=50 | JS commit | 2.46 ms | 3.15 ms | 1.94 ms | **1.44 ms** | **0.74×** | **0.46×** |
+| update N=50 | JS CPU/op | 2.59 ms | 8.65 ms | 2.47 ms | **2.41 ms** | **0.96×** | **0.28×** |
+| update N=50 | UI CPU/op | 4.34 ms | 21.82 ms | 10.99 ms | 23.92 ms | 2.19× | 1.12× |
+| memory N=200 | bytes/inst | 61.5 KiB | 360.2 KiB | 263.6 KiB | 352.8 KiB | 1.34× | 0.98× |
+
+### Android — `android35-emu-pixel9`, full plan, quiet — `abe68a1-android-20261030T155310Z.*`
+
+| Cell | Metric | rn-core | expo per-control | expo shared-host | nitro-ui | nitro-ui-host | ÷ shared | ÷ per-control |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mount N=1 | presented | 31.82 ms | 32.08 ms | 31.57 ms | 31.45 ms | 31.47 ms | 0.99× | 0.98× |
+| mount N=1 | JS commit | 0.45 ms | 1.93 ms | 1.92 ms | **0.71 ms** | 0.95 ms | 0.38× | 0.43× |
+| mount N=50 | presented | 32.58 ms | 97.93 ms | 49.61 ms | **49.32 ms** | **35.83 ms** | **0.98×** | **0.51×** |
+| mount N=50 | mounted | 25.79 ms | 58.09 ms | 40.73 ms | 39.30 ms | **27.61 ms** | **0.98×** | **0.68×** |
+| mount N=50 | UI CPU/op | 11.51 ms | 60.10 ms | 23.81 ms | 30.00 ms | **13.48 ms** | 1.26× | **0.50×** |
+| mount N=50 | JS CPU/op | 5.45 ms | 25.85 ms | 16.17 ms | **3.29 ms** | 3.60 ms | **0.20×** | **0.13×** |
+| mount N=200 | presented | 55.71 ms | 481.48 ms | 131.37 ms | 157.88 ms | **61.04 ms** | 1.20× _(nv)_ | **0.33×** |
+| mount N=200 | mounted | 41.07 ms | 208.41 ms | 114.87 ms | **89.07 ms** | **43.51 ms** | **0.78×** | **0.43×** |
+| mount N=200 | UI CPU/op | 28.07 ms | 407.92 ms | 76.80 ms | 135.32 ms | **31.33 ms** | 1.76× | **0.33×** |
+| mount N=200 | JS commit | 15.79 ms | 96.63 ms | 55.17 ms | **9.35 ms** | 9.49 ms | **0.17×** | **0.10×** |
+| update N=50 | presented | 31.15 ms | 46.38 ms | 64.19 ms | **22.93 ms** | 47.32 ms | **0.36×** | **0.50×** |
+| update N=50 | UI CPU/op | 5.68 ms | 19.07 ms | 5.45 ms | 15.05 ms | **7.05 ms** | 2.77× | **0.79×** |
+| memory N=200 | bytes/inst | 76.3 KiB | 437.5 KiB | 250.4 KiB | 213.1 KiB | **77.6 KiB** | **0.85×** | **0.49×** |
+
+The two findings this task made both reproduce on a quiet machine at 8 launches. **N=1 is free**:
+31.45 ms presented against `rn-core`'s 31.82 ms, every arm inside 2 %, and the shared-host
+comparator 0.99× of it. **N=200 splits the shapes**: hosted presents in 61.0 ms — `rn-core` is
+55.7 ms, the shared host 131.4 ms, the per-control arm 481.5 ms — while the standalone arm takes
+157.9 ms. That is the same 2.6× host-over-standalone gap this report quoted from the non-quiet run
+(64.8 ms against 168.9 ms), which is the strongest thing the quiet run confirms. iOS is the usual
+per-control story and unchanged in kind: 352.8 KiB against the shared host's 263.6 (1.34×), 0.98×
+the per-control arm. The `update.presented` 2.03× on iOS and the memory miss are now cells with a
+machine and a load stamp rather than a quick-plan number.
+
+What changed status: this task's tables came from a `quick` plan where Menu had no committed cell
+on any machine, so it could print no verdict. `Menu` is still unminted — `--update-baseline`
+replaces a whole baseline file and a `--component menu` run would drop the other 196 cells, so
+X14 owns the mint — but the ratios above are now quiet-run readings, and `--check` on them reports
+every `menu` row as `not measured in base` (28 on iOS, 35 on Android) rather than as a failure.
+
+The `leak` cells moved, and the move is worth the follow-up line it gets. G7b read
+`leakMonotonic: false` on every arm of `leak.menu` and concluded "printed, not judged". A5's quiet
+run agrees for the unhosted arms on both platforms (iOS 363 KiB/c and Android 417 KiB/c, both
+non-monotonic), but on Android **four `nitro-ui-host` cells are monotonic**: `leak.menu` 695,
+`leak.slider` 578, `leak.date-picker` 602 and `leak.button` 512 KiB/cycle, each over 8 launches
+with `heapCollected: true`. Under the runner's own rule (§6 of setup-decisions: fail on a
+monotonic increase) those four are the first slopes in this machine's bench history that qualify
+as growth rather than drift, and they are all on the Host arm. They gate nothing — a committed
+baseline stores no leak slope, so `--check` cannot see them — and A5 has no room to chase them;
+see its report's follow-ups.
+
 Four runs are reported: the two quick plans (both `problems: none` on the canonical devices, and
 both stamping the machine `quiet: true`, so comparable in kind with A3's baseline runs on this
 machine rather than with the busy runs G6 had to report), the Android full plan, which is not
@@ -345,6 +414,11 @@ and `--check` was not run against it.
   `undefined` tab lookup; it should read the generated `controls.mjs` row instead.
 - Bench gates: `gate.mjs bench --help` resolves to a real bench launch that exits 2 and lands a
   FAIL row in the ledger; `bench` should refuse `--help` the way `check` refuses arguments.
+- Bench leak cells: A5's quiet full plan is the first run here with **monotonic** leak slopes —
+  Android `nitro-ui-host` on `menu` (695 KiB/cycle), `date-picker` (602), `slider` (578), `button`
+  (512), 8 launches each, `heapCollected: true`, every unhosted arm still non-monotonic. Setup
+  decisions §6 says fail on a monotonic increase, and no gate can see it because a committed
+  baseline stores no leak slope. Wants an owner with a heap dump.
 - X4's Menu coverage is a duplicate `real-input-menu` block: `task/X4-conformance` added
   `testID="real-input-menu"` to `MenuScreen.tsx` independently of this task's block, so merging
   the two will need the a11y case repointed at one screen (or its fixture regenerated).
