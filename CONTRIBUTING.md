@@ -3,15 +3,16 @@
 Everything in this file is a contract: these are the exact commands the
 project's gates run. If you change one, change it here too.
 
-**The gates are local for now.** The GitHub workflows in `.github/workflows/`
-(CI, Bench, Smoke) are disabled on purpose, so nothing runs on a push or a pull
-request. `bun run check` plus the device suites below, run on your machine, are
-what a change is judged by. The release path is the exception: `Release`,
-`Release tag` and `Changeset status` are meant to be switched on (see
-"Releasing"). No version reaches npm without a person approving it, whichever of
-the three are on — and a workflow file that is new to `main` is enabled as soon as
-it lands, so `Changeset status` starts commenting on pull requests with the merge
-that brings it.
+**Four of the six workflows are on; the two that need a device are not.** `CI`
+runs `bun run check`, the host native tests and an Android debug build on every
+push to `main` and every pull request; `Changeset status` comments on a pull
+request that changes shipped code without a changeset; `Release` and `Release tag`
+run the release path (see "Releasing"). `Bench` and `Smoke` are
+`workflow_dispatch` only — a hosted runner has none of this project's devices, and
+a bench number from a shared machine measures nothing (D21). So the harness,
+real-input, smoke and bench suites a change cites are ones someone ran locally,
+and `bun run check` on your machine is still the first gate a change is judged by.
+A workflow file that is new to `main` is enabled as soon as it lands.
 
 ## Prerequisites
 
@@ -873,11 +874,13 @@ NITRO_UI_SMOKE_READY switch=61x28 slider=354x31 button=61x34.333343505859375 pro
 ```
 
 `scripts/smoke/lib.mjs` owns the contract (one `name=WxH` box per control -
-the seven controls plus `host`, the `<Host>` container, each greater than `0x0`;
+the eight controls the app mounts today plus `host`, the `<Host>` container, each
+greater than `0x0`;
 a number may be fractional, because `onLayout` reports computed layout metrics -
 `52.19047546386719x48` on a density-scaled Android display,
 `61x34.333343505859375` for a Button sized by its font on iOS, and the line
-above is iOS-shaped output from a run) and
+above is iOS-shaped output from a run - printed before `menu` joined the app, so
+it carries seven controls) and
 `scripts/smoke/ready-line.mjs` is the command both platform
 paths call, so iOS and Android cannot drift apart and a control that mounts at
 `0x0` - a sizing regression, a hosting change, a `measureContent()` that answers
@@ -954,8 +957,8 @@ single source of truth for what a consumer must be able to render. Its rules:
   surfacing ten minutes into a smoke run.
 
 `.github/workflows/smoke.yml` is written to run the same scripts nightly and on
-demand, but it is disabled with the other workflows, so these scripts are only
-run by hand today.
+demand; its schedule and label triggers are off, so it is `workflow_dispatch` only
+and these scripts are run by hand today.
 
 ## Running the benchmarks
 
@@ -999,11 +1002,12 @@ excludes 1.05 on a cell that was quiet inside its own run; the `rn-core` control
 and the `expo-ui-*` reference arms can never fail your pull request. `--check`
 compares against the committed baselines, which live per machine —
 `bench/baselines/<NITRO_UI_MACHINE_LABEL>/<deviceKey>.json` — so a machine gates only
-against baselines it measured itself. `maintainer-mac-1` has both canonical devices
-(an iPhone 17 simulator on iOS 27 and an API 35 Pixel 9 emulator); a machine without
-its own directory, or any other device, uses `--compare <ref>` instead.
-`.github/workflows/bench.yml` would post these tables on a pull request, but it is
-disabled. The gate that always blocks is the Reassure render count, below, because it is
+against baselines it measured itself. Both labelled machines have both canonical
+devices (an iPhone 17 simulator on iOS 27 and an API 35 Pixel 9 emulator); a
+machine without its own directory, or any other device, uses `--compare <ref>`
+instead. `.github/workflows/bench.yml` would post these tables on a pull request;
+its label and comment triggers are off, so it is `workflow_dispatch` only. The
+gate that always blocks is the Reassure render count, below, because it is
 deterministic.
 
 ## Perf contract

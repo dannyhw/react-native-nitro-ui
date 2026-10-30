@@ -379,7 +379,7 @@ by `run.mjs --check`, `run.mjs --compare`, and `report.mjs --check/--compare`:
 4. **Only the `nitro-ui` arm gates.** `rn-core` is the control and the `expo-ui-*`
    arms are reference arms: an `@expo/ui` bump is review information, not a
    failed nitro-ui pull request. The `nitro-ui-host` arm (controls inside
-   `<Host>`, scheduled on Android only, and only on the seven controls a Host can draw —
+   `<Host>`, scheduled on Android only, and only on the eight controls a Host can draw —
    `ARM_SCOPES` in `scripts/bench/lib.mjs`) is reported and not gated either. The two Android
    `expo-ui-*` arms have no DatePicker cells (`ARMS_WITHOUT_COMPONENT`).
 5. A leak fails the same way when the climb is **monotonic** and the slope ratio
