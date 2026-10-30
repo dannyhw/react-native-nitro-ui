@@ -655,6 +655,17 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   /// our hosting controller, so there is no window of ours to notice. Nothing here can
   /// see an open, so nothing here can report one; storing the callback is all this
   /// does. Android's popup is our own window and does call it.
+  ///
+  /// **One alternative was tried and measured (G7b, item 6): `.onAppear`/`.onDisappear`
+  /// on the menu's content.** `MenuContent.rows()` grew a
+  /// `.background(Color.clear.onAppear{}.onDisappear{})` sentinel, and the real-input
+  /// case drove it - open, tap a disabled row, dismiss, reopen, pick. The echo came back
+  /// `open > select bravo`: **one** `open` for two presentations and **no** `close` at
+  /// all, not even when the pick took the menu down. The content's identity survives the
+  /// presentation, so appear is a once-only signal and disappear is not a signal - a
+  /// pair that would report an open that never happened to an app already showing a
+  /// closed menu. Do not try this again on iOS 27; an expansion binding, if SwiftUI ever
+  /// ships one for `Menu`, is the only thing that could replace the Android-only ruling.
   var onOpen: (() -> Void)? {
     get { model.onOpen }
     set { model.onOpen = newValue }

@@ -411,6 +411,7 @@ export const ARM_SCOPES = {
       'segmented-control',
       'picker',
       'date-picker',
+      'menu',
       // @end-generated
     ],
     platform: 'android',
@@ -476,6 +477,9 @@ export const PLANS = {
     { scenario: 'mount.picker', n: 50 },
     { scenario: 'update.picker', n: 50 },
     { scenario: 'memory.picker', n: 200 },
+    { scenario: 'mount.menu', n: 50 },
+    { scenario: 'update.menu', n: 50 },
+    { scenario: 'memory.menu', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -527,6 +531,13 @@ export const PLANS = {
     { scenario: 'update.picker', n: 50 },
     { scenario: 'memory.picker', n: 200 },
     { scenario: 'leak.picker', n: 200 },
+    { scenario: 'mount.menu', n: 1 },
+    { scenario: 'mount.menu', n: 50 },
+    { scenario: 'mount.menu', n: 200 },
+    { scenario: 'update.menu', n: 1 },
+    { scenario: 'update.menu', n: 50 },
+    { scenario: 'memory.menu', n: 200 },
+    { scenario: 'leak.menu', n: 200 },
   ],
 };
 

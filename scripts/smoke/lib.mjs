@@ -52,6 +52,7 @@ export const SMOKE_CONTROLS = Object.freeze([
   'segmented-control',
   'date-picker',
   'picker',
+  'menu',
   // @end-generated
   // `host` is the shared `<Host>` container, which is not a control and has no
   // manifest: its own box is the one worth asserting, and a hosted child's is not.

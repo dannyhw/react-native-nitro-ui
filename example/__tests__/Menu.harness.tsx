@@ -1584,6 +1584,29 @@ describe('Menu · inside a Host', () => {
     expect(Math.abs(mLeft - aLeft)).toBeLessThan(40);
     expect(first.rows).toBe(PICKABLE);
     const gap = mTop - aBottom;
+    // The upper bound, which the line above does not give: `mTop + 24 >= aBottom` only
+    // refuses a popup that comes up *above* the button, so a list opened 200 px below
+    // it would pass. The number is the same 48 the reopened half below uses, so both
+    // halves ask one question.
+    //
+    // How this was shown able to fail (G7b fix round 1, M2). Baseline on this emulator:
+    // the popup's window top sat 16 px below the anchor's bottom. Replacing this
+    // `ExposedDropdownMenu` with a plain `DropdownMenu(offset = DpOffset(0.dp, 64.dp))`
+    // - a 64 dp offset handed to Material's own position provider, so the *window*
+    // moves rather than its content - made the same reading 168 px, and this line
+    // went red with `expected 168 to be less than 48` (`harness:android:Menu`, 30 Oct
+    // 01:48:49Z). So the bound does catch a popup that moves: the witness reads the
+    // window, and the window can move.
+    //
+    // What it did *not* catch, in round 1: dropping `menuAnchor` from the trigger three
+    // ways (the anchor inside the box, a `clickable` + `DropdownMenu`, that pair inside
+    // a `fillMaxSize` Box) and a 300 dp `Modifier.offset` on the list's *content*. All
+    // four passed this gate whole, which on this Material version (1.4.0) is the
+    // measurement: none of them moved the popup's window off the anchor. So this bound
+    // guards behaviour `menuAnchor` provides, and the code comment in
+    // `HybridNitroUiMenu.kt` explaining why the anchor stays is a reading of Material's
+    // contract rather than something these four mutants reproduced.
+    expect(gap).toBeLessThan(48);
 
     // Move the `<Host>`. Compose is never told: a popup positions itself against the
     // anchor's box inside its own composition, so a window left standing would point
