@@ -60,11 +60,18 @@ required gates green on `43816d4c80ef`). Three rows above need reading, not re-r
   the tree is involved — the same command run as `node scripts/bench/run.mjs --help` prints the
   usage and is the intended way to read it. Benches are never required by `need` (they belong to
   the bench host), so this row asks for nothing.
-- **`harness:android:Menu`** and **`real-input:ios:--control:menu`** are filtered runs
-  (`gate.mjs` records a filtered run under its own name and it satisfies nothing else). Each was
-  green on the tree it ran against, and both are superseded by the full gates above on this tree.
-  The third stale row is the same iOS filtered run launched with `--background` in the wrong
-  position, which the runner rejects as an unknown argument.
+- **`harness:android:Menu`** and **`real-input:ios:--control:menu`** are filtered runs, which
+  `gate.mjs` records under their own name as evidence for nothing but themselves. Their ledger
+  history is the mutation battery, and `gate.mjs logs` still has every log: the iOS row printed
+  above (tree `b13dde9a2150`) is the **`.accessibilityLabel` mutation** — the brief's red proof —
+  while the two earlier failures on that name are the step-ordering bug (`("select alpha > select
+  bravo") is not equal to ("select bravo")`) and the iOS spike (`("open > select bravo")`). Before
+  those, two runs died on their own bookkeeping: the tree moved while `xcodebuild` read it, and one
+  launch put `--background` after `--`, which the runner rejects as an unknown argument.
+  `harness:android:Menu` shows five `fail` lines: one `hosted-removal` timeout (the mutant with no
+  `menuAnchor`, which also stops the anchor reporting its own dismissal), the inverted `gap` bound,
+  and three stale-app refusals where the APK predated the edit — the guard working, not a test
+  failing. Everything there is superseded by the full gates above on this tree.
 - The iOS a11y red proof and the menuAnchor red proof (below) are deliberately left as red
   **runs**, then reverted: their ledger lines are the stale ones.
 
@@ -87,10 +94,11 @@ required gates green on `43816d4c80ef`). Three rows above need reading, not re-r
   that went red **elsewhere** instead: `Menu report for "hosted-removal" never matched within
   12000ms … {"expanded":false,…,"rows":0}` — no `menuAnchor` also means nothing reports the
   anchor's own dismissal, which is the second thing the modifier is for.
-- `scripts/__tests__/registry.test.js` → flip `menu` back to `"bench": false` in its manifest →
-  `✕ the tree in front of us is in step with its manifests` (and the host-arm row:
-  `the host-arm regions list the hostable *and* benched controls`), i.e. the manifest flip is
-  what the generated files claim.
+- `scripts/__tests__/registry.test.js` (the host-arm region test) → flip `menu` back to
+  `"bench": false` in its manifest → `✕ the tree in front of us is in step with its manifests` and
+  `✕ the host-arm regions list the hostable *and* benched controls`, the latter being the new
+  half: it asserts `menu` is in both lists **and** that a `bench: false` flip removes it, which is
+  the direction G7a left untested (its commit message is the other half of that claim).
 - `scripts/__tests__/component-coverage.test.js` → rename the `menu` branch in
   `bench/src/implementations/expoUi.android.tsx` → `✕ bench/src/implementations/
   expoUi.android.tsx handles every component in each of its render paths`.
@@ -105,30 +113,33 @@ required gates green on `43816d4c80ef`). Three rows above need reading, not re-r
 
 `NITRO_UI_MACHINE_LABEL=maintainer-mac-2 bun bench --platform <p> --plan quick --component menu`.
 Quick = 4 launches × (5 warmup + 20 measured) per cell. Both runs are `problems: none` on the
-canonical devices with the runner's own `quiet: true`, which is the first time in this series that
-a bench has run under the ceiling (load sampled against 5.0 for 10 cores: iOS median 3.30 / p90
-4.20, 0 of 58 samples over; Android median 4.17 / p90 4.67, 2 of 70 over). Numbers are load-stamped
-in the artifacts (`2dd8dd7-ios-20261030T005218Z.*`, `2dd8dd7-android-20261030T005723Z.*`); **no
-baseline was minted and `--check` was not run**, per the brief. `nitro-ui-host` has no iOS cell at
-all (`ARM_SCOPES`: iOS `<Host>` is a passthrough), which is why iOS has 12 cells and Android 15.
+canonical devices and both stamp the machine `quiet: true` (load sampled against a 5.0 ceiling for
+10 cores: iOS median 3.30 / p90 4.20, 0 of 58 samples over; Android median 4.17 / p90 4.67, 2 of 70
+over), so they are comparable in kind with A3's baseline runs on this machine rather than with the
+busy runs G6 had to report. Numbers are load-stamped in the artifacts
+(`2dd8dd7-ios-20261030T005218Z.*`, `2dd8dd7-android-20261030T005723Z.*`); **no baseline was minted
+and `--check` was not run**, per the brief. `nitro-ui-host` has no iOS cell at all (`ARM_SCOPES`:
+iOS `<Host>` is a passthrough), which is why iOS has 12 cells and Android 15.
 
 Medians of launch medians, ratios derived from them, and `(nv)` where either arm of that ratio has
 a within-run spread over 10 % (the spread is across the four launch medians of that metric, so a
-noisy arm marks every ratio that uses it):
+noisy arm marks every ratio that uses it). No verdict is claimed and nothing is bolded: no
+baseline exists for this component, so `(nv)` is the only mark a row can carry, and D15's PASS/MISS
+table is the orchestrator's to mint.
 
 ### iOS — `nitro-ui B` (`ios27-sim-iphoneair`), quick
 
 | Cell | Metric | rn-core | expo per-control | expo shared-host | nitro-ui | ÷ shared | ÷ per-control |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| mount | presented | 16.05 ms | 116.41 ms | 16.13 ms | **49.48 ms** | 3.07× | **0.43×** |
+| mount | presented | 16.05 ms | 116.41 ms | 16.13 ms | 49.48 ms | 3.07× | 0.43× |
 | mount | mounted | 8.98 ms | 34.63 ms | 17.12 ms | 31.89 ms | 1.86× _(nv)_ | 0.92× _(nv)_ |
-| mount | JS commit | 5.57 ms | 5.69 ms | 3.86 ms | **1.89 ms** | 0.49× _(nv)_ | 0.33× _(nv)_ |
-| mount | JS CPU/op | 5.88 ms | 9.29 ms | 4.37 ms | **2.24 ms** | 0.51× _(nv)_ | 0.24× _(nv)_ |
+| mount | JS commit | 5.57 ms | 5.69 ms | 3.86 ms | 1.89 ms | 0.49× _(nv)_ | 0.33× _(nv)_ |
+| mount | JS CPU/op | 5.88 ms | 9.29 ms | 4.37 ms | 2.24 ms | 0.51× _(nv)_ | 0.24× _(nv)_ |
 | mount | UI CPU/op | 2.80 ms | 79.00 ms | 26.76 ms | 32.07 ms | 1.20× _(nv)_ | 0.41× _(nv)_ |
 | update | presented | 16.11 ms | 15.51 ms | 16.11 ms | 32.78 ms | 2.03× _(nv)_ | 2.11× _(nv)_ |
 | update | mounted | 4.25 ms | 8.08 ms | 5.65 ms | 19.27 ms | 3.41× _(nv)_ | 2.38× _(nv)_ |
-| update | JS commit | 2.41 ms | 3.28 ms | 2.07 ms | **1.49 ms** | 0.72× _(nv)_ | **0.45×** |
-| update | JS CPU/op | 2.61 ms | 8.51 ms | 2.64 ms | **2.31 ms** | 0.88× _(nv)_ | 0.27× _(nv)_ |
+| update | JS commit | 2.41 ms | 3.28 ms | 2.07 ms | 1.49 ms | 0.72× _(nv)_ | 0.45× |
+| update | JS CPU/op | 2.61 ms | 8.51 ms | 2.64 ms | 2.31 ms | 0.88× _(nv)_ | 0.27× _(nv)_ |
 | update | UI CPU/op | 4.41 ms | 22.03 ms | 11.51 ms | 23.37 ms | 2.03× _(nv)_ | 1.06× _(nv)_ |
 | memory | bytes/inst | 61.9 KiB | 358.5 KiB | 262.0 KiB | 346.3 KiB | 1.32× | 0.97× |
 
@@ -137,27 +148,28 @@ Only two iOS rows are quiet in every arm, and they are the two worth quoting: `m
 16 ms shared-host, and `memory.bytes/inst` (≤ 4 %) at 346 KiB against 358 / 262 / 62 KiB.
 Everything else exceeds 10 % in at least one arm — `mount.jsCommit` and `mount.mounted` worst, at
 19–112 % across launch medians — so those ratios are reported, not judged. The direction the noisy
-rows still agree on is that nitro-ui's Menu is cheap on the JS thread (0.33–0.51× of either
-`@expo/ui` arm on JS commit and JS CPU) and dearer on wall-clock mount than `@expo/ui`'s shared
-host, which is one SwiftUI tree for all 50 controls while this control's trigger is a Button-shaped
-one. No cross-machine comparison is made here: G6's Picker numbers came from `maintainer-mac-1` on
-a different simulator, and the runner's own D15 rule is what reserves those rows.
+rows still agree on is that nitro-ui's Menu is cheap on the JS thread (0.24–0.51× of either
+`@expo/ui` arm on JS commit and JS CPU per op) and dearer on wall-clock mount than `@expo/ui`'s
+shared host, which is one SwiftUI tree for all 50 controls while this control's trigger is a
+Button-shaped one. No cross-machine comparison is made here: G6's Picker numbers came from
+`maintainer-mac-1` on a different simulator, and the runner's own D15 rule is what reserves those
+rows.
 
 ### Android — `nitroui_b` (`android35-emu-pixel9`), quick
 
 | Cell | Metric | rn-core | expo per-control | expo shared-host | nitro-ui | nitro-ui-host | ÷ shared | ÷ per-control |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| mount | presented | 32.77 ms | 98.93 ms | 50.40 ms | 49.44 ms | 32.83 ms | 0.98× _(nv)_ | **0.50×** |
-| mount | mounted | 24.65 ms | 60.10 ms | 43.29 ms | 39.67 ms | 26.36 ms | 0.92× _(nv)_ | **0.66×** |
-| mount | JS commit | 3.58 ms | 25.16 ms | 13.11 ms | **2.36 ms** | **2.45 ms** | 0.18× _(nv)_ | 0.09× _(nv)_ |
-| mount | JS CPU/op | 4.23 ms | 26.35 ms | 15.49 ms | **2.97 ms** | **3.01 ms** | 0.19× _(nv)_ | 0.11× _(nv)_ |
-| mount | UI CPU/op | 9.73 ms | 65.35 ms | 24.49 ms | 30.31 ms | 12.20 ms | 1.24× | **0.46×** |
-| update | presented | 30.93 ms | 53.90 ms | 64.41 ms | **22.31 ms** | 47.16 ms | 0.35× _(nv)_ | 0.41× _(nv)_ |
-| update | mounted | 18.04 ms | 21.55 ms | 15.82 ms | **9.36 ms** | 15.33 ms | **0.59×** | 0.43× _(nv)_ |
-| update | JS commit | 2.69 ms | 10.37 ms | 6.93 ms | **1.82 ms** | **1.82 ms** | 0.26× _(nv)_ | 0.18× _(nv)_ |
-| update | JS CPU/op | 2.82 ms | 10.72 ms | 7.34 ms | 2.90 ms | **2.20 ms** | 0.40× _(nv)_ | 0.27× _(nv)_ |
+| mount | presented | 32.77 ms | 98.93 ms | 50.40 ms | 49.44 ms | 32.83 ms | 0.98× _(nv)_ | 0.50× |
+| mount | mounted | 24.65 ms | 60.10 ms | 43.29 ms | 39.67 ms | 26.36 ms | 0.92× _(nv)_ | 0.66× |
+| mount | JS commit | 3.58 ms | 25.16 ms | 13.11 ms | 2.36 ms | 2.45 ms | 0.18× _(nv)_ | 0.09× _(nv)_ |
+| mount | JS CPU/op | 4.23 ms | 26.35 ms | 15.49 ms | 2.97 ms | 3.01 ms | 0.19× _(nv)_ | 0.11× _(nv)_ |
+| mount | UI CPU/op | 9.73 ms | 65.35 ms | 24.49 ms | 30.31 ms | 12.20 ms | 1.24× | 0.46× |
+| update | presented | 30.93 ms | 53.90 ms | 64.41 ms | 22.31 ms | 47.16 ms | 0.35× _(nv)_ | 0.41× _(nv)_ |
+| update | mounted | 18.04 ms | 21.55 ms | 15.82 ms | 9.36 ms | 15.33 ms | 0.59× | 0.43× _(nv)_ |
+| update | JS commit | 2.69 ms | 10.37 ms | 6.93 ms | 1.82 ms | 1.82 ms | 0.26× _(nv)_ | 0.18× _(nv)_ |
+| update | JS CPU/op | 2.82 ms | 10.72 ms | 7.34 ms | 2.90 ms | 2.20 ms | 0.40× _(nv)_ | 0.27× _(nv)_ |
 | update | UI CPU/op | 5.56 ms | 21.66 ms | 5.54 ms | 17.66 ms | 7.40 ms | 3.18× _(nv)_ | 0.82× _(nv)_ |
-| memory | bytes/inst | 76.3 KiB | 440.6 KiB | 248.6 KiB | 217.9 KiB | **77.5 KiB** | **0.88×** | **0.49×** |
+| memory | bytes/inst | 76.3 KiB | 440.6 KiB | 248.6 KiB | 217.9 KiB | 77.5 KiB | 0.88× | 0.49× |
 
 Android is where the shape pays. The quiet rows: `mount.UI CPU/op` at 30.3 ms against `@expo/ui`'s
 65.4 ms per-control (0.46×, and 1.24× its shared host), `update.mounted` at 0.59× the shared host,
@@ -196,11 +208,11 @@ beyond the arm, and the quick plan covers the three cells the D15 table reads.
 - `example/__tests__/Menu.harness.tsx` — the hosted popup's upper bound, and the comment that
   records what the four anchor mutants measured.
 - `example/src/stories/Menu.stories.tsx` — Playground (every public prop) plus 9 showcase stories.
-- `scripts/smoke/{App.tsx,lib.mjs}`, `scripts/__tests__/smoke-ready-line.test.js` — the eighth
-  control in the ready-line contract, with `menu=WxH` fixtures.
+- `scripts/smoke/App.tsx` and the generated `scripts/smoke/lib.mjs` — the eighth control in the
+  ready-line contract: one `Menu` in the consumer app, its box reported beside the other seven.
 - `scripts/__tests__/{registry,bench-gate,smoke-ready-line}.test.js` — the expectations the flips
-  move: `menu` in the registry and host-arm lists (and a `bench: false` flip removing it), the
-  bench-gate's arm/component lists, and a `menu=WxH` token in both ready-line fixtures.
+  move: `menu` in the registry and host-arm lists (plus the new `bench: false` direction), the plan
+  counts and shared-Host scope in `bench-gate`, and a `menu=WxH` token in both ready-line fixtures.
 - `ios/components/Menu/HybridNitroUiMenu.swift`,
   `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt`,
   `docs/components/menu.md`, `docs/tasks/FOLLOWUPS.md` — the spike's answer, the corrected
