@@ -738,7 +738,9 @@ Still no `expo-ui` rows: no `@expo/ui` arm has a mountable Android date field
 Ratio to `rn-core`: mount 1.39x presented, 1.61x mounted, 1.12x JS commit, 1.09x JS CPU/op,
 2.54x UI CPU/op; update 1.54x presented, 0.89x mounted, 1.44x JS commit, 1.39x JS CPU/op, 1.82x
 UI CPU/op; memory **6.69x**, or **3.27x** inside a `<Host>` (188.7 → 92.0 KiB, and UI CPU/op
-2.54x → 1.49x there). No `leak.date-picker` slope is monotonic on either platform.
+2.54x → 1.49x there). `leak.date-picker` is non-monotonic on every arm except Android
+`nitro-ui-host`, whose 602 KiB/cycle slope over 8 launches *is* monotonic — see A5's report and the
+follow-up filed in `G7b-menu-finish.report.md`.
 
 What that settles from this report, and what it does not:
 

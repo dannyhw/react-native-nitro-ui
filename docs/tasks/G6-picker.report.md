@@ -239,9 +239,11 @@ column the quick plan never scheduled for `Picker`: inside a `<Host>` the same f
 (0.53× unhosted), and 0.18× its JS CPU/op, with presented at 0.71× of the shared host — the
 `Picker` row of H2b's hosted table, at 8 launches on an idle machine. `update.picker` `mounted` on
 iOS is still the F3-shaped gap and is reported, not gated: 40.12 ms against the shared host's
-5.53 ms. Of the two instrument artefacts, only the Android `expo-ui` `update` signal gap is
-unchanged — those arms still emit no mount/presented row in `update`; `presentedBeforeMount` is
-zero in every cell of A5's iOS run.
+5.53 ms. Both instrument artefacts stand as this task recorded them: the Android `expo-ui` arms
+still emit no mount/presented signal in `update.picker` (160 of 160 on each of four cells), and
+`presentedBeforeMount` is still non-zero on iOS `mount.picker` for `nitro-ui` (79) and the two
+`expo-ui` arms (6 and 5) — while Android reads 0 in every `mount.picker` cell, so it is an iOS
+instrument behaviour, now on a fourth component's row.
 
 ### This task's runs — both busy, kept for the record
 
