@@ -8,6 +8,16 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.4.0
+
+### Minor Changes
+
+- c6fa4ec: `Menu` — a button that opens a list of actions. The trigger is a `Button` (same `variant`s, same `size`s, same box); the items are a typed `group` of actions, sections and one level of submenu, never JSON and never child views. A pick reports `onSelect` with that row's `id`, then `onClose` — the choice first, so a listener never acts while the menu is still up (DECISIONS D32); there is no value, so there is nothing to keep in sync, and no imperative `open()`/`close()`. iOS is SwiftUI `Menu` and nests a submenu; Android anchors a Material 3 `DropdownMenu` to the trigger inside its own window and renders a submenu's items inline under a divider. Three splits are documented rather than papered over: `systemImage` is iOS-only, as it is on `Button`; `primaryAction` (tap runs it, long-press opens) is iOS-only, following the native idiom; and `onOpen`/`onClose` are **Android-only** — the iPhoneOS 27.0 SDK gives SwiftUI's `Menu` no expansion binding, so **iOS never fires either one**, which is the same answer `Picker` already gives for its popup. Android's popup is ours to witness, so it also closes on a layout move and on `disabled` arriving while open, as `Picker` and `DatePicker` do; on iOS that last one is neither enforced nor observable.
+
+### Patch Changes
+
+- 62597c5: The README now describes what 0.4.0 ships. `Menu` joins the components table, the root `import` list and Usage (its example is compiled by `check`, as the others are), the `<Host>` sections say eight controls rather than seven, the performance section carries Menu's measured numbers, and Known limitations names the iOS splits DECISIONS D32 recorded. Two claims that were simply out of date are corrected: the consumer smoke table says what the app mounts today and keeps its 0.1.0 ticks because no consumer run has been repeated, and the "GitHub workflows are disabled" line is gone — `CI`, `Release`, `Release tag` and `Changeset status` run, while `Bench` and `Smoke` are dispatch-only.
+
 ## 0.3.2
 
 ### Patch Changes
