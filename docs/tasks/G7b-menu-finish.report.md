@@ -269,7 +269,9 @@ under the runner's busy bar, though the artifact carries no `quiet: true` stamp 
 **dirty** tree at `ae2ec53`, whose diff is docs and report files no arm imports. The four
 `memory`/`leak` cells at N=200 log `0 iterations`, which is what those two scenarios do: they ask for
 `bytesPerInstance`/`leakSlope` rather than per-iteration timings, so `samples: 0` against `expected:
-0` is whole, and their memory half did measure (4 of 4 launches). `leak.menu` records `bytesPerInstance:
+0` is whole, and their memory half did measure (4 of 4 launches). The Android full plan logs the same
+`0 iterations` on its five `memory`/`leak` cells, and round 1 quoted those slopes, so the line is not
+a failure signal. `leak.menu` records `bytesPerInstance:
 null` by the same rule. No iOS `nitro-ui-host` arm exists, so 28 cells where Android's full plan has
 35.
 
@@ -366,24 +368,22 @@ None blocking. Two notes for whoever merges:
 
 ## Fix round 1
 
-The review's three must-fixes, two should-fixes and the nits, all on `4b66bd4` and green on code
-tree `7e566bda08a6`.
+The review's three must-fixes, two should-fixes and the nits, green on code tree `7e566bda08a6`.
 
-**M1.** `CHECKS.menu` now asserts the whole echo twice — `open > close > open > select bravo > close`
-after the pick, and one more `open > close > open > select alpha > close` after the twin — and
-`lastEvents` is deleted. Red proof: `MenuScreen` firing `open` twice per gesture, run
-`01:49:39Z`, three `✗` lines. **M2.** A `DropdownMenu(offset = DpOffset(0.dp, 64.dp))` moves the
-popup's window; `gap` 16 px → 168 px, red at `01:48:49Z` (64 dp × this AVD's 2.625 density, exactly).
-Both mutants reverted. **M3.** The `harness:android:Menu` tally is six round-1 lines plus two from
-this round; the 23:23:53Z Picker timeout and the SIGTERM'd `harness:ios` each have a line; the iOS
-"witness" claim now describes the presented-rows check and the don't-re-press rule. **S1.** The
-unreliable dismissal after a disabled-row tap is in `FOLLOWUPS.md` and the report, and `tapScrim`
-says what the runs show. **S2.** The smoke fixture's `menu=` token is marked hand-written.
-Nits: the screenshot is an `XCTAttachment` plus a sandbox path, and committed at
-`docs/tasks/G7b/menu-open-ios.png`; the iOS tap-away is commented against the layout; "nothing is
-bolded" is gone; `select bravo` is lower-case; the summary is 394 words. The iOS full-plan bench
-finished — `0 iterations` is what those two scenarios do, and its memory and timing halves are
-quoted above.
+**M1.** `CHECKS.menu` asserts the whole echo twice — `open > close > open > select bravo > close`
+after the pick, plus `open > close > open > select alpha > close` after the twin — and `lastEvents`
+is gone. Red: `MenuScreen` firing `open` twice, run `01:49:39Z`, three `✗` lines.
+**M2.** `DropdownMenu(offset = DpOffset(0.dp, 64.dp))` moves the popup's window; `gap` 16 px →
+168 px (64 dp at this AVD's 2.625 density), red at `01:48:49Z`. Both mutants reverted.
+**M3.** The `harness:android:Menu` tally is six round-1 lines plus two from this round; the
+23:23:53Z Picker timeout and the SIGTERM'd `harness:ios` each have a line; the iOS "witness" claim
+now describes the presented-rows check and the don't-re-press rule. **S1.** The unreliable dismissal
+after a disabled-row tap is in `FOLLOWUPS.md` and here, and `tapScrim` says what the runs show.
+**S2.** The smoke fixture's `menu=` token is marked hand-written. Nits: the screenshot is an
+`XCTAttachment` plus a sandbox path and committed at `docs/tasks/G7b/menu-open-ios.png`; the
+tap-away point is tied to the layout; "nothing is bolded" is gone; `select bravo` is lower-case; the
+summary is 394 words. The iOS full-plan bench is quoted above: `0 iterations` is what `memory` and
+`leak` always log, and their memory half measured.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
