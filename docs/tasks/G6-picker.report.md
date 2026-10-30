@@ -187,14 +187,72 @@ lists, merges without contention.
 
 ## Bench
 
+**Superseded by A5.** The two tables here are what this task measured, on a busy machine, and stay
+for the record. A5's exclusive window on `maintainer-mac-2` has since run the full plan quiet on
+both platforms (`--plan full --launches 8` at `abe68a1`, `problems: []`, ART `speed-profile`
+primed): iOS 1 792 launches, 2 387 load samples against a ceiling of 5.0 with 15 over (0.6 %);
+Android 2 128 launches, 2 825 samples with one over (0.04 %). Same devices, same plan shape. The
+quiet cells:
+
+### iOS — iPhone 17 (`ios27-sim-iphone17`), `abe68a1`, quiet, N=50 (memory N=200)
+
+| Cell | Metric | rn-core | per-control | shared-host | nitro-ui | ÷ shared | ÷ per-control |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mount | presented | 16.11 ms | 260.79 ms | 198.91 ms | **42.34 ms** | **0.21× PASS** | **0.16× PASS** |
+| mount | mounted | 12.56 ms | 44.42 ms | 28.61 ms | 44.60 ms | 1.56× MISS | 1.01× MISS |
+| mount | JS commit | 4.25 ms | 8.95 ms | 6.85 ms | **2.43 ms** | **0.36× PASS** | **0.27× PASS** |
+| mount | JS CPU/op | 4.28 ms | 9.54 ms | 7.21 ms | **2.69 ms** | **0.37× PASS** | **0.28× PASS** |
+| mount | UI CPU/op | 8.24 ms | 191.59 ms | 156.79 ms | **46.21 ms** | **0.29× PASS** | 0.24× (nv) |
+| mount | UI CPU/unmount | 6.10 ms | 52.05 ms | 21.40 ms | 8.06 ms | 0.43× (nv) | 0.16× (nv) |
+| update | presented | 16.11 ms | 78.08 ms | 65.45 ms | 62.91 ms | **0.96× PASS** | **0.80× PASS** |
+| update | mounted | 10.11 ms | 7.01 ms | 5.53 ms | 40.12 ms | 7.26× MISS | 5.70× MISS |
+| update | JS commit | 2.21 ms | 4.33 ms | 2.95 ms | **1.56 ms** | **0.52× PASS** | **0.36× PASS** |
+| update | JS CPU/op | 2.37 ms | 10.03 ms | 3.62 ms | 2.49 ms | **0.70× PASS** | **0.25× PASS** |
+| update | UI CPU/op | 10.24 ms | 64.13 ms | 46.09 ms | 45.78 ms | **0.99× PASS** | **0.71× PASS** |
+| memory | bytes/inst | 69.7 KiB | 886.5 KiB | 817.2 KiB | 624.0 KiB | **0.76× PASS** | **0.70× PASS** |
+
+### Android — Pixel 9 emulator API 35 (`android35-emu-pixel9`), `abe68a1`, quiet
+
+| Cell | Metric | rn-core | per-control | shared-host | nitro-ui | in `<Host>` | ÷ shared | ÷ per-control |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mount | presented | 32.66 ms | 82.77 ms | 63.38 ms | 65.76 ms | 44.65 ms | 1.03× MISS | **0.79× PASS** |
+| mount | mounted | 25.52 ms | 67.02 ms | 48.60 ms | 48.81 ms | 35.64 ms | 1.00× | **0.72× PASS** |
+| mount | JS commit | 5.00 ms | 26.28 ms | 15.37 ms | **2.72 ms** | 2.75 ms | **0.18× PASS** | **0.10× PASS** |
+| mount | JS CPU/op | 5.43 ms | 27.40 ms | 17.43 ms | **3.11 ms** | 3.19 ms | **0.18× PASS** | **0.11× PASS** |
+| mount | UI CPU/op | 11.53 ms | 57.81 ms | 33.14 ms | 48.35 ms | **25.81 ms** | 1.47× MISS | **0.84× PASS** |
+| mount | UI CPU/unmount | 240 us | 3.90 ms | 2.46 ms | 2.46 ms | 2.00 ms | 0.98× (nv) | 0.61× (nv) |
+| update | presented | 30.85 ms | n/a | n/a | 41.73 ms | 47.76 ms | n/a | n/a |
+| update | mounted | 18.32 ms | n/a | n/a | 14.22 ms | 15.81 ms | n/a | n/a |
+| update | JS commit | 2.56 ms | 18.28 ms | 15.78 ms | **1.62 ms** | 2.02 ms | **0.10× PASS** | **0.09× PASS** |
+| update | JS CPU/op | 2.76 ms | 18.28 ms | 15.96 ms | **5.12 ms** | 2.24 ms | **0.32× PASS** | **0.28× PASS** |
+| update | UI CPU/op | 5.55 ms | 62.37 ms | 55.12 ms | **25.64 ms** | 11.31 ms | **0.47× PASS** | **0.41× PASS** |
+| memory | bytes/inst | 73.4 KiB | 442.6 KiB | 320.0 KiB | 292.2 KiB | **169.6 KiB** | **0.91× PASS** | **0.66× PASS** |
+
+Read on a quiet machine, every verdict this report made from its own two tables stands, and the two
+cells it hedged are now verdictable: iOS `mount.picker` `UI CPU/op` against the shared host is
+0.29× PASS where this run called it directional at best, and Android `mount.picker`
+`UI CPU/unmount` is still `(nv)` on both arms, so that one row stays unjudged. The Android misses
+this report called the host-architecture shape are the same misses at the same size — presented
+1.03× and UI CPU/op 1.47× — so they were not the machine. What the quiet run adds is the `<Host>`
+column the quick plan never scheduled for `Picker`: inside a `<Host>` the same field costs
+**169.6 KiB** (0.53× the shared host, 0.58× the unhosted control), 0.78× shared-host UI CPU/op
+(0.53× unhosted), and 0.18× its JS CPU/op, with presented at 0.71× of the shared host — the
+`Picker` row of H2b's hosted table, at 8 launches on an idle machine. `update.picker` `mounted` on
+iOS is still the F3-shaped gap and is reported, not gated: 40.12 ms against the shared host's
+5.53 ms. Both instrument artefacts stand as this task recorded them: the Android `expo-ui` arms
+still emit no mount/presented signal in `update.picker` (160 of 160 on each of four cells), and
+`presentedBeforeMount` is still non-zero on iOS `mount.picker` for `nitro-ui` (79) and the two
+`expo-ui` arms (6 and 5) — while Android reads 0 in every `mount.picker` cell, so it is an iOS
+instrument behaviour, now on a fourth component's row.
+
+### This task's runs — both busy, kept for the record
+
 `bun run bench -- --platform <ios|android> --plan quick --component picker`, quick = 4
 launches × (5 warmup + 20 measured) per cell, 3 cells × 4 implementations. Numbers are the
 runner's median of launch medians. A derived `nitro-ui ÷ <expo arm>` ratio is printed with a
 verdict only when both arms' launch-paired ratio-to-`rn-core` columns are quiet (≤ 10 %
 within-run spread); `(nv)` means at least one was noisy, and those cells are reported, not
 judged.
-
-### Runs
 
 | Results file | Device | Sampled load (median / p90, % over 7.0) | Busy | Problems |
 | --- | --- | --- | --- | --- |
@@ -261,7 +319,16 @@ missingPresented=80`), so those two rows have no comparison against them at all;
 | Platform | mount presented | mount UI CPU/op | memory |
 | --- | --- | --- | --- |
 | iOS (busy) | 0.30× PASS | 0.29× PASS | 0.76× PASS |
+| iOS (quiet, A5) | **0.21× PASS** | **0.29× PASS** | **0.76× PASS** |
 | Android (busy) | **1.19× MISS** | **1.46× MISS** | 0.93× PASS |
+| Android (quiet, A5) | **1.03× MISS** | **1.47× MISS** | **0.91× PASS** |
+
+The quiet rows are A5's, and they answer the follow-up this section raised: the two Android misses
+are not the busy machine. `Picker` has been part of `maintainer-mac-2`'s committed baselines since
+A3 minted them (`mount.picker:nitro-ui:50` and its 27 siblings on iOS, 35 cells on Android), so
+the unhosted arm's ratios to `rn-core` are gated on that machine; A5 checked against them and
+**failed nothing**. The shared-host ratios above are same-run paired readings, which a baseline
+does not store.
 
 The Android misses are the host-architecture shape G1/G2/G4 recorded, not something the
 Picker draws: mount `UI CPU/op` for `nitro-ui` has been 1.33–1.50× shared-host on Android
@@ -270,7 +337,8 @@ Compose fields, which is the metric a busy machine moves most. Both are stated a
 measures-taken-on-a-busy-machine, with the re-measure on an idle machine as the follow-up
 before release readiness decides whether they are real (D15: misses need an explanation and
 a follow-up, the reviewer decides). Per D15 a component's first arm never blocks on a
-missing baseline, so nothing here gates a merge.
+missing baseline, so nothing here gates a merge. The re-measure happened (A5) and the shape is
+unchanged, so the reviewer's call is the same one, now on quiet numbers.
 
 Where the picker is clearly ahead is the JS side, and that is not noise: 0.09–0.35×
 `expo-ui` on JS commit and JS CPU/op on both platforms, on every cell. One hosted view with
@@ -326,7 +394,11 @@ light one is the evidence for the over-wide menu being fitted and ellipsised.
 
 - **The D15 Android misses (mount presented 1.19×, mount UI CPU 1.46×) and the busy iOS PASSes
   all need one re-run on an idle machine.** Same devices, same command, ~20 minutes. That
-  run is what should record the iOS Picker baseline, not this one.
+  run is what should record the iOS Picker baseline, not this one. Closed by A5 (2026-10-30): both
+  platforms ran the full plan quiet on `maintainer-mac-2`, the iOS PASSes reproduce (0.21× /
+  0.29× / 0.76×) and the Android misses do too (1.03× / 1.47× / 0.91×). `Picker` now has committed
+  cells on that machine, so a regression of its ratio to `rn-core` is gated there; the 1.47×
+  shared-host miss is a same-run reading no baseline stores.
 - The README component table and any published perf numbers are left to the release task
   (D19 scope).
 - `scripts/smoke/lib.mjs` and `App.tsx` still say "the five controls" in prose above the
