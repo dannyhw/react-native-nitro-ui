@@ -68,8 +68,9 @@ quiet re-run was pending. A5 has since run the plan quiet on `maintainer-mac-2`
 they reproduce this table's shape — `Switch` 0.91x memory / 0.84x UI CPU, `Progress` 0.45x
 (`n/v`) and `Button` 0.80x, `Slider` level at 1.02x — and five of the ᴺ flags in the table below
 clear (unhosted `Switch` and `Button` UI CPU, unhosted `Button` JS, hosted `Button` JS 0.69x,
-hosted `Slider` JS 1.11x); of the four unmount cells against the shared host, only `Switch`'s
-(1.52x) becomes verdictable. One verdict does reverse: unhosted
+hosted `Slider` JS 1.11x). The four unmount cells stay ᴺ — the quiet run is noisy on every hosted
+unmount cell too (0.57x / 0.53x / 0.61x / 1.05x) — so the "no unmount claim" below still holds.
+One verdict does reverse: unhosted
 `Slider`'s mount JS CPU is **1.06x** there against the 0.94x this run read, so the JS column is
 above the shared host on `Slider` in both directions, not below it unhosted. The tables below stay
 as H2a measured them.
