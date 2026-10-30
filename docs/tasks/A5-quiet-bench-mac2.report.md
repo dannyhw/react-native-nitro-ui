@@ -21,7 +21,7 @@ Menu's 28 iOS and 35 Android cells stay unminted here and go in through X14's me
 verified both claims against a scratch copy of the mint path rather than by reading alone.
 
 Item 4 replaced the indicative tables in H2a, H2b, G5, G6, G7b and README "Performance", one commit
-each, and cleared the matching "quiet re-run pending" follow-ups. Most conclusions held; five
+each, and cleared the matching "quiet re-run pending" follow-ups. Most conclusions held; six
 moved and are listed under "Reversed conclusions" (fix round 1, per the orchestrator's ruling that
 the quiet data wins): Android memory is not a miss on *every* control, the iOS frame-floor is
 machine-specific, G5's Android memory move is still unattributed, unhosted `Slider` mount JS CPU is
@@ -152,7 +152,7 @@ monotonic (`lib.mjs:1618-1623`), which no committed cell was. See follow-ups.
 
 Brief item 4 said to report a reversed conclusion rather than rewrite for it. The orchestrator
 ruled (fix round 1) that the quiet data wins wherever it contradicts an indicative one, so each of
-these five is now stated that way in the file named. Review must-fix 9 asked for a Questions
+these six is now stated that way in the file named. Review must-fix 9 asked for a Questions
 section for the same list; the ruling answers it, so this section replaces it.
 
 1. **"Android memory is the consistent miss — every control."** Not every one: `Picker` 0.91× and
@@ -172,10 +172,14 @@ section for the same list; the ruling answers it, so this section replaces it.
    and `sizing.md`.
 5. **Hosted `SegmentedControl` mount UI CPU: 0.92× → 1.00×** — parity, not below. Corrected in
    README and H2b.
+6. **Hosting's JS cost: "roughly flat" / "unchanged" → hosted ÷ unhosted 1.02–1.32×** (`Progress`
+   0.77× against the shared host, not parity). Corrected in README, H2b and `host.md` (orchestrator,
+   from the re-review).
 
 Everything else that moved was a flag, not a verdict: six of `sizing.md`'s ᴺ cells cleared
 (unhosted `Switch` UI and unmount, unhosted `Button` UI and JS, hosted `Button` JS 0.69×, hosted
-`Slider` JS 1.11×), and H2a's two noise-flagged mount UI CPU cells now carry verdicts at 0.46× and
+`Slider` JS 1.11×), three gained (`Progress` memory on both sides, and unhosted `Progress`
+unmount), and H2a's two noise-flagged mount UI CPU cells now carry verdicts at 0.46× and
 0.50×.
 
 ## Settle and preflight (A3 items 2b / 2c)

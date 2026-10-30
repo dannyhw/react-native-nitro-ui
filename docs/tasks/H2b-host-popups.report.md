@@ -152,13 +152,13 @@ A5's exclusive window on `maintainer-mac-2` has since re-measured every one of t
 2 128 launches, 2 825 load samples against a ceiling of 5.0 with **one over (0.04 %)**,
 `machine.quiet: true`, `problems: []`, ART `speed-profile` primed. That run's tables are in
 [`A5-quiet-bench-mac2.report.md`](A5-quiet-bench-mac2.report.md) and in `README.md`. Every claim
-this section made holds there, and the cells that were `n/v` here mostly carry verdicts now:
+this section made holds there except the JS cost of hosting (below), and the cells that were `n/v` here mostly carry verdicts now:
 
 | Control            | mem host ÷ shared | mem host ÷ no Host | UI CPU host ÷ no Host | JS CPU host ÷ no Host |
 | ------------------ | ----------------- | ------------------ | --------------------- | --------------------- |
 | `Switch`           | **0.91x**(2%/2%)  | **0.32x**(2%/0%)   | **0.46x**(1%/1%)      | 1.20x(2%/1%)          |
 | `Slider`           | 1.02x(1%/1%)      | **0.43x**(1%/1%)   | **0.47x**(4%/2%)      | 1.05x(3%/1%)          |
-| `Progress`         | **0.45x**(3%/16%) `n/v` | **0.26x**(3%/2%) | **0.44x**(1%/1%)      | 1.32x(1%/1%)          |
+| `Progress`         | 0.45x(3%/16%) `n/v` | **0.26x**(3%/2%) | **0.44x**(1%/1%)      | 1.32x(1%/1%)          |
 | `Button`           | **0.80x**(0%/1%)  | **0.33x**(0%/0%)   | **0.50x**(2%/2%)      | 1.12x(2%/2%)          |
 | `SegmentedControl` | **0.56x**(1%/1%)  | **0.49x**(1%/1%)   | **0.70x**(1%/1%)      | 1.02x(1%/1%)          |
 | `Picker`           | **0.53x**(1%/1%)  | **0.58x**(1%/0%)   | **0.53x**(0%/1%)      | 1.05x(1%/0%)          |
@@ -170,7 +170,8 @@ unmount cells are still `n/v` — hosted ÷ unhosted `unmountMainNsPerOp` reads 
 one arm — so "the unmount cells carry no verdict" was right and still is at 8 launches. `Slider`
 at 1.02x is still a denominator story: hosting takes our own footprint from 148.2 to 64.0 KiB onto
 a shared-host Slider that measures 62.9 KiB. And `DatePicker` still has no shared-host comparison
-on any machine. Two numbers move: `SegmentedControl`'s hosted mount UI CPU against the shared
+on any machine. Three numbers move: hosted ÷ unhosted JS CPU, now 1.02–1.32x and over 1.10x on `Switch`,
+`Progress`, `Button` and `DatePicker`; `SegmentedControl`'s hosted mount UI CPU against the shared
 host, 0.92x as this task's run published it → 1.00x (parity rather than below), and `Picker`'s
 memory ratio to the shared host: this run read 0.50x, the quiet one 0.53x. `Menu`, which this
 task did not have, is the strongest case in the set at 0.31x.
@@ -201,7 +202,8 @@ these numbers, and none of them is a claim about a menu being open.
 JS CPU per op, hosted ÷ unhosted: `Switch` 0.94x(3%) · `Slider` 1.03x(8%) · `Progress` 1.06x(7%) ·
 `Button` **1.16x**(4%) · `SegmentedControl` 1.01x(2%) · `Picker` 1.00x(3%) · `DatePicker` 1.02x(9%).
 Only `Button` pays more than about a twentieth for being hosted, and it pays that on the unhosted
-side of the arithmetic too. Against `expo-ui-shared-host` our hosted JS is far cheaper on the two
+side of the arithmetic too. A5's quiet run reverses this: every control pays, four of them more
+than a tenth (1.20x `Switch`, 1.32x `Progress`, 1.12x `Button`, 1.11x `DatePicker`). Against `expo-ui-shared-host` our hosted JS is far cheaper on the two
 new popup controls (`Picker` 2.23 ms against its 12.91 ms, `SegmentedControl` 2.06 ms against
 6.87 ms) while `Switch` is level (1.92 against 1.86 ms); read those absolutes, not the ratio alone.
 

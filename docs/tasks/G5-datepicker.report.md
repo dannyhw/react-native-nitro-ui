@@ -752,7 +752,7 @@ What that settles from this report, and what it does not:
   the quiet run is another device, machine and tree, so it does not attribute the move.
 - **iOS `mount` presented is machine-dependent, so the "discard" needs its machine named.** This
   round threw away 2.02x because the pre-review run read 1.02x and `presented` is a frame stamp. On
-  `maintainer-mac-2` a quiet run reads 2.48x (39.90 ms against 16.08), so 1.00x is a
+  `maintainer-mac-2` a quiet run reads 2.48x (39.90 ms against 16.08), so 1.02x is a
   frame-floor artefact of that run's machine and iPhone Air simulator, not the truth of the mount.
   The cell is `n/v` there and carries no verdict either way; what it does not do is support a claim
   that iOS mount cost nothing.
