@@ -23,7 +23,7 @@ menu that wraps arbitrary RN children.
 | 3 | **G7b** Menu: bench arm, real-input case, Storybook story, smoke (brief `G7b-menu-finish.md`) — merged `268859b` | both | G7a |
 | — | ~~**G8** TextField~~ — moved to 0.5 (D30) | — | — |
 | 3b | **D3** docs pass for 0.4.0: README and component docs gain Menu, the stale "workflows disabled" lines go (brief `D3-docs-0.4.md`) — merged `8c42ce8` | docs | G7b, X4 |
-| 4 | 0.4.0 through Changesets (the bench baselines are not in the tarball, so the release does not wait for them), then quiet bench re-runs (H2a, H2b, G5, G6, plus G7) in one exclusive window | both | A3, G7b, D3 |
+| 4 | 0.4.0 through Changesets (the bench baselines are not in the tarball, so the release does not wait for them), then quiet bench re-runs (H2a, H2b, G5, G6, plus G7) in one exclusive window — 0.4.0 live; window is **A5** (`A5-quiet-bench-mac2.md`) | both | A3, G7b, D3 |
 
 G7a and T18 run in parallel, one device pair each. That is safe once X3's registry makes the
 registration lists generated.
