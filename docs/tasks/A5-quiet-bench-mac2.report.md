@@ -66,12 +66,26 @@ before the window so no compile load lands inside a measured launch, `dirty: fal
 | iOS | `ios27-sim-iphone17` | 17 837 s (4 h 59 m) | 1 792 / 1 792 | `{count: 2387, ceiling: 5, median: 2.1089, p90: 2.8896, max: 9.376, over: 15, overFraction: 0.0063}` | `true` | `[]` |
 | Android | `android35-emu-pixel9` | 20 900 s (5 h 49 m) | 2 128 / 2 128 | `{count: 2825, ceiling: 5, median: 1.4331, p90: 1.9526, max: 5.1323, over: 1, overFraction: 0.0004}` | `true` | `[]` |
 
-`--check` verdicts, from each run's own table: iOS **0 FAIL**, 117 within tolerance, 77 noisy,
-7 `new arm` (all `leak:*`, nothing committed to compare against), **28 `not measured in base`** —
-every one of them a `menu` row. Android **0 FAIL**, 159 within tolerance, 33 noisy, 7 `new arm`,
-**35 `not measured in base`** — again all `menu`. The only over-threshold row on either side is
-Android `update:nitro-ui:1` UI CPU at 1.26× with a 95 % CI of 0.98–1.38×, which covers 1.05 and so
-is reported, not conclusive. Per the brief nothing was re-minted over any of it.
+`--check` verdicts, counted from each run's own table (815 iOS rows, 941 Android):
+
+| | iOS | Android |
+| --- | --- | --- |
+| FAIL | **0** | **0** |
+| within tolerance | 117 | 159 |
+| noisy, no verdict | 69 | 29 |
+| noisy and over threshold, not conclusive | 8 | 4 |
+| over threshold, not conclusive (CI covers 1.05) | 1 | 1 |
+| `new arm` (all `leak:*` — no committed cell to compare against) | 7 | 7 |
+| `not measured in base` | 28 | 35 |
+| metrics noisy within the run (spread > 10 % MAD) | 157 | 120 |
+
+Every one of the `not measured in base` rows is a `menu` row on both platforms, which is item 3
+showing up in the output. The two rows that clear the 1.20× threshold with a usable CI are
+`update:nitro-ui:1` UI CPU/op at 1.26× (95 % CI 0.98–1.38×) on Android and
+`update.segmented-control:nitro-ui:50` JS CPU/op at 1.25× (CI 0.78–1.36×) on iOS; both CIs cover
+1.05, so the runner reports them and does not gate on them. The other over-threshold rows — 8 on
+iOS, 4 on Android — all carry "noisy" in their verdict, so they report a number without a finding.
+Per the brief nothing was re-minted over any of it.
 
 ### `nitro-ui` vs `expo-ui-shared-host` — iOS
 
