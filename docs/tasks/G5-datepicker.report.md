@@ -739,28 +739,28 @@ Ratio to `rn-core`: mount 1.39x presented, 1.61x mounted, 1.12x JS commit, 1.09x
 2.54x UI CPU/op; update 1.54x presented, 0.89x mounted, 1.44x JS commit, 1.39x JS CPU/op, 1.82x
 UI CPU/op; memory **6.69x**, or **3.27x** inside a `<Host>` (188.7 → 92.0 KiB, and UI CPU/op
 2.54x → 1.49x there). `leak.date-picker` is non-monotonic on every arm except Android
-`nitro-ui-host`, whose 602 KiB/cycle slope over 8 launches *is* monotonic — see A5's report and the
-follow-up filed in `G7b-menu-finish.report.md`.
+`nitro-ui-host`, whose footprint climbs in all 8 of its launches (602 KiB/cycle) — see A5's report
+and the follow-up filed in `G7b-menu-finish.report.md`.
 
 What that settles from this report, and what it does not:
 
 - **iOS `update` presented is 1.00x `rn-core` on a quiet machine too** — 16.07 ms against 16.13.
   That was the reading this round leaned on and it stands.
-- **The Android per-instance memory move this round could not attribute was real.** Fix round 1
-  recorded 193.9 KiB / 6.90x where the pre-review run had 135.5 KiB / 4.59x and said the cause was
-  unknown. The quiet run reads 188.7 KiB / 6.69x, so it was not load: the extra bytes came in with
-  the code between those two trees and are still there.
+- **The Android per-instance memory move this round could not attribute is still unattributed.**
+  Fix round 1 recorded 193.9 KiB / 6.90x where the pre-review run had 135.5 KiB / 4.59x and said the
+  cause was unknown. The quiet run reads 188.7 KiB / 6.69x, so the fix-round figure was not load;
+  the quiet run is another device, machine and tree, so it does not attribute the move.
 - **iOS `mount` presented is machine-dependent, so the "discard" needs its machine named.** This
   round threw away 2.02x because the pre-review run read 1.02x and `presented` is a frame stamp. On
   `maintainer-mac-2` a quiet run reads 2.48x (39.90 ms against 16.08), so 1.00x is a
-  frame-floor artefact of the faster machine, not the truth of the mount. The cell is `n/v` there
-  and carries no verdict either way; what it does not do is support a claim that iOS mount cost
-  nothing.
+  frame-floor artefact of that run's machine and iPhone Air simulator, not the truth of the mount.
+  The cell is `n/v` there and carries no verdict either way; what it does not do is support a claim
+  that iOS mount cost nothing.
 - **The memory penalty this report called "the honest penalty" is unchanged in kind and size**:
   6.44x iOS against the 6.20x/6.26x this task read, and it is the reason `<Host>` exists on
   Android, where the same field costs 3.27x instead of 6.69x.
 - The `leak` cells A5 ran are reported as `new arm` in `--check` (no committed cell to compare
-  against) and none is monotonic, so no leak is claimed.
+  against) and only Android `nitro-ui-host` is monotonic (602 KiB/cycle); no leak is claimed here.
 
 `bun run bench --platform ios --plan quick --component date-picker` and its Android twin (4
 launches per cell, 5 warmup + 20 measured iterations, on the assigned devices).

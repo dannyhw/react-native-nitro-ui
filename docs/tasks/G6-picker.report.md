@@ -202,7 +202,7 @@ quiet cells:
 | mount | mounted | 12.56 ms | 44.42 ms | 28.61 ms | 44.60 ms | 1.56× MISS | 1.01× MISS |
 | mount | JS commit | 4.25 ms | 8.95 ms | 6.85 ms | **2.43 ms** | **0.36× PASS** | **0.27× PASS** |
 | mount | JS CPU/op | 4.28 ms | 9.54 ms | 7.21 ms | **2.69 ms** | **0.37× PASS** | **0.28× PASS** |
-| mount | UI CPU/op | 8.24 ms | 191.59 ms | 156.79 ms | **46.21 ms** | **0.29× PASS** | **0.24× PASS** |
+| mount | UI CPU/op | 8.24 ms | 191.59 ms | 156.79 ms | **46.21 ms** | **0.29× PASS** | 0.24× (nv) |
 | mount | UI CPU/unmount | 6.10 ms | 52.05 ms | 21.40 ms | 8.06 ms | 0.43× (nv) | 0.16× (nv) |
 | update | presented | 16.11 ms | 78.08 ms | 65.45 ms | 62.91 ms | **0.96× PASS** | **0.80× PASS** |
 | update | mounted | 10.11 ms | 7.01 ms | 5.53 ms | 40.12 ms | 7.26× MISS | 5.70× MISS |
@@ -397,7 +397,8 @@ light one is the evidence for the over-wide menu being fitted and ellipsised.
   run is what should record the iOS Picker baseline, not this one. Closed by A5 (2026-10-30): both
   platforms ran the full plan quiet on `maintainer-mac-2`, the iOS PASSes reproduce (0.21× /
   0.29× / 0.76×) and the Android misses do too (1.03× / 1.47× / 0.91×). `Picker` now has committed
-  cells on that machine, so the Android `UI CPU/op` miss carries a gate as well as an explanation.
+  cells on that machine, so a regression of its ratio to `rn-core` is gated there; the 1.47×
+  shared-host miss is a same-run reading no baseline stores.
 - The README component table and any published perf numbers are left to the release task
   (D19 scope).
 - `scripts/smoke/lib.mjs` and `App.tsx` still say "the five controls" in prose above the

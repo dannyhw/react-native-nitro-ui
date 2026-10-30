@@ -21,17 +21,17 @@ Menu's 28 iOS and 35 Android cells stay unminted here and go in through X14's me
 verified both claims against a scratch copy of the mint path rather than by reading alone.
 
 Item 4 replaced the indicative tables in H2a, H2b, G5, G6, G7b and README "Performance", one commit
-each, and cleared the matching "quiet re-run pending" follow-ups. Most conclusions held. Three
-things moved, all labelled in place: Android memory is not a miss on *every* control (`Picker`
-0.91×, `Menu` 0.85× are under the shared host); the README's iOS frame-floor bullet is
-machine-specific and is now scoped to `maintainer-mac-1`, since on this machine only `Button` sits
-on the 16 ms floor for both arms; and G5's "unattributed" Android memory move was real — 188.7 KiB
-quiet, against the 135.5 KiB the pre-review run read.
+each, and cleared the matching "quiet re-run pending" follow-ups. Most conclusions held; five
+moved and are listed under "Reversed conclusions" (fix round 1, per the orchestrator's ruling that
+the quiet data wins): Android memory is not a miss on *every* control, the iOS frame-floor is
+machine-specific, G5's Android memory move is still unattributed, unhosted `Slider` mount JS CPU is
+1.06× not 0.94×, and hosted `SegmentedControl` mount UI CPU is 1.00× not 0.92×.
 
 The window also turned up something outside the brief: four Android `nitro-ui-host` leak cells are
-now **monotonic** (menu 695, date-picker 602, slider 578, button 512 KiB/cycle, 8 launches,
-`heapCollected: true`) while every unhosted arm stays non-monotonic. §6 of setup-decisions says
-fail on a monotonic increase; no gate can, because a baseline stores no leak slope. Filed, not
+the only ones whose footprint climbs in every one of the 8 launches (menu 695, date-picker 602,
+slider 578, button 512 KiB/cycle). The slopes are unremarkable — the unhosted arm is larger on
+three of the four and `rn-core` is positive too — and nothing gates them: `nitro-ui-host` is a
+reference arm, and a baseline keeps a slope only when its mint's cell was monotonic. Filed, not
 chased.
 
 ## Gates
@@ -133,10 +133,50 @@ menu 0.36 / 0.45 / 1.09. Every one inside spread; every unmount cell is `n/v`.
 
 ### Leak cells (reported, not gated)
 
-iOS: no monotonic slope on any arm. Android: `leak.menu:nitro-ui-host` 695, `leak.date-picker`
-602, `leak.slider` 578, `leak.button` 512 KiB/cycle with `leakMonotonic: true` (8 launches,
-`heapCollected: true`); every other Android cell, including all unhosted ones, is non-monotonic.
-A committed baseline stores no leak slope, so `--check` cannot gate this. See follow-ups.
+"Monotonic" is the runner's own test, not a slope threshold: for each of the cell's 8 launches, all
+11 samples `leak0`…`leak10` are ≥ the previous one, ties counting (`lib.mjs:1289-1294`).
+
+iOS: no monotonic cell on any arm. Android: exactly four, all `nitro-ui-host` — `leak.menu` 695,
+`leak.date-picker` 602, `leak.slider` 578, `leak.button` 512 KiB/cycle. `heapCollected: true` on
+them says only that Hermes' `gc()` was callable (`bench/src/probe.ts:158`), and it is true on all
+38 Android and all 32 iOS leak cells, so it neither distinguishes these four nor shows ART
+collected. The slopes are not outliers either: the unhosted `nitro-ui` arm is larger on three of
+the four (`date-picker` 933, `slider` 845, `button` 647 KiB/c) and `rn-core` is positive on all
+four (128–315). What is new is only that the hosted series climbs in every launch.
+
+Nothing gates it: `nitro-ui-host` is a reference arm that never gates (`GATED_IMPLEMENTATIONS`,
+`lib.mjs:72`), and a baseline records `leakSlopeBytesPerCycle` only when the minting cell was
+monotonic (`lib.mjs:1618-1623`), which no committed cell was. See follow-ups.
+
+## Reversed conclusions
+
+Brief item 4 said to report a reversed conclusion rather than rewrite for it. The orchestrator
+ruled (fix round 1) that the quiet data wins wherever it contradicts an indicative one, so each of
+these five is now stated that way in the file named. Review must-fix 9 asked for a Questions
+section for the same list; the ruling answers it, so this section replaces it.
+
+1. **"Android memory is the consistent miss — every control."** Not every one: `Picker` 0.91× and
+   `Menu` 0.85× land *below* the shared host. Stated in README as a denominator fact — `@expo/ui`'s
+   `Picker` and `Menu` cost 320.0 and 250.4 KiB against 50.6–77.4 KiB for its four others — not as
+   a claim that our row-drawing controls are light, which the data does not support (ours are 292.2
+   and 213.1 KiB).
+2. **"iOS `presented` at N=50 mostly measures the frame."** True of the `maintainer-mac-1` run
+   only. On this machine just `Button` is on the 16 ms floor for both arms; `Switch`, `Slider`,
+   `SegmentedControl` and `Picker` are several frames apart, so their ratios carry verdicts. The
+   README bullet is scoped to its machine.
+3. **G5: the Android `DatePicker` memory move was "not load, so it came in with the code."** The
+   quiet run does say the fix-round figure was not load, but it is another device, machine and
+   tree, so it does not attribute the move. G5 now says it stayed unattributed.
+4. **Unhosted `Slider` mount JS CPU: 0.94× → 1.06×** against the shared host. The JS tax is not
+   something `Slider` avoided before hosting; it was above parity already. Corrected in `host.md`
+   and `sizing.md`.
+5. **Hosted `SegmentedControl` mount UI CPU: 0.92× → 1.00×** — parity, not below. Corrected in
+   README and H2b.
+
+Everything else that moved was a flag, not a verdict: six of `sizing.md`'s ᴺ cells cleared
+(unhosted `Switch` UI and unmount, unhosted `Button` UI and JS, hosted `Button` JS 0.69×, hosted
+`Slider` JS 1.11×), and H2a's two noise-flagged mount UI CPU cells now carry verdicts at 0.46× and
+0.50×.
 
 ## Settle and preflight (A3 items 2b / 2c)
 
@@ -200,18 +240,44 @@ red. What I did prove rather than infer, and how:
   replaced with quiet cells, the frame-floor bullet scoped to its machine, and the per-control
   notes labelled by machine.
 - `docs/tasks/H2a-host-more-controls.report.md`, `H2b-host-popups.report.md`,
-  `G5-datepicker.report.md`, `G6-picker.report.md`, `G7b-menu-finish.report.md`: quiet cells added,
-  indicative tables kept for the record, "quiet re-run pending" follow-ups closed.
+  `G5-datepicker.report.md`, `G6-picker.report.md`, `G7b-menu-finish.report.md`: quiet cells added
+  (H2a's own tables replaced outright, the other four kept beside them for the record), "quiet
+  re-run pending" follow-ups closed.
 - `docs/components/host.md`, `docs/architecture/sizing.md`: the pending-rerun sentence replaced
   with the pointer to A5 (these two carried the same indicative claim; leaving them saying
   "pending" would have been a false statement in shipped docs).
 
 ## Follow-ups
 
-- bench: Android `nitro-ui-host` leak slopes are monotonic on four controls and no gate can see it —
-  written up in `G7b-menu-finish.report.md` "Follow-ups", needs an owner with a heap dump.
+- bench: Android `nitro-ui-host` leak series climb in every launch on four controls and no gate can
+  see it — written up in `G7b-menu-finish.report.md` "Follow-ups", needs an owner with a heap dump.
 - bench: Menu's cells stay unminted until X14's merge mint lands; until then 28 (iOS) + 35
   (Android) rows read `not measured in base` in `--check` on this machine.
 - bench: `maintainer-mac-1` still has no `Picker`, no `Menu` and no 0.4.x-era re-run; its table is
   now four releases old. A quiet window there is the same ~11 h, and the two machines' numbers are
-  visibly not interchangeable (iOS mount presented 1.00× vs 2.48× on `date-picker`).
+  visibly not interchangeable (iOS `mount.date-picker` presented reads 1.00× against the shared
+  host there, 2.24× here — both `n/v`, both same-run paired).
+- tooling: `scripts/bench/render.mjs:236` labels a monotonic leak on a reference arm "MONOTONIC
+  (gated as a leak)"; nothing gates a reference arm, so the label is wrong. Not A5's to fix.
+- tooling: the gate ledger records this task's iOS bench run with `platform: android` and
+  `emulator-5574`; the gate name and the log are right, the platform field is not. Not A5's to fix.
+
+## Fix round 1
+
+Review `67a389d` — FIX ROUND, docs only. Every number here was re-read from the two results files,
+not taken from the review.
+
+All nine must-fixes are in: the Switch hosted-memory direction (0.91× is 0.05 *closer*, and the gap
+is unattributed — machine, plan and code all differ); the hosted paragraph now claims a UI-thread
+win on four and a memory win on three with `Slider` level at 1.02×; `n/v` added to iOS
+`DatePicker` UI CPU and `Progress` memory; "JS CPU per op up 2–11 %"; "the only over-threshold row
+that is not noisy". The "row-drawing controls" cause is gone from both places — ours are heavy
+(292.2, 213.1 KiB), `@expo/ui`'s `Picker`/`Menu` are heavier (320.0, 250.4 against 50.6–77.4).
+G5's leak line matches its own table; `sizing.md` says six ᴺ flags cleared and one verdict
+reversed. Per your ruling the quiet data wins: a `## Reversed conclusions` section lists all five,
+in place, and replaces the Questions section the review asked for.
+
+Should-fixes: monotonic defined as the runner computes it, `heapCollected` demoted (true on all 70
+leak cells), larger unhosted and `rn-core` slopes named, the correct no-gate reason, 2.24×
+like-for-like, G5's attribution, H2b's two moves, G6's `(nv)` and gate wording, and the formatting
+nits.

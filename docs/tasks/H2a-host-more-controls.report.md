@@ -301,7 +301,8 @@ Ratios are the runner's own launch-paired `pairedLaunchRatios()`, read through
 `scripts/bench/lib.mjs`; the number in brackets after each is that cell's launch spread (MAD /
 median of the ratios to `rn-core`) for the numerator and denominator arm, and `n/v` marks one over
 10 %. This task's own run — one `--plan quick` at 4 launches on a busy machine, `e7b7dbf-dirty`,
-37 % of its samples over the ceiling — is described under "What this run cannot say" below, and
+37 % of its samples over the ceiling — is described under "What this run could not say, and what
+the quiet one says" below, and
 the claims it supported are marked against the quiet readings.
 
 The `nitro-ui-host` arm now carries all four hostable controls, which is what makes the D15

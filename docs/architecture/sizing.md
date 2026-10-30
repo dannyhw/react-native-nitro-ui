@@ -546,8 +546,9 @@ the ceiling), so every cell below is indicative**: every cell whose spread
 across launches is over 10 % is marked **ᴺ** and carries no verdict. A5 has since re-measured all
 of it quiet on `maintainer-mac-2` (`abe68a1`, 8 launches, 0.04 % over the ceiling), and that run's
 cells are in `docs/tasks/A5-quiet-bench-mac2.report.md` and `README.md`; they reproduce this
-table's shape and its verdicts, with two of the ᴺ flags cleared (`Switch` UI CPU on both sides,
-`Button`'s hosted JS CPU at 0.69x) and none of the claims reversed.
+table's shape, with six ᴺ flags cleared (unhosted `Switch` UI CPU and unmount, unhosted `Button`
+UI and JS, hosted `Button` JS 0.69x, hosted `Slider` JS 1.11x) and one verdict reversed: unhosted
+`Slider` JS CPU 1.06x against 0.94x here.
 
 | Control (N=200)         | `nitro-ui` unhosted                                       | `expo-ui-shared-host` | `nitro-ui` + `<Host>`                                   |
 | ----------------------- | --------------------------------------------------------- | --------------------- | ------------------------------------------------------- |

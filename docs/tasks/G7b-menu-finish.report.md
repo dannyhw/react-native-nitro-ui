@@ -173,12 +173,12 @@ same table rules:
 | Cell | Metric | rn-core | expo per-control | expo shared-host | nitro-ui | nitro-ui-host | ÷ shared | ÷ per-control |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | mount N=1 | presented | 31.82 ms | 32.08 ms | 31.57 ms | 31.45 ms | 31.47 ms | 0.99× | 0.98× |
-| mount N=1 | JS commit | 0.45 ms | 1.93 ms | 1.92 ms | **0.71 ms** | 0.95 ms | 0.38× | 0.43× |
+| mount N=1 | JS commit | 0.45 ms | 1.93 ms | 1.92 ms | **0.71 ms** | 0.95 ms | 0.38× _(nv)_ | 0.43× _(nv)_ |
 | mount N=50 | presented | 32.58 ms | 97.93 ms | 49.61 ms | **49.32 ms** | **35.83 ms** | **0.98×** | **0.51×** |
 | mount N=50 | mounted | 25.79 ms | 58.09 ms | 40.73 ms | 39.30 ms | **27.61 ms** | **0.98×** | **0.68×** |
 | mount N=50 | UI CPU/op | 11.51 ms | 60.10 ms | 23.81 ms | 30.00 ms | **13.48 ms** | 1.26× | **0.50×** |
 | mount N=50 | JS CPU/op | 5.45 ms | 25.85 ms | 16.17 ms | **3.29 ms** | 3.60 ms | **0.20×** | **0.13×** |
-| mount N=200 | presented | 55.71 ms | 481.48 ms | 131.37 ms | 157.88 ms | **61.04 ms** | 1.20× _(nv)_ | **0.33×** |
+| mount N=200 | presented | 55.71 ms | 481.48 ms | 131.37 ms | 157.88 ms | **61.04 ms** | 1.20× _(nv)_ | 0.33× _(nv)_ |
 | mount N=200 | mounted | 41.07 ms | 208.41 ms | 114.87 ms | **89.07 ms** | **43.51 ms** | **0.78×** | **0.43×** |
 | mount N=200 | UI CPU/op | 28.07 ms | 407.92 ms | 76.80 ms | 135.32 ms | **31.33 ms** | 1.76× | **0.33×** |
 | mount N=200 | JS commit | 15.79 ms | 96.63 ms | 55.17 ms | **9.35 ms** | 9.49 ms | **0.17×** | **0.10×** |
@@ -202,16 +202,22 @@ replaces a whole baseline file and a `--component menu` run would drop the other
 X14 owns the mint — but the ratios above are now quiet-run readings, and `--check` on them reports
 every `menu` row as `not measured in base` (28 on iOS, 35 on Android) rather than as a failure.
 
-The `leak` cells moved, and the move is worth the follow-up line it gets. G7b read
+The `leak` cells moved, and the move is worth the follow-up line it gets. "Monotonic" here is the
+runner's own test, not a slope threshold: for each of the cell's 8 launches, all 11 footprint
+samples `leak0`…`leak10` are ≥ the one before, ties counting (`lib.mjs:1289-1294`). G7b read
 `leakMonotonic: false` on every arm of `leak.menu` and concluded "printed, not judged". A5's quiet
 run agrees for the unhosted arms on both platforms (iOS 363 KiB/c and Android 417 KiB/c, both
-non-monotonic), but on Android **four `nitro-ui-host` cells are monotonic**: `leak.menu` 695,
-`leak.slider` 578, `leak.date-picker` 602 and `leak.button` 512 KiB/cycle, each over 8 launches
-with `heapCollected: true`. Under the runner's own rule (§6 of setup-decisions: fail on a
-monotonic increase) those four are growth rather than drift, and all four are on the Host arm: the
-unhosted `nitro-ui` arm is non-monotonic on the same four controls in the same run. They gate
-nothing — a committed baseline stores no leak slope, so `--check` cannot see them — and A5 has no
-room to chase them; see its report's follow-ups.
+non-monotonic), but on Android **four `nitro-ui-host` cells pass it**: `leak.menu` 695,
+`leak.slider` 578, `leak.date-picker` 602 and `leak.button` 512 KiB/cycle. `heapCollected: true`
+on them means only that Hermes' `gc()` was callable (`bench/src/probe.ts`), and it is true on every
+leak cell of both runs, so it neither sets these four apart nor shows ART collected. The slopes are
+not exceptional either: in the same run the unhosted `nitro-ui` arm is larger on three of the four
+(`slider` 845, `button` 647, `date-picker` 933 KiB/c) and `rn-core` is positive on all four
+(128–315 KiB/c) — what distinguishes the hosted four is that they are steady in every launch rather
+than a wobbling series. Nothing gates them: `nitro-ui-host` is a reference arm that never gates
+(`GATED_IMPLEMENTATIONS`, `lib.mjs:72`), and a baseline keeps a `leakSlopeBytesPerCycle` only when
+the minting cell was monotonic (`lib.mjs:1618-1623`), which no committed cell was. A5 has no room
+to chase them; see its report's follow-ups.
 
 Four runs are reported: the two quick plans (both `problems: none` on the canonical devices, and
 both stamping the machine `quiet: true`, so comparable in kind with A3's baseline runs on this
@@ -416,9 +422,10 @@ and `--check` was not run against it.
   FAIL row in the ledger; `bench` should refuse `--help` the way `check` refuses arguments.
 - Bench leak cells: A5's quiet full plan is the only run of this component's that has produced
   **monotonic** leak slopes — Android `nitro-ui-host` on `menu` (695 KiB/cycle), `date-picker`
-  (602), `slider` (578), `button` (512), 8 launches each, `heapCollected: true`, every unhosted arm
-  still non-monotonic. Setup decisions §6 says fail on a monotonic increase, and no gate can see it
-  because a committed baseline stores no leak slope. Wants an owner with a heap dump.
+  (602), `slider` (578), `button` (512). The slopes themselves are unremarkable (the unhosted arm
+  is larger on three of the four, `rn-core` is positive too); what is new is that the series climbs
+  in every launch. Nothing can gate it: `nitro-ui-host` is a reference arm, and a baseline stores a
+  slope only when its mint's cell was monotonic. Wants an owner with a heap dump.
 - X4's Menu coverage is a duplicate `real-input-menu` block: `task/X4-conformance` added
   `testID="real-input-menu"` to `MenuScreen.tsx` independently of this task's block, so merging
   the two will need the a11y case repointed at one screen (or its fixture regenerated).
