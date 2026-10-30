@@ -82,6 +82,8 @@ const ECHO = {
   pickerIndex: 'real-input-picker-index',
   pickerEvents: 'real-input-picker-events',
   pickerGone: 'real-input-drop-gone',
+  menuPick: 'real-input-menu-pick',
+  menuEvents: 'real-input-menu-events',
   hostValue: 'host-controlled-value',
   hostEvents: 'host-events-count',
   hostSliderValue: 'host-slider-value',
@@ -789,6 +791,277 @@ const CHECKS = {
       'opening and dismissing reported no selection - a menu is not a choice',
       t.requireEcho(ECHO.hostPickerIndex),
       '2'
+    );
+  },
+
+  /**
+   * A real tap must open a `Menu`'s popup, a real tap on a row must reach JS as a
+   * pick, and a disabled row must take none.
+   *
+   * Why the harness cannot cover it (`Menu.harness.tsx` covers the same shapes): a
+   * Compose popup is a window of its own, and the harness's touch injector reaches the
+   * React Native window, so nothing there has ever pressed the trigger or a row. The
+   * harness reaches a pick through `nuiTestSelectRow`, which is the model's pick path
+   * and not the popup's. Here the presses come from `adb shell input`, and the only
+   * witnesses are the window table and the text the app renders — which is the pair
+   * that can see D32: Android reports `open`, then `select`, then `close` for one
+   * pick, and a pick that did not arrive must not be retried into a second one.
+   *
+   * Two things worth naming before the steps:
+   *
+   * - **The echo cannot be read with the popup open.** The dump returns the popup's
+   *   tree while it is up, so every reading of `real-input-menu-*` happens after a
+   *   dismissal, and the accessibility claims about the *trigger* are taken before the
+   *   first tap. That is the same rule the `picker` check follows.
+   * - **The F1 native-state guard cannot be armed for a pick.** `pressUntil` wants a
+   *   reading of what the control itself holds; a Menu publishes its expanded state as
+   *   a Compose `stateDescription`, which `uiautomator dump` does not carry, and its
+   *   row has no `checked` state to read either. What *is* armed is the delivery
+   *   witness for the press that opens the popup — the window table, which is the
+   *   control's own state as far as out here is concerned — and for the pick,
+   *   `tapOptionUntilValue`'s rule that a row which has gone is not pressed again, so
+   *   a retry can never land a second choice.
+   *
+   * iOS has no `open`/`close` in any of these readings because a SwiftUI `Menu` keeps
+   * its presentation to itself (D32); the same echo reads `select bravo` there.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'menu': async (t) => {
+    // The three titles of `real-input-menu`, spelled as `MenuScreen` spells them.
+    // None appears anywhere else on the screen, which is what lets a text match name a
+    // popup row; `Locked row` is the disabled one.
+    const PICK = 'Bravo';
+    const TWIN = 'Alpha';
+    const LOCKED = 'Locked row';
+
+    // 1. Before any touch: the echoes, the window table, and what a screen reader is
+    //    offered. The trigger's node is read here rather than later because a popup
+    //    owns the dump while it is up.
+    const control = await t.requireControlOnScreen('Real-input menu');
+    // The one node behind this label, and the text it paints. Compose merges the
+    // trigger's semantics into a single node (the `clearAndSetSemantics` fix
+    // `HybridNitroUiMenu.kt` records), so name, value and role all land there — and
+    // `requireControlOnScreen` would happily hand back the first of several. Counting
+    // here is what makes the readings below claims about *one* announcement rather
+    // than about whichever node the dump happened to write first.
+    const named = t.nodesNamed('Real-input menu');
+    t.log.checkEquals(
+      "one node carries the trigger's name, so TalkBack announces it once",
+      named.length,
+      1
+    );
+    t.log.checkEquals(
+      'and that same node carries the title it paints as its value',
+      named[0]?.text,
+      'Actions'
+    );
+    // The role `Role.DropdownList` reaches the dump as the class Compose gives a
+    // drop-down — the same reading `CHECKS.picker` step 8 makes for a Picker.
+    t.log.checkEquals(
+      'the node announces the role of a list of choices',
+      named[0]?.className,
+      'android.widget.Spinner'
+    );
+    t.log.checkEquals(
+      'the Menu has reported no pick before a touch',
+      t.requireEcho(ECHO.menuPick),
+      '-'
+    );
+    t.log.checkEquals(
+      'and no event of any kind',
+      t.requireEcho(ECHO.menuEvents),
+      'none'
+    );
+    t.log.checkEquals(
+      'no popup window belongs to the app before a touch',
+      t.popupWindowCount(),
+      0
+    );
+
+    // 2. Opening. The window is the witness that the press arrived, so the trigger is
+    //    tapped until one is up.
+    t.log.checkEquals(
+      'a real tap on the trigger opens the menu as a popup window',
+      await t.tapUntilUp(
+        () => t.requireControlAt('Real-input menu', control),
+        'a real tap on the trigger',
+        () => t.popupWindowCount(),
+        { pollMs: DUMP_POLL_MS }
+      ),
+      '1'
+    );
+    t.waitForOption(PICK, 'the menu to open');
+    // The row vocabulary, read from the popup's own tree. The count is asserted; the
+    // attributes are printed rather than pinned, because what the tree says about a
+    // *disabled* row is not what this check assumed: the first real run read
+    // `enabled="true"` on the row the group disables, while the pick that check refuses
+    // is refused by the control (step 5 measures that with the twin as its barrier). So
+    // the numbers go in the log, the refusal is asserted where a finger proves it, and
+    // what a screen reader is told about a disabled row is a question for the library
+    // rather than a claim invented here.
+    const rows = t
+      .dump()
+      .filter(
+        (node) => [PICK, TWIN, LOCKED].includes(node.text) && node.text !== ''
+      );
+    t.log.checkEquals(
+      'the popup carries all three rows in the accessibility tree',
+      rows.length,
+      3
+    );
+    for (const node of rows) {
+      t.log.note(
+        `row "${node.text}": enabled=${node.enabled} clickable=${node.clickable} ` +
+          `checkable=${node.checkable} selected=${node.selected} ` +
+          `class=${node.className}`
+      );
+    }
+
+    // 3. The way out that changes nothing. Back is the platform's own, and a dismissal
+    //    must not be mistaken for a pick or counted as a second open.
+    await t.pressBack();
+    t.log.checkEquals(
+      'Back shuts the popup (no window left behind)',
+      t.waitForPopupCount(0, 'the back gesture to take the popup down'),
+      0
+    );
+    t.log.checkEquals(
+      'opening and dismissing reported no pick',
+      t.requireEcho(ECHO.menuPick),
+      '-'
+    );
+    // D32: opening is a thing that happens on Android, so it is reported - once, and
+    // with a close to match. An echo that read `open > open` would be the anchor and
+    // `menuAnchor`'s own handling both reporting one gesture.
+    t.log.checkEquals(
+      'and the pair the platform does report: one open, one close',
+      t.requireEcho(ECHO.menuEvents),
+      'open > close'
+    );
+
+    // 4. A pick. Aim again: the first dismissal leaves the trigger where it was, and
+    //    `requireControlAt` says so if it has moved.
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input menu', control),
+      'a real tap that reopens the menu',
+      () => t.popupWindowCount(),
+      { pollMs: DUMP_POLL_MS }
+    );
+    t.log.checkEquals(
+      `a real tap on the row "${PICK}" reaches JS`,
+      await t.tapOptionUntilValue(
+        PICK,
+        ECHO.menuPick,
+        'bravo',
+        'a pick from the menu to reach JS'
+      ),
+      'bravo'
+    );
+    t.log.checkEquals(
+      'a pick closes its own popup',
+      t.waitForPopupCount(0, 'the pick to take that popup down'),
+      0
+    );
+    // The ordering D32 rules on, asserted as the WHOLE echo rather than a tail of it.
+    // A three-event tail also matches `open > open > select bravo > close`, which is
+    // exactly what a retried tap or double-reporting anchor produces - the duplicate
+    // step 3's `open > close` check can only see from the front. The full string pins
+    // this suite's own steps (tap, Back, tap, pick), which is the point: the run has a
+    // deterministic shape and anything else in it, in any order, is a finding.
+    t.log.checkEquals(
+      'one pick reports open, then select, then close - in that order',
+      t.requireEcho(ECHO.menuEvents),
+      'open > close > open > select bravo > close'
+    );
+
+    // 5. The disabled row. A tap on it must report no pick.
+    //
+    //    Three things this step does not assert, each because the first real run
+    //    measured the library doing something the check had invented:
+    //
+    //    - **Whether the popup stays up.** It does, on every run so far: the disabled row
+    //      swallows the tap and leaves the window standing. That is not asserted either
+    //      way here, because the refusal is the claim about the control and the window's
+    //      fate is Compose's.
+    //    - **How the popup comes down, once it has to.** Neither of a person's two ways
+    //      is dependable after that tap: the scrim tap left it up at 30 Oct 00:35:09Z
+    //      and closed it at 01:49:39Z, and one run's Back press timed out with the
+    //      window still standing (29 Oct 23:33:43Z). The sequence below - scrim, then
+    //      Back if the scrim left it up - is what gets the screen back, and the log
+    //      says which one did. All measured, none asserted.
+    //    - **What the tree says about the row itself.** Printed in step 2. The row this
+    //      check refuses read `enabled="true"` in the dump while the control refused it,
+    //      so the announcement and the behaviour are different questions - see the
+    //      report's follow-ups. Asserting the refusal on the *echo* is the honest form.
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input menu', control),
+      'a real tap that opens the menu to reach the disabled row',
+      () => t.popupWindowCount(),
+      { pollMs: DUMP_POLL_MS }
+    );
+    await t.tapNode(
+      t.waitForOption(LOCKED, 'the menu to show the disabled row')
+    );
+    const afterLockedTap = t.popupWindowCount();
+    t.log.note(
+      `the disabled row's tap left popup windows = ${String(afterLockedTap)}`
+    );
+    // Put the popup away before reading an echo, because a popup owns the dump: with a
+    // window up, the app's own `Text` nodes are not in the tree and every echo reads as
+    // missing. Both of the two dismissals a person has are tried, and which one worked is
+    // logged rather than asserted - the claim under test is what the control *reported*,
+    // not which of Compose's own rules ended the gesture.
+    if (afterLockedTap > 0) {
+      await t.tapScrim();
+      let closedBy = 'the scrim tap';
+      if (t.popupWindowCount() > 0) {
+        await t.pressBack();
+        closedBy = 'the back gesture, after a scrim tap left it up';
+      }
+      t.log.note(
+        `that popup came down on ${closedBy}; popup windows now ` +
+          String(t.popupWindowCount())
+      );
+    }
+    t.log.checkEquals(
+      'a tap on the disabled row reports no pick',
+      t.requireEchoToStay(ECHO.menuPick, 'bravo', 'a tap on the disabled row'),
+      'bravo'
+    );
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input menu', control),
+      'a real tap that reopens the menu for the twin row',
+      () => t.popupWindowCount(),
+      { pollMs: DUMP_POLL_MS }
+    );
+    t.log.checkEquals(
+      `the enabled row "${TWIN}", tapped the same way, does report a pick`,
+      await t.tapOptionUntilValue(
+        TWIN,
+        ECHO.menuPick,
+        'alpha',
+        'the twin pick to reach JS'
+      ),
+      'alpha'
+    );
+    t.log.checkEquals(
+      'so the line above measured a refusal, not a dead screen',
+      t.waitForPopupCount(0, 'the twin pick to take its popup down'),
+      0
+    );
+    // And the whole history again, now that the last two gestures are in it. The
+    // reopen before the disabled-row tap fires an `open` and the dismissal after it
+    // fires the matching `close`, with no pick in between, and the twin pick is one
+    // more open/close pair around its own select. This is the strictest form of D32's
+    // promise on Android: every open has exactly one close, a dismissal of a disabled
+    // row still counts as a close, and nothing the suite performs is reported twice or
+    // out of order. The shape is measured green on 30 Oct at 02:06:15Z; under the M1
+    // mutation (01:49:39Z) every doubled `open` shows up in it.
+    t.log.checkEquals(
+      'the whole echo pairs every open with a close, in the order the gestures happened',
+      t.requireEcho(ECHO.menuEvents),
+      'open > close > open > select bravo > close > open > close > open > select alpha > close'
     );
   },
 
@@ -2521,7 +2794,7 @@ class DeviceHarness {
    * The example's tabs are its only navigation.
    *
    * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker' | 'host'} screen
+   *   | 'picker' | 'menu' | 'host'} screen
    */
   async goToScreen(screen) {
     const label = {
@@ -2531,6 +2804,7 @@ class DeviceHarness {
       segmented: 'Segments',
       datepicker: 'Dates',
       picker: 'Picker',
+      menu: 'Menu',
       host: 'Host',
     }[screen];
     const anchor = {
@@ -2540,6 +2814,7 @@ class DeviceHarness {
       segmented: ECHO.segmentedIndex,
       datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
+      menu: ECHO.menuPick,
       host: ECHO.hostValue,
     }[screen];
     // Asked from wherever the last control left the scroll, an echo that is scrolled
@@ -3568,6 +3843,29 @@ function makeContext(harness, log) {
      */
     async pressBack() {
       harness.key(KEY_BACK);
+      await sleep(400);
+    },
+
+    /**
+     * Press the empty part of the screen that an open popup's scrim covers.
+     *
+     * This is the other dismissal a person has. The trigger is *under* this control's
+     * popup (measured in G7b: the list is drawn over its own button), so a second press
+     * there lands on a row instead of on the button. The point chosen is a fifth of the
+     * screen's height above the bottom edge, which on this suite's screens is below the
+     * control under test and outside a list that hangs from a trigger near the top.
+     *
+     * Measured, not assumed, that it works: after a tap on a *disabled* row this tap
+     * left the popup standing (30 Oct 00:35:09Z), and so did the Back press that
+     * followed it on the run before (29 Oct 23:33:43Z). The Menu check therefore treats
+     * it as one attempt out of several and logs which dismissal actually cleared the
+     * window. A popup that survives both is a real finding, recorded in
+     * `docs/tasks/FOLLOWUPS.md`, not something this helper papered over.
+     */
+    async tapScrim() {
+      const height = harness.displayHeight();
+      const width = harness.displayWidth();
+      harness.tapAt(Math.round(width / 2), Math.round(height * 0.8));
       await sleep(400);
     },
 

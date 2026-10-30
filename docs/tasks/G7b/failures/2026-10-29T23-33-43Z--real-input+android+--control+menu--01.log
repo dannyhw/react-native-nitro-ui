@@ -1,0 +1,94 @@
+# Failure excerpt — real-input:android:--control:menu
+
+- Ran: 2026-10-29T23:33:43.849Z on code tree `32a742abfa8b` at HEAD `32575f8` (branch `task/G7b-menu-finish`)
+- Command: `node scripts/real-input/android.mjs --control menu`
+- Result: fail, exit 1, 65912 ms
+- Load: start 1.58, end 2.22, median 2.20, max 2.43
+- Device: android / device `emulator-5570` / lease `G7b-27pum`
+- Full log: `task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-33-43.666Z.log` (<store>/task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-33-43.666Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the disabled row ("Locked row") tells a screen reader it is disabled — expected false, saw true`
+- `✗ one pick reports open, then select, then close - in that order — expected open > select bravo > close, saw open > close > open > select bravo > close`
+- `✗ timed out after 8000ms waiting for the back gesture to take that popup down - popup windows 1, expected 0`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-33-43.666Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7b-27pum (still live)
+  |   G7b-27pum                G7b          both              pair-b
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.22 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 48 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: real-input:android:--control:menu
+gate: node scripts/real-input/android.mjs --control menu (cwd .)
+gate: code tree 32a742abfa8b at HEAD 32575f8
+gate: git tree 858d8832101e with a DIRTY worktree (not reusable)
+gate: log task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-33-43.666Z.log
+gate:       <store>/task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-33-43.666Z.log
+real-input (android): emulator-5570 · nitroui_b · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  menu: real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none
+    · "Real-input menu" occupies 42,918 → 294,1044
+    ✓ one node carries the trigger's name, so TalkBack announces it once — expected 1, saw 1
+    ✓ and that same node carries the title it paints as its value — expected Actions, saw Actions
+    ✓ the node announces the role of a list of choices — expected android.widget.Spinner, saw android.widget.Spinner
+    ✓ the Menu has reported no pick before a touch — expected -, saw -
+    ✓ and no event of any kind — expected none, saw none
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Real-input menu" occupies 42,918 → 294,1044
+    ✓ a real tap on the trigger opens the menu as a popup window — expected 1, saw 1
+    ✓ the popup carries all three rows in the accessibility tree — expected 3, saw 3
+    ✗ the disabled row ("Locked row") tells a screen reader it is disabled — expected false, saw true
+    ✓ and its twin ("Bravo") says it is not - so the line above is a refusal — expected true, saw true
+    ✓ Back shuts the popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no pick — expected -, saw -
+    ✓ and the pair the platform does report: one open, one close — expected open > close, saw open > close
+    · "Real-input menu" occupies 42,918 → 294,1044
+    ✓ a real tap on the row "Bravo" reaches JS — expected bravo, saw bravo
+    ✓ a pick closes its own popup — expected 0, saw 0
+    ✗ one pick reports open, then select, then close - in that order — expected open > select bravo > close, saw open > close > open > select bravo > close
+    · "Real-input menu" occupies 42,918 → 294,1044
+    · the disabled row's tap left popup windows = 1 - whether a disabled row dismisses its popup is Compose's choice, so the refusal below is asserted on the reported pick, not on the window
+    ✗ timed out after 8000ms waiting for the back gesture to take that popup down - popup windows 1, expected 0
+
+menu: FAIL (no retries)
+    failed: the disabled row ("Locked row") tells a screen reader it is disabled — expected false, saw true
+    failed: one pick reports open, then select, then close - in that order — expected open > select bravo > close, saw open > close > open > select bravo > close
+    failed: timed out after 8000ms waiting for the back gesture to take that popup down - popup windows 1, expected 0
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry
+gate: real-input:android:--control:menu FAIL in 65.9 s - note: the code tree moved during the run (65a27c77381b now), so this line describes 32a742abfa8b
+gate: recorded in .gates/task/G7b-menu-finish.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G7b-menu-finish/real-input+android+--control+menu-2026-10-29T23-33-43.666Z.log (5 probe(s))
+
+```

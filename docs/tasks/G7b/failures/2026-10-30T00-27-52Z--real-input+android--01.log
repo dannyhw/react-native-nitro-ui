@@ -1,0 +1,67 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-10-30T00:27:52.498Z on code tree `43816d4c80ef` at HEAD `2dd8dd7` (branch `task/G7b-menu-finish`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 279 ms
+- Load: start 3.69, end 3.69, median 3.69, max 3.69
+- Device: android / device `emulator-5570` / lease `G7b-27pum`
+- Full log: `task/G7b-menu-finish/real-input+android-2026-10-30T00-27-52.201Z.log` (<store>/task/G7b-menu-finish/real-input+android-2026-10-30T00-27-52.201Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/real-input+android-2026-10-30T00-27-52.201Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7b-27pum (still live)
+  |   G7b-27pum                G7b          both              pair-b
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.69 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 23 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: real-input:android
+gate: node scripts/real-input/android.mjs (cwd .)
+gate: code tree 43816d4c80ef at HEAD 2dd8dd7
+gate: git tree df08f357bfd5
+gate: log task/G7b-menu-finish/real-input+android-2026-10-30T00-27-52.201Z.log
+gate:       <store>/task/G7b-menu-finish/real-input+android-2026-10-30T00-27-52.201Z.log
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp e030c74c at 32575f8adf706ea598da9eaa70138866828a3023, now 43816d4c at 2dd8dd79f742e85988e383ea97983d0d587f2d4a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp e030c74c at 32575f8adf706ea598da9eaa70138866828a3023, now 43816d4c at 2dd8dd79f742e85988e383ea97983d0d587f2d4a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+gate: real-input:android FAIL in 0.3 s
+gate: recorded in .gates/task/G7b-menu-finish.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G7b-menu-finish/real-input+android-2026-10-30T00-27-52.201Z.log (5 probe(s))
+
+```

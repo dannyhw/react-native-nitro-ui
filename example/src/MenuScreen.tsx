@@ -45,6 +45,23 @@ const VARIANTS: readonly ButtonVariant[] = [
 
 const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
 
+/**
+ * The rows of the real-input menu, spelled as `CHECKS.menu` and
+ * `testRealInputMenu` spell them.
+ *
+ * None of the three titles appears anywhere else on this screen, which is what lets
+ * a text match name one popup row rather than some other text on screen (the same
+ * rule `PickerScreen`'s `REAL_INPUT_OPTIONS` follows). `Locked row` is disabled, so
+ * it is the row a check proves takes no pick.
+ */
+const REAL_INPUT_GROUP: MenuGroup = {
+  actions: [
+    { id: 'alpha', title: 'Alpha' },
+    { id: 'bravo', title: 'Bravo' },
+    { id: 'locked', title: 'Locked row', disabled: true },
+  ],
+};
+
 /** The rows the "group changes" block can take away and put back. */
 const OPTIONAL_ROW = { id: 'extra', title: 'Extra row' };
 
@@ -83,6 +100,32 @@ export default function MenuScreen() {
   const toggleExtraRow = useCallback(() => {
     setExtraRow((current) => !current);
   }, []);
+
+  // The real-input echoes: what the control reported, in the order it reported it.
+  //
+  // One string rather than three counters, because the *order* is the thing
+  // `scripts/real-input` asserts (DECISIONS D32: a pick fires `onSelect` and then
+  // `onClose`, and Android is the only platform that fires either). So the same
+  // echo reads `open > select bravo > close` on Android after one real pick and
+  // `select bravo` on iOS — row ids, not titles — and each platform's check reads
+  // it and expects its own text: the ruling is asserted rather than described.
+  const [events, setEvents] = useState('none');
+  const [lastPick, setLastPick] = useState('-');
+
+  const appendEvent = useCallback((said: string) => {
+    setEvents((current) =>
+      current === 'none' ? said : `${current} > ${said}`
+    );
+  }, []);
+  const noteRealSelect = useCallback(
+    (id: string) => {
+      setLastPick(id);
+      appendEvent(`select ${id}`);
+    },
+    [appendEvent]
+  );
+  const noteRealOpen = useCallback(() => appendEvent('open'), [appendEvent]);
+  const noteRealClose = useCallback(() => appendEvent('close'), [appendEvent]);
 
   // A menu with a header group, a divider-only group, a destructive row and a
   // disabled one — the whole row vocabulary in one control.
@@ -158,6 +201,45 @@ export default function MenuScreen() {
           anchored to the button on Android. The trigger is a Button: same
           variants, same sizes, same box.
         </Text>
+
+        <Text style={[styles.section, { color: ink.ink }]}>
+          Real input (scripts/real-input reads these)
+        </Text>
+        <Text style={styles.note}>
+          At the top of the page on purpose: a check that has to scroll to reach
+          a control cannot tell a dropped tap from a control that is off screen.
+        </Text>
+        <View style={styles.row}>
+          <Menu
+            title="Actions"
+            group={REAL_INPUT_GROUP}
+            onSelect={noteRealSelect}
+            onOpen={noteRealOpen}
+            onClose={noteRealClose}
+            testID="real-input-menu"
+            accessibilityLabel="Real-input menu"
+          />
+          {/* Separate `Text`s, not one line with nested children: React Native renders
+              a nested `Text` inline inside its parent, so on Android it never becomes
+              its own view and never carries a `resource-id` — the only way
+              `scripts/real-input/android.mjs` can find an echo. */}
+          <Text style={[styles.readout, { color: ink.muted }]}>
+            last row reported
+          </Text>
+          <Text
+            testID="real-input-menu-pick"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {lastPick}
+          </Text>
+          <Text style={[styles.readout, { color: ink.muted }]}>in order</Text>
+          <Text
+            testID="real-input-menu-events"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {events}
+          </Text>
+        </View>
 
         <Text style={[styles.section, { color: ink.ink }]}>
           What the control heard
@@ -287,4 +369,6 @@ const styles = StyleSheet.create({
   section: { fontSize: 15, fontWeight: '600', marginTop: 14 },
   note: { color: '#8a8a8f', fontSize: 12, lineHeight: 17 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  readout: { fontSize: 12, color: '#8a8a8f', alignSelf: 'center' },
+  value: { fontSize: 13, fontWeight: '600', alignSelf: 'center' },
 });

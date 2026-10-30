@@ -1,0 +1,82 @@
+# Failure excerpt — real-input:ios:--control:menu
+
+- Ran: 2026-10-30T00:11:18.567Z on code tree `b13dde9a2150` at HEAD `2dd8dd7` (branch `task/G7b-menu-finish`)
+- Command: `node scripts/real-input/ios.mjs --control menu`
+- Result: fail, exit 1, 126735 ms
+- Load: start 2.20, end 12.87, median 13.98, max 17.37
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G7b-27pum`
+- Full log: `task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-30T00-11-18.250Z.log` (<store>/task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-30T00-11-18.250Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputMenu in 15.457s`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-30T00-11-18.250Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7b-27pum (still live)
+  |   G7b-27pum                G7b          both              pair-b
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 12.87 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 40 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: real-input:ios:--control:menu
+gate: node scripts/real-input/ios.mjs --control menu (cwd .)
+gate: code tree b13dde9a2150 at HEAD 2dd8dd7
+gate: git tree df08f357bfd5 with a DIRTY worktree (not reusable)
+gate: log task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-30T00-11-18.250Z.log
+gate:       <store>/task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-30T00-11-18.250Z.log
+real-input (ios): nitro-ui B · 3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 · Metro 8293 · scheme NitroUiExampleUITests
+metro: started on 8293 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree b13dde9a2150 (602 files) head 2dd8dd79 · 9 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8293
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-10-30 00:13:09.026.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-10-30 00:13:09.026.
+    Test Suite 'RealInputTests' started at 2026-10-30 00:13:09.026.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputMenu]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputMenu]' failed (15.457 seconds).
+    Test Suite 'RealInputTests' failed at 2026-10-30 00:13:24.486.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-10-30 00:13:24.486.
+    Test Suite 'Selected tests' failed at 2026-10-30 00:13:24.487.
+    ** TEST EXECUTE FAILED **
+
+  menu: real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:2032: error: -[NitroUiExampleUITests.RealInputTests testRealInputMenu] : XCTAssertEqual failed: ("Actions") is not equal to ("Real-input menu") - the trigger's name should be the accessibilityLabel the library set on the SwiftUI Menu. Without `.accessibilityLabel` the control takes its name from its own title and says "Actions", which is what a VoiceOver user would hear.
+    ✗ XCUITest reported "failed" for testRealInputMenu in 15.457s
+
+menu: FAIL (no retries)
+    failed: XCUITest reported "failed" for testRealInputMenu in 15.457s
+
+real-input (ios): 0/1 controls passed · 0 press sequence(s) needed a retry
+gate: real-input:ios:--control:menu FAIL in 126.7 s
+gate: recorded in .gates/task/G7b-menu-finish.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-30T00-11-18.250Z.log (4 probe(s))
+
+```

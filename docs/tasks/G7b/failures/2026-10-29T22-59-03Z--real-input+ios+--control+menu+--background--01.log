@@ -1,0 +1,46 @@
+# Failure excerpt — real-input:ios:--control:menu:--background
+
+- Ran: 2026-10-29T22:59:03.933Z on code tree `cdde3752f6f3` at HEAD `2636d92` (branch `task/G7b-menu-finish`)
+- Command: `node scripts/real-input/ios.mjs --control menu --background`
+- Result: fail, exit 1, 181 ms
+- Load: start 7.47, end 7.47, median 7.47, max 7.47
+- Device: ios
+- Full log: `task/G7b-menu-finish/real-input+ios+--control+menu+--background-2026-10-29T22-59-03.933Z.log` (<store>/task/G7b-menu-finish/real-input+ios+--control+menu+--background-2026-10-29T22-59-03.933Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/real-input+ios+--control+menu+--background-2026-10-29T22-59-03.933Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G7b-27pum                G7b          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 7.47 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 5 log line(s)
+
+```
+
+real-input (ios): Error: real-input: unknown argument "--background".
+
+
+
+```

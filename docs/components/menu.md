@@ -156,15 +156,26 @@ the composition's own window and the Host has to keep it honest:
 
 The Android popup hangs off the **trigger's** box, not the composition's. That is a
 deliberate departure from `docs/tasks/Q1-menu-design.md` §3, which asks for a
-`Modifier.clickable` trigger beside a plain `DropdownMenu`: a plain `DropdownMenu` composes
-a `Popup` whose position provider is handed the composition's own view as its anchor, so
-the list opens under that view — the control's box while the control owns the
-composition, and the whole Host rectangle when it does not. `ExposedDropdownMenuBox` with
-`menuAnchor` is the anchor that keeps the list under its own button in both cases, which is
-what `Menu` is for; `exposedDropdownSize()` is deliberately not used, because it sizes the
-list to the anchor and a menu's list is as wide as its items need. The anchor still reports
-through `onGloballyPositioned`, so the witness's `anchor=` rect is the trigger's box in
-composition space, and dismissal on a layout move is H2b's, unchanged.
+`Modifier.clickable` trigger beside a plain `DropdownMenu`. `ExposedDropdownMenuBox` with
+`menuAnchor` is the documented way to say "position this popup against *this* control"
+rather than relying on what a container happens to be, and `Menu` inside a `<Host>` is
+exactly the case where that distinction should matter; `exposedDropdownSize()` is
+deliberately not used, because it sizes the list to the anchor and a menu's list is as
+wide as its items need. The anchor still reports through `onGloballyPositioned`, so the
+witness's `anchor=` rect is the trigger's box in composition space, and dismissal on a
+layout move is H2b's, unchanged.
+
+The failure mode the anchor is here to prevent — a plain `DropdownMenu` opening its list
+under the whole Host rectangle instead of under the button — is **Material's documented
+behaviour, not something this repo has observed**. G7b round 1 tried to reproduce it four
+ways inside a `<Host>` (the anchor dropped inside the box, a `clickable` + `DropdownMenu`,
+that pair inside a `fillMaxSize` Box, and this list offset 300 dp) and the hosted test read
+the popup at the trigger in every case; round 1 did not record how that last offset was
+applied, which is why the fix round ran a mutant that moves the window for certain: a plain
+`DropdownMenu(offset = DpOffset(0.dp, 64.dp))`. That one moved the popup's window from 16 px
+below the anchor's bottom to 168 px, and `Menu.harness.tsx`'s `gap < 48` went red — so the
+guard is proven able to catch a moved popup, and the sentence above stays the reason for the
+*API* choice rather than an observed failure (`docs/tasks/G7b-menu-finish.report.md`).
 
 ## Sizing
 
@@ -238,24 +249,43 @@ What this release can show, per platform:
   makes for the view, and RN puts `accessibilityLabel` on the component view itself, so
   the assertion holds that the prop reaches React Native's component view at the
   trigger's box, not the name VoiceOver reads. That view is not an accessibility element,
-  so the name a reader gets comes from the SwiftUI modifier, and nothing here tests it (a
-  reading of the harness' UIKit-only query; a G7b follow-up). Clearing the label off that view instead — leaving the prop, the model and
-  the SwiftUI element alone — is what makes the run go red. A `title` fallback is not
-  observable this way at all: a trigger with no `accessibilityLabel` answers no node for
-  its title on iOS, and on Android the query answers `null` for every Compose control.
+  so the name a reader gets comes from the SwiftUI modifier, and the harness cannot see
+  that (a reading of the harness' UIKit-only query). What does see it is the real-input
+  case: `testRealInputMenu` reads the *hosted* control's node out of the XCUITest tree —
+  after asserting its identifier differs from the React Native wrapper's, so reading the
+  wrapper cannot pass — and pins its name to `accessibilityLabel`. Removing
+  `.accessibilityLabel` from `MenuContent.body` makes that run red with
+  `("Actions") is not equal to ("Real-input menu")`: the control falls back to its own
+  title, which is exactly what a VoiceOver user would hear. A `title` fallback is not
+  observable through the harness at all: a trigger with no `accessibilityLabel` answers no
+  node for its title on iOS, and on Android the query answers `null` for every Compose
+  control.
 - **Android** — the label reaching the control is what is asserted, and nothing more:
   Compose publishes `SemanticsNode`s rather than Views, so the harness' View walk answers
   `null` however correct the component is (`example/__tests__/Slider.harness.tsx`
   documents that asymmetry with its measurements). Reading the semantics tree is
   `uiautomator dump`, which is the harness' `realInput` mode, and G7b's.
 
-Everything below this paragraph is a **reading**, not a measurement. No input this
-environment can inject opens a SwiftUI `Menu`, and nothing here reads Compose semantics,
-so no announcement has been observed on either platform: that the rows are reachable while
-the menu is open and speak their own titles, that a destructive row is announced as such on
-iOS, and that a disabled row is not focusable are what the code asks for, not what has been
-heard. The popup's rows are the platform's own elements — we do not re-label them. Hearing
-this list with VoiceOver and TalkBack is G7b's real-input pass.
+What real input has since seen (G7b), and what it still has not. A real finger tap does
+open both presentations, so the paragraph below is no longer the whole story:
+
+- **iOS** (`testRealInputMenu`, XCUITest) — the tap opens the presentation, the three rows
+  are in the tree while it is up, a pick reports `onSelect` alone, and the row the group
+  disables reports nothing while its enabled twin, pressed the same way, does. The same run
+  writes a screenshot that settles one styling question: the trigger's `.buttonStyle` does
+  not follow the rows into the list (three plain system rows under a tinted capsule), so
+  nothing had to be added to the row content.
+- **Android** (`CHECKS.menu`, `uiautomator dump`) — the tap opens one popup window, all
+  three rows are in its tree as `TextView`s, a pick closes it, and the echo proves the
+  order `onOpen`, `onSelect`, `onClose` (D32). The disabled row refuses the pick, and the
+  dump says why that is not an announcement: all three rows, that one included, report
+  `enabled="true"`. Behaviour and announcement are separate questions here; the announcement
+  is filed in `docs/tasks/FOLLOWUPS.md` rather than guessed at.
+
+Still a **reading**, not a measurement: that a destructive row is announced as such on iOS,
+that rows are announced in a particular order, and what TalkBack says aloud about a disabled
+row. The popup's rows are the platform's own elements — we do not re-label them — so hearing
+that list with VoiceOver and TalkBack remains a human pass.
 
 ## Limits
 
@@ -273,14 +303,12 @@ this list with VoiceOver and TalkBack is G7b's real-input pass.
 - **`primaryAction` is iOS-only**, and changes what a tap does there.
 - The menu is the platform's, so its look is the platform's. Beyond `tintColor` there is
   no row styling, no per-row icon on Android, and no way to place the popup.
-- Whether Button's `.buttonStyle` reaches an iOS menu's **rows** is unverified here.
-  `docs/tasks/G2-button.report.md` measured that the harness's synthesised `UITouch` is
-  rejected by SwiftUI's `Button` gesture environment "in all four styles this control
-  uses", and that an `agent-device` HID-level tap changed no app state at all; this
-  task's iOS runs likewise never got a `Menu` open (the events test delivers a press and
-  asserts the `-1` answer instead). So the trigger's box is measured and the open list is
-  not. It is on G7b's real-input list, and if the rows turn out to carry button chrome the
-  fix is one `.buttonStyle(.plain)` on the row content.
+- Button's `.buttonStyle` does **not** reach an iOS menu's rows — measured, no longer open. G7b's
+  real-input case (`testRealInputMenu`) opens the menu with a real finger press and writes a
+  screenshot mid-presentation: three plain system rows under a tinted capsule, so the trigger's
+  chrome stops at the trigger and no `.buttonStyle(.plain)` was needed on the row content. (What
+  G2 measured still holds for the *harness*: its synthesised `UITouch` never opened a `Menu` in any
+  style, which is why this answer came from XCUITest rather than from a harness test.)
 - One submenu level, and no nesting of sections. No checkmarks, no per-row state —
   a menu reports a pick and forgets it, which is the point of having no value.
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated.

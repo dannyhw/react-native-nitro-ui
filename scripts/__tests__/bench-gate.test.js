@@ -1316,10 +1316,11 @@ describe('the Button cells (--component button)', () => {
         'segmented-control',
         'date-picker',
         'picker',
+        'menu',
       ])
     );
     /**
-     * Seven components in the quick plan, each with the same three cells of the four
+     * Eight components in the quick plan, each with the same three cells of the four
      * unscoped arms, plus one scoped arm's cells for each component it renders. Both
      * halves are measured rather than folded into a product: a component losing a cell
      * moves the first number, and an arm escaping (or losing) its scope moves the second.
@@ -1346,7 +1347,7 @@ describe('the Button cells (--component button)', () => {
       component: 'switch',
     }).filter((entry) => entry.implementation === 'nitro-ui-host').length;
     expect(all.length).toBe(
-      unscoped.length * 7 +
+      unscoped.length * 8 +
         hostCells * ARM_SCOPES['nitro-ui-host'].components.length
     );
   });
@@ -1884,6 +1885,7 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     expect([...scoped].sort()).toEqual([
       'button',
       'date-picker',
+      'menu',
       'picker',
       'progress',
       'segmented-control',

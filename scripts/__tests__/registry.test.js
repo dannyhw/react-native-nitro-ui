@@ -619,9 +619,11 @@ describe('the generated tables cover what they claim', () => {
     // `components` list and `ARM_SCOPES` - and both are about cells: an arm is only
     // scheduled for a control it has cells to render. `hostable` alone means "a
     // `<Host>` composes this", which `HostChildren.ts` reads; a control that is
-    // hostable with `bench: false` (G7a's Menu, whose bench arm is G7b) has no cell
-    // to scope, so listing it would make the scheduler promise a cell the plan does
-    // not have and name a `ComponentName` the bench union does not carry.
+    // hostable with `bench: false` has no cell to scope, so listing it would make the
+    // scheduler promise a cell the plan does not have and name a `ComponentName` the
+    // bench union does not carry. G7a shipped Menu in exactly that state (arm on G7b's
+    // list); G7b's flip is the other half of the rule, so this asserts both: the
+    // control with cells is listed, and a control whose `bench` flips off leaves.
     const armIds = (text) => {
       const begin = text.indexOf('region: host-arm-components');
       expect(begin).toBeGreaterThan(-1);
@@ -635,16 +637,28 @@ describe('the generated tables cover what they claim', () => {
         (path) => [path, armIds(files[path] ?? readRepo(path))]
       );
 
-    // The tree in front of us: every hostable-and-benched control is listed, and the
-    // hostable-but-not-benched one is not.
+    // The tree in front of us: every hostable-and-benched control is listed, Menu
+    // included now that its bench arm exists.
     const shipped = runPlan();
     for (const [path, ids] of regions(shipped.files)) {
       expect([path, ids.length > 0]).toEqual([path, true]);
-      expect([path, ids.includes('menu')]).toEqual([path, false]);
+      expect([path, ids.includes('menu')]).toEqual([path, true]);
+    }
+    // And no hostable control escapes the region: the list is the whole hostable-and-
+    // benched set, which is what makes an unlisted control's cell a schedule miss
+    // rather than a launch that renders nothing.
+    const hostableAndBenched = shipped.manifests
+      .filter((m) => m.hostable && m.bench)
+      .map((m) => m.id)
+      .sort();
+    for (const [path, ids] of regions(shipped.files)) {
+      expect([path, [...ids].sort()]).toEqual([path, hostableAndBenched]);
     }
 
     // And the rule itself: flip a hostable control's `bench` off and its row leaves
-    // both regions, while `HostChildren.ts` keeps it (that half is `hostable`'s).
+    // both regions, while `HostChildren.ts` keeps it (that half is `hostable`'s). The
+    // same flip on Menu is the state G7a shipped in, so it is the case that proves the
+    // rule still refuses an arm-less control.
     const { manifests } = shipped;
     const flipped = manifests.map((m) =>
       m.name === 'Switch' ? { ...m, bench: false } : m
@@ -652,6 +666,13 @@ describe('the generated tables cover what they claim', () => {
     const after = runPlan(flipped);
     for (const [path, ids] of regions(after.files)) {
       expect([path, ids.includes('switch')]).toEqual([path, false]);
+    }
+    const menuless = manifests.map((m) =>
+      m.name === 'Menu' ? { ...m, bench: false } : m
+    );
+    const withoutMenu = runPlan(menuless);
+    for (const [path, ids] of regions(withoutMenu.files)) {
+      expect([path, ids.includes('menu')]).toEqual([path, false]);
     }
     const host =
       after.files['src/components/Host/HostChildren.ts'] ??

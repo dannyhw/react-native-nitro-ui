@@ -2,6 +2,8 @@ import {
   Button,
   DatePicker,
   Host,
+  Menu,
+  type MenuGroup,
   nitroUiCore,
   Picker,
   Progress,
@@ -61,6 +63,20 @@ import {
 type SmokeStatus = 'starting' | 'ready' | 'layout' | 'error';
 
 /**
+ * The items for the one `Menu` this app renders.
+ *
+ * Module-level and typed as `MenuGroup` rather than inline: `group` is an object
+ * prop, and this file is typechecked by `bun run check` so a public-API rename in
+ * the item shape has to fail here rather than in a 10-minute smoke run.
+ */
+const SMOKE_MENU_GROUP: MenuGroup = {
+  actions: [
+    { id: 'one', title: 'One' },
+    { id: 'two', title: 'Two' },
+  ],
+};
+
+/**
  * The list `scripts/smoke/lib.mjs` also carries, because this file is copied into a
  * generated app and cannot import that module.
  *
@@ -78,6 +94,7 @@ const SMOKE_CONTROLS = [
   'segmented-control',
   'date-picker',
   'picker',
+  'menu',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
   'host',
@@ -262,6 +279,12 @@ export default function App(): React.ReactElement {
           onLayout={measureFor('picker')}
           options={['One', 'Two', 'Three']}
           testID="SMOKE-picker"
+        />
+        <Menu
+          onLayout={measureFor('menu')}
+          title="Actions"
+          group={SMOKE_MENU_GROUP}
+          testID="SMOKE-menu"
         />
         {/* One Host, two hosted Switches: the Android path where a batch of
             controls shares one Compose composition. iOS renders this as a
