@@ -208,10 +208,10 @@ run agrees for the unhosted arms on both platforms (iOS 363 KiB/c and Android 41
 non-monotonic), but on Android **four `nitro-ui-host` cells are monotonic**: `leak.menu` 695,
 `leak.slider` 578, `leak.date-picker` 602 and `leak.button` 512 KiB/cycle, each over 8 launches
 with `heapCollected: true`. Under the runner's own rule (§6 of setup-decisions: fail on a
-monotonic increase) those four are the first slopes in this machine's bench history that qualify
-as growth rather than drift, and they are all on the Host arm. They gate nothing — a committed
-baseline stores no leak slope, so `--check` cannot see them — and A5 has no room to chase them;
-see its report's follow-ups.
+monotonic increase) those four are growth rather than drift, and all four are on the Host arm: the
+unhosted `nitro-ui` arm is non-monotonic on the same four controls in the same run. They gate
+nothing — a committed baseline stores no leak slope, so `--check` cannot see them — and A5 has no
+room to chase them; see its report's follow-ups.
 
 Four runs are reported: the two quick plans (both `problems: none` on the canonical devices, and
 both stamping the machine `quiet: true`, so comparable in kind with A3's baseline runs on this
@@ -414,7 +414,8 @@ and `--check` was not run against it.
   `undefined` tab lookup; it should read the generated `controls.mjs` row instead.
 - Bench gates: `gate.mjs bench --help` resolves to a real bench launch that exits 2 and lands a
   FAIL row in the ledger; `bench` should refuse `--help` the way `check` refuses arguments.
-- Bench leak cells: A5's quiet full plan is the first run here with **monotonic** leak slopes —
+- Bench leak cells: A5's quiet full plan is the only run of this component's that has produced
+  **monotonic** leak slopes —
   Android `nitro-ui-host` on `menu` (695 KiB/cycle), `date-picker` (602), `slider` (578), `button`
   (512), 8 launches each, `heapCollected: true`, every unhosted arm still non-monotonic. Setup
   decisions §6 says fail on a monotonic increase, and no gate can see it because a committed
