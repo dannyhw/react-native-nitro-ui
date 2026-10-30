@@ -55,10 +55,10 @@ required gates green on `43816d4c80ef`). Three rows above need reading, not re-r
 
 - **`bench:--help` FAIL is my own mistake, not a gate.** I typed `node scripts/gate.mjs bench
   --help` to learn the bench gate's form; `gate.mjs` resolved it as `bench:--help`, launched
-  `scripts/bench/run.mjs --help`, and the runner exited 1 after printing its usage. Nothing in
-  the tree is involved — the same command run as `node scripts/bench/run.mjs --help` prints the
-  usage and is the intended way to read it. Benches are never required by `need` (they belong to
-  the bench host), so this row asks for nothing.
+  `scripts/bench/run.mjs --help`, and the runner printed its usage and exited 2. Nothing in the
+  tree is involved — the same command run directly is the intended way to read that usage. Benches
+  are never required by `need` (they belong to the bench host), so this row asks for nothing, but it
+  does sit in the exported ledger, which is why it is explained rather than deleted.
 - **`harness:android:Menu`** and **`real-input:ios:--control:menu`** are filtered runs, which
   `gate.mjs` records under their own name as evidence for nothing but themselves. Their ledger
   history is the mutation battery, and `gate.mjs logs` still has every log: the iOS row printed
