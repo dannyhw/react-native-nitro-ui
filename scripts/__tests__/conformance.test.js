@@ -1354,10 +1354,15 @@ describe('the a11y sweep, against a fake device', () => {
     return {
       notes: [],
       failures: [],
+      // Every description, pass or fail. The sweep's passing line is an assertion about what
+      // a reader sees, so a test has to be able to read it back — `failures` alone can only
+      // ask what went wrong, never what the run claimed when it did not.
+      descriptions: [],
       note(message) {
         this.notes.push(message);
       },
       check(description, condition) {
+        this.descriptions.push(description);
         if (!condition) this.failures.push(description);
         return condition;
       },
@@ -1499,6 +1504,16 @@ describe('the a11y sweep, against a fake device', () => {
     );
     expect(withDebt.logs[0].log.notes.join('\n')).toContain('known failing');
     expect(withDebt.logs[0].log.failures).toEqual([]);
+    // …and the *passing line* has to agree with that note (X4 re-review, low). The first
+    // version printed "is named on one node a person can act on" beside a note saying it is
+    // not, which is a ✓ that contradicts the finding two lines above it — and a reader who
+    // scans the verdicts, or a tool that greps for the ✓, reads the opposite of the run.
+    expect(withDebt.logs[0].log.descriptions.join('\n')).toContain(
+      'no clean pass either'
+    );
+    expect(withDebt.logs[0].log.descriptions.join('\n')).not.toContain(
+      'is named on one node a person can act on'
+    );
 
     const unnamed = collector();
     const result = await runA11ySweep(

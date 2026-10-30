@@ -109,7 +109,11 @@ export async function runA11ySweep(
     // excerpt — so the description has to carry the finding, not a label.
     log.check(
       result.failures.length === 0
-        ? `${control.hybridView} is named on one node a person can act on`
+        ? result.known.length === 0
+          ? `${control.hybridView} is named on one node a person can act on`
+          : `${control.hybridView} has no new a11y finding — and no clean pass either: ` +
+            `${String(result.known.length)} of its problems match a debt row, printed ` +
+            'above, so the rule is answered by the exemption rather than by the dump'
         : result.failures.join(' | '),
       result.failures.length === 0
     );

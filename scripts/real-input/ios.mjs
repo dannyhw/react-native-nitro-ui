@@ -557,13 +557,24 @@ function reportA11yPass({ log, suite, status, testLog }) {
       check.note(problem);
     }
     if (result.exempt) matched.push(entry.id);
+    // The line has to agree with the notes above it (X4 re-review, low). Printing "is named
+    // on one element, at the control's own box, as the slider it claims to be" with a
+    // `known failing (… announced as an other and not as a slider)` note two lines earlier
+    // is a ✓ that contradicts the finding: a reader who scans the verdict column, or a tool
+    // that greps for the ✓, gets the opposite of the run's own answer. So the passing line
+    // says which of the two kinds of pass this is, and the debt one says that the rule was
+    // answered *only* because a row excuses the finding.
     check.check(
       result.failures.length === 0
-        ? `${entry.hybridView} is named on one element, at the control's own box, as ${
-            entry.iosTrait == null
-              ? 'a control'
-              : `the ${entry.iosTrait} it claims to be`
-          }`
+        ? result.known.length === 0
+          ? `${entry.hybridView} is named on one element, at the control's own box, as ${
+              entry.iosTrait == null
+                ? 'a control'
+                : `the ${entry.iosTrait} it claims to be`
+            }`
+          : `${entry.hybridView} has no new a11y finding — and no clean pass either: ` +
+            `${String(result.known.length)} of its problems match a debt row, printed ` +
+            'above, so the rule is answered by the exemption rather than by the tree'
         : result.failures.join(' | '),
       result.failures.length === 0
     );

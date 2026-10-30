@@ -866,10 +866,17 @@ function expectConformance(findings: Finding[]): void {
  * Does the engine have a declared fallback for this control?
  *
  * `prewarmSizing` returns how many of the names it was given had one registered, so `1` is
- * the engine saying "the startup table registered a size for this control" and `0` is it
- * saying nobody did. That is the only way to ask from JS, and it is why this rule does not
- * depend on `ColdSizing.harness.tsx`'s process-ordering contract: the answer comes from the
- * registry, so it does not change when another suite has already mounted the control.
+ * the engine saying "a size is registered for this control" and `0` is it saying nobody did.
+ *
+ * That is the only way to ask from JS, and it is *not* a clean question — see
+ * {@link readRegistrationOnce} for the expiry date. What the older version of this comment
+ * claimed (X4 re-review, low: it contradicted M5's finding) was that the answer "does not
+ * change when another suite has already mounted the control". Mounting is indeed not the
+ * problem; **seeding** is, and `seedSizingSize` writes the same table
+ * (`NitroUiSizingEngine.cpp:512`), so a harness that poisons a fallback anywhere in the
+ * process makes every later read of this say `true` about a control the startup table may
+ * never have had a row for. The guard is therefore about ordering, not about the seam: read
+ * once, before anything here seeds, and say in the log when the process was already warm.
  */
 function hasDeclaredFallback(component: string): boolean {
   return nitroUiCore.prewarmSizing([component]) === 1;
