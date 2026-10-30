@@ -452,6 +452,15 @@ private struct OptionalTint: ViewModifier {
 /// An empty `accessibilityLabel(_:)` would silence the Slider's own label, so it
 /// is applied only when set. `testID` is deliberately not here, for the Switch's
 /// reason: RN already puts it on the component view, and twice means twice.
+///
+/// **This modifier is not what a person hears**, and X4 measured it rather than assuming it
+/// (`real-input:ios`, 2026-10-30): deleting the `accessibilityLabel` call in `body` leaves
+/// both Slider a11y cases green, because the element VoiceOver stops on is
+/// `NitroUiSliderAccessibilityElement`, whose label `refresh()` assigns. It is not dead code
+/// — it is what SwiftUI's own traversal would use — but no conformance rule can grade it, so
+/// the iOS red proofs are taken against `refresh()` (which goes red) and not against here.
+/// Whoever reads this wondering whether the line matters: the test that would catch its loss
+/// does not exist, and the one for `refresh()` does.
 private struct OptionalAccessibility: ViewModifier {
   let label: String?
 
