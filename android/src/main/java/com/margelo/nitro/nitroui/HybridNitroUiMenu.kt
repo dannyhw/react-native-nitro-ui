@@ -593,12 +593,20 @@ private class MenuHost(
       onDispose { placedView.removeOnLayoutChangeListener(listener) }
     }
     // An anchor that opens a popup, rather than `Modifier.clickable` beside a plain
-    // `DropdownMenu`: a plain `DropdownMenu` composes a `Popup` whose position
-    // provider is handed the *composition's own view* as the anchor, so its list
-    // opens under that view - which is the control's box when the control owns the
-    // composition, and the Host's whole rectangle when it does not. The brief wants
-    // a hosted Menu to open under its own button, and this is the anchor that makes
-    // that true (`docs/components/menu.md` says so, and the harness measures it).
+    // `DropdownMenu`. The reason is Material's contract: `ExposedDropdownMenuBox` hands
+    // the popup the *anchor's* rectangle, while a plain `DropdownMenu` is positioned
+    // against its container. G7b tried to reproduce the second form's mis-anchoring
+    // inside a `<Host>` four ways (the anchor dropped inside the box, a `clickable` +
+    // `DropdownMenu`, that pair inside a `fillMaxSize` Box, and a 300 dp
+    // `Modifier.offset` on the list's content) and none of them moved the popup's
+    // window off the button, so on this Material version (1.4.0) the mis-anchoring this
+    // anchor exists to prevent does not reproduce. `menuAnchor` stays because it is the
+    // documented way to say "positioned against *this* control" rather than relying on
+    // what a container happens to be, and `Menu.harness.tsx` bounds the gap so a
+    // Material that does move the popup is caught: a plain `DropdownMenu` with
+    // `offset = DpOffset(0.dp, 64.dp)` moves the window and turns that bound red,
+    // which is what shows the reading is live. Numbers and both mutant recipes are in
+    // `example/__tests__/Menu.harness.tsx` and `docs/tasks/G7b-menu-finish.report.md`.
     ExposedDropdownMenuBox(
       expanded = expanded,
       // The anchor reports the request, including the dismissals it decides on

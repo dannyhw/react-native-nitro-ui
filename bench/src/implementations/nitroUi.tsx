@@ -2,6 +2,8 @@ import {
   Button,
   DatePicker,
   Host,
+  Menu,
+  type MenuGroup,
   Picker,
   Progress,
   SegmentedControl,
@@ -15,8 +17,11 @@ import {
   SEGMENTED_SELECTION,
   buttonTitle,
   dateValue,
+  menuItems,
+  menuTitle,
   onDateChange,
   onPress,
+  onMenuSelect,
   onPickerChange,
   onSegmentChange,
   onSliderChange,
@@ -217,6 +222,19 @@ export function NitroUiHostList({
         />
       );
     }
+    if (component === 'menu') {
+      return (
+        <Menu
+          key={index}
+          testID={testId}
+          title={menuTitle(value)}
+          group={MENU_GROUP}
+          onSelect={onMenuSelect}
+          nuiPerfId={nuiPerfId}
+          style={style}
+        />
+      );
+    }
     if (component === 'date-picker') {
       return (
         <DatePicker
@@ -229,13 +247,27 @@ export function NitroUiHostList({
         />
       );
     }
-    // Nothing is hostable outside the seven (an RN view, a nested Host): a Host refuses
+    // Nothing is hostable outside the eight (an RN view, a nested Host): a Host refuses
     // them, so the plan should never ask (`BenchImplementation.components`) and
     // rendering an empty tree here would be a number nobody asked for.
     throw new Error(`nitro-ui-host cannot compose ${component}`);
   };
   return <Host style={stackStyle(n, component)}>{range(n).map(child)}</Host>;
 }
+
+/**
+ * The item group every `nitro-ui` Menu arm mounts, built once.
+ *
+ * Module-level for the reason the other arms' option lists are: `group` is an
+ * object prop, so a literal in the JSX would be a fresh identity on every flip and
+ * hand this arm a prop diff no other arm pays.
+ */
+const MENU_GROUP: MenuGroup = {
+  actions: menuItems().map((title, index) => ({
+    id: `row-${String(index)}`,
+    title,
+  })),
+};
 
 /**
  * `n` real nitro-ui switches.
@@ -295,6 +327,32 @@ export function NitroUiList({
             options={pickerOptions()}
             selectedIndex={pickerSelection(value)}
             onChange={onPickerChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'menu') {
+    // `menuTitle(value)` is the same label the other arms draw, so the `update` cell
+    // is a real title change here: the trigger's text changes, the sizing key moves,
+    // the control re-measures, and the cost of that round trip is in the numbers.
+    // `MENU_GROUP` is the item list they mount too, and it is built once, so a flip
+    // costs one string prop rather than a fresh object identity. `variant`, `size`,
+    // `disabled`, `systemImage` and `tintColor` stay at their defaults - the arms
+    // compare each control's platform default, trigger box included. The popup is
+    // never opened by the bench: no arm can price a real popup gesture on three
+    // runtimes, so the cell measures the mounted control (see the report).
+    return (
+      <>
+        {range(n).map((index) => (
+          <Menu
+            key={index}
+            testID={`bench-nitro-ui-menu-${String(index)}`}
+            title={menuTitle(value)}
+            group={MENU_GROUP}
+            onSelect={onMenuSelect}
             nuiPerfId={perfMarks ? index : null}
             style={style}
           />

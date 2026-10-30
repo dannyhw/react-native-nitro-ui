@@ -1,0 +1,175 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-10-29T23:23:53.685Z on code tree `58d861fab92c` at HEAD `32575f8` (branch `task/G7b-menu-finish`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 542774 ms
+- Load: start 2.32, end 2.23, median 2.24, max 3.33
+- Device: android / device `emulator-5570` / lease `G7b-27pum`
+- Full log: `task/G7b-menu-finish/real-input+android-2026-10-29T23-23-53.499Z.log` (<store>/task/G7b-menu-finish/real-input+android-2026-10-29T23-23-53.499Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ timed out waiting for cycle 2: the picker to unmount - no view with testID "real-input-drop-gone"`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/real-input+android-2026-10-29T23-23-53.499Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7b-27pum (still live)
+  |   G7b-27pum                G7b          both              pair-b
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.23 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 131 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: real-input:android
+gate: node scripts/real-input/android.mjs (cwd .)
+gate: code tree 58d861fab92c at HEAD 32575f8
+gate: git tree 858d8832101e
+gate: log task/G7b-menu-finish/real-input+android-2026-10-29T23-23-53.499Z.log
+gate:       <store>/task/G7b-menu-finish/real-input+android-2026-10-29T23-23-53.499Z.log
+real-input (android): emulator-5570 · nitroui_b · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  switch: real tap flips the Switch and JS sees the new value
+    ✓ the Switch starts off — expected off, saw off
+    · "Controlled switch" occupies 901,759 → 1038,843
+    ✓ one real tap flips the Switch (React renders "on") — expected on, saw on
+    · "Controlled switch" occupies 901,759 → 1038,843
+    ✓ a second real tap flips it back (React renders "off") — expected off, saw off
+
+  slider: real drag moves the Slider and fires start, change and complete
+    · "Phases slider" occupies 42,1121 → 1038,1247
+    ✓ no gesture has been reported yet — expected start=0 change=0 complete=0, saw start=0 change=0 complete=0
+    ✓ one drag fires onSlidingStart exactly once — expected start=1, saw start=1
+    ✓ one drag fires onSlidingComplete exactly once — expected complete=1, saw complete=1
+    ✓ a drag reports the way over, not only the end (change=45)
+    ✓ the thumb lands right of centre (value=0.728)
+    ✓ a second drag fires both phases again — expected start=2 complete=2, saw start=2 complete=2
+    ✓ dragging back moves the value the other way (value=0.269)
+    · "Controlled slider" occupies 42,738 → 1038,864
+    ✓ the controlled Slider starts at 0.25 — expected 0.25, saw 0.25
+    ✓ the controlled value echo follows the real drag (0.25 → 0.773)
+
+  button: real tap presses the Button, and a disabled one stays pressed-out
+    · "Real-input button" occupies 42,792 → 332,897
+    · "Real-input disabled button" occupies 42,939 → 486,1044
+    ✓ the Button starts with no presses recorded — expected 0, saw 0
+    · "Real-input button" occupies 42,792 → 332,897
+    ✓ one real tap on the enabled Button reaches onPress — expected 1, saw 1
+    ✓ a real tap on the disabled Button does not press it — expected 1, saw 1
+    · "Real-input button" occupies 42,792 → 332,897
+    ✓ a second real tap presses the enabled Button again — expected 2, saw 2
+
+  segmented-control: real tap selects the segment under the finger, and a refused selection snaps back
+    · "Real-input segmented control" occupies 42,738 → 492,864
+    ✓ the SegmentedControl has reported no index before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    · "Real-input segmented control" occupies 42,738 → 492,864
+    ✓ a real tap on the second segment reaches JS as index 1 — expected 1, saw 1
+    ✓ one tap reports one change — expected 1, saw 1
+    · "Real-input segmented control" occupies 42,738 → 492,864
+    ✓ the control did not move out from under the finger — expected 42,738 → 492,864, saw 42,738 → 492,864
+    · "Real-input segmented control" occupies 42,738 → 492,864
+    ✓ a real tap on the first segment reaches JS as index 0 — expected 0, saw 0
+    ✓ two taps report two changes — expected 2, saw 2
+    ✓ the refusing parent pins its SegmentedControl at index 0 — expected 0, saw 0
+    ✓ nothing has been reported on the controlled control yet — expected 0, saw 0
+    · "Real-input rejecting segmented control" occupies 42,1090 → 492,1216
+    ✓ a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4) — expected 1, saw 1
+    ✓ the parent never accepted the change, so the index it sends is still 0 — expected 0, saw 0
+    · "Real-input rejecting segmented control" occupies 42,1090 → 492,1216
+    ✓ a second tap on segment 2 is a fresh selection, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ and the parent should still be refusing — expected 0, saw 0
+
+  date-picker: real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back
+    ✓ the DatePicker has reported no day before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    · "Real-input date picker" occupies 42,781 → 386,907
+    · tapping dialog day "Friday, October 16, 2026"
+    ✓ a real tap on a dialog day (Friday, October 16, 2026) reaches JS as a change — expected 1, saw 1
+    ✓ the day JS was told is the day React paints: "2026-10-16" is Y-M-D, written by hand so that no locale can move the assertion
+    ✓ the refusing parent pins its DatePicker to one day — expected 2024-06-15, saw 2024-06-15
+    ✓ nothing has been reported on the controlled control yet — expected 0, saw 0
+    · "Real-input rejecting date picker" occupies 42,1133 → 386,1259
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4) — expected 1, saw 1
+    ✓ the parent never accepted the change, so the day it sends is unchanged — expected 2024-06-15, saw 2024-06-15
+    · "Real-input rejecting date picker" occupies 42,1133 → 386,1259
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a second pick is a fresh selection, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ and the parent should still be refusing — expected 2024-06-15, saw 2024-06-15
+    · grid: 31 cells in the band, first = "Thursday, January 1, 2026", value = "2026-01-01 08:30"
+    ✓ the tap moved the value it is echoing: "2026-01-08 08:30" is not "2026-01-01 08:30"
+    ✓ and the day it accepted is the instant that day echoed before, time of day kept — expected 2026-01-01 08:30, saw 2026-01-01 08:30
+
+  picker: real tap opens the menu, a real tap on a row reports it, and an unmount while open leaks no popup
+    · "Real-input picker" occupies 42,678 → 777,825
+    ✓ the Picker has reported no index before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Real-input picker" occupies 42,678 → 777,825
+    ✓ a real tap on the anchor opens the menu as a popup window — expected 1, saw 1
+    ✓ the open menu marks the current choice ("Onyx") selected to TalkBack
+    ✓ Back shuts the popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no selection - a menu is not a choice — expected 0, saw 0
+    ✓ and the anchor still shows the title it started with — expected Onyx, saw Onyx
+    · "Real-input picker" occupies 42,678 → 777,825
+    ✓ tapping the row that is already chosen closes the menu — expected 0, saw 0
+    ✓ and a choice that changed nothing reports nothing — expected 0, saw 0
+    · "Real-input picker" occupies 42,678 → 777,825
+    ✓ a real tap on a menu row reaches JS as index 2 — expected 2, saw 2
+    ✓ one choice reports one change — expected 1, saw 1
+    ✓ choosing closes its own popup — expected 0, saw 0
+    ✓ the anchor now paints the title that was chosen ("A considerably longer mineral name") — expected A considerably longer mineral name, saw A considerably longer mineral name
+    ✓ the control grew to fit it (735 dp -> 888 dp), with no render to ask for
+    · "Real-input rejecting picker" occupies 42,1180 → 777,1327
+    ✓ the refusing parent pins its Picker at index 0 — expected 0, saw 0
+    · "Real-input rejecting picker" occupies 42,1180 → 777,1327
+    ✓ a real tap on the controlled picker still reaches JS - native paints optimistically — expected 1, saw 1
+    ✓ the parent never accepted the change, so the index it sends is still 0 — expected 0, saw 0
+    ✓ the refused title went away: the anchor shows the parent's title again — expected Summit, saw Summit
+    · "Real-input rejecting picker" occupies 42,1180 → 777,1327
+    ✓ tapping the refused row again is a fresh choice, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ choosing shut that popup too — expected 0, saw 0
+    · "Real-input drop picker" occupies 42,1682 → 777,1829
+    · "Real-input drop picker" occupies 42,1682 → 777,1829
+    ✓ cycle 1: the drop picker's menu is open as a popup window — expected 1, saw 1
+    ✓ cycle 1: unmounting with the menu open leaves no popup window — expected 0, saw 0
+    · "Real-input drop picker" occupies 42,1682 → 777,1829
+    · "Real-input drop picker" occupies 42,1682 → 777,1829
+    ✓ cycle 2: the drop picker's menu is open as a popup window — expected 1, saw 1
+    ✗ timed out waiting for cycle 2: the picker to unmount - no view with testID "real-input-drop-gone"
+
+  menu: real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none
+
+real-input (android): Error: real-input: no "undefined" tab in the accessibility tree, so the screen this check needs cannot be reached.
+gate: real-input:android FAIL in 542.8 s
+gate: recorded in .gates/task/G7b-menu-finish.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G7b-menu-finish/real-input+android-2026-10-29T23-23-53.499Z.log (5 probe(s))
+
+```

@@ -1,0 +1,74 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-10-29T23:46:36.551Z on code tree `e030c74c4537` at HEAD `c720a48` (branch `task/G7b-menu-finish`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit null signal SIGTERM, 17634 ms
+- Load: start 3.18, end 4.67, median 4.67, max 4.82
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G7b-27pum`
+- Full log: `task/G7b-menu-finish/harness+ios-2026-10-29T23-46-36.300Z.log` (<store>/task/G7b-menu-finish/harness+ios-2026-10-29T23-46-36.300Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Sizing.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/harness+ios-2026-10-29T23-46-36.300Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7b-27pum (still live)
+  |   G7b-27pum                G7b          both              pair-b
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.67 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 31 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree e030c74c4537 at HEAD c720a48
+gate: git tree 42c5414f7066 with a DIRTY worktree (not reusable)
+gate: log task/G7b-menu-finish/harness+ios-2026-10-29T23-46-36.300Z.log
+gate:       <store>/task/G7b-menu-finish/harness+ios-2026-10-29T23-46-36.300Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree e030c74c4537, 9 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.18/2.69 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7b-menu-finish/harness+ios-2026-10-29T23-46-36.300Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Sizing.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+gate: harness:ios FAIL in 17.6 s (signal SIGTERM)
+gate: recorded in .gates/task/G7b-menu-finish.jsonl
+
+
+gate: appended the device context to task/G7b-menu-finish/harness+ios-2026-10-29T23-46-36.300Z.log (4 probe(s))
+gate: re-raising SIGTERM
+
+```

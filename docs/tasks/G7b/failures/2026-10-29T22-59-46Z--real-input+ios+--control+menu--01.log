@@ -1,0 +1,62 @@
+# Failure excerpt — real-input:ios:--control:menu
+
+- Ran: 2026-10-29T22:59:46.838Z on code tree `cdde3752f6f3` at HEAD `2636d92` (branch `task/G7b-menu-finish`)
+- Command: `node scripts/real-input/ios.mjs --control menu`
+- Result: fail, exit 1, 143931 ms
+- Load: start 4.42, end 32.13, median 32.13, max 45.13
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G7b-27pum`
+- Full log: `task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T22-59-46.633Z.log` (<store>/task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T22-59-46.633Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T22-59-46.633Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7b-27pum (still live)
+  |   G7b-27pum                G7b          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 32.13 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 21 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: real-input:ios:--control:menu
+gate: node scripts/real-input/ios.mjs --control menu (cwd .)
+gate: code tree cdde3752f6f3 at HEAD 2636d92
+gate: git tree 46bce7816391 with a DIRTY worktree (not reusable)
+gate: log task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T22-59-46.633Z.log
+gate:       <store>/task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T22-59-46.633Z.log
+real-input (ios): nitro-ui B · 3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 · Metro 8293 · scheme NitroUiExampleUITests
+metro: started on 8293 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+
+real-input (ios): Error: real-input: the code tree changed during the build (before cdde3752f6f3, after 21aa59cb4c1b: 602 files when it started, 602 now). No stamp was written - nothing here proves which sources this binary came from. Run the build again with nothing else writing to the tree.
+       an incremental xcodebuild that never recompiled the generated hybrids is the usual cause: `rm -rf example/ios/build` and run again.
+gate: real-input:ios:--control:menu FAIL in 143.9 s - note: the code tree moved during the run (21aa59cb4c1b now), so this line describes cdde3752f6f3
+gate: recorded in .gates/task/G7b-menu-finish.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T22-59-46.633Z.log (4 probe(s))
+
+```
