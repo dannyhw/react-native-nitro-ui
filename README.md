@@ -131,11 +131,12 @@ install. Use the tarball.
 The consumer smoke tests (`scripts/smoke/`) install the packed tarball with
 `npm` into a fresh app, build **Release**, launch it and check that every
 control mounts with a non-zero size - the eight controls the app mounts today,
-plus a `<Host>` holding two Switches. The `Smoke` workflow is manual-only, so
-these run by hand; `CI`, `Release`, `Release tag` and `Changeset status` are the
-workflows that run on GitHub. Every ticked cell below was green for the 0.1.0
-tarball on 2026-10-26 and nothing has been re-run since - `Menu` joined the
-smoke app after that, so no consumer run has printed a `menu=WxH` box:
+plus a `<Host>` holding two Switches. The `Smoke` workflow is disabled and
+dispatch-only, so these run by hand; `CI`, `Release`, `Release tag` and
+`Changeset status` are the workflows that run on GitHub. Every ticked cell below
+was green for the 0.1.0 tarball on 2026-10-26 and nothing has been re-run since -
+`Menu` joined the smoke app after that, so no consumer run has printed a
+`menu=WxH` box:
 
 | Consumer              | iOS | Android |
 | --------------------- | --- | ------- |
@@ -682,9 +683,9 @@ calls.
 - [Development workflow](CONTRIBUTING.md) — prerequisites, the scripts, and the
   gates. `CI` runs `bun run check`, the host native tests and an Android debug
   build on every push and pull request; `Release`, `Release tag` and `Changeset
-status` run the release path. The device workflows — `Bench` and `Smoke` — are
-  manual-only, so the harness, real-input, smoke and bench suites a task cites
-  are the ones run locally
+status` run the release path. The two device workflows — `Bench` and `Smoke` — are
+  disabled and dispatch-only, so the harness, real-input, smoke and bench suites a
+  change cites are the ones someone ran locally
 - [Storybook](example/README.md#storybook) - the example app is also a showcase
   app: `bun run storybook:ios` / `bun run storybook:android` starts it, and
   `bun run storybook` runs its Metro server separately
