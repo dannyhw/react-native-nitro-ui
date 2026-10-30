@@ -14,17 +14,17 @@ the layout engine, and React never sees a native node.
 
 ## Components
 
-| Component          | iOS                                                        | Android                                                      | Status | Docs                                                         |
-| ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
-| `Switch`           | `Toggle(…).toggleStyle(.switch)`                           | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
-| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                  | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
-| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
-| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`            | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
-| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                        | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
-| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                    | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
-| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)      | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
-| `Menu`             | `Menu { rows } label: { … }` + Button's `.buttonStyle`     | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
-| `Host`             | a plain `View` (passthrough, by design)                    | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
+| Component          | iOS                                                         | Android                                                      | Status | Docs                                                         |
+| ------------------ | ----------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| `Switch`           | `Toggle(…).toggleStyle(.switch)`                            | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
+| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                   | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
+| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)`  | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
+| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`             | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
+| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                         | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
+| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                     | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
+| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)       | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
+| `Menu`             | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)` | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
+| `Host`             | a plain `View` (passthrough, by design)                     | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It held Switches only
@@ -575,7 +575,9 @@ are numbers rather than verdicts. Android is again the win — memory at N=200 f
 the quick run: 217.9 KiB per unhosted Menu against the shared host's 248.6
 (0.88×), and **77.5 KiB inside a `<Host>`**, within noise of `rn-core`'s 76.3 —
 and the full plan's N=200 mount says it louder: 64.8 ms presented hosted against
-168.9 ms unhosted, with `rn-core` at 65.5. iOS, where a Host is a passthrough, is
+168.9 ms unhosted, with `rn-core` at 65.5 — though that is the one run of the three
+that was not quiet (25 of its 176 load samples over the ceiling). iOS, where a Host
+is a passthrough, is
 the usual per-control story: 346.3 KiB against the shared host's 262.0 (1.32×).
 No run composed a popup — the arm never opens a menu — and that quick Android run
 was noisy on `update.UI CPU/op` (3.18× `n/v`), which nothing has re-measured.
