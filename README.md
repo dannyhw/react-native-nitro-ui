@@ -568,9 +568,12 @@ control is below it — because a hosted control is still a React Native node
 _and_ a child of somebody else's composition. That is why `Host` is something an
 app opts into for a dense list rather than what every container does. On iOS
 `Host` is a passthrough `View` (DECISIONS D23). `maintainer-mac-2`'s quiet full
-plan repeats the same six cells on its own emulator at 1.00× / 0.84× / 0.97× /
-1.01× / 1.17× / 0.57× `n/v`, with 46.0 KiB against the shared host's 50.6: every
-claim above reproduces, and the JS axis is the same ~1.2×.
+plan reads that hosted column on its own emulator as 0.91× memory (46.0 KiB
+against the shared host's 50.6), 0.84× UI CPU, 0.97× `mounted`, 1.01×
+`presented`, 1.17× JS CPU and 0.57× `n/v` unmount: the shape reproduces on a
+different machine, and the memory cell is 0.05 further from the shared host than
+the figure above, which is the size of the machine effect. The JS axis is the
+same ~1.2×.
 
 0.2.0 extends the same mechanism to `Slider`, `Progress` and `Button`, and 0.3.0
 to `SegmentedControl`, `Picker` and `DatePicker`; `Menu` joined them in 0.4.0, so
@@ -595,13 +598,13 @@ replace the indicative `quick`-plan tables those runs published. Against
 | Mount UI CPU vs no Host                 | **0.46×** | **0.47×** | **0.44×**     | **0.50×** |
 | Mount JS CPU vs no Host                 | 1.20×     | 1.05×     | 1.32×         | 1.12×     |
 
-The `Switch` row reproduces the published 0.86× / 0.87× within spread, which is
-what makes the rest of the run readable. What it shows: the memory and UI-thread
-win holds on all four controls, `Progress` most of all; the JS cost is about
-1.1–1.2× on `Switch`, `Slider` and `Button` — `Button` is the exception at 0.69×,
-and it pays that on the unhosted side too, where it is 0.62× the shared host — and
-the unmount cells are still spread too wide for any claim at all, on this machine
-and at 8 launches.
+The `Switch` row lands where H1's published 0.86× / 0.87× sits (0.91× / 0.84× on
+this machine), which is what makes the rest of the run readable. What it shows:
+the memory and UI-thread win holds on all four controls, `Progress` most of all;
+the JS cost is about 1.1–1.2× on `Switch`, `Slider` and `Button` — `Button` is the
+exception at 0.69×, and it pays that on the unhosted side too, where it is 0.62×
+the shared host — and the unmount cells are still spread too wide for any claim at
+all, on this machine and at 8 launches.
 
 The other four cost the same shape ([`A5's
 tables`](docs/tasks/A5-quiet-bench-mac2.report.md) have every cell):
