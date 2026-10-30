@@ -256,7 +256,7 @@ red. What I did prove rather than infer, and how:
 - bench: `maintainer-mac-1` still has no `Picker`, no `Menu` and no 0.4.x-era re-run; its table is
   now four releases old. A quiet window there is the same ~11 h, and the two machines' numbers are
   visibly not interchangeable (iOS `mount.date-picker` presented reads 1.00× against the shared
-  host there, 2.24× here — both `n/v`, both same-run paired).
+  host there — the frame floor — and 2.24× here, `n/v`).
 - tooling: `scripts/bench/render.mjs:236` labels a monotonic leak on a reference arm "MONOTONIC
   (gated as a leak)"; nothing gates a reference arm, so the label is wrong. Not A5's to fix.
 - tooling: the gate ledger records this task's iOS bench run with `platform: android` and
@@ -278,6 +278,6 @@ reversed. Per your ruling the quiet data wins: a `## Reversed conclusions` secti
 in place, and replaces the Questions section the review asked for.
 
 Should-fixes: monotonic defined as the runner computes it, `heapCollected` demoted (true on all 70
-leak cells), larger unhosted and `rn-core` slopes named, the correct no-gate reason, 2.24×
-like-for-like, G5's attribution, H2b's two moves, G6's `(nv)` and gate wording, and the formatting
+leak cells), larger unhosted and `rn-core` slopes named, the right no-gate reason, 2.24×
+like-for-like, G5's attribution, H2b's two moves, G6's `(nv)` and gate wording, formatting
 nits.
