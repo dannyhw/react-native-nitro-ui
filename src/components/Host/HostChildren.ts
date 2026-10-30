@@ -39,20 +39,21 @@ import { Menu } from '../Menu/Menu';
  * the error comes from the same table as the permission - hosting one more
  * control means adding one row here, and nothing else decides.
  *
- * Seven rows: `Switch` from H1, `Slider`, `Progress`, `Button` from H2a, and
- * `SegmentedControl`, `Picker`, `DatePicker` from H2b - each with a bench arm and a
- * device suite behind it (T16's condition 1 - "one arm per component before it is
- * claimed"). A row here is one half of the rule; the other is the `isHostable`
- * override on the control's own Android host, and the two are the same decision seen
- * from the two sides that have to agree.
+ * Eight rows: `Switch` from H1, `Slider`, `Progress`, `Button` from H2a,
+ * `SegmentedControl`, `Picker`, `DatePicker` from H2b and `Menu` from G7a/G7b - each
+ * with a bench arm and a device suite behind it (T16's condition 1 - "one arm per
+ * component before it is claimed"). A row here is one half of the rule; the other is
+ * the `isHostable` override on the control's own Android host, and the two are the same
+ * decision seen from the two sides that have to agree.
  *
- * The last three are the ones a `<Host>` was said not to be able to hold, because
- * each of them presents a popup or a dialog: a window of its own. The answer H2b
+ * The first seven are the ones a `<Host>` was said not to be able to hold, because
+ * three of them present a popup or a dialog: a window of its own. The answer H2b
  * measured is that a Compose popup or dialog opened from inside the Host's
  * composition is *that composition's* window - which is what closes it when the Host
  * goes away, and what anchors it to the box the Host drew
  * (`docs/components/host.md`, "Popups and dialogs"). A control is refused only if
- * hosting it is shown to be broken, and none of these three is.
+ * hosting it is shown to be broken, and none of these is: `Menu`'s list is a fourth
+ * such window, gated the same way for a hosted trigger (`example/__tests__/Menu.harness.tsx`).
  */
 export const HOSTABLE_CONTROLS = new Map<unknown, string>([
   [Button, 'Button'],
@@ -74,9 +75,9 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  * added without a row in one of the two tables, so this list cannot quietly fall
  * behind the library.
  *
- * **Empty since H2b**: all seven controls the library ships are hosted, so there is
+ * **Empty since H2b**: every control the library ships is hosted, so there is
  * nothing left to refuse here for being what it is. The table and the check that
- * reads it stay, because they are the row the *next* control goes on - a Menu, a
+ * reads it stay, because they are the row the *next* control goes on - a
  * TextField, anything added before it has been measured inside a Host starts here,
  * refused, until a round measures it. `host.test.tsx` proves the sentence still
  * works by putting a stand-in in this table, because nothing in the library does any
