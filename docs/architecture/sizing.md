@@ -537,13 +537,17 @@ anybody draws.
 H1 shipped that for `Switch` (0.1.0). H2a added `Slider`, `Progress` and `Button` to the same
 mechanism (0.2.0) and re-measured the batch with all four in it; H2b added `SegmentedControl`,
 `Picker` and `DatePicker` (0.3.0), priced in `docs/tasks/H2b-host-popups.report.md` by one more
-run that is likewise indicative, with a quiet re-run pending. One figure per control: mount memory (the `memory` cell, N=200) / mount UI-thread CPU /
+run of the same plan. One figure per control: mount memory (the `memory` cell, N=200) / mount UI-thread CPU /
 mount JS-thread CPU / unmount UI-thread CPU (the `mount` cell, N=50), each one the runner's own
 launch-paired ratio to `expo-ui-shared-host` from one run (`quick` plan, ART `speed-profile`,
 4 launches, `bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`, read with
 `bench/tools/arm-ratios.mjs`). That run was made on a **busy machine (37 % of load samples over
-the ceiling), so it is indicative and a quiet re-run is pending**: every cell whose spread
-across launches is over 10 % is marked **ᴺ** and carries no verdict.
+the ceiling), so every cell below is indicative**: every cell whose spread
+across launches is over 10 % is marked **ᴺ** and carries no verdict. A5 has since re-measured all
+of it quiet on `maintainer-mac-2` (`abe68a1`, 8 launches, 0.04 % over the ceiling), and that run's
+cells are in `docs/tasks/A5-quiet-bench-mac2.report.md` and `README.md`; they reproduce this
+table's shape and its verdicts, with two of the ᴺ flags cleared (`Switch` UI CPU on both sides,
+`Button`'s hosted JS CPU at 0.69x) and none of the claims reversed.
 
 | Control (N=200)         | `nitro-ui` unhosted                                       | `expo-ui-shared-host` | `nitro-ui` + `<Host>`                                   |
 | ----------------------- | --------------------------------------------------------- | --------------------- | ------------------------------------------------------- |
