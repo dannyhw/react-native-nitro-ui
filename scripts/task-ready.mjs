@@ -56,10 +56,12 @@ import {
   checkCoverage,
   checkFallbackTable,
   checkInAppFixtures,
+  checkRecycleNotes,
   checkSharedTableMirror,
   coverageMatrix,
   failingKeys,
   followupsResolver,
+  recycleNotes,
   repoManifests,
 } from './conformance-core.mjs';
 import {
@@ -252,11 +254,13 @@ function coverageProblems() {
   const matrix = coverageMatrix(manifests, {
     sizing,
     failing: failingKeys(),
+    recycleNotes: recycleNotes(harnessText),
   });
   return [
     ...checkFallbackTable(manifests, sizing),
     ...checkSharedTableMirror(harnessText ?? ''),
     ...checkInAppFixtures(manifests, harnessText),
+    ...checkRecycleNotes(harnessText),
     ...checkA11yTable(manifests, read),
     ...checkCoverage(manifests, matrix, followupsResolver(followups)),
   ];

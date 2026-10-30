@@ -114,7 +114,7 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'host'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'host'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -200,6 +200,21 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Real-input picker',
     role: 'interactive',
     anchorTestId: 'real-input-picker',
+    iosTrait: 'button',
+  },
+  {
+    id: 'menu',
+    component: 'Menu',
+    hybridView: 'NitroUiMenu',
+    screen: 'menu',
+    label: 'Real-input menu',
+    role: 'interactive',
+    anchorTestId: 'real-input-menu',
+    // What it *should* be announced as. The trigger is a Button's box
+    // (`docs/components/menu.md`), so this is the Button case's expectation rather than a
+    // guess at what the tree reports today — the header of this table says why the
+    // measured value never goes here. If the popup chrome makes XCUITest report something
+    // else, that is a finding with a debt row, not a reason to soften this one.
     iosTrait: 'button',
   },
   {

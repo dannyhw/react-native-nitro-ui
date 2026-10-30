@@ -83,6 +83,7 @@ const ECHO = {
   pickerIndex: 'real-input-picker-index',
   pickerEvents: 'real-input-picker-events',
   pickerGone: 'real-input-drop-gone',
+  menuHeard: 'menu-heard-state',
   hostValue: 'host-controlled-value',
   hostEvents: 'host-events-count',
   hostSliderValue: 'host-slider-value',
@@ -2558,6 +2559,7 @@ class DeviceHarness {
       segmented: 'Segments',
       datepicker: 'Dates',
       picker: 'Picker',
+      menu: 'Menu',
       host: 'Host',
     }[screen];
     const anchor = {
@@ -2567,6 +2569,7 @@ class DeviceHarness {
       segmented: ECHO.segmentedIndex,
       datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
+      menu: ECHO.menuHeard,
       host: ECHO.hostValue,
     }[screen];
     // Asked from wherever the last control left the scroll, an echo that is scrolled

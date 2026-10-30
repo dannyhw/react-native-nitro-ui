@@ -217,7 +217,9 @@ describe('coverage', () => {
       failing: [findingKey('Switch', 'recycle-reset')],
       sizing: {},
     });
-    expect(matrix[6].rules['recycle-reset'].state).toBe('failing');
+    expect(
+      matrix.find((row) => row.name === 'Switch').rules['recycle-reset'].state
+    ).toBe('failing');
     expect(checkCoverage(manifests, matrix, () => null).join('\n')).toContain(
       'marked failing with no'
     );
@@ -1035,10 +1037,11 @@ describe('the debt, as the matrix sees it', () => {
     expect(failingKeys(A11Y_EXEMPTIONS, [row])).toContain(
       findingKey('Switch', 'recycle-reset')
     );
-    // And it does not disturb the rows that already exist.
-    expect(failingKeys(A11Y_EXEMPTIONS, [row]).length).toBe(
-      failingKeys().length + 1
-    );
+    // And it does not disturb the rows that already exist — which means passing the real
+    // list plus the new one, since a one-row list *replaces* it and reads as two fewer keys.
+    expect(
+      failingKeys(A11Y_EXEMPTIONS, [...CONFORMANCE_EXEMPTIONS, row]).length
+    ).toBe(failingKeys().length + 1);
   });
 });
 
@@ -1410,6 +1413,7 @@ describe('the a11y sweep, against a fake device', () => {
         'segmented',
         'datepicker',
         'picker',
+        'menu',
         'host',
       ]);
     });

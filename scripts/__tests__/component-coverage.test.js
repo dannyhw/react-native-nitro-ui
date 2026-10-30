@@ -26,9 +26,11 @@ import {
   checkA11yTable,
   checkCoverage,
   checkInAppFixtures,
+  checkRecycleNotes,
   coverageMatrix,
   failingKeys,
   followupsResolver,
+  recycleNotes,
 } from '../conformance-core.mjs';
 
 /** Where the conformance suite keeps its per-control fixtures, and its tables. */
@@ -273,6 +275,10 @@ describe('every component is covered by the conformance suite', () => {
     const matrix = coverageMatrix(manifests, {
       sizing,
       failing: failingKeys(),
+      // The recycle column reads the *fixture table's* notes, so `n/a` is the suite's own
+      // sentence and not a second list here that could disagree with it (re-review: three
+      // `noProbe` controls whose cells said `covered`).
+      recycleNotes: recycleNotes(read(HARNESS_FILE)),
     });
     // A `failing` cell needs a line that exists in FOLLOWUPS.md, which is what
     // `followupsResolver` proves by returning null when the text is not there.
@@ -281,6 +287,7 @@ describe('every component is covered by the conformance suite', () => {
     ).toEqual([]);
     expect(checkA11yTable(manifests, read)).toEqual([]);
     expect(checkInAppFixtures(manifests, read(HARNESS_FILE))).toEqual([]);
+    expect(checkRecycleNotes(read(HARNESS_FILE))).toEqual([]);
   });
 
   it('the debt the matrix reports is the debt the runner reports', () => {
@@ -288,13 +295,15 @@ describe('every component is covered by the conformance suite', () => {
     // `known failing` lines from the exemption lists. Deriving one from the other is what
     // keeps a report's coverage table honest when a row is added or removed.
     //
-    // Three controls, and each one is a measurement rather than a guess: the Slider and
-    // SegmentedControl names are on nodes a screen reader cannot act on in a dump
-    // (Android), and the Slider is announced as the wrong kind of control (iOS), and a
-    // hosted Picker announces its name twice. The two platforms fail some of the same
-    // controls for different reasons, which is why `A11Y_EXEMPTIONS` rows carry a platform.
+    // Five cells, each a measurement rather than a guess: the Slider and SegmentedControl
+    // names are on nodes a screen reader cannot act on in a dump (Android), the Slider is
+    // announced as the wrong kind of control (iOS), a hosted Picker announces its name twice,
+    // and SegmentedControl and Menu hold recycle residue no read-out can show on the platform
+    // that recycles. The two platforms fail some of the same controls for different reasons,
+    // which is why `A11Y_EXEMPTIONS` rows carry a platform.
     const keys = failingKeys();
     expect(keys).toEqual([
+      'Menu|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
@@ -303,6 +312,7 @@ describe('every component is covered by the conformance suite', () => {
     const matrix = coverageMatrix(manifests, {
       sizing: JSON.parse(readRepo('nitro-ui.sizing.json') ?? '{}'),
       failing: keys,
+      recycleNotes: recycleNotes(readRepo(HARNESS_FILE)),
     });
     for (const key of keys) {
       const [name, rule] = key.split('|');

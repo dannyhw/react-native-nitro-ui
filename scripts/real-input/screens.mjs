@@ -25,5 +25,6 @@ export const SCREEN_FILE = Object.freeze({
   datepicker: 'example/src/DatePickerScreen.tsx',
   picker: 'example/src/PickerScreen.tsx',
   progress: 'example/src/ProgressScreen.tsx',
+  menu: 'example/src/MenuScreen.tsx',
   host: 'example/src/HostScreen.tsx',
 });

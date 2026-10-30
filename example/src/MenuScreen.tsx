@@ -162,7 +162,12 @@ export default function MenuScreen() {
         <Text style={[styles.section, { color: ink.ink }]}>
           What the control heard
         </Text>
-        <Text style={styles.note}>
+        {/* The echo the real-input pass navigates by (`goToScreen` in
+            `scripts/real-input/android.mjs`, `Echo.menuHeard` in
+            `RealInputTests.swift`): a Menu opens a popup of its own, so this is the
+            only node on this screen that says the app is standing on the Menu tab with
+            its state wired up. */}
+        <Text style={styles.note} testID="menu-heard-state">
           last pick: {picked ?? 'nothing'} · opened {String(opens)}× · closed{' '}
           {String(closes)}× · primary action {String(primary)}×
         </Text>
@@ -177,6 +182,20 @@ export default function MenuScreen() {
           Sections and rows
         </Text>
         <View style={styles.row}>
+          {/* The conformance suite's a11y case (`A11Y_CONTROLS` id `menu`): the label is
+              what the rule looks for and the testID is the box it compares the named
+              node's box with, so both are cross-checked against this file by
+              `checkA11yTable`. First on the page for the reason `ButtonScreen` gives —
+              `uiautomator dump` lists no off-screen nodes. */}
+          <Menu
+            title="File"
+            group={sectioned}
+            onSelect={recordSelect}
+            onOpen={recordOpen}
+            onClose={recordClose}
+            accessibilityLabel="Real-input menu"
+            testID="real-input-menu"
+          />
           <Menu
             title="File"
             group={sectioned}

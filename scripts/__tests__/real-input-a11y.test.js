@@ -97,6 +97,12 @@ describe('the a11y rule, on measured trees', () => {
       'button',
       'date-picker',
       'picker',
+      // Menu's own case, measured on pair-a: the name is on the Spinner that *is* the
+      // trigger, at the trigger's box, and it is clickable — so nothing about it needs a
+      // debt row. Not a control we went looking for a pass in: it is the first case in the
+      // table whose Android node is a real platform widget rather than Compose semantics,
+      // which is exactly why the Compose controls are the ones with debt.
+      'menu',
       'hosted-switch',
       'hosted-button',
       'hosted-picker',
