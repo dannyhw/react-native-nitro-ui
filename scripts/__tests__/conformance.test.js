@@ -32,7 +32,9 @@ import {
   checkFallbackTable,
   failingKeys,
   followupsResolver,
+  recycleNotes,
   checkInAppFixtures,
+  checkRecycleNotes,
   checkSharedTableMirror,
   classifyFindings,
   coverageMatrix,
@@ -133,29 +135,30 @@ describe('the rule list', () => {
   });
 
   it('picks up a control that does not exist yet', () => {
-    // The brief's central requirement, tested by adding one: Menu is 0.4's control, and
-    // the moment it has a manifest the matrix has a row for it and every rule has a
-    // verdict — `not-applicable` or `covered`, never silence.
+    // The brief's central requirement, tested by adding one. It used to be `Menu`, which is
+    // how this file proves the mechanism keeps working: Menu arrived in the registry, and the
+    // probe control moved on to a name the repo still does not have. A new manifest gets a row
+    // and a verdict from every rule — `not-applicable` or `covered`, never silence.
     const sizing = JSON.parse(read('nitro-ui.sizing.json'));
     const extra = repoWithExtraControl({
-      id: 'menu',
-      name: 'Menu',
-      hybridView: 'NitroUiMenu',
+      id: 'tooltip',
+      name: 'Tooltip',
+      hybridView: 'NitroUiTooltip',
       sizing: 'intrinsic',
-      exampleTab: 'menu',
+      exampleTab: 'tooltip',
     });
     const matrix = coverageMatrix(extra, { sizing });
-    const menu = matrix.find((row) => row.name === 'Menu');
-    expect(menu).toBeDefined();
-    expect(menu.rules['a11y-name-on-focusable-node'].state).toBe('covered');
-    expect(menu.rules['declared-fallback'].state).toBe('covered');
-    expect(menu.rules['recycle-reset'].state).toBe('covered');
+    const tooltip = matrix.find((row) => row.name === 'Tooltip');
+    expect(tooltip).toBeDefined();
+    expect(tooltip.rules['a11y-name-on-focusable-node'].state).toBe('covered');
+    expect(tooltip.rules['declared-fallback'].state).toBe('covered');
+    expect(tooltip.rules['recycle-reset'].state).toBe('covered');
     // A control with no a11y case is a red run, not a matrix cell that explains itself.
     // Round 1 had both, and the matrix half could not be reached: `checkA11yTable` fails
-    // the same tree first, so a cell waiting to say "no case for Menu" was dead code
+    // the same tree first, so a cell waiting to say "no case for Tooltip" was dead code
     // (review N9). One owner for the condition, and it is this.
     expect(checkA11yTable(extra, read).join('\n')).toContain(
-      'no a11y case for Menu'
+      'no a11y case for Tooltip'
     );
   });
 });
@@ -163,11 +166,12 @@ describe('the rule list', () => {
 /* ---------------------------------- coverage ---------------------------------- */
 
 describe('coverage', () => {
-  it('is complete for the seven controls today', () => {
+  it('is complete for the eight controls today', () => {
     const manifests = repoManifests();
     expect(manifests.map((m) => m.name)).toEqual([
       'Button',
       'DatePicker',
+      'Menu',
       'Picker',
       'Progress',
       'SegmentedControl',
@@ -182,11 +186,11 @@ describe('coverage', () => {
 
   it('goes red for a manifest no rule covers', () => {
     const manifests = repoWithExtraControl({
-      id: 'menu',
-      name: 'Menu',
-      hybridView: 'NitroUiMenu',
+      id: 'tooltip',
+      name: 'Tooltip',
+      hybridView: 'NitroUiTooltip',
       sizing: undefined,
-      exampleTab: 'menu',
+      exampleTab: 'tooltip',
     });
     const matrix = coverageMatrix(manifests, { sizing: {} });
     const problems = checkCoverage(manifests, matrix, () => null);
@@ -194,7 +198,7 @@ describe('coverage', () => {
     // the a11y rule's reason is a gap, and `checkA11yTable` is where that is caught.
     expect(problems).toEqual([]);
     expect(checkA11yTable(manifests, () => null).join('\n')).toContain(
-      'no a11y case for Menu'
+      'no a11y case for Tooltip'
     );
   });
 
@@ -312,22 +316,22 @@ describe('the declared-fallback rule', () => {
 
   it('goes red when a control has no row in the table', () => {
     const manifests = repoWithExtraControl({
-      id: 'menu',
-      name: 'Menu',
-      hybridView: 'NitroUiMenu',
+      id: 'tooltip',
+      name: 'Tooltip',
+      hybridView: 'NitroUiTooltip',
       sizing: 'intrinsic',
-      exampleTab: 'menu',
+      exampleTab: 'tooltip',
     });
     const problems = checkFallbackTable(
       manifests,
       {
         ...JSON.parse(read('nitro-ui.sizing.json')),
-        HybridNitroUiMenu: 'intrinsic',
+        HybridNitroUiTooltip: 'intrinsic',
       },
       DECLARED_FALLBACKS
     );
     expect(problems.join('\n')).toContain(
-      'no DECLARED_FALLBACKS row for NitroUiMenu'
+      'no DECLARED_FALLBACKS row for NitroUiTooltip'
     );
   });
 
@@ -420,8 +424,10 @@ describe('the declared-fallback rule', () => {
   });
 
   it('goes red rather than being vacuous when the control has no row', () => {
+    // `Tooltip`, because every control the repo has now has a row — and this is the check
+    // that goes red the day one is added without its number written down.
     const findings = fallbackFindings({
-      component: 'Menu',
+      component: 'Tooltip',
       platform: 'ios',
       declared: { width: 10, height: 10 },
       measured: { width: 10, height: 10 },
@@ -467,9 +473,13 @@ describe('which axes a declared fallback describes', () => {
     expect(boxRuleFor('NitroUiSlider', sizing)).toBe('height');
     expect(boxRuleFor('NitroUiProgress', sizing)).toBe('height');
     expect(boxRuleFor('NitroUiButton', sizing)).toBe('none');
+    // Menu joined the content-sized list with G7a: its trigger is a Button's box and its
+    // width is its title's, so its declaration is Button-sized by decree rather than a
+    // measured configuration (`HybridNitroUiMenu.swift:451-458` says so in words).
+    expect(boxRuleFor('NitroUiMenu', sizing)).toBe('none');
     // An unknown control keeps the strictest rule: a policy the table lost should cost a
     // red run, not a widened assertion.
-    expect(boxRuleFor('NitroUiMenu', sizing)).toBe('both');
+    expect(boxRuleFor('NitroUiTooltip', sizing)).toBe('both');
   });
 
   it('lets a fillWidth control be wider than its declaration, and still checks its height', () => {
@@ -688,11 +698,130 @@ describe('the recycle-reset rule', () => {
   });
 });
 
+/* ------------------------ the recycle hole, as two lists see it ---------------------- */
+
+describe('a recycle hole, as the fixture and the debt list describe it', () => {
+  /** A harness file with one fixture whose `probe` is the given kind. */
+  function harnessWith(kind, name = 'Switch') {
+    const body =
+      kind === 'probe'
+        ? "      leaveBehind: 'a tap on the control',"
+        : `      ${kind}:\n        'the reason the suite gives for not probing',`;
+    return [
+      'const FIXTURES: ReadonlyArray<Fixture> = [',
+      '  {',
+      `    name: '${name}',`,
+      "    component: 'NitroUiSwitch',",
+      '    probe: {',
+      body,
+      '    },',
+      '  },',
+      '];',
+    ].join('\n');
+  }
+
+  const row = {
+    component: 'Switch',
+    rule: 'recycle-reset',
+    followups: 'X4 recycle rule: Switch holds residue no read-out can show',
+    detail: 'nothing reports the drawn value',
+  };
+
+  it('reads the note each fixture declares, and the reason with it', () => {
+    const notes = recycleNotes(harnessWith('blindSpot'));
+    expect(notes.Switch.kind).toBe('blindSpot');
+    expect(notes.Switch.reason).toBe(
+      'the reason the suite gives for not probing'
+    );
+    expect(recycleNotes(harnessWith('noProbe')).Switch.kind).toBe('noProbe');
+    expect(recycleNotes(harnessWith('probe')).Switch).toEqual({
+      kind: 'probe',
+    });
+    // No table is not "no control has a hole" — that reading is how a check disappears
+    // without leaving a trace. `checkInAppFixtures` is what reports an absent table.
+    expect(recycleNotes(null)).toEqual({});
+    expect(recycleNotes('nothing in this file')).toEqual({});
+  });
+
+  it('goes red when a fixture calls its rule a hole and no debt row owns it', () => {
+    // The re-review's finding verbatim: the controls with no probe had a sentence in a
+    // fixture and a `covered` cell, and nothing could tell a hole in the guard from an
+    // exemption. A `blindSpot` is a failing cell, so it cannot live only in a comment.
+    const problems = checkRecycleNotes(harnessWith('blindSpot'), []);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain(
+      'the Switch fixture says its recycle rule is a `blindSpot`'
+    );
+    expect(problems[0]).toContain('add the row');
+  });
+
+  it('goes red when a debt row covers a control whose probe can produce the finding', () => {
+    // The dangerous direction: a probe lands, its row is left behind, and the run prints
+    // "known failing" over a number that now means something.
+    expect(checkRecycleNotes(harnessWith('probe'), [row]).join('\n')).toContain(
+      'that fixture has a residue probe'
+    );
+  });
+
+  it('goes red when the two files disagree about whether the control holds state', () => {
+    // `noProbe` says there is nothing to reset; a debt row says the reset is unreachable.
+    // Both cannot be true of one control, and the honest reading is that the probe is
+    // missing — which is the row being refused, not the note being rewritten.
+    expect(
+      checkRecycleNotes(harnessWith('noProbe'), [row]).join('\n')
+    ).toContain('disagree about whether the control holds state');
+  });
+
+  it('goes red when a row guards a control no fixture guards', () => {
+    // Nothing reports the key, so nothing can ever retire the row, and it sits there
+    // excusing a finding no probe is capable of producing.
+    expect(
+      checkRecycleNotes(harnessWith('blindSpot', 'Slider'), [row]).join('\n')
+    ).toContain('no fixture guards that control');
+  });
+
+  it('is quiet on the repo as it stands, and the two lists agree cell for cell', () => {
+    const harness = read('example/__tests__/Conformance.harness.tsx');
+    expect(checkRecycleNotes(harness)).toEqual([]);
+    // The statement the four tests above exist to make unfakeable: the set of fixtures
+    // that call their rule a hole *is* the set of debt rows, in both directions.
+    const notes = recycleNotes(harness);
+    expect(
+      Object.entries(notes)
+        .filter(([, note]) => note.kind === 'blindSpot')
+        .map(([name]) => name)
+        .sort()
+    ).toEqual(
+      CONFORMANCE_EXEMPTIONS.filter((r) => r.rule === 'recycle-reset')
+        .map((r) => r.component)
+        .sort()
+    );
+    // And every reason that reaches the coverage table is a sentence, not a fragment:
+    // the cell's whole claim is that the suite cannot reach the rule, so it has to say so.
+    for (const [name, note] of Object.entries(notes)) {
+      if (note.kind === 'probe') continue;
+      expect(note.reason.length).toBeGreaterThan(40);
+      expect(`${name}: ${note.reason}`).not.toMatch(/\s\+$/);
+    }
+  });
+});
+
 /* ---------------------------------- the debt --------------------------------- */
 
 describe('the debt ledger', () => {
-  it('has no in-app rows today, and the mechanism works when one is added', () => {
-    expect(CONFORMANCE_EXEMPTIONS).toEqual([]);
+  it('is the recycle holes on record, and the mechanism works when one is added', () => {
+    // Every row since the re-review is a `recycle-reset` hole, and they are named here
+    // rather than just counted: a row appearing means a new hole is on record (which wants
+    // a fixture note, a FOLLOWUPS line and a matrix cell with it), and a row disappearing
+    // without its probe landing is the same lie in the other direction.
+    expect(
+      CONFORMANCE_EXEMPTIONS.map((row) => `${row.component}|${row.rule}`)
+    ).toEqual(['Menu|recycle-reset', 'SegmentedControl|recycle-reset']);
+    for (const row of CONFORMANCE_EXEMPTIONS) {
+      // Debt needs an address and a description of what is blind, not just a name.
+      expect(row.followups.length).toBeGreaterThan(0);
+      expect(row.detail.length).toBeGreaterThan(0);
+    }
     const finding = {
       component: 'Switch',
       rule: 'recycle-reset',
@@ -951,6 +1080,8 @@ describe('the debt, as the matrix sees it', () => {
     // finding about the control, so it is recorded as debt with a FOLLOWUPS line and
     // printed on every run rather than asserted away.
     expect(failingKeys()).toEqual([
+      'Menu|recycle-reset',
+      'SegmentedControl|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
@@ -1053,18 +1184,18 @@ describe('the in-app fixture table cross-check', () => {
   });
 
   it('goes red for a manifest with no fixture, and names it', () => {
-    const withMenu = [
+    const withTooltip = [
       ...repoManifests(),
       manifest({
-        id: 'menu',
-        name: 'Menu',
-        hybridView: 'NitroUiMenu',
+        id: 'tooltip',
+        name: 'Tooltip',
+        hybridView: 'NitroUiTooltip',
         sizing: 'intrinsic',
-        exampleTab: 'menu',
+        exampleTab: 'tooltip',
       }),
     ];
-    expect(checkInAppFixtures(withMenu, harness()).join('\n')).toContain(
-      'no fixture for Menu'
+    expect(checkInAppFixtures(withTooltip, harness()).join('\n')).toContain(
+      'no fixture for Tooltip'
     );
   });
 
