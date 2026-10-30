@@ -58,11 +58,16 @@ Switches only). `SegmentedControl`, `Picker` and `DatePicker` follow in 0.3.0 (H
 "Popups and dialogs" below), and `Menu` in 0.4.0 (G7a/G7b) — eight controls, which is
 everything the library ships, so `UNHOSTABLE_CONTROLS` in `HostChildren.ts` is empty.
 
-H2a re-ran the same plan with them in the host arm, so the four are priced by one run
+H2a re-ran the same plan with them in the host arm, so the four were priced first by one run
 (`quick`, ART `speed-profile`, 4 launches, one results file;
 `bench/results/e7b7dbf-dirty-android-20261026T135002Z.json`). That machine was **not
-quiet — 37 % of its load samples sat over the ceiling — so the run is indicative and a
-quiet re-run is pending**. Ratios to `expo-ui-shared-host`, launch-paired; memory from the
+quiet — 37 % of its load samples sat over the ceiling**, so the run was indicative and a
+quiet re-run was pending. A5 has since run the plan quiet on `maintainer-mac-2`
+(`abe68a1`, 8 launches, 0.04 % of samples over the ceiling); its numbers are in
+[`A5-quiet-bench-mac2.report.md`](../tasks/A5-quiet-bench-mac2.report.md) and in `README.md`, and
+they reproduce this table's shape — `Switch` 0.91x memory / 0.84x UI CPU, `Progress` 0.45x and
+`Button` 0.80x, `Slider` level at 1.02x. The tables below stay as H2a measured them.
+Ratios to `expo-ui-shared-host`, launch-paired; memory from the
 N=200 cell, the rest from the N=50 `mount` cell; **ᴺ** = spread over 10 % and no verdict:
 
 | Control              | Mount memory (no Host → +`<Host>`) | Mount UI CPU (no Host → +`<Host>`) | Mount JS CPU (no Host → +`<Host>`) |
