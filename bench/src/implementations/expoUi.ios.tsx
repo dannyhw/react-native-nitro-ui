@@ -2,6 +2,7 @@ import {
   Button,
   DatePicker,
   Host,
+  Menu,
   Picker,
   ProgressView,
   Slider,
@@ -12,6 +13,8 @@ import {
 import {
   buttonStyle,
   labelsHidden,
+  menuIndicator,
+  menuStyle,
   pickerStyle,
   progressViewStyle,
   tag,
@@ -23,8 +26,11 @@ import {
   SEGMENTED_SELECTION,
   buttonTitle,
   dateValue,
+  menuItems,
+  menuTitle,
   onDateChange,
   onPress,
+  onMenuSelect,
   onSegmentChange,
   onSliderChange,
   onValueChange,
@@ -89,6 +95,27 @@ const TAG_MODIFIERS = [[tag(0)], [tag(1)], [tag(2)]];
  * what T02 review B3 is about.
  */
 const MENU_MODIFIERS = [pickerStyle('menu'), labelsHidden()];
+
+/**
+ * The trigger shape nitro-ui's iOS Menu asks SwiftUI for, asked the same way: the
+ * label *is* the trigger (`.menuStyle(.button)`), the disclosure chevron is hidden
+ * (`.menuIndicator(.hidden)`), and the button's own style is pinned rather than
+ * left automatic.
+ *
+ * Not a cosmetic choice. Without these, `@expo/ui`'s `Menu` renders SwiftUI's
+ * default menu look — a label with a chevron and no button chrome — and the arm
+ * would measure a different box from the control under test, which is the exact
+ * unfairness T02 review B3 is about. `ios/components/Menu/HybridNitroUiMenu.swift`
+ * applies `.menuStyle(.button)` plus `.buttonStyle(.borderedProminent)` for its
+ * default `filled` variant, so this array is that same pair through Expo's bridge:
+ * the comparison is then one SwiftUI `Menu` over Nitro versus one over Expo, not two
+ * different controls.
+ */
+const MENU_TRIGGER_MODIFIERS = [
+  menuStyle('button'),
+  menuIndicator('hidden'),
+  buttonStyle('borderedProminent'),
+];
 
 /**
  * @param {number} segment
@@ -239,6 +266,31 @@ function BenchMenuPicker({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
+ * A SwiftUI `Menu` whose trigger label is the one every other arm draws and whose
+ * rows are the ones they mount - so the flip paints the same new title, and the
+ * box has to follow it, as it does for every other arm.
+ *
+ * `MENU_TRIGGER_MODIFIERS` is what makes this the same control as the one under
+ * test rather than SwiftUI's default menu look. The rows are `Button`s because that
+ * is what a menu row is in SwiftUI, and the arm keeps them plain: the popup is
+ * never opened during a cell, so what this costs is the mounted trigger plus the
+ * row content SwiftUI builds for the menu.
+ */
+function BenchMenu({ index, value }: { index: number; value: boolean }) {
+  return (
+    <Menu
+      testID={`bench-expo-menu-${String(index)}`}
+      label={menuTitle(value)}
+      modifiers={MENU_TRIGGER_MODIFIERS}
+    >
+      {menuItems().map((label) => (
+        <Button key={label} label={label} onPress={onMenuSelect} />
+      ))}
+    </Menu>
+  );
+}
+
+/**
  * `@expo/ui` worst case for the library: one SwiftUI hosting view per control.
  * Expo UI always needs a `Host`, so both Expo arms are required for a fair
  * comparison (docs/research/setup-decisions.md SS6).
@@ -271,6 +323,10 @@ export function ExpoUiHostPerControlList({
           <Host key={index} matchContents style={style}>
             <BenchMenuPicker index={index} value={value} />
           </Host>
+        ) : component === 'menu' ? (
+          <Host key={index} matchContents style={style}>
+            <BenchMenu index={index} value={value} />
+          </Host>
         ) : component === 'slider' ? (
           <Host key={index} style={style}>
             <BenchSlider index={index} value={value} />
@@ -301,7 +357,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
     component === 'button' ||
     component === 'segmented-control' ||
     component === 'date-picker' ||
-    component === 'picker'
+    component === 'picker' ||
+    component === 'menu'
   ) {
     // `matchContents` for the batch's host too, for the same reason as the
     // per-control arm; the switch/slider hosts stay exactly as published.
@@ -315,6 +372,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
               <BenchDatePicker key={index} index={index} value={value} />
             ) : component === 'picker' ? (
               <BenchMenuPicker key={index} index={index} value={value} />
+            ) : component === 'menu' ? (
+              <BenchMenu key={index} index={index} value={value} />
             ) : (
               <BenchSegmented key={index} index={index} value={value} />
             )

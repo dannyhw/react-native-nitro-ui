@@ -1,0 +1,88 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-10-30T01:48:49.769Z on code tree `03e53c145b6f` at HEAD `ae2ec53` (branch `task/G7b-menu-finish`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 19715 ms
+- Load: start 4.58, end 3.98, median 4.24, max 4.58
+- Device: android / device `emulator-5570` / lease `G7b-27pum`
+- Full log: `task/G7b-menu-finish/harness+android+Menu-2026-10-30T01-48-49.571Z.log` (<store>/task/G7b-menu-finish/harness+android+Menu-2026-10-30T01-48-49.571Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · inside a Host › opens under its own button, and follows it when the Host moves`
+- `expected 168 to be less than 48`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/harness+android+Menu-2026-10-30T01-48-49.571Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7b-27pum (still live)
+  |   G7b-27pum                G7b          both              pair-b
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.98 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:Menu
+gate: node ../scripts/harness.mjs --harnessRunner android Menu (cwd example)
+gate: code tree 03e53c145b6f at HEAD ae2ec53
+gate: git tree 0a16fd7685df with a DIRTY worktree (not reusable)
+gate: log task/G7b-menu-finish/harness+android+Menu-2026-10-30T01-48-49.571Z.log
+gate:       <store>/task/G7b-menu-finish/harness+android+Menu-2026-10-30T01-48-49.571Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 03e53c145b6f, 9 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.58/3.95 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G7b-menu-finish/harness+android+Menu-2026-10-30T01-48-49.571Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · inside a Host › opens under its own button, and follows it when the Host moves
+
+    expected 168 to be less than 48
+
+      [0m [90m 1602 |[39m     [90m// the code comment in `HybridNitroUiMenu.kt` claiming the latter is a reading[39m
+       [90m 1603 |[39m     [90m// rather than a measurement.[39m
+      [31m[1m>[22m[39m[90m 1604 |[39m     expect(gap)[33m.[39mtoBeLessThan([35m48[39m)[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 1605 |[39m
+       [90m 1606 |[39m     [90m// Move the `<Host>`. Compose is never told: a popup positions itself against the[39m
+       [90m 1607 |[39m     [90m// anchor's box inside its own composition, so a window left standing would point[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        18.627 s
+Ran all test suites matching Menu.
+gate: harness:android:Menu FAIL in 19.7 s
+gate: recorded in .gates/task/G7b-menu-finish.jsonl
+
+
+gate: appended the device context to task/G7b-menu-finish/harness+android+Menu-2026-10-30T01-48-49.571Z.log (5 probe(s))
+
+```

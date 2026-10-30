@@ -23,7 +23,8 @@ export type ComponentName =
   | 'progress'
   | 'segmented-control'
   | 'date-picker'
-  | 'picker';
+  | 'picker'
+  | 'menu';
 // @end-generated
 
 /** What one launch does to the controls. */
@@ -42,7 +43,8 @@ export type ScenarioName =
   | `${ScenarioAction}.progress`
   | `${ScenarioAction}.segmented-control`
   | `${ScenarioAction}.date-picker`
-  | `${ScenarioAction}.picker`;
+  | `${ScenarioAction}.picker`
+  | `${ScenarioAction}.menu`;
 // @end-generated
 
 /**

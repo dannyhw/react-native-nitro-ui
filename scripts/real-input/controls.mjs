@@ -82,6 +82,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real tap opens the menu, a real tap on a row reports it, and an unmount while open leaks no popup',
     screen: 'picker',
   },
+  {
+    id: 'menu',
+    title:
+      'real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none',
+    screen: 'menu',
+  },
   // @end-generated
 ]);
 

@@ -45,6 +45,23 @@ const VARIANTS: readonly ButtonVariant[] = [
 
 const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
 
+/**
+ * The rows of the real-input menu, spelled as `CHECKS.menu` and
+ * `testRealInputMenu` spell them.
+ *
+ * None of the three titles appears anywhere else on this screen, which is what lets
+ * a text match name one popup row rather than some other text on screen (the same
+ * rule `PickerScreen`'s `REAL_INPUT_OPTIONS` follows). `Locked row` is disabled, so
+ * it is the row a check proves takes no pick.
+ */
+const REAL_INPUT_GROUP: MenuGroup = {
+  actions: [
+    { id: 'alpha', title: 'Alpha' },
+    { id: 'bravo', title: 'Bravo' },
+    { id: 'locked', title: 'Locked row', disabled: true },
+  ],
+};
+
 /** The rows the "group changes" block can take away and put back. */
 const OPTIONAL_ROW = { id: 'extra', title: 'Extra row' };
 
@@ -83,6 +100,32 @@ export default function MenuScreen() {
   const toggleExtraRow = useCallback(() => {
     setExtraRow((current) => !current);
   }, []);
+
+  // The real-input echoes: what the control reported, in the order it reported it.
+  //
+  // One string rather than three counters, because the *order* is the thing
+  // `scripts/real-input` asserts (DECISIONS D32: a pick fires `onSelect` and then
+  // `onClose`, and Android is the only platform that fires either). So the same
+  // echo reads `open > select bravo > close` on Android after one real pick and
+  // `select bravo` on iOS — row ids, not titles — and each platform's check reads
+  // it and expects its own text: the ruling is asserted rather than described.
+  const [events, setEvents] = useState('none');
+  const [lastPick, setLastPick] = useState('-');
+
+  const appendEvent = useCallback((said: string) => {
+    setEvents((current) =>
+      current === 'none' ? said : `${current} > ${said}`
+    );
+  }, []);
+  const noteRealSelect = useCallback(
+    (id: string) => {
+      setLastPick(id);
+      appendEvent(`select ${id}`);
+    },
+    [appendEvent]
+  );
+  const noteRealOpen = useCallback(() => appendEvent('open'), [appendEvent]);
+  const noteRealClose = useCallback(() => appendEvent('close'), [appendEvent]);
 
   // A menu with a header group, a divider-only group, a destructive row and a
   // disabled one — the whole row vocabulary in one control.
@@ -160,14 +203,56 @@ export default function MenuScreen() {
         </Text>
 
         <Text style={[styles.section, { color: ink.ink }]}>
+          Real input (scripts/real-input reads these)
+        </Text>
+        <Text style={styles.note}>
+          At the top of the page on purpose: a check that has to scroll to reach
+          a control cannot tell a dropped tap from a control that is off screen.
+        </Text>
+        <View style={styles.row}>
+          {/* Two suites read this one control. `CHECKS.menu` and
+              `testRealInputMenu` tap it and read the two echoes beside it; the
+              conformance suite's a11y case (`A11Y_CONTROLS` id `menu`) is what the
+              `accessibilityLabel` below is for — the label is the name the rule looks
+              for, the testID the box it compares the named node's box with, both
+              cross-checked against this file by `checkA11yTable`. Dropping the label
+              leaves every real-input check green and silently drops a control from the
+              a11y rule, which is the coupling worth knowing about on a shared anchor. */}
+          <Menu
+            title="Actions"
+            group={REAL_INPUT_GROUP}
+            onSelect={noteRealSelect}
+            onOpen={noteRealOpen}
+            onClose={noteRealClose}
+            testID="real-input-menu"
+            accessibilityLabel="Real-input menu"
+          />
+          {/* Separate `Text`s, not one line with nested children: React Native renders
+              a nested `Text` inline inside its parent, so on Android it never becomes
+              its own view and never carries a `resource-id` — the only way
+              `scripts/real-input/android.mjs` can find an echo. */}
+          <Text style={[styles.readout, { color: ink.muted }]}>
+            last row reported
+          </Text>
+          <Text
+            testID="real-input-menu-pick"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {lastPick}
+          </Text>
+          <Text style={[styles.readout, { color: ink.muted }]}>in order</Text>
+          <Text
+            testID="real-input-menu-events"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {events}
+          </Text>
+        </View>
+
+        <Text style={[styles.section, { color: ink.ink }]}>
           What the control heard
         </Text>
-        {/* The echo the real-input pass navigates by (`goToScreen` in
-            `scripts/real-input/android.mjs`, `Echo.menuHeard` in
-            `RealInputTests.swift`): a Menu opens a popup of its own, so this is the
-            only node on this screen that says the app is standing on the Menu tab with
-            its state wired up. */}
-        <Text style={styles.note} testID="menu-heard-state">
+        <Text style={styles.note}>
           last pick: {picked ?? 'nothing'} · opened {String(opens)}× · closed{' '}
           {String(closes)}× · primary action {String(primary)}×
         </Text>
@@ -182,20 +267,6 @@ export default function MenuScreen() {
           Sections and rows
         </Text>
         <View style={styles.row}>
-          {/* The conformance suite's a11y case (`A11Y_CONTROLS` id `menu`): the label is
-              what the rule looks for and the testID is the box it compares the named
-              node's box with, so both are cross-checked against this file by
-              `checkA11yTable`. First on the page for the reason `ButtonScreen` gives —
-              `uiautomator dump` lists no off-screen nodes. */}
-          <Menu
-            title="File"
-            group={sectioned}
-            onSelect={recordSelect}
-            onOpen={recordOpen}
-            onClose={recordClose}
-            accessibilityLabel="Real-input menu"
-            testID="real-input-menu"
-          />
           <Menu
             title="File"
             group={sectioned}
@@ -306,4 +377,6 @@ const styles = StyleSheet.create({
   section: { fontSize: 15, fontWeight: '600', marginTop: 14 },
   note: { color: '#8a8a8f', fontSize: 12, lineHeight: 17 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  readout: { fontSize: 12, color: '#8a8a8f', alignSelf: 'center' },
+  value: { fontSize: 13, fontWeight: '600', alignSelf: 'center' },
 });

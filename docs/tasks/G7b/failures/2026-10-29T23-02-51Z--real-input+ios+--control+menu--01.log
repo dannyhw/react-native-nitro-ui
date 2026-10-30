@@ -1,0 +1,85 @@
+# Failure excerpt — real-input:ios:--control:menu
+
+- Ran: 2026-10-29T23:02:51.957Z on code tree `21aa59cb4c1b` at HEAD `2636d92` (branch `task/G7b-menu-finish`)
+- Command: `node scripts/real-input/ios.mjs --control menu`
+- Result: fail, exit 1, 62994 ms
+- Load: start 17.74, end 13.29, median 17.56, max 21.21
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G7b-27pum`
+- Full log: `task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T23-02-51.778Z.log` (<store>/task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T23-02-51.778Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputMenu in 48.053s`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T23-02-51.778Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G7b-27pum (still live)
+  |   G7b-27pum                G7b          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 13.29 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: real-input:ios:--control:menu
+gate: node scripts/real-input/ios.mjs --control menu (cwd .)
+gate: code tree 21aa59cb4c1b at HEAD 2636d92
+gate: git tree 46bce7816391 with a DIRTY worktree (not reusable)
+gate: log task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T23-02-51.778Z.log
+gate:       <store>/task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T23-02-51.778Z.log
+real-input (ios): nitro-ui B · 3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 · Metro 8293 · scheme NitroUiExampleUITests
+metro: started on 8293 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree 21aa59cb4c1b (602 files) head 2636d925 · 9 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8293
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-10-29 23:03:06.021.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-10-29 23:03:06.021.
+    Test Suite 'RealInputTests' started at 2026-10-29 23:03:06.022.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputMenu]' started.
+    real-input (ios): the real tap that reopens the menu: tap 1/3 left the Menu trigger (real-input-menu) at "0 row(s) named "Bravo""
+    real-input (ios): the real tap that reopens the menu: the Menu trigger (real-input-menu) answered on tap 2/3 - the earlier tap(s) were never delivered
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputMenu]' failed (48.053 seconds).
+    Test Suite 'RealInputTests' failed at 2026-10-29 23:03:54.078.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-10-29 23:03:54.078.
+    Test Suite 'Selected tests' failed at 2026-10-29 23:03:54.079.
+    ** TEST EXECUTE FAILED **
+
+  menu: real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none
+    · real-input (ios): the real tap that reopens the menu: tap 1/3 left the Menu trigger (real-input-menu) at "0 row(s) named "Bravo""
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:2127: error: -[NitroUiExampleUITests.RealInputTests testRealInputMenu] : XCTAssertEqual failed: ("select alpha > select bravo") is not equal to ("select bravo") - one pick on iOS should report the pick alone - a SwiftUI Menu keeps its open state to itself, so `onOpen`/`onClose` never fire (DECISIONS D32)
+    · real-input (ios): the real tap that reopens the menu: the Menu trigger (real-input-menu) answered on tap 2/3 - the earlier tap(s) were never delivered
+    ✗ XCUITest reported "failed" for testRealInputMenu in 48.053s
+
+menu: FAIL (retried 1 press sequence(s))
+    failed: XCUITest reported "failed" for testRealInputMenu in 48.053s
+
+real-input (ios): 0/1 controls passed · 1 press sequence(s) needed a retry - see the "answered on tap" notes above for which
+gate: real-input:ios:--control:menu FAIL in 63.0 s
+gate: recorded in .gates/task/G7b-menu-finish.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G7b-menu-finish/real-input+ios+--control+menu-2026-10-29T23-02-51.778Z.log (4 probe(s))
+
+```

@@ -15,7 +15,7 @@ import type { ComponentName } from '../types';
 const ROW_HEIGHTS: Record<
   Exclude<
     ComponentName,
-    'button' | 'segmented-control' | 'date-picker' | 'picker'
+    'button' | 'segmented-control' | 'date-picker' | 'picker' | 'menu'
   >,
   number
 > = {
@@ -30,30 +30,34 @@ const ROW_HEIGHTS: Record<
   progress: 44,
 };
 
-/* Button, SegmentedControl, DatePicker and Picker have no row height on purpose
-   - see `fitRowStyle`. */
+/* Button, SegmentedControl, DatePicker, Picker and Menu have no row height on
+   purpose - see `fitRowStyle`. */
 
 /**
  * Whether a component's own measurement decides its box, so no arm may be given a
  * box to fit into.
  *
- * Button (G2), SegmentedControl (G4), DatePicker (G5) and Picker (G6) are the
- * components whose size comes from their props: a fixed height and a stretched
- * width would each silence the re-measure the `update` cell is there to price
- * (DECISIONS D16). A Picker
+ * Button (G2), SegmentedControl (G4), DatePicker (G5), Picker (G6) and Menu (G7b)
+ * are the components whose size comes from their props: a fixed height and a
+ * stretched width would each silence the re-measure the `update` cell is there to
+ * price (DECISIONS D16). A Picker
  * included - its box is the width of the title it paints, so a `stretch` would
  * make the `update.picker` cell price a repaint of a fixed box rather than the
- * re-measure a consumer actually pays. Switch and Slider are platform-sized, so
- * they take a row.
+ * re-measure a consumer actually pays. A Menu's trigger *is* a Button's box
+ * (D29: the same variant/size vocabulary, sized like a Button's label), so the
+ * same reasoning applies to `update.menu` and the title flip that drives it.
+ * Switch and Slider are platform-sized, so they take a row.
  */
 function isSizedByContent(
   component: ComponentName
-): component is 'button' | 'segmented-control' | 'date-picker' | 'picker' {
+): component is
+  'button' | 'segmented-control' | 'date-picker' | 'picker' | 'menu' {
   return (
     component === 'button' ||
     component === 'segmented-control' ||
     component === 'date-picker' ||
-    component === 'picker'
+    component === 'picker' ||
+    component === 'menu'
   );
 }
 
@@ -328,6 +332,51 @@ export function pickerSelection(value: boolean): number {
  * {@link onSegmentChange}.
  */
 export function onPickerChange(): void {
+  // Intentionally empty: state is driven by the runner.
+}
+
+/**
+ * The trigger label every Menu arm draws, flipped by the `update.menu` cell.
+ *
+ * A Menu's box is its trigger's box, and the trigger is sized like a Button's
+ * label, so this is the sizing key: one short word and one longer one, exactly as
+ * {@link buttonTitle} does for `update.button`. A flip that left the title alone
+ * would price a re-render of a box nobody re-measured, which is the invisible
+ * number D16 exists to prevent.
+ */
+export function menuTitle(value: boolean): string {
+  return value ? 'More actions' : 'More';
+}
+
+/**
+ * The item list every Menu arm mounts, constant across the flip.
+ *
+ * Module-level for the reason `pickerOptions` is: an arm that built a fresh array
+ * per render would pay a prop-identity change no other arm pays. Constant (rather
+ * than flipped like SegmentedControl's) because the Menu's width follows its
+ * *title*, so `update.menu` already moves the sizing key, and folding a list change
+ * into the same flip would charge two transactions to one number — the
+ * `SEGMENTED_SELECTION` reasoning, applied to the other half.
+ *
+ * Three plain rows and no submenu or section: those are the menu's *content*
+ * shapes, and nitro-ui flattens them into one row array on the JS side, so a
+ * submenu here would price JS work in a native ratio rather than the cost of the
+ * popup's contents on each runtime. One row is longer than the others so the list
+ * has a real intrinsic width on both platforms.
+ */
+const MENU_ITEMS: string[] = ['Rename', 'Duplicate', 'Move to a longer folder'];
+
+/** The rows every Menu arm mounts. */
+export function menuItems(): string[] {
+  return MENU_ITEMS;
+}
+
+/**
+ * Stable no-op `onSelect` for the Menu arms, for the same reason as
+ * {@link onPickerChange}. The bench never opens a popup, so this is the callback
+ * identity the arms share rather than a handler that runs.
+ */
+export function onMenuSelect(): void {
   // Intentionally empty: state is driven by the runner.
 }
 

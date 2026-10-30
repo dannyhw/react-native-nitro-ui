@@ -35,21 +35,27 @@ const READY_LINE =
   'I/ReactNative( 1234): ' +
   `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 ` +
   'progress=310x4 segmented-control=214x32 ' +
-  'date-picker=138x34 picker=72x35 host=310x96';
+  'date-picker=138x34 picker=72x35 menu=76x34 host=310x96';
 
 /**
- * What the two platforms actually printed the first time this gate ran on
- * devices: Android scales dp by the display density, iOS sizes a Button from its
- * font. Integer fixtures like `READY_LINE` are the common case, not the whole
- * contract, and a contract written against integers alone called both of these
- * runs a failure with every control laid out.
+ * What the two platforms printed for the eight controls this fixture predates:
+ * Android scales dp by the display density, iOS sizes a Button from its font.
+ * Integer fixtures like `READY_LINE` are the common case, not the whole contract,
+ * and a contract written against integers alone called both of these runs a
+ * failure with every control laid out.
+ *
+ * The `menu=` token is the exception: it was **written by hand** when Menu joined
+ * `SMOKE_CONTROLS` (G7b), from the same density-scaled shape as its neighbours,
+ * because no smoke run has been made since. It exercises the parser, not a
+ * measurement; a real device line for it is a one-line follow-up.
  */
 const READY_LINE_FRACTIONAL =
   'I/ReactNativeJS(13147): ' +
   `${READY_PREFIX} switch=52.19047546386719x48 slider=363.4285583496094x48 ` +
   'button=91.04762268066406x48 progress=363.4285583496094x4.19049072265625 ' +
   'segmented-control=256x48 date-picker=120.76190185546875x48 ' +
-  'picker=280x56.09523010253906 host=363.4285583496094x96';
+  'picker=280x56.09523010253906 menu=97.619049072265625x48 ' +
+  'host=363.4285583496094x96';
 
 describe('smoke ready line', () => {
   it('passes on one non-zero box per control', () => {
@@ -62,6 +68,7 @@ describe('smoke ready line', () => {
       height: 32,
     });
     expect(verdict.sizes.picker).toEqual({ width: 72, height: 35 });
+    expect(verdict.sizes.menu).toEqual({ width: 76, height: 34 });
   });
 
   it('fails the bare line the app used to print', () => {
@@ -157,7 +164,7 @@ describe('smoke ready line', () => {
     const verdict = checkReadyLine(
       `${READY_PREFIX} switch=30x20x1 slider=310x20 button=88x36 ` +
         'progress=310x4 segmented-control=214x32 ' +
-        'date-picker=138x34 picker=72x35 host=310x96'
+        'date-picker=138x34 picker=72x35 menu=76x34 host=310x96'
     );
     expect(verdict.ok).toBe(false);
     expect(verdict.problems.join('\n')).toContain('switch');
