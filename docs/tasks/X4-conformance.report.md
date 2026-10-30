@@ -46,12 +46,12 @@ its own numbers.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1322 tests / 49 suites | `f21b8a191a4e` | 2 m 35 s | start 5.3 / med 4.5 / max 6.3 |
-| `harness:ios` | **PASS** | 203 tests / 14 suites | `f21b8a191a4e` (ios tree) | 3 m 10 s | start 4.6 / med 3.0 / max 4.6 |
-| `harness:android` | **PASS** | 252 tests / 14 suites | `f21b8a191a4e` (android tree) | 7 m 16 s | start 3.0 / med 2.5 / max 3.6 |
-| `real-input:ios` | **PASS** | — | `f21b8a191a4e` (ios tree) | 13 m 28 s | start 2.6 / med 5.3 / max 29.9 |
-| `real-input:android` | **PASS** | — | `f21b8a191a4e` (android tree) | 19 m 29 s | start 5.1 / med 2.5 / max 5.1 |
-| `harness:ios:Conformance` | **PASS** | 35 tests / 1 suites | `f21b8a191a4e` (ios tree) | 1 m 10 s | start 4.8 / med 4.9 / max 6.3 |
+| `check` | **PASS** | 1336 tests / 49 suites | `7c2ce5f4c3dc` | 2 m 36 s | start 9.4 / med 7.2 / max 12.8 |
+| `harness:ios` | **PASS** | 223 tests / 15 suites | `7c2ce5f4c3dc` (ios tree) | 4 m 00 s | start 2.2 / med 22.5 / max 93.8 |
+| `harness:android` | **PASS** | 272 tests / 15 suites | `7c2ce5f4c3dc` (android tree) | 7 m 57 s | start 1.6 / med 2.3 / max 3.4 |
+| `real-input:ios` | **PASS** | — | `7c2ce5f4c3dc` (ios tree) | 15 m 20 s | start 7.5 / med 3.7 / max 16.1 |
+| `real-input:android` | **PASS** | — | `7c2ce5f4c3dc` (android tree) | 20 m 50 s | start 3.4 / med 2.4 / max 3.6 |
+| `harness:ios:Conformance` | **PASS** | 40 tests / 1 suites | `7c2ce5f4c3dc` (ios tree) | 1 m 50 s | start 3.1 / med 52.9 / max 96.1 |
 
 ## Bench
 
@@ -99,12 +99,13 @@ out to equal its declaration anyway — so adding a name to get one run green bu
 
 | Control | a11y-name-on-focusable-node | declared-fallback | no-leak-on-drop | recycle-reset |
 | --- | --- | --- | --- | --- |
-| Button | covered | covered | covered | covered |
+| Button | covered | covered | covered | n/a — a Button owns no state a reset can clear. title, accessibilityLabel and onPress are all re-sent by the wrapper on every mount - and the callback is deliberately always sent, as a stable no-op when the app passed none, which is what stops a recycled view keeping a dead owner’s handler (Button.tsx:99-110). Its prepareForRecycle is the belt, and nothing on either platform can show it missing. |
 | DatePicker | covered | covered | covered | covered |
-| Picker | covered | covered | covered | covered |
-| Progress | covered | covered | covered | covered |
-| SegmentedControl | **failing** — see X4 a11y: nothing actionable at the named node | covered | covered | covered |
-| Slider | **failing** — see X4 a11y: Compose RangeInfo nodes are not actionable in a dump | covered | covered | covered |
+| Menu | covered | covered | covered | **failing** |
+| Picker | **failing** | covered | covered | covered |
+| Progress | covered | covered | covered | n/a — Progress has no interaction to leave residue with - it is an indicator, not a control - and both platforms’ own read-out of it is a stub: nuiTestDisplayedValue() answers -1 on iOS and -1;animating=-1 on Android, so any assertion written against it would be a tautology. Its value, tint and variant are props the wrapper re-sends. |
+| SegmentedControl | **failing** | covered | covered | **failing** |
+| Slider | **failing** | covered | covered | covered |
 | Switch | covered | covered | covered | covered |
 
 ## Red proofs
@@ -257,3 +258,55 @@ Red proofs — mutation → line that went red:
 - unit → per-test registration read; comment-only fixture row; renamed FIXTURES;
   describe-body lookups; no area bound; `ls-files`; note-shaped return; scan reporting its own
   fixtures
+
+## Fix round 2
+
+1. `main` merged twice (`305ff9b` G7a, `3066da0` G7b: `bench`/`smoke`/`realInput` true). Seven
+   tests went red for the right reason — no a11y case, fallback, fixture or screen — all four
+   filled in. G7b's screen owns `real-input-menu`, so the a11y case rides it and its fixture
+   was re-measured.
+2. iOS a11y proofs, from recorded `real-input:ios` runs: Switch's `OptionalAccessibility`
+   (`:109`) and Slider's `refresh()` (`:591`) each losing the label → `no element other than
+   the React Native wrapper is announced as "Controlled switch" / "Controlled slider"`. `:469`
+   cannot go red — that mutation ran green — so the source names the graded site.
+3. Second owners moved off the reset value (Switch `true`, Slider `0.75`, DatePicker
+   2025-03-01), and each reset line got its own probe: uncontrolled reads `didApplyDefault`,
+   controlled the counts. `didApplyDefault` alone → three `(uncontrolled)` reds;
+   `model.state = …` alone → four `(controlled)` reds.
+4. The hosted Picker's exemption matches `announces the control's name twice` only; a lost
+   label is a new sentence, and a test shows it red.
+5. Menu and SegmentedControl are **failing**, each citing FOLLOWUPS; `checkRecycleNotes`
+   ties fixture notes to debt rows both ways.
+6. Lows: no contradictory ✓ on a debt run; `hasDeclaredFallback` says *seeding*; an invented
+   gate row is a `task-ready` error.
+
+## Appendix: how round 2's guards were shown to fail
+
+Device proofs are mutations of a real control, run through `gate.mjs` so they land in the
+ledger and leave a failure excerpt, then reverted. Unit proofs are mutations of the guard.
+
+- iOS a11y, `real-input:ios` 2026-10-30 02:02 — Switch `OptionalAccessibility.body` and Slider
+  `refresh()` each losing the label (one run, two cases) → `✗ NitroUiSwitch: no element other
+  than the React Native wrapper is announced as "Controlled switch"` and the same sentence for
+  `"Controlled slider"`.
+- iOS a11y, `real-input:ios` 02:42 — Slider's `OptionalAccessibility` (`:469`) losing it
+  instead → **13/13 passed**. That is the measurement behind "`:469` cannot go red"; the
+  modifier's doc comment now says so rather than leaving the next reader to repeat it.
+- Reset lines, `harness:ios:Conformance` 01:56 — `model.didApplyDefault = false` deleted from
+  four `prepareForRecycle` bodies → three `… (uncontrolled second owner) … where the props say`
+  reds (Switch, Slider, DatePicker); Picker green, so that line is not what its probe reads.
+- Reset lines, `harness:ios:Conformance` 01:59 — `model.state = NitroUiControlledValue(…)`
+  deleted from the same four → four `… (controlled second owner) …` reds, Picker's included.
+  Neither mutation goes red for the other's probe, which is the separation round 1 lacked.
+- Menu's a11y case — `A11Y_EXEMPTIONS` given round 1's regex (`/no element other than
+  the|announced as/`) → `✕ … a label that stops arriving`, `Expected length: 1 / Received
+  length: 0`: the old row excused the lost label as readily as the stutter.
+- `checkRecycleNotes` returning `[]` unconditionally → all four of its disagreement tests red.
+- `recycle-reset`'s `applies` returning `null` for everything → `the debt the matrix reports is
+  the debt the runner reports`: `Expected: "Button: not-applicable" / Received: "Button: covered"`.
+- The a11y sweep's ✓ line back to the unconditional wording → `Expected substring: "no clean
+  pass either" / Received: "NitroUiSlider is named on one node a person can act on"`.
+- `reportTableProblems` back to matching on gate *name* → `✕ goes red for a second row beside a
+  gate the report also got right`.
+- Menu's coverage needed no mutation: merging `main` is what broke it, and the seven reds are
+  the merge's own proof that the tables read the manifest.

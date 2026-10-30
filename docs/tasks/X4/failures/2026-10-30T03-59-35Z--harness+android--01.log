@@ -1,0 +1,194 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-30T03:59:35.900Z on code tree `7c2ce5f4c3dc` at HEAD `2e8c7b8` (branch `task/X4-conformance`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 478446 ms
+- Load: start 3.67, end 1.59, median 2.19, max 3.85
+- Device: android
+- Full log: `task/X4-conformance/harness+android-2026-10-30T03-59-35.710Z.log` (<store>/task/X4-conformance/harness+android-2026-10-30T03-59-35.710Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Console`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected [ 3, 6, 9 ] to deeply equal [ 3, 6, 9, 12 ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X4-conformance/harness+android-2026-10-30T03-59-35.710Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   X4-5pmth                 X4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 1.59 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 148 log line(s)
+
+```
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 7c2ce5f4c3dc at HEAD 2e8c7b8
+gate: git tree e79f807e2fcd
+gate: log task/X4-conformance/harness+android-2026-10-30T03-59-35.710Z.log
+gate:       <store>/task/X4-conformance/harness+android-2026-10-30T03-59-35.710Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 7c2ce5f4c3dc, 9 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.67/4.93 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X4-conformance/harness+android-2026-10-30T03-59-35.710Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Using existing Android emulator nitroui...
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      slider size: box=300.19x48.00 measured=300.19x48.00 expectedHeight=48
+
+
+    console.log
+      height vs width: wide=300.19x48.00/300.19x48.00 narrow=180.19x48.00/180.19x48.00
+
+
+    console.log
+      squashed box: box=180.19x12.19 measured=180.19x48.00
+
+
+    console.log
+      zero-height box: measured=180.19x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 measured=200.00x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 scroller box=240.00x923.43 measured=240.00x48.00 declared=240
+
+
+    console.log
+      poison: guess=200x12 box=300.19x48.00 measured=300.19x48.00 epoch=42->41 corrections=1
+
+
+    console.log
+      user style: box=180.19x60.19 measured=180.19x48.00
+
+
+    console.log
+      coalesce: same-turn moves=8 events=1
+
+
+    console.log
+      coalesce: spread moves=5 events=5
+
+
+    console.log
+      quantise tenths: [0.3]
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=false
+
+
+    console.log
+      a11y: box=300.19x48.00 labelBox=null handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed SetProgress(3.0) on #33250 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 65.4ms last=411.43x48.00
+
+
+    console.log
+      timing: Slider stress: mount 40 instances 65.4ms (limit 15000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 2.17/load5 3.14 over 10 cores · the bar is headroom for a debug build, not a target
+
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected [ 3, 6, 9 ] to deeply equal [ 3, 6, 9, 12 ]
+
+      [0m [90m 1538 |[39m       [32m'aligned past the top'[39m
+       [90m 1539 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 1540 |[39m     expect(aligned[33m.[39mcomplete)[33m.[39mtoEqual([[35m3[39m[33m,[39m [35m6[39m[33m,[39m [35m9[39m[33m,[39m [35m12[39m])[33m;[39m
+       [90m      |[39m                                     [31m[1m^[22m[39m
+       [90m 1541 |[39m     [36mawait[39m walkTo([32m'aligned -9'[39m[33m,[39m alignedHandle[33m,[39m aligned[33m,[39m [33m-[39m[35m1[39m[33m,[39m [[35m3[39m[33m,[39m [35m6[39m[33m,[39m [35m9[39m[33m,[39m [35m12[39m[33m,[39m [35m9[39m])[33m;[39m
+       [90m 1542 |[39m     [36mawait[39m walkTo([32m'aligned -3'[39m[33m,[39m alignedHandle[33m,[39m aligned[33m,[39m [33m-[39m[35m1[39m[33m,[39m [[35m3[39m[33m,[39m [35m6[39m[33m,[39m [35m9[39m[33m,[39m [35m12[39m[33m,[39m [35m9[39m[33m,[39m [35m6[39m])[33m;[39m
+       [90m 1543 |[39m     [36mawait[39m walkTo([0m
+
+HARNESS Shutting down Android emulator nitroui...
+
+Test Suites: 1 failed, 14 passed, 15 total
+Tests:       1 failed, 271 passed, 272 total
+Snapshots:   0 total
+Time:        477.617 s
+Ran all test suites.
+gate: harness:android FAIL in 478.4 s
+gate: recorded in .gates/task/X4-conformance.jsonl
+
+
+gate: appended the device context to task/X4-conformance/harness+android-2026-10-30T03-59-35.710Z.log (5 probe(s))
+
+```
