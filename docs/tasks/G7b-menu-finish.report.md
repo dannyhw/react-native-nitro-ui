@@ -262,7 +262,7 @@ against pair-b while the Android full plan held it.
 - Real-input tooling: `scripts/real-input/android.mjs`'s `goToScreen` takes a hand-written
   `screen → {label, anchor}` map, so a new control's manifest row silently produces an
   `undefined` tab lookup; it should read the generated `controls.mjs` row instead.
-- Bench gates: `gate.mjs bench --help` resolves to a real bench launch that exits 1 and lands a
+- Bench gates: `gate.mjs bench --help` resolves to a real bench launch that exits 2 and lands a
   FAIL row in the ledger; `bench` should refuse `--help` the way `check` refuses arguments.
 - X4's Menu coverage is a duplicate `real-input-menu` block: `task/X4-conformance` added
   `testID="real-input-menu"` to `MenuScreen.tsx` independently of this task's block, so merging
