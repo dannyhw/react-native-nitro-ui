@@ -44,7 +44,9 @@
 > merge gates green. **0.4.0 staged on npm (2026-10-30):** Version Packages PR #8 merged (`c74ffd0`; a bot-opened PR
 > runs no CI by design, and the gate is `Release`'s `check` on `main`). Release run 41019762301 green, `Stage on npm`
 > succeeded; the owner approved it, 0.4.0 is `latest` on npm, and `Release tag` was dispatched for v0.4.0.
-> Next: the quiet bench window (wave 4).
+> Next: **A5** (`A5-quiet-bench-mac2.md`), the quiet bench window (wave 4), holding the machine exclusively, then **X14**
+> (`X14-bench-component-mint.md`). The owner finds 11-hour exclusive windows rough, so after X14 a new component's
+> baseline cells are minted alone. A full window is only for a comparability break (Xcode/runtime/RN/bench change).
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
