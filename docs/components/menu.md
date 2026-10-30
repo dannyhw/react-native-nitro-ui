@@ -301,14 +301,12 @@ that list with VoiceOver and TalkBack remains a human pass.
 - **`primaryAction` is iOS-only**, and changes what a tap does there.
 - The menu is the platform's, so its look is the platform's. Beyond `tintColor` there is
   no row styling, no per-row icon on Android, and no way to place the popup.
-- Whether Button's `.buttonStyle` reaches an iOS menu's **rows** is unverified here.
-  `docs/tasks/G2-button.report.md` measured that the harness's synthesised `UITouch` is
-  rejected by SwiftUI's `Button` gesture environment "in all four styles this control
-  uses", and that an `agent-device` HID-level tap changed no app state at all; this
-  task's iOS runs likewise never got a `Menu` open (the events test delivers a press and
-  asserts the `-1` answer instead). So the trigger's box is measured and the open list is
-  not. It is on G7b's real-input list, and if the rows turn out to carry button chrome the
-  fix is one `.buttonStyle(.plain)` on the row content.
+- Button's `.buttonStyle` does **not** reach an iOS menu's rows — measured, no longer open. G7b's
+  real-input case (`testRealInputMenu`) opens the menu with a real finger press and writes a
+  screenshot mid-presentation: three plain system rows under a tinted capsule, so the trigger's
+  chrome stops at the trigger and no `.buttonStyle(.plain)` was needed on the row content. (What
+  G2 measured still holds for the *harness*: its synthesised `UITouch` never opened a `Menu` in any
+  style, which is why this answer came from XCUITest rather than from a harness test.)
 - One submenu level, and no nesting of sections. No checkmarks, no per-row state —
   a menu reports a pick and forgets it, which is the point of having no value.
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated.
