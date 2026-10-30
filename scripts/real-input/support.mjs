@@ -350,7 +350,7 @@ export class Suite {
    *
    * `finish` reports `passed/expected` over the shared control table, so a log pushed into
    * `results` would make the totals lie: `real-input` would claim eleven controls passed
-   * when the table has ten. The X4 a11y sweep is the first user — thirteen cases that are
+   * when the table has ten. The X4 a11y sweep is the first user — fourteen cases that are
    * about the accessibility tree rather than about a control responding to a press. They
    * get their own section and their own line in the verdict, which keeps `10/10` meaning
    * what it has always meant while still failing the run.

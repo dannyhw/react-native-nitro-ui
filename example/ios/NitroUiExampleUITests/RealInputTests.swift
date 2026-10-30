@@ -46,6 +46,7 @@ final class RealInputTests: XCTestCase {
     static let segmentedTab = "tab-segmented"
     static let datePickerTab = "tab-datepicker"
     static let pickerTab = "tab-picker"
+    static let menuTab = "tab-menu"
     static let hostTab = "tab-host"
   }
 
@@ -66,6 +67,9 @@ final class RealInputTests: XCTestCase {
     static let dateEvents = "real-input-date-events"
     static let pickerIndex = "real-input-picker-index"
     static let pickerEvents = "real-input-picker-events"
+    /// The Menu tab's echo (`MenuScreen.tsx`): a Menu opens a popup of its own, so the
+    /// state line is what says the screen is up and wired.
+    static let menuHeard = "menu-heard-state"
     static let dropArm = "real-input-drop-button"
     static let dropRemount = "real-input-drop-remount"
     static let dropGone = "real-input-drop-gone"
@@ -200,7 +204,7 @@ final class RealInputTests: XCTestCase {
         try measure(one)
       } catch is RealInputCheckAborted {
         // The runner reads the absence of a case's lines as a failure; aborting here keeps
-        // one screen that will not load from taking the other twelve cases down with it.
+        // one screen that will not load from taking the other thirteen cases down with it.
         continue
       } catch {
         print("real-input a11y case=\(one.id) | error | \(error)")
@@ -309,6 +313,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.datePickerTab, screenAnchor: Echo.dateValue),
       A11yCase(id: "picker", testId: "real-input-picker", label: "Real-input picker",
                tab: Tab.pickerTab, screenAnchor: Echo.pickerIndex),
+      A11yCase(id: "menu", testId: "real-input-menu", label: "Real-input menu",
+               tab: Tab.menuTab, screenAnchor: Echo.menuHeard),
       A11yCase(id: "hosted-switch", testId: "host-switch-0", label: "Hosted switch 0",
                tab: Tab.hostTab, screenAnchor: Echo.hostValue),
       A11yCase(id: "hosted-slider", testId: "host-slider", label: "Hosted slider",

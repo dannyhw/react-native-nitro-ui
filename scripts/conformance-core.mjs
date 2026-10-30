@@ -179,7 +179,16 @@ export const CONFORMANCE_RULES = Object.freeze([
     title:
       'a control that comes back under one identity shows no previous owner',
     runs: ['harness:ios', 'harness:android'],
-    applies: () => null,
+    // Applies to every control, except one whose own fixture says it has no state for a
+    // reset to clear (X4 re-review, medium "the matrix says covered"). `covered` on that
+    // cell is a claim about a check that does not exist, so the reason has to be the
+    // fixture's own words, read from the file the suite runs — not a second list here that
+    // can disagree with it. A `blindSpot` is *not* an exemption: see
+    // {@link CONFORMANCE_EXEMPTIONS}.
+    applies: (manifest, context) => {
+      const note = (context.recycleNotes ?? {})[manifest.name];
+      return note?.kind === 'noProbe' ? note.reason : null;
+    },
   },
 ]);
 
@@ -201,15 +210,39 @@ export const RULE_IDS = CONFORMANCE_RULES.map((rule) => rule.id);
 /**
  * The in-app half of the debt list; the Android a11y half is `A11Y_EXEMPTIONS`.
  *
- * Empty today, and that is a claim the tests check rather than a hope —
- * `conformance.test.js` asserts this list is empty *and* that adding a row changes
- * what {@link classifyFindings} does, so the mechanism is proven without needing
- * today's code to be broken. Rules today's controls do fail are a11y ones, and their
- * rows live where the finding is produced.
+ * One row since the re-review, and *why* is the part to read. It is a `recycle-reset`
+ * hole for a control whose fixture note is a `blindSpot`: the control **does** hold state a
+ * recycle has to clear, and neither platform can be shown the difference. Those two facts
+ * together are a failing cell, not an unapplicable one — the rule's subject exists and the
+ * suite cannot reach it, which is the definition of a hole. A control with no such state
+ * (`Button`, `Progress`) is `not-applicable` instead, and the difference between the two is
+ * exactly what `probe: { blindSpot }` versus `probe: { noProbe }` records in
+ * `Conformance.harness.tsx`.
+ *
+ * **How a row retires.** {@link checkRecycleNotes} ties the two lists together on every
+ * `check`: the fixture's note is `blindSpot` if and only if a row exists here. So the day a
+ * read-out lands, whoever writes the probe changes the fixture's note, and leaving this row
+ * behind goes red rather than quietly excusing a finding the new probe can produce. The
+ * a11y half clears itself from a device run because its rows match *problem text*; this one
+ * matches nothing, because the whole point is that no run can produce the sentence, so the
+ * clearing lives where both files are readable — in `check`.
  *
  * @type {ReadonlyArray<ConformanceExemption>}
  */
-export const CONFORMANCE_EXEMPTIONS = Object.freeze([]);
+export const CONFORMANCE_EXEMPTIONS = Object.freeze([
+  {
+    component: 'Menu',
+    rule: 'recycle-reset',
+    followups:
+      'X4 recycle rule: Menu holds residue no read-out can show, so the rule ' +
+      'cannot fail for it',
+    detail:
+      'a Menu’s open popup is native-owned state (D29), and the only read-out of it, ' +
+      '`nuiTestMenuReport()`, answers `-1` for `expanded` on iOS — the one platform that ' +
+      'actually recycles. Android can read it and never recycles, so nothing can survive ' +
+      'there to be seen.',
+  },
+]);
 
 /**
  * The key both halves of the debt ledger share.
@@ -482,6 +515,15 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 52, height: 48 },
     ios: { width: 61, height: 28 },
   },
+  // Read off the component's own source, which is the only place the number is decided:
+  // `HybridNitroUiMenu.swift:458` (`fallbackSize`) and `HybridNitroUiMenu.kt:844-845`
+  // (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`). Button-sized on iOS, and a Material 3
+  // trigger's box on Android. Menu is a `CONTENT_SIZED_BOX` control, so the suite never
+  // asks a measured Menu to equal these — see `boxRuleFor`.
+  NitroUiMenu: {
+    android: { width: 118, height: 52 },
+    ios: { width: 74, height: 38 },
+  },
   NitroUiSlider: {
     android: { width: 328, height: 48 },
     ios: { width: 351, height: 31 },
@@ -552,7 +594,16 @@ export function boxRuleFor(hybridView, sizingTable) {
  * box turns out to equal its declaration after all. Adding a name here to get one run
  * green therefore buys exactly one run — the next says the exemption earns nothing.
  */
-export const CONTENT_SIZED_BOX = Object.freeze(['NitroUiButton']);
+export const CONTENT_SIZED_BOX = Object.freeze([
+  'NitroUiButton',
+  // Menu's trigger is a Button's box (`docs/components/menu.md`): the fallback is
+  // Button-sized on iOS by decree (`HybridNitroUiMenu.swift:451-458` says so in as many
+  // words, and picks 74×38 against Button's 77×35), and the trigger's width is its
+  // title's, so no measured configuration of a Menu is any single number. `intrinsic`, so
+  // `checkContentSizedBox` accepts the claim, and the suite still refuses a fixture that
+  // happens to measure exactly the declaration.
+  'NitroUiMenu',
+]);
 
 /**
  * The one entry that is a real exception rather than a number, recorded so the report
@@ -1118,12 +1169,14 @@ export function checkInAppFixtures(manifests, harnessText) {
       );
     } else if (
       !/\n {6}leaveBehind:/.test(row.text) &&
-      !/\n {6}noProbe:/.test(row.text)
+      !/\n {6}noProbe:/.test(row.text) &&
+      !/\n {6}blindSpot:/.test(row.text)
     ) {
       problems.push(
         `example/__tests__/Conformance.harness.tsx: the ${manifest.name} ` +
-          'fixture has a `probe` that is neither a residue probe (`leaveBehind`) ' +
-          'nor a reason it cannot be one (`noProbe`)'
+          'fixture has a `probe` that is neither a residue probe (`leaveBehind`), ' +
+          'nor a reason it cannot be one (`noProbe`), nor a stated hole in the guard ' +
+          '(`blindSpot`) — and only the last two are visible in the coverage table'
       );
     }
   }
@@ -1137,6 +1190,141 @@ export function checkInAppFixtures(manifests, harnessText) {
         'and no manifest declares that control — the suite is asserting about a ' +
         'component that is not in the registry'
     );
+  }
+  return problems;
+}
+
+/**
+ * The recycle verdict each fixture declares: `{ kind: 'probe' }`, `{ kind: 'noProbe', reason }`
+ * or `{ kind: 'blindSpot', reason }`.
+ *
+ * @typedef {object} RecycleNote
+ * @property {'probe' | 'noProbe' | 'blindSpot'} kind
+ * @property {string} [reason] the fixture's own words, for the two kinds that have none
+ */
+
+/**
+ * The `name` → note map {@link CONFORMANCE_RULES}' recycle rule and {@link checkRecycleNotes}
+ * read out of the harness's fixture table.
+ *
+ * Read from the file rather than written out beside the matrix because the matrix's answer has
+ * to be the *suite's* answer: a list here of which controls have no probe is a second opinion
+ * that goes stale the day a probe lands, and the stale direction is the flattering one —
+ * `covered`. Returns `{}` when the table cannot be found; `checkInAppFixtures` is what reports
+ * that as a problem rather than letting an empty map read as "no control is missing a probe".
+ *
+ * @param {string | null} harnessText
+ * @returns {Record<string, RecycleNote>}
+ */
+export function recycleNotes(harnessText) {
+  const table = harnessText == null ? null : fixtureRows(harnessText);
+  /** @type {Record<string, RecycleNote>} */
+  const notes = {};
+  for (const row of table ?? []) {
+    notes[row.name] = recycleNoteOf(row.text);
+  }
+  return notes;
+}
+
+/**
+ * One fixture row's recycle verdict, or `{ kind: 'probe' }` when it has a real probe.
+ *
+ * The reason is the string literal in the row, which may be a `+`-joined multi-line one; the
+ * joins are collapsed and the quotes taken out so the coverage table prints a sentence rather
+ * than the middle of an expression.
+ *
+ * @param {string} rowText
+ * @returns {RecycleNote}
+ */
+function recycleNoteOf(rowText) {
+  const kind = /\n {4}probe: \{/m.test(rowText)
+    ? /\n {6}noProbe:/.test(rowText)
+      ? 'noProbe'
+      : /\n {6}blindSpot:/.test(rowText)
+        ? 'blindSpot'
+        : 'probe'
+    : 'probe';
+  if (kind === 'probe') return { kind };
+  const literal = new RegExp(
+    `\\n {6}${kind}: ((?:.|\\n)*?)(?:\\n {6}\\w+:|\\n {4}\\},|\\n {4}\\}$)`
+  ).exec(rowText);
+  const reason =
+    literal == null
+      ? '(no reason given)'
+      : literal[1]
+          .replace(/\n\s*\+\s*/g, '')
+          .replace(/['`]/g, '')
+          .trim();
+  return { kind, reason };
+}
+
+/**
+ * The two lists that describe a recycle hole are the fixture's note and a debt row, and they
+ * have to say the same thing.
+ *
+ * Four ways they can disagree, all of them a coverage lie in one direction or the other:
+ *
+ * - a `blindSpot` with no debt row: the matrix would say `covered` for a hole the suite knows
+ *   about, which is the re-review's finding verbatim;
+ * - a debt row for a control whose fixture has a real probe: the exemption would swallow a
+ *   finding the probe can actually produce, and a run that reproduced it would print `known
+ *   failing` over a number that says something;
+ * - a debt row for a control whose fixture says `noProbe`: the two files disagree about
+ *   whether the state exists, and the honest reading is that the *probe* is missing;
+ * - a debt row for a control no fixture guards: nothing reports the key, so
+ *   {@link staleDebt} can never retire the row and it excuses a finding nothing looks for.
+ *
+ * @param {string | null} harnessText
+ * @param {ReadonlyArray<any>} [rows] the debt list to compare with
+ * @returns {string[]} problems
+ */
+export function checkRecycleNotes(harnessText, rows = CONFORMANCE_EXEMPTIONS) {
+  const notes = recycleNotes(harnessText);
+  const problems = [];
+  for (const [name, note] of Object.entries(notes)) {
+    if (note.kind !== 'blindSpot') continue;
+    if (
+      !rows.some(
+        (row) => row.component === name && row.rule === 'recycle-reset'
+      )
+    ) {
+      problems.push(
+        `example/__tests__/Conformance.harness.tsx: the ${name} fixture says its ` +
+          'recycle rule is a `blindSpot` — the control holds state a reset must clear ' +
+          'and no platform can see it — and scripts/conformance-core.mjs has no ' +
+          'CONFORMANCE_EXEMPTIONS row for it. A known hole is a failing cell with a ' +
+          'FOLLOWUPS line, not a note in a fixture: add the row'
+      );
+    }
+  }
+  for (const row of rows) {
+    if (row.rule !== 'recycle-reset') continue;
+    const note = notes[row.component];
+    if (note == null) {
+      problems.push(
+        `scripts/conformance-core.mjs: CONFORMANCE_EXEMPTIONS has a recycle-reset ` +
+          `row for "${row.component}" and no fixture guards that control, so nothing ` +
+          'reports the key and nothing can retire the row — it would excuse a finding ' +
+          'no probe is capable of producing'
+      );
+      continue;
+    }
+    if (note.kind === 'probe') {
+      problems.push(
+        `scripts/conformance-core.mjs: CONFORMANCE_EXEMPTIONS exempts ` +
+          `"${row.component}" from recycle-reset and that fixture has a residue ` +
+          'probe, so the row would cover up a finding the probe can produce. Either ' +
+          'the probe is wrong or the debt is paid — delete one'
+      );
+    } else if (note.kind === 'noProbe') {
+      problems.push(
+        `scripts/conformance-core.mjs: CONFORMANCE_EXEMPTIONS files ` +
+          `"${row.component}"’s recycle-reset as failing debt and its fixture says ` +
+          '`noProbe` — the two disagree about whether the control holds state at all. ' +
+          'If the state is real the fixture’s note is a `blindSpot`; if it is not, the ' +
+          'debt row is excusing nothing'
+      );
+    }
   }
   return problems;
 }
@@ -1289,6 +1477,7 @@ export function coverageMatrix(manifests, context = {}) {
     for (const rule of CONFORMANCE_RULES) {
       const reason = rule.applies(manifest, {
         sizing: context.sizing ?? {},
+        recycleNotes: context.recycleNotes ?? {},
       });
       rules[rule.id] =
         reason != null

@@ -88,12 +88,14 @@ import { screen, userEvent } from '@react-native-harness/ui';
 import {
   Button,
   DatePicker,
+  Menu,
   Picker,
   Progress,
   SegmentedControl,
   Slider,
   Switch,
   nitroUiCore,
+  type MenuGroup,
   type NitroUiSizingStats,
 } from 'react-native-nitro-ui';
 
@@ -241,6 +243,13 @@ type Handle = {
   readonly accessibilityLabel: string | null;
   readonly value?: boolean | number | null;
   readonly selectedIndex?: number | null;
+  /**
+   * Menu's trigger text (`HybridNitroUiMenu.swift`'s `title` getter). Read because the
+   * recycle rule's props half asks what the control says about itself, and a Menu has no
+   * value — its title *is* the thing a previous owner could leave behind if a wrapper ever
+   * stopped providing it.
+   */
+  readonly title?: string;
   measureContent(): Size;
   /**
    * The Slider's own answer to "what value is showing, and what happened when a reader
@@ -303,6 +312,23 @@ type Handle = {
  * from a check that could not have failed - and `component-coverage.test.js` insists each
  * control has either a probe or that note, so the list of unprovable controls cannot grow in
  * silence.
+ *
+ * The note has **two kinds**, because the two situations want different verdicts (X4
+ * re-review, medium "recycle-reset says covered for three `noProbe` controls"):
+ *
+ * - `noProbe` — the control holds **nothing** a reset could clear. `Button`'s props are all
+ *   re-sent and its callback is always provided; `Progress` is an indicator with no
+ *   interaction at all. Nothing is being missed, so the matrix says `n/a` with these words.
+ * - `blindSpot` — the control **does** hold state a recycle has to clear and no platform can
+ *   be shown the difference. `SegmentedControl`'s picked index and `Menu`'s open popup are
+ *   real, and neither has a read-out where the recycle happens. That is a hole in the guard,
+ *   so the matrix says **failing** and points at a `docs/tasks/FOLLOWUPS.md` line; the
+ *   fixture prints `known failing (…)` the way the a11y sweep prints its own debt, and
+ *   `staleDebt` retires the row when a run stops reporting it.
+ *
+ * Putting a control in the wrong kind is not free: `checkRecycleNotes` reads this table and
+ * refuses a `blindSpot` with no `CONFORMANCE_EXEMPTIONS` row and a debt row whose fixture
+ * claims `noProbe`, so the two lists cannot drift and a hole cannot be filed as a pass.
  */
 type RecycleProbe = {
   /** What the residue is, in words, printed beside the verdict. */
@@ -322,8 +348,11 @@ type RecycleProbe = {
   >;
 };
 
-/** Why a control has no probe: printed as the verdict, so a pass is not read as coverage. */
-type RecycleNote = { noProbe: string };
+/**
+ * Why a control has no probe: printed as the verdict, so a pass is not read as coverage. The
+ * two kinds, and what the coverage table does with each, are in {@link RecycleProbe}'s header.
+ */
+type RecycleNote = { noProbe: string } | { blindSpot: string };
 
 /** Every callback the probes wired up, in order, as `testID:value`. */
 const recycleEvents: string[] = [];
@@ -997,6 +1026,35 @@ const SECOND = 'second owner';
 const columnStyle = { flexDirection: 'column' } as const;
 
 /**
+ * The rows every Menu fixture passes.
+ *
+ * A fixture has to send a `group` because the wrapper always sends `rows` to native
+ * (`Menu.nitro.ts:120-126`: a missing `rows` would leave a recycled view showing the
+ * previous row's menu), and the leak rule mounts eight of these at once, so the rows are a
+ * constant rather than something built per render — the same reason the other fixtures pass
+ * literal `options` arrays to Picker and SegmentedControl.
+ */
+const MENU_GROUP: MenuGroup = {
+  actions: [
+    { id: 'one', title: 'One' },
+    { id: 'two', title: 'Two' },
+  ],
+};
+
+/**
+ * The Menu fixtures' trigger text, which is also what the props half reads back.
+ *
+ * Deliberately long and deliberately not the fixture's `accessibilityLabel`: the fallback
+ * rule's `boxRule: 'none'` branch goes red if a content-sized control measures *exactly* its
+ * declared number, and Menu declares a Button-sized 74×38 pt / 118×52 dp, so a two-syllable
+ * title would be a coin flip on whether that guard had anything to say. A distinct label is
+ * for the same reason one way and one name in two places is how round 1's Picker stutter got
+ * missed.
+ */
+const MENU_TITLE = 'Conformance actions';
+const MENU_TITLE_SECOND = 'Second owner’s actions';
+
+/**
  * Every callback the a11y rule's own wrapper has to keep alive: a probe's control is wrapped
  * in a plain `View`, so the box the harness measures is the control's and the press lands on
  * it. `columnStyle` is what `Slider.harness.tsx` and the other suites use for the same reason.
@@ -1520,7 +1578,63 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
     },
   },
+  {
+    name: 'Menu',
+    component: 'NitroUiMenu',
+    label: 'Conformance menu',
+    testId: 'conformance-menu',
+    owner: (second) => (
+      <Menu
+        title={second ? MENU_TITLE_SECOND : MENU_TITLE}
+        group={MENU_GROUP}
+        onSelect={recordRecycle('conformance-menu')}
+        testID="conformance-menu"
+        accessibilityLabel={
+          second ? `Conformance menu, ${SECOND}` : 'Conformance menu'
+        }
+        hybridRef={captureFor('conformance-menu')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Menu
+        title={variant ? 'Leak B' : 'Leak A'}
+        group={MENU_GROUP}
+        testID={testId}
+        accessibilityLabel={`Leak menu ${String(variant)}`}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'title',
+        expected: second ? MENU_TITLE_SECOND : MENU_TITLE,
+        actual: handle.title,
+      },
+      {
+        label: 'accessibilityLabel',
+        expected: second ? `Conformance menu, ${SECOND}` : 'Conformance menu',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    // The props half runs; the residue half cannot, and that is a hole rather than a pass.
+    // A Menu's only native-owned state is whether its popup is open (DECISIONS D29: no
+    // `open()`/`close()` in v0.1, so only a gesture puts it there and no harness gesture can
+    // reach a SwiftUI `Menu`), and the one read-out of it — `nuiTestMenuReport`'s `expanded` —
+    // answers `-1` on iOS (`HybridNitroUiMenu.swift:750-765`), the only platform that reaches
+    // `prepareForRecycle` at all ("The recycle rule … per platform" in `FOLLOWUPS.md`).
+    // Android reads `expanded` fine and never recycles, so there is nothing there to see
+    // either. Round 1 called this `noProbe` and the coverage table said `covered`.
+    probe: {
+      blindSpot:
+        'a Menu holds one piece of state no prop rewrites - whether its popup is ' +
+        'open - and the read-out for it answers `-1` on iOS, the only platform that ' +
+        'recycles. Android can read it and never recycles. So the line that clears ' +
+        'it (`MenuModel.reset` writing `expanded = false`, ' +
+        '`HybridNitroUiMenu.kt:483`) has no observation on either side that could ' +
+        'show it missing.',
+    },
+  },
 ];
+
 /** Mounts per control in the leak fixture. */
 const CHURN = 50;
 
@@ -1780,15 +1894,30 @@ describe('conformance · every control, four rules', () => {
         // puts state in the view no prop describes, then a second mount whose props are all
         // defaults, then a question only the control's own state can answer.
         const probe = fixture.probe;
-        if ('noProbe' in probe) {
+        if ('noProbe' in probe || 'blindSpot' in probe) {
+          // The two kinds are not the same sentence, and the run has to print the difference
+          // the coverage table makes: a control with nothing to reset is a pass-shaped `n/a`,
+          // a control whose residue is invisible is *debt*, printed the way the a11y sweep
+          // prints its own so a reader cannot mistake the green line for coverage.
+          const note = 'noProbe' in probe ? probe.noProbe : probe.blindSpot;
+          const debt =
+            'noProbe' in probe
+              ? null
+              : EXEMPTIONS.find(
+                  (row) =>
+                    row.component === fixture.name &&
+                    row.rule === 'recycle-reset'
+                );
           console.log(
-            `    · ${fixture.testId} residue probe: none — ${probe.noProbe}`
+            `    · ${fixture.testId} residue probe: ${
+              debt == null
+                ? `none — ${note}`
+                : `none, and that is a hole — known failing (${debt.followups}): ` +
+                  `${debt.detail}`
+            }`
           );
           return;
         }
-        console.log(
-          `    · ${fixture.testId} residue probe: ${probe.leaveBehind}`
-        );
         recycleEvents.length = 0;
         const firstOwner = await render(probe.first(), RENDER);
         await settle();

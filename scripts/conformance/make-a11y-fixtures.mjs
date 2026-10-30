@@ -30,6 +30,7 @@ const TAB_LABEL = {
   segmented: 'Segments',
   datepicker: 'Dates',
   picker: 'Picker',
+  menu: 'Menu',
   host: 'Host',
 };
 

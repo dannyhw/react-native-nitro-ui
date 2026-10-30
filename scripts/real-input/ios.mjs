@@ -513,7 +513,7 @@ function reportA11yPass({ log, suite, status, testLog }) {
   } catch (error) {
     // A line whose box did not parse means the format moved under the parser. That is a
     // broken measurement, not a control's failure, so it fails the run outright rather
-    // than reporting thirteen cases as unmeasured.
+    // than reporting fourteen cases as unmeasured.
     const check = suite.beginAuxiliary(
       A11Y_ID,
       'the accessibility rule (XCUITest)'
