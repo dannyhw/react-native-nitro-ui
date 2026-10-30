@@ -988,8 +988,8 @@ const CHECKS = {
     //      is dependable after that tap: the scrim tap left it up at 30 Oct 00:35:09Z
     //      and closed it at 01:49:39Z, and one run's Back press timed out with the
     //      window still standing (29 Oct 23:33:43Z). The sequence below - scrim, then
-    //      Back, then re-aiming at the trigger - is what gets the screen back, and the
-    //      log says which one did. All measured, none asserted.
+    //      Back if the scrim left it up - is what gets the screen back, and the log
+    //      says which one did. All measured, none asserted.
     //    - **What the tree says about the row itself.** Printed in step 2. The row this
     //      check refuses read `enabled="true"` in the dump while the control refused it,
     //      so the announcement and the behaviour are different questions - see the
@@ -1050,20 +1050,14 @@ const CHECKS = {
       t.waitForPopupCount(0, 'the twin pick to take its popup down'),
       0
     );
-    // And the whole history again, now that the disabled-row gesture is in it: the
-    // tap on "Locked row" opened a window and closed it without reporting a pick, so
-    // its `open > close` pair belongs in the line in its own position. This is the
-    // strictest form of D32's promise on Android - every open has exactly one close,
-    // a dismissal of a disabled row still counts as a close, and nothing in the
-    // suite's four gestures was reported twice or out of order.
     // And the whole history again, now that the last two gestures are in it. The
     // reopen before the disabled-row tap fires an `open` and the dismissal after it
     // fires the matching `close`, with no pick in between, and the twin pick is one
     // more open/close pair around its own select. This is the strictest form of D32's
     // promise on Android: every open has exactly one close, a dismissal of a disabled
     // row still counts as a close, and nothing the suite performs is reported twice or
-    // out of order. The shape is measured, both halves at 30 Oct 00:35:09Z and again
-    // under the M1 mutation at 01:49:39Z, where every doubled `open` shows up.
+    // out of order. The shape is measured green on 30 Oct at 02:06:15Z; under the M1
+    // mutation (01:49:39Z) every doubled `open` shows up in it.
     t.log.checkEquals(
       'the whole echo pairs every open with a close, in the order the gestures happened',
       t.requireEcho(ECHO.menuEvents),
