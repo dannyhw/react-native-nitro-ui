@@ -2282,6 +2282,42 @@ describeCli('gate.mjs --background and wait', () => {
     expect(log).not.toContain('--background');
     expect(log).toContain('ColdSizing');
   }, 90_000);
+
+  it("records a bench's platform and device from its own --platform", async () => {
+    // X15 item 4, at the level that actually writes the ledger line. The unit cases
+    // above prove `resolveGate` parses `--platform` and that `deviceFromEnv` would
+    // answer correctly *if called with it*; the incident (A5's iOS bench recorded as
+    // `platform: android` with an Android serial) lived in the one `??` between the
+    // two, and a unit test of either half cannot see it. So: run the real CLI, on a
+    // lease that exports both halves of a pair, and read what it recorded.
+    //
+    // A bench claims no device and pre-flights no Metro (`platform: null`), so the
+    // fixture needs no pool state - and the fake `node` on PATH stands in for
+    // `scripts/bench/run.mjs`, which is the thing under test's child, not its subject.
+    const dir = checkout(iosOnly);
+    const run = runCli(dir, ['bench', '--', '--platform', 'ios'], {
+      NITRO_UI_LEASE_ID: 'A5-1',
+      NITRO_UI_LEASE_TASK: 'A5',
+      NITRO_UI_LEASE_PLATFORM: 'both',
+      IOS_SIM_UDID: 'UDID-A',
+      IOS_SIM: 'iPhone 17',
+      ANDROID_AVD: 'nitro-ui-a',
+      ANDROID_SERIAL: 'emulator-5574',
+      EMULATOR_PORT: '5574',
+      ANDROID_ADB_SERVER_PORT: '5043',
+    });
+    expect(run.status).toBe(0);
+    const lines = ledgerLines(dir);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].platform).toBe('ios');
+    expect(lines[0].device).toBe('UDID-A');
+    expect(lines[0].device).not.toBe('emulator-5574');
+    expect(lines[0].lease).toBe('A5-1');
+    // The bench really was told which platform, and the flag is the runner's, not the
+    // ledger's: the log is the only place the child's argv appears.
+    const log = fs.readFileSync(logFile(dir, lines[0].logPath), 'utf8');
+    expect(log).toContain('--platform ios');
+  }, 90_000);
 });
 
 /**
