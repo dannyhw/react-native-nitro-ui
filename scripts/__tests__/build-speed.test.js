@@ -228,6 +228,54 @@ describe('iosCleanTargets', () => {
       path.join('/repo/example/ios', 'Pods', '.nitro-ui-pod-inputs')
     );
   });
+
+  it('names what --clean deletes, in the help text as well as in code', () => {
+    // The X1 re-review's last item: `--clean` deletes DerivedData *and* the
+    // pod-inputs record, while the help said only "the build directory" - so
+    // nobody could tell from `--help` what survived a clean, and the whole point
+    // of the record is that a clean which misses it cleans the wrong thing.
+    //
+    // The help is tied to what this function actually returns: each target has a
+    // phrase the option's help paragraph has to contain, and a target with no
+    // entry fails outright. Delete the help line, or add a fourth deletion nobody
+    // described, and this is where it surfaces.
+    const source = fs.readFileSync(
+      path.resolve(process.cwd(), 'scripts', 'build-app.mjs'),
+      'utf8'
+    );
+    const lines = source.split('\n');
+    // Either quote style, because prettier picks: this very literal is written
+    // with double quotes, since its first line contains an apostrophe. The first
+    // run of this case was red for exactly that, which is the failure mode of any
+    // source-reading test - it must read the text, not one spelling of it.
+    const start = lines.findIndex((line) => /^\s+["']  --clean/.test(line));
+    expect(start).toBeGreaterThan(-1);
+    const region = [];
+    for (let index = start; index < lines.length; index += 1) {
+      // The option's paragraph ends at the empty literal that separates it from
+      // the next block of the help text.
+      if (/^\s+["']\\n["']( \+)?$/.test(lines[index])) break;
+      region.push(lines[index]);
+    }
+    const text = region.join('\n');
+
+    const described = new Map([
+      [path.join('/repo/example/ios', 'build'), /DerivedData/],
+      [
+        path.join('/repo/example/ios', 'Pods', '.nitro-ui-pod-inputs'),
+        /pod install/,
+      ],
+    ]);
+    expect(targets.filter((target) => !described.has(target))).toEqual([]);
+    for (const target of targets) {
+      expect(text).toMatch(described.get(target));
+    }
+    // The Android half, which is the other buildApp target list (`buildAndroid`).
+    expect(text).toMatch(/app\/build/);
+    // And it must not promise what `--clean` deliberately does not do: reinstalling
+    // Pods costs minutes, and `bun run clean` is the one that removes them.
+    expect(text).not.toMatch(/delete[^\n]*Pods\//i);
+  });
 });
 
 describe('decideSkipBuild', () => {
