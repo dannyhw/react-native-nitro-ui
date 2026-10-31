@@ -5,8 +5,8 @@
 
 ## Summary
 
-**Android recycles, and X4's report said otherwise.** Its claim was that `prepareToRecycleView`
-is a legacy hook whose only caller is `ViewManager.recycleView`. On RN 0.88 that is incomplete:
+**Android recycles, and X4's report said otherwise.** It called `prepareToRecycleView` a legacy
+hook whose only caller is `ViewManager.recycleView`. On RN 0.88 that is incomplete:
 `onDropViewInstance` also prepares the view and pushes it onto a pool, and `createViewInstance
 (tag, …)` pops it — guarded on `enableViewRecycling`, whose default is `false`, which is why
 reading the graph in a flag-off app looked like proof. The example app now sets that flag and
@@ -15,31 +15,29 @@ mount reports `recycles >= 1` from counters the reset deliberately does not clea
 
 Installing the flag was not a one-liner. `loadReactNative` calls `SoLoader.init`, and the flag
 accessor's class loads `libreactnative.so` in a static initialiser, so an override installed
-ahead of it crashes the launch; installed after, `override` throws, because `load` already
-installed RN's provider and the C++ side takes one per process. The working shape is
-`dangerouslyForceOverride` wrapping the RNOSS/Stable provider by delegation, after `loadReactNative`.
+ahead of it crashes the launch; installed after, `override` throws — `load` already installed
+RN's provider and the C++ side takes one per process. So: `dangerouslyForceOverride` wrapping
+the RNOSS/Stable provider, after `loadReactNative`.
 
 The recycle rule now has teeth on both platforms. SegmentedControl has `nuiTestDisplayedIndex()`,
 written in the body rather than a prop setter, so its cell is a probe and its debt row is gone;
-Picker's second owner now defaults to `2`, which makes its `didApplyDefault` line the only thing
-that can pass the cell. Both were shown red on Android. Menu's hole **narrowed** to iOS alone (no
-gesture reaches a SwiftUI `Menu`, and `expanded` answers `-1` there); Android's reset line is
-guarded by a JVM test, so the cell is honest debt.
+Picker's second owner now defaults to `2`, making its `didApplyDefault` line the only thing that
+can pass the cell. Both were red on the mutation, on both platforms. Menu's hole **narrowed** to
+iOS alone (no gesture reaches a SwiftUI `Menu`, and `expanded` answers `-1` there); Android's
+reset line is guarded by a JVM test instead.
 
 B1's two unasserted branches are counted in the shipping code and asserted at zero — the only
-honest gate for a branch expected never to fire. That exposed a real bug in `38a1e93`: the two M2
+honest gate for a branch expected never to fire. That exposed a bug in `38a1e93`: the two M2
 counters were declared twice, an instance field shadowing the companion's "process-wide" total.
-Screens-pop blanking is unreachable here — `react-native-screens` is not an example dependency —
-so it is reported rather than fixed.
+Screens-pop blanking is unreachable here — `react-native-screens` is no example dependency.
 
 **The flag caught a product bug.** Recycling on made three DatePicker G5 tests red: a 131.05 dp
 `compact` field laid out at its row's 411.43. `sizingPolicy` is host state that the `variant`
 setter moves, and that setter compares against `model.variant` — which `prepareForRecycle()` has
-already restored to `compact`. So the next mount saw "no change" and left the previous owner's
-`fillWidth` in place, and the field was sized by its box. Android's DatePicker was the only host
-missing the line (Picker, Progress and iOS's DatePicker had it). Fixed in product code with a
-changeset, and owned by a new recycle test that asserts the pessimistic pair — widest field
-against narrowest row across rounds — so one stretched field fails it.
+already restored to `compact`. So the next mount saw "no change" and kept the previous owner's
+`fillWidth`, sizing the field by its box. Android's DatePicker was the only host missing the line.
+Fixed in product code with a changeset, and owned by a new recycle test that compares the widest
+field against the narrowest row across rounds.
 
 ## Gates
 
