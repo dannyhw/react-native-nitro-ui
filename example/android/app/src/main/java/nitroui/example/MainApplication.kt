@@ -22,10 +22,12 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
-    // Before `loadReactNative`: RN reads `enableViewRecycling` when the first
-    // ViewManager is constructed, and the flag accessor caches what it was asked
-    // first. See NitroUiFeatureFlags.
-    NitroUiFeatureFlags.install()
     loadReactNative(this)
+    // After `loadReactNative`, which both initialises SoLoader and installs RN's own
+    // flag provider - `override` replaces rather than merges, so an override installed
+    // first would be gone by the time the first ViewManager reads it. No ViewManager
+    // exists until the lazy `reactHost` is first touched, which is later than here.
+    // See NitroUiFeatureFlags for the full reason.
+    NitroUiFeatureFlags.install()
   }
 }

@@ -8,6 +8,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.internal.featureflags.ReactNativeFeatureFlags
 import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.uimanager.ViewManager
 
@@ -69,6 +70,25 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
       promise.resolve(stats)
     } catch (error: Throwable) {
       promise.reject("heap-stats", error)
+    }
+  }
+
+  /**
+   * Whether RN's `enableViewRecycling` flag is on **as the process now sees it**.
+   *
+   * The one number that lets `example/__tests__/Recycling.harness.tsx` tell "recycling
+   * works" from "recycling is switched off, so nothing ever reached
+   * `prepareForRecycle`". The app installs its override at launch
+   * (`NitroUiFeatureFlags`), and the flag accessor caches its first answer, so this is
+   * the value every `ViewManager` was constructed under — read from the same door RN
+   * itself reads, not from a copy of the intent.
+   */
+  @ReactMethod
+  fun viewRecyclingEnabled(promise: Promise) {
+    try {
+      promise.resolve(ReactNativeFeatureFlags.enableViewRecycling())
+    } catch (error: Throwable) {
+      promise.reject("view-recycling-flag", error)
     }
   }
 
