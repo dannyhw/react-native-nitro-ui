@@ -186,9 +186,12 @@ First task run through a T3 link at access level `auto`. What the orchestrator w
   settle ~17 min. Roughly **26 min from clone-equivalent to the first mint**, and that is the
   one-time cost per linked worktree.
 - Two housekeeping notes for linked runs: `caffeinate -is` was mine and is stopped; the Gradle
-  daemon I started was stopped with `./gradlew --stop`; my emulator was killed by its own
-  `adb -s emulator-5574 emu kill`, never by name. The two other-project simulators and the owner's
-  `emulator-5560` were never touched, and both lease devices were left booted on release.
+  daemon I started was stopped with `./gradlew --stop`; my emulator was shut down by its own
+  `adb -s emulator-5574 emu kill`, never by name, because I had started it outside the lease — so
+  the pool's pair-b Android device is off and the next acquire pays that boot, while pair-a's
+  simulator is left Booted and unleased, which is the pool's business and not mine to switch off.
+  The two other-project simulators and the owner's `emulator-5560` were never touched, and
+  `lease.mjs release A6` left everything as it found it.
 
 ## Follow-ups
 
