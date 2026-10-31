@@ -38,13 +38,11 @@ has a guard where it previously had only a fix, which is the part F4 actually ad
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1533 tests / 57 suites | `24426ca64a8a` | 2 m 39 s | start 2.9 / med 5.0 / max 5.8 |
-| `harness:ios` | **PASS** | 227 tests / 16 suites | `24426ca64a8a` (ios tree) | 5 m 57 s | start 1.7 / med 3.2 / max 4.7 |
-| `harness:android` | **PASS** | 278 tests / 16 suites | `24426ca64a8a` (android tree) | 8 m 25 s | start 10.4 / med 4.3 / max 10.4 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
+Round 0 ran on tree `24426ca64a8a` at HEAD `ba5c029`, lease `F4-on9yl`: `check` passed 1533 tests
+across 57 suites in 2 m 39 s, `harness:ios` 227 tests / 16 suites in 5 m 57 s, `harness:android`
+278 / 16 in 8 m 25 s; `real-input:ios` and `real-input:android` were missing (merge-stage only).
+Those rows are in `docs/tasks/F4/gates.jsonl` and are stale for the current tree; the generated
+table for the code as it stands is in **Fix round 1** below, which is why it is not repeated here.
 
 `need --for review`: `need: review is satisfied on this code tree.` (both harness gates are owed
 and run because `example/rn-harness.config.mjs` and `scripts/app-stamp-core.mjs` changed;
