@@ -325,6 +325,170 @@ export function runnerFromArgv(argv) {
 }
 
 /**
+ * The subcommands `harness ci …` answers to, mirrored from the pinned CLI
+ * (`CI_SUBCOMMANDS` in `@react-native-harness/cli/dist/index.js`). They are the
+ * only steps that read the harness config without running a device test, and
+ * `scripts/__tests__/ci-harness-config.test.js` refuses a drift between this
+ * list and that file, so this stays a copy of the truth rather than a guess.
+ */
+export const HARNESS_CI_SUBCOMMANDS = Object.freeze([
+  'load-config',
+  'plan-metro-restore',
+  'snapshot-metro',
+  'plan-metro-save',
+]);
+
+/**
+ * Which runner this process is starting, read off the environment the
+ * `react-native-harness` GitHub Action sets (F4).
+ *
+ * Why `argv` is not enough: the action's `Load React Native Harness
+ * Configuration` step runs `harness ci load-config`, which names no runner on
+ * its command line, and that step *imports this config to read it*. Before F4 an
+ * Android CI job therefore loaded the config as iOS, looked for the iOS `.app`
+ * it had never built, and refused (`bun run harness:ios: no app to test` inside
+ * `Harness (Android)`, run 40382254368). The action hands the answer over twice:
+ * `INPUT_RUNNER` for its `ci …` steps, `HARNESS_RUNNER` for the test run. Both
+ * are facts about the pinned action's own step environment, and argv still wins
+ * because that is what a local run types.
+ *
+ * @param {Record<string, string | undefined>} env `process.env`
+ * @returns {'ios'|'android'|null}
+ */
+export function runnerFromEnv(env) {
+  for (const key of ['HARNESS_RUNNER', 'INPUT_RUNNER']) {
+    const value = env[key];
+    if (value === 'ios' || value === 'android') return value;
+  }
+  return null;
+}
+
+/**
+ * What `example/rn-harness.config.mjs` should test, before any of it is refused.
+ *
+ * The config file is where the stamp gate lives, because that is the earliest
+ * point both platforms reach; it is also a file with a simulator, an emulator and
+ * a Metro port behind it, so the *decision* is made here where a test can hand it
+ * a fake filesystem and a fake command line.
+ *
+ * Three things it has to get right, each a CI failure or a local one:
+ *
+ *   - **which platform** (`runner`), from argv then the action's environment. A
+ *     CI job for one platform loading the config as the other goes looking for
+ *     an app that job never built (see {@link runnerFromEnv});
+ *   - **whether this read is a device run at all** (`ciStep`). The action reads
+ *     the config from four more steps whose only job is to plan a cache, one of
+ *     them after a red test run; a refusal there replaces the harness's own
+ *     report with a config error;
+ *   - **an absolute artifact path** (`artifact`). `react-native-harness` only
+ *     asks `existsSync` on `HARNESS_APP_PATH`, from the *project root* -
+ *     `example/`, not where a workflow was written - so a relative path meant a
+ *     run that never installed the app and died as an opaque `AbortError` (what
+ *     A2 lost three runs to). A path that exists from the project root wins; one
+ *     that exists only from the repo root is read that way, so both conventions
+ *     a person can type work; anything else is resolved against the project root
+ *     and reported by the harness as the missing file it is.
+ *
+ * @param {object} options
+ * @param {string[]} options.argv `process.argv`
+ * @param {Record<string, string | undefined>} options.env `process.env`
+ * @param {(file: string) => boolean} options.existsSync
+ * @param {string} [options.cwd] the directory the harness starts the CLI from
+ * @param {(platform: 'ios'|'android') => string} options.artifactFor the fixed
+ *   product of `scripts/build-app.mjs` for a platform
+ * @param {string} [options.parentDir] what a repo-root-relative path hangs off
+ * @returns {{runner: 'ios'|'android', artifact: string | null, ciStep: boolean}}
+ */
+export function selectHarnessApp({
+  argv,
+  env,
+  existsSync,
+  cwd = '',
+  artifactFor,
+  parentDir = null,
+}) {
+  const runner = runnerFromArgv(argv) ?? runnerFromEnv(env) ?? 'ios';
+  // `harness ci <subcommand>`, matched exactly as the CLI matches it
+  // (`CI_SUBCOMMANDS` in @react-native-harness/cli/dist/index.js): argv[2] is
+  // `ci` because bin.js is argv[1]. Anything else - including a test file named
+  // `ci` - is a device run and does gate.
+  const ciStep =
+    runnerFromArgv(argv) == null &&
+    argv[2] === 'ci' &&
+    HARNESS_CI_SUBCOMMANDS.includes(String(argv[3] ?? ''));
+  const explicit =
+    env.HARNESS_APP_PATH == null ? '' : String(env.HARNESS_APP_PATH);
+  if (explicit !== '') {
+    return {
+      runner,
+      artifact: resolveAppPath(explicit, { existsSync, cwd, parentDir }),
+      ciStep,
+    };
+  }
+  const built = artifactFor(runner);
+  return {
+    runner,
+    artifact: existsSync(built) ? built : null,
+    ciStep,
+  };
+}
+
+/**
+ * See {@link selectHarnessApp} for the rule this implements.
+ *
+ * @param {string} explicit what `HARNESS_APP_PATH` said
+ * @param {object} options
+ * @param {(file: string) => boolean} options.existsSync
+ * @param {string} options.cwd the directory the harness starts the CLI from
+ * @param {string | null} [options.parentDir] what a repo-root-relative path hangs off
+ * @returns {string} an absolute path
+ */
+export function resolveAppPath(
+  explicit,
+  { existsSync, cwd, parentDir = null }
+) {
+  if (isAbsolutePath(explicit)) return trimTrailingSlash(explicit);
+  const fromCwd = joinPath(cwd, explicit);
+  if (existsSync(fromCwd)) return fromCwd;
+  if (parentDir != null) {
+    const fromParent = joinPath(parentDir, explicit);
+    if (existsSync(fromParent)) return fromParent;
+  }
+  // Nothing answers to either base. Report it relative to the project root,
+  // which is where the harness will look and where its own message will point.
+  return fromCwd;
+}
+
+/**
+ * `path.isAbsolute` / `path.join` without importing `node:path`, so these stay
+ * usable with a Windows-style argument in a test that has no Windows.
+ *
+ * @param {string} file
+ * @returns {boolean}
+ */
+function isAbsolutePath(file) {
+  return file.startsWith('/') || /^[A-Za-z]:[\\/]/.test(file);
+}
+
+/**
+ * @param {string} base
+ * @param {string} file
+ * @returns {string}
+ */
+function joinPath(base, file) {
+  if (isAbsolutePath(file)) return trimTrailingSlash(file);
+  return trimTrailingSlash(`${base}/${file}`);
+}
+
+/**
+ * @param {string} file
+ * @returns {string}
+ */
+function trimTrailingSlash(file) {
+  return file.replace(/\/+$/, '');
+}
+
+/**
  * @param {string} artifact an `.app` or an `.apk`
  * @returns {'ios'|'android'|null}
  */

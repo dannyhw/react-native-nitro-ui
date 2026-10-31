@@ -21,9 +21,13 @@ name: Release tag
 
 on:
   schedule:
-    # Hourly. Cheap: two registry/API reads and a no-op unless something is
-    # waiting for its tag, so the wait after an approval is at most an hour.
-    - cron: '0 * * * *'
+    # Hourly, but not on the hour: minute 0 is when the hourly-cron traffic from
+    # every other repository in the world arrives, and a scheduled workflow that
+    # has to wait for a runner can be skipped outright when none is free. A
+    # fixed offset costs nothing and gets a runner sooner (F4, row 53). Cheap
+    # either way: two registry/API reads and a no-op unless something is waiting
+    # for its tag, so the wait after an approval is at most an hour.
+    - cron: '17 * * * *'
   # Run it by hand right after approving a staged version.
   workflow_dispatch:
 

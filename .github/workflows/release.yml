@@ -65,6 +65,15 @@ jobs:
 
       - name: Setup
         uses: ./.github/actions/setup
+        with:
+          # The tarball this job uploads is what `stage` puts on the registry, so
+          # it has to come from an install of this tree and nothing else: npm's
+          # own guidance for a release build is never to reuse a package cache.
+          # `prepare` runs builder-bob and nitrogen through this `node_modules`,
+          # and a cache key is two lockfiles' hashes - not proof that what is in
+          # the directory matches the sources being packed (R6 re-review N-1;
+          # `stage` has refused a cache since, and now `pack` does too).
+          package-manager-cache: false
 
       - name: Publish the Node version
         id: node

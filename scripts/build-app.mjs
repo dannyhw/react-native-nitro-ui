@@ -85,7 +85,11 @@ const USAGE =
   '           simulator/emulator here runs. NITRO_UI_ANDROID_ARCH does the same\n' +
   '           thing for a whole shell; CI passes x86_64 for its emulators.\n' +
   '  --force  build even when app.stamp already says this tree is built.\n' +
-  '  --clean  delete the build directory first (never skips).\n' +
+  "  --clean  delete this platform's build state first, and never skip:\n" +
+  '             ios     - example/ios/build (DerivedData), plus the record of\n' +
+  '                       what the last pod install was shown; Pods/ is kept\n' +
+  '             android - example/android/app/build\n' +
+  '           (bun run clean is what removes Pods/ and every build directory.)\n' +
   '\n' +
   '  Nothing changed since the last build? The build is skipped and says so.\n' +
   '  ccache, when it is installed, speeds up the C/C++/Objective-C++ compiles\n' +
