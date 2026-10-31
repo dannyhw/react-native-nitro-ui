@@ -795,14 +795,22 @@ export async function main(argv) {
   // instead of after a three-hour plan. Local feedback runs are not refused -
   // their ratios are same-run pairs, and a busy machine is information there, not
   // a disqualification.
-  if (minting && !force) {
-    const preflight = [];
+  if (minting) {
+    // Two lists, because `--force` means different things to each. The first is
+    // judgement about *this measurement* - how busy the machine is, whether the
+    // schedule and waiting rule are the ones a baseline is recorded under - and a
+    // human who types `--force` is overruling exactly that. The second is whether
+    // these numbers belong in *this file* at all: a merge refused because the
+    // simulator runtime or the `@expo/ui` version differs is not a warning to
+    // wave through, and `--force` says nothing about either.
+    const overridable = [];
+    const absolute = [];
     const blocker = loadBlocker({
       loadavg1: os.loadavg()[0] ?? null,
       cpuCount: os.cpus().length,
     });
     if (blocker != null) {
-      preflight.push(blocker);
+      overridable.push(blocker);
     }
     // Same fail-fast reasoning for a narrowed schedule: a filtered run cannot mint the
     // table `--check` gates against, and finding that out after three hours of device
@@ -827,7 +835,7 @@ export async function main(argv) {
       filters,
     });
     if (narrowed != null && component == null) {
-      preflight.push(narrowed);
+      overridable.push(narrowed);
     }
     // Same for the waiting rule: the runner's own startup line calls any `--timeout-*`
     // run a diagnostic that "cannot mint a baseline", so a mint that asks for a
@@ -839,7 +847,7 @@ export async function main(argv) {
       presentedTimeoutMs: timeouts.presentedTimeoutMs,
     });
     if (waitingProblem != null) {
-      preflight.push(waitingProblem);
+      overridable.push(waitingProblem);
     }
     // A merge mint is the one run `narrowingProblem()` must not refuse: writing one
     // component's cells into an existing file *is* a narrowed schedule (X14). So for
@@ -850,7 +858,9 @@ export async function main(argv) {
     // fingerprint) is deferred to the authoritative check below, not passed.
     if (component != null) {
       const device = preflightDevice(platform);
-      preflight.push(
+      // The plan and launch count are the run's own fault and so are overridable;
+      // the file's answer about its contents is not.
+      overridable.push(
         ...mergeRunProblems({
           plan,
           launches,
@@ -875,7 +885,10 @@ export async function main(argv) {
         device: device.device,
         allowDeferred: true,
       });
-      preflight.push(...decided.opened.problems);
+      if (decided.opened.refusal != null) {
+        absolute.push(decided.opened.refusal.message);
+      }
+      absolute.push(...decided.opened.problems);
       for (const entry of decided.opened.unverified) {
         log(`Merge:     ${entry.reason}`);
       }
@@ -883,11 +896,14 @@ export async function main(argv) {
         log(`Merge:     deferred - ${entry.reason}`);
       }
     }
+    const preflight = force ? absolute : [...overridable, ...absolute];
     if (preflight.length > 0) {
       log(
-        `--update-baseline refused before the run started (pass --force to override):\n${preflight
-          .map((reason) => `  - ${reason}`)
-          .join('\n')}`
+        `--update-baseline refused before the run started${
+          force
+            ? ':'
+            : ' (pass --force to override the measurement-quality guards only):'
+        }\n${preflight.map((reason) => `  - ${reason}`).join('\n')}`
       );
       process.exitCode = 2;
       return;

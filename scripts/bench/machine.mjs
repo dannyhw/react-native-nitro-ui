@@ -118,6 +118,11 @@ export function collectDependencies({ lockPath, nodeModulesDir, source }) {
  *   device?: any,
  *   dependencies?: any,
  *   timeouts?: { mountTimeoutMs?: number|null, presentedTimeoutMs?: number|null } | null,
+ *   machine?: any,
+ *     the host summary to stand in for `collectMachine()`. Only `--dry-run` passes
+ *     one, and for the same reason it injects a device key and a load average: its
+ *     rules are unit tests rather than a machine (`bench-dry-run.test.js`). A live
+ *     pre-flight passes nothing and gets the real host.
  *   now?: () => string,
  * }} input
  */
@@ -132,8 +137,17 @@ export function mergeCandidateRun({
   device = {},
   dependencies = null,
   timeouts = null,
+  machine = null,
   now = () => new Date().toISOString(),
 }) {
+  // No `--timeout-*` flag says the app waits under its platform's default rule,
+  // which the command line does know; a *measured* run's record is read back from
+  // its launches instead. `timeouts` arrives as `{ mountTimeoutMs: null, ... }` when
+  // no flag was passed, so the default has to be reached for field by field - a `??`
+  // over the whole object never fires, and a file that predates the field would then
+  // look unanswerable at pre-flight time and be refused for the wrong reason.
+  const ruleFor = (name) =>
+    timeouts?.[name] ?? (BASELINE_TIMEOUTS_MS[platform] ?? {})[name] ?? null;
   return {
     platform,
     plan,
@@ -142,18 +156,17 @@ export function mergeCandidateRun({
     dirty,
     sha,
     deviceKey,
-    deviceName: device.name ?? null,
-    machine: collectMachine(platform, device, null),
+    deviceName: device.name ?? device.avd ?? null,
+    machine: machine ?? collectMachine(platform, device, null),
     // Null, not 'verify': the state the app is in is decided by the install, which
     // has not happened yet, and inventing one would make the guard pass on it.
     art: null,
     dependencies,
     timeouts: baselineTimeoutRecord({
-      timeouts: timeouts ??
-        BASELINE_TIMEOUTS_MS[platform] ?? {
-          mountTimeoutMs: null,
-          presentedTimeoutMs: null,
-        },
+      timeouts: {
+        mountTimeoutMs: ruleFor('mountTimeoutMs'),
+        presentedTimeoutMs: ruleFor('presentedTimeoutMs'),
+      },
     }),
     createdAt: now(),
   };

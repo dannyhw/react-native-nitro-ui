@@ -109,6 +109,7 @@ export function mergePreflight(input) {
     exists = false,
     deviceKey,
     device = {},
+    machine = null,
     dependencies = null,
     scheduleLength = null,
     componentPlanLength = null,
@@ -136,6 +137,7 @@ export function mergePreflight(input) {
     device,
     dependencies,
     timeouts,
+    ...(machine == null ? {} : { machine }),
     ...(now == null ? {} : { now }),
   });
   const problems = mergeRunProblems({ plan, launches, perfMarks, dirty });
@@ -461,6 +463,13 @@ export function dryRunReport(input) {
      * null in a unit test that asks a different question.
      */
     deviceInfo = null,
+    /**
+     * The host summary the merge pre-flight compares with the file's, injected for
+     * the same reason the device key and load average are: this half is a unit test
+     * rather than a machine. The gatherer omits it, and the candidate then reports
+     * the real host.
+     */
+    machine = null,
     mergeEvidence = null,
   } = input;
 
@@ -542,15 +551,10 @@ export function dryRunReport(input) {
   const exists = baselinePath == null ? null : existsSync(baselinePath);
   // A merge pre-flight reads the file it would write into. Read lazily and only for
   // that shape: a `--check` does not need the contents, and a corrupt file is the
-  // check's problem to report, not something to throw over here.
+  // check's problem to report, not something to throw over here. Not gated on
+  // `--force`, because the merge rules are not overridable.
   let mergeBaseline = null;
-  if (
-    minting &&
-    !forced &&
-    component != null &&
-    baselinePath != null &&
-    exists === true
-  ) {
+  if (minting && component != null && baselinePath != null && exists === true) {
     try {
       mergeBaseline = readJson(baselinePath);
     } catch (error) {
@@ -631,8 +635,10 @@ export function dryRunReport(input) {
     // The merge question (X14), asked of the file the run would write into. A
     // `--component` mint replaces the narrowing refusal above with this one, so a
     // dry run has to answer it or it would print "would start" for a run the
-    // runner refuses before booting.
-    if (minting && !forced && component != null) {
+    // runner refuses before booting. Unlike the guards above, `--force` does not
+    // silence it: force overrules judgements about the measurement, and whether
+    // these numbers belong in this file is not one.
+    if (minting && component != null && deviceKey != null) {
       // Gathered only now, and for this file: the founding-commit half of the
       // version evidence is a question about the file, not about the machine.
       const evidence = mergeEvidence?.(mergeBaseline) ?? null;
@@ -651,6 +657,7 @@ export function dryRunReport(input) {
         exists: exists === true,
         deviceKey,
         device: deviceInfo ?? {},
+        ...(machine == null ? {} : { machine }),
         dependencies: evidence?.dependencies ?? null,
         ...(evidence?.resolved == null ? {} : { resolved: evidence.resolved }),
         scheduleLength: schedule.length,
@@ -664,7 +671,16 @@ export function dryRunReport(input) {
         }).length,
         allowDeferred: true,
       });
-      problems.push(...merged.problems);
+      // The run's own faults (plan, launch count, marks, dirty tree) stay
+      // overridable, exactly as they are in `run.mjs`; the file's answer is not.
+      const runProblems = merged.problems.filter((reason) =>
+        forced
+          ? !/plan "|launches per cell|perf marks|working tree is dirty/.test(
+              reason
+            )
+          : true
+      );
+      problems.push(...runProblems);
       for (const entry of merged.unverified) {
         mergeLines.push(`Merge:     ${entry.reason}`);
       }
@@ -772,6 +788,7 @@ export function dryRun({
   component,
   baselinesDir,
   env = process.env,
+  machine = null,
   write = (line) => process.stdout.write(`${line}\n`),
   /**
    * Gathers the version evidence a merge pre-flight asks for, called with the target
@@ -821,6 +838,7 @@ export function dryRun({
     deviceDetail: device.detail,
     deviceProblem: device.problem,
     deviceInfo: device.device ?? null,
+    ...(machine == null ? {} : { machine }),
     cpuCount: os.cpus().length,
     loadavg1: os.loadavg()[0] ?? null,
     baselinesDir,
