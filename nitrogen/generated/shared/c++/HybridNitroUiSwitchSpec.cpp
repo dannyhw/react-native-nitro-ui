@@ -40,6 +40,7 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("nuiSizingId", &HybridNitroUiSwitchSpec::setNuiSizingId);
       prototype.registerHybridMethod("measureContent", &HybridNitroUiSwitchSpec::measureContent);
       prototype.registerHybridMethod("nuiTestArmedGuards", &HybridNitroUiSwitchSpec::nuiTestArmedGuards);
+      prototype.registerHybridMethod("nuiTestLifetimeReport", &HybridNitroUiSwitchSpec::nuiTestLifetimeReport);
     });
   }
 

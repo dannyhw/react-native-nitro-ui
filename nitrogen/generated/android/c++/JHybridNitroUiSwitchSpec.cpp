@@ -182,5 +182,10 @@ namespace margelo::nitro::nitroui {
     auto __result = method(_javaPart);
     return __result->toStdString();
   }
+  std::string JHybridNitroUiSwitchSpec::nuiTestLifetimeReport() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("nuiTestLifetimeReport");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
 
 } // namespace margelo::nitro::nitroui

@@ -22,6 +22,12 @@ typealias NitroUiSizing = margelo.nitro.nitroui.NitroUiSizing
 enum NitroUiPerfKind: Int32 {
   case propsApplied = 0
   case firstFrame = 1
+  /// `onDropView` ran: the mount is over (a real unmount, or the recycle front door).
+  case dropped = 2
+  /// `prepareForRecycle` ran, so the instance entered Fabric's recycle pool. A
+  /// `dropped` with no `recycled` after it is a real unmount; the pair is what a
+  /// gate counts to show recycling is live on this platform.
+  case recycled = 3
 }
 
 /// `nuiPerfId` of a view that never set one.
@@ -100,6 +106,18 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
 
   private var isDirty = true
   private var hasCommitted = false
+
+  /// How many mounts of *this object* have ended, and how many entered Fabric's
+  /// recycle pool.
+  ///
+  /// Deliberately not reset by ``prepareForRecycle()`` - that is the whole point. A
+  /// per-mount flag cannot tell a reused instance from a fresh one, and "did the pool
+  /// hand this exact view back" is a question about one object's lifetime. The pair a
+  /// harness reads: `drops=n recycles=m` with `m >= 1` on a *second* mount is proof
+  /// this object was recycled and reused, not merely that a reset ran. The Android
+  /// host keeps the same two counters for the same reason.
+  private(set) var lifetimeDrops = 0
+  private(set) var lifetimeRecycles = 0
   private var suppressesNextAnimation = true
   private var hasMarkedFirstFrame = false
   /// Whether the hosted content needs a measure pass. Starts `true`, and becomes
@@ -301,6 +319,12 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// Reset for reuse. Keeps the hosting controller and its SwiftUI state.
   func prepareForRecycle() {
     nitroUiAssertMainThread()
+    // Before any reset, and unconditionally: a recycled instance keeps its
+    // `perfInstanceId` on this platform (the next mount's props set it, and the
+    // wrapper always sends `nuiPerfId`), so the mark is attributable. Together with
+    // `dropped` this is the pair a gate counts to show recycling really runs here.
+    lifetimeRecycles += 1
+    mark(.recycled)
     isDirty = true
     suppressesNextAnimation = true
     contentSizeNeedsMeasure = true
@@ -319,6 +343,15 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     detachFromContainer()
   }
 
+  /// What a harness asks about (F6): what this host object has been through since it
+  /// was allocated — `drops=<n> recycles=<m>`.
+  ///
+  /// Neither counter is cleared by ``prepareForRecycle()``; see ``lifetimeDrops`` for
+  /// why that is the entire mechanism.
+  func lifetimeReport() -> String {
+    return "drops=\(lifetimeDrops) recycles=\(lifetimeRecycles)"
+  }
+
   /// Tear down what must not outlive a mount.
   ///
   /// Note the generated component view calls `onDropView` before
@@ -326,6 +359,11 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// the hosting controller.
   func drop() {
     nitroUiAssertMainThread()
+    // See `prepareForRecycle`: the generated component view calls this before
+    // `prepareForRecycle` as well as on a real unmount, so `dropped` with no
+    // `recycled` after it is the unmount and the pair is the recycle.
+    lifetimeDrops += 1
+    mark(.dropped)
     detachFromContainer()
     hasMarkedFirstFrame = false
     releaseSizingInstance()

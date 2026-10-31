@@ -703,7 +703,8 @@ class HybridNitroUiButton(
 
   override fun prepareForRecycle() {
     host.tag = null
-    host.perfInstanceId = NitroUiPerf.NO_INSTANCE
+    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
+    // marked the recycle: clearing it here would hide that mark.
     // Not cleared here: `host.prepareForRecycle()` releases the sizing instance
     // (which needs the id to tell the engine), and `onDropView` has already run.
     // The composition does not survive a recycle (core.md §6); what recycling saves

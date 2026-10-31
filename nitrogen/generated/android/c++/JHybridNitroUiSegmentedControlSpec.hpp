@@ -80,6 +80,7 @@ namespace margelo::nitro::nitroui {
     NitroUiSegmentedControlSize measureContent() override;
     void nuiTestPixelProbe(double color) override;
     std::string nuiTestPixelReport() override;
+    std::string nuiTestDisplayedIndex() override;
 
   private:
     jni::global_ref<JHybridNitroUiSegmentedControlSpec::JavaPart> _javaPart;

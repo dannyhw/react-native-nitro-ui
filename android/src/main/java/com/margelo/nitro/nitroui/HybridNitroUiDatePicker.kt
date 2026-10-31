@@ -1850,7 +1850,8 @@ class HybridNitroUiDatePicker(
 
   override fun prepareForRecycle() {
     host.tag = null
-    host.perfInstanceId = NitroUiPerf.NO_INSTANCE
+    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
+    // marked the recycle: clearing it here would hide that mark.
     // The dialog first, before anything else: `host.prepareForRecycle()` resets the model
     // (which clears `presented`, and a `Dialog` that stops being composed closes its
     // window), and the next mount must not inherit an open dialog - or, worse, the

@@ -27,6 +27,7 @@ public protocol HybridNitroUiSegmentedControlSpec_protocol: HybridObject, Hybrid
   func measureContent() throws -> NitroUiSegmentedControlSize
   func nuiTestPixelProbe(color: Double) throws -> Void
   func nuiTestPixelReport() throws -> String
+  func nuiTestDisplayedIndex() throws -> String
 }
 
 public extension HybridNitroUiSegmentedControlSpec_protocol {

@@ -549,7 +549,8 @@ class HybridNitroUiProgress(
 
   override fun prepareForRecycle() {
     host.tag = null
-    host.perfInstanceId = NitroUiPerf.NO_INSTANCE
+    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
+    // marked the recycle: clearing it here would hide that mark.
     // Back to the default policy, matching the reset variant - a host that kept
     // `intrinsic` would ask the next owner's linear bar the wrong question, and the
     // composition rebuilt for the next owner reads the policy as it is built.
