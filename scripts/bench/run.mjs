@@ -856,6 +856,16 @@ export async function main(argv) {
     // fingerprint) is deferred to the authoritative check below, not passed.
     if (component != null) {
       const device = preflightDevice(platform);
+      // A merge targets one machine's file, and the file's path is derived from the
+      // device's key, so a device that could not be resolved has no path to name.
+      // Saying "no baseline at …/null.json — the first mint is a full run" would
+      // send a contributor off to re-mint a whole table (eleven hours) for what is
+      // an unset `IOS_SIM_UDID` (review L1). The device's own problem is the refusal.
+      if (device.deviceKey == null) {
+        absolute.push(
+          `--component ${String(component)} --update-baseline: the device could not be resolved, so this machine's baseline file cannot be named.\n        ${String(device.problem ?? 'no device was resolved')}`
+        );
+      }
       // The plan and launch count are the run's own fault and so are overridable;
       // the file's answer about its contents is not.
       overridable.push(
@@ -866,32 +876,40 @@ export async function main(argv) {
           dirty: isGitDirty(),
         })
       );
-      const decided = decideMerge({
-        platform,
-        plan,
-        launches,
-        perfMarks,
-        component,
-        timeouts,
-        filters: {
-          only: filters.only,
-          scenario: filters.scenario,
-          n: filters.n,
-        },
-        scheduled,
-        deviceKey: device.deviceKey,
-        device: device.device,
-        allowDeferred: true,
-      });
-      if (decided.opened.refusal != null) {
+      // With no device key there is no file to open, and the merge question has no
+      // subject: asking it would add a second, wrong refusal about a path ending in
+      // `null.json` on top of the one above that says what is actually missing.
+      const decided =
+        device.deviceKey == null
+          ? null
+          : decideMerge({
+              platform,
+              plan,
+              launches,
+              perfMarks,
+              component,
+              timeouts,
+              filters: {
+                only: filters.only,
+                scenario: filters.scenario,
+                n: filters.n,
+              },
+              scheduled,
+              deviceKey: device.deviceKey,
+              device: device.device,
+              allowDeferred: true,
+            });
+      if (decided?.opened.refusal != null) {
         absolute.push(decided.opened.refusal.message);
       }
-      absolute.push(...decided.opened.problems);
-      for (const entry of decided.opened.unverified) {
-        log(`Merge:     ${entry.reason}`);
-      }
-      for (const entry of decided.opened.deferred) {
-        log(`Merge:     deferred - ${entry.reason}`);
+      if (decided != null) {
+        absolute.push(...decided.opened.problems);
+        for (const entry of decided.opened.unverified) {
+          log(`Merge:     ${entry.reason}`);
+        }
+        for (const entry of decided.opened.deferred) {
+          log(`Merge:     deferred - ${entry.reason}`);
+        }
       }
     }
     const preflight = force ? absolute : [...overridable, ...absolute];

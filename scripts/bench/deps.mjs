@@ -127,18 +127,35 @@ export function parseLockFile(text) {
   }
 }
 
-/** The above, one pass, single-pass: no rewrite of anything inside a string. */
+/**
+ * The above, in one pass over the text, in linear time.
+ *
+ * "Is the last thing I emitted a comma?" is the whole trailing-comma test, so the
+ * scan remembers the index of the last non-whitespace character it emitted and asks
+ * that in O(1). The obvious version called `out.trimEnd()` at every closer, which
+ * re-scans the output built so far and made the read quadratic: 503 ms for the
+ * 518 KB `bun.lock`, which a run parses about three times (review L3). Characters
+ * are collected in an array rather than appended to a string for the same reason.
+ */
 function stripJson5Syntax(text) {
-  let out = '';
+  const parts = [];
   let inString = false;
+  // Index in `parts` of the last emitted non-whitespace character, or -1.
+  let lastMeaningful = -1;
+  const emit = (ch) => {
+    parts.push(ch);
+    if (ch !== ' ' && ch !== '\t' && ch !== '\n' && ch !== '\r') {
+      lastMeaningful = parts.length - 1;
+    }
+  };
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (inString) {
-      out += ch;
+      emit(ch);
       if (ch === '\\') {
         // Keep the escaped character opaque: `\"` is not the end of the string.
         i += 1;
-        if (i < text.length) out += text[i];
+        if (i < text.length) emit(text[i]);
         continue;
       }
       if (ch === '"') inString = false;
@@ -146,13 +163,13 @@ function stripJson5Syntax(text) {
     }
     if (ch === '"') {
       inString = true;
-      out += ch;
+      emit(ch);
       continue;
     }
     const next = text[i + 1];
     if (ch === '/' && next === '/') {
       while (i < text.length && text[i] !== '\n') i += 1;
-      out += '\n';
+      emit('\n');
       continue;
     }
     if (ch === '/' && next === '*') {
@@ -161,17 +178,18 @@ function stripJson5Syntax(text) {
       continue;
     }
     if (ch === ',' || ch === '}' || ch === ']') {
-      // A comma directly before a closer is the trailing one bun writes.
-      const tail = out.trimEnd();
-      if (ch !== ',' && tail.endsWith(',')) {
-        out = tail.slice(0, -1);
+      // A comma directly before a closer is the trailing one bun writes. The
+      // closer is emitted either way, so nothing has to be re-scanned after the
+      // drop: this character becomes the last meaningful one.
+      if (ch !== ',' && lastMeaningful >= 0 && parts[lastMeaningful] === ',') {
+        parts.length = lastMeaningful;
       }
-      out += ch;
+      emit(ch);
       continue;
     }
-    out += ch;
+    emit(ch);
   }
-  return out;
+  return parts.join('');
 }
 
 /**

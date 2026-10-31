@@ -28,9 +28,11 @@ import { describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  closeSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   realpathSync,
@@ -47,6 +49,9 @@ import {
   SCHEMA_VERSION,
   aggregateRecords,
   baselineBlockers,
+  baselineTimeoutRecord,
+  buildSchedule,
+  cellKey,
   buildBaseline,
   cellsForComponent,
   componentsInBaseline,
@@ -55,6 +60,7 @@ import {
   mergeComponentBaseline,
   mergeRunProblems,
   missingBaselineProvenanceProblem,
+  requestedTimeouts,
   seededComponentProvenance,
 } from '../bench/lib.mjs';
 
@@ -80,7 +86,11 @@ const WAIT_BY_PLATFORM = {
  * Records for one arm of one scenario, shaped exactly like the bench app's output.
  * `scenario` is what makes a cell belong to a component (`mount.slider` -> slider).
  */
-function armRecords(scenario, implementation, { latency, n = 50, wait }) {
+function armRecords(
+  scenario,
+  implementation,
+  { latency, n = 50, wait, launches = LAUNCHES }
+) {
   const records = [
     {
       kind: 'meta',
@@ -95,7 +105,7 @@ function armRecords(scenario, implementation, { latency, n = 50, wait }) {
       ...wait,
     },
   ];
-  for (let launch = 0; launch < LAUNCHES; launch++) {
+  for (let launch = 0; launch < launches; launch++) {
     const factor = QUIET[launch] ?? 1;
     for (let index = 0; index < ITERATIONS; index++) {
       const wiggle = 1 + 0.002 * ((index % 5) - 2);
@@ -133,6 +143,25 @@ function armRecords(scenario, implementation, { latency, n = 50, wait }) {
 }
 
 /**
+ * A load summary that is *not* null, for the same reason the fixtures' CPU model is
+ * not `Apple M4 Pro`: `loadSamples: null` is also exactly what a dropped field reads
+ * as, so a fixture that carries null can never tell "the run recorded no sampler"
+ * from "the provenance writer forgot the field" — and a provenance entry whose load
+ * summary vanished is precisely the silent failure that makes a bench number
+ * unauditable. The numbers are a real run's shape (X14's menu mint on
+ * `maintainer-mac-2`), chosen so none of them is zero or a default.
+ */
+const LOAD_SAMPLES = {
+  count: 352,
+  ceiling: 7,
+  median: 1.4492,
+  p90: 1.8081,
+  max: 2.2217,
+  over: 0,
+  overFraction: 0,
+};
+
+/**
  * The machine a fixture run rode, with values chosen so they cannot match this
  * repo's requirements or this host by coincidence.
  */
@@ -147,7 +176,7 @@ function fixtureMachine(platform, overrides = {}) {
     cpuModel: 'Fixture M4 Pro',
     loadavg1: 1.5,
     loadavg5: 1.2,
-    loadSamples: null,
+    loadSamples: LOAD_SAMPLES,
     totalMemoryGb: 32,
     xcode: 'Xcode 26.3',
     quiet: true,
@@ -165,10 +194,21 @@ function fixtureMachine(platform, overrides = {}) {
   };
 }
 
-/** A run of the shape both CLIs read, measuring the scenarios it is handed. */
+/**
+ * A run of the shape both CLIs read, measuring the scenarios it is handed.
+ *
+ * Pass `component` instead of `scenarios` to get a run that measures that component
+ * *whole* — every cell and every arm `buildSchedule` would launch for it, which is
+ * the only shape a merge accepts. That distinction is the difference between a fixture
+ * that tests a comparability field (two arms of one cell is plenty) and one that
+ * tests a merge (a partial block is exactly what a merge must refuse, because the
+ * rows left out could never be added later — see X14 fix round 1, H1).
+ */
 function makeRun({
   platform = 'ios',
   scenarios = ['mount'],
+  component = null,
+  components = null,
   nitroUi = 110_000,
   machine = fixtureMachine(platform),
   dependencies = { reactNative: '0.80.0', expoUi: '54.0.0', source: 'fixture' },
@@ -176,15 +216,54 @@ function makeRun({
   deviceKey = DEVICE_KEY,
   overrides = {},
 } = {}) {
-  const arms = { 'rn-core': 100_000, 'nitro-ui': nitroUi };
   const wait = WAIT_BY_PLATFORM[platform] ?? WAIT_BY_PLATFORM.ios;
+  // The arm latencies a complete run needs. Only `rn-core` and `nitro-ui` are ever
+  // compared against a baseline here; the third-party reference arms exist so the
+  // schedule is whole, and their absolute cost is not what any of these tests ask.
+  const latencies = {
+    'rn-core': 100_000,
+    'nitro-ui': nitroUi,
+    'expo-ui-host-per-control': 120_000,
+    'expo-ui-shared-host': 115_000,
+    'nitro-ui-host': 105_000,
+  };
+  const whole = [
+    ...(component == null ? [] : [component]),
+    ...(components ?? []),
+  ];
+  // `--force` can shorten a launch group, and a fixture that stands in for a
+  // *measured* run has to hold the records that group actually ran, or the shape
+  // checks refuse it for measuring too little rather than for what it tests.
+  const launches = overrides.launches ?? LAUNCHES;
+  let cells = null;
+  if (whole.length > 0) {
+    cells = [
+      ...new Map(
+        whole
+          .flatMap((name) =>
+            buildSchedule({
+              plan: 'full',
+              launches,
+              platform,
+              component: name,
+            })
+          )
+          .map((entry) => [
+            cellKey(entry.scenario, entry.implementation, entry.n),
+            entry,
+          ])
+      ).values(),
+    ];
+  }
+  const arms =
+    whole.length > 0 ? null : { 'rn-core': 100_000, 'nitro-ui': nitroUi };
   return {
     schemaVersion: SCHEMA_VERSION,
     platform,
     deviceKey,
     deviceName: 'Fixture Device',
     plan: 'full',
-    launches: LAUNCHES,
+    launches,
     perfMarks: false,
     sha: 'dead123',
     dirty: false,
@@ -195,11 +274,24 @@ function makeRun({
     problems: [],
     machine,
     cells: aggregateRecords(
-      scenarios.flatMap((scenario) =>
-        Object.entries(arms).flatMap(([implementation, latency]) =>
-          armRecords(scenario, implementation, { latency, wait })
-        )
-      ),
+      whole.length > 0
+        ? cells.flatMap((entry) =>
+            armRecords(entry.scenario, entry.implementation, {
+              latency: latencies[entry.implementation] ?? 120_000,
+              n: entry.n,
+              wait,
+              launches,
+            })
+          )
+        : scenarios.flatMap((scenario) =>
+            Object.entries(arms).flatMap(([implementation, latency]) =>
+              armRecords(scenario, implementation, {
+                latency,
+                wait,
+                launches,
+              })
+            )
+          ),
       { keepRaw: true }
     ),
     ...overrides,
@@ -245,6 +337,33 @@ function merge(input) {
   return mergeBaselineProblems(input);
 }
 
+/**
+ * The same run as a **pre-flight candidate**: every comparability field, no cells.
+ *
+ * The file rules these tests are about (does this file already hold the component,
+ * does it record the same regime) are answered from the command line before a device
+ * is booted, against exactly this shape — `mergeCandidateRun()` has no cells because
+ * nothing has been measured yet, and a run that has measured nothing cannot be
+ * refused for measuring too little. A merge that asks them of a *measured* record is
+ * also asked whether the record is the right shape, and that is tested against
+ * fixtures built whole (`makeRun({ component })`) through the CLIs, not here.
+ *
+ * The waiting rule is copied over explicitly because the fixture carries it inside
+ * its records: a real pre-flight gets it from `--timeout-*` or from the platform
+ * default (`mergeCandidateRun()`), and dropping it here would have this stand-in
+ * refuse for a reason the code under test does not raise.
+ */
+function candidate(run) {
+  const { cells, ...rest } = run;
+  return {
+    ...rest,
+    cells: {},
+    timeouts: baselineTimeoutRecord({
+      timeouts: run.timeouts ?? requestedTimeouts(run),
+    }),
+  };
+}
+
 /* ------------------------- why a merge is refused ------------------------- */
 
 describe('a merge is refused before any device is touched', () => {
@@ -253,7 +372,7 @@ describe('a merge is refused before any device is touched', () => {
 
   it('refuses when the file already has this component, and counts the cells', () => {
     const out = merge({
-      run: base,
+      run: candidate(base),
       baseline: file,
       exists: true,
       component: 'switch',
@@ -273,7 +392,7 @@ describe('a merge is refused before any device is touched', () => {
       ['only', 'nitro-ui'],
     ]) {
       const out = merge({
-        run: base,
+        run: candidate(base),
         baseline: file,
         exists: true,
         component: 'slider',
@@ -289,7 +408,7 @@ describe('a merge is refused before any device is touched', () => {
 
   it('refuses a schedule that does not cover the component whole', () => {
     const out = merge({
-      run: base,
+      run: candidate(base),
       baseline: file,
       exists: true,
       component: 'slider',
@@ -302,7 +421,7 @@ describe('a merge is refused before any device is touched', () => {
 
   it('refuses when there is no file, and says a full run comes first', () => {
     const out = merge({
-      run: base,
+      run: candidate(base),
       baseline: null,
       exists: false,
       component: 'slider',
@@ -313,7 +432,7 @@ describe('a merge is refused before any device is touched', () => {
 
   it('says nothing about a run with no component, which is a full mint', () => {
     const out = merge({
-      run: base,
+      run: candidate(base),
       baseline: file,
       exists: true,
       component: null,
@@ -338,7 +457,7 @@ describe('a merge checks the environment field by field', () => {
     const { run, baseline } = pair(rest);
     const target = mutate == null ? baseline : mutate({ run, baseline });
     return merge({
-      run,
+      run: candidate(run),
       baseline: target,
       exists: true,
       component,
@@ -353,7 +472,7 @@ describe('a merge checks the environment field by field', () => {
     // silent about it.
     const run = makeRun();
     const out = merge({
-      run,
+      run: candidate(run),
       baseline: buildBaseline(run),
       exists: true,
       component: 'slider',
@@ -424,7 +543,7 @@ describe('a merge checks the environment field by field', () => {
       art: { status: 'speed-profile', primed: true },
     });
     const androidOut = merge({
-      run: android,
+      run: candidate(android),
       baseline: {
         ...preX14Baseline(android, { withTimeouts: true }),
         deviceKey: 'android34-emu-pixel9',
@@ -481,7 +600,7 @@ describe('a merge checks the environment field by field', () => {
     const run = makeRun();
     const baseline = preX14Baseline(run, { withTimeouts: true });
     const out = merge({
-      run,
+      run: candidate(run),
       baseline: {
         ...baseline,
         timeouts: { mountTimeoutMs: 1500, presentedTimeoutMs: 2000 },
@@ -528,7 +647,7 @@ describe('a field the file predates is answered with evidence, or refused', () =
 
   it('matches pre-X14 app versions against the founding commit, and records the source', () => {
     const out = merge({
-      run,
+      run: candidate(run),
       baseline: preX14Baseline(run),
       exists: true,
       component: 'slider',
@@ -551,7 +670,7 @@ describe('a field the file predates is answered with evidence, or refused', () =
 
   it('refuses when the recovered versions contradict the run', () => {
     const out = merge({
-      run,
+      run: candidate(run),
       baseline: preX14Baseline(run),
       exists: true,
       component: 'slider',
@@ -573,7 +692,7 @@ describe('a field the file predates is answered with evidence, or refused', () =
 
   it('refuses when a version cannot be recovered at all', () => {
     const out = merge({
-      run,
+      run: candidate(run),
       baseline: preX14Baseline(run),
       exists: true,
       component: 'slider',
@@ -588,7 +707,7 @@ describe('a field the file predates is answered with evidence, or refused', () =
 
   it('accepts the platform default waiting rule for a file that records none', () => {
     const out = merge({
-      run,
+      run: candidate(run),
       baseline: preX14Baseline(run),
       exists: true,
       component: 'slider',
@@ -609,7 +728,7 @@ describe('a field the file predates is answered with evidence, or refused', () =
       },
     });
     const out = merge({
-      run: diagnostic,
+      run: candidate(diagnostic),
       baseline: preX14Baseline(makeRun()),
       exists: true,
       component: 'slider',
@@ -630,7 +749,7 @@ describe('a field the file predates is answered with evidence, or refused', () =
     delete stripped.machine.androidApi;
     delete stripped.art;
     const out = merge({
-      run: runAndroid,
+      run: candidate(runAndroid),
       baseline: stripped,
       exists: true,
       component: 'slider',
@@ -654,7 +773,7 @@ describe('the baseline schema version is a regime, with one exception', () => {
 
   it('upgrades a readable v2 file and says so, rather than refusing every merge', () => {
     const out = merge({
-      run,
+      run: candidate(run),
       baseline: preX14Baseline(run, { withTimeouts: true }),
       exists: true,
       component: 'slider',
@@ -704,15 +823,15 @@ describe('a pre-flight defers what it cannot measure, and never passes it', () =
   const file = preX14Baseline(run, { withTimeouts: true });
 
   /** The candidate: no ART state and no system-image fingerprint yet. */
-  const candidate = {
-    ...run,
+  const preFlight = {
+    ...candidate(run),
     art: null,
     machine: { ...run.machine, androidImage: null },
   };
 
   it('reports the unknown halves as deferred when allowed', () => {
     const out = merge({
-      run: candidate,
+      run: preFlight,
       baseline: file,
       exists: true,
       component: 'slider',
@@ -728,7 +847,7 @@ describe('a pre-flight defers what it cannot measure, and never passes it', () =
 
   it('refuses the same candidate when the answers are due', () => {
     const out = merge({
-      run: candidate,
+      run: preFlight,
       baseline: file,
       exists: true,
       component: 'slider',
@@ -822,7 +941,7 @@ describe('provenance for a file that predates it', () => {
 
   it('seeds nothing for a current file, so its own block is kept', () => {
     const out = merge({
-      run,
+      run: candidate(run),
       baseline: buildBaseline(run),
       exists: true,
       component: 'slider',
@@ -969,6 +1088,96 @@ describe('the merge itself only touches its own component', () => {
     );
   });
 
+  /**
+   * The write-side filter, on its own.
+   *
+   * `mergeBaselineProblems()` refuses a run that measured more than the named
+   * component, so no CLI path can hand this function a whole run's table any more —
+   * which is exactly why the filter is also applied where the cells are copied. The
+   * function is exported, and the cost of trusting its caller is another component's
+   * measured numbers being replaced by the merged component's, so the guard lives in
+   * the copy as well and this test is what keeps it there.
+   */
+  it('copies only the named component out of a `built` that holds a whole run', () => {
+    const wholeRun = makeRun({
+      components: ['button', 'slider'],
+      nitroUi: 200_000,
+    });
+    const merged = mergeComponentBaseline({
+      baseline: before,
+      run: wholeRun,
+      component: 'button',
+      built: buildBaseline(wholeRun),
+      componentsBase: seededComponentProvenance(before, null),
+      dependencies: null,
+      comparabilityNotes: [],
+    });
+    // The file's own cells (switch, slider) are as they were, even though `built`
+    // held slider's numbers at a different cost.
+    for (const [key, cell] of Object.entries(before.cells)) {
+      expect([key, JSON.stringify(merged.baseline.cells[key])]).toEqual([
+        key,
+        JSON.stringify(cell),
+      ]);
+    }
+    // And the entry describes 28 button cells, not 56 of two components.
+    expect(merged.addedCells).toBe(
+      Object.keys(cellsForComponent(buildBaseline(wholeRun).cells, 'button'))
+        .length
+    );
+    expect(
+      merged.provenance.cellKeys.every((key) => key.includes('.button'))
+    ).toBe(true);
+    expect(
+      merged.changedCells.some((entry) => !entry.includes('.button'))
+    ).toBe(false);
+  });
+
+  /**
+   * Every field of a merged entry's provenance, asserted.
+   *
+   * The README's "Adding one component" section promises a reader can answer "when
+   * were these cells measured, on what, under how many launches, and how loaded was
+   * the machine" from the file alone, and each of those is one field of this object.
+   * A test that asserted only `sha` let `launches: null` be dropped from the writer
+   * unnoticed (review M1), so the assertions are per-field and the fixture's load
+   * summary is non-null — a null fixture could not tell a dropped field from a run
+   * that recorded no sampler.
+   */
+  it('writes a provenance entry that says who measured what, when and how quietly', () => {
+    const { baseline, provenance } = result();
+    const entry = baseline.components.button;
+    expect(entry).toEqual(provenance);
+    expect(entry.component).toBe('button');
+    // The merge run's sha and timestamp, not the founding run's.
+    expect(entry.sha).toBe(sliderRun.sha);
+    expect(entry.mintedAt).toBe(sliderRun.createdAt);
+    expect(entry.launches).toBe(LAUNCHES);
+    expect(entry.plan).toBe('full');
+    // What the launches actually waited for, in the file's own shape.
+    expect(entry.timeouts).toEqual(
+      baselineTimeoutRecord({ timeouts: requestedTimeouts(sliderRun) })
+    );
+    expect(entry.timeouts.presentedTimeoutMs).toBe(
+      WAIT_BY_PLATFORM.ios.presentedTimeoutMs
+    );
+    // The load summary is the *per-component* sampler of the run, copied out of the
+    // machine record; the committed files carry real numbers here and a reader judges
+    // a component's cells partly by them.
+    expect(entry.loadSamples).toEqual(LOAD_SAMPLES);
+    expect(entry.loadSamples.count).toBeGreaterThan(0);
+    expect(entry.dependencies).toEqual({
+      reactNative: '0.80.0',
+      expoUi: '54.0.0',
+      source: 'fixture',
+    });
+    // The entry claims exactly the cells it was built from, so a reader can check it
+    // against the table instead of trusting the count.
+    expect(entry.cellKeys).toEqual(Object.keys(built.cells).sort());
+    expect(entry.comparabilityNotes).toEqual([]);
+    expect(entry.seededFromFoundingRun ?? false).toBe(false);
+  });
+
   it('keeps the components block the file already had', () => {
     const current = buildBaseline(existing);
     const second = mergeComponentBaseline({
@@ -1064,7 +1273,11 @@ describe('opening a file for a merge', () => {
   function open({ files, component = 'slider', label = MINE, resolved = {} }) {
     return openBaselineForMerge({
       baselinesDir: 'bench/baselines',
-      run: { ...run, machine: { ...run.machine, hostname: label } },
+      // A pre-flight candidate: what `run.mjs` hands the opener before the device
+      // has measured anything. These cases are about the file (its path, its
+      // schema, whose machine it names, what has to be seeded into it); the shape
+      // of a *measured* record is the merge's business and is tested below.
+      run: { ...candidate(run), machine: { ...run.machine, hostname: label } },
       component,
       isCompatibleBaseline,
       schemaVersion: BASELINE_SCHEMA_VERSION,
@@ -1347,6 +1560,45 @@ describe('run.mjs refuses an incomparable merge before booting', () => {
     }
   });
 
+  /**
+   * The refusal a contributor actually sees when they forget their lease (L1).
+   *
+   * A merge's file is named from the device key, so an unresolved device has no path
+   * to report. Before this, the merge said "no baseline at
+   * `bench/baselines/maintainer-mac-1/null.json` — the first mint for a machine is a
+   * full run", which points at an eleven-hour re-mint for what is one unset variable.
+   */
+  it('names the missing device rather than a null.json path when IOS_SIM_UDID is unset', () => {
+    const ws = tree();
+    try {
+      const out = runCli(
+        ws,
+        [
+          '--platform',
+          'ios',
+          '--plan',
+          'full',
+          '--launches',
+          '8',
+          '--update-baseline',
+          '--component',
+          'menu',
+          // Absolute refusals survive --force, and asking with it proves this one is
+          // not a measurement judgement someone could wave through.
+          '--force',
+        ],
+        { IOS_SIM_UDID: '' }
+      );
+      expect(out.status).toBe(2);
+      expect(out.all).toContain('IOS_SIM_UDID is not set');
+      expect(out.all).toContain('could not be resolved');
+      expect(out.all).not.toContain('null.json');
+      expect(out.all).not.toContain('nothing to merge into');
+    } finally {
+      rmSync(ws.root, { recursive: true, force: true });
+    }
+  });
+
   it('refuses an API level that differs even under --force, before the device', () => {
     const ws = tree();
     try {
@@ -1391,13 +1643,23 @@ describe('report.mjs merges one component', () => {
   }
 
   function cli({ root, bin }, args, env = {}) {
+    // stdout and stderr go to a **file**, not a pipe. `report.mjs` ends in
+    // `process.exit()`, which discards pending async writes, and a pipe caps at
+    // 64 KiB: a whole-plan report is bigger than that, so a piped capture would
+    // cut off the very `--check` verdict table these tests read. A redirected
+    // file is written synchronously and arrives whole.
+    const outFile = path.join(
+      root,
+      `cli-${Math.random().toString(36).slice(2)}.log`
+    );
+    const fd = openSync(outFile, 'w');
     const child = spawnSync(
       process.execPath,
       [path.join(root, 'scripts', 'bench', 'report.mjs'), ...args],
       {
-        encoding: 'utf8',
         cwd: root,
         timeout: 120_000,
+        stdio: ['ignore', fd, fd],
         env: {
           ...process.env,
           PATH: `${bin}:${process.env.PATH}`,
@@ -1410,9 +1672,12 @@ describe('report.mjs merges one component', () => {
         },
       }
     );
+    closeSync(fd);
+    const all = readFileSync(outFile, 'utf8');
+    rmSync(outFile, { force: true });
     return {
       status: child.status,
-      all: `${child.stdout ?? ''}${child.stderr ?? ''}`,
+      all,
     };
   }
 
@@ -1437,10 +1702,16 @@ describe('report.mjs merges one component', () => {
   /**
    * A file holding switch + slider (v3: it records its own versions) and a results
    * file measuring button.
+   *
+   * Both sides are built *whole*: the file's founding run measures switch and slider
+   * as the plan measures them, and the results file measures button whole. A merge is
+   * a transaction over a component's whole block now, so a fixture made of two cells
+   * of one scenario is not a merge candidate at all — it is the thing a merge refuses
+   * (H1), which has its own cases below.
    */
   function fixtureTree(ws, { file = null, baselineOverrides = {} } = {}) {
     const founding = makeRun({
-      scenarios: ['mount', 'mount.slider'],
+      components: ['switch', 'slider'],
       machine: fixtureMachine('ios', { hostname: MINE }),
     });
     const existing = file ?? {
@@ -1449,7 +1720,7 @@ describe('report.mjs merges one component', () => {
     };
     write(ws.root, baselineRel, existing);
     const results = makeRun({
-      scenarios: ['mount.button'],
+      component: 'button',
       machine: fixtureMachine('ios', { hostname: MINE }),
     });
     return {
@@ -1495,7 +1766,7 @@ describe('report.mjs merges one component', () => {
   it('merges into a pre-X14 file, recovering its versions from its own commit', () => {
     withTree((ws) => {
       const founding = makeRun({
-        scenarios: ['mount', 'mount.slider'],
+        components: ['switch', 'slider'],
         machine: fixtureMachine('ios', { hostname: MINE }),
       });
       const { sha, file } = gitTree(ws, founding);
@@ -1507,7 +1778,7 @@ describe('report.mjs merges one component', () => {
         ws.root,
         'head.json',
         makeRun({
-          scenarios: ['mount.button'],
+          component: 'button',
           machine: fixtureMachine('ios', { hostname: MINE }),
         })
       );
@@ -1590,12 +1861,14 @@ describe('report.mjs merges one component', () => {
   it('refuses a component the file already holds, without writing', () => {
     withTree((ws) => {
       const { existing, results } = fixtureTree(ws);
-      const resultsFile = write(ws.root, 'again.json', {
-        ...makeRun({
-          scenarios: ['mount.slider'],
+      const resultsFile = write(
+        ws.root,
+        'again.json',
+        makeRun({
+          component: 'slider',
           machine: fixtureMachine('ios', { hostname: MINE }),
-        }),
-      });
+        })
+      );
       const out = cli(ws, [
         resultsFile,
         '--update-baseline',
@@ -1611,13 +1884,127 @@ describe('report.mjs merges one component', () => {
     });
   });
 
+  /**
+   * The three shapes of results file that used to corrupt a baseline (H1).
+   *
+   * `report.mjs` re-reports *any* results file with *any* flags, so the flags say
+   * nothing about what the run measured. Before fix round 1 the merge copied every
+   * cell the record held into the file, so a full run reported as `--component menu`
+   * rewrote all of switch's and slider's measured numbers and filed them under
+   * `components.menu` — and a narrowed one landed a partial block that then counted
+   * as "menu is present", making the missing rows unaddable. Both are refusals now,
+   * asked of the record rather than of the command line.
+   */
+  it('refuses a full-run results file rather than filing every cell under one component', () => {
+    withTree((ws) => {
+      const { existing } = fixtureTree(ws);
+      // Same plan, same machine, same versions — but switch and slider measured at a
+      // *different* nitro-ui cost, so any cell the merge overwrote is visible as a
+      // changed number rather than as a coincidence.
+      const fullRun = write(
+        ws.root,
+        'full.json',
+        makeRun({
+          components: ['switch', 'slider', 'button'],
+          nitroUi: 200_000,
+          machine: fixtureMachine('ios', { hostname: MINE }),
+        })
+      );
+      const out = cli(ws, [
+        fullRun,
+        '--update-baseline',
+        '--component',
+        'menu',
+      ]);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain('of other components');
+      // The file as it was written: byte for byte, so nothing under `menu` and no
+      // re-measured switch/slider row.
+      expect(readFileSync(path.join(ws.root, baselineRel), 'utf8')).toBe(
+        `${JSON.stringify(existing, null, 2)}\n`
+      );
+    });
+  });
+
+  it('refuses a results file that measured a different component than the one named', () => {
+    withTree((ws) => {
+      const { existing } = fixtureTree(ws);
+      // A whole `slider` run, reported as `menu`: slider is in the file, so this is
+      // not the "already has" rule — it is the record holding a component the merge
+      // was not asked to write, which used to mean slider's numbers were replaced.
+      const sliderRun = write(
+        ws.root,
+        'slider.json',
+        makeRun({
+          component: 'slider',
+          nitroUi: 200_000,
+          machine: fixtureMachine('ios', { hostname: MINE }),
+        })
+      );
+      const out = cli(ws, [
+        sliderRun,
+        '--update-baseline',
+        '--component',
+        'menu',
+      ]);
+      expect(out.status).toBe(2);
+      // Names the rule and shows a cell of the component that does not belong.
+      expect(out.all).toMatch(/of other components \(first: \S*slider/);
+      const after = JSON.parse(
+        readFileSync(path.join(ws.root, baselineRel), 'utf8')
+      );
+      expect(after.components.menu).toBeUndefined();
+      for (const key of ['mount.slider:nitro-ui:50', 'mount:nitro-ui:50']) {
+        expect([key, JSON.stringify(after.cells[key])]).toEqual([
+          key,
+          JSON.stringify(existing.cells[key]),
+        ]);
+      }
+    });
+  });
+
+  it('refuses a results file that measured only part of the named component', () => {
+    withTree((ws) => {
+      const { existing } = fixtureTree(ws);
+      // Every cell here *is* menu's, so the stray rule is satisfied and the other
+      // half of the check is what stops it: the plan measures 28 cells for a
+      // component and this run holds two of them. Merging would leave the file with
+      // a menu block missing rows that `--check` then reports as never measured,
+      // with no merge able to add them later because menu now counts as present.
+      const partial = write(
+        ws.root,
+        'partial.json',
+        makeRun({
+          scenarios: ['mount.menu', 'update.menu'],
+          machine: fixtureMachine('ios', { hostname: MINE }),
+        })
+      );
+      const out = cli(ws, [
+        partial,
+        '--update-baseline',
+        '--component',
+        'menu',
+      ]);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain('would land incomplete');
+      expect(out.all).toContain('cells that plan measures for `menu`');
+      const after = JSON.parse(
+        readFileSync(path.join(ws.root, baselineRel), 'utf8')
+      );
+      expect(after.components.menu).toBeUndefined();
+      expect(componentsInBaseline(after)).toEqual(
+        componentsInBaseline(existing)
+      );
+    });
+  });
+
   it('refuses when there is no baseline to merge into', () => {
     withTree((ws) => {
       const resultsFile = write(
         ws.root,
         'head.json',
         makeRun({
-          scenarios: ['mount.button'],
+          component: 'button',
           machine: fixtureMachine('ios', { hostname: MINE }),
         })
       );
@@ -1658,7 +2045,7 @@ describe('report.mjs merges one component', () => {
         file: {
           ...preX14Baseline(
             makeRun({
-              scenarios: ['mount', 'mount.slider'],
+              components: ['switch', 'slider'],
               machine: fixtureMachine('ios', { hostname: 'maintainer-mac-9' }),
             }),
             { withTimeouts: true }
@@ -1710,7 +2097,7 @@ describe('report.mjs merges one component', () => {
         ws.root,
         'thin.json',
         makeRun({
-          scenarios: ['mount.button'],
+          component: 'button',
           machine: fixtureMachine('ios', { hostname: MINE }),
           overrides: { launches: 4 },
         })
@@ -1740,7 +2127,7 @@ describe('report.mjs merges one component', () => {
         ws.root,
         'head2.json',
         makeRun({
-          scenarios: ['update.button'],
+          component: 'button',
           machine: fixtureMachine('ios', {
             hostname: MINE,
             simRuntime: '18.4',
@@ -1767,6 +2154,76 @@ describe('report.mjs merges one component', () => {
       ]);
       expect(forced.status).toBe(2);
       expect(forced.all).toContain('simulator runtime differs');
+    });
+  });
+
+  /**
+   * The atomicity of the write (review L2).
+   *
+   * `writeBaseline` runs prettier on what it wrote, so whoever gets that command
+   * wrong — or whose machine has no prettier — reaches the committed file *after*
+   * the bytes are already there. The mint now formats a temp file and renames it, so
+   * two things hold that did not before: what prettier is handed is not the committed
+   * path, and a formatter that damages its input cannot leave a damaged baseline.
+   */
+  it('formats a temp file, and leaves a readable baseline when the formatter damages it', () => {
+    withTree((ws) => {
+      const { resultsFile } = fixtureTree(ws);
+      // A prettier that scribbles on the file it is handed and fails, which is
+      // what a crash or a version-mismatched prettier actually looks like from
+      // here. It also records the path it was asked to format, because "did the
+      // mint hand prettier the committed file or a scratch copy?" is the whole
+      // question, and it is only observable from inside the formatter.
+      writeFileSync(
+        path.join(ws.bin, 'bunx'),
+        [
+          '#!/bin/sh',
+          `last=""`,
+          'for arg in "$@"; do last="$arg"; done',
+          `printf '%s\\n' "$last" > "${path.join(ws.root, 'prettier-target')}"`,
+          ': > "$last"',
+          'echo "prettier died" >&2',
+          'exit 1',
+          '',
+        ].join('\n')
+      );
+      chmodSync(path.join(ws.bin, 'bunx'), 0o755);
+      const out = cli(ws, [
+        resultsFile,
+        '--update-baseline',
+        '--component',
+        'button',
+      ]);
+      expect(out.status).toBe(0);
+      expect(out.all).toContain('Merged baseline');
+
+      // 1. Prettier never saw the committed path.
+      const target = readFileSync(
+        path.join(ws.root, 'prettier-target'),
+        'utf8'
+      ).trim();
+      expect(path.basename(target)).toContain('.tmp.json');
+      expect(target).not.toBe(path.join(ws.root, baselineRel));
+
+      // 2. What arrived at the committed path still parses and still holds the
+      // merge: the scribble was undone by re-serialising, then renamed in.
+      const raw = readFileSync(path.join(ws.root, baselineRel), 'utf8');
+      const after = JSON.parse(raw);
+      expect(after.components.button.sha).toBe('dead123');
+      expect(after.components.button.cellKeys.length).toBeGreaterThan(0);
+
+      // 3. The note tells a human to format the file that *exists*, not the temp
+      // name prettier was handed and that no longer exists.
+      expect(out.all).toContain('bun run format:write');
+      expect(out.all).toContain(path.basename(baselineRel));
+      expect(out.all).not.toContain('.tmp.json');
+
+      // 4. And the formatter's scratch file did not stay in the committed dir.
+      expect(
+        readdirSync(path.dirname(path.join(ws.root, baselineRel))).filter(
+          (name) => name.includes('.tmp')
+        )
+      ).toEqual([]);
     });
   });
 
@@ -1814,7 +2271,7 @@ describe('report.mjs merges one component', () => {
         ws.root,
         'full.json',
         makeRun({
-          scenarios: ['mount', 'mount.slider', 'mount.button'],
+          components: ['switch', 'slider', 'button'],
           machine: fixtureMachine('ios', { hostname: MINE }),
         })
       );
