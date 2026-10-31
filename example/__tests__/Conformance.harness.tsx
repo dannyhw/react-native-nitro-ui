@@ -48,26 +48,33 @@
  *
  * ## The recycle rule, and what it can reach on each platform
  *
- * The two platforms do not run the same code here, and round 1 of this file had it backwards.
+ * Both platforms run the reset today, and F6 is what established that for Android rather than
+ * reading it off a call graph. Round 1 of this file had it the other way round, and what it
+ * wrote was true of RN 0.80 and false of the version this repo ships on.
  *
  * - **iOS recycles by default.** Nitrogen reports each of our views as recyclable when it
  *   implements `RecyclableView` (`NitroUiAutolinking.swift:71`), which all seven do, and
  *   nothing overrides that — so Fabric's registry enqueues the instance on unmount, calling
  *   `prepareForRecycle` as it does (`RCTComponentViewRegistry.mm:117`), and dequeues it for
- *   the next mount of that component (`:95`). The reset is live code on this platform, which
- *   is why the residue probes below are real tests on iOS and not only on paper.
- * - **Android does not reach it.** Nitro's generated manager wires recycling up and would call
- *   `prepareForRecycle` from `prepareToRecycleView`, but that method is a legacy-architecture
- *   hook: its only caller is `ViewManager.recycleView` (`ViewManager.java:269`), and Fabric's
- *   Android mounting layer calls `onDropViewInstance` and nothing else
- *   (`SurfaceMountingManager.kt:1060`). So `onDropView` runs on Android and `prepareForRecycle`
- *   does not — `FOLLOWUPS.md` B1's "recycling path has no leak gate" is that gap, and
- *   `docs/tasks/B1-android-mount-oom.report.md` is where `onDropView` is proved instead.
+ *   the next mount of that component (`:95`).
+ * - **Android recycles under a flag the example app now turns on.** X4 recorded that
+ *   `prepareToRecycleView` is a legacy-architecture hook whose only caller is
+ *   `ViewManager.recycleView`, so Fabric's Android layer "calls `onDropViewInstance` and
+ *   nothing else". On RN 0.88 that is not the whole graph: `ViewManager.onDropViewInstance`
+ *   also calls `prepareToRecycleView` and pushes the view onto a pool, and
+ *   `createViewInstance(tag, …)` pops it — guarded on `enableViewRecycling`, whose default is
+ *   `false`, which is presumably why the hook looked dead. The example app sets that flag
+ *   (`example/android/.../NitroUiFeatureFlags.kt`), and `example/__tests__/Recycling.harness.tsx`
+ *   proves the consequence rather than assuming it: a dropped control answers `recycled` on
+ *   the perf ring, and a *later* mount reads `recycles >= 1` from counters the reset
+ *   deliberately does not clear — which a freshly allocated view cannot do under any
+ *   circumstance.
  *
- * Consequence for this suite, stated plainly: the residue probes can only go red on iOS, and
- * on Android the rule's failure mode is a prop that stops arriving. Both halves run on both
- * platforms, and `checkInAppFixtures` insists every control has a probe or a written reason it
- * cannot have one, so the list of unprovable controls cannot grow by omission.
+ * Consequence for this suite, stated plainly: **the residue probes can go red on either
+ * platform**, and both have been shown red (the report lists the per-control mutations and
+ * the assertion each one turned up). Both halves run on both platforms, and
+ * `checkInAppFixtures` insists every control has a probe or a written reason it cannot have
+ * one, so the list of unprovable controls cannot grow by omission.
  *
  * @file Gates: `harness:ios`, `harness:android`. Discovered automatically:
  *       `example/jest.harness.config.mjs` matches any `*.harness.tsx` under a
@@ -221,13 +228,7 @@ const SHARED = {
       "component": "Menu",
       "rule": "recycle-reset",
       "followups": "X4 recycle rule: Menu holds residue no read-out can show, so the rule cannot fail for it",
-      "detail": "a Menu’s open popup is native-owned state (D29), and the only read-out of it, `nuiTestMenuReport()`, answers `-1` for `expanded` on iOS — the one platform that actually recycles. Android can read it and never recycles, so nothing can survive there to be seen."
-    },
-    {
-      "component": "SegmentedControl",
-      "rule": "recycle-reset",
-      "followups": "X4 recycle rule: SegmentedControl holds residue no read-out can show, so the rule cannot fail for it",
-      "detail": "a pick moves the displayed index and the handshake counts, and neither platform reports the drawn index: the handle’s `selectedIndex` is `model.state.js`, and `nuiTestPixelReport()` answers a colour. The residue is real; the blindness is too."
+      "detail": "a Menu’s open popup is native-owned state (D29). Since F6 the blind half is iOS alone: no harness gesture reaches a SwiftUI `Menu`, and `nuiTestMenuReport()` answers `-1` for `expanded` there. Android reads the flag and recycles, and its reset line is guarded by `MenuModelTest`."
     }
   ]
 };
@@ -306,6 +307,14 @@ type Handle = {
   nuiTestSelect?(...fields: number[]): void;
   /** Progress's displayed fraction, as the view draws it, plus its animation flag. */
   nuiTestDisplayedValue?(): string;
+  /**
+   * SegmentedControl's answer to "which segment is the row painting" — `displayed=<index>`,
+   * or `displayed=none` before the hosted row has been handed a selection at all. F6's
+   * read-out, written in the SwiftUI body / the composable rather than in a prop setter, and
+   * the recycle rule's oracle for this control: the handle's `selectedIndex` returns
+   * `state.js`, which is what React sent, so it cannot show what the reset owns.
+   */
+  nuiTestDisplayedIndex?(): string;
 };
 
 /**
@@ -416,10 +425,46 @@ const pressControl = async (testId: string): Promise<void> => {
 };
 
 /**
- * Press the right-hand end of a control's box - the last segment of a SegmentedControl, which
- * names an index no default does. The suite's own SegmentedControl tests press at the ends for
- * the same reason (`SegmentedControl.harness.tsx:413`).
+ * Tap segment `index` of `testId`, at the centre of the slice of its box that segment owns.
+ *
+ * The same arithmetic `SegmentedControl.harness.tsx:405` uses, and it is fair here because
+ * this fixture's row is not over-wide: three short labels, so the box is the row's own width
+ * and each third of it is one segment. A press is the only oracle that can put a SegmentedControl
+ * in state no prop describes — the handle's `selectedIndex` echoes what React sent, so driving
+ * the value through props would leave nothing for the reset to clear.
  */
+const tapSegmentOf = async (
+  testId: string,
+  index: number,
+  optionCount: number
+): Promise<void> => {
+  const box = harnessUi.queryByTestId(testId);
+  if (box == null) {
+    throw new Error(`Cannot tap "${testId}" - the harness sees no box for it.`);
+  }
+  await userEvent.pressAt(
+    box.x + (box.width * (2 * index + 1)) / (2 * optionCount),
+    box.y + box.height / 2
+  );
+};
+
+/**
+ * Which segment a SegmentedControl's row is painting, once it has painted one.
+ *
+ * Polling here is safe in a way the DatePicker probe's read is not: the reset clears this
+ * report to the word `none`, so waiting for a real index is waiting for the *new* mount to
+ * draw, not for a reset to happen. A control that kept its previous owner's index answers
+ * that index the moment you ask, so this can never go green on a missing reset — the worst it
+ * can do is time out on a row that never drew, which the caller reports as a finding.
+ */
+async function drawnIndexOf(testId: string): Promise<string> {
+  const report = await pollReport(
+    () => handleFor(testId).nuiTestDisplayedIndex?.() ?? '',
+    (next) => next !== 'displayed=none' && next !== '',
+    `the drawn index of "${testId}"`
+  );
+  return /displayed=(\S+)/.exec(report)?.[1] ?? report;
+}
 
 /** Poll a control's own report until it answers the way `until` wants, then hand it back. */
 async function pollReport(
@@ -1541,20 +1586,122 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
     ],
     probe: {
-      blindSpot:
-        'it has residue and no way to see it. A pick really does move the ' +
-        'displayed index and the handshake counts, but neither platform reports ' +
-        'the drawn index: the handle’s `selectedIndex` is `model.state.js`, which ' +
-        'is what React sent, and `nuiTestPixelReport()` answers a colour, not a ' +
-        'position. A press oracle cannot stand in either - iOS emits from the ' +
-        'selection binding without asking whether the index changed ' +
-        '(HybridNitroUiSegmentedControl.swift:150-156), so the same press reports ' +
-        'an event whether or not the control was already there, and the answer ' +
-        'would differ per platform for reasons that are not the reset’s. This is a ' +
-        'hole in the guard, not an exemption from it: the state is real, so the ' +
-        'coverage table says **failing** and points at the FOLLOWUPS line whose fix ' +
-        'is a read-out (a `nuiTestDisplayedIndex`, alongside Progress’s and ' +
-        'DatePicker’s).',
+      leaveBehind:
+        'a tapped segment on an uncontrolled control, then a second owner whose ' +
+        'own `defaultSelectedIndex` is 1 — neither the residue (2) nor what the ' +
+        'reset writes (0), so only the re-armed one-shot can put the row there',
+      first: () => (
+        <SegmentedControl
+          options={['One', 'Two', 'Three']}
+          defaultSelectedIndex={0}
+          onChange={(event) =>
+            recordRecycle('conformance-segmented')(event.index)
+          }
+          testID="conformance-segmented"
+          accessibilityLabel="Conformance segmented"
+          hybridRef={captureFor('conformance-segmented')}
+        />
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        // A finger, not a prop: `defaultSelectedIndex` stays 0 for the whole fixture, so
+        // the index 2 the row ends up on exists nowhere in what React sent and can only
+        // arrive from the control's own state.
+        await tapSegmentOf('conformance-segmented', 2, 3);
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual(['conformance-segmented:2'])
+        );
+        // And the residue is *measured* through the read-out this probe depends on, before
+        // that read-out is trusted: a `nuiTestDisplayedIndex` that echoed the prop would
+        // answer 0 here (React never sent 2) and go red on this line rather than banking a
+        // pass for the second mount. 2 is also what `prepareForRecycle` does *not* write,
+        // so the second read below cannot be this number arriving late.
+        await pollReport(
+          () =>
+            handleFor('conformance-segmented').nuiTestDisplayedIndex?.() ?? '',
+          (report) => report === 'displayed=2',
+          'the first owner’s tap, as the row draws it'
+        );
+      },
+      second: () => (
+        <SegmentedControl
+          options={['One', 'Two', 'Three']}
+          defaultSelectedIndex={1}
+          onChange={(event) =>
+            recordRecycle('conformance-segmented')(event.index)
+          }
+          testID="conformance-segmented"
+          accessibilityLabel="Conformance segmented"
+          hybridRef={captureFor('conformance-segmented')}
+        />
+      ),
+      read: async () => [
+        {
+          // The row's own answer, not the handle's `selectedIndex`: a second owner that
+          // sends no `selectedIndex` sees `null` from that getter either way, which is the
+          // blindness X4 recorded as "residue no read-out can show". Index 1 is reachable
+          // only through `prepareForRecycle` re-arming `didApplyDefault`
+          // (`HybridNitroUiSegmentedControl.swift:518`, `HybridNitroUiSegmentedControl.kt`
+          // `reset`) so the second owner's own default can apply: the residue is 2 and the
+          // reset writes 0, so this is the third value the arrangement can produce, and the
+          // line is specific to the one-shot rather than to the display write beside it.
+          label: 'the segment the row paints',
+          expected: '1',
+          actual: await drawnIndexOf('conformance-segmented'),
+        },
+      ],
+    },
+    controlledProbe: {
+      leaveBehind:
+        'a tapped segment on an uncontrolled SegmentedControl, then a second owner ' +
+        'that is *controlled* on the first one — whose index cannot be shown unless ' +
+        'the counters came back at zero',
+      first: () => (
+        <SegmentedControl
+          options={['One', 'Two', 'Three']}
+          defaultSelectedIndex={0}
+          onChange={(event) =>
+            recordRecycle('conformance-segmented')(event.index)
+          }
+          testID="conformance-segmented"
+          accessibilityLabel="Conformance segmented"
+          hybridRef={captureFor('conformance-segmented')}
+        />
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        await tapSegmentOf('conformance-segmented', 2, 3);
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual(['conformance-segmented:2'])
+        );
+      },
+      // Controlled on 0, the opposite of the residue. `useControlled.ts:56` sends
+      // `mostRecentEventCount` 0 with it, so the only thing that can accept the write is
+      // `nativeEvents` back at 0 — which is what the reset's handshake assignment does and
+      // nothing else does. Left at the previous owner's count, `reconcile()` sees
+      // `jsEvents 0 < nativeEvents 1`, refuses it as stale, and the row keeps painting
+      // segment 2 while the app believes it asked for 0.
+      second: () => (
+        <SegmentedControl
+          options={['One', 'Two', 'Three']}
+          selectedIndex={0}
+          onChange={(event) =>
+            recordRecycle('conformance-segmented')(event.index)
+          }
+          testID="conformance-segmented"
+          accessibilityLabel="Conformance segmented"
+          hybridRef={captureFor('conformance-segmented')}
+        />
+      ),
+      read: async () => [
+        {
+          // Read through the row, not the handle: `selectedIndex` answers `state.js`, which
+          // is 0 because that is what React sent, whether or not the write was accepted.
+          label: 'the segment the controlled second mount paints',
+          expected: '0',
+          actual: await drawnIndexOf('conformance-segmented'),
+        },
+      ],
     },
   },
   {
@@ -1740,8 +1887,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     ],
     probe: {
       leaveBehind:
-        'a pick of the last option on an uncontrolled control, then the same pick ' +
-        'again - which only counts as a choice if the selection has been reset',
+        'a pick of option 1 on an uncontrolled control, then a second owner whose ' +
+        'own `defaultSelectedIndex` is 2 — so picking 0 fires only if the one-shot ' +
+        'was re-armed and the second owner’s default is what the control is standing on',
       first: () => (
         <Picker
           options={['One', 'Two', 'Three']}
@@ -1754,15 +1902,15 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       act: async () => {
         const before = eventsSince(0).length;
-        const choose = () => handleFor('conformance-picker').nuiTestSelect?.(2);
+        const choose = () => handleFor('conformance-picker').nuiTestSelect?.(1);
         choose();
         await waitFor(() =>
-          expect(eventsSince(before)).toEqual(['conformance-picker:2'])
+          expect(eventsSince(before)).toEqual(['conformance-picker:1'])
         );
         // The same choice again: `applyUserSelection` returns without emitting when the
         // index equals what is displayed (`HybridNitroUiPicker.swift:103`, whose comment
         // names this as the thing that makes a *rolled-back* selection observable). So the
-        // second call says, in the negative, that the control really is on 2.
+        // second call says, in the negative, that the control really is on 1.
         choose();
         await settle(300);
         if (eventsSince(before).length !== 1) {
@@ -1772,10 +1920,18 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           );
         }
       },
+      // Defaulted to **2**, which is neither the residue (1) nor what `prepareForRecycle`
+      // writes into `displayed` (0). That is the line-specificity X4 re-review 2 asked for:
+      // round 1's second owner defaulted to `0`, the reset's own number, so deleting
+      // `didApplyDefault = false` stayed green — the control was already on 0 for the wrong
+      // reason and both arrangements emitted the same events. Now the three states are three
+      // different answers to the same question: one-shot alive → on 2, so picking 0 moves it
+      // and fires; one-shot dead → on 0 (the reset's write), so picking 0 changes nothing and
+      // stays silent.
       second: () => (
         <Picker
           options={['One', 'Two', 'Three']}
-          defaultSelectedIndex={0}
+          defaultSelectedIndex={2}
           onChange={(event) => recordRecycle('conformance-picker')(event.index)}
           testID="conformance-picker"
           accessibilityLabel="Conformance picker"
@@ -1784,26 +1940,28 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       read: async () => {
         const before = eventsSince(0).length;
-        handleFor('conformance-picker').nuiTestSelect?.(2);
-        // The event is the reset reporting for itself: the previous owner left this control on
-        // 2, and a control that still believes it is there emits nothing for a choice that
-        // would change nothing. Silence *is* the residue, so it gets reported, not waited away.
+        handleFor('conformance-picker').nuiTestSelect?.(0);
+        // The event is the reset reporting for itself. Silence *is* the residue, so it gets
+        // reported rather than waited away: `waitFor` here would turn the missing reset into
+        // a Jest timeout that names neither value.
         //
-        // What this oracle can and cannot separate, measured rather than assumed: it answers
-        // "is the control still on 2?" and nothing finer, so either reset line on its own is
-        // enough to pass it — `prepareForRecycle` writes `displayed: 0`
-        // (`HybridNitroUiPicker.swift:504`) and the one-shot would write the second owner's
-        // default, and both are "not 2". Deleting one line therefore stays green here, and it
-        // is `controlledProbe` below that goes red for the counters on their own. The other
-        // three probed controls are arranged so their second owner's default is a *third*
-        // value, which makes this one line-specific; the Picker cannot be, because its only
-        // read-out is "did picking this change anything", not the index it is standing on
-        // (`nuiTestMenuReport()` answers `expanded`/`live`/`rows` and no index).
+        // What this oracle separates, and what it cannot. Its one question is "are you
+        // standing on 0?", and a pick is destructive - a firing pick moves the control, so a
+        // second question in the same read would be answered about the first pick's result.
+        // That leaves exactly two things to ask of this shape, and the pair splits them:
+        // this probe asks about `didApplyDefault` (the second owner's default of 2 is what
+        // makes that the only answer a healthy control can give), and `controlledProbe`
+        // below asks about the handshake counters - which is also where a *wholesale* reset
+        // deletion shows up, because a recycled control left on 2 with its counts intact
+        // refuses the controlled write and goes silent on that probe, not this one. Nothing
+        // an uncontrolled control does ever reads those counts, so this probe could not ask
+        // that question even with a second read to spend.
         return [
           {
-            label: 'choosing the previous owner’s option again emits',
-            expected: 'conformance-picker:2',
-            actual: await eventsSettled(before, 'conformance-picker:2'),
+            label:
+              'choosing an option other than the second owner’s default emits',
+            expected: 'conformance-picker:0',
+            actual: await eventsSettled(before, 'conformance-picker:0'),
           },
         ];
       },
@@ -1894,22 +2052,28 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
-    // The props half runs; the residue half cannot, and that is a hole rather than a pass.
-    // A Menu's only native-owned state is whether its popup is open (DECISIONS D29: no
-    // `open()`/`close()` in v0.1, so only a gesture puts it there and no harness gesture can
-    // reach a SwiftUI `Menu`), and the one read-out of it — `nuiTestMenuReport`'s `expanded` —
-    // answers `-1` on iOS (`HybridNitroUiMenu.swift:750-765`), the only platform that reaches
-    // `prepareForRecycle` at all ("The recycle rule … per platform" in `FOLLOWUPS.md`).
-    // Android reads `expanded` fine and never recycles, so there is nothing there to see
-    // either. Round 1 called this `noProbe` and the coverage table said `covered`.
+    // The props half runs; the residue half runs nowhere, and what that hole *is* changed in
+    // F6 so the row describes today's two platforms rather than the pair X4 measured. A Menu's
+    // only native-owned state is whether its popup is open (DECISIONS D29: no `open()`/
+    // `close()` in v0.1, so only a gesture puts it there and no harness gesture can reach a
+    // SwiftUI `Menu`). `nuiTestMenuReport` reads that flag for real on **Android**, which F6
+    // proved also recycles (`example/__tests__/Recycling.harness.tsx`) — so the Android half
+    // is no longer blind, and `MenuModelTest` in `android/src/test` covers the reset line the
+    // fixture cannot reach from a device: `MenuModel.reset()` clears `expanded` ahead of every
+    // other field, and the popup's own witness closes it when its composition is disposed
+    // (`HybridNitroUiMenu.kt`'s `MenuWitness.onDispose`), which a device run goes through
+    // first. The failing half is **iOS**, where both doors are shut at once: no gesture
+    // reaches the control (D29) *and* the read-out answers `-1`
+    // (`HybridNitroUiMenu.swift:762`), and the coverage table has no way to mark one platform
+    // of a cell — see the report's follow-up for splitting it.
     probe: {
       blindSpot:
         'a Menu holds one piece of state no prop rewrites - whether its popup is ' +
-        'open - and the read-out for it answers `-1` on iOS, the only platform that ' +
-        'recycles. Android can read it and never recycles. So the line that clears ' +
-        'it (`MenuModel.reset` writing `expanded = false`, ' +
-        '`HybridNitroUiMenu.kt:483`) has no observation on either side that could ' +
-        'show it missing.',
+        'open - and on iOS, the platform that recycles by default, neither door is ' +
+        'open: no harness gesture can reach a SwiftUI `Menu` (D29), and the ' +
+        'read-out for the flag answers `-1` there ' +
+        '(`HybridNitroUiMenu.swift:762`). Android reads the flag and recycles too, so ' +
+        'the blind half is one platform, not both.',
     },
   },
 ];
