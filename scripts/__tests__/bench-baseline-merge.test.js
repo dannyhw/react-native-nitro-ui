@@ -54,6 +54,7 @@ import {
   cellKey,
   buildBaseline,
   cellsForComponent,
+  componentProvenance,
   componentsInBaseline,
   isCompatibleBaseline,
   mergeBaselineProblems,
@@ -1103,11 +1104,24 @@ describe('the merge itself only touches its own component', () => {
       components: ['button', 'slider'],
       nitroUi: 200_000,
     });
+    const built = buildBaseline(wholeRun);
+    // A comparison-arm row the run measured but skipped, for the *other* component.
+    // `skippedCells` is the block a merge has to reason about row by row, and a
+    // healthy fixture run has none of its own, so without this the skipped-side
+    // filter has nothing to filter and dropping it would go unnoticed.
+    const foreignSkip = 'mount.slider:expo-ui-shared-host:50';
+    built.skippedCells[foreignSkip] = {
+      scenario: 'mount.slider',
+      implementation: 'expo-ui-shared-host',
+      n: 50,
+      skipReason: 'presentedNs incomplete',
+      skipReasons: ['presentedNs: 12 of 160 samples arrived'],
+    };
     const merged = mergeComponentBaseline({
       baseline: before,
       run: wholeRun,
       component: 'button',
-      built: buildBaseline(wholeRun),
+      built,
       componentsBase: seededComponentProvenance(before, null),
       dependencies: null,
       comparabilityNotes: [],
@@ -1120,6 +1134,12 @@ describe('the merge itself only touches its own component', () => {
         JSON.stringify(cell),
       ]);
     }
+    // And the skipped table gained nothing: `button` has no skipped rows, so the
+    // other component's must not have been copied in either.
+    expect(Object.keys(merged.baseline.skippedCells).sort()).toEqual(
+      Object.keys(before.skippedCells).sort()
+    );
+    expect(merged.baseline.skippedCells[foreignSkip]).toBeUndefined();
     // And the entry describes 28 button cells, not 56 of two components.
     expect(merged.addedCells).toBe(
       Object.keys(cellsForComponent(buildBaseline(wholeRun).cells, 'button'))
@@ -1131,6 +1151,28 @@ describe('the merge itself only touches its own component', () => {
     expect(
       merged.changedCells.some((entry) => !entry.includes('.button'))
     ).toBe(false);
+  });
+
+  /**
+   * `componentProvenance()` is also what a full mint writes, and a mint is allowed on
+   * a plan the merge is not, so this asks the writer directly rather than through a
+   * merge that would refuse the run first: the entry must carry the plan and the
+   * launch count of the run it describes. A row that said `full` because the code
+   * wanted `full` would tell a reader a row is gateable when it was measured on the
+   * quick plan, and nothing else in the file would disagree with it.
+   */
+  it('records the run’s plan and launch count, not the ones a baseline is minted under', () => {
+    const thin = makeRun({ overrides: { plan: 'quick', launches: 4 } });
+    const entry = componentProvenance(thin, 'slider', [
+      'mount.slider:nitro-ui:50',
+      'update.slider:nitro-ui:50',
+    ]);
+    expect([entry.plan, entry.launches]).toEqual(['quick', 4]);
+    expect(entry.component).toBe('slider');
+    expect(entry.cellKeys).toEqual([
+      'mount.slider:nitro-ui:50',
+      'update.slider:nitro-ui:50',
+    ]);
   });
 
   /**
@@ -1918,6 +1960,12 @@ describe('report.mjs merges one component', () => {
       ]);
       expect(out.status).toBe(2);
       expect(out.all).toContain('of other components');
+      // And the completeness half counts *menu's* rows, not the run's: 28 are
+      // expected and none were measured. A count taken from the record would tell a
+      // human "measured 84 of the 112", which reads like a near-complete merge.
+      expect(out.all).toContain(
+        'measured 0 of the 28 cells that plan measures'
+      );
       // The file as it was written: byte for byte, so nothing under `menu` and no
       // re-measured switch/slider row.
       expect(readFileSync(path.join(ws.root, baselineRel), 'utf8')).toBe(
