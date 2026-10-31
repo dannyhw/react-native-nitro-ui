@@ -127,6 +127,15 @@ describe('the Android half of a dry run', () => {
     ).toEqual({
       deviceKey: 'android33-emu-pixel7',
       detail: expect.stringContaining('not attached'),
+      // The device identity a merge pre-flight compares with a baseline file's
+      // (X14): the API level read from the AVD's own files, and a null system-image
+      // fingerprint because only a booted device can answer that.
+      device: {
+        avd: 'nitroui_b',
+        sdk: '33',
+        image: null,
+        profile: 'pixel_7',
+      },
       problem: null,
     });
   });
@@ -189,6 +198,9 @@ describe('the Android half of a dry run', () => {
       deviceKey: null,
       detail: expect.stringContaining('profile unknown'),
       problem: expect.stringContaining('cannot be built from this AVD'),
+      // The half-read identity is reported as the half-read it is: no profile, and
+      // never a value filled in from this repo's own requirement (X14).
+      device: { avd: 'nitroui_a', sdk: '30', image: null, profile: null },
     });
     // The same for the other half: a profile with no API level.
     expect(
