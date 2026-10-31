@@ -17,6 +17,7 @@
 import { describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   copyFileSync,
   mkdtempSync,
   readFileSync,
@@ -90,6 +91,28 @@ describe('the shared free-port lsof stub', () => {
     ];
     for (const p of paths) expect(p).toBe(FREE_LSOF.NITRO_UI_LSOF_BIN);
     expect(new Set(paths).size).toBe(1);
+  });
+
+  it('replaces a stub on disk that no longer matches what the helper says', () => {
+    // The fixed path is a cache, and a cache that is never validated is how a helper starts
+    // lying: if the shipped contents ever change while an old stub sits in the temp directory,
+    // every suite keeps getting the old answer. So correctness is decided by content, not by
+    // the file existing - and a stale one is repaired on the next import.
+    const tmp = mkdtempSync(join(tmpdir(), 'x15-stub-stale-'));
+    try {
+      const first = importInFreshProcess(tmp);
+      writeFileSync(first.path, '#!/bin/sh\nexit 0\n');
+      chmodSync(first.path, 0o755);
+      const second = importInFreshProcess(tmp);
+      expect(second.path).toBe(first.path);
+      expect(readFileSync(first.path, 'utf8')).not.toBe('#!/bin/sh\nexit 0\n');
+      const run = spawnSync(first.path, ['-nP', '-iTCP', '-sTCP:LISTEN'], {
+        encoding: 'utf8',
+      });
+      expect(run.status).toBe(1);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   it('answers "nothing is listening" the way the real tool does', () => {
