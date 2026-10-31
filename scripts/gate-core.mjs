@@ -2962,6 +2962,26 @@ export function canonicalGateName(base, extraArgs = []) {
  * @returns {{gate: string, argv: string[], cwd: 'repo'|'example',
  *   platform: 'ios'|'android'|null, bench: boolean}}
  */
+/**
+ * The platform a bench run says it will drive, read out of its own arguments.
+ *
+ * Spelled the way `run.mjs` reads it - `flag(argv, '--platform')`, i.e. the token
+ * after `--platform` - because this is only worth recording when the runner would
+ * agree: a `--platform=ios` or a colon-packed `bench:--platform:ios` is a run that
+ * refuses to start, and the ledger should say "no platform", the same as a `check`.
+ * Anything but `ios`/`android` (absent, a typo, another flag) is null for the same
+ * reason.
+ *
+ * @param {string[]} args the bench's own arguments
+ * @returns {'ios' | 'android' | null}
+ */
+export function benchPlatformFromArgs(args = []) {
+  const index = args.indexOf('--platform');
+  if (index === -1 || index + 1 >= args.length) return null;
+  const value = args[index + 1];
+  return value === 'ios' || value === 'android' ? value : null;
+}
+
 export function resolveGate(name, extraArgs = []) {
   const args = [...extraArgs];
   if (name === 'check') {
@@ -3044,8 +3064,17 @@ export function resolveGate(name, extraArgs = []) {
       gate: canonicalGateName('bench', extraArgsForRun),
       argv: ['node', 'scripts/bench/run.mjs', ...extraArgsForRun],
       cwd: 'repo',
+      // Deliberately null: what `platform` keys is the device claim, the Metro
+      // pre-flight and the harness suite timings, none of which a bench run today.
       platform: null,
       bench: true,
+      // The bench's own `--platform`, for the ledger (X15 item 4). A5's iOS bench was
+      // recorded as `platform: android` with an Android serial: a bench lease covers
+      // both halves of a pair, so reading the environment answers "which devices does
+      // this task own", not "which device did this run drive". The runner refuses to
+      // start without `--platform`, so a bench that never named one has nothing to
+      // record - the environment must not fill it in.
+      benchPlatform: benchPlatformFromArgs(extraArgsForRun),
     };
   }
   throw new Error(

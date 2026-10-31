@@ -1714,7 +1714,15 @@ function metroPreflight(env = process.env, run) {
 async function runGateUnclaimed(name, resolved, options = {}) {
   const branch = currentBranch();
   const before = readTrees();
-  const device = deviceFromEnv(process.env, resolved.platform);
+  // A bench says which device it drives (`--platform`) and a lease covers both
+  // halves of a pair, so the bench's own answer wins over the environment's guess -
+  // which is how A5's iOS bench came to be recorded on an Android serial (X15 item 4).
+  // Every other gate passes its platform, or null, which keeps the old reading: no
+  // platform of its own means the lease's environment describes the run.
+  const device = deviceFromEnv(
+    process.env,
+    resolved.platform ?? resolved.benchPlatform ?? null
+  );
   const startedAt = Date.now();
   const startedLoad = os.loadavg()[0] ?? null;
   const samples = [startedLoad];

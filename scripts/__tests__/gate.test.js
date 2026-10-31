@@ -770,6 +770,81 @@ describe('resolveGate', () => {
     ]);
   });
 
+  it("takes a bench platform from the bench's own --platform (X15)", () => {
+    // A5's iOS bench was recorded as `platform: android` with an Android serial,
+    // because the ledger read the lease env and a bench lease covers both sides of
+    // a pair. The bench knows which device it is driving - it is the one argument it
+    // cannot run without - so that is what the line has to carry.
+    expect(
+      resolveGate('bench', ['--platform', 'ios', '--plan', 'full'])
+        .benchPlatform
+    ).toBe('ios');
+    expect(
+      resolveGate('bench', ['--plan', 'quick', '--platform', 'android'])
+        .benchPlatform
+    ).toBe('android');
+    // The colon spelling a harness gate accepts (`harness:android:ColdSizing`) is not
+    // a bench's: here the whole `--platform:ios:--plan:quick` arrives as one argument,
+    // which `run.mjs` refuses for itself. The ledger must not read a platform out of
+    // something the runner cannot parse.
+    expect(
+      resolveGate('bench:--platform:ios:--plan:quick').benchPlatform
+    ).toBeNull();
+    // The field is separate from `platform` on purpose: `platform` is what claims a
+    // device, pre-flights Metro and asks for per-suite timings, and a bench does none
+    // of those. Reading the run's own device is all this changes.
+    expect(resolveGate('bench', ['--platform', 'ios']).platform).toBeNull();
+    expect(resolveGate('bench', ['--platform', 'ios']).bench).toBe(true);
+    // No `--platform`, no claim: the runner refuses that run itself, and the ledger
+    // must not invent a platform for it.
+    expect(resolveGate('bench', ['--plan', 'quick']).benchPlatform).toBeNull();
+    expect(
+      resolveGate('bench', ['--platform', 'solar']).benchPlatform
+    ).toBeNull();
+    // A value that is another flag is not a platform, and neither is one that is
+    // somebody else's option value.
+    expect(resolveGate('bench', ['--platform']).benchPlatform).toBeNull();
+    expect(
+      resolveGate('bench', ['--only', '--platform']).benchPlatform
+    ).toBeNull();
+    expect(
+      resolveGate('bench', ['--compare', 'HEAD', '--platform', 'ios'])
+        .benchPlatform
+    ).toBe('ios');
+    // `--platform=ios` is not what `run.mjs` parses (its `flag()` looks for the
+    // token), so recording a platform there would describe a run that cannot start.
+    expect(
+      resolveGate('bench', ['--platform=android']).benchPlatform
+    ).toBeNull();
+  });
+
+  it("records the bench platform's device, not the lease's other side", () => {
+    // The other half of the incident: an iOS bench on a lease that exports both
+    // sides used to print `ANDROID_SERIAL`, because "which device" was answered from
+    // the environment rather than from the platform the run named.
+    const env = {
+      NITRO_UI_LEASE_ID: 'A5-1',
+      IOS_SIM_UDID: 'UDID-A',
+      IOS_SIM: 'iPhone 17',
+      ANDROID_SERIAL: 'emulator-5574',
+      ANDROID_AVD: 'nitro-ui-a',
+    };
+    // The old reading, which is what made the wrong line: no platform of its own, so
+    // the environment's Android side answered for an iOS run.
+    expect(deviceFromEnv(env, null).platform).toBe('android');
+    const resolved = resolveGate('bench', [
+      '--platform',
+      'ios',
+      '--plan',
+      'quick',
+    ]);
+    expect(deviceFromEnv(env, resolved.benchPlatform)).toEqual({
+      platform: 'ios',
+      device: 'UDID-A',
+      lease: 'A5-1',
+    });
+  });
+
   it('refuses a gate name it does not know, rather than running something', () => {
     expect(() => resolveGate('harness:both')).toThrow(
       /harness needs a platform/
