@@ -6,49 +6,75 @@
 ## Summary
 
 **Android recycles, and X4's report said otherwise.** Its claim was that `prepareToRecycleView`
-is a legacy hook whose only caller is `ViewManager.recycleView`, so Fabric "calls
-`onDropViewInstance` and nothing else". On RN 0.88 that is incomplete: `onDropViewInstance` also
-prepares the view and pushes it onto a pool, and `createViewInstance(tag, …)` pops it — guarded
-on `enableViewRecycling`, whose default is `false`, which is why reading the graph in a flag-off
-app looked like proof. The example app now sets that flag and `Recycling.harness.tsx` measures
-the result: the ring answers `dropped`+`recycled`, and a later mount reports `recycles >= 1` from
-counters the reset deliberately does not clear — which a freshly allocated view cannot do.
+is a legacy hook whose only caller is `ViewManager.recycleView`. On RN 0.88 that is incomplete:
+`onDropViewInstance` also prepares the view and pushes it onto a pool, and `createViewInstance
+(tag, …)` pops it — guarded on `enableViewRecycling`, whose default is `false`, which is why
+reading the graph in a flag-off app looked like proof. The example app now sets that flag and
+`Recycling.harness.tsx` measures the result: the ring answers `dropped`+`recycled`, and a later
+mount reports `recycles >= 1` from counters the reset deliberately does not clear.
 
-Installing the flag was not a one-liner. `loadReactNative` is what calls `SoLoader.init`, and the
-flag accessor's class loads `libreactnative.so` in a static initialiser, so an override installed
+Installing the flag was not a one-liner. `loadReactNative` calls `SoLoader.init`, and the flag
+accessor's class loads `libreactnative.so` in a static initialiser, so an override installed
 ahead of it crashes the launch; installed after, `override` throws, because `load` already
 installed RN's provider and the C++ side takes one per process. The working shape is
 `dangerouslyForceOverride` wrapping the RNOSS/Stable provider by delegation, after `loadReactNative`.
 
 The recycle rule now has teeth on both platforms. SegmentedControl has `nuiTestDisplayedIndex()`,
 written in the body rather than a prop setter, so its cell is a probe and its debt row is gone;
-Picker's second owner now defaults to `2` — this file's own recipe — which makes its
-`didApplyDefault` line the only thing that can pass the cell. Both were shown red on Android.
-Menu's hole **narrowed** to iOS alone (no gesture reaches a SwiftUI `Menu`, and `expanded`
-answers `-1` there); Android's reset line is guarded by a JVM test, so the cell is honest debt.
+Picker's second owner now defaults to `2`, which makes its `didApplyDefault` line the only thing
+that can pass the cell. Both were shown red on Android. Menu's hole **narrowed** to iOS alone (no
+gesture reaches a SwiftUI `Menu`, and `expanded` answers `-1` there); Android's reset line is
+guarded by a JVM test, so the cell is honest debt.
 
 B1's two unasserted branches are counted in the shipping code and asserted at zero — the only
-honest gate for a branch expected never to fire. Doing that exposed a real bug in `38a1e93`: the
-two M2 counters were declared twice, an instance field shadowing the companion's "process-wide"
-total. Screens-pop blanking is not reachable in anything this repo runs — `react-native-screens`
-is not a dependency of the example app — so it is reported rather than fixed.
+honest gate for a branch expected never to fire. That exposed a real bug in `38a1e93`: the two M2
+counters were declared twice, an instance field shadowing the companion's "process-wide" total.
+Screens-pop blanking is unreachable here — `react-native-screens` is not an example dependency —
+so it is reported rather than fixed.
 
-**And the flag caught a product bug.** Turning recycling on made three DatePicker G5 tests red:
-a 131.05 dp `compact` field laid out at its row's 411.43. `sizingPolicy` is host state that the
-`variant` setter moves, and that setter compares against `model.variant` — which
-`prepareForRecycle()` has already restored to `compact`. So the next mount, wanting the default
-variant, saw "no change" and left the previous owner's `fillWidth` in place; the next field was
-then measured by the box instead of by its own text. Android's DatePicker was the only host
-missing the reset (Picker, Progress and iOS's DatePicker all had it). Fixed in product code with
-a changeset, and owned by a new recycle test that asserts the pessimistic pair — widest field
-across rounds against narrowest row — so one stretched field fails it.
+**The flag caught a product bug.** Recycling on made three DatePicker G5 tests red: a 131.05 dp
+`compact` field laid out at its row's 411.43. `sizingPolicy` is host state that the `variant`
+setter moves, and that setter compares against `model.variant` — which `prepareForRecycle()` has
+already restored to `compact`. So the next mount saw "no change" and left the previous owner's
+`fillWidth` in place, and the field was sized by its box. Android's DatePicker was the only host
+missing the line (Picker, Progress and iOS's DatePicker had it). Fixed in product code with a
+changeset, and owned by a new recycle test that asserts the pessimistic pair — widest field
+against narrowest row across rounds — so one stretched field fails it.
 
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1432 tests / 51 suites | `d9036d532516` | 2 m 40 s | start 3.7 / med 4.0 / max 5.4 |
+| `harness:ios` | **PASS** | 227 tests / 16 suites | `d9036d532516` (ios tree) | 3 m 51 s | start 3.9 / med 3.8 / max 4.6 |
+| `harness:android` | **PASS** | 277 tests / 16 suites | `d9036d532516` (android tree) | 8 m 04 s | start 5.7 / med 2.6 / max 5.8 |
+| `real-input:ios` | stale | — | 228eff2a30f1 (not this tree) | 16 m 19 s | start 11.6 / med 11.6 / max 56.7 |
+| `real-input:android` | stale | — | 228eff2a30f1 (not this tree) | 20 m 43 s | start 3.3 / med 2.5 / max 13.0 |
+| `harness:android:Conformance` | stale | 2 failed of 40 tests / 1 suites | 49097b0d9fc5 (not this tree) | 1 m 28 s | start 3.1 / med 3.0 / max 3.8 |
+| `harness:android:DatePicker` | stale | 3 failed of 14 tests / 1 suites | a982ed897a7d (not this tree) | 47.8 s | start 2.0 / med 2.2 / max 2.6 |
+| `harness:android:MountChurn` | stale | 1 failed of 5 tests / 1 suites | 4e4de08b2e69 (not this tree) | 46.0 s | start 2.0 / med 2.3 / max 2.4 |
+| `harness:android:Recycling` | stale | 1 failed of 5 tests / 1 suites | a982ed897a7d (not this tree) | 23.6 s | start 2.2 / med 2.3 / max 2.5 |
+| `harness:android:Recycling:--background` | stale | — | a6bcccf687a4 (not this tree) | 0.7 s | start 8.2 / med 8.2 / max 8.2 |
+| `harness:ios:Conformance` | stale | 2 failed of 40 tests / 1 suites | 4a5f0cc904d7 (not this tree) | 1 m 28 s | start 3.4 / med 3.2 / max 3.5 |
+| `harness:ios:Recycling` | stale | 3 tests / 1 suites | f8b2d79d92b2 (not this tree) | 16.3 s | start 3.0 / med 3.7 / max 3.7 |
 
 `need --for review`:
+
+```
+need: review against .gates/task/F6-recycling-gates.jsonl; code diff base 1d97611 touches ios + android
+  ✓ check — green
+  ✓ harness:ios — green on the ios code tree
+  ✓ harness:android — green on the android code tree
+  note: treated as both platforms (outside the known prefixes): example/__tests__/Conformance.harness.tsx,
+        example/__tests__/Recycling.harness.tsx, scripts/conformance-core.mjs
+need: review is satisfied on this code tree.
+```
+
+The two `real-input:*` rows are the merge-stage bar and were green on `228eff2a30f1`, one
+docs/changeset commit back; the diff since is `android/` + `example/__tests__/`, so they are stale
+rather than missing. The filtered rows are the red proofs above (a filtered run records under its
+own name and satisfies nothing), plus `harness:android:Recycling:--background` from a mistyped
+invocation, recorded in `## Follow-ups`.
 
 ## Red proofs
 
@@ -143,6 +169,12 @@ across rounds against narrowest row — so one stretched field fails it.
   no reproducible shape here; a screen-stack screen would be the place to look for it.
 - tooling: `gate.mjs harness:android:Recycling:--background` recorded one line from a mistyped
   invocation; argument parsing after `--` accepts a flag as a filter name.
+- tooling (`scripts/__tests__/gate.test.js`, X-series — not touched here because X15 is editing
+  gate and lease files): "refuses a device another live run holds" spawns the CLI on
+  `process.env`, so an ambient `NITRO_UI_GATE_DEVICE_FORCE=1` makes it run anyway and the suite
+  fails on `expect(run.status).toBe(1)`. It cost one `check` cycle here. Either strip the
+  variable in `runCli`/`spawnCli` unless a case passes it explicitly, or have the test name it
+  `undefined`; the first keeps any future case from inheriting the same hole.
 
 ## Questions for orchestrator
 
