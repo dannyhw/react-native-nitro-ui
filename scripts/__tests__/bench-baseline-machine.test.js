@@ -389,7 +389,9 @@ describe('opening a machine baseline for --check', () => {
     // Names what the reader reads, not a version handed in by a caller: X14 split
     // the results and baseline constants, and a refusal that quoted one of them by
     // argument could (did) quote the wrong one.
-    expect(opened.refusal.message).toContain('is not a baseline this version reads');
+    expect(opened.refusal.message).toContain(
+      'is not a baseline this version reads'
+    );
     expect(opened.refusal.message).toContain('found v1');
     // Every readable version, not one of them: the point of a refusal is saying
     // what would be accepted, and after X14 that is a set rather than a number.
