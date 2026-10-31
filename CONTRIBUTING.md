@@ -1056,8 +1056,8 @@ A baseline that is missing a component gates nothing for it, and the only way to
 one used to be a full mint — A3's on this machine was 4 h 24 min on iOS and 5 h 13 min
 on Android, so components went missing rather than being added. One component's cells
 can now join an existing file, which is one component's launches instead of the whole
-matrix: Menu on Android is 7 cells x 5 arms x 8 launches = 280 launches, about 48 min at
-the 10.2 s per launch A3 measured:
+matrix: Menu on Android is 7 cells x 5 arms x 8 launches = 280 launches, and the run
+that did it took 35 min:
 
 ```sh
 export NITRO_UI_MACHINE_LABEL=maintainer-mac-2
