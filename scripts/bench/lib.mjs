@@ -7,7 +7,37 @@
  * guardrails".
  */
 
+/**
+ * The version of the **results file** a run writes and every reader accepts. A
+ * results file is a machine-local artifact (`bench/results/`, gitignored), so
+ * bumping this means "re-run the bench", never "migrate a committed file".
+ */
 export const SCHEMA_VERSION = 2;
+
+/**
+ * The version of a **committed baseline** (`bench/baselines/<machine>/<device>.json`).
+ *
+ * Split from `SCHEMA_VERSION` (X14) because a committed file is the one artifact
+ * this repo cannot re-run into existence: the two versions that existed before
+ * the split (v1 pre-D9, v2 ratio-only) are both still readable on disk, so one
+ * number had to mean "what a run writes" and "what a reader accepts" at once.
+ * A baseline written by *this* code is v3; v2 files are read and gated, and are
+ * migrated on the next full re-mint.
+ */
+export const BASELINE_SCHEMA_VERSION = 3;
+
+/**
+ * The baseline versions `--check` may gate against, and that a merge may add a
+ * component's cells to.
+ *
+ * v2 is the shape every committed file has today: one run's ratios, `ratio` plus
+ * `launchRatios` per metric, which is all `baselineTable()` and `baselineNoise()`
+ * read. v3 adds the per-component `components` block that lets one file hold
+ * cells from several runs. Reading is unchanged between them, so `--check` on a
+ * v2 file behaves exactly as it did, and nothing is re-minted for a version.
+ */
+export const READABLE_BASELINE_SCHEMA_VERSIONS = new Set([2, 3]);
+
 export const WARMUP_ITERATIONS = 5;
 export const MEASURED_ITERATIONS = 20;
 export const LAUNCHES_PER_CELL = 4;
@@ -2429,8 +2459,17 @@ export function buildBaseline(run) {
     };
   }
   const timeouts = requestedTimeouts(run);
+  const cellsByComponent = {};
+  for (const [key, cell] of Object.entries(cells)) {
+    const component = componentOf(cell.scenario ?? parseCellKey(key).scenario);
+    (cellsByComponent[component] ??= []).push(key);
+  }
+  for (const [key, cell] of Object.entries(skippedCells)) {
+    const component = componentOf(cell.scenario ?? parseCellKey(key).scenario);
+    (cellsByComponent[component] ??= []).push(key);
+  }
   return {
-    schemaVersion: SCHEMA_VERSION,
+    schemaVersion: BASELINE_SCHEMA_VERSION,
     platform: run.platform,
     deviceKey: run.deviceKey,
     deviceName: run.deviceName,
@@ -2440,6 +2479,28 @@ export function buildBaseline(run) {
     updatedAt: run.createdAt,
     machine: run.machine ?? null,
     art: run.art ?? null,
+    /**
+     * The app versions every cell in this freshly minted file was measured with
+     * (X14). An `@expo/ui` bump moves the two reference arms' ratios and an RN
+     * bump moves `rn-core`, which is the denominator of every row, so a file that
+     * stores no versions cannot tell a merged-in cell from a comparable one.
+     * Written by `run.mjs` from the bench app's own install; never guessed here,
+     * so a run whose app recorded nothing writes nulls and a merge refuses it.
+     */
+    dependencies: dependenciesOf(run),
+    /**
+     * Per-component provenance (X14). In a file from one full run there is one
+     * entry per component and they all say the same thing as the top-level
+     * fields; after a merge they don't, which is the whole reason for the block.
+     */
+    components: Object.fromEntries(
+      Object.entries(cellsByComponent)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([component, keys]) => [
+          component,
+          componentProvenance(run, component, keys),
+        ])
+    ),
     /**
      * The waiting rule this table was recorded under (A4). A baseline's `presented`
      * column only means anything with its timeout attached: raise the wait and
@@ -2452,12 +2513,7 @@ export function buildBaseline(run) {
      * the false claim this field exists to prevent. `baselineBlockers()` refuses such a
      * run, so `null` only appears in a file forced past that guard.
      */
-    timeouts: {
-      mountTimeoutMs:
-        timeouts.mountTimeoutMs > 0 ? timeouts.mountTimeoutMs : null,
-      presentedTimeoutMs:
-        timeouts.presentedTimeoutMs > 0 ? timeouts.presentedTimeoutMs : null,
-    },
+    timeouts: baselineTimeoutRecord({ timeouts }),
     /**
      * Comparison-arm cells left out of `cells`, and why (A4). Empty in a run where
      * every signal arrived.
@@ -2498,9 +2554,20 @@ export function skippedCellNotes(baseline, { display }) {
   return lines;
 }
 
-/** A baseline from before D9 (absolute cells) cannot be gated against. */
+/**
+ * Whether `--check` may gate against this file (D9).
+ *
+ * Accepts every version in `READABLE_BASELINE_SCHEMA_VERSIONS`: a v2 file is a
+ * complete ratio table, and reading it needs nothing the merge added, so the
+ * committed baselines keep gating after the split instead of all four going red
+ * because a writer learned a new field. The pre-D9 v1 file (absolute cells) is
+ * still refused, which is what this predicate was written for.
+ */
 export function isCompatibleBaseline(baseline) {
-  return baseline?.schemaVersion === SCHEMA_VERSION && baseline.cells != null;
+  return (
+    READABLE_BASELINE_SCHEMA_VERSIONS.has(baseline?.schemaVersion) &&
+    baseline.cells != null
+  );
 }
 
 /**
@@ -2645,4 +2712,870 @@ export function newestResultsName(names, sha, platform) {
 /** Accept both a full results run and a bare `cells` map. */
 export function cellsFrom(run) {
   return run?.cells ?? run ?? {};
+}
+
+/* ------------------------- merging one component ------------------------- */
+
+/**
+ * The `cells` a baseline stores for one component, and the same for every run.
+ *
+ * A component is the `action.component` half of a scenario (`mount.slider` ->
+ * `slider`, `mount` -> `switch`), so `componentOf()` is the one reader of the
+ * encoding here too. A cell key is `scenario:implementation:n`, so everything
+ * belonging to one component is contiguous by construction, and everything else
+ * is *other* components' cells.
+ */
+export function cellsForComponent(cells, component) {
+  const out = {};
+  for (const [key, cell] of Object.entries(cells ?? {})) {
+    const scenario = cell?.scenario ?? parseCellKey(key).scenario;
+    if (componentOf(scenario) === component) {
+      out[key] = cell;
+    }
+  }
+  return out;
+}
+
+/** The components a baseline already holds cells for (never the skipped ones). */
+export function componentsInBaseline(baseline) {
+  const found = new Set();
+  for (const [key, cell] of Object.entries(baseline?.cells ?? {})) {
+    found.add(componentOf(cell?.scenario ?? parseCellKey(key).scenario));
+  }
+  return [...found].sort();
+}
+
+/**
+ * What a run's record of the bench app's dependencies looks like, and where it
+ * came from. `null` values mean "not recorded", which is never a match (see
+ * `COMPARABILITY_FIELDS`).
+ *
+ * @param {{ reactNative?: string | null, expoUi?: string | null, source?: string | null } | null | undefined} deps
+ */
+function dependencyRecord(deps) {
+  if (deps == null) {
+    return { reactNative: null, expoUi: null, source: null };
+  }
+  return {
+    reactNative: deps.reactNative ?? null,
+    expoUi: deps.expoUi ?? null,
+    source: deps.source ?? null,
+  };
+}
+
+/** The app versions a run recorded, or the "nothing recorded" record. */
+export function dependenciesOf(run) {
+  return dependencyRecord(run?.dependencies);
+}
+
+/** The app versions a baseline file records, or the "nothing recorded" record. */
+export function dependenciesOfBaseline(baseline) {
+  return dependencyRecord(baseline?.dependencies);
+}
+
+/**
+ * The app versions to record for a founding run whose file predates the field.
+ *
+ * Only a source may be substituted for a recorded value, and it has to say what it
+ * is: a file whose top-level `dependencies` say `source: "git:9cf95f3:bun.lock"`
+ * claims those versions were read out of the commit the file's own `sha` names,
+ * which is checkable and is not the same claim as "the run reported them". Null
+ * versions with a source are still nulls — no source turns a guess into a value.
+ *
+ * @param {{ reactNative: string | null, expoUi: string | null, source: string }} recovered
+ */
+export function foundingDependencyRecord(recovered) {
+  return dependencyRecord({
+    reactNative: recovered?.reactNative ?? null,
+    expoUi: recovered?.expoUi ?? null,
+    source: recovered?.source ?? null,
+  });
+}
+
+/** Formats one side of a refusal: the field's value, or the word that says absent. */
+function describeFieldValue(value) {
+  return value == null ? 'not recorded' : JSON.stringify(value);
+}
+
+/**
+ * The fields a merged file may not mix across, and how each is read on both sides.
+ *
+ * Every cell's ratio is normalised to `rn-core` *inside its own run*, so cells
+ * from two runs can share a file — but only while the two runs measured the same
+ * thing on the same hardware under the same rules. Each reader below says which
+ * side of the pair it reads, so a refusal can name a field without translating
+ * between shapes.
+ */
+export const COMPARABILITY_FIELDS = [
+  {
+    field: 'schemaVersion',
+    label: 'baseline schema version',
+    read: {
+      file: (baseline) => baseline?.schemaVersion ?? null,
+      run: () => BASELINE_SCHEMA_VERSION,
+    },
+    /**
+     * A file whose version is not the one the writer produces is normally a
+     * refusal, and it still is for anything outside
+     * `READABLE_BASELINE_SCHEMA_VERSIONS`. The v2 files that exist are complete
+     * ratio tables whose *cells* are the same shape as v3's, so joining them is
+     * an upgrade of the file's own bookkeeping, not a change of what was
+     * measured — which is what `versionUpgrade` records in the merged entry
+     * rather than refusing.
+     */
+    versionUpgrade: true,
+  },
+  {
+    field: 'platform',
+    label: 'platform',
+    read: {
+      file: (baseline) => baseline?.platform ?? null,
+      run: (run) => run?.platform ?? null,
+    },
+  },
+  {
+    field: 'deviceKey',
+    label: 'device key',
+    read: {
+      file: (baseline) => baseline?.deviceKey ?? null,
+      run: (run) => run?.deviceKey ?? null,
+    },
+  },
+  {
+    field: 'machine.cpuModel',
+    label: 'CPU model',
+    read: {
+      file: (baseline) => baseline?.machine?.cpuModel ?? null,
+      run: (run) => run?.machine?.cpuModel ?? null,
+    },
+  },
+  {
+    field: 'machine.cpuCount',
+    label: 'core count',
+    read: {
+      file: (baseline) => baseline?.machine?.cpuCount ?? null,
+      run: (run) => run?.machine?.cpuCount ?? null,
+    },
+  },
+  {
+    field: 'machine.simRuntime',
+    label: 'simulator runtime',
+    applies: (side) => side?.platform === 'ios',
+    read: {
+      file: (baseline) => baseline?.machine?.simRuntime ?? null,
+      run: (run) => run?.machine?.simRuntime ?? null,
+    },
+  },
+  {
+    field: 'machine.xcode',
+    label: 'Xcode',
+    applies: (side) => side?.platform === 'ios',
+    read: {
+      file: (baseline) => baseline?.machine?.xcode ?? null,
+      run: (run) => run?.machine?.xcode ?? null,
+    },
+  },
+  {
+    field: 'machine.androidApi',
+    label: 'Android API level',
+    applies: (side) => side?.platform === 'android',
+    read: {
+      file: (baseline) => baseline?.machine?.androidApi ?? null,
+      run: (run) => run?.machine?.androidApi ?? null,
+    },
+  },
+  {
+    field: 'machine.androidImage',
+    label: 'Android system image',
+    applies: (side) => side?.platform === 'android',
+    read: {
+      file: (baseline) => baseline?.machine?.androidImage ?? null,
+      run: (run) => run?.machine?.androidImage ?? null,
+    },
+  },
+  {
+    field: 'art.status',
+    label: 'ART compile state',
+    applies: (side) => side?.platform === 'android',
+    read: {
+      file: (baseline) => baseline?.art?.status ?? null,
+      run: (run) => run?.art?.status ?? null,
+    },
+  },
+  {
+    field: 'timeouts',
+    label: 'waiting rule',
+    read: {
+      file: (baseline) => formatTimeoutRule(baseline?.timeouts),
+      // A run that records no rule is refused by `baselineBlockers()` before it
+      // can mint, so this reads what the launches actually waited for.
+      run: (run) => formatTimeoutRule(run?.timeouts ?? requestedTimeouts(run)),
+    },
+    absent: 'run-default',
+  },
+  {
+    field: 'dependencies.reactNative',
+    label: 'react-native version',
+    read: {
+      file: (baseline) => dependenciesOfBaseline(baseline).reactNative,
+      run: (run) => dependenciesOf(run).reactNative,
+    },
+    absent: 'from-sha',
+  },
+  {
+    field: 'dependencies.expoUi',
+    label: 'bench app `@expo/ui` version',
+    read: {
+      file: (baseline) => dependenciesOfBaseline(baseline).expoUi,
+      run: (run) => dependenciesOf(run).expoUi,
+    },
+    absent: 'from-sha',
+  },
+];
+
+/**
+ * How a *file* that does not record a field is handled, per field (X14).
+ *
+ * The four committed baselines predate X14, so three of them record no `timeouts`
+ * block and none records `dependencies`. Refusing every merge into them would put
+ * the guard's benefits out of reach of every file that exists, and guessing from
+ * today's defaults would be a claim nobody measured. So each field says what its
+ * absence can be answered with:
+ *
+ * - `'refuse'` (the default, and what an absent `absent` means) — nothing can
+ *   answer for it, so a file that does not record it cannot take a merge. The
+ *   OS runtime, Xcode, Android API level and system image, and the ART compile
+ *   state are all in this set: each is a regime change on its own
+ *   (`docs/architecture/benchmarks.md`, "a comparability break like a runtime
+ *   change is"), and none of them can be recovered from a git commit.
+ * - `'run-default'` — the run measured its platform's default rule, which is the
+ *   only rule a file's cells can have been minted under other than A4's iOS raise,
+ *   and that raise is value-neutral for every cell the file is allowed to hold: an
+ *   incomplete metric on a gated arm or on `rn-core` refused those mints outright
+ *   (`baselineBlockers()`), so every gated ratio in a committed file is a cell
+ *   where all samples arrived, and a cell whose samples arrived keeps its medians
+ *   under a longer wait (`bench/baselines/README.md`, the same argument that keeps
+ *   `maintainer-mac-1`'s iOS table comparable). A run that asked for anything else
+ *   is a diagnostic and is refused.
+ * - `'from-sha'` — the versions a file's cells were measured with are in git at the
+ *   commit the file's own `sha` names (`bench/package.json` and `bun.lock` pin
+ *   them), which is evidence rather than a default; `run.mjs` reads it. Refused
+ *   when that commit cannot be read.
+ */
+/**
+ * The `timeouts` block a baseline records: what the launches actually waited for,
+ * or nulls when nothing reported a rule (A4, review N1 — never fill this in from
+ * the rule we happen to want).
+ */
+export function baselineTimeoutRecord({ timeouts }) {
+  return {
+    mountTimeoutMs:
+      timeouts?.mountTimeoutMs > 0 ? timeouts.mountTimeoutMs : null,
+    presentedTimeoutMs:
+      timeouts?.presentedTimeoutMs > 0 ? timeouts.presentedTimeoutMs : null,
+  };
+}
+
+/** One comparable form for the waiting rule, so `{1500,8000}` matches itself. */
+function formatTimeoutRule(timeouts) {
+  if (timeouts == null) {
+    return null;
+  }
+  const mount = timeouts.mountTimeoutMs ?? null;
+  const presented = timeouts.presentedTimeoutMs ?? null;
+  if (mount == null && presented == null) {
+    return null;
+  }
+  return `${String(mount)}/${String(presented)} ms`;
+}
+
+/** The platform's default waiting rule for a side, or null when it has none. */
+function defaultTimeoutRuleFor(side) {
+  const defaults =
+    side?.platform == null
+      ? null
+      : (BASELINE_TIMEOUTS_MS[side.platform] ?? null);
+  return defaults == null
+    ? null
+    : formatTimeoutRule({
+        mountTimeoutMs: defaults.mountTimeoutMs,
+        presentedTimeoutMs: defaults.presentedTimeoutMs,
+      });
+}
+
+/**
+ * Why this run's environment is not comparable with this file's, and which fields
+ * the merge could not check (X14).
+ *
+ * Each problem names the field, the file's value and the run's value, because the
+ * fix differs per field: a runtime or image change is a new baseline file, an
+ * `@expo/ui` bump is a full re-mint, and a field the file predates is answered by
+ * its `absent` policy — or refused when nothing can answer for it.
+ *
+ * `unverified` is the honest half: the fields a merge went ahead without, and the
+ * reason each was allowed. It goes into the merged component's provenance, so a
+ * reader of the file can tell a checked match from a documented assumption
+ * instead of having to remember which version of the writer produced the file.
+ *
+ * @param {{
+ *   run: any,
+ *   baseline: any,
+ *   resolved?: Record<string, { value: unknown, why: string } | null>,
+ * }} input `resolved` carries what the caller recovered for a field the file does
+ *   not record — for a pre-X14 file's app versions, `run.mjs` reads
+ *   `bench/package.json` and `bun.lock` at the commit the file's own `sha` names.
+ *   A value here is evidence; its absence is not a pass.
+ * @returns {{ problems: string[], unverified: Array<{field: string, reason: string}> }}
+ */
+export function comparabilityCheck({
+  run,
+  baseline,
+  resolved = {},
+  allowDeferred = false,
+}) {
+  const problems = [];
+  const deferred = [];
+  const unverified = [];
+  for (const entry of COMPARABILITY_FIELDS) {
+    if (
+      entry.applies != null &&
+      !(entry.applies(run) && entry.applies({ platform: baseline?.platform }))
+    ) {
+      continue;
+    }
+    const fileValue = entry.read.file(baseline);
+    const runValue = entry.read.run(run);
+    if (fileValue != null && fileValue === runValue) {
+      continue;
+    }
+
+    if (allowDeferred && runValue == null && fileValue != null) {
+      deferred.push({
+        field: entry.field,
+        reason: `${entry.label} cannot be known before the run starts, so it is checked against the file again after it`,
+      });
+      continue;
+    }
+
+    if (
+      entry.versionUpgrade === true &&
+      fileValue != null &&
+      READABLE_BASELINE_SCHEMA_VERSIONS.has(fileValue) &&
+      runValue === BASELINE_SCHEMA_VERSION
+    ) {
+      unverified.push({
+        field: entry.field,
+        reason: `${entry.label} is v${String(
+          fileValue
+        )} and this merge writes v${String(
+          BASELINE_SCHEMA_VERSION
+        )}: the cells are the same shape in both, so the file's bookkeeping is upgraded and its founding run's fields are carried through unchanged`,
+      });
+      continue;
+    }
+
+    if (fileValue == null) {
+      const recovered = resolved[entry.field];
+      if (recovered != null && recovered.value != null) {
+        if (recovered.value === runValue) {
+          unverified.push({
+            field: entry.field,
+            reason: `${entry.label} is not in the file (it predates X14); matched ${describeFieldValue(
+              runValue
+            )} from ${recovered.why}`,
+          });
+          continue;
+        }
+        problems.push(
+          `${entry.label} differs - the baseline's founding commit records ${describeFieldValue(
+            recovered.value
+          )} (${recovered.why}), this run measured ${describeFieldValue(runValue)}`
+        );
+        continue;
+      }
+      if (
+        entry.absent === 'run-default' &&
+        runValue != null &&
+        runValue === defaultTimeoutRuleFor(run)
+      ) {
+        unverified.push({
+          field: entry.field,
+          reason: `${entry.label} is not in the file (it predates X14); the run measured ${describeFieldValue(
+            runValue
+          )}, that platform's default rule, which is the rule every gated ratio in a committed table was recorded under`,
+        });
+        continue;
+      }
+      problems.push(
+        `${entry.label} is not recorded by the baseline${
+          entry.absent === 'from-sha'
+            ? ', and its founding commit could not be read to recover it'
+            : ''
+        } - this run measured ${describeFieldValue(
+          runValue
+        )}.\n        A merge cannot judge a field it cannot read: full re-mint this file with \`--plan full --launches 8 --update-baseline\` (no \`--component\`) so it records ${entry.label} (bench/baselines/README.md "Adding one component").`
+      );
+      continue;
+    }
+
+    problems.push(
+      `${entry.label} differs - the baseline recorded ${describeFieldValue(
+        fileValue
+      )}, this run measured ${describeFieldValue(runValue)}`
+    );
+  }
+  return { problems, unverified, deferred };
+}
+
+/**
+ * Why this run's environment is not comparable with this file's, one entry per
+ * field that differs (X14). See `comparabilityCheck()` for the fields a merge
+ * went ahead without, and why.
+ *
+ * @param {{ run: any, baseline: any, resolved?: object }} input
+ * @returns {string[]}
+ */
+export function comparabilityProblems({ run, baseline, resolved = {} }) {
+  return comparabilityCheck({ run, baseline, resolved }).problems;
+}
+
+/**
+ * The per-component provenance entry for the run that minted `component`'s cells.
+ *
+ * One merged file is several runs' work, so `sha`, `updatedAt` and
+ * `machine.loadSamples` at the top level cannot describe all of it (X14): those
+ * keep meaning "the full run this file was founded on", and this block says who
+ * measured each component, when, over how many launches, and how quiet the
+ * machine was while they did it.
+ */
+export function componentProvenance(
+  run,
+  component,
+  cells,
+  comparabilityNotes = []
+) {
+  const cellKeys = (
+    Array.isArray(cells) ? cells : Object.keys(cells ?? {})
+  ).sort();
+  const load = run?.machine?.loadSamples ?? null;
+  return {
+    component,
+    sha: run?.sha ?? null,
+    mintedAt: run?.createdAt ?? null,
+    launches: run?.launches ?? null,
+    plan: run?.plan ?? null,
+    /** The waiting rule those cells were recorded under, per launch group. */
+    timeouts: baselineTimeoutRecord({
+      timeouts: run?.timeouts ?? requestedTimeouts(run),
+    }),
+    loadSamples: load,
+    /** The app versions those cells were measured with. */
+    dependencies: dependenciesOf(run),
+    /** Every cell key this entry is the provenance of, so a reader can check it. */
+    cellKeys,
+    /**
+     * The comparability fields this merge could not read in the file, and what it
+     * used instead (X14). Empty for a merge into a current file and for a full
+     * mint — a non-empty list is the file saying which of its guarantees are
+     * measured and which are reasoned.
+     */
+    comparabilityNotes,
+  };
+}
+
+/**
+ * Why a `--component <name> --update-baseline` run may not merge into this file,
+ * or null when it may (X14).
+ *
+ * Every guard is answered **before a device is touched**, because the whole point
+ * of a merge mint is that it costs one component's cells rather than an
+ * eleven-hour window (docs/tasks/X14-bench-component-mint.md). These are the
+ * reasons a merge would silently make the file lie about itself:
+ *
+ * 1. no file at all — the first mint for a machine is still a full run, since a
+ *    file holding one component reads like a whole table;
+ * 2. the component already has cells — replacing measured numbers is a full
+ *    re-mint, or a separate decision, not a merge;
+ * 3. any other filter narrows the run (`--scenario`, `--n`, `--only`), so the
+ *    component's own cells would land incomplete;
+ * 4. the file predates provenance (`missingBaselineProvenanceProblem()`), or the
+ *    run's regime differs from the file's (`comparabilityProblems()`).
+ *
+ * The per-run guards a full mint has (`baselineBlockers()`: plan, launches,
+ * completeness, load, clean tree, Android's `speed-profile`) are *not* relaxed
+ * here — `writeBaseline()` still calls them, and `--force` skips them but never
+ * these, so a forced merge still cannot cross a regime boundary.
+ *
+ * @param {{
+ *   run?: any,
+ *   baseline?: any | null,
+ *   exists?: boolean,
+ *   component: string,
+ *   filters?: Record<string, unknown>,
+ *   scheduled?: number,
+ *   componentPlan?: number,
+ * }} input `run`/`baseline` are the run doing the mint and the parsed file;
+ *   `exists` is whether the file is on disk (a run's own `machine.hostname`
+ *   already picked the path); `scheduled` is the run's schedule length and
+ *   `componentPlan` the same plan restricted to `component` — comparing them
+ *   catches `--scenario`/`--n`/`--only` without re-deriving the filters.
+ *   `allowDeferred` is for the pre-flight's *candidate*: a field it honestly
+ *   cannot know yet (an ART compile state before the install, a system-image
+ *   fingerprint before the emulator answers) is reported as deferred rather than
+ *   refused, and the same call with the measured run answers it before a byte is
+ *   written. A real run never passes it.
+ * @returns {{ problems: string[], unverified: Array, deferred: Array,
+ *   note: string | null, seeded: object, foundingDependencies: any }}
+ */
+export function mergeBaselineProblems({
+  run = null,
+  baseline = null,
+  exists = false,
+  component,
+  filters = {},
+  scheduled = null,
+  componentPlan = null,
+  resolved = {},
+  allowDeferred = false,
+}) {
+  const problems = [];
+  if (component == null) {
+    return {
+      problems,
+      unverified: [],
+      deferred: [],
+      note: null,
+      seeded: {},
+      foundingDependencies: null,
+    };
+  }
+  if (!exists || baseline == null) {
+    problems.push(
+      `--component ${component} --update-baseline: no baseline at this machine's path yet, so there is nothing to merge into.\n` +
+        '        The first mint for a machine is a full run: run `--plan full --launches 8 --update-baseline` ' +
+        'with no `--component`, then add components to that file one at a time.'
+    );
+    return {
+      problems,
+      unverified: [],
+      deferred: [],
+      note: null,
+      seeded: {},
+      foundingDependencies: null,
+    };
+  }
+  const existing = cellsForComponent(baseline.cells, component);
+  if (Object.keys(existing).length > 0) {
+    problems.push(
+      `--component ${component} --update-baseline: this file already has ${String(
+        Object.keys(existing).length
+      )} \`${component}\` cell(s) (first: ${Object.keys(existing).sort()[0]}), and a merge only adds cells.\n` +
+        '        Replacing measured numbers is a full re-mint (`--plan full --launches 8 --update-baseline`, no ' +
+        '`--component`) so every ratio in the file is normalised against one `rn-core`, or a deliberate edit of that file.'
+    );
+  }
+  const missing = Object.entries(filters).filter(([, value]) => value != null);
+  if (missing.length > 0) {
+    problems.push(
+      `--component ${component} --update-baseline is also narrowed by ${missing
+        .map(([name, value]) => `--${name} ${String(value)}`)
+        .join(' ')}.\n` +
+        "        A merge writes that component's whole block, so the other filters have to go: a run that measures part of a " +
+        'component leaves the rest of its cells missing, which reads to `--check` as "not measured in base".'
+    );
+  }
+  if (
+    isNumber(scheduled) &&
+    isNumber(componentPlan) &&
+    scheduled < componentPlan
+  ) {
+    problems.push(
+      `--component ${component} --update-baseline: the schedule is narrowed to ${String(
+        scheduled
+      )} of the ${String(componentPlan)} launches that component's cells need, so its block would land incomplete.`
+    );
+  }
+  const note = missingBaselineProvenanceProblem({ baseline });
+  const check = comparabilityCheck({
+    run,
+    baseline,
+    resolved,
+    allowDeferred,
+  });
+  for (const problem of check.problems) {
+    problems.push(`--component ${component} --update-baseline: ${problem}`);
+  }
+  return {
+    problems,
+    unverified: check.unverified,
+    note,
+    seeded:
+      note == null
+        ? {}
+        : seededComponentProvenance(baseline, foundingDepsFrom(resolved)),
+    foundingDependencies: foundingDepsFrom(resolved),
+  };
+}
+
+/**
+ * Why a merge run cannot mint anything at all, judged from what is knowable on the
+ * command line: the plan, the launch count, perf marks, and a dirty tree (X14).
+ *
+ * These are the first four judgements `baselineBlockers()` makes, and a merge has
+ * to make them *before* the run: `--plan quick --component slider` would burn ~20
+ * minutes and then be refused, and `--launches 4` would spend 10 minutes writing
+ * ratios whose within-run spread is too wide to gate a threshold against. The
+ * numbers are the same constants, not a restatement; only the tense differs, and
+ * `scripts/__tests__/bench-baseline-merge.test.js` asserts each case is the same
+ * *defect* the post-run guard refuses, so the two cannot drift into refusing
+ * different runs.
+ *
+ * The waiting rule is deliberately absent: `timeoutRuleProblem()` already answers
+ * that one from the flags, in the same pre-flight, with the rule's own wording.
+ *
+ * @param {{ plan?: string, launches?: number, perfMarks?: boolean, dirty?: boolean }} input
+ * @returns {string[]}
+ */
+export function mergeRunProblems({
+  plan,
+  launches,
+  perfMarks = false,
+  dirty = false,
+}) {
+  const problems = [];
+  if (perfMarks === true) {
+    problems.push(
+      'the run turns on native perf marks (--perf-marks), so every iteration there pays for instrumentation'
+    );
+  }
+  if (dirty === true) {
+    problems.push(
+      'the working tree is dirty (a baseline must be attributable to a commit)'
+    );
+  }
+  if (plan !== BASELINE_PLAN) {
+    problems.push(
+      `the run would use plan "${String(
+        plan ?? 'unknown'
+      )}", and a baseline needs "${BASELINE_PLAN}" - quick-plan numbers are local feedback`
+    );
+  }
+  if (!isNumber(launches) || launches < BASELINE_LAUNCHES) {
+    problems.push(
+      `the run would use ${String(
+        launches ?? 'an unknown number of'
+      )} launches per cell, and a baseline needs at least ${String(
+        BASELINE_LAUNCHES
+      )}`
+    );
+  }
+  return problems;
+}
+
+/**
+ * The app versions recovered for a file that recorded none, in the shape a
+ * baseline's `dependencies` block stores them — with the `source` that says where
+ * they came from, so the file never claims a run reported what git did.
+ */
+function foundingDepsFrom(resolved) {
+  const reactNative = resolved?.['dependencies.reactNative'];
+  const expoUi = resolved?.['dependencies.expoUi'];
+  if (reactNative == null && expoUi == null) {
+    return null;
+  }
+  return foundingDependencyRecord({
+    reactNative: reactNative?.value ?? null,
+    expoUi: expoUi?.value ?? null,
+    source: reactNative?.why ?? expoUi?.why ?? null,
+  });
+}
+
+/**
+ * What a file that predates X14's per-component provenance is missing, phrased as
+ * a note rather than a refusal, or null when the file is a current one.
+ *
+ * Every committed baseline is in this state. A merge can still be judged — the
+ * device, host and app versions are all recoverable from what the file does
+ * record (its `deviceKey`, `machine`, and the founding `sha` in git) — but the
+ * file's own per-component entries have to be *seeded* from the founding run's
+ * top-level fields rather than read, and the merged cell has to say which fields
+ * were checked and which were reasoned about. That statement is what this returns,
+ * so the run prints it and the provenance block stores it.
+ *
+ * @param {{ baseline: any }} input
+ * @returns {string | null}
+ */
+export function missingBaselineProvenanceProblem({ baseline }) {
+  if (baseline?.components != null) {
+    return null;
+  }
+  const absent = [];
+  if (baseline?.dependencies == null) {
+    absent.push(
+      '`dependencies` (the react-native and @expo/ui versions the founding run measured)'
+    );
+  }
+  if (baseline?.timeouts?.mountTimeoutMs == null) {
+    absent.push('`timeouts` (the waiting rule its `presented` column means)');
+  }
+  return (
+    'this baseline predates per-component provenance, so it records no `components` block' +
+    (absent.length > 0 ? ` or ${absent.join(' or ')}` : '') +
+    ".\n        Its existing cells are given provenance from the founding run's own top-level " +
+    '`sha`/`updatedAt`/`launches`/`machine.loadSamples`, marked `seededFromFoundingRun`; each field that ' +
+    'had to be recovered or reasoned about for this merge is named, with what it was matched against, in ' +
+    "the new entry's `comparabilityNotes`. A full re-mint is what turns those notes into measurements."
+  );
+}
+
+/**
+ * Per-component provenance for the components a pre-X14 file already holds.
+ *
+ * Their cells came from the run described by the file's top-level fields — that is
+ * what a pre-X14 file *is* — so the founding `sha`, date, launch count and load
+ * summary can be handed to each component verbatim. `seededFromFoundingRun: true`
+ * is what distinguishes that from an entry the writer measured. The app versions
+ * were never in a v2 file, so they go in only when the caller recovered them from
+ * the founding `sha` — with that recovery named as their `source`, never as a
+ * value the founding run reported.
+ */
+export function seededComponentProvenance(baseline, dependencies = null) {
+  const cells = baseline?.cells ?? {};
+  const skipped = baseline?.skippedCells ?? {};
+  const byComponent = {};
+  for (const [key, cell] of Object.entries({ ...cells, ...skipped })) {
+    const component = componentOf(cell?.scenario ?? parseCellKey(key).scenario);
+    (byComponent[component] ??= []).push(key);
+  }
+  return Object.fromEntries(
+    Object.entries(byComponent)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([component, keys]) => [
+        component,
+        {
+          component,
+          sha: baseline?.sha ?? null,
+          mintedAt: baseline?.updatedAt ?? null,
+          launches: baseline?.launches ?? null,
+          plan: baseline?.plan ?? null,
+          timeouts: baselineTimeoutRecord({ timeouts: baseline?.timeouts }),
+          loadSamples: baseline?.machine?.loadSamples ?? null,
+          dependencies: {
+            reactNative: null,
+            expoUi: null,
+            source: null,
+          },
+          cellKeys: keys.sort(),
+          seededFromFoundingRun: true,
+        },
+      ])
+  );
+}
+
+/**
+ * Add one component's freshly minted cells to a baseline the file already holds.
+ *
+ * Everything outside that component is copied out of the parsed file unchanged, so
+ * it survives byte-for-byte through `JSON.stringify` and prettier (X14's whole
+ * point): the other components' cells and `skippedCells` entries, and the founding
+ * run's `sha`/`updatedAt`/`machine`/`art`/`timeouts`/`deviceName`. New cell keys
+ * are appended after the existing ones rather than sorted in, because a re-sorted
+ * `cells` object would rewrite every line of the file in the diff. What a merge
+ * writes is therefore: the component's own cells, its `skippedCells` entries, one
+ * `components` provenance entry, and — on the first merge into a pre-X14 file —
+ * the `components` block seeded from the founding run plus the app versions
+ * recovered from its `sha`, which is what lets the *next* merge check versions
+ * without going back to git.
+ *
+ * @param {{
+ *   baseline: any,
+ *   run: any,
+ *   component: string,
+ *   built?: any, the full `buildBaseline(run)` for the component's run
+ *   componentsBase?: Record<string, any>, provenance to seed the block with
+ *     (`seededComponentProvenance()` for a pre-X14 file); defaults to the file's own
+ *   dependencies?: any, the app versions to record for the founding run when the
+ *     file itself recorded none
+ *   comparabilityNotes?: Array<{field: string, reason: string}>, the fields a merge
+ *     went ahead without, recorded with the cells they were not checked against
+ * }} input
+ * @returns {{ baseline: any, changedCells: string[], addedCells: number, removedCells: number, provenance: any }}
+ */
+export function mergeComponentBaseline({
+  baseline,
+  run,
+  component,
+  built = buildBaseline(run),
+  componentsBase = null,
+  dependencies = null,
+  comparabilityNotes = [],
+}) {
+  const next = {
+    ...baseline,
+    schemaVersion: BASELINE_SCHEMA_VERSION,
+    dependencies:
+      dependencies ??
+      (baseline.dependencies == null ? null : dependenciesOfBaseline(baseline)),
+    components: { ...(componentsBase ?? baseline.components ?? {}) },
+    skippedCells: { ...(baseline.skippedCells ?? {}) },
+    cells: { ...baseline.cells },
+  };
+  if (next.dependencies == null) {
+    delete next.dependencies;
+  }
+
+  const removed = [];
+  for (const [key, cell] of Object.entries(next.cells)) {
+    if (
+      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component
+    ) {
+      removed.push(key);
+    }
+  }
+  for (const key of removed) {
+    delete next.cells[key];
+  }
+  const removedSkipped = [];
+  for (const [key, cell] of Object.entries(next.skippedCells)) {
+    if (
+      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component
+    ) {
+      removedSkipped.push(key);
+    }
+  }
+  for (const key of removedSkipped) {
+    delete next.skippedCells[key];
+  }
+
+  const addedCells = {};
+  for (const [key, cell] of Object.entries(built.cells ?? {})) {
+    addedCells[key] = cell;
+    next.cells[key] = cell;
+  }
+  for (const [key, cell] of Object.entries(built.skippedCells ?? {})) {
+    addedCells[key] = cell;
+    next.skippedCells[key] = cell;
+  }
+
+  const provenance = componentProvenance(
+    run,
+    component,
+    addedCells,
+    comparabilityNotes
+  );
+  next.components[component] = provenance;
+
+  return {
+    baseline: next,
+    changedCells: [
+      ...removed.map((key) => `-${key}`),
+      ...removedSkipped.map((key) => `-skip:${key}`),
+      ...Object.keys(addedCells)
+        .sort()
+        .map((key) => `+${key}`),
+    ],
+    addedCells: Object.keys(addedCells).length,
+    removedCells: removed.length + removedSkipped.length,
+    provenance,
+  };
 }
