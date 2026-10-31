@@ -22,6 +22,10 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // Before `loadReactNative`: RN reads `enableViewRecycling` when the first
+    // ViewManager is constructed, and the flag accessor caches what it was asked
+    // first. See NitroUiFeatureFlags.
+    NitroUiFeatureFlags.install()
     loadReactNative(this)
   }
 }
