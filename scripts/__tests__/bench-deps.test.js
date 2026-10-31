@@ -14,51 +14,148 @@
  */
 
 import { describe, expect, it } from '@jest/globals';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 import {
   dependenciesSourceAt,
   installedDependenciesProblem,
   installedVersion,
   lockedVersion,
+  parseLockFile,
   requestedVersion,
   resolvedDependencies,
 } from '../bench/deps.mjs';
 
-/** A `bun.lock` in the shape bun writes, with the awkward entries the parser must skip. */
-const LOCK = JSON.stringify({
-  lockfileVersion: 1,
-  workspaces: { '': ['bench'] },
-  packages: {
-    'react-native': ['react-native@0.80.0', {}],
-    '@expo/ui': ['@expo/ui@54.1.2(peer@1.2.3)', {}],
-    'react-is': ['react-is@workspace:.', {}],
-    'zod': ['zod@3.23.8', {}],
-  },
-});
+/**
+ * A lock in the shape bun writes: JSON5-ish, with a trailing comma before every
+ * closer and `//` comments. Hand-writing this as strict JSON is the mistake this
+ * fixture exists to prevent — the first version of these tests did exactly that,
+ * the reader passed every one of them, and it resolved nothing on the real
+ * `bun.lock`, which made every merge refuse. `bench-deps.test.js` also reads the
+ * repo's own lock below, so the two can never drift apart again.
+ */
+const LOCK = [
+  '{',
+  '  "lockfileVersion": 1,',
+  '  // what bun install resolved',
+  '  "workspaces": { "": ["bench"], },',
+  '  "packages": {',
+  '    "react-native": ["react-native@0.80.0", {},],',
+  '    "@expo/ui": ["@expo/ui@54.1.2(peer@1.2.3)", {},],',
+  '    "react-is": ["react-is@workspace:.", {},],',
+  '    "zod": ["zod@3.23.8", {},],',
+  '  },',
+  '}',
+  '',
+].join('\n');
 
 const MANIFEST = JSON.stringify({
   name: 'bench',
   dependencies: { 'react-native': '0.80.0', '@expo/ui': '^54.0.0' },
 });
 
+describe('the lock file parser', () => {
+  it('reads bun’s own file, which is not strict JSON', () => {
+    // The whole reason this parser exists: bun writes trailing commas, and a
+    // strict `JSON.parse` of the shipped lock throws. Asserting the strict
+    // failure first is what makes the tolerant pass's success mean something.
+    expect(() => JSON.parse(LOCK)).toThrow();
+    const { value, error } = parseLockFile(LOCK);
+    expect(error).toBeNull();
+    expect(Object.keys(value.packages)).toEqual([
+      'react-native',
+      '@expo/ui',
+      'react-is',
+      'zod',
+    ]);
+  });
+
+  it('accepts strict JSON too, and does not touch what is inside a string', () => {
+    expect(parseLockFile('{"a":1}').value).toEqual({ a: 1 });
+    // A trailing comma *inside* a string value is part of the value, and a `//`
+    // inside one is not a comment. A rewrite that did not track string state
+    // would corrupt both.
+    const inside = parseLockFile('{"a":"x,}","b":"// not a comment,},"}');
+    expect(inside.error).toBeNull();
+    expect(inside.value).toEqual({
+      a: 'x,}',
+      b: '// not a comment,},',
+    });
+  });
+
+  it('reports the real text when neither pass reads it', () => {
+    const out = parseLockFile('{this is not json');
+    expect(out.value).toBeNull();
+    // The strict parser's message, because it points at a position in the text
+    // the reader can look at; the tolerant pass's would describe characters that
+    // were rewritten away.
+    expect(out.error).toContain('JSON');
+  });
+
+  it('reads this repo’s own bun.lock, at HEAD and at another commit', () => {
+    // The fixture can be wrong about what bun writes; the shipped file cannot. A
+    // reader that fails here resolves nothing, and every merge in the world
+    // refuses with "could not be read to recover it".
+    const text = readFileSync('bun.lock', 'utf8');
+    const atHead = resolvedDependencies({
+      lockText: text,
+      manifestText: readFileSync('bench/package.json', 'utf8'),
+      source: 'bun.lock',
+    });
+    expect([atHead.problems, atHead.reactNative, atHead.expoUi]).toEqual([
+      [],
+      expect.stringMatching(/^\d/),
+      expect.stringMatching(/^\d/),
+    ]);
+
+    // And the same read at the founding commit of a committed baseline, which is
+    // the path a pre-X14 merge takes.
+    const sha = execFileSync('git', ['rev-parse', 'HEAD~5'], {
+      encoding: 'utf8',
+    }).trim();
+    const at = dependenciesSourceAt({
+      git: (args) => {
+        try {
+          return execFileSync('git', args, { encoding: 'utf8' });
+        } catch {
+          return null;
+        }
+      },
+      rev: sha,
+    });
+    const older = resolvedDependencies({
+      lockText: at.lockText,
+      manifestText: at.manifestText,
+      source: `bun.lock at ${sha}`,
+    });
+    expect(older.problems).toEqual([]);
+    expect(older.reactNative).toEqual(expect.stringMatching(/^\d/));
+    expect(older.expoUi).toEqual(expect.stringMatching(/^\d/));
+  });
+});
+
 describe('the lock file reader', () => {
+  /** Read through the parser above, so these tests see the same lock shape. */
+  const lock = () => parseLockFile(LOCK).value;
+
   it('reads a plain name@version, including a scoped name', () => {
-    expect(lockedVersion(JSON.parse(LOCK), 'react-native')).toBe('0.80.0');
-    expect(lockedVersion(JSON.parse(LOCK), 'zod')).toBe('3.23.8');
+    expect(lockedVersion(lock(), 'react-native')).toBe('0.80.0');
+    expect(lockedVersion(lock(), 'zod')).toBe('3.23.8');
   });
 
   it('drops a peer suffix rather than returning it as the version', () => {
     // `@expo/ui@54.1.2(peer@1.2.3)` - a reader that took everything after the last
     // `@` would return `54.1.2(peer@1.2.3)`, which would then never match the
     // installed package's `54.1.2` and refuse every merge on a false difference.
-    expect(lockedVersion(JSON.parse(LOCK), '@expo/ui')).toBe('54.1.2');
+    expect(lockedVersion(lock(), '@expo/ui')).toBe('54.1.2');
   });
 
   it('returns null for a workspace entry, a missing name, or no lock', () => {
     // A workspace package has no version at all; inventing one would be a
     // comparison the guard then passes for no reason.
-    expect(lockedVersion(JSON.parse(LOCK), 'react-is')).toBeNull();
-    expect(lockedVersion(JSON.parse(LOCK), 'not-here')).toBeNull();
+    expect(lockedVersion(lock(), 'react-is')).toBeNull();
+    expect(lockedVersion(lock(), 'not-here')).toBeNull();
     expect(lockedVersion(null, 'react-native')).toBeNull();
     expect(lockedVersion({ packages: {} }, 'react-native')).toBeNull();
   });

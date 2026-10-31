@@ -87,6 +87,94 @@ export function installedVersion(manifest) {
 }
 
 /**
+ * Parses a lock file bun actually wrote.
+ *
+ * `bun.lock` is JSON5-ish, not JSON: bun writes a trailing comma before every
+ * `}` and `]` (and allows `//` comments). `JSON.parse` therefore fails on the
+ * shipped file — "Expected double-quoted property name" — and a reader that only
+ * tries strict JSON resolves *nothing*, on every machine, forever. That is the
+ * bug this exists because of: the fixture lock in `bench-deps.test.js` was
+ * hand-written strict JSON, so the reader looked fine while the real file made
+ * every merge refuse with "could not be read to recover it".
+ *
+ * Strict JSON is tried first, so a file that is already canonical is never
+ * rewritten on the way through. The tolerant pass then walks the text outside
+ * string literals: comments are dropped, and a comma whose next non-whitespace
+ * token is a closer is dropped. It reuses no dependency, for the reason
+ * `format.mjs` documents — this module has to stay importable from the unit
+ * tests, which do not install a JSON5 parser.
+ *
+ * @param {string} text
+ * @returns {{ value: any, error: string | null }}
+ */
+export function parseLockFile(text) {
+  try {
+    return { value: JSON.parse(text), error: null };
+  } catch (strictError) {
+    const relaxed = stripJson5Syntax(text);
+    try {
+      return { value: JSON.parse(relaxed), error: null };
+    } catch {
+      // Report the strict error: it points at the real text, and the tolerant
+      // pass's message would describe characters that are not in the file.
+      return {
+        value: null,
+        error: String(
+          strictError instanceof Error ? strictError.message : strictError
+        ),
+      };
+    }
+  }
+}
+
+/** The above, one pass, single-pass: no rewrite of anything inside a string. */
+function stripJson5Syntax(text) {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      out += ch;
+      if (ch === '\\') {
+        // Keep the escaped character opaque: `\"` is not the end of the string.
+        i += 1;
+        if (i < text.length) out += text[i];
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      continue;
+    }
+    const next = text[i + 1];
+    if (ch === '/' && next === '/') {
+      while (i < text.length && text[i] !== '\n') i += 1;
+      out += '\n';
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      const end = text.indexOf('*/', i + 2);
+      i = end === -1 ? text.length : end + 1;
+      continue;
+    }
+    if (ch === ',' || ch === '}' || ch === ']') {
+      // A comma directly before a closer is the trailing one bun writes.
+      const tail = out.trimEnd();
+      if (ch !== ',' && tail.endsWith(',')) {
+        out = tail.slice(0, -1);
+      }
+      out += ch;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
  * The versions a measurement belongs to, from a lock file and a manifest.
  *
  * `reactNative`/`expoUi` are the *resolved* versions — the ones that decide
@@ -111,13 +199,12 @@ export function resolvedDependencies({ lockText, manifestText, source }) {
     lockUnreadable = true;
     problems.push(`${source}: could not be read`);
   } else {
-    try {
-      lock = JSON.parse(lockText);
-    } catch (error) {
+    const parsed = parseLockFile(lockText);
+    if (parsed.error != null) {
       lockUnreadable = true;
-      problems.push(
-        `${source}: is not JSON (${String(error instanceof Error ? error.message : error)})`
-      );
+      problems.push(`${source}: is not JSON (${parsed.error})`);
+    } else {
+      lock = parsed.value;
     }
   }
   if (manifestText != null) {
