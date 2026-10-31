@@ -3184,6 +3184,79 @@ export function componentProvenance(
 }
 
 /**
+ * The cells this run should have produced for `component` and did not, or null when
+ * the question does not apply.
+ *
+ * Asked of the **record**, not of the command line: `report.mjs` can be handed any
+ * results file with any flags, so `--component menu` over a `--scenario`-narrowed
+ * run looks like a complete merge until someone counts the rows. The expected set is
+ * the schedule itself (`buildSchedule` with the run's own plan, launch count and
+ * platform), which already knows which arms exist on which platform and which arms
+ * are scoped out of a component, so the answer is the same list the runner would have
+ * launched.
+ *
+ * A cell the run *measured and skipped* counts: `buildBaseline()` files an incomplete
+ * comparison-arm cell under `skippedCells`, and that is an honest row of the file, not
+ * a hole. A cell the run never launched is the thing this refuses.
+ *
+ * Returns null when the run holds no cells at all, which is the pre-flight's candidate
+ * run: it stands in for a measurement that has not happened, and refusing it for
+ * measuring nothing would make every startup check refuse.
+ *
+ * @param {{ run: any, component: string }} input
+ * @returns {string | null}
+ */
+export function missingComponentCells({ run, component }) {
+  const held = run?.cells;
+  if (held == null || Object.keys(held).length === 0) {
+    return null;
+  }
+  let expected = null;
+  try {
+    expected = buildSchedule({
+      plan: run.plan ?? BASELINE_PLAN,
+      launches: run.launches ?? BASELINE_LAUNCHES,
+      platform: run.platform ?? null,
+      component,
+    });
+  } catch {
+    // A plan or platform this builder does not know about is the run's own problem,
+    // and `baselineBlockers()` and the readers say so better than a guess would.
+    return null;
+  }
+  const built = buildBaseline(run);
+  const present = new Set([
+    ...Object.keys(cellsForComponent(built.cells, component)),
+    ...Object.keys(cellsForComponent(built.skippedCells, component)),
+  ]);
+  const missing = [
+    ...new Set(
+      expected
+        .map((entry) => cellKey(entry.scenario, entry.implementation, entry.n))
+        .filter((key) => !present.has(key))
+    ),
+  ].sort();
+  if (missing.length === 0) {
+    return null;
+  }
+  const shown = missing
+    .slice(0, 4)
+    .join(', ')
+    .concat(missing.length > 4 ? `, +${String(missing.length - 4)} more` : '');
+  return (
+    `--component ${component} --update-baseline: this run measured ${String(
+      present.size
+    )} of the ${String(present.size + missing.length)} cells that plan measures for \`${component}\`, ` +
+    `so its block would land incomplete (missing: ${shown}).\n` +
+    '        A merge writes the component whole: run it with `--component ' +
+    component +
+    '` and no other filter. Rows left out would read to `--check` as "not measured in ' +
+    'base" with no way to add them later, because the file would already count this ' +
+    'component as present.'
+  );
+}
+
+/**
  * Why a `--component <name> --update-baseline` run may not merge into this file,
  * or null when it may (X14).
  *
@@ -3297,6 +3370,32 @@ export function mergeBaselineProblems({
         scheduled
       )} of the ${String(componentPlan)} launches that component's cells need, so its block would land incomplete.`
     );
+  }
+  // And the same two questions asked of the **record** rather than of the command
+  // line, because `report.mjs` re-reports any results file with any flags: it has
+  // no schedule to inspect, only the cells the run left behind. A run that measured
+  // more than the named component would have its other components' cells filed
+  // under this one's provenance — and would overwrite those components' own rows,
+  // since `mergeComponentBaseline` deletes and rewrites the named component's block.
+  // A run that measured less would land a partial block, after which the component
+  // counts as present and the missing rows can never be merged in.
+  const strays = Object.entries(run?.cells ?? {})
+    .filter(
+      ([key, cell]) =>
+        componentOf(cell?.scenario ?? parseCellKey(key).scenario) !== component
+    )
+    .map(([key]) => key);
+  if (strays.length > 0) {
+    problems.push(
+      `--component ${component} --update-baseline: this run also measured ${String(
+        strays.length
+      )} cell(s) of other components (first: ${strays.sort()[0]}), which a merge has nowhere to put.\n` +
+        `        A results file merges as \`${component}\`'s block only if it measured \`${component}\` and nothing else: \`bun bench --component ${component}\` writes one, and \`report.mjs\` will not turn a full run into one.`
+    );
+  }
+  const absent = missingComponentCells({ run, component });
+  if (absent != null) {
+    problems.push(absent);
   }
   const note = missingBaselineProvenanceProblem({ baseline });
   const check = comparabilityCheck({
@@ -3555,11 +3654,21 @@ export function mergeComponentBaseline({
   }
 
   const addedCells = {};
-  for (const [key, cell] of Object.entries(built.cells ?? {})) {
+  // Only this component's own cells, from a `built` that may hold a whole run's.
+  // `mergeBaselineProblems()` refuses a run that measured more than the named
+  // component, and `report.mjs` asks it — but this function is exported and the
+  // cost of trusting the caller here is another component's measured numbers, so
+  // the filter is applied here as well and the caller's refusal is what a human
+  // sees rather than what keeps the file honest.
+  for (const [key, cell] of Object.entries(
+    cellsForComponent(built.cells ?? {}, component)
+  )) {
     addedCells[key] = cell;
     next.cells[key] = cell;
   }
-  for (const [key, cell] of Object.entries(built.skippedCells ?? {})) {
+  for (const [key, cell] of Object.entries(
+    cellsForComponent(built.skippedCells ?? {}, component)
+  )) {
     addedCells[key] = cell;
     next.skippedCells[key] = cell;
   }

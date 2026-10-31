@@ -23,7 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { machineLabelFromEnv } from './baseline.mjs';
-import { installedVersion, lockedVersion } from './deps.mjs';
+import { installedVersion } from './deps.mjs';
 import {
   BASELINE_TIMEOUTS_MS,
   baselineTimeoutRecord,
@@ -44,52 +44,38 @@ export function tryExec(command, args) {
 }
 
 /**
- * Records `bun.lock` and `node_modules`, so a baseline can name the versions its
- * ratios were measured against (X14).
+ * The two installed packages a run measured, read from `node_modules`.
  *
- * `bun.lock` is the answer that travels: it is committed, so the same read works
- * at the commit an older baseline file names (`deps.mjs` `dependenciesSourceAt`),
- * which is what lets a merge compare versions instead of assuming them.
- * `node_modules/<name>/package.json` is recorded beside it because the measured
- * thing is the installed package, and the two disagreeing is worth a line - a
- * merged cell has to be comparable with the file it joins, and a stale install
- * would otherwise smuggle an unrecorded app into the comparison.
+ * Beside the lock because the measured thing is the install, and the two
+ * disagreeing is worth a line — a merged cell has to be comparable with the file
+ * it joins, and a stale install would otherwise smuggle an unrecorded app into
+ * the comparison. X14's first version of this lived in `machine.mjs` as
+ * `collectDependencies()` and also parsed `bun.lock` with strict `JSON.parse`;
+ * that half was never read by its one caller (which resolves the lock through
+ * `deps.mjs`'s tolerant reader) and carried the exact bug that reader exists to
+ * fix, so it is gone and only the install read remains.
  *
- * Nulls rather than guesses throughout: an empty `bun.lock` read, an
- * unresolvable name, or an uninstalled package all record "not recorded", which a
- * merge refuses rather than matching against another blank.
+ * A package that is not installed is null rather than a guess.
  *
- * @param {{ lockPath: string, nodeModulesDir: string, source?: string }} paths
+ * @param {{ nodeModulesDir: string, read?: (file: string) => string }} input
+ * @returns {{ reactNative: string | null, expoUi: string | null }}
  */
-export function collectDependencies({ lockPath, nodeModulesDir, source }) {
-  const read = (file) => {
-    try {
-      return fs.readFileSync(file, 'utf8');
-    } catch {
-      return null;
-    }
-  };
-  let lock = null;
-  try {
-    lock = JSON.parse(read(lockPath) ?? '');
-  } catch {
-    lock = null;
-  }
+export function installedPackageVersions({
+  nodeModulesDir,
+  read = (file) => fs.readFileSync(file, 'utf8'),
+}) {
   const installed = (name) => {
     try {
       return installedVersion(
-        JSON.parse(read(path.join(nodeModulesDir, name, 'package.json')) ?? '')
+        JSON.parse(read(path.join(nodeModulesDir, name, 'package.json')))
       );
     } catch {
       return null;
     }
   };
   return {
-    reactNative: lockedVersion(lock, 'react-native'),
-    expoUi: lockedVersion(lock, '@expo/ui'),
-    installedReactNative: installed('react-native'),
-    installedExpoUi: installed('@expo/ui'),
-    source: source ?? "bun.lock at the run's commit",
+    reactNative: installed('react-native'),
+    expoUi: installed('@expo/ui'),
   };
 }
 

@@ -35,6 +35,7 @@ import {
   androidDryRunDevice,
   dryRunReport,
   iosDryRunDevice,
+  mergeDependencyEvidence,
   readAvdHardware,
 } from '../bench/dry-run.mjs';
 
@@ -417,6 +418,55 @@ describe('the merge half of a dry run', () => {
     });
     expect(out.lines.join('\n')).not.toContain('Merge:');
     expect(out.exitCode).toBe(0);
+  });
+
+  /**
+   * The pre-flight recovers a pre-X14 file's app versions through the *same*
+   * function the authoritative write-time check uses (review L3: it had its own
+   * copy of eleven lines, which is how the two drifted apart in the first place).
+   * Only `run.mjs` calls `mergeDependencyEvidence()` — no test reached it — so the
+   * shared reader is asserted here rather than trusted: the pre-flight must answer
+   * with what `git show <the file's sha>:bun.lock` says, with the same `why`, or it
+   * would wave a merge through and the write would then refuse it after the device
+   * time was spent.
+   */
+  it("recovers a pre-X14 file's versions through the reader the run uses", () => {
+    const shown = [];
+    const git = (args) => {
+      shown.push(args.join(' '));
+      if (args[1] === 'dead123:bun.lock') {
+        return '{"lockfileVersion":1,"packages":{"react-native":["react-native@0.80.0",{},"react-native-0.80.0.tgz"],"@expo/ui":["@expo/ui@54.0.0",{},"expo-ui-54.0.0.tgz"]},}';
+      }
+      if (args[1] === 'dead123:bench/package.json') {
+        return '{"dependencies":{"react-native":"0.80.0","@expo/ui":"54.0.0"}}';
+      }
+      throw new Error(`nothing at ${String(args[1])}`);
+    };
+    const out = mergeDependencyEvidence({
+      lockPath: '/repo/bun.lock',
+      nodeModulesDir: null,
+      git,
+      // A file that predates the `dependencies` field, so the recovery is what is
+      // being asked for, and that names the commit it was measured at.
+      baseline: { sha: 'dead123', dependencies: null },
+      read: () => {
+        throw new Error('no working-tree lock in this case');
+      },
+    });
+    expect(shown).toEqual([
+      'show dead123:bun.lock',
+      'show dead123:bench/package.json',
+    ]);
+    expect(out.resolved).toEqual({
+      'dependencies.reactNative': {
+        value: '0.80.0',
+        why: "bun.lock at the baseline's founding commit dead123",
+      },
+      'dependencies.expoUi': {
+        value: '54.0.0',
+        why: "bun.lock at the baseline's founding commit dead123",
+      },
+    });
   });
 });
 

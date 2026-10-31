@@ -29,6 +29,7 @@ import path from 'node:path';
 
 import {
   baselineFileFor,
+  foundingDependencies,
   labelPreFlightProblem,
   machineLabelFromEnv,
   machineLabelProblem,
@@ -48,7 +49,7 @@ import {
   parseTimeoutFlags,
   timeoutRuleProblem,
 } from './lib.mjs';
-import { collectDependencies, mergeCandidateRun } from './machine.mjs';
+import { installedPackageVersions, mergeCandidateRun } from './machine.mjs';
 import { resolvedDependencies } from './deps.mjs';
 
 /**
@@ -202,9 +203,9 @@ export function mergeDependencyEvidence({
     source: resolved.source,
   };
   if (nodeModulesDir != null) {
-    const installed = collectDependencies({ lockPath, nodeModulesDir });
-    dependencies.installedReactNative = installed.installedReactNative;
-    dependencies.installedExpoUi = installed.installedExpoUi;
+    const installed = installedPackageVersions({ nodeModulesDir, read });
+    dependencies.installedReactNative = installed.reactNative;
+    dependencies.installedExpoUi = installed.expoUi;
   }
   return {
     dependencies,
@@ -215,31 +216,20 @@ export function mergeDependencyEvidence({
 
 /**
  * The app versions recorded at the commit a baseline's own `sha` names, in the shape
- * `mergeBaselineProblems({ resolved })` wants. Kept here rather than imported from
- * `baseline.mjs` so this module stays free of a cycle: `baseline.mjs` does the same
- * read for the authoritative check.
+ * `mergeBaselineProblems({ resolved })` wants.
+ *
+ * One implementation lives in `baseline.mjs` (`foundingDependencies()`), which is what
+ * the authoritative check runs. `dry-run.mjs` used to carry its own copy of the same
+ * eleven lines and the two drifted the moment one of them learned something new, so
+ * the pre-flight asks the original instead — which is safe because the dependency
+ * only points *down* this way: `baseline.mjs` imports `deps.mjs` and `lib.mjs`, never
+ * this module.
  */
 export function foundingDependencyEvidence({ git = null, baseline = null }) {
-  const sha = typeof baseline?.sha === 'string' ? baseline.sha : null;
-  if (git == null || sha == null) {
-    return {};
-  }
-  const source = `bun.lock at the baseline's founding commit ${sha}`;
-  const show = (file) => {
-    try {
-      return git(['show', `${sha}:${file}`]);
-    } catch {
-      return null;
-    }
-  };
-  const at = resolvedDependencies({
-    lockText: show('bun.lock'),
-    manifestText: show('bench/package.json'),
-    source,
-  });
+  const recovered = foundingDependencies({ git, baseline });
   return {
-    'dependencies.reactNative': { value: at.reactNative, why: source },
-    'dependencies.expoUi': { value: at.expoUi, why: source },
+    'dependencies.reactNative': recovered['dependencies.reactNative'],
+    'dependencies.expoUi': recovered['dependencies.expoUi'],
   };
 }
 

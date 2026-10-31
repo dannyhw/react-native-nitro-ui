@@ -161,26 +161,54 @@ export function writeBaseline(
     });
   }
   const baseline = merged?.baseline ?? built;
-  fs.writeFileSync(file, `${JSON.stringify(baseline, null, 2)}\n`);
+  const text = `${JSON.stringify(baseline, null, 2)}\n`;
+  // Write, format, then rename — in that order (review L2). The committed file is
+  // every machine's gate table, and prettier runs on it *after* the write: writing
+  // in place means a crash mid-write, or a prettier that dies half-way, leaves a
+  // truncated or re-wrapped table where a byte-identical one should be. The temp
+  // file is in the same directory, so the rename is atomic and a reader sees either
+  // the old file or the finished new one. It keeps a `.json` extension because
+  // prettier infers its parser from the file it is handed.
+  const tempFile = path.join(
+    path.dirname(file),
+    `.${path.basename(file, '.json')}.${String(process.pid)}.tmp.json`
+  );
+  fs.writeFileSync(tempFile, text);
   // The baseline is a committed file, and `bun run format` checks committed
   // files - so the mint formats what it wrote instead of leaving a formatting
   // diff for whoever commits it (A1b follow-up).
   // From the repo root, so bunx finds this repo's prettier rather than the
   // bench app's (see scripts/bench/format.mjs).
-  const { note } = formatCommittedJsonFile(file, { cwd: REPO_ROOT });
-  return {
-    written: true,
-    blockers: [],
-    file,
-    baseline,
-    formatted: note == null,
-    note,
-    merged,
-    changedCells: merged?.changedCells ?? null,
-    skippedCellNotes: skippedCellNotes(baseline, {
-      display: path.relative(REPO_ROOT, file),
-    }),
-  };
+  try {
+    const { note } = formatCommittedJsonFile(tempFile, { cwd: REPO_ROOT });
+    if (note != null) {
+      // Prettier could not run, or exited non-zero — possibly after writing a
+      // half-formatted file. Serialise what we meant to write over whatever it left
+      // behind: an unformatted baseline is a formatting diff for a human to fix
+      // (`bun run format:write`), a corrupt one is a lost table.
+      fs.writeFileSync(tempFile, text);
+    }
+    fs.renameSync(tempFile, file);
+    return {
+      written: true,
+      blockers: [],
+      file,
+      baseline,
+      formatted: note == null,
+      // The note tells a human to run prettier on the file, and it was written for
+      // the temp name it has just lost: re-point it at the path that now exists.
+      note: note == null ? null : note.split(tempFile).join(file),
+      merged,
+      changedCells: merged?.changedCells ?? null,
+      skippedCellNotes: skippedCellNotes(baseline, {
+        display: path.relative(REPO_ROOT, file),
+      }),
+    };
+  } catch (error) {
+    // Nothing was committed; take the half-written temp with us.
+    fs.rmSync(tempFile, { force: true });
+    throw error;
+  }
 }
 
 export function writeReportFiles({ run, markdown, fileName }) {
