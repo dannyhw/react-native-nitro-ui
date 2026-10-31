@@ -201,10 +201,29 @@ describe('decideAcquire with a busy Metro port', () => {
     expect(ask().pair.id).toBe(PAIR_A);
   });
 
-  it('holds an exclusive lease back from any pair whose port is served', () => {
-    // An exclusive lease promises a quiet machine and holds every pair, so one
-    // stranger's Metro anywhere in the pool is enough to hold a mint back.
+  it('lets an exclusive acquire proceed over a busy Metro port, and says so', () => {
+    // An exclusive lease is a bench or a baseline mint, and a bench builds its JS into
+    // the Release binary (`scripts/bench/devices.mjs:10`), so it never serves or joins a
+    // Metro. Waiting here cost up to an hour for a port the run will not touch, and the
+    // `pendingExclusive` marker refreshed on every poll held back every *other* task
+    // with a message that named neither the port nor the pid (X15 review). The guard the
+    // exclusive case really needs is the device reap it already runs, not this one.
     const decision = ask({ exclusive: true, portBlocked: [blocked(PAIR_B)] });
+    expect(decision.ok).toBe(true);
+    expect(decision.note).toContain(
+      'exclusive lease does not wait on Metro ports'
+    );
+    expect(decision.note).toContain(`Metro port (${PAIR_B})`);
+  });
+
+  it('still holds a non-exclusive lease back from a busy port when it is the only pair', () => {
+    // The other half of the pair of rules: the device task that *would* join that Metro
+    // keeps the guard. Making the exclusive case loud-but-fast must not quietly widen
+    // the exception to everyone.
+    const decision = ask({
+      exclusive: false,
+      portBlocked: [blocked(PAIR_A), blocked(PAIR_B)],
+    });
     expect(decision.ok).toBe(false);
     expect(decision.reason).toMatch(/Metro port/);
   });

@@ -850,12 +850,15 @@ export function pruneExpired(state, now) {
  * @param {'ios'|'android'|'both'} options.platform
  * @param {string} options.task
  * @param {object[]} [options.pending] live `pendingExclusive` requests (others')
- * @param {string[]} [options.portBlocked] pair ids whose Metro port a live process
- *   still serves (X15 item 1). A pair on that list is skipped the way a leased pair
- *   is: a task that could take a *quiet* pair takes it, and one that could not waits
- *   for the port rather than being told "every pair is leased" — which would send it
- *   to `lease.mjs list`, where nothing looks wrong.
- * @returns {{ok: true, pair: object} | {ok: false, reason: string, waiting: string[]}}
+ * @param {Array<{id: string, reason?: string}>} [options.portBlocked] the pairs whose
+ *   Metro port a live process still serves (X15 item 1). A pair on that list is skipped
+ *   the way a leased pair is: a task that could take a *quiet* pair takes it, and one
+ *   that could not waits for the port rather than being told "every pair is leased" —
+ *   which would send it to `lease.mjs list`, where nothing looks wrong. An *exclusive*
+ *   acquire is the exception: a bench bundles its JS into a Release build and never uses
+ *   a Metro (X15 review), so it proceeds over a busy port with a `note` naming it rather
+ *   than waiting an hour for a port it will not touch.
+ * @returns {{ok: true, pair: object, note?: string} | {ok: false, reason: string, waiting: string[]}}
  */
 export function decideAcquire({
   active,
@@ -931,14 +934,21 @@ export function decideAcquire({
   const portWait = free
     .filter((pair) => blocked.has(pair.id))
     .map((pair) => blocked.get(pair.id));
+  // An exclusive lease is a bench or a baseline mint, and neither runs a Metro: a bench
+  // builds a Release app with the bundle inside it (X15: `scripts/bench/devices.mjs:10`),
+  // so it measures nothing on the port and waits for nothing on it (X15 review). Waiting
+  // here was worse than useless: the wait is up to an hour, and the `pendingExclusive`
+  // marker it refreshes on every poll holds back *every* non-exclusive acquire with a
+  // message that never mentions the port or the process causing it. So an exclusive
+  // acquire takes the machine over a stranger's Metro and says so.
   const usable = free
-    .filter((pair) => !blocked.has(pair.id))
+    .filter((pair) => exclusive || !blocked.has(pair.id))
     .filter((pair) => {
       if (platform === 'ios' && pair.ios == null) return false;
       if (platform === 'android' && pair.android == null) return false;
       return pair.ios != null || pair.android != null;
     });
-  if (usable.length === 0 || (exclusive && portWait.length > 0)) {
+  if (usable.length === 0) {
     if (portWait.length > 0) {
       return { ok: false, reason: portWait.join('; '), waiting };
     }
@@ -949,6 +959,19 @@ export function decideAcquire({
           ? `no configured pair has ${platform === 'both' ? 'a device' : `a ${platform} device`}`
           : `every pair is already leased (${[...taken].join(', ')})`,
       waiting,
+    };
+  }
+  // The warning an exclusive acquire owes the human who is about to measure on a machine
+  // somebody's Metro is still serving. `decideAcquire` is a pure decision, so it travels
+  // as a note and `lease.mjs` prints it - a wait would be wrong (above), and silence
+  // would be the failure mode the whole guard exists to end.
+  if (exclusive && portWait.length > 0) {
+    return {
+      ok: true,
+      pair: usable[0],
+      note:
+        `an exclusive lease does not wait on Metro ports (a bench builds its bundle in, ` +
+        `so it never uses one): proceeding over ${portWait.join('; ')}`,
     };
   }
   return { ok: true, pair: usable[0] };
