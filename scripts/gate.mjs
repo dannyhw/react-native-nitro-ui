@@ -189,7 +189,7 @@ const LOAD_SAMPLE_INTERVAL_MS = 15_000;
  * ledger recorded nothing; forwarding gives the child its own cleanup, and the
  * signal is re-raised on self afterwards so the exit status is still the signal.
  */
-const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'];
+const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
 /**
  * The flags `gate.mjs` itself owns on a gate run, which must never reach the
@@ -1888,6 +1888,18 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // finds a transcript with every line in it twice. Foreground runs still echo.
   const echo = !backgrounded;
   let logStreamOpen = true;
+  /**
+   * The gate's own news, in the transcript as well as on the terminal (X15 review 4). What the
+   * evidence store keeps is the log file, and a sweep that stopped a server or a signal that
+   * was re-raised is exactly the fact a reader needs three days later: on stderr alone it is
+   * gone the moment the run scrolls past. Written to both, not moved, because the person
+   * watching the run needs it now too.
+   */
+  const note = (message) => {
+    process.stderr.write(message);
+    logText += message;
+    if (logStreamOpen) logStream.write(message);
+  };
   const tee = (chunk, output) => {
     logText += String(chunk);
     // Guarded, because the drain above can end the stream while a descendant of the run is
@@ -1924,11 +1936,16 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   );
 
   let childPid = null;
-  // The run's output as one question: has everything arrived? `close` on the child's pipes
-  // answers it, and the drain below races that answer against a constant. Declared out here
-  // because the answer arrives from inside the promise below and is read after it.
+  // The run's output as one question: has *all* of it arrived? Answered by the child's two
+  // pipes closing, counted rather than taken from the first `close` to arrive (X15 review 2):
+  // stdout and stderr close independently, and treating either one as the end loses the other
+  // one's tail - which for a harness run is the test summary the ledger's counts are parsed
+  // from. Declared out here because the answer arrives from inside the promise below and is
+  // read after it.
   let childStreamsClosed = false;
+  let streamsClosedCount = 0;
   let drainNow = null;
+  let childStreams = null;
   const exit = await new Promise((resolvePromise) => {
     const child = spawn(resolved.argv[0], resolved.argv.slice(1), {
       cwd,
@@ -1965,9 +1982,10 @@ async function runGateUnclaimed(name, resolved, options = {}) {
       })(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    // Remembered for the sweep below: `child` is inside this promise's scope, and the
-    // sweep runs after it settles.
+    // Remembered for the sweep and the release below: `child` is inside this promise's scope,
+    // and both run after it settles.
     childPid = child.pid ?? null;
+    childStreams = { out: child.stdout, err: child.stderr };
     let forwarded = null;
     const handlers = FORWARDED_SIGNALS.map((signal) => {
       const handler = () => {
@@ -2009,7 +2027,12 @@ async function runGateUnclaimed(name, resolved, options = {}) {
         forwarded: null,
       });
     });
+    // Both pipes, counted: see `streamsClosedCount`. A leaked descendant holds *both* open
+    // (it inherits them), so waiting for the pair costs nothing in the case the drain exists
+    // for, and saves the tail in the ordinary one where the two close a chunk apart.
     const markClosed = () => {
+      streamsClosedCount += 1;
+      if (streamsClosedCount < 2) return;
       childStreamsClosed = true;
       drainNow?.();
     };
@@ -2026,9 +2049,11 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // child's stdout and stderr, so its end holds both pipes open long after the harness is
   // gone. Resolving on `close` is what hung a gate for its whole timeout, and a leaked
   // server must not be able to do that. So the pipes get a bounded moment to drain - long
-  // enough for the tail of a normal run, which is what the test-count parse reads - and the
-  // sweep below is what then stops whatever is still holding them open. The drain is a
-  // constant rather than a knob: nobody should tune how much of their own log they read.
+  // enough for the tail of a normal run, which is what the test-count parse reads - and
+  // whatever is still holding them at the end of that moment is dealt with below: the sweep
+  // stops a Metro this run owns, and the release below drops our read ends whatever it is,
+  // because a descendant the sweep may not touch is not a reason to stay alive. The drain is
+  // a constant rather than a knob: nobody should tune how much of their own log they read.
   if (!childStreamsClosed) {
     await new Promise((resolveDrain) => {
       const timer = setTimeout(() => {
@@ -2054,14 +2079,32 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   const leftover = await stopOwnMetro({
     port: process.env.METRO_PORT,
     leaderPid: childPid,
-    log: (message) => process.stderr.write(message),
+    log: note,
   });
   if (leftover.length > 0) {
-    process.stderr.write(
+    note(
       `gate: stopped the Metro this run started (${leftover.join(', ')}) on port ${String(
         process.env.METRO_PORT
       )} - the next gate on this lease gets a free port\n`
     );
+  }
+  // Our read ends on the child's output are done with, unconditionally (X15 review 3): the run
+  // is recorded and swept, so there is nothing left to read and two ways a held pipe still
+  // hurts. A descendant that is not a Metro on the leased port (a real-input server on the
+  // 8291 default, with no `METRO_PORT` in the environment to sweep by) is not ours to stop, and
+  // holding the read end is what keeps *this* process alive: a lease doing nothing until an
+  // orphan decides to close, and `wait` reporting a finished gate as still running. It also
+  // holds the tail hostage - the drain ends when both pipes have closed, and a gate that keeps
+  // reading after that is reading output it has already written up.
+  //
+  // `destroy`, not `end`: nothing is left to flush on a read stream, and `end` would wait for
+  // the other side.
+  for (const stream of [childStreams?.out, childStreams?.err]) {
+    try {
+      stream?.destroy();
+    } catch {
+      /* already gone */
+    }
   }
   samples.push(os.loadavg()[0] ?? Number.NaN);
   const durationMs = Date.now() - startedAt;
