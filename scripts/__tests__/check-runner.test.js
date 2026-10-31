@@ -66,9 +66,9 @@ describe('the check step list is the chain', () => {
     for (const name of parsed.names) {
       expect(packageJson.scripts[name]).toEqual(expect.any(String));
     }
-    // The old order, kept as the reference: 16 steps, `prepare` before the three
+    // The old order, kept as the reference: 17 steps, `prepare` before the three
     // that read `lib/`.
-    expect(parsed.names).toHaveLength(16);
+    expect(parsed.names).toHaveLength(17);
     expect(parsed.names.indexOf('prepare')).toBeLessThan(
       parsed.names.indexOf('api-extractor:check')
     );
@@ -81,13 +81,13 @@ describe('the check step list is the chain', () => {
     const chain = serialChainFromSteps(CHECK_STEPS);
     const added = `${chain} && bun run smoke:pack`;
     expect(stepsFromSerialChain(added).names).not.toEqual(stepNames());
-    expect(stepsFromSerialChain(added).names.slice(0, 16)).toEqual(stepNames());
+    expect(stepsFromSerialChain(added).names.slice(0, 17)).toEqual(stepNames());
 
     const dropped = stepsFromSerialChain(
       chain.replace(' && bun run readme:check', '')
     ).names;
     expect(dropped).not.toEqual(stepNames());
-    expect(dropped).toHaveLength(15);
+    expect(dropped).toHaveLength(16);
   });
 
   it('the runner refuses to start when the chain and the graph differ, either way', () => {
@@ -166,6 +166,7 @@ describe('the check step list is the chain', () => {
       'format',
       'test',
       'test:native',
+      'test:native:android',
       'perf:renders',
       'nitrogen:check',
       'registry:check',
@@ -251,6 +252,10 @@ describe('steps that share an output are ordered', () => {
       'prepare writes nitrogen while lint reads it',
       'prepare writes nitrogen while format reads it',
       'prepare writes nitrogen/generated while test reads it',
+      // X15 item 2: the Android JVM test compiles the library, whose autolinking adds
+      // `nitrogen/generated/android/kotlin` to the Kotlin source set - so bob deleting
+      // the directory underneath it is the same race the three above are.
+      'prepare writes nitrogen/generated while test:native:android reads it',
       'prepare writes nitrogen/generated while perf:renders reads it',
       'prepare writes nitrogen/generated while nitrogen:check reads it',
     ]);
@@ -998,7 +1003,7 @@ describe('check.mjs, spawning real steps', () => {
     }
   }, 60_000);
 
-  it('refuses an argument it does not know instead of handing it to sixteen steps', () => {
+  it('refuses an argument it does not know instead of handing it to every step', () => {
     const run = runRunner(['--update-baseline']);
     expect(run.status).toBe(2);
     expect(run.stderr).toContain('unknown argument');
