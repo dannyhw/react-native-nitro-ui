@@ -1,0 +1,168 @@
+# Failure excerpt — bench:--platform:ios:--plan:full:--launches:8:--component:menu:--update-baseline:--skip-build
+
+- Ran: 2026-10-31T19:34:41.835Z on code tree `224752adf1e2` at HEAD `b59db14` (branch `task/A6-mac1-menu-cells`)
+- Command: `node scripts/bench/run.mjs --platform ios --plan full --launches 8 --component menu --update-baseline --skip-build`
+- Result: fail, exit 2, 1936628 ms
+- Load: start 5.27, end 8.58, median 6.94, max 9.13
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `A6-pse0s`
+- Full log: `task/A6-mac1-menu-cells/bench+--platform+ios+--plan+full+--launches+8+--component+menu+--update-baseline+--skip-build-2026-10-31T19-34-41.455Z.log` (<store>/task/A6-mac1-menu-cells/bench+--platform+ios+--plan+full+--launches+8+--component+menu+--update-baseline+--skip-build-2026-10-31T19-34-41.455Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Last 150 log line(s) (of 316 — the rest is in the full log above)
+
+```
+[154/224] update.menu:expo-ui-shared-host:1 launch 6/8 ... 20 iterations (3.9s)
+[155/224] update.menu:expo-ui-host-per-control:1 launch 6/8 ... 20 iterations (3.8s)
+[156/224] update.menu:rn-core:1 launch 6/8 ... 20 iterations (3.9s)
+[157/224] update.menu:nitro-ui:50 launch 6/8 ... 20 iterations (4.4s)
+[158/224] update.menu:expo-ui-shared-host:50 launch 6/8 ... 20 iterations (3.8s)
+[159/224] update.menu:expo-ui-host-per-control:50 launch 6/8 ... 20 iterations (3.8s)
+[160/224] update.menu:rn-core:50 launch 6/8 ... 20 iterations (3.9s)
+[161/224] memory.menu:nitro-ui:200 launch 6/8 ... 0 iterations (5.4s)
+[162/224] memory.menu:expo-ui-shared-host:200 launch 6/8 ... 0 iterations (5.3s)
+[163/224] memory.menu:expo-ui-host-per-control:200 launch 6/8 ... 0 iterations (5.4s)
+[164/224] memory.menu:rn-core:200 launch 6/8 ... 0 iterations (5.4s)
+[165/224] leak.menu:nitro-ui:200 launch 6/8 ... 0 iterations (19.8s)
+[166/224] leak.menu:expo-ui-shared-host:200 launch 6/8 ... 0 iterations (20.6s)
+[167/224] leak.menu:expo-ui-host-per-control:200 launch 6/8 ... 0 iterations (20.4s)
+[168/224] leak.menu:rn-core:200 launch 6/8 ... 0 iterations (20.4s)
+[169/224] mount.menu:rn-core:1 launch 7/8 ... 20 iterations (5.3s)
+[170/224] mount.menu:expo-ui-host-per-control:1 launch 7/8 ... 20 iterations (5.3s)
+[171/224] mount.menu:expo-ui-shared-host:1 launch 7/8 ... 20 iterations (5.3s)
+[172/224] mount.menu:nitro-ui:1 launch 7/8 ... 20 iterations (5.9s)
+[173/224] mount.menu:rn-core:50 launch 7/8 ... 20 iterations (5.4s)
+[174/224] mount.menu:expo-ui-host-per-control:50 launch 7/8 ... 20 iterations (7.3s)
+[175/224] mount.menu:expo-ui-shared-host:50 launch 7/8 ... 20 iterations (6.9s)
+[176/224] mount.menu:nitro-ui:50 launch 7/8 ... 20 iterations (6.4s)
+[177/224] mount.menu:rn-core:200 launch 7/8 ... 20 iterations (5.9s)
+[178/224] mount.menu:expo-ui-host-per-control:200 launch 7/8 ... 20 iterations (18.4s)
+[179/224] mount.menu:expo-ui-shared-host:200 launch 7/8 ... 20 iterations (9.9s)
+[180/224] mount.menu:nitro-ui:200 launch 7/8 ... 20 iterations (10.4s)
+[181/224] update.menu:rn-core:1 launch 7/8 ... 20 iterations (3.9s)
+[182/224] update.menu:expo-ui-host-per-control:1 launch 7/8 ... 20 iterations (3.9s)
+[183/224] update.menu:expo-ui-shared-host:1 launch 7/8 ... 20 iterations (3.9s)
+[184/224] update.menu:nitro-ui:1 launch 7/8 ... 20 iterations (4.4s)
+[185/224] update.menu:rn-core:50 launch 7/8 ... 20 iterations (3.9s)
+[186/224] update.menu:expo-ui-host-per-control:50 launch 7/8 ... 20 iterations (4.4s)
+[187/224] update.menu:expo-ui-shared-host:50 launch 7/8 ... 20 iterations (4.3s)
+[188/224] update.menu:nitro-ui:50 launch 7/8 ... 20 iterations (4.4s)
+[189/224] memory.menu:rn-core:200 launch 7/8 ... 0 iterations (5.4s)
+[190/224] memory.menu:expo-ui-host-per-control:200 launch 7/8 ... 0 iterations (5.4s)
+[191/224] memory.menu:expo-ui-shared-host:200 launch 7/8 ... 0 iterations (5.4s)
+[192/224] memory.menu:nitro-ui:200 launch 7/8 ... 0 iterations (5.4s)
+[193/224] leak.menu:rn-core:200 launch 7/8 ... 0 iterations (19.8s)
+[194/224] leak.menu:expo-ui-host-per-control:200 launch 7/8 ... 0 iterations (20.7s)
+[195/224] leak.menu:expo-ui-shared-host:200 launch 7/8 ... 0 iterations (20.5s)
+[196/224] leak.menu:nitro-ui:200 launch 7/8 ... 0 iterations (19.8s)
+[197/224] mount.menu:nitro-ui:1 launch 8/8 ... 20 iterations (5.9s)
+[198/224] mount.menu:expo-ui-shared-host:1 launch 8/8 ... 20 iterations (5.9s)
+[199/224] mount.menu:expo-ui-host-per-control:1 launch 8/8 ... 20 iterations (5.9s)
+[200/224] mount.menu:rn-core:1 launch 8/8 ... 20 iterations (5.4s)
+[201/224] mount.menu:nitro-ui:50 launch 8/8 ... 20 iterations (6.4s)
+[202/224] mount.menu:expo-ui-shared-host:50 launch 8/8 ... 20 iterations (6.4s)
+[203/224] mount.menu:expo-ui-host-per-control:50 launch 8/8 ... 20 iterations (7.9s)
+[204/224] mount.menu:rn-core:50 launch 8/8 ... 20 iterations (5.4s)
+[205/224] mount.menu:nitro-ui:200 launch 8/8 ... 20 iterations (10.4s)
+[206/224] mount.menu:expo-ui-shared-host:200 launch 8/8 ... 20 iterations (9.9s)
+[207/224] mount.menu:expo-ui-host-per-control:200 launch 8/8 ... 20 iterations (17.1s)
+[208/224] mount.menu:rn-core:200 launch 8/8 ... 20 iterations (5.9s)
+[209/224] update.menu:nitro-ui:1 launch 8/8 ... 20 iterations (4.4s)
+[210/224] update.menu:expo-ui-shared-host:1 launch 8/8 ... 20 iterations (3.9s)
+[211/224] update.menu:expo-ui-host-per-control:1 launch 8/8 ... 20 iterations (4.4s)
+[212/224] update.menu:rn-core:1 launch 8/8 ... 20 iterations (4.4s)
+[213/224] update.menu:nitro-ui:50 launch 8/8 ... 20 iterations (4.4s)
+[214/224] update.menu:expo-ui-shared-host:50 launch 8/8 ... 20 iterations (4.4s)
+[215/224] update.menu:expo-ui-host-per-control:50 launch 8/8 ... 20 iterations (4.4s)
+[216/224] update.menu:rn-core:50 launch 8/8 ... 20 iterations (4.4s)
+[217/224] memory.menu:nitro-ui:200 launch 8/8 ... 0 iterations (5.4s)
+[218/224] memory.menu:expo-ui-shared-host:200 launch 8/8 ... 0 iterations (5.4s)
+[219/224] memory.menu:expo-ui-host-per-control:200 launch 8/8 ... 0 iterations (5.4s)
+[220/224] memory.menu:rn-core:200 launch 8/8 ... 0 iterations (5.4s)
+[221/224] leak.menu:nitro-ui:200 launch 8/8 ... 0 iterations (20.5s)
+[222/224] leak.menu:expo-ui-shared-host:200 launch 8/8 ... 0 iterations (20.5s)
+[223/224] leak.menu:expo-ui-host-per-control:200 launch 8/8 ... 0 iterations (20.6s)
+[224/224] leak.menu:rn-core:200 launch 8/8 ... 0 iterations (20.6s)
+
+Results: bench/results/b59db14-ios-20261031T193448Z.json
+Raw:     bench/results/b59db14-ios-20261031T193448Z.ndjson
+Report:  bench/results/b59db14-ios-20261031T193448Z.md
+
+| Cell              | Implementation           | presented | mounted   | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| ----------------- | ------------------------ | --------- | --------- | --------- | --------- | --------- | ---------- |
+| mount.menu N=1    | rn-core                  | 16.04 ms  | 785.53 us | 490.71 us | 747.27 us | 525.98 us | n/a        |
+| mount.menu N=1    | expo-ui-host-per-control | 16.02 ms  | 1.77 ms   | 441.85 us | 862.25 us | 1.91 ms   | n/a        |
+| mount.menu N=1    | expo-ui-shared-host      | 16.05 ms  | 1.75 ms   | 409.61 us | 709.42 us | 1.70 ms   | n/a        |
+| mount.menu N=1    | nitro-ui                 | 16.03 ms  | 1.90 ms   | 334.50 us | 586.92 us | 1.93 ms   | n/a        |
+| mount.menu N=50   | rn-core                  | 16.00 ms  | 6.52 ms   | 4.15 ms   | 4.55 ms   | 2.32 ms   | n/a        |
+| mount.menu N=50   | expo-ui-host-per-control | 104.84 ms | 26.14 ms  | 4.55 ms   | 8.31 ms   | 79.45 ms  | n/a        |
+| mount.menu N=50   | expo-ui-shared-host      | 16.12 ms  | 13.84 ms  | 3.25 ms   | 3.71 ms   | 21.57 ms  | n/a        |
+| mount.menu N=50   | nitro-ui                 | 32.79 ms  | 27.72 ms  | 1.68 ms   | 2.08 ms   | 30.09 ms  | n/a        |
+| mount.menu N=200  | rn-core                  | 16.13 ms  | 15.63 ms  | 9.96 ms   | 10.22 ms  | 10.36 ms  | n/a        |
+| mount.menu N=200  | expo-ui-host-per-control | 358.46 ms | 114.89 ms | 18.38 ms  | 50.00 ms  | 297.42 ms | n/a        |
+| mount.menu N=200  | expo-ui-shared-host      | 133.48 ms | 49.99 ms  | 12.40 ms  | 13.45 ms  | 85.72 ms  | n/a        |
+| mount.menu N=200  | nitro-ui                 | 144.53 ms | 103.67 ms | 6.40 ms   | 6.85 ms   | 116.10 ms | n/a        |
+| update.menu N=1   | rn-core                  | 16.08 ms  | 437.16 us | 282.66 us | 409.27 us | 669.42 us | n/a        |
+| update.menu N=1   | expo-ui-host-per-control | 16.04 ms  | 1.10 ms   | 487.56 us | 841.45 us | 2.41 ms   | n/a        |
+| update.menu N=1   | expo-ui-shared-host      | 16.06 ms  | 802.60 us | 337.89 us | 607.95 us | 1.79 ms   | n/a        |
+| update.menu N=1   | nitro-ui                 | 16.04 ms  | 2.05 ms   | 404.59 us | 601.90 us | 2.53 ms   | n/a        |
+| update.menu N=50  | rn-core                  | 16.09 ms  | 3.16 ms   | 2.05 ms   | 2.24 ms   | 3.37 ms   | n/a        |
+| update.menu N=50  | expo-ui-host-per-control | 14.35 ms  | 7.65 ms   | 2.79 ms   | 6.96 ms   | 18.08 ms  | n/a        |
+| update.menu N=50  | expo-ui-shared-host      | 16.08 ms  | 4.87 ms   | 1.86 ms   | 2.44 ms   | 10.08 ms  | n/a        |
+| update.menu N=50  | nitro-ui                 | 32.76 ms  | 15.59 ms  | 1.35 ms   | 1.90 ms   | 20.58 ms  | n/a        |
+| memory.menu N=200 | rn-core                  | n/a       | n/a       | n/a       | n/a       | n/a       | 62.2 KiB   |
+| memory.menu N=200 | expo-ui-host-per-control | n/a       | n/a       | n/a       | n/a       | n/a       | 357.0 KiB  |
+| memory.menu N=200 | expo-ui-shared-host      | n/a       | n/a       | n/a       | n/a       | n/a       | 263.4 KiB  |
+| memory.menu N=200 | nitro-ui                 | n/a       | n/a       | n/a       | n/a       | n/a       | 336.5 KiB  |
+| leak.menu N=200   | rn-core                  | n/a       | n/a       | n/a       | n/a       | n/a       | n/a        |
+| leak.menu N=200   | expo-ui-host-per-control | n/a       | n/a       | n/a       | n/a       | n/a       | n/a        |
+| leak.menu N=200   | expo-ui-shared-host      | n/a       | n/a       | n/a       | n/a       | n/a       | n/a        |
+| leak.menu N=200   | nitro-ui                 | n/a       | n/a       | n/a       | n/a       | n/a       | n/a        |
+
+Ratio to rn-core:
+
+| Cell              | Implementation           | presented | mounted | JS commit | JS CPU/op | UI CPU/op | bytes/inst |
+| ----------------- | ------------------------ | --------- | ------- | --------- | --------- | --------- | ---------- |
+| mount.menu N=1    | rn-core                  | 1.00x     | 1.00x   | 1.00x     | 1.00x     | 1.00x     | n/a        |
+| mount.menu N=1    | expo-ui-host-per-control | 1.00x     | 2.50x   | 1.01x     | 1.28x     | 3.86x     | n/a        |
+| mount.menu N=1    | expo-ui-shared-host      | 1.00x     | 2.77x   | 1.02x     | 1.12x     | 4.01x     | n/a        |
+| mount.menu N=1    | nitro-ui                 | 1.00x     | 3.16x   | 0.92x     | 0.98x     | 4.76x     | n/a        |
+| mount.menu N=50   | rn-core                  | 1.00x     | 1.00x   | 1.00x     | 1.00x     | 1.00x     | n/a        |
+| mount.menu N=50   | expo-ui-host-per-control | 6.55x     | 4.55x   | 1.23x     | 1.82x     | 33.93x    | n/a        |
+| mount.menu N=50   | expo-ui-shared-host      | 1.01x     | 2.41x   | 0.90x     | 0.86x     | 9.16x     | n/a        |
+| mount.menu N=50   | nitro-ui                 | 2.06x     | 4.85x   | 0.46x     | 0.47x     | 13.15x    | n/a        |
+| mount.menu N=200  | rn-core                  | 1.00x     | 1.00x   | 1.00x     | 1.00x     | 1.00x     | n/a        |
+| mount.menu N=200  | expo-ui-host-per-control | 22.01x    | 7.47x   | 1.86x     | 4.88x     | 28.26x    | n/a        |
+| mount.menu N=200  | expo-ui-shared-host      | 6.79x     | 3.24x   | 1.27x     | 1.35x     | 8.26x     | n/a        |
+| mount.menu N=200  | nitro-ui                 | 6.71x     | 6.67x   | 0.65x     | 0.67x     | 11.21x    | n/a        |
+| update.menu N=1   | rn-core                  | 1.00x     | 1.00x   | 1.00x     | 1.00x     | 1.00x     | n/a        |
+| update.menu N=1   | expo-ui-host-per-control | 1.00x     | 2.55x   | 1.82x     | 2.13x     | 3.72x     | n/a        |
+| update.menu N=1   | expo-ui-shared-host      | 1.00x     | 1.76x   | 1.16x     | 1.39x     | 2.48x     | n/a        |
+| update.menu N=1   | nitro-ui                 | 1.00x     | 3.82x   | 1.24x     | 1.28x     | 3.24x     | n/a        |
+| update.menu N=50  | rn-core                  | 1.00x     | 1.00x   | 1.00x     | 1.00x     | 1.00x     | n/a        |
+| update.menu N=50  | expo-ui-host-per-control | 0.89x     | 2.42x   | 1.38x     | 3.15x     | 5.34x     | n/a        |
+| update.menu N=50  | expo-ui-shared-host      | 1.00x     | 1.53x   | 0.90x     | 1.09x     | 2.98x     | n/a        |
+| update.menu N=50  | nitro-ui                 | 2.04x     | 5.00x   | 0.67x     | 0.86x     | 6.14x     | n/a        |
+| memory.menu N=200 | rn-core                  | n/a       | n/a     | n/a       | n/a       | n/a       | 1.00x      |
+| memory.menu N=200 | expo-ui-host-per-control | n/a       | n/a     | n/a       | n/a       | n/a       | 5.73x      |
+| memory.menu N=200 | expo-ui-shared-host      | n/a       | n/a     | n/a       | n/a       | n/a       | 4.23x      |
+| memory.menu N=200 | nitro-ui                 | n/a       | n/a     | n/a       | n/a       | n/a       | 5.42x      |
+| leak.menu N=200   | rn-core                  | n/a       | n/a     | n/a       | n/a       | n/a       | n/a        |
+| leak.menu N=200   | expo-ui-host-per-control | n/a       | n/a     | n/a       | n/a       | n/a       | n/a        |
+| leak.menu N=200   | expo-ui-shared-host      | n/a       | n/a     | n/a       | n/a       | n/a       | n/a        |
+| leak.menu N=200   | nitro-ui                 | n/a       | n/a     | n/a       | n/a       | n/a       | n/a        |
+Merge:     baseline schema version is v2 and this merge writes v3: the cells are the same shape in both, so the file's bookkeeping is upgraded and its founding run's fields are carried through unchanged
+Merge:     waiting rule is not in the file (it predates X14); the run measured "1500/8000 ms", that platform's default rule, which is the rule every gated ratio in a committed table was recorded under
+Merge:     react-native version is not in the file (it predates X14); matched "0.88.0" from bun.lock at the baseline's founding commit c9548f6
+Merge:     bench app `@expo/ui` version is not in the file (it predates X14); matched "58.0.22" from bun.lock at the baseline's founding commit c9548f6
+
+--update-baseline refused (pass --force to override):
+  - the machine was busy for 47% of the run: 137 of 289 load samples over 7.0 (ceiling for 14 cores), median 6.93
+gate: bench:--platform:ios:--plan:full:--launches:8:--component:menu:--update-baseline:--skip-build FAIL in 1936.6 s
+gate: recorded in .gates/task/A6-mac1-menu-cells.jsonl
+gate: a bench never blocks `need` - benches go to the bench host (D15).
+
+```
