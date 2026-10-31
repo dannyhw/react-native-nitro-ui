@@ -29,8 +29,15 @@ repo's shipped lock at HEAD and at an older commit.
 **A file that predates a comparability field answers with evidence or the merge refuses** —
 recovery from `bun.lock` at the file's own `sha` for the two app versions, the platform's default
 waiting rule for `timeouts`, refusal for runtime/Xcode/API/image/ART. Everything matched lands in
-`comparabilityNotes`. `--force` silences judgements about a measurement (load, plan, launches,
-dirt, marks) and nothing else, in the pre-flight, the runner and the writer alike.
+`comparabilityNotes`. `--force` silences judgements about a measurement (load, launches, dirt,
+marks, and the plan rule for a plain mint) and nothing else, in the pre-flight, the runner and the
+writer alike. For a merge the plan is not overridable at all: fix round 2 made the file's plan an
+absolute rule, because a quick-plan block in a full-plan file is incomplete by that file's definition.
+
+**Fix round 2, one commit later:** the round-1 summary's claim that a merge refuses a quick-plan run
+held only without `--force`, because completeness was counted against the *run's* plan; the re-review
+(F1) closed that, along with the empty-record case (F2) and reading component identity from the key
+rather than the record's `scenario` field (F3). See `## Fix round 2`.
 
 The device proof: 280 launches, 35.5 min, 0 of 352 load samples over the ceiling. The diff is
 menu's 35 cells plus bookkeeping — 231 old cells byte-identical, founding fields untouched, and

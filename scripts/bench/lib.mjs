@@ -2460,13 +2460,8 @@ export function buildBaseline(run) {
   }
   const timeouts = requestedTimeouts(run);
   const cellsByComponent = {};
-  for (const [key, cell] of Object.entries(cells)) {
-    const component = componentOf(cell.scenario ?? parseCellKey(key).scenario);
-    (cellsByComponent[component] ??= []).push(key);
-  }
-  for (const [key, cell] of Object.entries(skippedCells)) {
-    const component = componentOf(cell.scenario ?? parseCellKey(key).scenario);
-    (cellsByComponent[component] ??= []).push(key);
+  for (const key of [...Object.keys(cells), ...Object.keys(skippedCells)]) {
+    (cellsByComponent[componentOfKey(key)] ??= []).push(key);
   }
   return {
     schemaVersion: BASELINE_SCHEMA_VERSION,
@@ -2727,20 +2722,59 @@ export function cellsFrom(run) {
  */
 export function cellsForComponent(cells, component) {
   const out = {};
-  for (const [key, cell] of Object.entries(cells ?? {})) {
-    const scenario = cell?.scenario ?? parseCellKey(key).scenario;
-    if (componentOf(scenario) === component) {
-      out[key] = cell;
+  for (const key of Object.keys(cells ?? {})) {
+    if (componentOfKey(key) === component) {
+      out[key] = cells[key];
     }
   }
   return out;
 }
 
+/**
+ * Which component a cell key belongs to — the answer to "whose row is this?".
+ *
+ * Always the key, never `cell.scenario` (review F3). The key is what `--check`
+ * matches rows by and what a reader sees, so it is the claim that has to hold; a
+ * record whose `scenario` field disagrees with it is a corrupted or hand-edited
+ * file, and trusting the field would let a cell keyed `mount:nitro-ui:50` (a
+ * `switch` row) be treated as `menu`'s and overwrite switch's measured numbers.
+ * `mergeBaselineProblems()` refuses such a cell outright; this keeps the ownership
+ * rules from being *fooled* even if some caller forgets to ask.
+ */
+function componentOfKey(key) {
+  return componentOf(parseCellKey(key).scenario);
+}
+
+/**
+ * Cells whose own `scenario` contradicts the key that stores them, or [] when the
+ * record is self-consistent (review F3).
+ *
+ * A run's own output cannot produce one: the key is built from the record. A
+ * hand-edited results file can, and the two ways it goes wrong are the two ways a
+ * merge can destroy a row it was never asked about — the cell passes the
+ * "did this run measure only `<component>`?" question by claiming that component,
+ * and then lands on another component's key.
+ *
+ * @param {Record<string, any> | null | undefined} cells
+ * @returns {Array<{key: string, keyScenario: string, claimed: string}>}
+ */
+export function cellsContradictingTheirKey(cells) {
+  const found = [];
+  for (const [key, cell] of Object.entries(cells ?? {})) {
+    const keyScenario = parseCellKey(key).scenario;
+    const claimed = cell?.scenario;
+    if (typeof claimed === 'string' && claimed !== keyScenario) {
+      found.push({ key, keyScenario, claimed });
+    }
+  }
+  return found.sort((a, b) => a.key.localeCompare(b.key));
+}
+
 /** The components a baseline already holds cells for (never the skipped ones). */
 export function componentsInBaseline(baseline) {
   const found = new Set();
-  for (const [key, cell] of Object.entries(baseline?.cells ?? {})) {
-    found.add(componentOf(cell?.scenario ?? parseCellKey(key).scenario));
+  for (const key of Object.keys(baseline?.cells ?? {})) {
+    found.add(componentOfKey(key));
   }
   return [...found].sort();
 }
@@ -3199,22 +3233,43 @@ export function componentProvenance(
  * comparison-arm cell under `skippedCells`, and that is an honest row of the file, not
  * a hole. A cell the run never launched is the thing this refuses.
  *
- * Returns null when the run holds no cells at all, which is the pre-flight's candidate
- * run: it stands in for a measurement that has not happened, and refusing it for
- * measuring nothing would make every startup check refuse.
+ * The expected set comes from **the file's** plan, not the run's (review F1): the
+ * question is what a complete block of this file looks like, and `--force` lets a
+ * caller skip `baselineBlockers()`'s "this run is not on the full plan" judgement, so
+ * building it from `run.plan` made a quick-plan run look complete against a full-plan
+ * file and merge 12 of a component's 28 rows. `mergeBaselineProblems()` refuses the
+ * plan mismatch outright, and this keeps the count honest for any caller that asks it
+ * alone.
  *
- * @param {{ run: any, component: string }} input
+ * Returns null for the pre-flight's candidate run, which is marked `candidate: true`
+ * where it is built (review F2). It stands in for a measurement that has not happened
+ * and holds no cells, and refusing it for measuring nothing would make every startup
+ * check refuse. Emptiness is no longer the test: a *real* run that measured nothing —
+ * every launch failed — is indistinguishable from the stand-in by that test, and used
+ * to merge a provenance entry with no cells under `--force`.
+ *
+ * @param {{ run: any, component: string, plan?: string | null }} input `plan` is the
+ *   plan of the file being merged into; defaults to the run's own.
  * @returns {string | null}
  */
-export function missingComponentCells({ run, component }) {
+export function missingComponentCells({ run, component, plan = null }) {
+  if (run?.candidate === true) {
+    return null;
+  }
   const held = run?.cells;
   if (held == null || Object.keys(held).length === 0) {
-    return null;
+    return (
+      `--component ${component} --update-baseline: this run records no cells at all, so its block would be ` +
+      'empty — a provenance entry claiming the component was measured, and no numbers.\n' +
+      '        A run whose launches all failed looks like this. Re-run `bun bench --component ' +
+      component +
+      '` and read its problems list before writing anything.'
+    );
   }
   let expected = null;
   try {
     expected = buildSchedule({
-      plan: run.plan ?? BASELINE_PLAN,
+      plan: plan ?? run.plan ?? BASELINE_PLAN,
       launches: run.launches ?? BASELINE_LAUNCHES,
       platform: run.platform ?? null,
       component,
@@ -3341,6 +3396,20 @@ export function mergeBaselineProblems({
     };
   }
   const existing = cellsForComponent(baseline.cells, component);
+  // Which plan a complete block of *this file* has, judged by the plan the file
+  // itself was recorded under. Two shapes of plan in one table is a regime break,
+  // not a measurement judgement, so `--force` does not reach it (review F1): a
+  // quick-plan run has 12 of a component's 28 full-plan rows, and once those land
+  // the component counts as present and the other 16 can never be merged in.
+  const filePlan = baseline.plan ?? BASELINE_PLAN;
+  if (run != null && run.plan !== filePlan) {
+    problems.push(
+      `--component ${component} --update-baseline: this run measured the \`${String(
+        run.plan ?? '?'
+      )}\` plan and the file holds \`${filePlan}\` cells, and one table may not mix them.\n` +
+        `        Every ratio in a baseline is normalised against \`rn-core\` inside its own run, and \`--check\` gates the rows of the plan it is told to expect; a quick-plan row is not gateable against a full-plan table. Mint this component with \`--plan ${filePlan}\`.`
+    );
+  }
   if (Object.keys(existing).length > 0) {
     problems.push(
       `--component ${component} --update-baseline: this file already has ${String(
@@ -3379,12 +3448,28 @@ export function mergeBaselineProblems({
   // since `mergeComponentBaseline` deletes and rewrites the named component's block.
   // A run that measured less would land a partial block, after which the component
   // counts as present and the missing rows can never be merged in.
-  const strays = Object.entries(run?.cells ?? {})
-    .filter(
-      ([key, cell]) =>
-        componentOf(cell?.scenario ?? parseCellKey(key).scenario) !== component
-    )
-    .map(([key]) => key);
+  const strays = Object.keys(run?.cells ?? {}).filter(
+    (key) => componentOfKey(key) !== component
+  );
+  // A cell whose own `scenario` disagrees with its key (review F3). The key is what
+  // `--check` matches by and what the merge writes, so the field is the weaker claim
+  // — but until this check existed, the field was also the one the ownership rules
+  // read, which let a hand-edited record keyed `mount:nitro-ui:50` claim
+  // `scenario: 'mount.menu'`, pass the stray question as a `menu` cell, and land on
+  // `switch`'s key. Ownership is now read from the key everywhere
+  // (`componentOfKey`), so such a cell is at least a stray here; refusing it outright
+  // says so rather than describing it as a measurement of another component.
+  const contradicted = cellsContradictingTheirKey(run?.cells);
+  if (contradicted.length > 0) {
+    problems.push(
+      `--component ${component} --update-baseline: ${String(
+        contradicted.length
+      )} cell(s) in this record name a scenario that is not the one their key stores (first: ${contradicted[0].key} claims \`${contradicted[0].claimed}\`, its key says \`${contradicted[0].keyScenario}\`).\n` +
+        '        The key is what `--check` gates and what the merge writes, so the record cannot be trusted to know which component it measured. A run of `bun bench --component ' +
+        component +
+        '` cannot produce this; re-run it rather than editing the results file.'
+    );
+  }
   if (strays.length > 0) {
     problems.push(
       `--component ${component} --update-baseline: this run also measured ${String(
@@ -3393,7 +3478,11 @@ export function mergeBaselineProblems({
         `        A results file merges as \`${component}\`'s block only if it measured \`${component}\` and nothing else: \`bun bench --component ${component}\` writes one, and \`report.mjs\` will not turn a full run into one.`
     );
   }
-  const absent = missingComponentCells({ run, component });
+  const absent = missingComponentCells({
+    run,
+    component,
+    plan: filePlan,
+  });
   if (absent != null) {
     problems.push(absent);
   }
@@ -3549,9 +3638,8 @@ export function seededComponentProvenance(baseline, dependencies = null) {
   const cells = baseline?.cells ?? {};
   const skipped = baseline?.skippedCells ?? {};
   const byComponent = {};
-  for (const [key, cell] of Object.entries({ ...cells, ...skipped })) {
-    const component = componentOf(cell?.scenario ?? parseCellKey(key).scenario);
-    (byComponent[component] ??= []).push(key);
+  for (const key of [...Object.keys(cells), ...Object.keys(skipped)]) {
+    (byComponent[componentOfKey(key)] ??= []).push(key);
   }
   return Object.fromEntries(
     Object.entries(byComponent)
@@ -3630,25 +3718,15 @@ export function mergeComponentBaseline({
     delete next.dependencies;
   }
 
-  const removed = [];
-  for (const [key, cell] of Object.entries(next.cells)) {
-    if (
-      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component
-    ) {
-      removed.push(key);
-    }
-  }
+  const removed = Object.keys(next.cells).filter(
+    (key) => componentOfKey(key) === component
+  );
   for (const key of removed) {
     delete next.cells[key];
   }
-  const removedSkipped = [];
-  for (const [key, cell] of Object.entries(next.skippedCells)) {
-    if (
-      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component
-    ) {
-      removedSkipped.push(key);
-    }
-  }
+  const removedSkipped = Object.keys(next.skippedCells).filter(
+    (key) => componentOfKey(key) === component
+  );
   for (const key of removedSkipped) {
     delete next.skippedCells[key];
   }
