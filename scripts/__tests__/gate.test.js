@@ -912,9 +912,21 @@ describe('ownMetroPids', () => {
     expect(throwing).toEqual([]);
   });
 
-  it('ignores the leader itself and nonsense pids', () => {
-    // A server that *is* the run's direct child (a runner that bundles Metro in-process) is
-    // already gone by the time the sweep runs, and a zero/negative/NaN pid is not a target.
+  it('never targets the leader pid itself, even when its group matches', () => {
+    // The one way this sweep could kill a stranger while still obeying its own rule. The child
+    // led the group, so a *recycled* pid 100 - the child exited and the OS handed its number to
+    // some unrelated process - answers 100 for both pid and pgid and matches on the group alone.
+    // By the time the sweep runs, `leaderPid` can only mean "not my child any more".
+    expect(
+      ownMetroPids({
+        listeners: [{ pid: 100, command: 'node' }],
+        leaderPid: 100,
+        groupOf: () => 100,
+      })
+    ).toEqual([]);
+  });
+
+  it('ignores nonsense pids and a run with no leader', () => {
     expect(
       ownMetroPids({
         listeners: [
@@ -1538,9 +1550,45 @@ function makeCheckout(files, onBranch = () => {}) {
 function writeFakeRunner(dir) {
   const bin = path.join(dir, 'fake-bin');
   fs.mkdirSync(bin, { recursive: true });
+  // Two leaked-descendant cases (X15 review 2 and 3), branched before the default summary is
+  // printed: each is the run's whole output, so a branch that fell through to the default lines
+  // would test a run with three summaries in it and prove nothing about the tail. A descendant
+  // that outlives the run keeps the child's pipes open, which is the shape of a real one -
+  // real-input's Metro on the 8291 default when `METRO_PORT` was never exported. The gate can
+  // neither wait for those pipes to close nor kill what it does not own, so both cases say how
+  // long they hold for and write `$!` where the test can find it: a fixture that left a `sleep`
+  // behind would be the very leak it is testing for.
+  const leakedDescendantCases =
+    // Holds *both* pipes for 10 s after the run is over: a correct gate stops waiting at its
+    // drain, releases its read ends and exits with its code in about two seconds; one that still
+    // waits for `close` sits for the whole ten. The duration is the measurement.
+    'if [ -n "$FAKE_HOLD_OPEN" ]; then\n' +
+    '  ( sleep 10 ) &\n' +
+    '  echo "$!" > "$FAKE_HOLD_OPEN"\n' +
+    '  echo "Test Suites: 1 passed, 1 total"\n' +
+    '  echo "Tests: 1 passed, 1 total"\n' +
+    '  exit 0\n' +
+    'fi\n' +
+    // The drain case, and it has to be one pipe at a time to prove anything. stdout has no other
+    // holder, so it closes the moment the child exits; the subshell keeps *stderr* open for half a
+    // second and writes a second summary into it through fd 4, with its own stdout and stderr sent
+    // to /dev/null so the only thing that reaches the gate is that summary. A gate that treats the
+    // first close as the end of the output destroys its read ends at once and loses the summary;
+    // one that waits for both gets it, well inside the drain's own budget. The timing is set by
+    // the sleep, not by the machine, so it does not depend on load.
+    'if [ -n "$FAKE_HOLD_TAIL" ]; then\n' +
+    '  echo "Test Suites: 1 passed, 1 total"\n' +
+    '  echo "Tests: 1 passed, 1 total"\n' +
+    '  ( sleep 0.5; echo "Test Suites: 7 passed, 7 total" >&4; ' +
+    'echo "Tests: 7 passed, 7 total" >&4 ) 4>&2 2>/dev/null 1>/dev/null &\n' +
+    '  echo "$!" > "$FAKE_HOLD_TAIL"\n' +
+    '  exit 0\n' +
+    'fi\n';
+
   const script =
     '#!/bin/sh\n' +
     'echo "fake runner: $0 $*"\n' +
+    leakedDescendantCases +
     'echo "Test Suites: 23 passed, 23 total"\n' +
     'echo "Tests: 391 passed, 391 total"\n' +
     'if [ -n "$FAKE_SECOND_SUMMARY" ]; then\n' +
@@ -2283,6 +2331,71 @@ describeCli('gate.mjs --background and wait', () => {
     expect(log).toContain('ColdSizing');
   }, 90_000);
 
+  it('exits with its code when a leaked descendant holds the pipes open', async () => {
+    // X15 review 3. The gate's child exited, the ledger line is written, and something the run
+    // started is still alive and still holding stdout and stderr - a descendant that is not a
+    // Metro on `$METRO_PORT`, so the sweep is right to leave it alone. If the gate waits for the
+    // pipes to finish closing, it sits for the holder's whole life: a lease doing nothing, and
+    // `wait` reporting a finished run as running. 10 s of holder against a 2 s drain makes the
+    // difference a measurement rather than a race.
+    const dir = checkout(iosOnly);
+    const holder = path.join(dir, 'holder.pid');
+    const startedAt = Date.now();
+    let run = null;
+    try {
+      run = runCli(dir, ['check'], { FAKE_HOLD_OPEN: holder });
+      const elapsed = Date.now() - startedAt;
+      expect(run.status).toBe(0);
+      expect(elapsed).toBeLessThan(8_000);
+      // And the ledger says what happened, so the fast exit is not a crash.
+      const lines = ledgerLines(dir);
+      expect(lines.map((row) => [row.gate, row.result, row.exitCode])).toEqual([
+        ['check', 'pass', 0],
+      ]);
+      expect(lines[0].counts.tests.total).toBe(1);
+    } finally {
+      // The holder is this run's own leaked child, recorded by the shim: killing it is the
+      // point of writing the file, and leaving a 10 s sleep behind would be a test that leaks.
+      try {
+        process.kill(Number(fs.readFileSync(holder, 'utf8').trim()), 'SIGKILL');
+      } catch {
+        /* already gone */
+      }
+    }
+  }, 90_000);
+
+  it('keeps the tail written after the run exits, when it arrives on the slower pipe', async () => {
+    // X15 review 2. A child's two pipes close at different moments: stdout the instant it exits,
+    // stderr only when the last thing holding it lets go. Counting the first close as the end of
+    // the output destroys both read ends there and loses whatever the second pipe was carrying -
+    // and for a harness run that tail is the test summary the ledger's counts are parsed from.
+    // So the drain waits for *both*, and the tail below (a second summary, written into stderr
+    // half a second after the child is gone) has to be in the log and in the counts.
+    const dir = checkout(iosOnly);
+    const tail = path.join(dir, 'tail.pid');
+    let run = null;
+    try {
+      run = runCli(dir, ['check'], { FAKE_HOLD_TAIL: tail });
+      expect(run.status).toBe(0);
+      const [record] = ledgerLines(dir);
+      const log = fs.readFileSync(logFile(dir, record.logPath), 'utf8');
+      expect(log).toContain('Tests: 1 passed, 1 total');
+      expect(log).toContain('Tests: 7 passed, 7 total');
+      // The ledger read the tail too, which is the part a reader actually acts on: the first
+      // summary is `counts` and all of them are `summaries`.
+      expect(record.counts.tests.total).toBe(1);
+      expect(record.summaries.map((entry) => entry.tests.total)).toEqual([
+        1, 7,
+      ]);
+    } finally {
+      try {
+        process.kill(Number(fs.readFileSync(tail, 'utf8').trim()), 'SIGKILL');
+      } catch {
+        /* already gone */
+      }
+    }
+  }, 90_000);
+
   it("records a bench's platform and device from its own --platform", async () => {
     // X15 item 4, at the level that actually writes the ledger line. The unit cases
     // above prove `resolveGate` parses `--platform` and that `deviceFromEnv` would
@@ -2505,9 +2618,14 @@ describeCli(
         fs.rmSync(dir, { recursive: true, force: true });
     });
 
+    // SIGHUP is the third one because the child is `detached` (X15 review 5): it no longer
+    // shares this process's group, so a hangup that used to reach it through that group now
+    // reaches only `gate.mjs`. A gate whose caller's terminal goes away must not leave a
+    // harness holding a leased device.
     for (const [signal, trap] of [
       ['SIGINT', 'INT'],
       ['SIGTERM', 'TERM'],
+      ['SIGHUP', 'HUP'],
     ]) {
       it(`forwards ${signal} to the running gate, re-raises it, and still writes the ledger`, async () => {
         const dir = makeCheckout(IOS_ONLY);

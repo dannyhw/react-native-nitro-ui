@@ -3377,6 +3377,12 @@ export function decideWait({
  * this feature exists to prevent. So the rule is equality with the leader's pid - never
  * "whatever is on the port" - and a pid the kernel cannot answer for is left alone.
  *
+ * The leader itself is never a target, and not because it is unimportant: the sweep runs after
+ * it has exited, so a pid answering to `leaderPid` at that point has been *recycled* to some
+ * unrelated process, and its group would match by accident. That is the one way this sweep
+ * could kill a stranger without violating its own rule, so the leader's number is excluded
+ * rather than trusted (X15 review 6c).
+ *
  * @param {object} options
  * @param {Array<{pid: number, command: string}>} [options.listeners] what `lsof` found
  * @param {number | null} options.leaderPid the run's direct child, which leads its own group
@@ -3389,6 +3395,7 @@ export function ownMetroPids({ listeners, leaderPid, groupOf }) {
   for (const listener of listeners ?? []) {
     const pid = Number(listener?.pid);
     if (!Number.isInteger(pid) || pid <= 0) continue;
+    if (pid === leaderPid) continue;
     let group = null;
     try {
       group = groupOf(pid);
