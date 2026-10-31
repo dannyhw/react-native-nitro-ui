@@ -40,6 +40,7 @@ import {
   ledgerRelativePath,
   latestByGate,
   listByGate,
+  ownMetroPids,
   parseLedger,
   parseTestCounts,
   parseTestSummaries,
@@ -851,6 +852,90 @@ describe('resolveGate', () => {
     );
     expect(() => resolveGate('smoke:maybe')).toThrow(/smoke is one of/);
     expect(() => resolveGate('deploy')).toThrow(/unknown gate/);
+  });
+});
+
+/**
+ * Which Metro server belongs to the run that just ended (X15 review).
+ *
+ * The merge sequence runs four gates on one lease, and `real-input`'s `ensureMetro` reuses a
+ * server that is already up by design, so a run that starts one has to stop one - otherwise
+ * the next gate pre-flights its own leftover and refuses. The authority for "mine" is the
+ * child's process group; everything else is somebody else's server, and stopping that is the
+ * X4 incident. `gate.mjs` cannot be imported (it runs `main` at import), so the rule lives
+ * here with the rest of the gate's pure half, and the end-to-end behaviour - a real listener,
+ * a real group, a real signal - is in `lease-metro-port.test.js`.
+ */
+describe('ownMetroPids', () => {
+  const listeners = (...pids) => pids.map((pid) => ({ pid, command: 'node' }));
+
+  it('claims only the listeners whose group is the run’s own child', () => {
+    expect(
+      ownMetroPids({
+        listeners: listeners(101, 102, 103),
+        leaderPid: 100,
+        groupOf: (pid) => ({ 101: 100, 102: 77, 103: 100 })[pid] ?? null,
+      })
+    ).toEqual([101, 103]);
+  });
+
+  it('claims nothing when the server is in another group - the case that must not kill', () => {
+    // The X4 shape: a task's Metro on a port the pool handed to somebody else. Here the run
+    // owns the port and none of the servers, and the right answer is no signal at all.
+    expect(
+      ownMetroPids({
+        listeners: listeners(202),
+        leaderPid: 100,
+        groupOf: () => 202,
+      })
+    ).toEqual([]);
+  });
+
+  it('claims nothing when the kernel will not answer for the pid', () => {
+    // A pid that will not report a group is also a pid whose signal delivery is a guess, and
+    // "not mine" is the only safe reading. This is also what a dead pid gives: `ps` prints
+    // nothing, and the caller must not treat that as ownership.
+    expect(
+      ownMetroPids({
+        listeners: listeners(301),
+        leaderPid: 100,
+        groupOf: () => null,
+      })
+    ).toEqual([]);
+    const throwing = ownMetroPids({
+      listeners: listeners(302),
+      leaderPid: 100,
+      groupOf: () => {
+        throw new Error('pid gone');
+      },
+    });
+    expect(throwing).toEqual([]);
+  });
+
+  it('ignores the leader itself and nonsense pids', () => {
+    // A server that *is* the run's direct child (a runner that bundles Metro in-process) is
+    // already gone by the time the sweep runs, and a zero/negative/NaN pid is not a target.
+    expect(
+      ownMetroPids({
+        listeners: [
+          { pid: 0, command: '' },
+          { pid: -1, command: '' },
+        ],
+        leaderPid: 100,
+        groupOf: () => 100,
+      })
+    ).toEqual([]);
+    expect(ownMetroPids({ leaderPid: 100, groupOf: () => 100 })).toEqual([]);
+  });
+
+  it('requires a leader pid, so a sweep without one stops nothing', () => {
+    expect(
+      ownMetroPids({
+        listeners: listeners(101),
+        leaderPid: null,
+        groupOf: () => 100,
+      })
+    ).toEqual([]);
   });
 });
 

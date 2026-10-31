@@ -3360,6 +3360,47 @@ export function decideWait({
 }
 
 /**
+ * Which of the pids serving a Metro port belong to the run that is ending (X15 review).
+ *
+ * Why this exists: the merge sequence is `real-input:ios` -> `real-input:android` ->
+ * `harness:ios` -> `harness:android` on one lease, and `real-input`'s `ensureMetro` reuses a
+ * server that is already up *by design* (`scripts/real-input/support.mjs`). So a run that
+ * starts the Metro itself must stop it itself: leaving it up means the next gate in the
+ * sequence pre-flights its own leftover and refuses. Attributing a listener by its
+ * environment (`ps eww`, hunting for the lease id) was the other option and is not good
+ * enough - `ps` truncates its env block at a width nobody controls, so a lease id past the cut
+ * reads as somebody else's Metro, and the safe branch there is the leak. Process *groups* are
+ * not approximated: the gate spawns its child `detached`, so the child leads a group of its
+ * own, and a listener whose pgid is that group can only have been started by this run.
+ *
+ * A listener in any other group is another task's Metro, and stopping that is the X4 incident
+ * this feature exists to prevent. So the rule is equality with the leader's pid - never
+ * "whatever is on the port" - and a pid the kernel cannot answer for is left alone.
+ *
+ * @param {object} options
+ * @param {Array<{pid: number, command: string}>} [options.listeners] what `lsof` found
+ * @param {number | null} options.leaderPid the run's direct child, which leads its own group
+ * @param {(pid: number) => number | null} options.groupOf the kernel's answer, injected
+ * @returns {number[]} the pids this run owns, in the order they were found
+ */
+export function ownMetroPids({ listeners, leaderPid, groupOf }) {
+  const owned = [];
+  if (leaderPid == null) return owned;
+  for (const listener of listeners ?? []) {
+    const pid = Number(listener?.pid);
+    if (!Number.isInteger(pid) || pid <= 0) continue;
+    let group = null;
+    try {
+      group = groupOf(pid);
+    } catch {
+      group = null;
+    }
+    if (group != null && group === leaderPid) owned.push(pid);
+  }
+  return owned;
+}
+
+/**
  * Which backgrounded gates are still running, for `status`.
  *
  * A gate started with `--background` returns before it finishes, so without this
