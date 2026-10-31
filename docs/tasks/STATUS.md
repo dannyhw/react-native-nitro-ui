@@ -67,3 +67,4 @@
 | X15 | Tooling and test hygiene: lease/Metro port pre-flight, `test:native:android` runs automatically, Menu iOS read-back race, bench ledger platform, render label, readme-examples mapping, CONTRIBUTING CI runner | Apex | Opus | merged (`5bc783b`) |
 | F6 | Recycling and drop-path gates: `enableViewRecycling` exercised and leak-gated, B1 drop-path items, X4 recycle blind spots (SegmentedControl, Picker, Menu) | Apex | Opus | merged (`611fd66`) |
 | A6 | maintainer-mac-1's Menu baseline cells by merge mint, both platforms; first task delegated to a linked machine (INV-0391) | Apex (on mac-1) | Opus | running |
+| F4 | CI green on every trigger: no cancelled `main` runs, dispatched harness jobs fixed, release-pipeline nits, X1 leftovers, iOS < 26 fallback row | Apex | Opus | running |
