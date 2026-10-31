@@ -55,6 +55,8 @@
 > host no longer measures until it is re-attached. All five merge gates green (`check` on a re-run: X15's self-exit
 > fixture raced a busy port once, fixed in the next commit). Three patch changesets are pending for 0.4.1. CI on `main`
 > was red from `386a511` to `96ad69c` (a depth-1 checkout had no `HEAD~5`); the jobs that run `check` now fetch history.
+> **0.4.1 staged on npm (2026-10-31):** Version Packages PR #9 merged (`7a4063c`), Release run 41217627377 green with
+> `Stage on npm` succeeded; it waits for the owner's approval, then `Release tag` tags v0.4.1.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
