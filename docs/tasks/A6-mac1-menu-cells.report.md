@@ -109,7 +109,7 @@ for nitro-ui against 49.13 ms for rn-core, and `memory.menu N=200` 300.4 KiB aga
 | Results | bench/results/b59db14-ios-20261031T193448Z.json — gitignored, a run-local path; kept on this machine as the evidence for the refusal |
 | sha / dirty | `b59db14` / `dirty: false` |
 | Plan | `full` / 8 → 7 cells × 4 implementations × 8 = **224 launches**, 224/224, `problems: []` |
-| Wall time | 1 929 545 ms = **1930 s / 32.2 min**, 8.6 s per launch, 19:34:41 → 20:06:30 local |
+| Wall time | 1 929 545 ms = **1930 s / 32.2 min**, 8.6 s per launch, 19:34:41 → 20:06:50 local |
 | Load stamps | start `loadavg1` 5.27 (dry-run 5.65, gate row 5.3) · median 6.93 · p90 7.98 · max 9.32 · **137 of 289 samples over 7.0 (47.4 %)** · end instant `loadavg1` 8.58, `loadavg5` 7.59 · `quiet: false` |
 | Refusal, verbatim | `--update-baseline refused (pass --force to override):` then `- the machine was busy for 47% of the run: 137 of 289 load samples over 7.0 (ceiling for 14 cores), median 6.93` |
 | Comparability | matched before the guard: CPU model + 14 cores, iOS 27.0 runtime and Xcode, device key `ios27-sim-iphone17`, RN `0.88.0` and `@expo/ui 58.0.22` from `bun.lock` at the file's founding commit `c9548f6`, waiting rule 1500/8000 ms = platform default (the four inferences are the run's own `Merge:` lines) |
