@@ -1698,6 +1698,43 @@ describe('run.mjs refuses an incomparable merge before booting', () => {
   });
 
   /**
+   * The same refusal on the route that costs device time (review F1).
+   *
+   * `report.mjs` is the re-report route; `run.mjs` is the one that would boot a
+   * simulator and spend forty minutes measuring a block it then cannot write. The
+   * plan rule is in the absolute half of that pre-flight, so `--force` does not reach
+   * it and this run refuses on the same second it starts — proved by the absence of
+   * the line a run prints when it gets as far as looking for an emulator.
+   */
+  it('refuses a quick-plan merge before booting, under --force too', () => {
+    const ws = tree();
+    try {
+      const file = writeAndroidBaseline(ws);
+      const before = readFileSync(file, 'utf8');
+      const forced = runCli(ws, [
+        '--platform',
+        'android',
+        '--plan',
+        'quick',
+        '--launches',
+        '8',
+        '--update-baseline',
+        '--component',
+        'slider',
+        '--force',
+      ]);
+      expect(forced.status).toBe(2);
+      expect(forced.all).toContain(
+        'the `quick` plan and the file holds `full`'
+      );
+      expect(forced.all).not.toContain('No attached emulator');
+      expect(readFileSync(file, 'utf8')).toBe(before);
+    } finally {
+      rmSync(ws.root, { recursive: true, force: true });
+    }
+  });
+
+  /**
    * The refusal a contributor actually sees when they forget their lease (L1).
    *
    * A merge's file is named from the device key, so an unresolved device has no path

@@ -108,9 +108,9 @@ the table above are the second run's.
 
 ## Red proofs
 
-64 rows in `docs/tasks/X14/mutations.json`; drivers restore with `git checkout --` between rows,
+73 rows in `docs/tasks/X14/mutations.json`; drivers restore with `git checkout --` between rows,
 and every name below exists in the suite it is cited against. The list is generated from that
-file, not written by hand, which is what let 15 of its lines drift in round 1 (review M1). Four
+file, not written by hand, which is what let 15 of its lines drift in round 1 (review M1). Five
 rows are worth naming: the `skippedCells` carry-through went red both ways (dropping every row,
 and dropping none); an escaped quote inside a lock string went green on its first draft because
 the input was still valid strict JSON, so the tolerant walk never ran — the trailing comma is what
@@ -120,7 +120,14 @@ rows went green when first run (`merge copies every skippedCells row`, `complete
 run's cells`, `provenance records the plan it wants`), which was a weak assertion and not a
 working guard — the tests were strengthened and the same mutations re-run, and those re-runs are
 the rows in the ledger. Four older rows were re-anchored for the same reason the review found:
-their `before` text no longer matched the source, or matched twice.
+their `before` text no longer matched the source, or matched twice. Fix round 2 did the same to
+five more of its own (`merge wipes every other component's cells`, `merge allowed onto a component
+the file already has`, and the `skippedCells`/completeness pair) because round 2's `componentOfKey`
+simplification rewrote the loops they mutated; driver 8 re-proved all five red at the new anchors.
+One round-2 row is worth naming on its own: `a quick-plan merge is complete for its own plan and no
+plan rule refuses it` is the only row that turns the runner route red, because it restores both
+halves of F1 — with either guard left in place, that CLI still refuses, for a different reason, and
+the mutation would not be a proof of the thing the review reported.
 
 - `bench-baseline-merge.test.js` -> `merge wipes every other component's cells` (`lib.mjs`) -> `leaves every other cell byte-for-byte identical`
 - `bench-baseline-merge.test.js` -> `merge writes only the new component's cells (full overwrite)` (`lib.mjs`) -> `leaves every other cell byte-for-byte identical`
@@ -186,6 +193,15 @@ their `before` text no longer matched the source, or matched twice.
 - `bench-baseline-merge.test.js` -> `completeness counts the run's cells instead of the component's` (`lib.mjs`) -> `refuses a full-run results file rather than filing every cell under one component`
 - `bench-baseline-merge.test.js` -> `provenance records the plan it wants instead of the run's` (`lib.mjs`) -> `records the run’s plan and launch count, not the ones a baseline is minted under`
 - `bench-baseline-merge.test.js` -> `merge copies every skippedCells row the run holds` (`lib.mjs`) -> `copies only the named component out of a `built` that holds a whole run`
+- `bench-baseline-merge.test.js` -> `completeness is counted against the run's plan again` (`lib.mjs`) -> `counts a component block complete against the file’s plan, not the run’s`
+- `bench-baseline-merge.test.js` -> `a merge stops refusing a plan the file does not hold` (`lib.mjs`) -> `refuses a quick-plan results file under --force, because the file is full-plan`
+- `bench-baseline-merge.test.js` -> `the pre-flight is identified by an empty cells table again` (`lib.mjs`) -> `refuses a measured record with no cells, and defers the pre-flight that has none`
+- `bench-baseline-merge.test.js` -> `a record that measured nothing is treated as the pre-flight's stand-in` (`lib.mjs`) -> `refuses a measured record with no cells, and defers the pre-flight that has none`
+- `bench-baseline-merge.test.js` -> `cellsForComponent reads the scenario field instead of the key` (`lib.mjs`) -> `assigns a cell to the component its key names, never its scenario field`
+- `bench-baseline-merge.test.js` -> `a cell whose scenario contradicts its key is no longer refused` (`lib.mjs`) -> `refuses a record whose cell keys and scenarios disagree, and does not overwrite`
+- `bench-baseline-merge.test.js` -> `a forged cell overwrites the switch row it was never asked about` (`lib.mjs`) -> `refuses a record whose cell keys and scenarios disagree, and does not overwrite`
+- `bench-dry-run.test.js` -> `the pre-flight's candidate record stops saying it is a candidate` (`machine.mjs`) -> `answers the merge question instead of refusing a narrowed schedule`
+- `bench-baseline-merge.test.js` -> `a quick-plan merge is complete for its own plan and no plan rule refuses it` (`lib.mjs`) -> `refuses a quick-plan merge before booting, under --force too`
 
 ## Files changed
 
@@ -201,7 +217,8 @@ their `before` text no longer matched the source, or matched twice.
   `bench-baseline-machine.test.js` — 80 new tests (127 across those four files), incl. `run.mjs`
   driven over a fake tree with an adb that reports nothing attached, and the repo's own `bun.lock`
   read at two commits. Fix round 1 takes `bench-baseline-merge.test.js` to 62 tests and
-  `bench-dry-run.test.js` to 31.
+  `bench-dry-run.test.js` to 31; fix round 2 takes the merge suite to 69 (152 across the six bench
+  suites), including two CLI cases that assert the baseline file is left byte-identical.
 - `bench/baselines/maintainer-mac-2/android35-emu-pixel9.json` — Menu's cells, by the new path.
 - `bench/baselines/README.md`, `CONTRIBUTING.md` — adding a component vs a full re-mint.
 - `docs/tasks/X14/` — the ledger, its failure excerpt, `mutations.json`.
@@ -240,6 +257,22 @@ unresolved device is its own absolute refusal, not a `null.json` path. **L2:** f
 re-serialise if prettier dies, then rename. **L3:** the dead strict-JSON lock read is gone, the two
 founding-version readers are one, `stripJson5Syntax` is linear (503 ms → 19 ms). 20 new red proofs,
 3 self-corrections; `check` green.
+
+## Fix round 2
+
+Check-only, no device time. **F1 (must-fix):** completeness is counted against the plan the
+*file* records (`baseline.plan ?? BASELINE_PLAN`), and a run on another plan is refused
+outright, `--force` included — one table may not mix plans, and `--force` does wave the
+quick-plan judgement through for a plain mint. `missingComponentCells()` takes the file's plan,
+so a quick-plan `menu` run reads "12 of the 28 cells", not "12 of 12". Four CLI cases refuse and
+leave the file byte-identical: that run through `report.mjs`, and through `run.mjs` (both wrote
+12 of 28 rows before); a record with no cells; a forged cell claiming `menu` on a `switch` key,
+where switch's own row survives. **F2:** the stand-in says so (`candidate: true`, set in
+`mergeCandidateRun`), so a measured record with no cells refuses instead of writing provenance
+with no numbers — in `lib.mjs`, where a test reaches it; `report.mjs` gets no second guard
+nothing could have shown red. **F3:** identity comes from the cell key everywhere
+(`componentOfKey`), and a record whose `scenario` contradicts its key refuses. 9 new red proofs,
+5 re-anchored by driver 8; the ledger is 73 rows. F1's three false claims are corrected.
 
 ## Questions for orchestrator
 
