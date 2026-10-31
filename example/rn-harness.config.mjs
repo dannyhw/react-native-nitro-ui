@@ -20,7 +20,7 @@ import {
 } from '../scripts/app-stamp.mjs';
 import {
   platformForArtifact,
-  runnerFromArgv,
+  selectHarnessApp,
 } from '../scripts/app-stamp-core.mjs';
 import { checkEmulatorEnv, emulatorSerial } from '../scripts/lease-core.mjs';
 import {
@@ -43,19 +43,35 @@ assertSupportedNode({ command: 'bun run harness:ios|android' });
 // build, or an APK whose dex lost a generated hybrid). Refusing here happens
 // before a simulator or emulator is touched, so a refusal cannot hold a device
 // another task needs. `scripts/build-app.mjs` writes the stamp this reads.
-const runner = runnerFromArgv(process.argv) ?? 'ios';
-const explicitApp = process.env.HARNESS_APP_PATH ?? '';
-// No explicit path means the fixed one this worktree's build writes, when it is
-// there: publishing it back to the environment is what lets
-// `bun run harness:ios` run with no environment at all.
-const artifact =
-  explicitApp === ''
-    ? fs.existsSync(artifactPath({ platform: runner }))
-      ? artifactPath({ platform: runner })
-      : null
-    : path.resolve(explicitApp);
+//
+// Which platform this is asks argv first and then the environment (F4). argv is
+// what a local `bun run harness:ios` types; the environment is what the
+// `react-native-harness` GitHub Action sets, because its `load-config` step runs
+// `harness ci load-config` with no runner on the command line. Before F4 an
+// Android CI job loaded this file as iOS, went looking for the `.app` it had
+// never built, and refused inside `Harness (Android)`.
+const exampleDir = path.dirname(new URL(import.meta.url).pathname);
+const { runner, artifact, ciStep } = selectHarnessApp({
+  argv: process.argv,
+  env: process.env,
+  existsSync: (file) => fs.existsSync(file),
+  cwd: process.cwd(),
+  // The repo root, one above this file: `bun run harness:*` always starts the CLI
+  // in `example/`, so a path typed from the repository root (`example/ios/build/…
+  // NitroUiExample.app`, as the reports and CI jobs write it) has to be understood
+  // too, or the same string means two different things depending on the shell.
+  parentDir: path.resolve(exampleDir, '..'),
+  artifactFor: (platform) => artifactPath({ platform }),
+});
 
-if (artifact != null) {
+if (ciStep) {
+  // Say it rather than being silent: a reader of a CI log should be able to see
+  // that this step checked nothing, and not have to work out whether it did.
+  console.log(
+    'app.stamp: not checked - this step reads the config to plan a cache, ' +
+      'it is not a device run.'
+  );
+} else if (artifact != null) {
   process.env.HARNESS_APP_PATH = artifact;
   const platform = platformForArtifact(artifact) ?? runner;
   try {
@@ -103,12 +119,18 @@ if (artifact != null) {
   // already has installed, which is a previous task's app or none. Printing a
   // note and continuing is how a suite ends up reporting results for a binary
   // nobody has, which is the exact failure this file exists to stop.
+  //
+  // It does not offer `HARNESS_APP_PATH` as the way out (X1 re-review F3): an
+  // app built by Xcode or Android Studio has no stamp either, so pointing at one
+  // is refused three lines further down. The hatch that actually works is the
+  // one named here, with what it costs.
   throw new Error(
     `bun run harness:${runner}: no app to test.\n` +
       `       build it: node scripts/build-app.mjs --platform ${runner}\n` +
       '       (it writes app.stamp, which is what this check reads)\n' +
-      '       or point HARNESS_APP_PATH at an app built another way;\n' +
-      '       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite without this check.'
+      '       an app built another way has no stamp and is refused too -\n' +
+      '       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite with no artifact check\n' +
+      '       at all, against whatever the device already has installed.'
   );
 }
 // react-native-harness does not build the app: build a Debug iOS .app or an
@@ -219,7 +241,7 @@ if (emulatorBoot.port != null) {
  */
 const metroPort = Number(process.env.METRO_PORT ?? 8291);
 const stopTimingGate = publishTimingGate({
-  exampleDir: path.dirname(new URL(import.meta.url).pathname),
+  exampleDir,
   port: metroPort,
   log: (message) => console.log(message),
 });
