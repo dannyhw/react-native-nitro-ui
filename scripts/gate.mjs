@@ -2357,7 +2357,7 @@ function commandTable({ stage, full, reuse = true }) {
   if (full === true) {
     // Per-step durations, for the one gate where the total is not the useful
     // number. Under `--full`, because a report's gate table is five device rows and
-    // sixteen step rows would bury them. Gates with no breakdown print nothing, so
+    // a step row apiece would bury them. Gates with no breakdown print nothing, so
     // this stays `check`'s section in practice without naming it as such.
     const steps = renderStepTimings({ entries, gates: MERGE_GATES });
     if (steps !== '') process.stdout.write(`\n${steps}\n`);

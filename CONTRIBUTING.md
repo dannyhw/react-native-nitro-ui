@@ -140,8 +140,9 @@ Run from the repo root.
 | `bun run hooks:uninstall`     | Remove them again                                                           |
 | `bun run clean`               | Delete build outputs (`lib/`, native build dirs)                            |
 
-`bun run check` is sixteen steps — typecheck, lock:check, bench:typecheck, lint,
-format, test, test:native, perf:renders, nitrogen:check, registry:check,
+`bun run check` is seventeen steps — typecheck, lock:check, bench:typecheck, lint,
+format, test, test:native, test:native:android, perf:renders, nitrogen:check,
+registry:check,
 autolinking:check, prepare, api-extractor:check, publint, manifest:check,
 readme:check — run through a small scheduler (`scripts/check.mjs` + the step graph in
 `scripts/check-steps.mjs`), so independent ones overlap: up to half the machine's
@@ -607,7 +608,7 @@ The merge bar is `check`, both full harness runs and both real-input runs; a
 filtered harness run satisfies nothing. `table --full` adds the log path to every
 row and, under it, the per-step durations of the `check` run — `check` is the one
 gate long enough that its total is not an actionable number, so the ledger keeps
-what each of the sixteen steps cost. At merge, `need` may accept a `check` from
+what each of the steps cost. At merge, `need` may accept a `check` from
 another branch's ledger when it passed on this exact code tree and its commit is
 merged here (see `docs/tasks/ORCHESTRATOR.md`, "The loop" step 5); `--no-reuse`
 asks the strict question. A task report starts from

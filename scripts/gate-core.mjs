@@ -58,7 +58,7 @@ export const LOG_STORE_BASENAME = 'nitro-ui-gates';
  *     jest, then perf, then more, and "the last summary wins" made its row report
  *     the 7-test perf step instead of the 391-test unit run (M3).
  *
- * v3 adds `stepTimings` for `check` (X10): what each of the sixteen steps did, with
+ * v3 adds `stepTimings` for `check` (X10): what each of the steps did, with
  * its own duration. `check` is the one gate long enough that "3 m 04 s" is not an
  * actionable number - the thing a reader wants is which step got slower. It is a
  * record, not a rule: no decision in this file reads `stepTimings`, so a v2 line and
@@ -497,7 +497,7 @@ const STEP_STATUS_LABELS = {
  * It is a second table rather than extra cells on the first because it belongs to
  * one gate: `check` is the only run long enough to need it, and its row's duration
  * is the sum of this column's interesting parts. `--full` is the switch because
- * the report's gate table is the one a reviewer reads, and sixteen rows under it
+ * the report's gate table is the one a reviewer reads, and a step row under it
  * would bury the five device rows.
  *
  * @param {object} options

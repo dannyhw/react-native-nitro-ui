@@ -14,6 +14,16 @@ if [ -z "${ANDROID_HOME:-}" ] && [ ! -f "${ROOT}/example/android/local.propertie
   exit 0
 fi
 
+# In CI this belongs to the `build-android` job, which is the one that sets up JDK 17,
+# accepts the SDK licences and warms the gradle cache with a real build. The `checks`
+# job has an SDK but no JDK of its own and an empty gradle cache, so running it there
+# too would pay a cold dependency download to prove the same thing twice. Named, not
+# silent: a green `check` row that ran no Kotlin tests has to say who did.
+if [ -n "${CI:-}" ] && [ "${CI:-}" != "false" ]; then
+  echo "test:native:android: CI runs this in the build-android job (JDK 17 + warm gradle cache) - skipped here"
+  exit 0
+fi
+
 cd "${ROOT}/example/android"
 
 # The JVM tests do not run native code, so one ABI is all the library's CMake

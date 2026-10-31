@@ -123,6 +123,16 @@ jobs:
           NITRO_UI_CCACHE: '0'
         run: node scripts/build-app.mjs --platform android --arch x86_64
 
+      # The Kotlin half of `check`'s `test:native:android` step, here because this is
+      # the job that already paid for the Android toolchain: JDK 17, the licences, and
+      # a warm gradle cache from the build above, so the JVM tests are seconds rather
+      # than a cold dependency download (X15 item 2 - the same split the macOS
+      # `native-tests` job makes for the Swift half).
+      - name: Android JVM unit tests
+        env:
+          GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
+        run: bash scripts/native-tests-android.sh
+
   # A release build of the example app: this is what catches codegen/dex/R8
   # problems that a debug build tolerates. Slower than the debug build and not
   # something every pull request needs, so it is opt-in.

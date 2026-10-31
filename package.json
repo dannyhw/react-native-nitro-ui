@@ -66,7 +66,7 @@
     "manifest:check": "node scripts/package-files.mjs",
     "manifest:update": "node scripts/package-files.mjs --update",
     "check": "node scripts/check.mjs",
-    "check:serial": "bun run typecheck && bun run lock:check && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders && bun run nitrogen:check && bun run registry:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check && bun run readme:check",
+    "check:serial": "bun run typecheck && bun run lock:check && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run test:native:android && bun run perf:renders && bun run nitrogen:check && bun run registry:check && bun run autolinking:check && bun run prepare && bun run api-extractor:check && bun run publint && bun run manifest:check && bun run readme:check",
     "storybook": "bun --cwd example storybook",
     "storybook:ios": "bun --cwd example storybook:ios",
     "storybook:android": "bun --cwd example storybook:android",
