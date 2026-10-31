@@ -312,7 +312,7 @@ export function openBaselineForMerge({
     problems: decided.problems ?? [],
     unverified: decided.unverified ?? [],
     note: decided.note ?? null,
-    seeded: decided.seeded ?? {},
+    seeded: decided.seeded,
     foundingDependencies: decided.foundingDependencies ?? null,
     refusal: null,
   };
@@ -327,7 +327,10 @@ function mergeRefusal(file, display, machineLabel, kind, message) {
     problems: [],
     unverified: [],
     note: null,
-    seeded: {},
+    // null, not {}: the caller passes this straight to `writeBaseline()` as
+    // `componentsBase`, where an empty object means "the file had no provenance
+    // block" and would erase the one it does have.
+    seeded: null,
     foundingDependencies: null,
     refusal: { kind, message },
   };
