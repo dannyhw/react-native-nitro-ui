@@ -699,8 +699,29 @@ const LISTENER_SNIPPET =
   's.listen(Number(process.argv[1]),()=>fs.writeFileSync(process.argv[2],String(process.pid)))};' +
   'tryBind(0);const die=setTimeout(()=>process.exit(0),60000);if(die.unref)die.unref();';
 
-/** The same fixture with its self-exit at 1.5 s, for the case that measures the self-exit. */
-const SELF_EXIT_SNIPPET = LISTENER_SNIPPET.replace(',60000)', ',1500)');
+/**
+ * The same fixture with its self-exit at 1.5 s, for the case that measures the self-exit.
+ *
+ * Here the deadline starts once the port is bound and the pid file written, not at boot. A
+ * port that is briefly busy under a parallel suite costs 200 ms a bind retry, so a 1.5 s
+ * deadline counted from boot can end the fixture before it has written its pid (F6's merge
+ * `check`, 31 Oct). The shipped 60 s deadline outlasts every retry, so it can stay at boot.
+ */
+const SELF_EXIT_SNIPPET = LISTENER_SNIPPET.replace(
+  'String(process.pid)))};',
+  'String(process.pid))||setTimeout(()=>process.exit(0),1500).unref())};'
+).replace(
+  'const die=setTimeout(()=>process.exit(0),60000);if(die.unref)die.unref();',
+  ''
+);
+if (
+  !SELF_EXIT_SNIPPET.includes(',1500)') ||
+  SELF_EXIT_SNIPPET.includes(',60000)')
+) {
+  throw new Error(
+    'SELF_EXIT_SNIPPET no longer matches LISTENER_SNIPPET; update both together'
+  );
+}
 
 /**
  * Blocks for a moment without a subprocess and without spinning.
