@@ -160,6 +160,14 @@ export function writeBaseline(
       comparabilityNotes,
     });
   }
+  // A merge that would add nothing was refused a moment ago by
+  // `mergeBaselineProblems()` -> `missingComponentCells()`, which asks it of any record
+  // that is not the pre-flight's stand-in (review F2). There is no second guard here on
+  // `merged.addedCells === 0` deliberately: `report.mjs` is the only caller of this
+  // function and it always asks that question first, so a guard here could not be run
+  // red, and a branch nobody can demonstrate failing is not a guard. The same reasoning
+  // that keeps `missingComponentCells()` honest — it is in `lib.mjs`, where a test can
+  // reach it — is why that is where the rule lives.
   const baseline = merged?.baseline ?? built;
   const text = `${JSON.stringify(baseline, null, 2)}\n`;
   // Write, format, then rename — in that order (review L2). The committed file is

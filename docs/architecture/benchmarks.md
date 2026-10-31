@@ -176,8 +176,11 @@ is `--component <name> --update-baseline` itself: writing one component's cells 
 existing file *is* a narrowed schedule, so the narrowing guard is replaced for that shape
 by the question "may this file take this component's cells at all" - and its refusals are
 absolute. `--force` means "I know the machine was busy", not "I know this is a different
-simulator", and it never buys a partial block either: a merge writes a component whole, or
-refuses. See `bench/baselines/README.md`, "Adding one component".
+simulator", and it cannot buy a partial block: what counts as the component's block *whole*
+is counted against **the file's** plan, so `--plan quick --component menu --force` is refused
+(12 of menu's 28 rows) even though `--force` does wave the quick-plan judgement through for a
+plain `--update-baseline`. A merge writes a component whole, or refuses. See
+`bench/baselines/README.md`, "Adding one component".
 
 `--check` and `--update-baseline` need `NITRO_UI_MACHINE_LABEL`: baselines are keyed
 by machine as well as device, so without a usable label both refuse before the run

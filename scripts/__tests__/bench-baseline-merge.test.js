@@ -53,6 +53,7 @@ import {
   buildSchedule,
   cellKey,
   buildBaseline,
+  cellsContradictingTheirKey,
   cellsForComponent,
   componentProvenance,
   componentsInBaseline,
@@ -61,6 +62,7 @@ import {
   mergeComponentBaseline,
   mergeRunProblems,
   missingBaselineProvenanceProblem,
+  missingComponentCells,
   requestedTimeouts,
   seededComponentProvenance,
 } from '../bench/lib.mjs';
@@ -210,6 +212,7 @@ function makeRun({
   scenarios = ['mount'],
   component = null,
   components = null,
+  plan = 'full',
   nitroUi = 110_000,
   machine = fixtureMachine(platform),
   dependencies = { reactNative: '0.80.0', expoUi: '54.0.0', source: 'fixture' },
@@ -243,7 +246,7 @@ function makeRun({
         whole
           .flatMap((name) =>
             buildSchedule({
-              plan: 'full',
+              plan,
               launches,
               platform,
               component: name,
@@ -263,7 +266,7 @@ function makeRun({
     platform,
     deviceKey,
     deviceName: 'Fixture Device',
-    plan: 'full',
+    plan,
     launches,
     perfMarks: false,
     sha: 'dead123',
@@ -358,6 +361,9 @@ function candidate(run) {
   const { cells, ...rest } = run;
   return {
     ...rest,
+    // The real pre-flight stand-in says so (review F2), and the guards read that
+    // rather than inferring it from the record being empty, so the fixture has to.
+    candidate: true,
     cells: {},
     timeouts: baselineTimeoutRecord({
       timeouts: run.timeouts ?? requestedTimeouts(run),
@@ -1173,6 +1179,71 @@ describe('the merge itself only touches its own component', () => {
       'mount.slider:nitro-ui:50',
       'update.slider:nitro-ui:50',
     ]);
+  });
+
+  /**
+   * The completeness question, on its own.
+   *
+   * `mergeBaselineProblems()` also refuses the plan mismatch outright, which is what a
+   * human sees, so a CLI case cannot tell "expected came from the file's plan" from
+   * "expected came from the run's" — both refuse. This asks the function directly: the
+   * number of rows a component's block needs is a property of **the file** it is
+   * joining, because that is the table `--check` gates. A quick-plan run of `menu`
+   * holds 12 of the 28 rows the committed files measure per component, and the message
+   * has to say 12 of 28: "12 of 12" is what made the partial block look mergeable in
+   * the first place.
+   */
+  it('counts a component block complete against the file’s plan, not the run’s', () => {
+    const quick = makeRun({ plan: 'quick', component: 'menu' });
+    // Whole for its own plan, which is exactly the trap.
+    expect(missingComponentCells({ run: quick, component: 'menu' })).toBeNull();
+    const message = missingComponentCells({
+      run: quick,
+      component: 'menu',
+      plan: 'full',
+    });
+    expect(message).toContain('measured 12 of the 28 cells');
+  });
+
+  /**
+   * Which component a row belongs to, on its own (review F3).
+   *
+   * The key, always. `cellsForComponent` is what decides whose rows a merge deletes
+   * and rewrites, so reading the record's own `scenario` field here is the difference
+   * between refusing a hand-edited file and silently replacing `switch`'s measured
+   * numbers with something filed under a `menu` claim.
+   */
+  it('assigns a cell to the component its key names, never its scenario field', () => {
+    const forged = {
+      'mount:nitro-ui:50': {
+        scenario: 'mount.menu',
+        implementation: 'nitro-ui',
+        n: 50,
+      },
+      'mount.menu:nitro-ui:50': {
+        scenario: 'mount.menu',
+        implementation: 'nitro-ui',
+        n: 50,
+      },
+    };
+    expect(Object.keys(cellsForComponent(forged, 'menu'))).toEqual([
+      'mount.menu:nitro-ui:50',
+    ]);
+    // Which leaves the lie visible rather than harmless: the key's owner is a switch
+    // row, and that is the row a merge would have destroyed.
+    expect(cellsContradictingTheirKey(forged)).toEqual([
+      {
+        key: 'mount:nitro-ui:50',
+        keyScenario: 'mount',
+        claimed: 'mount.menu',
+      },
+    ]);
+    expect(
+      cellsContradictingTheirKey({
+        'mount:nitro-ui:50': { scenario: 'mount' },
+        'mount.menu:nitro-ui:50': { scenario: 'mount.menu' },
+      })
+    ).toEqual([]);
   });
 
   /**
@@ -2042,6 +2113,134 @@ describe('report.mjs merges one component', () => {
       expect(after.components.menu).toBeUndefined();
       expect(componentsInBaseline(after)).toEqual(
         componentsInBaseline(existing)
+      );
+    });
+  });
+
+  /**
+   * F1: `--force` must not buy a partial block (review round 2).
+   *
+   * A quick-plan run of `menu` holds 12 of the 28 cells the file's plan measures for
+   * it. Before the fix, the completeness question was asked against **the run's**
+   * plan — so 12 of 12 looked complete — while the rule that refuses a quick-plan
+   * mint lives in `baselineBlockers()`, which `--force` skips, and plan is not a
+   * comparability field. The result exited 0 and wrote those 12 rows; menu then
+   * counted as present, so the other 16 could never be merged in. The plan a
+   * component's block has to be complete *for the file*, and mixing plans in one
+   * table is a regime break, which is why this refusal is absolute.
+   */
+  it('refuses a quick-plan results file under --force, because the file is full-plan', () => {
+    withTree((ws) => {
+      const { existing } = fixtureTree(ws);
+      const quickRun = write(
+        ws.root,
+        'quick.json',
+        makeRun({
+          plan: 'quick',
+          component: 'menu',
+          nitroUi: 200_000,
+          machine: fixtureMachine('ios', { hostname: MINE }),
+        })
+      );
+      const forced = cli(ws, [
+        quickRun,
+        '--update-baseline',
+        '--component',
+        'menu',
+        '--force',
+      ]);
+      expect(forced.status).toBe(2);
+      expect(forced.all).toContain(
+        'the `quick` plan and the file holds `full`'
+      );
+      expect(readFileSync(path.join(ws.root, baselineRel), 'utf8')).toBe(
+        `${JSON.stringify(existing, null, 2)}\n`
+      );
+    });
+  });
+
+  /**
+   * F2: a measured record with no cells is not the pre-flight's stand-in.
+   *
+   * The stand-in is empty because nothing has been measured yet; a *real* run is
+   * empty because every launch failed. Inferring one from the other let a results
+   * file with `cells: {}` reach the file under `--force` and print "Merged … 0
+   * cells" while adding a `components.menu` entry — a claim that menu was measured
+   * here, with nothing in the table to contradict it, and menu unmergeable from then
+   * on. The stand-in now says so explicitly (`candidate: true`), and a merge that
+   * would add no cells refuses at the last moment as well.
+   */
+  it('refuses a results file that measured nothing, under --force too', () => {
+    withTree((ws) => {
+      const { existing, results } = fixtureTree(ws);
+      const empty = write(ws.root, 'empty.json', {
+        ...results,
+        cells: {},
+        // The waiting rule a real run records, so this fails for having no cells
+        // and not for a field the merge cannot read.
+        timeouts: baselineTimeoutRecord({
+          timeouts: requestedTimeouts(results),
+        }),
+      });
+      const forced = cli(ws, [
+        empty,
+        '--update-baseline',
+        '--component',
+        'button',
+        '--force',
+      ]);
+      expect(forced.status).toBe(2);
+      expect(forced.all).toContain('records no cells at all');
+      expect(forced.all).not.toContain('Merged baseline');
+      expect(readFileSync(path.join(ws.root, baselineRel), 'utf8')).toBe(
+        `${JSON.stringify(existing, null, 2)}\n`
+      );
+    });
+  });
+
+  /**
+   * F3: a cell belongs to the component its **key** names.
+   *
+   * A hand-edited record can carry `scenario: 'mount.menu'` on the key
+   * `mount:nitro-ui:50`, which is a `switch` row. Both ownership questions used to
+   * read the field, so the cell passed "did this run measure only menu?" and then
+   * landed on switch's key and replaced it. The key is what `--check` matches by and
+   * what the merge writes, so it is the claim that has to hold, and a record whose
+   * two accounts disagree is refused rather than interpreted.
+   */
+  it('refuses a record whose cell keys and scenarios disagree, and does not overwrite', () => {
+    withTree((ws) => {
+      const { existing } = fixtureTree(ws);
+      const forged = makeRun({
+        component: 'menu',
+        nitroUi: 200_000,
+        machine: fixtureMachine('ios', { hostname: MINE }),
+      });
+      // Same record, filed under a switch key: 28 menu cells plus this one, so the
+      // count still looks like a complete menu block.
+      forged.cells['mount:nitro-ui:50'] = {
+        ...forged.cells['mount.menu:nitro-ui:50'],
+        scenario: 'mount.menu',
+      };
+      const forgedFile = write(ws.root, 'forged.json', forged);
+      const out = cli(ws, [
+        forgedFile,
+        '--update-baseline',
+        '--component',
+        'menu',
+        // Absolute refusals survive --force, and asking with it is the point: this
+        // is not a judgement about the measurement.
+        '--force',
+      ]);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain('not the one their key stores');
+      const after = JSON.parse(
+        readFileSync(path.join(ws.root, baselineRel), 'utf8')
+      );
+      expect(after.components.menu).toBeUndefined();
+      // The switch row the forged cell would have replaced, byte for byte.
+      expect(JSON.stringify(after.cells['mount:nitro-ui:50'])).toBe(
+        JSON.stringify(existing.cells['mount:nitro-ui:50'])
       );
     });
   });

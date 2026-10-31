@@ -135,6 +135,13 @@ export function mergeCandidateRun({
   const ruleFor = (name) =>
     timeouts?.[name] ?? (BASELINE_TIMEOUTS_MS[platform] ?? {})[name] ?? null;
   return {
+    // This record is a *stand-in* for a measurement that has not happened (X14). The
+    // merge guards ask it the questions they will ask the real run, and some of those
+    // questions have answers only a measured run can give — "did you measure every
+    // cell?" being the obvious one, since this holds no cells at all. They read this
+    // flag rather than inferring it from emptiness (review F2): a real run whose every
+    // launch failed is empty too, and that one is a refusal, not a deferral.
+    candidate: true,
     platform,
     plan,
     launches,
