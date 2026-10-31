@@ -179,21 +179,20 @@ Kept out of the fix-round section above, which has a 200-word bar. Twelve rows a
 
 ## Fix round 2
 
-The two leaked fixtures (pids 28527, 30581) are dead, their ports free. The fixture that leaked
-them now ends itself (a 60 s unref'd timer), its pid file is polled with a 30 s budget, and
-cleanup kills from that file in a `finally`; four new cases cover the wait, the give-up, the kill
-and the self-exit. Ten sequential runs and two beside the whole `scripts/__tests__` tree were
-green, with nothing surviving.
+Leaked fixtures 28527 and 30581 are dead, ports free. The fixture now ends itself (60 s, unref'd),
+its pid file is polled with a 30 s budget, cleanup kills from that file in a `finally`, and five new
+cases cover wait, give-up, kill, self-exit. Ten sequential runs and two beside the whole
+`scripts/__tests__` tree were green. The two listeners a later `ps` found were my own mutation runs
+of the old fixture — hence an `afterAll` kill by pid file, since a red case runs no `finally`.
 
-`markClosed` counts both pipes before ending the drain: the first close lost stdout's tail. After
-the sweep the gate destroys its read ends, so a leaked descendant that is not a Metro on
-`$METRO_PORT` cannot hold it alive. One `note()` puts the sweep's line in the run's log as well as
-stderr. `SIGHUP` joins the forwarded signals: a detached child is outside this process's group.
+`markClosed` counts both pipes before ending the drain; the first close had been losing stdout's
+tail. After the sweep the gate destroys its read ends, so a descendant that is not a Metro on
+`$METRO_PORT` can no longer hold it alive. One `note()` puts the sweep's line in the log, not just
+stderr; `SIGHUP` joins the forwarded signals, a detached child being outside this group.
 
-Nits: the shared `lsof` stub uses one fixed path, not a temp dir per import, with a suite proving
-the reuse; `ownMetroPids` excludes the leader pid outright (a recycled pid matches its own group),
-and the "ignored the leader itself" test says what it tests; two drifted `mutations.json` rows are
-re-recorded and every `before` re-verified; the sweep-disabled note tells the truth.
+Nits: one fixed stub path instead of a temp dir per import (a suite proves the reuse); the leader
+pid is excluded from the sweep outright, and that test says what it tests; two drifted
+`mutations.json` rows re-recorded, every `before` re-verified; the sweep-disabled note corrected.
 
 ## Appendix — red proofs (fix round 2)
 
