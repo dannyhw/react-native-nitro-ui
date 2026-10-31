@@ -99,6 +99,130 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
     /** How long to let the collectors settle before reading the heap. */
     const val GC_SETTLE_MS = 250L
   }
+
+  /**
+   * Simulate B1 review N5's shape on a live hosted control, and report what the guard did:
+   * `"<host class>|dropped|measuredWidth=<n>"`, or `"no-host"` when nothing hosted is on
+   * screen.
+   *
+   * The shape is: a hosted control is dropped **while it is still attached**, and is then
+   * measured. RN reaches it from `stopSurface`, which drops views before taking the root
+   * out; the probe reaches it by calling the library's own teardown and then asking the
+   * view to measure, which is what a layout pass would do. Nothing else is faked: the
+   * composition really is disposed, the strategy really is un-armed, and the measure
+   * really is the framework's `View.measure`.
+   *
+   * Why a probe rather than the app itself: the harness cannot unmount one control while
+   * leaving its parent's layout pass running - the only dropped-and-still-attached view a
+   * test can reach is one the app hands over deliberately. And the answer is read two
+   * ways on purpose: `measuredWidth` here (`0` = the guard declined, anything else = it
+   * composed for a dead mount), and the library's own process-wide ask count from JS. A
+   * probe cannot see the count and the count cannot see the width, so both have to be
+   * read or neither says anything.
+   *
+   * Runs on the UI thread and waits for it: `drop()` disposes a composition and
+   * `measure()` would lay one out, both of which Compose requires be done there. That
+   * blocks this bridge thread, never the JS thread - every method here is a Promise for
+   * exactly that reason.
+   */
+  @ReactMethod
+  fun simulatePostDropMeasure(promise: Promise) {
+    // `reactApplicationContext.currentActivity`, not `getCurrentActivity()`: the module
+    // base class deprecates its own accessor in favour of this one in RN 0.88.
+    val activity = reactApplicationContext.currentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no activity to walk")
+      return
+    }
+    val decor = activity.window?.decorView
+    if (decor == null) {
+      promise.reject("NO_DECOR", "the activity has no decor view to walk")
+      return
+    }
+    val done = java.util.concurrent.CountDownLatch(1)
+    var answer = "no-host"
+    activity.runOnUiThread {
+      val host = findHost(decor)
+      if (host != null) {
+        // Whether it is still attached is the precondition of N5, so it is reported
+        // rather than assumed: a host that had already been removed from its parent is
+        // not the shape under test, and `measuredWidth=0` would then be an answer about
+        // a detached view rather than about the guard.
+        val attached = host.isAttachedToWindow
+        host.drop()
+        // Exactly one measure, and with a spec the host has never been given. Android
+        // caches a view's measured result against the spec it last saw and returns the
+        // cached number without calling `onMeasure`, so a spec the view has never had is
+        // what guarantees the call reaches the guard. `requestLayout()` would also force
+        // it, and deliberately is not used: it schedules a pass on a later frame, which
+        // would have a dropped host measured again during some other test's window.
+        //
+        // One measure, not two, so the JS side can assert the counter moved by exactly
+        // one: an ask-count that cannot be pinned to a known number of asks is a number,
+        // not a measurement.
+        val spec =
+          android.view.View.MeasureSpec.makeMeasureSpec(2000, android.view.View.MeasureSpec.EXACTLY)
+        host.measure(spec, spec)
+        answer =
+          "${host.javaClass.simpleName}|attached=$attached|dropped|" +
+            "measuredWidth=${host.measuredWidth}"
+      } else {
+        // Not a bare "no-host": the shape is the diagnosis, and this is the harness's
+        // only look at the app's real view tree. `views` proves the walk ran at all, and
+        // `reactViews` says whose window the test content is in - if the activity here is
+        // not the one hosting React, no amount of walking finds a host.
+        answer =
+          "no-host|activity=${activity.javaClass.simpleName}|" +
+            "root=${decor.javaClass.simpleName}|views=${countViews(decor)}|" +
+            "reactViews=${countNamed(decor, "React")}"
+      }
+      done.countDown()
+    }
+    done.await(5, java.util.concurrent.TimeUnit.SECONDS)
+    promise.resolve(answer)
+  }
+
+  /** Depth-first count of every view under [view], including it. */
+  private fun countViews(view: android.view.View): Int {
+    var total = 1
+    if (view is android.view.ViewGroup) {
+      for (index in 0 until view.childCount) {
+        total += countViews(view.getChildAt(index))
+      }
+    }
+    return total
+  }
+
+  /** Depth-first count of views whose class name contains [needle]. */
+  private fun countNamed(view: android.view.View, needle: String): Int {
+    var total = if (view.javaClass.name.contains(needle)) 1 else 0
+    if (view is android.view.ViewGroup) {
+      for (index in 0 until view.childCount) {
+        total += countNamed(view.getChildAt(index), needle)
+      }
+    }
+    return total
+  }
+
+  /**
+   * Depth-first search for the first hosted control in the app's view tree.
+   *
+   * Any control will do: the rule under test is `NitroComposeHost`'s, shared by all of
+   * them, and the harness's own screen has a Switch on it.
+   */
+  private fun findHost(
+    view: android.view.View
+  ): com.margelo.nitro.nitroui.core.NitroComposeHost<*>? {
+    if (view is com.margelo.nitro.nitroui.core.NitroComposeHost<*>) {
+      return view
+    }
+    if (view is android.view.ViewGroup) {
+      for (index in 0 until view.childCount) {
+        findHost(view.getChildAt(index))?.let { return it }
+      }
+    }
+    return null
+  }
 }
 
 class NitroUiProbePackage : ReactPackage {

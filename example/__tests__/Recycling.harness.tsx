@@ -210,11 +210,14 @@ async function waitForTestId(testId: string, timeoutMs: number) {
  * One Switch, mounted with the perf id the marks are keyed on.
  *
  * `value` is passed explicitly because every prop is always passed (nitro#1184), and
- * because a *controlled* value is what the second mount can be asked about.
+ * because a *controlled* value is what the second mount can be asked about. `key` is for
+ * the identity test: swapping it deletes this instance and asks for another, which is the
+ * drop-and-create pair the pool turns into a hand-back.
  */
-function oneSwitch(second: boolean) {
+function oneSwitch(second: boolean, key = 'single') {
   return (
     <Switch
+      key={key}
       value={second}
       testID="recycling-switch"
       accessibilityLabel="Recycling switch"
@@ -236,16 +239,42 @@ type HeapStats = {
 type ProbeModule = {
   heapStats(forceGc: boolean): Promise<HeapStats>;
   viewRecyclingEnabled(): Promise<boolean>;
+  /** Android only: drives B1's N5 shape and reports what the guard answered. */
+  simulatePostDropMeasure(): Promise<string>;
 };
 
 let probe: ProbeModule | null = null;
-function heapStats(): Promise<HeapStats> {
+function probeModule(): ProbeModule {
   if (probe == null) {
     probe = TurboModuleRegistry.getEnforcing(
       'NitroUiProbe'
     ) as unknown as ProbeModule;
   }
-  return probe.heapStats(true);
+  return probe;
+}
+
+/**
+ * The process-wide drop-path totals, as the library's own line, read through whichever
+ * control answers.
+ *
+ * A mount is needed to ask at all — the probe is a method on a live control — so this
+ * mounts one, reads it while it is on screen, and takes it away. The read is of the
+ * library's process-wide counters, so which control answers is beside the point. Callers
+ * hand the line to `lifetimeFields`, which is what refuses a missing field.
+ */
+async function readLifetimeLine(): Promise<string> {
+  delivered.length = 0;
+  const { unmount } = await render(oneSwitch(false, 'reporter'));
+  await waitForTestId('recycling-switch', 10000);
+  await settle(150);
+  const raw = latestHandle().nuiTestLifetimeReport();
+  unmount();
+  await settle(150);
+  return raw;
+}
+
+function heapStats(): Promise<HeapStats> {
+  return probeModule().heapStats(true);
 }
 
 const MIB = 1024 * 1024;
@@ -443,7 +472,13 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
       }
 
       // The witness first: a run that never pooled would leave the bound below
-      // trivially true, so the loop has to show it reached the reset at all.
+      // trivially true, so the loop has to show it reached the reset at all. What it
+      // shows precisely is that *this control class* went through the drop-and-pool path
+      // — `recycled` is marked for the shared perf id, so it counts the inline picker's
+      // own pool entry as well as the field's. That is weaker than the identity test's
+      // per-object proof, and it is the weaker witness on purpose: DatePicker has no
+      // `nuiTestLifetimeReport`, and adding one to a second control for a witness the
+      // Switch already settles is more API surface than the claim is worth.
       expect(sawRecycle).toBe(true);
       // The claim. `widestField` and `narrowestRow` are deliberately the pessimistic
       // pair across rounds: the assertion holds only if *every* round's field was
@@ -464,47 +499,69 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
   });
 
   it('gives a later mount an instance the pool took back', async () => {
-    // The identity half. A mark says a reset ran somewhere; this says the object some
-    // mount is looking at *is* the one that was reset, because its own counter — which
-    // the reset does not clear — says it has been through a mount already. A freshly
-    // allocated view cannot report `recycles >= 1` under any circumstance, so the
-    // assertion cannot be satisfied by a leak-free run that never pooled.
+    // The identity half. A mark says a reset ran somewhere; this says the object a mount
+    // is looking at *is* the one that was reset, because its own counter — which the
+    // reset does not clear — says it has been through a mount already.
     //
-    // Three rounds rather than two, and a maximum over the handles rather than a claim
-    // about "the" handle: the pool is per component class and may already hold an
-    // instance from an earlier suite, so which of several pooled views comes back on a
-    // given mount is the pool's business. What is not its business is whether any mount
-    // ever reported a recycle — and that is the fact the rule needs.
+    // **The read happens while the control is still mounted**, and that is the whole
+    // test. Read after the unmount, every handle says `drops=1 recycles=1`: the drop and
+    // the pool entry have both run on it by then, so a freshly allocated instance reads
+    // exactly like a reused one and the assertion proves nothing. Read while mounted, a
+    // fresh view can only say `drops=0 recycles=0` — nothing has dropped it yet — and
+    // `recycles >= 1` is reachable only by a view the pool popped for this mount.
+    //
+    // The churn is one `render` plus rerenders, and the swap is by `key`, for two
+    // reasons. A swap by key deletes and re-adds inside the same parent, which is what
+    // drops one instance and asks for another; and it stays on the *same surface*, which
+    // matters because RN's pool is keyed by `surfaceId` and `onSurfaceStopped` empties it
+    // — a churn that tore the root down between rounds would be paying for a new pool
+    // every time. Alternating `value` as well, so every round's control has to have
+    // received its own props: a recycled view that came back as a corpse with tidy
+    // counters would satisfy a counter assertion without being a control anyone could use.
     delivered.length = 0;
-    for (const [round, value] of [false, true, false].entries()) {
-      const { unmount } = await render(oneSwitch(value));
-      await waitForTestId('recycling-switch', 5000);
-      await settle();
-      // Each round's own mount has to have received its own props: a recycled view that
-      // came back as a corpse with tidy counters would satisfy the counter assertion
-      // below without being a control anyone could use.
-      await waitFor(() => expect(latestHandle().value).toBe(value));
-      unmount();
-      // Long enough for the drop to have run and, on iOS, for the instance to reach the
-      // pool: `enqueueComponentViewWithComponentHandle` is what calls
-      // `prepareForRecycle`, on the mounting transaction that removes the view.
-      await settle(500);
-      const seen = delivered.map((handle) => lifetime(handle));
+    const KEYS = ['a', 'b', 'a', 'b', 'a', 'b'];
+    const { rerender, unmount } = await render(oneSwitch(false, KEYS[0]), {
+      timeout: 25000,
+    });
+    await waitForTestId('recycling-switch', 10000);
+    await settle();
+    const whileMounted: Array<{ drops: number; recycles: number }> = [];
+    for (const [round, key] of KEYS.entries()) {
+      const value = round % 2 === 1;
+      if (round > 0) {
+        await rerender(oneSwitch(value, key));
+        await settle(400);
+      }
+      // Each round's own mount has to have received its own props.
+      await waitFor(() => expect(latestHandle().value).toBe(value), {
+        timeout: 8000,
+      });
+      // The read, while this mount is live. `latestHandle()` is the handle *this* round
+      // delivered, so the numbers are about the instance currently on screen.
+      const counters = lifetime(latestHandle());
+      whileMounted.push(counters);
       console.log(
-        `    · round ${String(round)} handles: ${JSON.stringify(seen)} ` +
-          `(delivered: ${String(delivered.length)})`
+        `    · round ${String(round)} (key ${key}, value ${String(value)}) ` +
+          `while mounted: ${JSON.stringify(counters)}`
       );
     }
+    unmount();
 
-    const counters = delivered.map((handle) => lifetime(handle));
-    const reused = Math.max(...counters.map((count) => count.recycles));
-    const dropped = Math.max(...counters.map((count) => count.drops));
-    console.log(
-      `    · highest counters seen: drops=${String(dropped)} ` +
-        `recycles=${String(reused)} over ${String(counters.length)} handle(s)`
-    );
-    expect(dropped).toBeGreaterThanOrEqual(1);
-    expect(reused).toBeGreaterThanOrEqual(1);
+    const reused = Math.max(...whileMounted.map((c) => c.recycles));
+    const dropped = Math.max(...whileMounted.map((c) => c.drops));
+    // Thrown, not `expect`, and with every round in the message: the assertion is only
+    // convincing next to the whole series, and a device run carries a thrown Error out of
+    // the process where `console.log` goes nowhere (the lesson `Conformance.harness.tsx`
+    // learned the hard way).
+    if (dropped < 1 || reused < 1) {
+      throw new Error(
+        `no mounted control reported a previous mount — highest on a mounted view was ` +
+          `drops=${String(dropped)} recycles=${String(reused)} over ` +
+          `${String(whileMounted.length)} rounds ${JSON.stringify(whileMounted)}. ` +
+          `Either the pool never handed a view back, or the counters no longer survive ` +
+          `a recycle — which is the exact claim this test exists to make.`
+      );
+    }
   });
 });
 
@@ -554,10 +611,10 @@ if (Platform.OS === 'android') {
             `(marks for nuiPerfId=${String(PERF_ID)} only)`
         );
 
-        // The witness that the loop recycled at all: the churned rows carry no perf id,
-        // so this is the *warm-up* control's marks and the count is a floor, not the
-        // cycle's total. Zero across every cycle would mean the pool never ran and the
-        // flat heap below would be measuring something else entirely.
+        // The witness that the loop recycled at all. Every churned row carries
+        // `nuiPerfId`, and the ring is drained each cycle, so this is that cycle's own
+        // hand-backs and not a running total. Zero across every cycle would mean the pool
+        // never ran, and the flat heap below would be measuring something else entirely.
         expect(
           recycledPerCycle.reduce((sum, value) => sum + value, 0)
         ).toBeGreaterThan(0);
@@ -573,61 +630,205 @@ if (Platform.OS === 'android') {
     });
 
     /**
-     * The two drop-path branches B1 could only measure once, by hand, now counted for good.
+     * The drop-path branches B1 could only measure once, by hand: nothing happens, and
+     * nothing happens across a whole churn.
      *
-     * B1's re-review called both "honest, but unasserted": the post-drop measure and layout
-     * path (its N5 — `stopSurface` drops views before taking the root out, so a dropped host
-     * can still be measured while attached) and the listener shape it filed as
-     * near-unreachable (M2 — a sizing flush scheduled while detached, then attach, then
-     * detach before a frame, then drop). Neither has a red-first route as ordinarily written:
-     * the expected outcome is *nothing happens*, and a test for an event that must not occur
-     * goes green on a probe that never fires. B1 measured them with instrumentation and
-     * reverted it, which leaves the claim resting on one run nobody can repeat.
+     * B1's re-review called both "honest, but unasserted": the post-drop measure and
+     * layout path (its N5 — `stopSurface` drops views before taking the root out, so a
+     * dropped host can still be measured while attached) and the listener shape it filed
+     * as near-unreachable (M2 — a sizing flush scheduled while detached, then attach,
+     * then detach before a frame, then drop). The counting lives in the shipping code
+     * (`NitroComposeHost`'s companion: `processMeasuresAfterDrop`,
+     * `processLayoutsAfterDrop`, `giveUpUnregisters`, `floatingFlushSchedules`) and all
+     * four are **process-wide totals**, which is what makes a zero mean anything: the
+     * host whose guard fired is the one object a harness holds no handle for, and the
+     * population is every mount the process has done, not the one control being read.
      *
-     * So the counting moved into the shipping code, ahead of the decline
-     * (`NitroUiLifetimeGate.declineMeasure`, `declineLayout`) and at the two M2 branches
-     * (`NitroComposeHost`'s companion `giveUpUnregisters`, `floatingFlushesSchedules`), and
-     * this is what turns a counter into a gate: zero on all four is a measured negative with
-     * a run behind it, and any non-zero value is a live leak path that arrives with a name
-     * and a count. `lifetimeFields` refuses a report that answers no field, which is the one
-     * way a probe could otherwise turn "never happened" into "never asked".
+     * A delta across a churn, not an absolute: the totals are monotonic and other tests
+     * in this file mount and drop controls, so an absolute zero would be a claim about
+     * test ordering. A delta of zero says 600 mounts, 600 drops and 600 pool entries
+     * produced no post-drop ask, which is the measured negative B1's re-review asked for.
      *
-     * Declared last in this file on purpose. Both counters are process-wide totals, so this
-     * reports every mount and drop the process has done by the time it reads them — the
-     * churn above when that ran first, and at minimum the pair of mounts and drops below,
-     * which is what keeps the population non-empty when this file is run filtered.
+     * The number is only as honest as the counter, and that is the next test's job: it
+     * drives the shape and shows the counter can move.
      */
-    it('measures the drop-path branches B1 called unreachable at zero', async () => {
-      // A handle to ask with. The Switch is only the mouth: the answer is about the process,
-      // and the mount itself is the population when nothing else ran first.
-      const { unmount } = await render(oneSwitch(false));
-      await waitForTestId('recycling-switch', 5000);
-      const raw = latestHandle().nuiTestLifetimeReport();
-      const seen = lifetimeFields(raw);
-      const nonZero = DROP_PATH_FIELDS.filter((field) => seen[field] !== 0);
-      if (nonZero.length > 0) {
-        // Thrown with the whole report inside the message, the way `Conformance.harness.tsx`
+    it('measures the drop-path branches B1 called unreachable at zero across a churn', async () => {
+      const before = lifetimeFields(await readLifetimeLine());
+      await churnCycle('drop-path');
+      await churnCycle('drop-path');
+      const after = lifetimeFields(await readLifetimeLine());
+      const grew = DROP_PATH_FIELDS.filter(
+        (field) => (after[field] ?? 0) > (before[field] ?? 0)
+      );
+      console.log(
+        `    · drop-path totals across 2 churn cycles of ${String(COUNT)}: ` +
+          `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`
+      );
+      if (grew.length > 0) {
+        // Thrown with both reports inside the message, the way `Conformance.harness.tsx`
         // learned to report: a device run carries a thrown Error out of the process and
-        // carries `console.log` out of it in none of the runs anyone has tried, and a
-        // `toBe` on one field would print one number where the whole line is the evidence.
+        // carries `console.log` out of it in none of the runs anyone has tried.
         throw new Error(
-          `${nonZero.join(', ')} ${nonZero.length === 1 ? 'is' : 'are'} non-zero, so ` +
-            `B1's unreachable drop-path branch is a live leak path: ${raw}`
+          `${grew.join(', ')} ${grew.length === 1 ? 'rose' : 'rose'} across a churn ` +
+            `of ${String(COUNT)} controls, so B1's unreachable drop-path branch is a ` +
+            `live leak path. before=${JSON.stringify(before)} ` +
+            `after=${JSON.stringify(after)}`
         );
       }
+    });
+
+    /**
+     * B1's N5 shape, driven on purpose, to show the guard fires and the counter counts.
+     *
+     * A zero from a counter nobody has ever seen move is an assumption wearing a number.
+     * So this asks the example app to do the thing `stopSurface` does — drop a hosted
+     * control while it is still attached, then let the framework measure it — and reads
+     * the answer two ways: the view's own `measuredWidth` (`0` = the guard declined; any
+     * other number = it composed a UI for a mount that no longer exists, which is the
+     * leak) and the same process-wide counters as the test above, which have to have moved
+     * by *exactly one* — the probe makes exactly one measure call.
+     *
+     * It is also the only place the guard is *seen working* on Android. With recycling on,
+     * `onDropView` and `prepareToRecycleView` arrive back to back, so in normal operation
+     * the window the guard covers is entered only by `stopSurface`, which no harness here
+     * produces. That is what made the rule deletable before this round.
+     *
+     * Ordering matters twice over. The control must still be **mounted** when the probe
+     * walks the tree (the harness tears the whole root down between tests, so a probe run
+     * after the last `unmount()` sees an empty app and says `no-host`), and the "after"
+     * read must go through a *live* handle for the same reason. So: read the totals, mount
+     * the control, probe, read again, then unmount.
+     */
+    it('declines, and counts, a host dropped while it is still attached', async () => {
+      const before = lifetimeFields(await readLifetimeLine());
+
+      const { unmount } = await render(oneSwitch(false));
+      await waitForTestId('recycling-switch', 5000);
+      await settle();
+
+      const answer = await probeModule().simulatePostDropMeasure();
+      // Read through the handle this test's own render delivered, which is still on
+      // screen. The probe has dropped the view it found, which may or may not be this
+      // one; either way the numbers are the process's.
+      const after = lifetimeFields(latestHandle().nuiTestLifetimeReport());
+      console.log(
+        `    · post-drop measure, driven: ${answer} ` +
+          `totals before=${JSON.stringify(before)} after=${JSON.stringify(after)}`
+      );
       unmount();
+
+      if (answer.startsWith('no-host')) {
+        throw new Error(
+          `the probe found no hosted control to drop, so it proved nothing about the ` +
+            `post-drop rule — a control has to be on screen. ` +
+            `The probe's own look at the tree: ${answer}`
+        );
+      }
+      // The precondition, stated as data: the guard only matters for a dropped host that
+      // is still attached, so a probe that found an already-detached view would be
+      // measuring the wrong thing and reporting a passing width.
+      expect(answer).toContain('attached=true');
+      // The guard. `measuredWidth=0` is the decline: the alternative is a view that
+      // measured, and so composed, for a mount whose composition was already disposed.
+      expect(answer).toContain('measuredWidth=0');
+      // The counter, moved by exactly the one ask the probe made. Without this half the
+      // assertion above could be satisfied by a guard that never ran, which is the failure
+      // mode a "must not happen" gate has and a "must happen" gate does not.
+      expect(after.measuresAfterDrop).toBe((before.measuresAfterDrop ?? 0) + 1);
     });
   });
 } else {
   /**
-   * The pending test, for the reason `MountChurn.harness.tsx` gives in full: Jest fails a
-   * suite that registers nothing, so the platform that is not gated says so out loud.
+   * iOS: measured, not cited, because round 1 of this file asserted two absences that
+   * turned out not to be true. It said `HermesInternal` does not exist and
+   * `performance.memory` is unimplemented; a run says `HermesInternal` **is** present and
+   * `performance.memory.usedJSHeapSize` **is** readable and live. So the reason iOS has no
+   * recycling leak gate is not that JS cannot see memory, and the reason has to be stated
+   * as three facts this test measures every run:
+   *
+   * 1. **No way to force a collection.** `HermesInternal` exposes no enumerable methods,
+   *    and neither `getHeapInfo` nor `collectGarbage` is among them. The Android gate is a
+   *    slope on a *post-collect* floor (`Runtime.totalMemory()` after `System.gc()`);
+   *    without a collect, a series of readings measures when the GC happened to run, not
+   *    what is retained.
+   * 2. **No ceiling to size a tolerance against.** `jsHeapSizeLimit` is `null`, so the
+   *    "the floor still has room to grow" half of the Android assertion — which is what
+   *    stops a pass at the heap limit — has no iOS equivalent.
+   * 3. **The leak this gate exists to catch is not on the JS heap.** On Android the
+   *    retention B1 measured was Java-heap objects (host, `ComposeContent`,
+   *    `AndroidComposeView`, ~42 KiB and one lifecycle observer each), which is why the
+   *    probe reads the Java heap. On iOS the same shape would be SwiftUI/UIKit objects in
+   *    native memory, which a JS-heap number cannot see at any sampling rate.
+   *
+   * Point 1 is why the number cannot be patched into a gate anyway, and the test below
+   * shows the number *is* live rather than frozen — `usedJSHeapSize` did move across a
+   * churn (5.97 MiB before, 8.60 MiB after 200 Switches, in the run that established
+   * this). A live number you cannot pin to a collection is still not a floor.
+   *
+   * Registered, not skipped: a skipped test asserts nothing. This one pins the three facts
+   * and has a future — the day a collect handle or a heap limit appears, it goes red and
+   * tells whoever added it to write the gate (the follow-up in
+   * `docs/tasks/FOLLOWUPS.md` is the same instruction).
    */
-  describe('recycling · churn does not leak', () => {
-    it.skip(
-      'is Android-only: the floor gate measures the Compose hosting lifecycle, ' +
-        'and iOS hosts SwiftUI views with a different lifetime',
-      () => {}
-    );
+  /**
+   * `performance.memory.usedJSHeapSize` on both sides of a churn, because the test needs
+   * the pair and `churnCycle` returns nothing.
+   */
+  async function sampleUsedJsHeapAcrossChurn(prefix: string): Promise<{
+    before: number;
+    after: number;
+  }> {
+    const read = () =>
+      (
+        globalThis as unknown as {
+          performance?: { memory?: { usedJSHeapSize?: number } };
+        }
+      ).performance?.memory?.usedJSHeapSize ?? 0;
+    const before = read();
+    await churnCycle(prefix);
+    await settle(400);
+    return { before, after: read() };
+  }
+
+  describe('recycling · what iOS can measure about leaks (F6)', () => {
+    it('has a JS heap number but no way to pin it to a collection, so no floor gate', async () => {
+      const g = globalThis as unknown as {
+        HermesInternal?: Record<string, unknown>;
+        performance?: { memory?: Record<string, number | undefined> };
+      };
+      const hermes = g.HermesInternal;
+      const asHeap = hermes as unknown as {
+        getHeapInfo?: unknown;
+        collectGarbage?: unknown;
+      };
+      const memory = g.performance?.memory;
+      const used = memory?.usedJSHeapSize;
+
+      // The readout has to be a real number, or the rest of this test is about nothing.
+      expect(typeof used).toBe('number');
+      expect(used).toBeGreaterThan(0);
+      expect(memory?.jsHeapSizeLimit).toBeNull();
+      expect(asHeap?.getHeapInfo).toBeUndefined();
+      expect(asHeap?.collectGarbage).toBeUndefined();
+
+      // And live, not frozen: `performance.memory` could in principle be a constant stub,
+      // in which case "we could not gate on it" would be the wrong reason. Sampled across
+      // a real churn, it has to answer differently. Measured on the simulator, it is also
+      // *not* monotonic in an obvious way — an 8 MiB JS ballast made it go down (5.97 MiB
+      // before, 4.30 MiB holding the ballast, 9.02 MiB after a 200-Switch churn) — which is
+      // exactly the problem: a series of uncollected readings tracks when the GC happened
+      // to run, so only its direction is safe to assert, not its sign or its slope.
+      const samples = await sampleUsedJsHeapAcrossChurn('ios-readout');
+      // Thrown evidence is what survives a device run, but the pair is worth logging too:
+      // it is the number a future reader needs in order to judge whether a slope gate
+      // would even be stable here.
+      console.log(
+        `    · iOS usedJSHeapSize across a churn: ${String(
+          samples.before
+        )} -> ${String(samples.after)} (no forced collect, no limit)`
+      );
+      expect(samples.after).toBeGreaterThan(0);
+      expect(samples.after).not.toBe(samples.before);
+    });
   });
 }
