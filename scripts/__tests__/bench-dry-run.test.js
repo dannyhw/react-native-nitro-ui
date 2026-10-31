@@ -35,6 +35,7 @@ import {
   androidDryRunDevice,
   dryRunReport,
   iosDryRunDevice,
+  mergeDependencyEvidence,
   readAvdHardware,
 } from '../bench/dry-run.mjs';
 
@@ -127,6 +128,15 @@ describe('the Android half of a dry run', () => {
     ).toEqual({
       deviceKey: 'android33-emu-pixel7',
       detail: expect.stringContaining('not attached'),
+      // The device identity a merge pre-flight compares with a baseline file's
+      // (X14): the API level read from the AVD's own files, and a null system-image
+      // fingerprint because only a booted device can answer that.
+      device: {
+        avd: 'nitroui_b',
+        sdk: '33',
+        image: null,
+        profile: 'pixel_7',
+      },
       problem: null,
     });
   });
@@ -189,6 +199,9 @@ describe('the Android half of a dry run', () => {
       deviceKey: null,
       detail: expect.stringContaining('profile unknown'),
       problem: expect.stringContaining('cannot be built from this AVD'),
+      // The half-read identity is reported as the half-read it is: no profile, and
+      // never a value filled in from this repo's own requirement (X14).
+      device: { avd: 'nitroui_a', sdk: '30', image: null, profile: null },
     });
     // The same for the other half: a profile with no API level.
     expect(
@@ -210,6 +223,250 @@ describe('the Android half of a dry run', () => {
         attachedSerials: [],
       }).problem
     ).toContain('ANDROID_AVD');
+  });
+});
+
+/**
+ * The merge pre-flight inside `--dry-run` (X14).
+ *
+ * A `--component --update-baseline` mint replaces the narrowing refusal with the
+ * merge question, so a dry run that did not answer it would print `would start` for
+ * a run the runner refuses before booting anything - the exact failure this command
+ * exists to prevent. `mergeEvidence` is injected, because the real one reads this
+ * repo's `bun.lock` and a founding commit, neither of which a rule test should
+ * depend on.
+ */
+describe('the merge half of a dry run', () => {
+  const MINE = 'maintainer-mac-2';
+  const DEVICE_KEY = 'android35-emu-pixel9';
+
+  /** A v2 Android baseline for `switch`, in the shape a committed file has. */
+  function existingFile() {
+    return {
+      schemaVersion: 2,
+      platform: 'android',
+      deviceKey: DEVICE_KEY,
+      sha: '9cf95f3',
+      plan: 'full',
+      launches: 8,
+      updatedAt: '2026-10-27T00:00:00.000Z',
+      machine: {
+        hostname: MINE,
+        cpuCount: 10,
+        cpuModel: 'Fixture M4 Pro',
+        androidApi: '35',
+        androidImage: 'fixture/google_apis/35',
+        loadavg1: 1.2,
+      },
+      art: { status: 'speed-profile', primed: true },
+      cells: {
+        'mount:nitro-ui:50': {
+          scenario: 'mount',
+          implementation: 'nitro-ui',
+          n: 50,
+          metrics: { presentedNs: { ratio: 1.1 } },
+        },
+      },
+    };
+  }
+
+  const EVIDENCE = {
+    dependencies: {
+      reactNative: '0.88.0',
+      expoUi: '58.0.22',
+      installedReactNative: '0.88.0',
+      installedExpoUi: '58.0.22',
+      source: 'bun.lock in the working tree',
+    },
+    resolved: {
+      'dependencies.reactNative': {
+        value: '0.88.0',
+        why: "bun.lock at the baseline's founding commit 9cf95f3",
+      },
+      'dependencies.expoUi': {
+        value: '58.0.22',
+        why: "bun.lock at the baseline's founding commit 9cf95f3",
+      },
+    },
+  };
+
+  const base = {
+    platform: 'android',
+    plan: 'full',
+    launches: 8,
+    component: 'slider',
+    argv: ['--update-baseline', '--component', 'slider'],
+    env: { NITRO_UI_MACHINE_LABEL: MINE },
+    deviceKey: DEVICE_KEY,
+    deviceDetail: 'AVD nitroui_a, API 35, profile pixel_9',
+    deviceProblem: null,
+    deviceInfo: {
+      avd: 'nitroui_a',
+      sdk: '35',
+      image: null,
+      profile: 'pixel_9',
+    },
+    // The host the merge compares against, injected for the same reason the device
+    // key is: this suite cannot know the machine it runs on.
+    machine: {
+      hostname: MINE,
+      cpuCount: 10,
+      cpuModel: 'Fixture M4 Pro',
+      loadavg1: 1.2,
+      xcode: null,
+      androidApi: '35',
+    },
+    cpuCount: 10,
+    loadavg1: 1.2,
+    baselinesDir: '/repo/bench/baselines',
+    existsSync: () => true,
+    relative: (file) => file.replace('/repo/', ''),
+    readJson: () => existingFile(),
+    mergeEvidence: () => EVIDENCE,
+  };
+
+  it('answers the merge question instead of refusing a narrowed schedule', () => {
+    const out = dryRunReport(base);
+    const text = out.lines.join('\n');
+    // The narrowing guard would call this run part of a plan; a merge is allowed
+    // to be narrowed, and the line proving that is the one about the merge.
+    expect(text).not.toContain('the schedule is narrowed');
+    expect(text).toContain('Mint:      would start');
+    expect(out.exitCode).toBe(0);
+    // The fields a v2 file cannot answer for are printed, deferred or accepted, so
+    // the reader sees what the verdict rested on rather than only the verdict.
+    expect(text).toContain('Merge:');
+    expect(text).toContain('deferred');
+    expect(text).toContain('Android system image');
+    expect(text).toContain('founding commit 9cf95f3');
+  });
+
+  it('refuses a component the file already holds', () => {
+    const out = dryRunReport({
+      ...base,
+      argv: ['--update-baseline', '--component', 'switch'],
+      component: 'switch',
+    });
+    expect(out.exitCode).toBe(2);
+    expect(out.problems.join('\n')).toContain('already has');
+    expect(out.lines.join('\n')).toContain('would refuse');
+  });
+
+  it('refuses when the file does not exist, and says a full mint comes first', () => {
+    const out = dryRunReport({ ...base, existsSync: () => false });
+    expect(out.exitCode).toBe(2);
+    expect(out.problems.join('\n')).toContain('nothing to merge into');
+  });
+
+  it('refuses when the device the file was measured on differs', () => {
+    const out = dryRunReport({
+      ...base,
+      readJson: () => ({
+        ...existingFile(),
+        machine: { ...existingFile().machine, cpuModel: 'Fixture M2 Ultra' },
+      }),
+    });
+    expect(out.exitCode).toBe(2);
+    expect(out.problems.join('\n')).toContain('CPU model differs');
+    expect(out.problems.join('\n')).toContain('Fixture M2 Ultra');
+  });
+
+  it('refuses the same command under --force, because force is not comparability', () => {
+    // `--force` means "I know the machine was busy", never "I know this is a
+    // different simulator", so the merge refusals stay in force. The API level is a
+    // field the host can answer for before booting, so this is a refusal and not a
+    // deferral - a pre-flight that deferred everything would pass this test for the
+    // wrong reason, which is why the system-image case below is a separate test.
+    const out = dryRunReport({
+      ...base,
+      argv: ['--update-baseline', '--component', 'switch', '--force'],
+      readJson: () => ({
+        ...existingFile(),
+        machine: { ...existingFile().machine, androidApi: '34' },
+      }),
+    });
+    expect(out.problems.join('\n')).toContain('Android API level differs');
+  });
+
+  it('defers only what a booted device cannot answer yet, and says which', () => {
+    // The two halves a stopped emulator cannot report. A pre-flight that deferred
+    // *everything* would pass the force case above for the wrong reason, so the
+    // deferrals are named here, and the API level - which the AVD's own files do
+    // answer for - is a refusal in the test above.
+    const out = dryRunReport(base);
+    const deferred = out.lines.filter((line) =>
+      line.startsWith('Merge:     deferred')
+    );
+    expect(
+      deferred.map((line) => line.split('deferred - ')[1].split(' ')[0])
+    ).toEqual(['Android', 'ART']);
+    expect(out.exitCode).toBe(0);
+  });
+
+  it('refuses a quick plan or a thin launch count without touching the file rules', () => {
+    const thin = dryRunReport({ ...base, launches: 4 });
+    expect(thin.problems.join('\n')).toContain('launches per cell');
+    const quick = dryRunReport({ ...base, plan: 'quick' });
+    expect(quick.problems.join('\n')).toContain('quick-plan numbers');
+  });
+
+  it('says nothing about a merge when no component was asked for', () => {
+    const out = dryRunReport({
+      ...base,
+      component: null,
+      argv: ['--update-baseline'],
+    });
+    expect(out.lines.join('\n')).not.toContain('Merge:');
+    expect(out.exitCode).toBe(0);
+  });
+
+  /**
+   * The pre-flight recovers a pre-X14 file's app versions through the *same*
+   * function the authoritative write-time check uses (review L3: it had its own
+   * copy of eleven lines, which is how the two drifted apart in the first place).
+   * Only `run.mjs` calls `mergeDependencyEvidence()` — no test reached it — so the
+   * shared reader is asserted here rather than trusted: the pre-flight must answer
+   * with what `git show <the file's sha>:bun.lock` says, with the same `why`, or it
+   * would wave a merge through and the write would then refuse it after the device
+   * time was spent.
+   */
+  it("recovers a pre-X14 file's versions through the reader the run uses", () => {
+    const shown = [];
+    const git = (args) => {
+      shown.push(args.join(' '));
+      if (args[1] === 'dead123:bun.lock') {
+        return '{"lockfileVersion":1,"packages":{"react-native":["react-native@0.80.0",{},"react-native-0.80.0.tgz"],"@expo/ui":["@expo/ui@54.0.0",{},"expo-ui-54.0.0.tgz"]},}';
+      }
+      if (args[1] === 'dead123:bench/package.json') {
+        return '{"dependencies":{"react-native":"0.80.0","@expo/ui":"54.0.0"}}';
+      }
+      throw new Error(`nothing at ${String(args[1])}`);
+    };
+    const out = mergeDependencyEvidence({
+      lockPath: '/repo/bun.lock',
+      nodeModulesDir: null,
+      git,
+      // A file that predates the `dependencies` field, so the recovery is what is
+      // being asked for, and that names the commit it was measured at.
+      baseline: { sha: 'dead123', dependencies: null },
+      read: () => {
+        throw new Error('no working-tree lock in this case');
+      },
+    });
+    expect(shown).toEqual([
+      'show dead123:bun.lock',
+      'show dead123:bench/package.json',
+    ]);
+    expect(out.resolved).toEqual({
+      'dependencies.reactNative': {
+        value: '0.80.0',
+        why: "bun.lock at the baseline's founding commit dead123",
+      },
+      'dependencies.expoUi': {
+        value: '54.0.0',
+        why: "bun.lock at the baseline's founding commit dead123",
+      },
+    });
   });
 });
 
