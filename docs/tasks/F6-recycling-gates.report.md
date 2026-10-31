@@ -33,6 +33,16 @@ two M2 counters were declared twice, an instance field shadowing the companion's
 total. Screens-pop blanking is not reachable in anything this repo runs — `react-native-screens`
 is not a dependency of the example app — so it is reported rather than fixed.
 
+**And the flag caught a product bug.** Turning recycling on made three DatePicker G5 tests red:
+a 131.05 dp `compact` field laid out at its row's 411.43. `sizingPolicy` is host state that the
+`variant` setter moves, and that setter compares against `model.variant` — which
+`prepareForRecycle()` has already restored to `compact`. So the next mount, wanting the default
+variant, saw "no change" and left the previous owner's `fillWidth` in place; the next field was
+then measured by the box instead of by its own text. Android's DatePicker was the only host
+missing the reset (Picker, Progress and iOS's DatePicker all had it). Fixed in product code with
+a changeset, and owned by a new recycle test that asserts the pessimistic pair — widest field
+across rounds against narrowest row — so one stretched field fails it.
+
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
@@ -68,6 +78,12 @@ is not a dependency of the example app — so it is reported rather than fixed.
   (Android 10:41, iOS 11:08 — both).
 - `MenuModelTest.aRecycleClosesThePopupWithoutReportingToItsPreviousOwner` -> delete
   `expanded = false` from `MenuModel.reset` -> `AssertionError` at `MenuModelTest.kt:146`.
+- `Recycling › hands the next mount a host with no sizing policy left behind` -> comment out
+  `host.sizingPolicy = POLICY_INTRINSIC` in `HybridNitroUiDatePicker.prepareForRecycle` ->
+  `a compact field was laid out at its row's width — widest field 411.43 against narrowest row
+  411.43` (`harness:android:Recycling`, 31 Oct 12:33). The same mutation reds the three DatePicker
+  G5 tests it came from: `testID "narrow" … never reached 131.05x48.00 - last box 411.43x48.00`,
+  and likewise `key-date` and `mode-date` (`harness:android:DatePicker`, 12:32).
 - `check` (`component-coverage` / `conformance`) -> leave `SegmentedControl`'s exemption row in
   place over its new probe -> `checkRecycleNotes` refuses it: "exempts `SegmentedControl` … that
   fixture has a residue probe".
@@ -79,25 +95,41 @@ is not a dependency of the example app — so it is reported rather than fixed.
 
 ## Files changed
 
-- `example/android/.../NitroUiFeatureFlags.kt`, `MainApplication.kt`, `NitroUiProbePackage.kt` —
+- `example/android/app/src/main/java/nitroui/example/NitroUiFeatureFlags.kt`,
+  `example/android/app/src/main/java/nitroui/example/MainApplication.kt`,
+  `example/android/app/src/main/java/nitroui/example/NitroUiProbePackage.kt` —
   the flag, where RN can take it, plus a read-back so a refused override cannot pass silently.
 - `example/__tests__/Recycling.harness.tsx` — new: pool marks, per-object identity, heap floor,
-  drop-path counters. New file so it does not collide with X15's edits to `Menu.harness.tsx`.
-- `android/.../core/NitroUiLifetimeGate.kt` (+ its JVM test), `NitroComposeHost.kt` — the
-  post-drop rule as a testable type; the shadowed process-wide counters fixed. Every host's
-  `drop()` now routes through the gate, so the rule has one place to be enforced from.
-- `cpp/core/NitroUiPerf.hpp`, `cpp/HybridNitroUiCore.cpp`, `android/.../core/NitroUiPerf.kt`,
-  `ios/core/NitroSwiftUIHost.swift`, `ios/components/Switch/…` — the `dropped`/`recycled` ring
-  kinds on both platforms, and the per-object `drops=`/`recycles=` read-out on Switch.
-- `ios/.../HybridNitroUiSegmentedControl.swift`, `android/.../HybridNitroUiSegmentedControl.kt` —
+  drop-path counters, and the sizing-policy reset rule. New file so it does not collide with
+  X15's edits to `Menu.harness.tsx`.
+- `android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiLifetimeGate.kt` (+
+  `android/src/test/java/com/margelo/nitro/nitroui/core/NitroUiLifetimeGateTest.kt`) and
+  `android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt` — the post-drop rule
+  as a testable type; the shadowed process-wide counters fixed. Every host's `drop()` now routes
+  through the gate, so the rule has one place to be enforced from.
+- `cpp/core/NitroUiPerf.hpp`, `cpp/HybridNitroUiCore.cpp`,
+  `android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt`,
+  `ios/core/NitroSwiftUIHost.swift`, `ios/components/Switch/HybridNitroUiSwitch.swift` — the
+  `dropped`/`recycled` ring kinds on both platforms, and the per-object `drops=`/`recycles=`
+  read-out on Switch.
+- `ios/components/DatePicker/HybridNitroUiDatePicker.swift`,
+  `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt` — the sizing
+  policy reset on recycle (Android was missing the line iOS already had), which is what made
+  three DatePicker G5 tests red.
+- `ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift`,
+  `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt` —
   `nuiTestDisplayedIndex`, and the body fix that made the iOS build compile again.
-- `src/**` (Switch + SegmentedControl `.nitro.ts`/native shims) and the nitrogen output under
-  `android/src/main/java/com/margelo/nitro/nitroui/spec` + `cpp/generated` — the two probes are
-  spec methods, so the generated bindings move with them (`check`'s drift step is what says so).
+- `src/components/Switch/Switch.nitro.ts`, `src/components/Switch/NativeNitroUiSwitch.ts`,
+  `src/components/Switch/Switch.tsx`, `src/components/SegmentedControl/SegmentedControl.nitro.ts`,
+  `src/components/SegmentedControl/NativeNitroUiSegmentedControl.ts`,
+  `src/components/SegmentedControl/SegmentedControl.tsx` and the nitrogen output under
+  `nitrogen/generated/` — the two probes are spec methods, so the generated bindings move with
+  them (`check`'s drift step is what says so).
 - `example/__tests__/Conformance.harness.tsx`, `scripts/conformance-core.mjs`,
-  `scripts/__tests__/{conformance,component-coverage}.test.js` — two cells flipped to covered,
-  one narrowed, the platform section rewritten to say what was measured.
-- `android/src/test/.../MenuModelTest.kt` — the Android half of Menu's popup reset, at JVM distance.
+  `scripts/__tests__/conformance.test.js`, `scripts/__tests__/component-coverage.test.js` — two
+  cells flipped to covered, one narrowed, the platform section rewritten to say what was measured.
+- `android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt` — the Android half of Menu's
+  popup reset, at JVM distance.
 - `docs/tasks/FOLLOWUPS.md` — the B1 line closed, the four X4 recycle lines corrected.
 
 ## Follow-ups
