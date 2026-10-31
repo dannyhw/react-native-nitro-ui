@@ -84,14 +84,30 @@ on them is a no-op the verifier reports honestly rather than skips); `skippedCel
 only compares rows its own run measured), hence the second bench gate above: 64 launches, all
 components, `nitro-ui`/`rn-core`.
 
+**Why the ledger holds two 35-minute menu mints** (review L4, both exit 0). The first started at
+`01:10:05Z` on head `1788d4c`; I committed `3bcc899` at 01:26, inside that window, and the runner
+takes its `sha` when the run *ends* — so the provenance block that mint wrote named a commit that
+had not existed for any of the 280 launches. That is precisely the claim a reader cannot check
+afterwards, so the merged file was thrown away and the mint re-run from a frozen tree at head
+`cb269c9` (started `01:56:48Z`, nothing committed during it), which is what `dcd3634` commits and
+what the file's `components.menu.sha` says. Two 35-min rows is the cost of noticing; the numbers in
+the table above are the second run's.
+
 ## Red proofs
 
-44 rows in `docs/tasks/X14/mutations.json`; drivers restore with `git checkout --` between rows.
-Three rows are worth naming: the `skippedCells` carry-through went red both ways (dropping every
-row, and dropping none); an escaped quote inside a lock string went green on its first draft
-because the input was still valid strict JSON, so the tolerant walk never ran — the trailing comma
-is what reaches that code; and the `--check` version refusal is asserted through `report.mjs`
-rather than the function, because a call site is what can pass the wrong constant.
+64 rows in `docs/tasks/X14/mutations.json`; drivers restore with `git checkout --` between rows,
+and every name below exists in the suite it is cited against. The list is generated from that
+file, not written by hand, which is what let 15 of its lines drift in round 1 (review M1). Four
+rows are worth naming: the `skippedCells` carry-through went red both ways (dropping every row,
+and dropping none); an escaped quote inside a lock string went green on its first draft because
+the input was still valid strict JSON, so the tolerant walk never ran — the trailing comma is what
+reaches that code; the `--check` version refusal is asserted through `report.mjs` rather than the
+function, because a call site is what can pass the wrong constant; and three of fix round 1's own
+rows went green when first run (`merge copies every skippedCells row`, `completeness counts the
+run's cells`, `provenance records the plan it wants`), which was a weak assertion and not a
+working guard — the tests were strengthened and the same mutations re-run, and those re-runs are
+the rows in the ledger. Four older rows were re-anchored for the same reason the review found:
+their `before` text no longer matched the source, or matched twice.
 
 - `bench-baseline-merge.test.js` -> `merge wipes every other component's cells` (`lib.mjs`) -> `leaves every other cell byte-for-byte identical`
 - `bench-baseline-merge.test.js` -> `merge writes only the new component's cells (full overwrite)` (`lib.mjs`) -> `leaves every other cell byte-for-byte identical`
@@ -99,44 +115,64 @@ rather than the function, because a call site is what can pass the wrong constan
 - `bench-baseline-merge.test.js` -> `merge rewrites the founding run's sha/updatedAt` (`lib.mjs`) -> `merges into a pre-X14 file, recovering its versions from its own commit`
 - `bench-baseline-merge.test.js` -> `merge re-sorts the whole cells table` (`lib.mjs`) -> `appends new cell keys instead of re-sorting the table`
 - `bench-baseline-merge.test.js` -> `merge allowed onto a component the file already has` (`lib.mjs`) -> `refuses when the file already has this component, and counts the cells`
-- `bench-baseline-merge.test.js` -> `merge ignores the other filters (--scenario/--n/--only)` (`lib.mjs`) -> `refuses a merge that narrows the run beyond --component`
-- `bench-baseline-merge.test.js` -> `merge allowed on a schedule too small for the component` (`lib.mjs`) -> `refuses a schedule that does not cover the component whole`
-- `bench-baseline-merge.test.js` -> `merge accepts a different device key` (`lib.mjs`) -> `refuses a different device key`
-- `bench-baseline-merge.test.js` -> `merge accepts a different CPU model` (`lib.mjs`) -> `refuses a different CPU model or core count`
-- `bench-baseline-merge.test.js` -> `merge accepts a different core count` (`lib.mjs`) -> `refuses a different CPU model or core count`
-- `bench-baseline-merge.test.js` -> `merge accepts a different simulator runtime` (`lib.mjs`) -> `refuses a different simulator runtime or Xcode on iOS, and ignores both on Android`
-- `bench-baseline-merge.test.js` -> `merge accepts a different Android API level` (`lib.mjs`) -> `refuses a different Android API level, system image or ART state`
-- `bench-baseline-merge.test.js` -> `comparability stops checking the ART compile state` (`lib.mjs`) -> `refuses a different Android API level, system image or ART state`
-- `bench-baseline-merge.test.js` -> `merge accepts a different react-native version` (`lib.mjs`) -> `refuses a different react-native or @expo/ui version`
-- `bench-baseline-merge.test.js` -> `merge accepts a different @expo/ui version` (`lib.mjs`) -> `refuses a different react-native or @expo/ui version`
-- `bench-baseline-merge.test.js` -> `a version the file predates is waved through instead of refused` (`lib.mjs`) -> `refuses when the file already has this component, and counts the cells`
-- `bench-baseline-merge.test.js` -> `any waiting rule accepted for a file that records none` (`lib.mjs`) -> `refuses a pre-X14 file when the run waited under a non-default rule`
-- `bench-baseline-merge.test.js` -> `a pre-X14 file's versions are never recovered` (`lib.mjs`) -> `matches pre-X14 app versions against the founding commit, and records the source`
-- `bench-baseline-merge.test.js` -> `the schema version is not compared` (`lib.mjs`) -> `accepts a v2 file and says the bookkeeping is upgraded`
-- `bench-baseline-merge.test.js` -> `a v1 file is accepted` (`lib.mjs`) -> `refuses a v1 file`
-- `bench-baseline-merge.test.js` -> `a pre-flight deferral is treated as a pass` (`lib.mjs`) -> `reports the unknown halves as deferred when allowed`
-- `bench-baseline-merge.test.js` -> `provenance loses the per-component launch count` (`lib.mjs`) -> `records per-component provenance for a merge`
-- `bench-baseline-merge.test.js` -> `existing components are not seeded` (`lib.mjs`) -> `seeds the file's own components from its founding run`
-- `bench-baseline-merge.test.js` -> `seeded entries are not marked as seeded` (`lib.mjs`) -> `seeds the file's own components from its founding run`
-- `bench-baseline-merge.test.js` -> `the runner lets --force skip the merge refusal` (`run.mjs`) -> `refuses an API level that differs even under --force, before the device`
-- `bench-baseline-merge.test.js` -> `the pre-flight crashes printing a merge's deferred fields` (`baseline.mjs`) -> `refuses a thin launch count, and lets --force past it to the device`
-- `bench-baseline-merge.test.js` -> `the CLI ignores the merge refusals` (`report.mjs`) -> `refuses a component the file already holds, without writing`
-- `bench-baseline-merge.test.js` -> `the refusal names the version it wanted, not the version it found` (`baseline.mjs`) -> `refuses a pre-D9 file before the merge rules run`
-- `bench-baseline-merge.test.js` -> `--check reads the baseline at the results file's version` (`report.mjs`) -> `names the baseline schema version it wanted when a pre-D9 file is checked`
-- `bench-baseline-merge.test.js` -> `the merge drops every skippedCells row, not just its own` (`lib.mjs`) -> `carries the other components' skippedCells rows and drops only its own`
-- `bench-baseline-merge.test.js` -> `the merged component's stale skipped row survives its own re-measure` (`lib.mjs`) -> `carries the other components' skippedCells rows and drops only its own`
-- `bench-baseline-machine.test.js` -> `the refusal lists one readable version instead of every one` (`baseline.mjs`) -> `refuses a pre-D9 baseline before the provenance check`
-- `bench-deps.test.js` -> `bun's own lock stops parsing (the strict-only reader returns)` (`deps.mjs`) -> `reads bun's own file, which is not strict JSON`
-- `bench-deps.test.js` -> `the string walk loses its escape handling` (`deps.mjs`) -> `accepts strict JSON too, and does not touch what is inside a string`
-- `bench-deps.test.js` -> `a trailing comma before a closer is no longer dropped` (`deps.mjs`) -> `reads bun's own file, which is not strict JSON`
-- `bench-deps.test.js` -> `a // comment is no longer stripped` (`deps.mjs`) -> `reads bun's own file, which is not strict JSON`
-- `bench-deps.test.js` -> `a broken lock is also reported as two missing packages` (`deps.mjs`) -> `says so when the lock could not be read or parsed`
+- `bench-baseline-merge.test.js` -> `merge allowed with an extra narrowing filter` (`lib.mjs`) -> `refuses any other narrowing filter, naming each one`
+- `bench-baseline-merge.test.js` -> `comparability stops checking device key, CPU model, runtime, Xcode` (`lib.mjs`) -> `refuses a different platform, device key, CPU model or core count by name`
+- `bench-baseline-merge.test.js` -> `comparability stops checking the Android system image` (`lib.mjs`) -> `refuses a different Android API level, system image or ART state`
+- `bench-baseline-merge.test.js` -> `the platform default waiting rule no longer accepted` (`lib.mjs`) -> `refuses when the file already has this component, and counts the cells`
+- `bench-baseline-merge.test.js` -> `a readable v2 file is refused instead of upgraded` (`lib.mjs`) -> `refuses when the file already has this component, and counts the cells`
+- `bench-baseline-merge.test.js` -> `the pre-D9 v1 file becomes readable` (`lib.mjs`) -> `refuses a version it cannot read at all`
+- `bench-baseline-merge.test.js` -> `an unanswered field is always deferred, never refused` (`lib.mjs`) -> `refuses the same candidate when the answers are due`
+- `bench-baseline-merge.test.js` -> `the pre-flight refuses what it cannot measure yet` (`lib.mjs`) -> `reports the unknown halves as deferred when allowed`
+- `bench-baseline-merge.test.js` -> `the pre-flight stops requiring 8 launches` (`lib.mjs`) -> `refuses a quick plan, a thin launch count, perf marks and a dirty tree`
+- `bench-baseline-merge.test.js` -> `the pre-flight stops requiring the full plan` (`lib.mjs`) -> `refuses a quick plan, a thin launch count, perf marks and a dirty tree`
+- `bench-baseline-merge.test.js` -> `seeded provenance stops marking itself as seeded` (`lib.mjs`) -> `seeds every existing component from the founding run, and marks it`
+- `bench-baseline-merge.test.js` -> `seeded provenance loses the recovered versions` (`lib.mjs`) -> `seeds every existing component from the founding run, and marks it`
+- `bench-baseline-merge.test.js` -> `a file copied in from another machine is accepted` (`baseline.mjs`) -> `refuses a file copied in from another machine`
+- `bench-baseline-merge.test.js` -> `a missing file is not refused at open time` (`baseline.mjs`) -> `refuses a missing file, and names the full run that creates one`
+- `bench-baseline-merge.test.js` -> `the CLI writes a full baseline instead of merging` (`report.mjs`) -> `merges into a pre-X14 file, recovering its versions from its own commit`
 - `bench-deps.test.js` -> `the lock reader keeps a peer suffix in the version` (`deps.mjs`) -> `drops a peer suffix rather than returning it as the version`
 - `bench-deps.test.js` -> `a stale install stops being reported` (`deps.mjs`) -> `refuses a stale install, naming both versions`
 - `bench-deps.test.js` -> `an unreadable revision stops coming back null` (`deps.mjs`) -> `comes back null when the revision cannot be read, rather than using the working tree`
+- `bench-baseline-merge.test.js` -> `merge allowed on a schedule too small for the component` (`lib.mjs`) -> `refuses a schedule that does not cover the component whole`
+- `bench-baseline-merge.test.js` -> `comparability stops checking the ART compile state` (`lib.mjs`) -> `refuses a different Android API level, system image or ART state`
+- `bench-baseline-merge.test.js` -> `a version the file predates is waved through instead of refused` (`lib.mjs`) -> `refuses when the file already has this component, and counts the cells`
+- `bench-baseline-merge.test.js` -> `any waiting rule accepted for a file that records none` (`lib.mjs`) -> `refuses a pre-X14 file when the run waited under a non-default rule`
+- `bench-baseline-merge.test.js` -> `the CLI ignores the merge refusals` (`report.mjs`) -> `refuses a component the file already holds, without writing`
 - `bench-dry-run.test.js` -> `--force silences a merge's comparability refusals` (`dry-run.mjs`) -> `refuses a quick plan or a thin launch count without touching the file rules`
 - `bench-dry-run.test.js` -> `the dry run stops asking the merge question at all` (`dry-run.mjs`) -> `answers the merge question instead of refusing a narrowed schedule`
 - `bench-dry-run.test.js` -> `a pre-flight with no --timeout flag reports no waiting rule` (`machine.mjs`) -> `answers the merge question instead of refusing a narrowed schedule`
+- `bench-baseline-merge.test.js` -> `the runner lets --force skip the merge refusal` (`run.mjs`) -> `refuses a thin launch count, and lets --force past it to the device`
+- `bench-baseline-merge.test.js` -> `the pre-flight crashes printing a merge's deferred fields` (`baseline.mjs`) -> `refuses a thin launch count, and lets --force past it to the device`
+- `bench-baseline-merge.test.js` -> `--check reads the baseline at the results file's version` (`baseline.mjs`) -> `names the baseline schema version it wanted when a pre-D9 file is checked`
+- `bench-deps.test.js` -> `bun's own lock stops parsing (the strict-only reader returns)` (`deps.mjs`) -> `reads bun’s own file, which is not strict JSON`
+- `bench-deps.test.js` -> `the string walk loses its escape handling` (`deps.mjs`) -> `accepts strict JSON too, and does not touch what is inside a string`
+- `bench-deps.test.js` -> `a trailing comma before a closer is no longer dropped` (`deps.mjs`) -> `reads bun’s own file, which is not strict JSON`
+- `bench-deps.test.js` -> `a // comment is no longer stripped` (`deps.mjs`) -> `reads bun’s own file, which is not strict JSON`
+- `bench-deps.test.js` -> `a broken lock is also reported as two missing packages` (`deps.mjs`) -> `says so when the lock could not be read or parsed`
+- `bench-baseline-merge.test.js` -> `the refusal names the version it wanted, not the version it found` (`baseline.mjs`) -> `refuses a pre-D9 file before the merge rules run`
+- `bench-baseline-machine.test.js` -> `the refusal lists one readable version instead of every one` (`baseline.mjs`) -> `refuses a pre-D9 baseline before the provenance check`
+- `bench-baseline-merge.test.js` -> `the merge drops every skippedCells row, not just its own` (`lib.mjs`) -> `carries the other components' skippedCells rows and drops only its own`
+- `bench-baseline-merge.test.js` -> `the merged component's stale skipped row survives its own re-measure` (`lib.mjs`) -> `carries the other components' skippedCells rows and drops only its own`
+- `bench-baseline-merge.test.js` -> `merge copies every cell the run holds, not just the component's` (`lib.mjs`) -> `copies only the named component out of a `built` that holds a whole run`
+- `bench-baseline-merge.test.js` -> `a run holding another component's cells is not refused` (`lib.mjs`) -> `refuses a full-run results file rather than filing every cell under one component`
+- `bench-baseline-merge.test.js` -> `a run holding part of the component's cells is not refused` (`lib.mjs`) -> `refuses a results file that measured only part of the named component`
+- `bench-baseline-merge.test.js` -> `the completeness question is never asked of the record` (`lib.mjs`) -> `refuses a results file that measured only part of the named component`
+- `bench-baseline-merge.test.js` -> `provenance loses the per-component launch count` (`lib.mjs`) -> `writes a provenance entry that says who measured what, when and how quietly`
+- `bench-baseline-merge.test.js` -> `provenance loses when the component was minted` (`lib.mjs`) -> `writes a provenance entry that says who measured what, when and how quietly`
+- `bench-baseline-merge.test.js` -> `provenance loses the run's load summary` (`lib.mjs`) -> `writes a provenance entry that says who measured what, when and how quietly`
+- `bench-baseline-merge.test.js` -> `provenance loses the app versions it was measured with` (`lib.mjs`) -> `writes a provenance entry that says who measured what, when and how quietly`
+- `bench-baseline-merge.test.js` -> `provenance claims no cell keys` (`lib.mjs`) -> `writes a provenance entry that says who measured what, when and how quietly`
+- `bench-baseline-merge.test.js` -> `provenance reads the waiting rule from nothing but a flag` (`lib.mjs`) -> `writes a provenance entry that says who measured what, when and how quietly`
+- `bench-baseline-merge.test.js` -> `the baseline merge formats the committed file in place, not a temp file` (`report.mjs`) -> `formats a temp file, and leaves a readable baseline when the formatter damages it`
+- `bench-baseline-merge.test.js` -> `an unresolved device is reported as a missing baseline file` (`run.mjs`) -> `names the missing device rather than a null.json path when IOS_SIM_UDID is unset`
+- `bench-dry-run.test.js` -> `the one founding-version reader answers nothing for the pre-flight too` (`baseline.mjs`) -> `recovers a pre-X14 file's versions through the reader the run uses`
+- `bench-baseline-merge.test.js` -> `merge accepts a different core count` (`lib.mjs`) -> `refuses a different platform, device key, CPU model or core count by name`
+- `bench-baseline-merge.test.js` -> `merge accepts a different Android API level` (`lib.mjs`) -> `refuses an API level that differs even under --force, before the device`
+- `bench-baseline-merge.test.js` -> `merge accepts a different react-native version` (`lib.mjs`) -> `refuses a different react-native or @expo/ui version, naming both`
+- `bench-baseline-merge.test.js` -> `merge accepts a different @expo/ui version` (`lib.mjs`) -> `refuses a different react-native or @expo/ui version, naming both`
+- `bench-baseline-merge.test.js` -> `completeness counts the run's cells instead of the component's` (`lib.mjs`) -> `refuses a full-run results file rather than filing every cell under one component`
+- `bench-baseline-merge.test.js` -> `provenance records the plan it wants instead of the run's` (`lib.mjs`) -> `records the run’s plan and launch count, not the ones a baseline is minted under`
+- `bench-baseline-merge.test.js` -> `merge copies every skippedCells row the run holds` (`lib.mjs`) -> `copies only the named component out of a `built` that holds a whole run`
 
 ## Files changed
 
@@ -151,7 +187,8 @@ rather than the function, because a call site is what can pass the wrong constan
 - `scripts/__tests__/bench-baseline-merge.test.js`, `bench-deps.test.js`, `bench-dry-run.test.js`,
   `bench-baseline-machine.test.js` — 80 new tests (127 across those four files), incl. `run.mjs`
   driven over a fake tree with an adb that reports nothing attached, and the repo's own `bun.lock`
-  read at two commits.
+  read at two commits. Fix round 1 takes `bench-baseline-merge.test.js` to 62 tests and
+  `bench-dry-run.test.js` to 31.
 - `bench/baselines/maintainer-mac-2/android35-emu-pixel9.json` — Menu's cells, by the new path.
 - `bench/baselines/README.md`, `CONTRIBUTING.md` — adding a component vs a full re-mint.
 - `docs/tasks/X14/` — the ledger, its failure excerpt, `mutations.json`.
@@ -160,17 +197,36 @@ rather than the function, because a call site is what can pass the wrong constan
 
 - `deps.mjs`: `installedDependenciesProblem()` cannot see a `node_modules` (the bench workspace is
   hoisted, `bun.lock` lives only at the repo root), so the installed half is inert here.
-- `docs/architecture/benchmarks.md` does not mention `--component`; the two documents the brief
-  named are updated, this is a third place nobody pointed at.
+- `docs/architecture/benchmarks.md` did not mention `--component`; fixed in fix round 1, which also
+  corrected the two false claims the review caught there (M2).
 - `report.mjs`'s missing-baseline exit stays 1 by history while `run.mjs`'s is 2; the new refusals
   are 2 on both. Unifying them changes a gate's exit code.
 - `gate.mjs` encodes a bench's args into the gate name, so `--only a,b` becomes `--only:a%2Cb` and
   the printed `wait` line needs that exact form. Cosmetic, but it cost one retried wait.
 - The menu mint and the narrowed check-run both record `--skip-build`; nothing re-verified the APK
   against the tree mid-window beyond the stamp the build wrote at 01:05.
-- Hygiene incident, one: the Gradle daemon this branch's build started (pid 62468) had also served
+- Hygiene incidents, two. The Gradle daemon this branch's build started (pid 62468) had also served
   an A3 worktree that no longer exists; I stopped that PID by number after confirming no gradle
   client, gate or Metro of any task was live. Costs anyone else one daemon start, not an answer.
+  And after releasing lease `X14-p6phr` I powered `emulator-5574` down, which is the pool's
+  decision and not mine — `release` is meant to leave the pair warm so the next task does not pay
+  for a boot. Minor: no other device was touched, nothing was reset, and `lease.mjs acquire --boot`
+  simply pays the boot. My mistake of reading, not of the tooling.
+
+## Fix round 1
+
+Check-only, no device time. **H1:** the merge's two new questions are asked of the *record* in
+`mergeBaselineProblems()` — a run holding another component's cells, or missing any cell the plan
+measures for the named one (measured-and-skipped counts) — is refused, and `mergeComponentBaseline`
+filters what it copies so the promise holds without a caller. Three CLI cases: a full run filed as
+`menu`, a `slider` run filed as `menu`, a part-of-`menu` run; each leaves the file byte-identical.
+**M1:** every provenance field is asserted against a fixture whose `loadSamples` is non-null; the
+report's list is generated from `mutations.json` (64 rows), rows 4/18/34/37 re-anchored. **M2:** the
+`--force` row and the narrowed-schedule paragraph now say what survives `--force`. **L1:** an
+unresolved device is its own absolute refusal, not a `null.json` path. **L2:** format a temp file,
+re-serialise if prettier dies, then rename. **L3:** the dead strict-JSON lock read is gone, the two
+founding-version readers are one, `stripJson5Syntax` is linear (503 ms → 19 ms). 20 new red proofs,
+3 self-corrections; `check` green.
 
 ## Questions for orchestrator
 
