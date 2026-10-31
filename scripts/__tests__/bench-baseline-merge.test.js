@@ -1042,7 +1042,10 @@ describe('opening a file for a merge', () => {
     });
     expect(out.refusal.kind).toBe('incompatible');
     expect(out.refusal.message).toContain(
-      `not a v${String(BASELINE_SCHEMA_VERSION)} ratio baseline`
+      'is not a baseline this version reads'
+    );
+    expect(out.refusal.message).toContain(
+      `writes v${String(BASELINE_SCHEMA_VERSION)}`
     );
   });
 
@@ -1718,10 +1721,14 @@ describe('report.mjs merges one component', () => {
       );
       const out = cli(ws, [resultsFile, '--check']);
       expect(out.status).toBe(2);
+      expect(out.all).toContain('is not a baseline this version reads');
+      expect(out.all).toContain('found v1');
+      // The results file's own version is also 2, and quoting it here is the bug
+      // this asserts away: the reader accepts v2 baselines, so a refusal that said
+      // "not a v2 baseline" described a file it had just opened.
       expect(out.all).toContain(
-        `not a v${String(BASELINE_SCHEMA_VERSION)} ratio baseline`
+        `writes v${String(BASELINE_SCHEMA_VERSION)}`
       );
-      expect(out.all).not.toContain('not a v2 ratio baseline');
     });
   });
 

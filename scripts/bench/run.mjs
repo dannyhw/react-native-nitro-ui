@@ -62,7 +62,6 @@ import {
 } from './dry-run.mjs';
 import {
   ARMS_WITHOUT_COMPONENT,
-  BASELINE_SCHEMA_VERSION,
   baselineNoise,
   baselineTable,
   baselineTimeoutsFor,
@@ -692,7 +691,6 @@ function decideMerge({
     run: candidate,
     component,
     isCompatibleBaseline,
-    schemaVersion: BASELINE_SCHEMA_VERSION,
     readJson,
     display: (file) => path.relative(process.cwd(), file),
     resolved: (baseline) => foundingDependencies({ baseline, git }),
@@ -1249,7 +1247,6 @@ export async function main(argv) {
       display: (file) => path.relative(process.cwd(), file),
       readJson,
       isCompatibleBaseline,
-      schemaVersion: SCHEMA_VERSION,
     });
     if (opened.refusal != null) {
       log(`\n${opened.refusal.message}`);

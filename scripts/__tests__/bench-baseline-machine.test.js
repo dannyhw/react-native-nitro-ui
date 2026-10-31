@@ -386,8 +386,13 @@ describe('opening a machine baseline for --check', () => {
       },
     });
     expect(opened.refusal.kind).toBe('incompatible');
+    // Names what the reader reads, not a version handed in by a caller: X14 split
+    // the results and baseline constants, and a refusal that quoted one of them by
+    // argument could (did) quote the wrong one.
+    expect(opened.refusal.message).toContain('is not a baseline this version reads');
+    expect(opened.refusal.message).toContain('found v1');
     expect(opened.refusal.message).toContain(
-      `not a v${String(BASELINE_SCHEMA_VERSION)} ratio baseline`
+      `writes v${String(BASELINE_SCHEMA_VERSION)}`
     );
   });
 

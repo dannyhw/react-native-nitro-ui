@@ -50,7 +50,6 @@ import { formatCommittedJsonFile } from './format.mjs';
 import { tryExec } from './machine.mjs';
 
 import {
-  BASELINE_SCHEMA_VERSION,
   SCHEMA_VERSION,
   baselineBlockers,
   baselineNoise,
@@ -286,7 +285,6 @@ if (
         run,
         component,
         isCompatibleBaseline,
-        schemaVersion: BASELINE_SCHEMA_VERSION,
         readJson,
         display: (file) => path.relative(REPO_ROOT, file),
         resolved: (baseline) =>
@@ -360,9 +358,6 @@ if (
       display: (file) => path.relative(REPO_ROOT, file),
       readJson,
       isCompatibleBaseline,
-      // The *baseline* version, not the results file's (X14): the two constants
-      // describe different files, and the refusal names the one it rejected.
-      schemaVersion: BASELINE_SCHEMA_VERSION,
     });
     if (opened.refusal != null) {
       process.stderr.write(`\n${opened.refusal.message}\n`);
