@@ -1050,6 +1050,50 @@ its label and comment triggers are off, so it is `workflow_dispatch` only. The
 gate that always blocks is the Reassure render count, below, because it is
 deterministic.
 
+### Adding a component to a committed baseline
+
+A baseline that is missing a component gates nothing for it, and the only way to add
+one used to be an eleven-hour full mint — so components went missing rather than being
+added. One component's cells can now join an existing file, which is a run an hour or
+so instead:
+
+```sh
+export NITRO_UI_MACHINE_LABEL=maintainer-mac-2
+node scripts/lease.mjs acquire --task <ID> --exclusive --boot
+node scripts/bench/run.mjs --platform android --plan full --launches 8 \
+  --component menu --update-baseline   # add --dry-run first: it answers the same
+                                       # startup questions without booting anything
+```
+
+Everything in the file that is not that component survives byte-for-byte, so the diff
+is one component's cells plus its provenance entry. Then read it back:
+
+```sh
+node scripts/bench/run.mjs --platform android --plan full --launches 8 \
+  --component menu --check            # or report.mjs <results.json> --check
+```
+
+What it refuses, and why each refusal matters:
+
+- **A component the file already holds**, and any other filter (`--scenario`, `--n`,
+  `--only`): a merge writes that component's whole block, and a partial one reads to
+  `--check` as "not measured in base". Refreshing existing numbers means a full re-mint.
+- **An environment that is not the same measurement** — CPU model and core count,
+  simulator runtime and Xcode, Android API level and system image, ART compile state,
+  the waiting rule, and the `react-native` and `@expo/ui` versions. Each refusal names
+  the field and both values. `--force` does not get you past this one: it is a human
+  overruling judgements about their own measurement, and "this is a different
+  simulator" is not one.
+- **A field the file predates that it cannot answer for.** `bun.lock` at the commit the
+  file's own `sha` names recovers the two app versions, and the platform's default
+  waiting rule stands in for a `timeouts` block a v2 file never wrote; a runtime,
+  image or ART state cannot be recovered from anything, so those refuse. What was
+  matched that way is recorded in the merged entry's `comparabilityNotes`, and the
+  versions land in the file so the next merge does not have to ask git again.
+
+The details, including the provenance a merged file keeps per component, are
+`bench/baselines/README.md` ("Adding one component").
+
 ## Perf contract
 
 Hybrid Views are easy to make slow, so these rules are enforced by the local
