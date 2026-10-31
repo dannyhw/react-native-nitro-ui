@@ -1,0 +1,103 @@
+# Failure excerpt — harness:android:DatePicker
+
+- Ran: 2026-10-31T12:32:35.811Z on code tree `a982ed897a7d` at HEAD `d6c7b0d` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android DatePicker`
+- Result: fail, exit 1, 47811 ms
+- Load: start 2.00, end 2.17, median 2.17, max 2.61
+- Device: android / device `emulator-5574` / lease `F6-586pg`
+- Full log: `task/F6-recycling-gates/harness+android+DatePicker-2026-10-31T12-32-35.811Z.log` (<store>/task/F6-recycling-gates/harness+android+DatePicker-2026-10-31T12-32-35.811Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/DatePicker.harness.tsx`
+- `● DatePicker · G5 › gives two compact pickers one box, whatever dates they show`
+- `● DatePicker · G5 › keeps a date field and a time field at their own boxes`
+- `● DatePicker · G5 › re-measures the field when the mode changes`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android+DatePicker-2026-10-31T12-32-35.811Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-586pg (still live)
+  |   F6-586pg                 F6           both              pair-a
+  |   X15-9xz8i                X15          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.17 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 56 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android DatePicker
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a982ed897a7d, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.00/2.16 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android+DatePicker-2026-10-31T12-32-35.811Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/DatePicker.harness.tsx
+  ● DatePicker · G5 › gives two compact pickers one box, whatever dates they show
+
+    testID "narrow" (the 2026 field) never reached 131.05x48.00 - last box 411.43x48.00, control measured 131.05x48.00.
+
+      [0m [90m 363 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 364 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 365 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 366 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 367 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 368 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+  ● DatePicker · G5 › keeps a date field and a time field at their own boxes
+
+    testID "key-date" (the date field) never reached 131.05x48.00 - last box 411.43x48.00, control measured 131.05x48.00.
+
+      [0m [90m 363 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 364 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 365 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 366 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 367 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 368 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+  ● DatePicker · G5 › re-measures the field when the mode changes
+
+    testID "mode-date" (the date field) never reached 131.05x48.00 - last box 411.43x48.00, control measured 131.05x48.00.
+
+      [0m [90m 363 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 364 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 365 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 366 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 367 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 368 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 11 passed, 14 total
+Snapshots:   0 total
+Time:        46.525 s
+Ran all test suites matching DatePicker.
+
+
+
+```

@@ -1,0 +1,78 @@
+# Failure excerpt — harness:android:MountChurn
+
+- Ran: 2026-10-31T10:55:11.974Z on code tree `4e4de08b2e69` at HEAD `38a1e93` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android MountChurn`
+- Result: fail, exit 1, 45984 ms
+- Load: start 2.00, end 2.26, median 2.26, max 2.37
+- Device: android / device `emulator-5574` / lease `F6-586pg`
+- Full log: `task/F6-recycling-gates/harness+android+MountChurn-2026-10-31T10-55-11.974Z.log` (<store>/task/F6-recycling-gates/harness+android+MountChurn-2026-10-31T10-55-11.974Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/MountChurn.harness.tsx`
+- `● Mount churn · Android (B1) › keeps the post-GC heap floor flat across 3 churn cycles of 200 single-child <Host>s`
+- `expected 7.92 to be less than 2`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android+MountChurn-2026-10-31T10-55-11.974Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-586pg (still live)
+  |   F6-586pg                 F6           both              pair-a
+  |   X15-9xz8i                X15          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.26 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 32 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android MountChurn
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 4e4de08b2e69, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.00/2.40 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android+MountChurn-2026-10-31T10-55-11.974Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/MountChurn.harness.tsx
+  ● Mount churn · Android (B1) › keeps the post-GC heap floor flat across 3 churn cycles of 200 single-child <Host>s
+
+    expected 7.92 to be less than 2
+
+      [0m [90m 641 |[39m       expect(corrections)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m 642 |[39m       expect(toMib(last[33m.[39mmaxBytes) [33m-[39m toMib(last[33m.[39musedBytes))[33m.[39mtoBeGreaterThan([35m20[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 643 |[39m       expect(growthMib)[33m.[39mtoBeLessThan([33mMAX_FLOOR_GROWTH_MIB_PER_CYCLE[39m)[33m;[39m
+       [90m     |[39m                                     [31m[1m^[22m[39m
+       [90m 644 |[39m     })[33m;[39m
+       [90m 645 |[39m
+       [90m 646 |[39m     [36mconst[39m pickerTitle [33m=[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 4 passed, 5 total
+Snapshots:   0 total
+Time:        44.525 s
+Ran all test suites matching MountChurn.
+
+
+
+```
