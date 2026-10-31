@@ -31,6 +31,7 @@ import {
 import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  readdirSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -804,7 +805,36 @@ function spawnFixture(dir, snippet, ...args) {
 describe('readFixturePid', () => {
   const dir = mkdtempSync(join(tmpdir(), 'x15-pidfile-'));
 
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  /**
+   * Kills whatever any case in this block left running, by the pid files they all write.
+   *
+   * Not a formality: the cases pass a pid file to a fixture, so the file is the one handle that
+   * exists no matter how far a test got. The leak this exists for was found by running the
+   * suite - a case whose fixture never exits goes *red*, and a red test's `finally` is either
+   * skipped or already past the spawn, so the listener stayed up holding a real port. That is
+   * the same failure the fixture's self-exit is meant to make impossible, and a broken
+   * self-exit is exactly the state in which this teardown earns its keep: it runs on the way
+   * out of a failing block, when nothing else does.
+   */
+  afterAll(() => {
+    let names = [];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (!name.endsWith('.pid')) continue;
+      let pid = null;
+      try {
+        pid = Number(String(readFileSync(join(dir, name), 'utf8')).trim());
+      } catch {
+        continue;
+      }
+      killFixturePid(pid);
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   it('waits for a writer that is late, rather than reading a file that is not there', () => {
     const pidFile = join(dir, 'late.pid');
