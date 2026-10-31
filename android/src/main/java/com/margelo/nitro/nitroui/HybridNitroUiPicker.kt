@@ -1280,7 +1280,8 @@ class HybridNitroUiPicker(
 
   override fun prepareForRecycle() {
     host.tag = null
-    host.perfInstanceId = NitroUiPerf.NO_INSTANCE
+    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
+    // marked the recycle: clearing it here would hide that mark.
     // The policy is per-host state, not model state: a recycled host left
     // `fillWidth` would answer a menu's next measure with the box's width.
     host.sizingPolicy = NitroUiSizing.POLICY_INTRINSIC

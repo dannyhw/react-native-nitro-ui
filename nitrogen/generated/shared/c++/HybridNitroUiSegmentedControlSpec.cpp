@@ -41,6 +41,7 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridMethod("measureContent", &HybridNitroUiSegmentedControlSpec::measureContent);
       prototype.registerHybridMethod("nuiTestPixelProbe", &HybridNitroUiSegmentedControlSpec::nuiTestPixelProbe);
       prototype.registerHybridMethod("nuiTestPixelReport", &HybridNitroUiSegmentedControlSpec::nuiTestPixelReport);
+      prototype.registerHybridMethod("nuiTestDisplayedIndex", &HybridNitroUiSegmentedControlSpec::nuiTestDisplayedIndex);
     });
   }
 

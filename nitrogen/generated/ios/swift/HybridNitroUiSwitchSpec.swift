@@ -26,6 +26,7 @@ public protocol HybridNitroUiSwitchSpec_protocol: HybridObject, HybridView {
   // Methods
   func measureContent() throws -> NitroUiSize
   func nuiTestArmedGuards() throws -> String
+  func nuiTestLifetimeReport() throws -> String
 }
 
 public extension HybridNitroUiSwitchSpec_protocol {
