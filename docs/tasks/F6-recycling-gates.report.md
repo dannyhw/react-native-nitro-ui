@@ -46,18 +46,18 @@ field against the narrowest row across rounds.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1432 tests / 51 suites | `d9036d532516` | 2 m 40 s | start 3.7 / med 4.0 / max 5.4 |
-| `harness:ios` | **PASS** | 227 tests / 16 suites | `d9036d532516` (ios tree) | 3 m 51 s | start 3.9 / med 3.8 / max 4.6 |
-| `harness:android` | **PASS** | 277 tests / 16 suites | `d9036d532516` (android tree) | 8 m 04 s | start 5.7 / med 2.6 / max 5.8 |
+| `check` | **PASS** | 1432 tests / 51 suites | `2d61281c7801` | 2 m 50 s | start 4.1 / med 4.8 / max 11.8 |
+| `harness:ios` | **PASS** | 227 tests / 16 suites | `2d61281c7801` (ios tree) | 3 m 54 s | start 11.5 / med 6.6 / max 14.8 |
+| `harness:android` | **PASS** | 278 tests / 16 suites | `2d61281c7801` (android tree) | 8 m 33 s | start 8.6 / med 8.0 / max 37.2 |
 | `real-input:ios` | stale | — | 228eff2a30f1 (not this tree) | 16 m 19 s | start 11.6 / med 11.6 / max 56.7 |
 | `real-input:android` | stale | — | 228eff2a30f1 (not this tree) | 20 m 43 s | start 3.3 / med 2.5 / max 13.0 |
 | `harness:android:Conformance` | stale | 2 failed of 40 tests / 1 suites | 49097b0d9fc5 (not this tree) | 1 m 28 s | start 3.1 / med 3.0 / max 3.8 |
 | `harness:android:DatePicker` | stale | 3 failed of 14 tests / 1 suites | a982ed897a7d (not this tree) | 47.8 s | start 2.0 / med 2.2 / max 2.6 |
 | `harness:android:MountChurn` | stale | 1 failed of 5 tests / 1 suites | 4e4de08b2e69 (not this tree) | 46.0 s | start 2.0 / med 2.3 / max 2.4 |
-| `harness:android:Recycling` | stale | 1 failed of 5 tests / 1 suites | a982ed897a7d (not this tree) | 23.6 s | start 2.2 / med 2.3 / max 2.5 |
+| `harness:android:Recycling` | stale | 1 failed of 6 tests / 1 suites | 11fe76104803 (not this tree) | 26.0 s | start 1.9 / med 2.5 / max 3.4 |
 | `harness:android:Recycling:--background` | stale | — | a6bcccf687a4 (not this tree) | 0.7 s | start 8.2 / med 8.2 / max 8.2 |
 | `harness:ios:Conformance` | stale | 2 failed of 40 tests / 1 suites | 4a5f0cc904d7 (not this tree) | 1 m 28 s | start 3.4 / med 3.2 / max 3.5 |
-| `harness:ios:Recycling` | stale | 3 tests / 1 suites | f8b2d79d92b2 (not this tree) | 16.3 s | start 3.0 / med 3.7 / max 3.7 |
+| `harness:ios:Recycling` | stale | 1 failed of 4 tests / 1 suites | 26ee14a06b89 (not this tree) | 17.9 s | start 4.1 / med 3.7 / max 4.1 |
 
 `need --for review`:
 
