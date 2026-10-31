@@ -1438,12 +1438,17 @@ request, on free GitHub-hosted runners: `bun run check` (ubuntu, Node from
 them in a `macos-26` job instead), and an Android `assembleDebug` of the
 example.
 
-A push to `main` is never cancelled by the next one. Concurrency cancels
-superseded runs on pull requests and feature branches only
-(`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`), because `main` is
-the branch whose conclusion the release pipeline and the next person's bisect
-read: cancelling it leaves a commit with no CI result at all, which is how a red
-`main` stayed unnoticed for seven hours on 31 Oct (F4).
+Every push to `main` reaches a conclusion, by two rules rather than one.
+`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` cancels superseded
+runs on pull requests and feature branches only, and `main` additionally gets a
+concurrency group **per commit**
+(`group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}`).
+The second rule is not optional: GitHub keeps just one running and one pending run
+per group, and a newly queued run replaces the pending one whatever
+`cancel-in-progress` says, so a branch-level group on `main` meant three quick
+merges lost the middle one with no conclusion. `main` is the branch whose
+conclusion the release pipeline and the next person's bisect read, and losing a
+run there is how a red `main` stayed unnoticed for seven hours on 31 Oct (F4).
 
 That Android job is also where the Kotlin JVM tests run. `scripts/native-tests-
 android.sh` skips when `CI` is set, because `check`'s runner has an SDK but no JDK
@@ -1463,9 +1468,9 @@ hosted runner has no device, and the device gates that decide a task run locally
 The two macOS labels CI schedules on run iOS 26-and-up simulators only, so
 **nothing in CI can exercise the declared sizing fallbacks on an older iOS
 runtime**. `docs/ci-runner-images.md` records what each published image manifest
-installs, which image series has an iOS 18 simulator at all, and why moving a
-device job there is not a label change. Until that is settled, an older-runtime
-check is a manual run on a maintainer Mac, recorded in a report.
+installs, which image series has an iOS 18 simulator at all, and what the first
+try at a row there would take. Until that is tried, an older-runtime check is a
+manual run on a maintainer Mac, recorded in a report.
 
 Validate workflow edits locally with
 [`actionlint`](https://github.com/rhysd/actionlint)

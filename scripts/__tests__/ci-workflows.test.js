@@ -56,14 +56,271 @@ function triggers(file) {
 }
 
 /**
- * What a `cancel-in-progress` expression answers for a given ref.
+ * A small evaluator for the subset of Actions expression syntax these workflows
+ * use, so the guards can ask what an expression **decides** instead of matching
+ * its text.
  *
- * The two F4 requirements pull in opposite directions - never cancel on `main`,
- * still cancel a superseded PR - and the only way to test the pair is to ask the
- * expression what it decides rather than pattern-match its text. The grammar is
- * deliberately tiny (a comparison of `github.ref` against a literal, optionally
- * `||`'d), because that is all a concurrency group needs and anything richer
- * should fail loudly here rather than be silently misread.
+ * Why this exists: both of F4's concurrency findings were invisible to a text
+ * check. Round 1's `if: inputs.package-manager-cache` mentions the input, so a
+ * guard that asked only "does the `if` name it?" passed while the release job
+ * restored a cache - composite inputs always arrive as strings, and any
+ * non-falsy string is true. And `cancel-in-progress: false` reads as "main is
+ * safe" while GitHub's one-running-plus-one-pending-per-group rule still drops a
+ * queued commit's run. The only test that can catch either is one that evaluates
+ * the expression with the values the runner would pass, using Actions' own
+ * coercion: the falsy set is `false`, `0`, `-0`, `''`, `null`; `==`/`!=` are
+ * loose and case-insensitive on strings; `&&`/`||` return an operand, not a
+ * boolean. Unsupported syntax throws rather than being guessed at, so the guard
+ * cannot go quietly blind.
+ *
+ * Supported: `${{ … }}` interpolation inside text, `'string'` and number
+ * literals, dotted context access (`github.ref`, `inputs.x`,
+ * `steps.id.outputs.name`, `needs.job.outputs.x`), `==` `!=` `<` `<=` `>` `>=`,
+ * `&&`, `||`, and parentheses.
+ *
+ * @param {string} source raw YAML value, with or without `${{ … }}`
+ * @param {object} ctx the contexts the expression may read
+ * @returns {unknown} the evaluated value ('' for a context path that has none)
+ */
+function evaluate(source, ctx) {
+  const text = String(source);
+  if (!text.includes('${{')) return text;
+  return text.replace(/\$\{\{([\s\S]*?)\}\}/g, (_whole, body) =>
+    stringify(parseExpression(body, ctx))
+  );
+}
+
+/**
+ * @param {string} source the inside of one `${{ … }}`
+ * @param {object} ctx
+ * @returns {unknown}
+ */
+function parseExpression(source, ctx) {
+  const tokens = tokenize(source);
+  const state = { tokens, at: 0 };
+  const value = parseOr(state, ctx);
+  if (state.at < state.tokens.length) {
+    throw new Error(
+      `unreadable Actions expression (leftover ${JSON.stringify(
+        state.tokens.slice(state.at)
+      )}): ${source}`
+    );
+  }
+  return value;
+}
+
+/**
+ * @param {string} source
+ * @returns {string[]}
+ */
+function tokenize(source) {
+  const tokens = [];
+  let rest = source;
+  while (rest !== '') {
+    const ws = /^\s+/.exec(rest);
+    if (ws != null) {
+      rest = rest.slice(ws[0].length);
+      continue;
+    }
+    const op = /^(==|!=|<=|>=|&&|\|\||[<>()])/.exec(rest);
+    if (op != null) {
+      tokens.push(op[1]);
+      rest = rest.slice(op[1].length);
+      continue;
+    }
+    const str = /^'([^']*)'/.exec(rest);
+    if (str != null) {
+      tokens.push(str[0]);
+      rest = rest.slice(str[0].length);
+      continue;
+    }
+    const word = /^[\w.$-]+/.exec(rest);
+    if (word != null) {
+      tokens.push(word[0]);
+      rest = rest.slice(word[0].length);
+      continue;
+    }
+    throw new Error(
+      `unreadable Actions expression near ${JSON.stringify(rest)}`
+    );
+  }
+  return tokens;
+}
+
+/**
+ * @param {{tokens: string[], at: number}} state
+ * @param {object} ctx
+ * @returns {unknown}
+ */
+function parseOr(state, ctx) {
+  let left = parseAnd(state, ctx);
+  while (peek(state) === '||') {
+    state.at += 1;
+    const right = parseAnd(state, ctx);
+    left = isActionsTruthy(left) ? left : right;
+  }
+  return left;
+}
+
+/**
+ * @param {{tokens: string[], at: number}} state
+ * @param {object} ctx
+ * @returns {unknown}
+ */
+function parseAnd(state, ctx) {
+  let left = parseComparison(state, ctx);
+  while (peek(state) === '&&') {
+    state.at += 1;
+    const right = parseComparison(state, ctx);
+    left = isActionsTruthy(left) ? right : left;
+  }
+  return left;
+}
+
+/**
+ * @param {{tokens: string[], at: number}} state
+ * @returns {string | undefined}
+ */
+function peek(state) {
+  return state.tokens[state.at];
+}
+
+/**
+ * @param {{tokens: string[], at: number}} state
+ * @param {object} ctx
+ * @returns {unknown}
+ */
+function parseComparison(state, ctx) {
+  const left = parsePrimary(state, ctx);
+  const operator = peek(state);
+  if (['==', '!=', '<', '<=', '>', '>='].includes(String(operator))) {
+    state.at += 1;
+    return compare(operator, left, parsePrimary(state, ctx));
+  }
+  return left;
+}
+
+/**
+ * @param {{tokens: string[], at: number}} state
+ * @param {object} ctx
+ * @returns {unknown}
+ */
+function parsePrimary(state, ctx) {
+  const token = state.tokens[state.at];
+  if (token === undefined) {
+    throw new Error('unreadable Actions expression: it ends early');
+  }
+  state.at += 1;
+  if (token === '(') {
+    const grouped = parseOr(state, ctx);
+    if (state.tokens[state.at] !== ')') {
+      throw new Error('unreadable Actions expression: unbalanced parentheses');
+    }
+    state.at += 1;
+    return grouped;
+  }
+  const literal = /^'([^']*)'$/.exec(token);
+  if (literal != null) return literal[1];
+  if (/^-?\d+(\.\d+)?$/.test(token)) return Number(token);
+  if (/^[\w.$-]+$/.test(token)) return lookup(token, ctx);
+  throw new Error(
+    `unreadable Actions expression operand ${JSON.stringify(token)}`
+  );
+}
+
+/**
+ * @param {string} token a dotted context path
+ * @param {object} ctx
+ * @returns {unknown} null when the path has no value, which is falsy in Actions
+ */
+function lookup(token, ctx) {
+  let value = ctx;
+  for (const part of token.split('.')) {
+    if (value == null || typeof value !== 'object') return null;
+    value = value[part];
+  }
+  return value === undefined ? null : value;
+}
+
+/**
+ * @param {string} operator
+ * @param {unknown} left
+ * @param {unknown} right
+ * @returns {boolean}
+ */
+function compare(operator, left, right) {
+  if (operator === '==') return looseEqual(left, right);
+  if (operator === '!=') return !looseEqual(left, right);
+  const l = toNumber(left);
+  const r = toNumber(right);
+  if (Number.isNaN(l) || Number.isNaN(r)) return false;
+  if (operator === '<') return l < r;
+  if (operator === '<=') return l <= r;
+  if (operator === '>') return l > r;
+  return l >= r;
+}
+
+/**
+ * Actions' loose equality: same-type compare, otherwise coerce both to numbers;
+ * strings compare case-insensitively.
+ *
+ * @param {unknown} left
+ * @param {unknown} right
+ * @returns {boolean}
+ */
+function looseEqual(left, right) {
+  if (typeof left === 'string' && typeof right === 'string') {
+    return left.toLowerCase() === right.toLowerCase();
+  }
+  if (left === right) return true;
+  if (typeof left === 'boolean' || typeof right === 'boolean') {
+    return isActionsTruthy(left) === isActionsTruthy(right);
+  }
+  return toNumber(left) === toNumber(right);
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number}
+ */
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  if (value === true) return 1;
+  if (value === false) return 0;
+  return Number(value);
+}
+
+/**
+ * Verbatim from the expression docs: the falsy set is `false`, `0`, `-0`, `''`,
+ * `null`; every other value is truthy - which is exactly why the string `'false'`
+ * is not the boolean, and the whole of review item 1.
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isActionsTruthy(value) {
+  if (value === false || value === null || value === undefined) return false;
+  if (value === '' || value === 0 || value === -0) return false;
+  return true;
+}
+
+/**
+ * Actions' stringification, for interpolating a value into text.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function stringify(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+/**
+ * What a `cancel-in-progress` value decides for a given ref.
  *
  * @param {unknown} value the parsed YAML value
  * @param {string} ref e.g. `refs/heads/main`
@@ -71,36 +328,73 @@ function triggers(file) {
  */
 function cancelsFor(value, ref) {
   if (typeof value === 'boolean') return value;
-  const expression = String(value)
-    .trim()
-    .replace(/^\$\{\{|\}\}$/g, '')
-    .trim();
-  if (expression === '') {
-    throw new Error(
-      `cannot read a cancel-in-progress decision out of ${value}`
-    );
-  }
-  return expression
-    .split('||')
-    .some((clause) => evalClause(clause.trim(), ref));
+  // `cancel-in-progress` is a boolean-typed key, so the runner evaluates the
+  // expression rather than stringifying it into text: parse it directly (going
+  // through `evaluate`'s interpolation would turn `false` into the string
+  // 'false', which is truthy - the exact trap this round is about).
+  return isActionsTruthy(parseExpression(inner(value), { github: { ref } }));
 }
 
 /**
- * @param {string} clause e.g. `github.ref != 'refs/heads/main'`
- * @param {string} ref
+ * @param {unknown} value
+ * @returns {string}
+ */
+function inner(value) {
+  return String(value)
+    .trim()
+    .replace(/^\$\{\{|\}\}$/g, '')
+    .trim();
+}
+
+/**
+ * What `concurrency.group` names a run, for an event.
+ *
+ * @param {unknown} value the parsed YAML value
+ * @param {{ref: string, sha: string, workflow?: string}} event
+ * @returns {string}
+ */
+function groupFor(value, event) {
+  return evaluate(value, {
+    github: {
+      ref: event.ref,
+      sha: event.sha,
+      workflow: event.workflow ?? 'ci.yml',
+    },
+  });
+}
+
+/**
+ * What a step's `if:` (or a `cancel-in-progress:`) decides.
+ *
+ * An `if:` is evaluated as an expression even when it is written without
+ * `${{ … }}`, unlike every other key - so this strips the braces when present
+ * and parses the whole thing, then applies Actions' truthiness.
+ *
+ * @param {unknown} value the parsed YAML value
+ * @param {object} ctx the contexts the expression may read
  * @returns {boolean}
  */
-function evalClause(clause, ref) {
-  const match = /^github\.ref\s*(===|!==|==|!=)\s*'([^']*)'$/.exec(clause);
-  if (match == null) {
-    throw new Error(
-      `ci.yml's cancel-in-progress uses a shape this test does not understand: ${clause}`
-    );
+function evaluateCondition(value, ctx) {
+  if (typeof value === 'boolean') return value;
+  return isActionsTruthy(parseExpression(inner(value), ctx));
+}
+
+/**
+ * What a step's `if:` decides, with composite-action inputs as the runner passes
+ * them (strings) and step outputs as strings.
+ *
+ * @param {unknown} value the parsed `if:` value
+ * @param {Record<string, string | boolean>} inputs
+ * @param {Record<string, string>} [outputs] keyed `'<step-id>.<output-name>'`
+ * @returns {boolean}
+ */
+function runsStep(value, inputs, outputs = {}) {
+  const steps = {};
+  for (const [key, output] of Object.entries(outputs)) {
+    const [id, name] = key.split('.');
+    steps[id] = { outputs: { ...(steps[id]?.outputs ?? {}), [name]: output } };
   }
-  const [, operator, literal] = match;
-  const equal = ref === literal;
-  const same = operator === '==' || operator === '===';
-  return equal === same;
+  return evaluateCondition(value, { inputs, steps, github: {} });
 }
 
 /**
@@ -140,6 +434,143 @@ describe('CI keeps every push to main to a conclusion', () => {
     const value = readYaml('ci.yml').concurrency['cancel-in-progress'];
     expect(cancelsFor(value, 'refs/pull/9/merge')).toBe(true);
     expect(cancelsFor(value, 'refs/heads/task/F4-ci-green')).toBe(true);
+  });
+
+  it('gives every push to main its own concurrency group', () => {
+    // `cancel-in-progress: false` is only half the rule. GitHub keeps **one
+    // running and one pending run per group**, and a newly queued run replaces
+    // whatever was pending - a dropped run gets no conclusion at all, which is
+    // the exact thing this task exists to prevent. So three quick merges on one
+    // branch-level group meant A running, B pending, C arrives, B vanishes. Each
+    // commit to `main` now names its own group, and nothing can be displaced.
+    const group = readYaml('ci.yml').concurrency.group;
+    const first = groupFor(group, { ref: 'refs/heads/main', sha: 'aaa1111' });
+    const second = groupFor(group, { ref: 'refs/heads/main', sha: 'bbb2222' });
+    expect(first).not.toBe(second);
+    // Still one group per workflow per commit: not a group per run attempt, which
+    // would stop a re-run of the same sha joining its own group.
+    expect(groupFor(group, { ref: 'refs/heads/main', sha: 'aaa1111' })).toBe(
+      first
+    );
+  });
+
+  it('still puts every push to one pull request in the same group', () => {
+    // The other half: on a PR the whole point is that the newest push takes over,
+    // so a branch's pushes must keep sharing a group. If they did not, three
+    // pushes would run three 20-minute suites against the same branch.
+    const group = readYaml('ci.yml').concurrency.group;
+    expect(groupFor(group, { ref: 'refs/pull/9/merge', sha: 'ccc3333' })).toBe(
+      groupFor(group, { ref: 'refs/pull/9/merge', sha: 'ddd4444' })
+    );
+    expect(
+      groupFor(group, { ref: 'refs/heads/task/F4-ci-green', sha: 'eee5555' })
+    ).toBe(
+      groupFor(group, { ref: 'refs/heads/task/F4-ci-green', sha: 'fff6666' })
+    );
+    // And the two refs must not share a group with each other, or with main.
+    const distinct = new Set([
+      groupFor(group, { ref: 'refs/pull/9/merge', sha: 'ccc3333' }),
+      groupFor(group, { ref: 'refs/heads/task/F4-ci-green', sha: 'eee5555' }),
+      groupFor(group, { ref: 'refs/heads/main', sha: 'aaa1111' }),
+    ]);
+    expect(distinct.size).toBe(3);
+  });
+
+  it('loses no commit when three land on main while the first is still running', () => {
+    // The queue model GitHub's own docs describe, applied to the real group
+    // expression: one run executes and one waits per group, and a run that is
+    // displaced from the pending slot finishes with no conclusion.
+    //
+    // `concurrency.cancels` says whether a displaced run is *cancelled* by the
+    // newcomer or simply dropped from the queue; either way it has no result, so
+    // both are counted as lost here. What the test measures is how many of the
+    // three pushes end with a conclusion.
+    const ci = readYaml('ci.yml').concurrency;
+    const pushes = [
+      { ref: 'refs/heads/main', sha: 'aaa1111' },
+      { ref: 'refs/heads/main', sha: 'bbb2222' },
+      { ref: 'refs/heads/main', sha: 'ccc3333' },
+    ];
+    const runs = pushes.map((event) => ({
+      event,
+      group: groupFor(ci.group, event),
+      conclude: true,
+    }));
+    const withoutConclusion = modelActionsQueue(runs).filter(
+      (run) => !run.conclude
+    );
+    expect(withoutConclusion.map((run) => run.event.sha)).toEqual([]);
+  });
+
+  it('and the model says the branch-level group did lose one (so the test can fail)', () => {
+    // The same queue with the group round 1 shipped (`<workflow>-<ref>`): this is
+    // the red proof for the case above, kept as a case so the model cannot be
+    // quietly wrong about GitHub's rule - if someone "fixes" the model to lose
+    // nothing here, the assertion below is where it surfaces.
+    const runs = ['aaa1111', 'bbb2222', 'ccc3333'].map((sha) => ({
+      event: { ref: 'refs/heads/main', sha },
+      group: 'ci.yml-refs/heads/main',
+      conclude: true,
+    }));
+    const lost = modelActionsQueue(runs).filter((run) => !run.conclude);
+    expect(lost.map((run) => run.event.sha)).toEqual(['bbb2222']);
+  });
+
+  /**
+   * GitHub's per-group queue: one running, one pending, a third arrival displaces
+   * the pending run, and a displaced run never produces a conclusion.
+   *
+   * Runs arrive in order; the first is still running when the rest arrive, which is
+   * the situation that bit `main` on 31 Oct.
+   *
+   * @param {Array<{group: string, conclude: boolean, event: object}>} runs
+   * @returns {Array<{group: string, conclude: boolean, event: object}>} the same
+   *   objects, with `conclude` set to false for any run the queue dropped
+   */
+  function modelActionsQueue(runs) {
+    /** @type {Record<string, {running: object | null, pending: object | null}>} */
+    const groups = {};
+    for (const run of runs) {
+      const state = (groups[run.group] ??= { running: null, pending: null });
+      if (state.running == null) {
+        state.running = run;
+      } else if (state.pending == null) {
+        state.pending = run;
+      } else {
+        // The newcomer takes the pending slot; the run that held it is gone.
+        state.pending.conclude = false;
+        state.pending = run;
+      }
+    }
+    return runs;
+  }
+
+  it('CONTRIBUTING states both rules, not just the one a reader would copy', () => {
+    // Round 1's doc said "A push to `main` is never cancelled by the next one"
+    // and named only `cancel-in-progress`, which is true as far as it goes and
+    // still left the reader with a workflow that drops a commit. A sentence about
+    // the flag has to be accompanied by the group, so the doc is checked for both
+    // expressions it describes.
+    const contributing = fs.readFileSync(
+      path.join(root, 'CONTRIBUTING.md'),
+      'utf8'
+    );
+    // Anchor on the expression the paragraph is about, not on its first sentence,
+    // so rewording the prose cannot make the guard silently match nothing.
+    const section =
+      /\n[A-Z][^\n]*\n(?:[^\n]*\n)*?[^\n]*cancel-in-progress: \$\{\{[^\n]*(?:\n[^\n]*)*?\n\n/.exec(
+        contributing
+      );
+    expect(section).not.toBe(null);
+    const text = section[0];
+    expect(text).toContain(
+      "cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}"
+    );
+    expect(text).toContain(
+      "github.ref == 'refs/heads/main' && github.sha || github.ref"
+    );
+    // And it may not claim the flag alone is enough.
+    expect(text).not.toMatch(/never cancelled by the next one/);
   });
 
   it('the release workflows still refuse to cancel a run that may be staging', () => {
@@ -283,25 +714,79 @@ describe('the release pipeline does not share machine state with a publish', () 
     // being packed (R6 re-review N-1, row 53).
     expect(setupWith('pack')).not.toBe(null);
     expect(setupWith('pack')['package-manager-cache']).toBe(false);
+    // …and the action has to honour it once the runner has stringified it. That
+    // half is asserted in the next case, which is where the bug actually lived.
+    const action = readYaml('.github/actions/setup/action.yml');
+    for (const step of cacheSteps(action)) {
+      expect({
+        step: String(step.name),
+        runs: runsStep(step.if, { 'package-manager-cache': 'false' }),
+      }).toEqual({ step: String(step.name), runs: false });
+    }
   });
+
+  /**
+   * The actions/cache steps of the composite, in run order.
+   *
+   * @param {any} action parsed `action.yml`
+   */
+  function cacheSteps(action) {
+    const steps = (action.runs.steps ?? []).filter((step) =>
+      String(step.uses ?? '').startsWith('actions/cache')
+    );
+    expect(steps.length).toBeGreaterThan(0);
+    return steps;
+  }
 
   it('the composite can install without caching, and every cache step obeys it', () => {
     const action = readYaml('.github/actions/setup/action.yml');
-    expect(Object.keys(action.inputs ?? {})).toContain('package-manager-cache');
-    expect(action.inputs['package-manager-cache'].default).toBe(true);
-    const cacheSteps = (action.runs.steps ?? []).filter((step) =>
-      String(step.uses ?? '').startsWith('actions/cache')
-    );
-    expect(cacheSteps.length).toBeGreaterThan(0);
-    // A cache step that ignores the input makes the input a lie, which is worse
-    // than not having one: the release job would read as uncached while still
-    // restoring whatever the last tree saved.
-    const ungated = cacheSteps
+    const input = (action.inputs ?? {})['package-manager-cache'];
+    expect(input).toBeDefined();
+    // A string default, not `true`: the runner stringifies the default the same
+    // way it stringifies a caller's value, and the `if:` compares against `'false'`.
+    expect(input.default).toBe('true');
+    // `type: boolean` is not a key a composite action input supports, so writing
+    // it promises a cast that never happens - the exact mistake that made the
+    // first version of this gate restore a cache in the release job.
+    expect(input.type).toBeUndefined();
+
+    const steps = cacheSteps(action);
+    // Every cache step, evaluated with the input as the runner would pass it.
+    // `true` (the default) keeps caching; `'false'` turns both halves off; and an
+    // empty string - what a caller gets from an input it never declared - keeps
+    // caching rather than silently disabling it, because that is the bug-free
+    // direction of the two.
+    const skippedWhenOff = steps
       .filter(
-        (step) => !String(step.if ?? '').includes('package-manager-cache')
+        (step) =>
+          runsStep(step.if, { 'package-manager-cache': 'false' }) ||
+          !runsStep(step.if, { 'package-manager-cache': 'true' })
       )
       .map((step) => String(step.name));
-    expect(ungated).toEqual([]);
+    expect(skippedWhenOff).toEqual([]);
+    // And the save step still refuses to write when the restore hit, so the
+    // truthiness fix cannot have swallowed the original condition.
+    const save = steps.find((step) => String(step.uses).includes('cache/save'));
+    expect(
+      runsStep(
+        save.if,
+        { 'package-manager-cache': 'true' },
+        {
+          'bun-cache.cache-hit': 'true',
+          'bun-cache.cache-primary-key': 'key',
+        }
+      )
+    ).toBe(false);
+    expect(
+      runsStep(
+        save.if,
+        { 'package-manager-cache': 'true' },
+        {
+          'bun-cache.cache-hit': '',
+          'bun-cache.cache-primary-key': 'key',
+        }
+      )
+    ).toBe(true);
   });
 
   it('the catch-up cron does not start on the hour', () => {
@@ -521,7 +1006,7 @@ describe('the harness app refusal and its docs agree', () => {
 });
 
 describe('the iOS floor CI could test on is written down', () => {
-  it('the claim about an older iOS runtime cites a runner manifest that says it', () => {
+  it('the claim about an older iOS runtime cites the arm64 manifests that say it', () => {
     // Rows 6/12 of the triage: "one day check the declared fallbacks on iOS 18".
     // That sentence is only useful if some hosted image really has an iOS 18
     // runtime, so the claim and the evidence live together, and this test refuses
@@ -537,6 +1022,44 @@ describe('the iOS floor CI could test on is written down', () => {
       'neither image this repo uses can run an ios 18 simulator'
     );
     expect(notes).toMatch(/`macos-15.*iOS 18|iOS 18[^\n]*`macos-15/s);
+    // Fix round 1's correction: the labels schedule arm64 hosts, so quoting the
+    // Intel manifest's image id documented a build nobody runs. The arm64 file
+    // names and their image ids are the citation now, and a reader has to be able
+    // to find them.
+    for (const citation of [
+      'macos-26-arm64-Readme.md',
+      'macos-15-arm64-Readme.md',
+      '20261026.0455.2',
+      '20261028.0489.1',
+    ]) {
+      expect(notes).toContain(citation);
+    }
+    // And the sentence that round deleted may not come back: `macos-15-arm64`
+    // installs iOS 18.5/18.6 next to Xcode 26.x, so "Apple offers no iOS 18
+    // runtime for Xcode 26" is contradicted by the manifest on the same page.
+    // Matched on whitespace-collapsed text, because the sentence wraps.
+    expect(notes.replace(/\s+/g, ' ')).not.toMatch(
+      /apple does not offer[^\n]{0,80}?ios 18[^\n]{0,40}?xcode 26/i
+    );
+    // The doc has to say what is actually unproven, in the paragraph that lists
+    // it, or the next person reads the feasibility as a settled fact and files a
+    // workflow row nobody tested. Asserted on that paragraph rather than anywhere
+    // in the file: "boot" and "macOS 15" appear in prose elsewhere too, and a
+    // whole-file regex was satisfied by them while the caveat was gone (the
+    // mutant that found this deleted the caveat and stayed green).
+    const caveat = (
+      notes
+        .split(/\n\n+/)
+        .join('\n\n')
+        .split(/\n\n+/)
+        .find((block) => /\bUnproven\b/.test(block)) ?? ''
+    ).replace(/\s+/g, ' ');
+    expect(caveat).not.toBe('');
+    for (const open of [/boot/i, /Xcode 26/i, /macOS 15/i]) {
+      expect(caveat).toMatch(open);
+    }
+    expect(notes).toMatch(/xcode-select/i);
+
     const contributing = fs.readFileSync(
       path.join(root, 'CONTRIBUTING.md'),
       'utf8'
