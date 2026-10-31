@@ -1,7 +1,8 @@
 # X14 — Add one component's cells to a baseline without re-running the rest
 
-**Branch:** `task/X14-bench-component-mint` (from `main` at `d3f27d3`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** `X14-p6phr` (`nitroui_a` → `emulator-5574`, both pairs, exclusive; released)
+**Branch:** `task/X14-bench-component-mint` (from `main` at `d3f27d3`) · **Round:** round 1, plus
+fix round 1 of at most 2 (D19) · **Lease:** `X14-p6phr` (`nitroui_a` → `emulator-5574`, both pairs,
+exclusive; released)
 
 ## Summary
 
@@ -40,7 +41,7 @@ gains a comma as three new blocks are appended after it. Neither is a data row.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1416 tests / 51 suites | `d76e1d429a3b` | 2 m 31 s | start 1.5 / med 2.5 / max 3.2 |
+| `check` | **PASS** | 1425 tests / 51 suites | `736601d1f783` | 2 m 34 s | start 3.9 / med 3.8 / max 5.5 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
@@ -58,9 +59,14 @@ test, and `bench` is not in `need`'s required prefixes, so nothing is owed — a
 refreshed as things stand: the merge refuses a component the file already holds, so re-running
 that command now is a refusal by design (which is itself item 1 of the brief, proven by the file
 in this branch). Re-minting would mean reverting `dcd3634` first, then spending 35 min of an
-exclusive machine to move a row from `stale` to `green`. The first `check` run on the final tree
-failed on that same formatting error, which is why its excerpt is committed under
-`docs/tasks/X14/failures/`.
+exclusive machine to move a row from `stale` to `green`. Round 1's first `check` run failed on that
+same formatting error, which is why its excerpt is committed under `docs/tasks/X14/failures/`.
+
+The ledger also holds two *other* failed `check` rows on this round's tree, and they are mine
+rather than the code's: both were runs I started and then killed by PID because I had just committed
+underneath them, so their excerpt ends in `terminated by signal SIGTERM` on a native test binary
+that was mid-run. `check` is keyed to the whole tree, so a run has to finish on the tree it started
+on; the excerpt says so in its own words, and the green row above is the run that did.
 
 ## Device proof
 

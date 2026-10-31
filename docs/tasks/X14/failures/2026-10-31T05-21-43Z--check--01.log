@@ -1,0 +1,154 @@
+# Failure excerpt — check
+
+- Ran: 2026-10-31T05:21:43.845Z on code tree `736601d1f783` at HEAD `c7c1016` (branch `task/X14-bench-component-mint`)
+- Command: `bun run check`
+- Result: fail, exit 1, 7675 ms
+- Load: start 2.86, end 4.70, median 3.78, max 4.70
+- Device: none recorded (not a device gate)
+- Full log: `task/X14-bench-component-mint/check-2026-10-31T05-21-43.634Z.log` (<store>/task/X14-bench-component-mint/check-2026-10-31T05-21-43.634Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `error: script "lint" was terminated by signal SIGTERM (Polite quit request)`
+- `error: script "format" was terminated by signal SIGTERM (Polite quit request)`
+- `error: script "test" was terminated by signal SIGTERM (Polite quit request)`
+- `error: script "test:native" was terminated by signal SIGTERM (Polite quit request)`
+- `error: script "check" exited with code 1`
+
+## Last 132 log line(s)
+
+```
+gate: check
+gate: bun run check (cwd .)
+gate: code tree 736601d1f783 at HEAD c7c1016
+gate: git tree db3e07d811d2 with a DIRTY worktree (not reusable)
+gate: log task/X14-bench-component-mint/check-2026-10-31T05-21-43.634Z.log
+gate:       <store>/task/X14-bench-component-mint/check-2026-10-31T05-21-43.634Z.log
+$ node scripts/check.mjs
+check: 16 steps, 4 job(s) of 10 cores
+check: ✓ lock:check          pass        0.0s
+check: ✓ bench:typecheck     pass        2.0s
+check: ✓ typecheck           pass        2.3s
+──────── typecheck — pass, 2.3s ──────────────────────────────────────────────────
+$ tsc
+──────── lock:check — pass, 0.0s ─────────────────────────────────────────────────
+$ node scripts/sync-example-lock.mjs
+example-lock: example/ios/Podfile.lock locks NitroUi (0.4.0) - in step with package.json.
+──────── bench:typecheck — pass, 2.0s ────────────────────────────────────────────
+$ bun --cwd bench typecheck && bun --cwd bench typecheck:android
+$ tsc -p tsconfig.json
+$ tsc -p tsconfig.android.json
+check: ✗ test                fail        5.1s - exit null (signal SIGTERM)
+check: · perf:renders        skipped     0.0s - not started - test failed
+check: · nitrogen:check      skipped     0.0s - not started - test failed
+check: · registry:check      skipped     0.0s - not started - test failed
+check: · autolinking:check   skipped     0.0s - not started - test failed
+check: · prepare             skipped     0.0s - not started - test failed
+check: · api-extractor:check skipped     0.0s - not started - test failed
+check: · publint             skipped     0.0s - not started - test failed
+check: · manifest:check      skipped     0.0s - not started - test failed
+check: · readme:check        skipped     0.0s - not started - test failed
+check: ✗ format              fail        7.0s - exit null (signal SIGTERM)
+check: ✗ lint                fail        7.1s - exit null (signal SIGTERM)
+──────── lint — fail, 7.1s ───────────────────────────────────────────────────────
+──────── format — fail, 7.0s ─────────────────────────────────────────────────────
+──────── test — fail, 5.1s ───────────────────────────────────────────────────────
+check: ✗ test:native         fail        5.2s - exit null (signal SIGTERM)
+──────── test:native — fail, 5.2s ────────────────────────────────────────────────
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — skipped, 0.0s ──────────────────────────────────────────
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 3 passed, 4 failed, 9 skipped in 7.6s
+check: failed step(s): lint, format, test, test:native
+check: not started after the first failure: perf:renders, nitrogen:check, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: lint ──────────────────────────────────────────────────────────
+$ eslint "**/*.{js,mjs,ts,tsx}"
+error: script "lint" was terminated by signal SIGTERM (Polite quit request)
+──────── full log: format ────────────────────────────────────────────────────────
+$ prettier --check .
+Checking formatting...
+error: script "format" was terminated by signal SIGTERM (Polite quit request)
+──────── full log: test ──────────────────────────────────────────────────────────
+$ jest
+PASS scripts/__tests__/bench-deps.test.js
+error: script "test" was terminated by signal SIGTERM (Polite quit request)
+──────── full log: test:native ───────────────────────────────────────────────────
+$ bash scripts/native-tests.sh
+── sizing state-update captures by value
+── sizing flush requests its draw
+compiling (host clang/swiftc, into <tmp>//nitro-ui-native-tests-97726)
+── clock.test (C++ / Objective-C++)
+NitroUiClock
+  ok    nowNs() matches CACurrentMediaTime() (CADisplayLink base) (off by 0 us)
+  ok    nowNs() matches NSProcessInfo.systemUptime (off by 11 us)
+  ok    nowNs() is CLOCK_UPTIME_RAW (off by 12 us)
+  ok    nowNs() is not CLOCK_MONOTONIC_RAW (= steady_clock on Apple)
+        sleep gap vs CLOCK_MONOTONIC_RAW: 52.6 h
+  ok    nowNs() is monotonic
+  ok    nowMs() is the same base
+NitroUiPerf
+  ok    a disabled ring records nothing
+  ok    drain() returns every mark
+  ok    drain() is oldest first
+  ok    marks keep instanceId and kind
+  ok    drain() clears the ring
+  ok    mark() timestamps with the same clock as nowNs()
+  ok    the ring keeps at most CAPACITY marks
+  ok    a wrapped ring drops the oldest and stays ordered
+clock.test: all checks passed
+── handshake.test (Swift)
+NitroUiControlledValue
+  ok    starts at the displayed default
+  ok    uncontrolled has no pending React write
+  ok    uncontrolled reconcile changes nothing
+  ok    no events yet
+  ok    user() returns the event count to emit
+  ok    user() updates the displayed value immediately
+  ok    rapid interaction keeps counting
+  ok    the last interaction wins
+  ok    uncontrolled native keeps what the user did
+  ok    optimistic while JS thinks
+  ok    a write is stale until JS echoes this many events
+  ok    the echo lets the rejected write revert
+  ok    the rejected change reverted
+  ok    reconciling twice changes nothing
+  ok    a stale write is dropped, not queued
+  ok    the next write after catching up applies
+  ok    first tap
+  ok    second tap before JS has seen the first
+  ok    native shows the newest interaction
+  ok    a write is still stale before the echo
+  ok    the newest write applies once JS has seen every event
+  ok    uncontrolled interactions leave JS behind
+  ok    uncontrolled native keeps what the user did
+  ok    the first controlled write after a mode switch applies
+  ok    doubles count events
+  ok    an unchanged value is not reported as a change
+  ok    a new value applies
+  ok    a different double is a change
+  ok    a drag emits its first change
+  ok    the counts look caught up
+  ok    a write is refused while native holds an un-emitted sample
+  ok    what was last emitted is still what is shown
+  ok    once the sample is emitted, the write is judged by the count alone
+  ok    an interaction is not blocked by an un-emitted sample
+  ok    with nothing from React there is still nothing to apply
+  ok    an un-emitted sample still refuses the write
+  ok    and clearing it lets the write through
+handshake.test: all checks passed
+── sizing.test (C++)
+error: script "test:native" was terminated by signal SIGTERM (Polite quit request)
+bash: line 1:  5355 Killed: 9               '<tmp>//nitro-ui-native-tests-97726/sizing'
+error: script "check" exited with code 1
+gate: check FAIL in 7.7 s
+gate: recorded in .gates/task/X14-bench-component-mint.jsonl
+gate: re-raising SIGTERM
+
+```
