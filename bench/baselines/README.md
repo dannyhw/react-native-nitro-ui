@@ -123,6 +123,12 @@ both platforms and `DatePicker` on Android. `--check` reports their cells as
 `maintainer-mac-2`'s Android file recorded every scenario for every component the plan has
 on Android, so nothing is `new arm` there but the `leak` cells, which store no slope.
 
+`Menu` is the exception, and the first component added by the cheaper path below: its
+Android cells are in `maintainer-mac-2`'s file (35 cells, merged in by
+`--component menu --update-baseline`), and it is missing from the other three files —
+`maintainer-mac-2`'s iOS file, and both of `maintainer-mac-1`'s — where its cells read as
+`new arm` until somebody mints them.
+
 The one Android baseline committed before this one (`bb41d00`) was recorded while
 nitro-ui self-skipped: all seven of its nitro-ui cells carry a `skipReason` and zero
 metrics, so every `--check` against it degraded to `new-arm` and could never fail. It
