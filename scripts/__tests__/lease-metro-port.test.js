@@ -1,3 +1,4 @@
+/* global Atomics, SharedArrayBuffer */
 /**
  * A pair nobody has leased can still have its Metro port spoken for (X15 item 1).
  *
@@ -19,7 +20,14 @@
  * so a case says which port is busy and which process owns it.
  */
 
-import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
+import {
+  describe,
+  expect,
+  it,
+  beforeEach,
+  afterEach,
+  afterAll,
+} from '@jest/globals';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
@@ -34,6 +42,7 @@ import {
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
+import { LOG_STORE_BASENAME } from '../gate-core.mjs';
 import {
   decideAcquire,
   lsofListenArgs,
@@ -401,6 +410,10 @@ describeCli('a stale Metro server on a leased pair', () => {
     NITRO_UI_LEASE_POLL_MS: '20',
     NITRO_UI_LSOF_BIN: join(bins, 'lsof'),
     NITRO_UI_FAKE_BUSY: busyFile,
+    // The gate's log store, aimed at this fixture's home (X15 review 4 needs a test that reads
+    // a run's transcript back, and a path derived from `git rev-parse --git-common-dir` in a
+    // throwaway checkout is not one a test should reconstruct). Production never sets this.
+    NITRO_UI_GATE_LOG_STORE: join(home, 'log-store'),
     ...extra,
   });
   const leaseCli = (args, extra = {}) =>
@@ -551,32 +564,49 @@ describeCli('a stale Metro server on a leased pair', () => {
     // busy file names the pid *indirectly*, so the port reads free until the listener exists
     // and busy from then on: the order a leaked server has in a real run, and the reason the
     // fixture cannot simply assert a pid of its own.
-    //
-    // The listener binds its own free port while the fixture's *leased* port stays 8295: the
-    // sweep asks about `METRO_PORT`, so both are pointed at the listener's port for this case,
-    // and pair-a remains free in the pool for the acquire assertion at the end.
     const port = freePort();
     const pidFile = join(home, 'fake-metro.pid');
     rmSync(pidFile, { force: true });
     serve(port, `@${pidFile}`, 'node');
-    const run = gateCli(['harness:android'], {
-      ...PAIR_A_ENV,
-      METRO_PORT: String(port),
-      FAKE_SERVE_METRO: `${port} ${pidFile}`,
-      FAKE_REAL_NODE: process.execPath,
-      FAKE_METRO_SNIPPET: LISTENER_SNIPPET,
-    });
-    expect(run.status).toBe(0);
-    const ownerPid = Number(readFileSync(pidFile, 'utf8').trim());
-    expect(ownerPid).toBeGreaterThan(0);
-    expect(run.stderr).toContain('stopped the Metro this run started');
-    expect(run.stderr).toContain(String(ownerPid));
-    expect(pidIsAlive(ownerPid)).toBe(false);
-    // And the pool's answer for the pair is unchanged: the sweep stopped a server on the port
-    // this run was handed, not the pair's own port, and certainly not another task's.
-    const next = leaseCli(['acquire', '--task', 'X5']);
-    expect(next.status).toBe(0);
-    expect(next.stdout).toContain(`export METRO_PORT='${PORT_A}'`);
+    let ownerPid = null;
+    let run = null;
+    try {
+      run = gateCli(['harness:android'], {
+        ...PAIR_A_ENV,
+        METRO_PORT: String(port),
+        FAKE_SERVE_METRO: `${port} ${pidFile}`,
+        FAKE_REAL_NODE: process.execPath,
+        FAKE_METRO_SNIPPET: LISTENER_SNIPPET,
+      });
+      expect(run.status).toBe(0);
+      ownerPid = readFixturePid(pidFile);
+      expect(ownerPid).not.toBeNull();
+      expect(run.stderr).toContain('stopped the Metro this run started');
+      expect(run.stderr).toContain(String(ownerPid));
+      expect(pidIsAlive(ownerPid)).toBe(false);
+      // The same evidence in the run's *log*, which is what the gate's evidence store keeps
+      // (X15 review 4): on stderr alone, the fact that a sweep fired is gone with the terminal,
+      // and a reader of `gate.mjs logs` three days later cannot tell a run that cleaned up from
+      // one that never needed to. Read from the ledger's own `logPath`, not a guessed name.
+      const [record] = run.lines;
+      expect(record.logPath).toBeTruthy();
+      const transcript = readFileSync(
+        join(home, 'log-store', LOG_STORE_BASENAME, record.logPath),
+        'utf8'
+      );
+      expect(transcript).toContain('stopped the Metro this run started');
+      // And the run's own output is still in there in full - the drain is what keeps the tail
+      // of a harness summary, which is where the ledger's counts are parsed from.
+      expect(transcript).toContain('Tests: 3 passed, 3 total');
+      // And the pool's answer for the pair is unchanged: the sweep stopped a server on the port
+      // this run was handed, not the pair's own port, and certainly not another task's.
+      const next = leaseCli(['acquire', '--task', 'X5']);
+      expect(next.status).toBe(0);
+      expect(next.stdout).toContain(`export METRO_PORT='${PORT_A}'`);
+    } finally {
+      killFixturePid(ownerPid);
+      if (run != null) writeFileSync(busyFile, '');
+    }
   });
 
   it('leaves a Metro in another process group alone', () => {
@@ -594,13 +624,10 @@ describeCli('a stale Metro server on a leased pair', () => {
       ['-e', LISTENER_SNIPPET, String(port), pidFile],
       { stdio: 'ignore' }
     );
+    let otherPid = null;
     try {
-      const deadline = Date.now() + 15_000;
-      while (!existsSync(pidFile) && Date.now() < deadline) {
-        spawnSync(process.execPath, ['-e', '0']);
-      }
-      expect(existsSync(pidFile)).toBe(true);
-      const otherPid = Number(readFileSync(pidFile, 'utf8').trim());
+      otherPid = readFixturePid(pidFile);
+      expect(otherPid).not.toBeNull();
       expect(pidIsAlive(otherPid)).toBe(true);
       serve(port, `@${pidFile}`, 'node');
       const run = gateCli(['harness:android'], {
@@ -613,12 +640,7 @@ describeCli('a stale Metro server on a leased pair', () => {
       expect(pidIsAlive(otherPid)).toBe(true);
     } finally {
       listener.kill('SIGKILL');
-      try {
-        const pid = Number(readFileSync(pidFile, 'utf8').trim());
-        if (pid > 0) process.kill(pid, 'SIGKILL');
-      } catch {
-        /* gone */
-      }
+      killFixturePid(otherPid);
       writeFileSync(busyFile, '');
     }
   });
@@ -652,13 +674,209 @@ describeCli('a stale Metro server on a leased pair', () => {
  * are because `freePort` releases the port before the caller binds it - the usual
  * ephemeral-port race, and the same one a real Metro has with a predecessor's port.
  */
+/**
+ * A bundle server, as a real socket owner: binds, writes its pid, stays up - and then exits.
+ *
+ * Two things it must not do, learned by being wrong about both:
+ *
+ *  - **leak.** The first version held the event loop open with `setTimeout(()=>{},1e6)` and
+ *    nothing ended it, so a fixture killed halfway through - an assertion before its cleanup, a
+ *    test that timed out - left a listener on a real port for the rest of the machine's life.
+ *    Two of those were found days later, still listening. So the deadline below is the fixture's
+ *    own promise: it dies even if every killer fails. `unref` because it must not *extend* life
+ *    either - when the gate under test stops it, that is the end of it. 60 s is minutes away
+ *    from a passing run and short enough that a missed kill is a leak that ends by itself.
+ *  - **give up on a busy port.** `freePort` releases the port before this binds it, the usual
+ *    ephemeral-port race, and the same one a real Metro has with a predecessor's port; hence
+ *    the retry, not a single `listen`.
+ */
 const LISTENER_SNIPPET =
   'const net=require("net"),fs=require("fs");' +
   'const tryBind=(n)=>{const s=net.createServer((c)=>c.end());' +
   's.once("error",(e)=>{if(e.code!=="EADDRINUSE"||n>20)throw e;' +
   'setTimeout(()=>tryBind(n+1),200)});' +
   's.listen(Number(process.argv[1]),()=>fs.writeFileSync(process.argv[2],String(process.pid)))};' +
-  'tryBind(0);setTimeout(()=>{},1e6);';
+  'tryBind(0);const die=setTimeout(()=>process.exit(0),60000);if(die.unref)die.unref();';
+
+/** The same fixture with its self-exit at 1.5 s, for the case that measures the self-exit. */
+const SELF_EXIT_SNIPPET = LISTENER_SNIPPET.replace(',60000)', ',1500)');
+
+/**
+ * Blocks for a moment without a subprocess and without spinning.
+ *
+ * A synchronous helper cannot use a timer, and the alternatives are bad: a busy loop burns a
+ * core while a real process is trying to start (worst case for the very thing being waited on),
+ * and spawning `node -e 0` per poll costs a whole runtime start per iteration - which is what
+ * made these waits time out under a loaded suite. `Atomics.wait` on a shared buffer is a
+ * scheduler-level sleep available on the main thread in Node.
+ */
+function sleepSync(ms) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    spawnSync(process.execPath, ['-e', '0']);
+  }
+}
+
+/**
+ * Waits for a fixture's pid file to appear, and returns the pid in it.
+ *
+ * Polling a file with a deadline instead of `expect(existsSync(...))`: the writer is a child of
+ * a child of a child, and the machine decides when it gets there. Under a parallel suite run
+ * this exact assertion is what failed once in four - not a wrong answer, a *too early* one, and
+ * an ENOENT that points at the test rather than at the code. So the budget is generous (what a
+ * loaded box needs), and the failure says "never appeared" rather than throwing ENOENT from a
+ * read the test never needed to make.
+ */
+function readFixturePid(pidFile, limitMs = 30_000) {
+  const deadline = Date.now() + limitMs;
+  for (;;) {
+    if (existsSync(pidFile)) {
+      const pid = Number(String(readFileSync(pidFile, 'utf8')).trim());
+      if (Number.isInteger(pid) && pid > 0) return pid;
+    }
+    if (Date.now() >= deadline) return null;
+    sleepSync(25);
+  }
+}
+
+/**
+ * Kills a fixture's listener by the pid it wrote, and waits for it to be gone.
+ *
+ * In the test's `finally`, so the outcome of an assertion cannot decide whether the process
+ * survives. The pid comes from the file, not from a `ChildProcess` handle: the interesting case
+ * is a listener the *gate* was supposed to stop, which this test never held a handle to.
+ */
+function killFixturePid(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    /* gone already - which is the pass case for the sweep test */
+  }
+  const deadline = Date.now() + 5_000;
+  while (pidIsAlive(pid) && Date.now() < deadline) {
+    sleepSync(25);
+  }
+}
+
+/**
+ * Starts the fixture and walks away, so the fixture is a *grandchild* of the test process.
+ *
+ * Not tidiness - a real difference, and one that made two of the cases below fail before they
+ * were right. `pidIsAlive` asks `kill(pid, 0)`, which answers "alive" for a zombie, and a fixture
+ * this suite fathered is a zombie until node reaps it, which needs the event loop the synchronous
+ * pid-file wait is busy blocking. The real sweep has no such problem, because the server it stops
+ * is never its own child: it is the run's child's child, reparented when the run exited and reaped
+ * by the OS. Launching through one more process is what makes the fixture the same shape as the
+ * thing being guarded, so "is it gone?" means the same thing in both.
+ */
+function spawnFixture(dir, snippet, ...args) {
+  const launcher = join(dir, 'spawn-fixture.mjs');
+  if (!existsSync(launcher)) {
+    writeFileSync(
+      launcher,
+      'import { spawn } from "node:child_process";\n' +
+        'const [, , exec, snippet, pidFile, port] = process.argv;\n' +
+        'const child = spawn(exec, ["-e", snippet, port, pidFile], {\n' +
+        '  detached: true,\n' +
+        '  stdio: "ignore",\n' +
+        '});\n' +
+        'child.unref();\n'
+    );
+  }
+  const child = spawn(
+    process.execPath,
+    [launcher, process.execPath, snippet, ...args],
+    { detached: true, stdio: 'ignore' }
+  );
+  child.unref();
+  return child;
+}
+
+/**
+ * The pid-file wait, on its own, because the two device-gate cases below cannot show it working:
+ * in a passing run the file always appears in time, which is exactly the condition under which a
+ * single `existsSync` + `readFileSync` pair looks identical to a poll. What makes them differ is
+ * a late writer - the once-in-four ENOENT this suite hit while `check-runner` ran beside it - so
+ * the writer here is late on purpose.
+ */
+describe('readFixturePid', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'x15-pidfile-'));
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('waits for a writer that is late, rather than reading a file that is not there', () => {
+    const pidFile = join(dir, 'late.pid');
+    rmSync(pidFile, { force: true });
+    // A real process, writing after a pause longer than any scheduler hiccup, so the
+    // alternative - looking once - is guaranteed to miss it.
+    spawnFixture(
+      dir,
+      'setTimeout(()=>require("fs").writeFileSync(process.argv[2],String(process.pid),err=>process.exit(err?1:0)),1500)',
+      pidFile,
+      String(freePort())
+    );
+    const startedAt = Date.now();
+    const pid = readFixturePid(pidFile, 20_000);
+    const waited = Date.now() - startedAt;
+    expect(pid).not.toBeNull();
+    // The bound that proves the poll: the writer is 1.5 s away from the first look, so a helper
+    // that returns without waiting cannot reach 750 ms. A floor, not a ceiling - load can only
+    // make the real wait longer, which is the whole reason the helper exists.
+    expect(waited).toBeGreaterThan(750);
+    // The writer exits once it has written, so this is a courtesy: the helper's job was to find
+    // the pid, and `killFixturePid` is quiet about a process that is already gone.
+    killFixturePid(pid);
+  });
+
+  it('gives up with null when nothing ever writes, so the test says which', () => {
+    // The other wrong answer is an ENOENT from a `readFileSync`, which reads as a broken test
+    // rather than as "the process under test never started" - the thing a reader needs to know.
+    expect(readFixturePid(join(dir, 'never.pid'), 400)).toBeNull();
+  });
+
+  it('kills by the pid file and waits for the process to be gone', () => {
+    const pidFile = join(dir, 'killed.pid');
+    rmSync(pidFile, { force: true });
+    spawnFixture(dir, LISTENER_SNIPPET, pidFile, String(freePort()));
+    const pid = readFixturePid(pidFile, 20_000);
+    expect(pid).not.toBeNull();
+    expect(pidIsAlive(pid ?? 0)).toBe(true);
+    killFixturePid(pid);
+    expect(pidIsAlive(pid ?? 0)).toBe(false);
+  });
+
+  it('does nothing for a pid that was never written', () => {
+    // A failure before the pid file exists must not turn cleanup into a second failure, and
+    // `kill(0)`/`kill(NaN)` would be a signal to somebody.
+    expect(() => killFixturePid(null)).not.toThrow();
+    expect(() => killFixturePid(0)).not.toThrow();
+    expect(() => killFixturePid(Number.NaN)).not.toThrow();
+  });
+
+  it('exits by itself even if every killer fails', () => {
+    // The fixture's own promise, and the one no device-gate case can show: those have the gate
+    // stop the server, so they never reach the deadline. It is here because two real listeners
+    // were found days later, still holding ports, from exactly this shape of fixture - and this
+    // test signals nothing, so surviving is only ever the fixture's own doing.
+    const pidFile = join(dir, 'self.pid');
+    rmSync(pidFile, { force: true });
+    // 1.5 s against the shipped 60 s: the deadline is the thing under test, so the fixture is
+    // built with a short one rather than the suite waiting a minute for it.
+    spawnFixture(dir, SELF_EXIT_SNIPPET, pidFile, String(freePort()));
+    const pid = readFixturePid(pidFile, 20_000);
+    expect(pid).not.toBeNull();
+    // Up when the pid file appeared, and nothing signals it: the disappearance below is the
+    // fixture's own `setTimeout`, and nothing else.
+    expect(pidIsAlive(pid ?? 0)).toBe(true);
+    const deadline = Date.now() + 12_000;
+    while (pidIsAlive(pid ?? 0) && Date.now() < deadline) {
+      sleepSync(50);
+    }
+    expect(pidIsAlive(pid ?? 0)).toBe(false);
+  }, 30_000);
+});
 
 /**
  * A port nobody is listening on, asked of the OS rather than guessed: the fixture's fake Metro
@@ -715,9 +933,14 @@ function makeCheckout() {
     'if [ -n "$FAKE_SERVE_METRO" ]; then',
     '  set -- $FAKE_SERVE_METRO',
     '  "$FAKE_REAL_NODE" -e "$FAKE_METRO_SNIPPET" "$1" "$2" &',
-    '  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do',
+    // Not a courtesy pause: the gate's Metro sweep looks for a listener on the port, so a shim
+    // that prints its summary before the server exists makes the sweep stop nothing and the
+    // test goes red for the wrong reason. 15 s of 0.2 s polls is what a loaded box takes.
+    '  i=0',
+    '  while [ "$i" -lt 75 ]; do',
     '    [ -s "$2" ] && break',
     '    sleep 0.2',
+    '    i=$((i+1))',
     '  done',
     '  echo "fake metro: serving $1 as pid $(cat "$2" 2>/dev/null)"',
     'fi',
