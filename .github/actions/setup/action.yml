@@ -1,6 +1,18 @@
 name: Setup
 description: Setup bun and install dependencies
 
+inputs:
+  package-manager-cache:
+    description: >-
+      Restore node_modules from, and save it to, the actions cache. A job that
+      builds an artifact it intends to publish must set this to false: npm's own
+      guidance for release builds is never to reuse a package cache, because the
+      install a cache hands back was written by some other tree and `npm pack`
+      runs this package's `prepare` through it.
+    required: false
+    type: boolean
+    default: true
+
 runs:
   using: composite
   steps:
@@ -16,6 +28,11 @@ runs:
 
     - name: Restore dependencies
       id: bun-cache
+      # Gated rather than unconditional so a release job can ask for a clean
+      # install without reimplementing this file. `steps.bun-cache.outputs` is
+      # empty when this is skipped, which is exactly the cache-miss answer the
+      # two steps below want.
+      if: inputs.package-manager-cache
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: node_modules
@@ -29,7 +46,7 @@ runs:
       shell: bash
 
     - name: Cache dependencies
-      if: steps.bun-cache.outputs.cache-hit != 'true'
+      if: inputs.package-manager-cache && steps.bun-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: node_modules
