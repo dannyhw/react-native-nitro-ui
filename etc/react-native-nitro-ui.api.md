@@ -340,6 +340,7 @@ export interface SegmentedControlProps extends ViewProps {
         };
         nuiTestPixelProbe(color: number): void;
         nuiTestPixelReport(): string;
+        nuiTestDisplayedIndex(): string;
     }) => void) | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;
@@ -403,6 +404,7 @@ export interface SwitchProps extends ViewProps {
             height: number;
         };
         nuiTestArmedGuards(): string;
+        nuiTestLifetimeReport(): string;
     }) => void) | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;
