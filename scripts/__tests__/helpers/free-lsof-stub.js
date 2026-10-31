@@ -25,7 +25,14 @@
  * idempotent, so there is exactly one of these per machine and it costs nothing to reuse.
  */
 
-import { chmodSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -38,10 +45,27 @@ const contents = [
   '',
 ].join('\n');
 mkdirSync(dir, { recursive: true });
-// Rewriting unconditionally would truncate the file a sibling worker is executing through,
-// which is an `ETXTBSY` or a half-read shebang depending on the moment. So: write once.
-if (!statSync(bin, { throwIfNoEntry: false })?.isFile()) {
-  writeFileSync(bin, contents);
+// Written into place, never into the file itself. A sibling worker may be *executing* the
+// stub while this runs, and writing to an inode under execution is an `ETXTBSY` or a
+// half-read shebang depending on the moment. `rename` replaces the directory entry
+// atomically, so a reader sees either the old file or the new one and the old inode stays
+// alive for anybody mid-execution. It is also why a mismatch is repaired rather than left
+// alone: a helper whose shipped text no longer matched the stub on disk would keep handing
+// every suite the old answer, which is a fail-open `lsof` wearing the shape of a green run.
+let current = null;
+try {
+  current = readFileSync(bin, 'utf8');
+} catch {
+  /* not created yet */
+}
+if (current !== contents) {
+  const staging = `${bin}.${String(process.pid)}.staged`;
+  try {
+    writeFileSync(staging, contents, { mode: 0o755 });
+    renameSync(staging, bin);
+  } finally {
+    rmSync(staging, { force: true });
+  }
 }
 chmodSync(bin, 0o755);
 
