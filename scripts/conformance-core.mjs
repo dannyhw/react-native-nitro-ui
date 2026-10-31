@@ -210,22 +210,28 @@ export const RULE_IDS = CONFORMANCE_RULES.map((rule) => rule.id);
 /**
  * The in-app half of the debt list; the Android a11y half is `A11Y_EXEMPTIONS`.
  *
- * Not empty since the re-review, and *why* is the part to read. Both rows are
- * `recycle-reset` holes for a control whose `probe` is a `blindSpot`: the control **does**
- * hold state a recycle has to clear, and neither platform can be shown the difference.
+ * One row, and its history is the part to read. Both entries here were written by X4 as
+ * `recycle-reset` holes for a control whose `fixture probe` is a `blindSpot`: the control
+ * **does** hold state a recycle has to clear, and no platform can be shown the difference.
  * Those two facts together are a failing cell, not an unapplicable one — the rule's subject
  * exists and the suite cannot reach it, which is the definition of a hole. A control with no
  * such state (`Button`, `Progress`) is `not-applicable` instead, and the difference between
  * the two is exactly what `probe: { blindSpot }` versus `probe: { noProbe }` records in
  * `Conformance.harness.tsx`.
  *
- * **How a row retires.** {@link checkRecycleNotes} ties the two lists together on every
- * `check`: the fixture's note is `blindSpot` if and only if a row exists here. So the day a
- * `nuiTestDisplayedIndex` lands, whoever writes the probe changes the fixture's note, and
- * leaving this row behind goes red rather than quietly excusing a finding the new probe can
- * produce. The a11y half clears itself from a device run because its rows match *problem
- * text*; these two match nothing, because the whole point is that no run can produce the
- * sentence, so the clearing lives where both files are readable — in `check`.
+ * **SegmentedControl's row is gone (F6)**, and the way it retired is the mechanism working:
+ * the fixture gained a read-out that can see the residue (`nuiTestDisplayedIndex`, written in
+ * the composable/SwiftUI body rather than in a prop setter), so the fixture's note became a
+ * real probe and `checkRecycleNotes` would refuse this row as an exemption for a control that
+ * now has a failing-producible check. Keeping it would have gone red, not quietly excused the
+ * finding the probe can produce.
+ *
+ * **Menu stays**, with its reason corrected: what X4 recorded ("Android reads `expanded` and
+ * never recycles") turned out not to hold on RN 0.88 once `enableViewRecycling` was on, so the
+ * blind half is now iOS alone — no gesture reaches a SwiftUI `Menu` (D29) *and* the read-out
+ * answers `-1` there. Android's side of that reset line is guarded in
+ * `MenuModelTest.aRecycleClosesThePopupWithoutReportingToItsPreviousOwner`, which is why the
+ * cell is still honest debt rather than a cover for an untested line.
  *
  * @type {ReadonlyArray<ConformanceExemption>}
  */
@@ -237,21 +243,10 @@ export const CONFORMANCE_EXEMPTIONS = Object.freeze([
       'X4 recycle rule: Menu holds residue no read-out can show, so the rule ' +
       'cannot fail for it',
     detail:
-      'a Menu’s open popup is native-owned state (D29), and the only read-out of it, ' +
-      '`nuiTestMenuReport()`, answers `-1` for `expanded` on iOS — the one platform that ' +
-      'actually recycles. Android can read it and never recycles, so nothing can survive ' +
-      'there to be seen.',
-  },
-  {
-    component: 'SegmentedControl',
-    rule: 'recycle-reset',
-    followups:
-      'X4 recycle rule: SegmentedControl holds residue no read-out can show, so ' +
-      'the rule cannot fail for it',
-    detail:
-      'a pick moves the displayed index and the handshake counts, and neither platform ' +
-      'reports the drawn index: the handle’s `selectedIndex` is `model.state.js`, and ' +
-      '`nuiTestPixelReport()` answers a colour. The residue is real; the blindness is too.',
+      'a Menu’s open popup is native-owned state (D29). Since F6 the blind half is ' +
+      'iOS alone: no harness gesture reaches a SwiftUI `Menu`, and ' +
+      '`nuiTestMenuReport()` answers `-1` for `expanded` there. Android reads the ' +
+      'flag and recycles, and its reset line is guarded by `MenuModelTest`.',
   },
 ]);
 

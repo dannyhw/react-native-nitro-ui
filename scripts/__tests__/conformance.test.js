@@ -810,13 +810,15 @@ describe('a recycle hole, as the fixture and the debt list describe it', () => {
 
 describe('the debt ledger', () => {
   it('is the recycle holes on record, and the mechanism works when one is added', () => {
-    // Every row since the re-review is a `recycle-reset` hole, and they are named here
-    // rather than just counted: a row appearing means a new hole is on record (which wants
-    // a fixture note, a FOLLOWUPS line and a matrix cell with it), and a row disappearing
-    // without its probe landing is the same lie in the other direction.
+    // Every row here is a `recycle-reset` hole, and they are named here rather than just
+    // counted: a row appearing means a new hole is on record (which wants a fixture note, a
+    // FOLLOWUPS line and a matrix cell with it), and a row disappearing without its probe
+    // landing is the same lie in the other direction. `SegmentedControl`'s row left in F6 —
+    // the fixture now has `nuiTestDisplayedIndex`, so `checkRecycleNotes` would refuse an
+    // exemption for it — which is this list being allowed to shrink for the right reason.
     expect(
       CONFORMANCE_EXEMPTIONS.map((row) => `${row.component}|${row.rule}`)
-    ).toEqual(['Menu|recycle-reset', 'SegmentedControl|recycle-reset']);
+    ).toEqual(['Menu|recycle-reset']);
     for (const row of CONFORMANCE_EXEMPTIONS) {
       // Debt needs an address and a description of what is blind, not just a name.
       expect(row.followups.length).toBeGreaterThan(0);
@@ -1081,7 +1083,6 @@ describe('the debt, as the matrix sees it', () => {
     // printed on every run rather than asserted away.
     expect(failingKeys()).toEqual([
       'Menu|recycle-reset',
-      'SegmentedControl|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
