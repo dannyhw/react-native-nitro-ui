@@ -311,6 +311,11 @@ export function openBaselineForMerge({
     machineLabel,
     problems: decided.problems ?? [],
     unverified: decided.unverified ?? [],
+    // Carried through, and defaulted to an empty list rather than left undefined:
+    // the pre-flight prints these to say *which* fields it could not answer for,
+    // and a caller that iterates an undefined `deferred` throws on the way to
+    // printing the answer it exists to give.
+    deferred: decided.deferred ?? [],
     note: decided.note ?? null,
     seeded: decided.seeded,
     foundingDependencies: decided.foundingDependencies ?? null,
@@ -326,6 +331,7 @@ function mergeRefusal(file, display, machineLabel, kind, message) {
     machineLabel,
     problems: [],
     unverified: [],
+    deferred: [],
     note: null,
     // null, not {}: the caller passes this straight to `writeBaseline()` as
     // `componentsBase`, where an empty object means "the file had no provenance
