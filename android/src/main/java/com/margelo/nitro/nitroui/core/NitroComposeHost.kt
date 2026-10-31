@@ -158,13 +158,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   val lifetimeRecycles: Int
     get() = lifetime.recycles
 
-  /** See [NitroUiLifetimeGate.measuresAfterDrop]. */
+  /** Post-drop measure asks by **every** host in this process, not just this one. */
   val measuresAfterDrop: Int
-    get() = lifetime.measuresAfterDrop
+    get() = processMeasuresAfterDrop
 
-  /** See [NitroUiLifetimeGate.layoutsAfterDrop]. */
+  /// [measuresAfterDrop], for the layout pass.
   val layoutsAfterDrop: Int
-    get() = lifetime.layoutsAfterDrop
+    get() = processLayoutsAfterDrop
 
   /**
    * Whether a pre-draw listener is registered for this mount, with the observer it
@@ -612,17 +612,17 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * this model from scratch.
    */
   fun prepareForRecycle() {
-    // Before anything else, and before the caller clears [perfInstanceId]: the pair
-    // of marks a gate counts to show recycling is live on this platform (`dropped`
-    // from [drop], `recycled` here). Clearing the id first - which is what every
-    // component used to do, one line each - makes the mark invisible, because
-    // `NitroUiPerf.mark` returns at once for `NO_INSTANCE`.
+    // First, and while [perfInstanceId] still holds the mount that just ended: the pair
+    // of marks a gate counts to show recycling is live on this platform (`dropped` from
+    // [drop], `recycled` here). `NitroUiPerf.mark` returns at once for `NO_INSTANCE`, so
+    // a host that cleared its id first - which is what every component used to do, one
+    // line each - made the mark invisible.
     lifetime.onRecycle()
     NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_RECYCLED)
     perfInstanceId = NitroUiPerf.NO_INSTANCE
-    // No strategy is re-armed here, deliberately: this is pool entry, and the pool
-    // is where a host may never be reused. [onAttachedToWindow] arms the guard for
-    // the mount that follows, before that mount can compose.
+    // No strategy is re-armed and the dropped window stays shut, deliberately: this is
+    // pool entry, and the pool is where a host may never be reused. [onAttachedToWindow]
+    // arms the guard and opens the host to composing again, for the mount that follows.
     model.reset()
     isDirty = true
     isMeasurePending = true
@@ -764,17 +764,16 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
-   * What a harness asks about (F6): what this host object has been through since it
-   * was allocated — `drops=<n> recycles=<m> measuresAfterDrop=<n> layoutsAfterDrop=<n>
-   * giveUps=<n> floatingFlushes=<n>`.
+   * What a harness asks about (F6): `drops=<n> recycles=<m> measuresAfterDrop=<n>
+   * layoutsAfterDrop=<n> giveUps=<n> floatingFlushes=<n>`.
    *
-   * The first four are about this object. The last two are the companion's process-wide
-   * totals — deliberately not per-host, because the run whose leak-path question they
-   * answer is a churn of controls this probe has no handle for: a per-host counter on the
-   * 200 dropped Switches could never be read by anything, and the question B1 asked is
-   * whether the branch happened *anywhere in the process*. They are reported here because
-   * a Switch is mounted in every harness file and this is the one probe line a test can
-   * read without a new native surface.
+   * Only the first two are about this object. The other four are process-wide totals —
+   * deliberately not per-host, because the run whose leak-path question they answer is a
+   * churn of controls this probe has no handle for: a per-host counter on the 200 dropped
+   * Switches could never be read by anything, and the question B1 asked is whether the
+   * branch happened *anywhere in the process*. A freshly mounted host contributes
+   * nothing to them, so the numbers a test reads are the process's, and it is the one
+   * probe line a harness can read without a new native surface.
    *
    * Neither per-object counter is cleared by [prepareForRecycle]; see [lifetimeDrops]
    * for why that is the entire mechanism.
@@ -786,6 +785,29 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       " giveUps=${giveUpUnregisters}" +
       " floatingFlushes=${floatingFlushSchedules}"
 
+  /**
+   * What a harness asks about (H1 N4): the guards this mount armed for a composition of
+   * its own, as one line - `strategy` for an installed [ViewCompositionStrategy] (the
+   * activity `LifecycleRegistry` observer), `preDraw` for the first-frame listener once
+   * it is on its observer.
+   *
+   * The line has two halves, `ever|live:<live>`:
+   *
+   * - the **ever** half is what this mount has armed at any point, surviving the live
+   *   flags going false again. Arming is what costs, and a first-frame listener that has
+   *   already marked is still a listener that was armed and had to be taken out; a probe
+   *   that read only the live pair could not tell "never armed" from "armed and
+   *   released", which made it a race with the first frame - round 1's mutation of the
+   *   hosted early-return stayed green under a live-only probe for exactly that reason.
+   * - the **live** half is what is installed *now*, which is the only way to see the
+   *   other direction: a control that moves into a Host mid-mount has armed both and must
+   *   give both back ([releaseOwnCompositionGuards]). Without this half that release path
+   *   could be deleted and nothing would notice.
+   *
+   * So a hosted control answers `|live:` - nothing armed, nothing installed - and the same
+   * control outside a Host answers `strategy,preDraw|live:strategy` once its first frame
+   * has been marked. Read-only; both halves answer from fields the arming writes.
+   */
   internal fun armedGuardsReport(): String {
     val ever = mutableListOf<String>()
     if (everArmedStrategy) {
@@ -862,6 +884,12 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   // MARK: - View lifecycle
 
   override fun onAttachedToWindow() {
+    // The dropped window closes here and not in [prepareForRecycle]: a host may only
+    // compose when it has a window and a strategy, and this is the one moment both are
+    // true. Pool entry has neither, and a pooled host may never be reused, so opening
+    // the window there is what let the post-drop guard be deleted on Android without
+    // anything noticing (see [NitroUiLifetimeGate]).
+    lifetime.onAttach()
     // The guard goes on before anything can compose, and this is the first moment
     // it can: the child's attach - which is where `AbstractComposeView` creates its
     // composition - is dispatched by `super`, and a measure while detached is
@@ -918,9 +946,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       // dropped host can still be measured while it is attached. Its composition is
       // disposed and its strategy is un-armed, so a measure here would build a
       // composition with nothing to dispose it - the leak the drop path exists to
-      // prevent, arriving through the other door. The ask is counted before the
-      // decline ([NitroUiLifetimeGate.declineMeasure]), so the number answers "did the
-      // path happen" and not merely "did the guard fire".
+      // prevent, arriving through the other door. Counted into the process-wide total
+      // *before* the decline, so the number answers "did the path happen" and not merely
+      // "did the guard fire" ([processMeasuresAfterDrop]).
+      processMeasuresAfterDrop += 1
       isMeasurePending = true
       setMeasuredDimension(0, 0)
       return
@@ -1004,6 +1033,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       // would call the case unreachable when it only went unmeasured. Nothing here is
       // worth laying out - the composition is disposed - and `measureNow` below would
       // only ask a dropped host to compose.
+      processLayoutsAfterDrop += 1
       return
     }
     if (isHostedByParent) {
@@ -1354,10 +1384,22 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   private companion object {
-
-
     /** Sub-dp wobble that is not a size change. */
     private const val SIZING_EPSILON_DP = 0.5
+
+    /**
+     * Times **any** host in this process declined a measure because it was dropped.
+     *
+     * Process-wide for the same reason as [giveUpUnregisters]: the question B1's review
+     * N5 asks is whether the path exists at all, and the host whose guard fired is the
+     * one object a harness holds no handle for — a per-host count of it could only be
+     * read through the leaked view itself. Reported by [lifetimeReport], so any run can
+     * raise it and none can quietly leave it at zero.
+     */
+    internal var processMeasuresAfterDrop = 0
+
+    /// [processMeasuresAfterDrop], for the layout pass.
+    internal var processLayoutsAfterDrop = 0
 
     /**
      * Times [unregisterPreDraw] had to give up: the captured observer was dead **and**
