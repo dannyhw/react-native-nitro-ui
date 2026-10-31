@@ -1394,7 +1394,7 @@ None of this is a contributor's step, and none of it lives in this repo to chang
 request, on free GitHub-hosted runners: `bun run check` (ubuntu, Node from
 `.nvmrc`), the host native ASan tests (**macOS**: they need a Swift toolchain and
 `xcrun`, so `scripts/native-tests.sh` prints its skip reason on Linux and CI runs
-them in a `macos-latest` job instead), and an Android `assembleDebug` of the
+them in a `macos-26` job instead), and an Android `assembleDebug` of the
 example. Anything that needs one of this project's devices or a Mac's simulators -
 the harness suites, the consumer smoke tests, the benchmarks, the Android release
 build - stays **manual**: those jobs are `workflow_dispatch` only, because a
