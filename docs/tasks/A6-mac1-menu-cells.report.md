@@ -62,7 +62,7 @@ a regression, and a bench never blocks `need` (D15).
 | Field | Value |
 | --- | --- |
 | Command | `node scripts/gate.mjs bench --background -- --platform android --plan full --launches 8 --component menu --update-baseline --skip-build` (pid 60824), `NITRO_UI_MACHINE_LABEL=maintainer-mac-1` |
-| Results | `bench/results/35d687a-android-20261031T183820Z.json` (+ `.ndjson`, `.md`) — gitignored |
+| Results | bench/results/35d687a-android-20261031T183820Z.json (+ `.ndjson`, `.md`) — that directory is gitignored, so this is a run-local path, not one a reviewer can open at HEAD |
 | sha / dirty | `35d687a` / `dirty: false` (clean tree for all 33.9 min) |
 | Device | AVD `nitroui_t03`, API 35, profile `pixel_9`, `emulator-5574` on adb server 5043 → key `android35-emu-pixel9`. The file's `deviceName` stays `nitroui_t01` (its founding device): carried through byte-identically, not rewritten |
 | Plan | `full` / 8 → 7 cells × 5 implementations × 8 = **280 launches**, 280/280, `problems: []`, `dirty: false` |
@@ -106,7 +106,7 @@ for nitro-ui against 49.13 ms for rn-core, and `memory.menu N=200` 300.4 KiB aga
 | Field | Value |
 | --- | --- |
 | Command | same form, `--platform ios` (pid 82571) |
-| Results | `bench/results/b59db14-ios-20261031T193448Z.json` — gitignored; kept as the evidence for this refusal |
+| Results | bench/results/b59db14-ios-20261031T193448Z.json — gitignored, a run-local path; kept on this machine as the evidence for the refusal |
 | sha / dirty | `b59db14` / `dirty: false` |
 | Plan | `full` / 8 → 7 cells × 4 implementations × 8 = **224 launches**, 224/224, `problems: []` |
 | Wall time | 1 929 545 ms = **1930 s / 32.2 min**, 8.6 s per launch, 19:34:41 → 20:06:30 local |
