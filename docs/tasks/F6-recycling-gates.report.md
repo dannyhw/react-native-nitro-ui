@@ -96,11 +96,11 @@ code in the diff. Device proofs from round 1 that still stand are kept.
 - `Recycling › gives a later mount an instance the pool took back` -> reset both counters at the
   end of `prepareForRecycle` (the "clean slate for the next owner" mistake) -> `no mounted control
   reported a previous mount — highest on a mounted view was drops=0 recycles=0 over 6 rounds`
-  (`harness:android:Recycling`, 31 Oct 13:44).
+  (`harness:android:Recycling`, 31 Oct 13:42).
 - The same test -> `prepareToRecycleView` still runs, so counters and marks behave normally, but
   returns `null` so RN never pools the view -> same failure, on the same line, with the flag still
-  on and the marks still moving. This is the discriminator for the review's objection: a run that
-  prepares perfectly and reuses nothing cannot pass.
+  on and the marks still moving (13:43). This is the discriminator for the review's objection: a
+  run that prepares perfectly and reuses nothing cannot pass.
 - Round 1's proof for the same test (counters read *after* the unmount) is withdrawn: it stayed
   green on a run with no reuse, which is what the review caught.
 - `Recycling` (all three) -> remove the app's `enableViewRecycling` override -> red on the
