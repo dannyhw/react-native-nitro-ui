@@ -10,7 +10,7 @@ import org.junit.Test
  * (`bun run test:native:android`).
  *
  * Why this lives here rather than only in a device run: the rule "a dropped host must
- * not compose again until it is recycled" is a decision, and the shape that reaches it
+ * not compose again until it is attached again" is a decision, and the shape that reaches it
  * on a device — RN's `stopSurface` dropping views before it removes the root — is one
  * the harness has never produced (B1 measured the analogous listener case at 0 of 3200
  * attempts). A branch nobody can reach from JS is exactly the branch that gets deleted
@@ -27,43 +27,71 @@ class NitroUiLifetimeGateTest {
     val gate = NitroUiLifetimeGate()
     assertFalse("a mounted host does not decline a measure", gate.declineMeasure())
     assertFalse("a mounted host does not decline a layout", gate.declineLayout())
-    assertEquals("and nothing was counted", "drops=0 recycles=0 measuresAfterDrop=0 layoutsAfterDrop=0", gate.report())
+    assertEquals("and nothing was counted", "drops=0 recycles=0", gate.report())
   }
 
+  /**
+   * The dropped window is the window between a drop and the next attach.
+   *
+   * [NitroUiLifetimeGate.onAttach] is the only line that closes it, so deleting that call
+   * leaves every host declining its measure forever — the new mount composes nothing and
+   * both assertions below go red on a device too.
+   */
   @Test
-  fun aDroppedHostDeclinesUntilItIsRecycled() {
+  fun aDroppedHostDeclinesUntilItIsAttachedAgain() {
     val gate = NitroUiLifetimeGate()
     gate.onDrop()
     assertTrue("a dropped host declines its measure", gate.declineMeasure())
     assertTrue("and its layout", gate.declineLayout())
-    gate.onRecycle()
+    gate.onAttach()
     assertFalse("the next mount measures again", gate.declineMeasure())
     assertFalse("and lays out", gate.declineLayout())
   }
 
   /**
-   * The counters ask "did the path happen", not "did the guard fire".
+   * Entering the pool does not end the dropped window, and that is the whole fix.
    *
-   * This is what lets a harness run report a *measured* negative for B1's N5 rather than
-   * an assumption: the number moves when a dropped host is asked, and stays at zero when
-   * nothing ever asks.
+   * F6's first round cleared `isDropped` in `onRecycle`, and with recycling on RN calls
+   * `onDropView` and `prepareToRecycleView` back to back: a pooled host left the dropped
+   * window with no window and no [androidx.compose.ui.platform.ViewCompositionStrategy]
+   * armed, which is the exact state B1's N5 says must not compose. So a recycle must
+   * change the *model* and the counters, never the guard. Before this test existed, that
+   * inversion was invisible from a device: the guard had nothing to guard against because
+   * no pooled view was ever flagged.
    */
   @Test
-  fun everyDeclinedAskIsCounted() {
+  fun poolEntryKeepsTheDroppedWindowShutUntilTheNextAttach() {
     val gate = NitroUiLifetimeGate()
     gate.onDrop()
-    gate.declineMeasure()
-    gate.declineMeasure()
-    gate.declineLayout()
-    assertEquals(2, gate.measuresAfterDrop)
-    assertEquals(1, gate.layoutsAfterDrop)
     gate.onRecycle()
-    gate.declineMeasure()
-    assertEquals(
-      "a live mount's measures are not counted",
-      2,
-      gate.measuresAfterDrop
+    assertTrue(
+      "a host sitting in the pool still declines: it has no window and no strategy",
+      gate.declineMeasure()
     )
+    assertTrue("and declines its layout", gate.declineLayout())
+    gate.onAttach()
+    assertFalse(
+      "and only the attach, which arms the strategy, lets it compose",
+      gate.declineMeasure()
+    )
+  }
+
+  /**
+   * The dropped window also survives a recycle *and a re-drop*, which is the pair a real
+   * churn produces: drop, pool, pop, attach, drop.
+   *
+   * This is what pins the ordering rather than the flags: a gate that cleared on recycle
+   * would read "not dropped" between the pool and the attach, and the assertion below
+   * would be the only thing standing between that and a silent leak.
+   */
+  @Test
+  fun aRecycledHostLeftInThePoolIsStillDropped() {
+    val gate = NitroUiLifetimeGate()
+    gate.onDrop()
+    gate.onRecycle()
+    // Never popped: RN empties the pool on `trimMemory` without telling the views in it.
+    assertTrue("still dropped, and still guarded", gate.declineMeasure())
+    assertEquals("drops=1 recycles=1", gate.report())
   }
 
   /**
@@ -81,7 +109,7 @@ class NitroUiLifetimeGateTest {
     gate.onRecycle()
     gate.onDrop()
     gate.onRecycle()
-    assertEquals("drops=2 recycles=2 measuresAfterDrop=0 layoutsAfterDrop=0", gate.report())
+    assertEquals("drops=2 recycles=2", gate.report())
   }
 
   /**
@@ -103,5 +131,21 @@ class NitroUiLifetimeGateTest {
     pooled.onRecycle()
     assertEquals("a recycle also drops first", 1, pooled.drops)
     assertEquals(1, pooled.recycles)
+  }
+
+  /**
+   * An attach is not a mount and not a pool entry, so it moves neither counter.
+   *
+   * The device test reads `recycles >= 1` off a handle that is *currently mounted* to
+   * prove the pool handed that view back. If an attach counted as a recycle, that read
+   * would say "reused" about a freshly allocated view, which is the false pass this
+   * round's review found.
+   */
+  @Test
+  fun anAttachCountsNeitherAMountNorAPoolEntry() {
+    val gate = NitroUiLifetimeGate()
+    gate.onAttach()
+    gate.onAttach()
+    assertEquals("drops=0 recycles=0", gate.report())
   }
 }
