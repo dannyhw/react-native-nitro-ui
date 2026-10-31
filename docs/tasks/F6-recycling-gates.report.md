@@ -10,8 +10,9 @@ hook whose only caller is `ViewManager.recycleView`. On RN 0.88 that is incomple
 `onDropViewInstance` also prepares the view and pushes it onto a pool, and `createViewInstance
 (tag, …)` pops it — guarded on `enableViewRecycling`, whose default is `false`, which is why
 reading the graph in a flag-off app looked like proof. The example app now sets that flag and
-`Recycling.harness.tsx` measures the result: the ring answers `dropped`+`recycled`, and a later
-mount reports `recycles >= 1` from counters the reset deliberately does not clear.
+`Recycling.harness.tsx` measures the result: the ring answers `dropped`+`recycled`, and a control
+**while it is on screen** reports `recycles >= 1` — which a freshly allocated view cannot say,
+because nothing has dropped it yet.
 
 Installing the flag was not a one-liner. `loadReactNative` calls `SoLoader.init`, and the flag
 accessor's class loads `libreactnative.so` in a static initialiser, so an override installed
@@ -26,10 +27,12 @@ can pass the cell. Both were red on the mutation, on both platforms. Menu's hole
 iOS alone (no gesture reaches a SwiftUI `Menu`, and `expanded` answers `-1` there); Android's
 reset line is guarded by a JVM test instead.
 
-B1's two unasserted branches are counted in the shipping code and asserted at zero — the only
-honest gate for a branch expected never to fire. That exposed a bug in `38a1e93`: the two M2
-counters were declared twice, an instance field shadowing the companion's "process-wide" total.
-Screens-pop blanking is unreachable here — `react-native-screens` is no example dependency.
+B1's two unasserted branches are counted as **process-wide totals** and asserted as a zero *delta*
+across a churn of 400 controls; the post-drop half (N5) is also driven on purpose by an app-side
+probe, so the guard is seen declining and the counter seen moving rather than merely never
+firing. That counting exposed a bug in `38a1e93`: the M2 counters were declared twice, an
+instance field shadowing the companion's total. Screens-pop blanking is unreachable here —
+`react-native-screens` is no example dependency.
 
 **The flag caught a product bug.** Recycling on made three DatePicker G5 tests red: a 131.05 dp
 `compact` field laid out at its row's 411.43. `sizingPolicy` is host state that the `variant`
@@ -76,23 +79,52 @@ invocation, recorded in `## Follow-ups`.
 
 ## Red proofs
 
-- `NitroUiLifetimeGateTest.aDroppedHostDeclinesUntilItIsRecycled` + `everyDeclinedAskIsCounted` ->
-  delete `isDropped = false` from `onRecycle` -> both `FAILED` on the JVM.
-- `NitroUiLifetimeGateTest.countersSurviveARecycleAndNameTheObject` + `anUnmountAndARecycleAreToldApartByThePair`
-  -> reset `drops` on recycle -> both `FAILED`.
-- `NitroUiLifetimeGateTest.aFreshHostMeasuresAndLaysOutNormally` + `everyDeclinedAskIsCounted` ->
-  invert the counting guard in `declineMeasure` -> both `FAILED`.
-- `Recycling › gives a later mount an instance the pool took back` -> delete `recycles += 1` ->
-  `expected 0 to be greater than or equal to 1` (`harness:android:Recycling`, 31 Oct 10:06).
+Round 1's three JVM proofs guarded a gate shape this round replaced (the dropped window closing on
+recycle, per-object N5 counters), so they are superseded by the four below — which are against the
+code in the diff. Device proofs from round 1 that still stand are kept.
+
+- `NitroUiLifetimeGateTest.poolEntryKeepsTheDroppedWindowShutUntilTheNextAttach` +
+  `aRecycledHostLeftInThePoolIsStillDropped` -> put `isDropped = false` back in `onRecycle` (what
+  round 1 did) -> both `FAILED`, `66 tests completed, 2 failed`.
+- `aDroppedHostDeclinesUntilItIsAttachedAgain` + `poolEntryKeepsTheDroppedWindowShutUntilTheNextAttach`
+  -> delete `isDropped = false` from `onAttach` -> both `FAILED`, `2 failed`.
+- `countersSurviveARecycleAndNameTheObject` + `anUnmountAndARecycleAreToldApartByThePair` +
+  `aRecycledHostLeftInThePoolIsStillDropped` -> delete `recycles += 1` -> all three `FAILED`,
+  `3 failed`.
+- `anAttachCountsNeitherAMountNorAPoolEntry` -> let `onAttach` also `recycles += 1`, which would
+  make a fresh view read as reused -> `FAILED`, `1 failed`.
+- `Recycling › gives a later mount an instance the pool took back` -> reset both counters at the
+  end of `prepareForRecycle` (the "clean slate for the next owner" mistake) -> `no mounted control
+  reported a previous mount — highest on a mounted view was drops=0 recycles=0 over 6 rounds`
+  (`harness:android:Recycling`, 31 Oct 13:44).
+- The same test -> `prepareToRecycleView` still runs, so counters and marks behave normally, but
+  returns `null` so RN never pools the view -> same failure, on the same line, with the flag still
+  on and the marks still moving. This is the discriminator for the review's objection: a run that
+  prepares perfectly and reuses nothing cannot pass.
+- Round 1's proof for the same test (counters read *after* the unmount) is withdrawn: it stayed
+  green on a run with no reuse, which is what the review caught.
 - `Recycling` (all three) -> remove the app's `enableViewRecycling` override -> red on the
   precondition: `AssertionError: expected false to be true` at the `expect(enabled).toBe(true)`
   in `beforeAll` — the flag check, not the recycling assertions, which is the order wanted.
 - `Recycling › keeps the post-GC heap floor flat` -> retain a 64 KiB allocation per
   `prepareForRecycle` -> `expected 13.24 to be less than 2` (31 Oct 10:56).
-- `Recycling › measures the drop-path branches … at zero` -> invert the non-zero filter ->
-  `measuresAfterDrop, layoutsAfterDrop, giveUps, floatingFlushes are non-zero, so B1's
-  unreachable drop-path branch is a live leak path: drops=8 recycles=8 measuresAfterDrop=0 …`
-  (the mutation makes every field read as a leak, which is what proves the assertion reads them).
+- `Recycling › measures the drop-path branches … at zero across a churn` -> invert the grew-filter
+  so every field reads as a leak -> `measuresAfterDrop, layoutsAfterDrop, giveUps, floatingFlushes
+  rose across a churn …`, with both reports in the message. Round 1's equivalent proof was against
+  the absolute-zero form this round replaced; the honest proof of a delta assertion is that the
+  counter moves, which is the next entry.
+- `Recycling › declines, and counts, a host dropped while it is still attached` -> delete the
+  counting line in `onMeasure`, guard intact -> red on the **counter** half only, `expected +0 to
+  be 1`, while the width half stayed green: the view still declined, so only the count proves the
+  ask happened (`harness:android:Recycling`, 31 Oct 13:30).
+- The same test -> disable the guard in `onMeasure` -> red on the **width** half instead, `expected
+  'SwitchHost|attached=true|dropped|meas…' to contain 'measuredWidth=0'` (13:30). Two halves, each
+  red for its own reason, which is what makes the pair a measurement.
+- `Recycling › has a JS heap number but no way to pin it to a collection` (iOS) -> return the
+  first sample twice, so the churn stops being sampled -> `expected 5098792 not to be 5098792`
+  (`harness:ios:Recycling`, 31 Oct 13:39). -> and the reverse: assert `collectGarbage` *is*
+  defined -> `expected undefined to be defined`, which is the assertion that says the collect
+  handle does not exist.
 - `Conformance › · SegmentedControl` -> delete `didApplyDefault = false` from Android's
   `SegmentedControlModel.reset` -> `the segment the row paints reads 0 where the props say 1`
   (31 Oct 10:41). The same mutation in iOS's `prepareForRecycle` goes red on the same line
@@ -136,10 +168,10 @@ invocation, recorded in `## Follow-ups`.
   `ios/core/NitroSwiftUIHost.swift`, `ios/components/Switch/HybridNitroUiSwitch.swift` — the
   `dropped`/`recycled` ring kinds on both platforms, and the per-object `drops=`/`recycles=`
   read-out on Switch.
-- `ios/components/DatePicker/HybridNitroUiDatePicker.swift`,
-  `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt` — the sizing
-  policy reset on recycle (Android was missing the line iOS already had), which is what made
-  three DatePicker G5 tests red.
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt` — the sizing
+  policy reset on recycle, which is what made three DatePicker G5 tests red. iOS's
+  `DatePicker` already had the line, so only Android changed (an earlier draft of this report
+  listed the Swift file as changed too; it is not in the diff).
 - `ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift`,
   `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt` —
   `nuiTestDisplayedIndex`, and the body fix that made the iOS build compile again.
@@ -173,6 +205,39 @@ invocation, recorded in `## Follow-ups`.
   fails on `expect(run.status).toBe(1)`. It cost one `check` cycle here. Either strip the
   variable in `runCli`/`spawnCli` unless a case passes it explicitly, or have the test name it
   `undefined`; the first keeps any future case from inheriting the same hole.
+- iOS recycling leak gate: the recycling gate's *leak* half is Android-only, and this round
+  measured why — iOS has a live `performance.memory.usedJSHeapSize` but no way to force a
+  collection and no `jsHeapSizeLimit`, and the retention shape lives in native memory anyway.
+  The gate for it is a JS-visible `HermesInternal.collectGarbage()` handle, or an iOS example-app
+  probe with a live-host count like Android's `heapStats`; either makes the churn-slope gate
+  buildable, and `Recycling.harness.tsx`'s iOS branch goes red when one appears so nobody adds
+  one quietly.
+
+## Merge note — the JVM tests
+
+`MenuModelTest` and `NitroUiLifetimeGateTest` are in no gate on this branch: X15 is wiring
+`test:native:android` into `check` and CI, and this task does not touch those files (the
+wiring would conflict). They ran here by hand — `bun run test:native:android`: **66 tests, 0
+failures**, 7 of them in `NitroUiLifetimeGateTest` — and four of that file's tests are the red
+proofs above. They are covered by `check` once X15 lands, so **F6 merges after X15**.
+
+## Fix round 1
+
+Nine items, no gate weakened. The identity test read counters after the unmount, where a fresh view
+and a reused one read alike; it now reads them **while mounted**, where `recycles >= 1` is reachable
+only through a pool hand-back. Red twice: counters reset on recycle, and `prepareToRecycleView`
+returning `null` — prepared, marked, never pooled, all counters normal.
+
+The dropped window now closes in `onAttachedToWindow`, not `onRecycle`: pool entry has no window and
+no strategy, so clearing there made the guard unobservable. The two N5 counters are process-wide
+totals like `giveUps`, asserted as a zero delta across 400 controls — and driven, by a probe that
+drops an attached host and measures it. Guard half and counter half red separately.
+
+iOS's leak arm measured its own premises instead of borrowing MountChurn's: Hermes **is** present
+and `usedJSHeapSize` **is** live, so the reason is no forced collect and no heap limit, in native
+memory either way. Round 1's comment was wrong and is gone.
+
+JVM suite by hand: 66 tests, 0 failures; in `check` once X15 lands, so F6 merges after X15.
 
 ## Questions for orchestrator
 
