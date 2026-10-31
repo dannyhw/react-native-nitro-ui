@@ -1,7 +1,7 @@
 {
   "task": "X14",
   "how": "One source mutation applied to the working tree, one jest suite run, then `git checkout -- <file>` before the next row. Driver: a per-task script (not committed) that reads the table below. `redTests` are the names that went red. Run on maintainer-mac-2, 2026-10-31.",
-  "note": "Three rows were re-issued by the second driver after their text turned out not to match the source (a NO-MATCH is not a proof); this file holds only the corrected rows that actually went red.",
+  "note": "Five rows were re-issued by a later driver after their text turned out not to match the source (a NO-MATCH is not a proof); this file holds only the corrected rows that actually went red. Driver 3 covers the two fixes that post-date the first two drivers: the JSON5 lock reader and the baseline refusal's version message.",
   "mutations": [
     {
       "test": "scripts/__tests__/bench-baseline-merge.test.js",
@@ -352,6 +352,112 @@
       "redTests": [
         "refuses a thin launch count, and lets --force past it to the device",
         "refuses an API level that differs even under --force, before the device"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/report.mjs",
+      "mutation": "--check reads the baseline at the results file's version",
+      "before": "      schemaVersion: BASELINE_SCHEMA_VERSION,\n    });\n    if (opened.refusal != null) {",
+      "after": "      schemaVersion: SCHEMA_VERSION,\n    });\n    if (opened.refusal != null) {",
+      "redTests": [
+        "names the baseline schema version it wanted when a pre-D9 file is checked"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-deps.test.js",
+      "file": "scripts/bench/deps.mjs",
+      "mutation": "bun's own lock stops parsing (the strict-only reader returns)",
+      "before": "    const relaxed = stripJson5Syntax(text);",
+      "after": "    const relaxed = text;",
+      "redTests": [
+        "reads bun\u2019s own file, which is not strict JSON",
+        "accepts strict JSON too, and does not touch what is inside a string",
+        "reads this repo\u2019s own bun.lock, at HEAD and at another commit"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-deps.test.js",
+      "file": "scripts/bench/deps.mjs",
+      "mutation": "the string walk loses its escape handling",
+      "before": "      if (ch === '\\\\') {",
+      "after": "      if (false && ch === '\\\\') {",
+      "redTests": [
+        "accepts strict JSON too, and does not touch what is inside a string"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-deps.test.js",
+      "file": "scripts/bench/deps.mjs",
+      "mutation": "a trailing comma before a closer is no longer dropped",
+      "before": "      if (ch !== ',' && tail.endsWith(',')) {",
+      "after": "      if (false && ch !== ',' && tail.endsWith(',')) {",
+      "redTests": [
+        "reads bun\u2019s own file, which is not strict JSON",
+        "accepts strict JSON too, and does not touch what is inside a string",
+        "reads this repo\u2019s own bun.lock, at HEAD and at another commit"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-deps.test.js",
+      "file": "scripts/bench/deps.mjs",
+      "mutation": "a // comment is no longer stripped",
+      "before": "    if (ch === '/' && next === '/') {",
+      "after": "    if (false && ch === '/' && next === '/') {",
+      "redTests": [
+        "reads bun\u2019s own file, which is not strict JSON",
+        "reads a plain name@version, including a scoped name",
+        "drops a peer suffix rather than returning it as the version"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-deps.test.js",
+      "file": "scripts/bench/deps.mjs",
+      "mutation": "a broken lock is also reported as two missing packages",
+      "before": "      lockUnreadable = true;\n      problems.push(`${source}: is not JSON (${parsed.error})`);",
+      "after": "      problems.push(`${source}: is not JSON (${parsed.error})`);",
+      "redTests": [
+        "says so when the lock could not be read or parsed"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/baseline.mjs",
+      "mutation": "the refusal names the version it wanted, not the version it found",
+      "before": "          found: baseline?.schemaVersion,\n          fullMint: true,",
+      "after": "          found: BASELINE_SCHEMA_VERSION,\n          fullMint: true,",
+      "redTests": [
+        "refuses a pre-D9 file before the merge rules run"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-machine.test.js",
+      "file": "scripts/bench/baseline.mjs",
+      "mutation": "the refusal lists one readable version instead of every one",
+      "before": "    `v${String(found)}; it reads v${reads.join(' and v')} ratio baselines and writes `",
+      "after": "    `v${String(found)}; it reads v${String(reads[reads.length - 1])} ratio baselines and writes `",
+      "redTests": [
+        "refuses a pre-D9 baseline before the provenance check"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the merge drops every skippedCells row, not just its own",
+      "before": "  const removedSkipped = [];\n  for (const [key, cell] of Object.entries(next.skippedCells)) {\n    if (\n      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component\n    ) {\n      removedSkipped.push(key);\n    }\n  }",
+      "after": "  const removedSkipped = Object.keys(next.skippedCells);",
+      "redTests": [
+        "carries the other components' skippedCells rows and drops only its own"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the merged component's stale skipped row survives its own re-measure",
+      "before": "  for (const key of removedSkipped) {\n    delete next.skippedCells[key];\n  }",
+      "after": "  for (const key of removedSkipped) {\n    if (false) delete next.skippedCells[key];\n  }",
+      "redTests": [
+        "carries the other components' skippedCells rows and drops only its own"
       ]
     }
   ]
