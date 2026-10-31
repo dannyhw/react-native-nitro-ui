@@ -100,6 +100,30 @@ export interface NitroUiSwitchMethods extends HybridViewMethods {
    * Switch and the test that reads this is gated to Android.
    */
   nuiTestArmedGuards(): string;
+
+  /**
+   * TEMPORARY, test-only (task F6): how many mounts of **this object** have ended, and
+   * how many of them entered the platform's view pool, as one line —
+   * `drops=<n> recycles=<m>`.
+   *
+   * The counters belong to the host object and are deliberately *not* reset by
+   * `prepareForRecycle`, because the question they answer is about one object's
+   * lifetime rather than one mount's: a fresh instance answers `drops=0 recycles=0`,
+   * and a second mount that reads `drops>=1 recycles>=1` can only be looking at an
+   * instance the pool handed back. That is the difference between "a reset method was
+   * called" and "views really recycle on this platform", which is what F6 had to
+   * measure rather than infer — and it needs a per-object counter, since every
+   * per-mount flag reads the same either way.
+   *
+   * Both platforms answer for real: iOS pools through
+   * `RCTComponentViewRegistry.prepareForRecycle`, Android through
+   * `ViewManager.onDropViewInstance` -> `prepareToRecycleView` when RN's
+   * `enableViewRecycling` flag is on (which the example app turns on). An example app
+   * that leaves the flag off answers `drops=n recycles=0` forever, which is the point.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestLifetimeReport(): string;
 }
 
 /**

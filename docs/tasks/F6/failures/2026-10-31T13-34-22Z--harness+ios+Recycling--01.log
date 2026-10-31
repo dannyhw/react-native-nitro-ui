@@ -1,0 +1,75 @@
+# Failure excerpt — harness:ios:Recycling
+
+- Ran: 2026-10-31T13:34:22.776Z on code tree `2289cd0ff10d` at HEAD `3aa4fff` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Recycling`
+- Result: fail, exit 1, 19338 ms
+- Load: start 7.39, end 9.94, median 9.94, max 10.63
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F6-ex2j5`
+- Full log: `task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-34-22.776Z.log` (<store>/task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-34-22.776Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● recycling · what iOS can measure about leaks (F6) › has no JS-visible readout of this process memory, so no slope gate is possible`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-34-22.776Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-ex2j5 (still live)
+  |   F6-ex2j5                 F6           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 9.94 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Recycling
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 2289cd0ff10d, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.72/4.30 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-34-22.776Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● recycling · what iOS can measure about leaks (F6) › has no JS-visible readout of this process memory, so no slope gate is possible
+
+    performance.memory became available on iOS, so the recycling leak gate Android has is now buildable here: a churn slope on a live-host count or a resident-memory floor. Delete this test and write that gate — do not delete the assertion. (If only the module appeared without a heap readout, widen this test to ask for the number it owes you.)
+
+      [0m [90m 798 |[39m       ][33m.[39mfilter((name)[33m:[39m name is string [33m=>[39m name [33m!=[39m [36mnull[39m)[33m;[39m
+       [90m 799 |[39m       [36mif[39m (available[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 800 |[39m         [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 801 |[39m           [32m`${available.join(', ')} became available on iOS, so the recycling leak `[39m [33m+[39m
+       [90m 802 |[39m             [32m`gate Android has is now buildable here: a churn slope on a live-host count `[39m [33m+[39m
+       [90m 803 |[39m             [32m`or a resident-memory floor. Delete this test and write that gate — do not `[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 3 passed, 4 total
+Snapshots:   0 total
+Time:        18.015 s, estimated 19 s
+Ran all test suites matching Recycling.
+
+
+
+```

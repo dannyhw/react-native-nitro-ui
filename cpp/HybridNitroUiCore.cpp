@@ -28,13 +28,20 @@ namespace margelo::nitro::nitroui {
     // (`NitroUiPerfEvent.kind`); the ints come from NitroUiPerf.
     static const std::string propsApplied = "propsApplied";
     static const std::string firstFrame = "firstFrame";
+    static const std::string dropped = "dropped";
+    static const std::string recycled = "recycled";
     static const std::string unknown = "unknown";
 
     std::vector<NitroUiPerfEvent> events;
     for (const auto& mark: NitroUiPerf::drain()) {
       const std::string& kind = mark.kind == NitroUiPerf::KIND_PROPS_APPLIED
         ? propsApplied
-        : (mark.kind == NitroUiPerf::KIND_FIRST_FRAME ? firstFrame : unknown);
+        : (mark.kind == NitroUiPerf::KIND_FIRST_FRAME
+               ? firstFrame
+               : (mark.kind == NitroUiPerf::KIND_DROPPED
+                      ? dropped
+                      : (mark.kind == NitroUiPerf::KIND_RECYCLED ? recycled
+                                                                 : unknown)));
       // `time` is milliseconds in the same base as `now()`.
       events.emplace_back(static_cast<double>(mark.instanceId), kind,
                           static_cast<double>(mark.timeNs) / 1000000.0);

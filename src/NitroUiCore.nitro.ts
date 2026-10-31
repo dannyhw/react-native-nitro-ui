@@ -6,7 +6,7 @@ import type { HybridObject } from 'react-native-nitro-modules';
 export interface NitroUiPerfEvent {
   /** The view's `nuiPerfId`, or `-1` when the view did not set one. */
   instanceId: number;
-  /** `'propsApplied'` or `'firstFrame'`. */
+  /** `'propsApplied'`, `'firstFrame'`, `'dropped'` or `'recycled'`. */
   kind: string;
   /** Timestamp in the same time base as `now()`. */
   time: number;

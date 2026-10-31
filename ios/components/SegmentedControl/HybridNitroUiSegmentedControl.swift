@@ -72,6 +72,32 @@ final class SegmentedControlModel: NitroUiModel {
     return pixelReport
   }
 
+  /// What the row of segments last drew as its selection, as one line.
+  ///
+  /// Written by ``recordDrawnIndex(_:)`` in the body, so it is a reading of the hosted
+  /// control rather than an echo of the `selectedIndex` prop: the handle's
+  /// `selectedIndex` answers `state.js`, which is what React sent, so a recycled control
+  /// that re-painted at index 0 and one that merely stopped being told otherwise looked
+  /// the same to every read-out this file had (F6, closing X4's blind spot). Answers
+  /// `displayed=<index>`, or `displayed=none` before the body has run.
+  private var drawnIndexReport = "displayed=none"
+
+  /// Record what the drawing code was handed. Plain storage plus the lock, never
+  /// `@Published`: publishing from the body would ask for the recomposition that has
+  /// just happened.
+  func recordDrawnIndex(_ index: Int) {
+    pixelReportLock.lock()
+    drawnIndexReport = "displayed=\(index)"
+    pixelReportLock.unlock()
+  }
+
+  /// What the row displays, as one line. Safe from any thread.
+  func readDrawnIndex() -> String {
+    pixelReportLock.lock()
+    defer { pixelReportLock.unlock() }
+    return drawnIndexReport
+  }
+
   /// Forget the last probe, for recycling.
   ///
   /// Android's model `reset()` does this, and the reason is worth the symmetry rather
@@ -82,6 +108,14 @@ final class SegmentedControlModel: NitroUiModel {
   func clearPixelReport() {
     pixelReportLock.lock()
     pixelReport = ""
+    pixelReportLock.unlock()
+  }
+
+  /// Forget the last drawn index, for recycling (see ``clearPixelReport()`` for why
+  /// test state goes back to "nothing yet" rather than to a plausible-looking 0).
+  func clearDrawnIndex() {
+    pixelReportLock.lock()
+    drawnIndexReport = "displayed=none"
     pixelReportLock.unlock()
   }
 
@@ -116,11 +150,24 @@ struct SegmentedControlContent: NitroUIContent {
   }
 
   var body: some View {
+    // The reading of the hosted row that `nuiTestDisplayedIndex()` answers with, taken
+    // here where the selection is read in order to paint. It is the *same expression*
+    // the `selection` binding below hands the `Picker`, and that is the whole point:
+    // recording a re-clamped or derived number would let this read-out report a
+    // different segment than the one that was drawn. A commit that stored the index
+    // without the body ever being handed it fails the test that reads this, which is
+    // what makes it a reading of the control rather than an echo of the prop (Progress
+    // does the same with its value). The explicit `return` below is what lets this
+    // statement sit in a `ViewBuilder`: without one, a `Void` statement is the body's
+    // value and the compiler refuses it (`type '()' cannot conform to 'View'`).
+    let drawn = Int(model.state.displayed)
+    model.recordDrawnIndex(drawn)
+
     // A SwiftUI segmented `Picker` is the control iOS users know: one capsule,
     // one segment per option, the selected one filled. It presents nothing, so
     // this host needs no view-controller containment (`needsContainment` stays
     // false, unlike a `.menu` Picker - which is the 0.2 `Picker` component).
-    Picker(selection: selection) {
+    return Picker(selection: selection) {
       // `id: \.offset`, not the label: two options may carry the same text, and
       // a duplicate identity in a `ForEach` is a broken list, not a duplicate
       // segment. The `tag` is the index for the same reason.
@@ -468,6 +515,7 @@ final class HybridNitroUiSegmentedControl: HybridNitroUiSegmentedControlSpec, Re
   func prepareForRecycle() {
     model.options = []
     model.clearPixelReport()
+    model.clearDrawnIndex()
     model.state = NitroUiControlledValue<Double>(displayed: 0)
     model.defaultSelectedIndex = 0
     model.didApplyDefault = false
@@ -526,6 +574,11 @@ extension HybridNitroUiSegmentedControl {
 
   func nuiTestPixelReport() throws -> String {
     return model.readPixelReport()
+  }
+
+  /// What the row displays - see `NitroUiSegmentedControlMethods.nuiTestDisplayedIndex`.
+  func nuiTestDisplayedIndex() throws -> String {
+    return model.readDrawnIndex()
   }
 }
 

@@ -54,6 +54,12 @@ export interface NitroUiSegmentedControlHandle {
    * @internal
    */
   nuiTestPixelReport(): string;
+  /**
+   * Which segment the control is displaying - see
+   * `NitroUiSegmentedControlMethods.nuiTestDisplayedIndex`.
+   * @internal
+   */
+  nuiTestDisplayedIndex(): string;
 }
 
 /**

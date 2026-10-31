@@ -486,7 +486,8 @@ class HybridNitroUiSwitch(
 
   override fun prepareForRecycle() {
     host.tag = null
-    host.perfInstanceId = NitroUiPerf.NO_INSTANCE
+    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
+    // marked the recycle: clearing it here would hide that mark.
     // Not cleared here: `host.prepareForRecycle()` releases the sizing instance
     // (which needs the id to tell the engine), and `onDropView` has already run.
     // Resets the model. The composition does not survive a recycle: Nitro's
@@ -521,4 +522,12 @@ class HybridNitroUiSwitch(
    * The mechanism is `NitroComposeHost`'s, so every control shares the answer.
    */
   override fun nuiTestArmedGuards(): String = host.armedGuardsReport()
+
+  /**
+   * What this object has been through, since it was allocated (see the spec).
+   *
+   * The same host object answers for every control, so this is the Switch's share of
+   * a mechanism `NitroComposeHost` owns.
+   */
+  override fun nuiTestLifetimeReport(): String = host.lifetimeReport()
 }

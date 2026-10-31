@@ -17,6 +17,15 @@ object NitroUiPerf {
   /** The hosted content drew its first frame. */
   const val KIND_FIRST_FRAME: Int = 1
 
+  /** `onDropView` ran: the mount is over (a real unmount, or the front door of recycling). */
+  const val KIND_DROPPED: Int = 2
+
+  /**
+   * `prepareForRecycle` ran, so the instance entered RN's pool. A `dropped` with no
+   * `recycled` after it is a real unmount; the pair is how a gate tells the two apart.
+   */
+  const val KIND_RECYCLED: Int = 3
+
   /** One JNI call per mark site; callers gate on [NO_INSTANCE] first. */
   @JvmStatic private external fun nMark(instanceId: Int, kind: Int)
 

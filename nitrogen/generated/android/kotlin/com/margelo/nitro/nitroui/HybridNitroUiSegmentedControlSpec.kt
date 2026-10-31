@@ -120,6 +120,10 @@ abstract class HybridNitroUiSegmentedControlSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun nuiTestPixelReport(): String
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestDisplayedIndex(): String
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

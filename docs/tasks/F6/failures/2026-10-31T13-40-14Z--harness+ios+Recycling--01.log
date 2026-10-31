@@ -1,0 +1,76 @@
+# Failure excerpt — harness:ios:Recycling
+
+- Ran: 2026-10-31T13:40:14.246Z on code tree `26ee14a06b89` at HEAD `3aa4fff` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Recycling`
+- Result: fail, exit 1, 17859 ms
+- Load: start 4.13, end 3.66, median 3.66, max 4.13
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F6-ex2j5`
+- Full log: `task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-40-14.246Z.log` (<store>/task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-40-14.246Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● recycling · what iOS can measure about leaks (F6) › has a JS heap number but no way to pin it to a collection, so no floor gate`
+- `expected undefined to be defined`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-40-14.246Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-ex2j5 (still live)
+  |   F6-ex2j5                 F6           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.66 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Recycling
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 26ee14a06b89, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.13/4.25 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-40-14.246Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● recycling · what iOS can measure about leaks (F6) › has a JS heap number but no way to pin it to a collection, so no floor gate
+
+    expected undefined to be defined
+
+      [0m [90m 810 |[39m       expect(memory[33m?[39m[33m.[39mjsHeapSizeLimit)[33m.[39mtoBeNull()[33m;[39m
+       [90m 811 |[39m       expect(asHeap[33m?[39m[33m.[39mgetHeapInfo)[33m.[39mtoBeUndefined()[33m;[39m
+      [31m[1m>[22m[39m[90m 812 |[39m       expect(asHeap[33m?[39m[33m.[39mcollectGarbage)[33m.[39mtoBeDefined()[33m;[39m [90m// MUTATION-F6R1[39m
+       [90m     |[39m                                                 [31m[1m^[22m[39m
+       [90m 813 |[39m
+       [90m 814 |[39m       [90m// And live, not frozen: `performance.memory` could in principle be a constant stub,[39m
+       [90m 815 |[39m       [90m// in which case "we could not gate on it" would be the wrong reason. Sampled across[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 3 passed, 4 total
+Snapshots:   0 total
+Time:        16.866 s
+Ran all test suites matching Recycling.
+
+
+
+```

@@ -135,6 +135,24 @@ export interface NitroUiSegmentedControlMethods extends HybridViewMethods {
    * @internal Not app API (DECISIONS D14).
    */
   nuiTestPixelReport(): string;
+
+  /**
+   * TEMPORARY, test-only (task F6): which segment the control is **displaying**, as one
+   * line — `displayed=<index>`, or `displayed=none` before the control has drawn.
+   *
+   * Written where the control is drawn - the SwiftUI body, the Composable - so it is a
+   * reading of the hosted control rather than an echo of a prop. Nothing else this
+   * control offers could answer the recycle rule: the handle's `selectedIndex` reports
+   * `state.js`, which is what React sent, so a second owner that sends no `selectedIndex`
+   * sees `null` whether or not the row still shows the previous owner's segment; and
+   * `nuiTestPixelReport()` answers a colour. That is X4's "SegmentedControl holds residue
+   * no read-out can show", and it is why the coverage table had to mark this control's
+   * recycle cell failing rather than covered.
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can read a selection
+   * out of a hosted control.
+   */
+  nuiTestDisplayedIndex(): string;
 }
 
 /**

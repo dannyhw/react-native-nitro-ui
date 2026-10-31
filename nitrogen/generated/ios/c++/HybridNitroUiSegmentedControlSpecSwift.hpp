@@ -174,6 +174,14 @@ namespace margelo::nitro::nitroui {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::string nuiTestDisplayedIndex() override {
+      auto __result = _swiftPart.nuiTestDisplayedIndex();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
 
   private:
     NitroUi::HybridNitroUiSegmentedControlSpec_cxx _swiftPart;
