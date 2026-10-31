@@ -102,12 +102,19 @@ export function resolvedDependencies({ lockText, manifestText, source }) {
   const problems = [];
   let lock = null;
   let manifest = null;
+  // Whether the lock itself was unreadable, which is one problem and explains
+  // every null in it. Tracked separately from `problems` because a *missing
+  // package* also pushes a message that starts with `source`, and testing for
+  // that prefix instead suppressed the second package's own complaint.
+  let lockUnreadable = false;
   if (lockText == null) {
+    lockUnreadable = true;
     problems.push(`${source}: could not be read`);
   } else {
     try {
       lock = JSON.parse(lockText);
     } catch (error) {
+      lockUnreadable = true;
       problems.push(
         `${source}: is not JSON (${String(error instanceof Error ? error.message : error)})`
       );
@@ -133,7 +140,7 @@ export function resolvedDependencies({ lockText, manifestText, source }) {
     problems,
   };
   for (const [key, name] of Object.entries(TRACKED_DEPENDENCIES)) {
-    if (out[key] == null && !problems.some((p) => p.startsWith(source))) {
+    if (out[key] == null && !lockUnreadable) {
       problems.push(`${source}: no resolved version for ${name}`);
     }
   }
