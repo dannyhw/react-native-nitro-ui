@@ -1,0 +1,131 @@
+{
+  "task": "X15",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row. Rows whose fix landed after the test (items 3-7 were written test-first) record the state the test was first run against instead: `before` is the pre-fix source and `after` is the shipped code, which is the same inversion, read the other way. Run on maintainer-mac-1, 2026-10-31, lease X15-58alc.",
+  "mutations": [
+    {
+      "test": "scripts/__tests__/lease-metro-port.test.js",
+      "file": "scripts/lease.mjs",
+      "mutation": "acquire stops asking about the pool's Metro ports",
+      "before": "    const portBlocked = metroPortBlockers({ devices, log });",
+      "after": "    const portBlocked = [];",
+      "redTests": [
+        "is not handed out by acquire, which takes the other pair instead",
+        "refuses when every pair is leased, naming the processes on the ports",
+        "says so once when the machine cannot answer, and leases anyway"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/lease-metro-port.test.js",
+      "file": "scripts/gate.mjs",
+      "mutation": "the gate never asks about its leased Metro port",
+      "before": "    const preflight = metroPreflight();",
+      "after": "    const preflight = 0;",
+      "redTests": [
+        "makes gate.mjs refuse a leased pair whose Metro port someone else serves",
+        "runs the gate under NITRO_UI_GATE_METRO_FORCE=1"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/lease-metro-port.test.js",
+      "file": "scripts/gate.mjs",
+      "mutation": "the pre-flight's exit code is read as an object (the shape first written)",
+      "before": "    if (preflight !== 0) return preflight;",
+      "after": "    if (preflight.status !== 0) return preflight.status;",
+      "note": "Not a hypothetical: this is what the first implementation did, and it is the reason the two CLI cases exist. `undefined` is truthy-not-0, so every device gate returned before starting - exit 0, no child, no ledger line. A test that only asserted the refusal message would have passed while the harness gate stopped running entirely.",
+      "redTests": [
+        "makes gate.mjs refuse a leased pair whose Metro port someone else serves",
+        "runs the gate under NITRO_UI_GATE_METRO_FORCE=1"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/check-runner.test.js",
+      "file": "package.json",
+      "mutation": "the new step is in the graph but not in the serial chain",
+      "before": "\"check:serial\": \"bun run typecheck && bun run lock:check && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run test:native:android && bun run perf:renders",
+      "after": "\"check:serial\": \"bun run typecheck && bun run lock:check && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders",
+      "note": "Applied in the other direction at first (step added to CHECK_STEPS, package.json untouched), which is how it was actually caught.",
+      "redTests": [
+        "`check:serial` in package.json is exactly what the graph declares",
+        "a step added to the chain and not to the graph is the failure this guards",
+        "the runner refuses to start when the chain and the graph differ, either way",
+        "the step names, in order, are the ones the chain runs"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/check-runner.test.js",
+      "file": "scripts/check-steps.mjs",
+      "mutation": "prepare no longer waits on the Android JVM test",
+      "before": "      'test:native:android',\n",
+      "after": "",
+      "note": "The needs edge removed from prepare's list; findOutputConflicts then reports the pair, which is the row below.",
+      "redTests": ["removing that edge is the red this guards"]
+    },
+    {
+      "test": "scripts/__tests__/native-tests-android-skip.test.js",
+      "file": "scripts/native-tests-android.sh",
+      "mutation": "the CI hand-off is deleted, so `check` runs it in every job",
+      "before": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ]; then\n  echo \"test:native:android: CI runs this in the build-android job (JDK 17 + warm gradle cache) - skipped here\"\n  exit 0\nfi",
+      "after": "",
+      "redTests": ["hands the run to CI's Android job rather than proving it twice"]
+    },
+    {
+      "test": "scripts/__tests__/native-tests-android-skip.test.js",
+      "file": ".github/workflows/ci.yml",
+      "mutation": "the build-android job stops running the script the skip hands off to",
+      "before": "        run: bash scripts/native-tests-android.sh",
+      "after": "        run: bash scripts/native-tests.sh",
+      "redTests": ["really is run by the CI job it hands off to"]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "mutation": "applyPick closes the popup before it reports the choice (D32's order inverted)",
+      "before": "  fun applyPick(id: String) {\n    if (enabled) {",
+      "after": "  fun applyPick(id: String) {\n    setOpen(false)\n    if (enabled) {",
+      "note": "The second hunk drops the trailing `setOpen(false)`. This is the test item 2 exists to run: `bun run test:native:android` went red in 2 s with it, which is the whole argument for the step being in `check`.",
+      "redTests": [
+        "aPickReportsTheChoiceThenClosesThePopup",
+        "aPickFromASubmenuOrASectionReportsUnderItsOwnIdAndStillCloses",
+        "aCloseOnlyReportsTheTransition"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-gate.test.js",
+      "file": "scripts/bench/render.mjs",
+      "mutation": "every arm's monotonic leak cell says it is gated (the shipped behaviour before X15)",
+      "before": "        cell.memory.leakMonotonic\n          ? leakGated\n            ? 'MONOTONIC (gated as a leak)'\n            : 'MONOTONIC (reported, not gated)'\n          : 'not monotonic (not gated)',",
+      "after": "        cell.memory.leakMonotonic\n          ? 'MONOTONIC (gated as a leak)'\n          : 'not monotonic (not gated)',",
+      "redTests": [
+        "labels a reference arm's monotonic climb as reported, not gated (X15)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/gate.test.js",
+      "file": "scripts/gate-core.mjs",
+      "mutation": "example/src/readme-examples.tsx is not in the check-only allow-list (the state before X15)",
+      "before": "  'example/src/readme-examples.tsx',\n",
+      "after": "",
+      "redTests": ["treats the check-only allow-list as no platform at all"]
+    },
+    {
+      "test": "scripts/__tests__/gate.test.js",
+      "file": "scripts/gate-core.mjs",
+      "mutation": "resolveGate records no platform for a bench (the state before X15)",
+      "before": "      benchPlatform: benchPlatformFromArgs(extraArgsForRun),",
+      "after": "      benchPlatform: null,",
+      "redTests": [
+        "takes a bench platform from the bench's own --platform (X15)",
+        "records the bench platform's device, not the lease's other side"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/contributing-ci-claims.test.js",
+      "file": "CONTRIBUTING.md",
+      "mutation": "the CI section names a runner label no workflow schedules on",
+      "before": "them in a `macos-26` job instead), and an Android `assembleDebug` of the",
+      "after": "them in a `macos-latest` job instead), and an Android `assembleDebug` of the",
+      "redTests": ["names no runner label that no workflow uses"]
+    }
+  ],
+  "notMutated": "Item 3 (Menu's read-back) waits for a handle rather than adding an assertion, so no mutation is recorded: the only source change that turns it red is breaking `hybridRef`'s registration in the example app, which would take a device run to reach. Its evidence is that the shape which failed at X14 (`handles.get(...)` read once) no longer appears in that test, and that `harness:ios` and `harness:android` are both green on the tree."
+}

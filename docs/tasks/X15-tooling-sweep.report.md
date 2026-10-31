@@ -45,7 +45,22 @@ red proofs.
 
 ## Gates
 
-<!-- `node scripts/gate.mjs table` -->
+`need --for review` exits 0 on this code tree ("need: review is satisfied"). `real-input:*` are the
+merge-stage bar, not review's.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1470 tests / 54 suites | `a3a7211b9242` | 2 m 45 s | start 2.6 / med 4.7 / max 9.1 |
+| `harness:ios` | **PASS** | 223 tests / 15 suites | `a3a7211b9242` (ios tree) | 5 m 46 s | start 1.7 / med 2.9 / max 4.8 |
+| `harness:android` | **PASS** | 272 tests / 15 suites | `a3a7211b9242` (android tree) | 7 m 53 s | start 3.7 / med 2.8 / max 3.9 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+Both platforms ran `Menu.harness.tsx` green (15 tests each), which is item 3's evidence: the test now
+waits for the three `hybridRef` handles on devices where they used to arrive after the render settled.
+The two harness runs were serialised on purpose: pair-b is one device *pair* with one Metro on 8293, so
+a concurrent `harness:ios` would collide with `harness:android` on exactly the port item 1 guards (and
+item 1's pre-flight is the guard that would say so instead of failing obscurely).
 
 ## Red proofs
 
