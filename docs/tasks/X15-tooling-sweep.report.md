@@ -50,7 +50,7 @@ merge-stage bar, not review's.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1470 tests / 54 suites | `a3a7211b9242` | 2 m 45 s | start 2.6 / med 4.7 / max 9.1 |
+| `check` | **PASS** | 1470 tests / 54 suites | `a3a7211b9242` | 2 m 39 s | start 2.3 / med 4.4 / max 5.6 |
 | `harness:ios` | **PASS** | 223 tests / 15 suites | `a3a7211b9242` (ios tree) | 5 m 46 s | start 1.7 / med 2.9 / max 4.8 |
 | `harness:android` | **PASS** | 272 tests / 15 suites | `a3a7211b9242` (android tree) | 7 m 53 s | start 3.7 / med 2.8 / max 3.9 |
 | `real-input:ios` | missing | — | — | — | — |
