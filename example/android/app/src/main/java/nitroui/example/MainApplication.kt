@@ -23,11 +23,12 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     loadReactNative(this)
-    // After `loadReactNative`, which both initialises SoLoader and installs RN's own
-    // flag provider - `override` replaces rather than merges, so an override installed
-    // first would be gone by the time the first ViewManager reads it. No ViewManager
-    // exists until the lazy `reactHost` is first touched, which is later than here.
-    // See NitroUiFeatureFlags for the full reason.
+    // After `loadReactNative`, for two reasons that are easy to get wrong and were each
+    // learned from a crash: it is what initialises SoLoader (the flag accessor's class
+    // cannot load before that), and it is what installs RN's own flag provider - and the
+    // C++ side takes one provider per process, so installing ours first and RN's second
+    // would throw, not merge. See NitroUiFeatureFlags for the full reason, including why
+    // the install has to *force*.
     NitroUiFeatureFlags.install()
   }
 }
