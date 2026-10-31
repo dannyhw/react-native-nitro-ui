@@ -44,7 +44,7 @@
 > merge gates green. **0.4.0 staged on npm (2026-10-30):** Version Packages PR #8 merged (`c74ffd0`; a bot-opened PR
 > runs no CI by design, and the gate is `Release`'s `check` on `main`). Release run 41019762301 green, `Stage on npm`
 > succeeded; the owner approved it, 0.4.0 is `latest` on npm, and `Release tag` was dispatched for v0.4.0.
-> **A5 merged (`4f67da0`)**: quiet numbers in README and reports, six reversed conclusions stated. **X14** running:
+> **A5 merged (`4f67da0`)**: quiet numbers in README and reports, six reversed conclusions stated. **X14 merged (`386a511`)**: Menu's Android cells are in this machine's baseline, and iOS's are next by merge mint
 > (`X14-bench-component-mint.md`). The owner finds 11-hour exclusive windows rough, so after X14 a new component's
 > baseline cells are minted alone. A full window is only for a comparability break (Xcode/runtime/RN/bench change).
 >
