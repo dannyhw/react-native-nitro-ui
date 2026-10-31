@@ -893,6 +893,71 @@ describe('the merge itself only touches its own component', () => {
     expect(baseline.sha).toBe(before.sha);
   });
 
+  /**
+   * `skippedCells` is the one block a merge has to reason about per row rather than
+   * carry wholesale: it holds the comparison-arm cells that were measured but came
+   * out incomplete, and a row for the component being re-measured must go with its
+   * cells (the new run either filled it or did not) while every other row is a
+   * finding about a different component and survives verbatim. The committed
+   * Android file this task merged into happens to have none, so nothing but a
+   * fixture can say what happens to one — and the README promises rows are carried
+   * through, which is a claim about this function.
+   */
+  it("carries the other components' skippedCells rows and drops only its own", () => {
+    const withSkips = {
+      ...before,
+      skippedCells: {
+        'mount:rn-core:50': {
+          scenario: 'mount',
+          implementation: 'rn-core',
+          n: 50,
+          skipReason: 'presented incomplete',
+          skipReasons: ['presented: 160 of 161 samples arrived'],
+        },
+        'mount.slider:nitro-ui:1': {
+          scenario: 'mount.slider',
+          implementation: 'nitro-ui',
+          n: 1,
+          skipReason: 'presented incomplete',
+          skipReasons: ['presented: 0 of 160 samples arrived'],
+        },
+        'mount.button:rn-core:50': {
+          scenario: 'mount.button',
+          implementation: 'rn-core',
+          n: 50,
+          skipReason: 'presented incomplete',
+          skipReasons: ['presented: 12 of 160 samples arrived'],
+        },
+      },
+    };
+    const merged = mergeComponentBaseline({
+      baseline: withSkips,
+      run: sliderRun,
+      component: 'button',
+      built,
+      componentsBase: seededComponentProvenance(withSkips, null),
+      dependencies: {
+        reactNative: '0.80.0',
+        expoUi: '54.0.0',
+        source: 'fixture',
+      },
+      comparabilityNotes: [],
+    }).baseline;
+    // The other components' rows, byte for byte.
+    for (const key of ['mount:rn-core:50', 'mount.slider:nitro-ui:1']) {
+      expect([key, JSON.stringify(merged.skippedCells[key])]).toEqual([
+        key,
+        JSON.stringify(withSkips.skippedCells[key]),
+      ]);
+    }
+    // The merged component's own row is gone, replaced by whatever this run says.
+    expect(merged.skippedCells['mount.button:rn-core:50']).toBeUndefined();
+    expect(Object.keys(merged.skippedCells).sort()).toEqual([
+      'mount.slider:nitro-ui:1',
+      'mount:rn-core:50',
+    ]);
+  });
+
   it('appends new cell keys instead of re-sorting the table', () => {
     const { baseline } = result();
     const keys = Object.keys(baseline.cells);
@@ -1044,6 +1109,11 @@ describe('opening a file for a merge', () => {
     expect(out.refusal.message).toContain(
       'is not a baseline this version reads'
     );
+    // Both halves of the comparison: what was found, and what would have been
+    // accepted. A refusal that names only one of them leaves the reader to guess
+    // which side is wrong.
+    expect(out.refusal.message).toContain('found v1');
+    expect(out.refusal.message).toContain('it reads v2 and v3');
     expect(out.refusal.message).toContain(
       `writes v${String(BASELINE_SCHEMA_VERSION)}`
     );
@@ -1726,9 +1796,7 @@ describe('report.mjs merges one component', () => {
       // The results file's own version is also 2, and quoting it here is the bug
       // this asserts away: the reader accepts v2 baselines, so a refusal that said
       // "not a v2 baseline" described a file it had just opened.
-      expect(out.all).toContain(
-        `writes v${String(BASELINE_SCHEMA_VERSION)}`
-      );
+      expect(out.all).toContain(`writes v${String(BASELINE_SCHEMA_VERSION)}`);
     });
   });
 

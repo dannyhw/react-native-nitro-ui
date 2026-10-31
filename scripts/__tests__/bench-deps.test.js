@@ -82,6 +82,18 @@ describe('the lock file parser', () => {
       a: 'x,}',
       b: '// not a comment,},',
     });
+    // And an escaped quote does not end the string. A tolerant pass that consumes
+    // the `\` and then treats the `"` as a closer would resume *outside* the string
+    // and strip commas it has no business touching; bun writes `\u0022`-style
+    // escapes in integrity fields, so this is not hypothetical.
+    // The trailing comma is what puts this text through the tolerant walk at all:
+    // without it the strict parser reads the file and the string-state code below
+    // is never reached, which is the first version of this assertion and why it
+    // passed for no reason.
+    const escaped = parseLockFile('{"a":"q\\"q,}","b":1,}');
+    expect(() => JSON.parse('{"a":"q\\"q,}","b":1,}')).toThrow();
+    expect(escaped.error).toBeNull();
+    expect(escaped.value).toEqual({ a: 'q"q,}', b: 1 });
   });
 
   it('reports the real text when neither pass reads it', () => {
