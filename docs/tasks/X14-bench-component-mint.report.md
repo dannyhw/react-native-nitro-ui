@@ -48,14 +48,13 @@ gains a comma as three new blocks are appended after it. Neither is a data row.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1425 tests / 51 suites | `736601d1f783` | 2 m 34 s | start 3.9 / med 3.8 / max 5.5 |
+| `check` | **PASS** | 1432 tests / 51 suites | `e8d8d7975fbd` | 2 m 32 s | start 1.5 / med 2.6 / max 3.5 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 | `bench:--platform:android:--plan:full:--launches:8:--component:menu:--update-baseline:--skip-build` | stale | — | ad3a6b2a67ed (not this tree) | 35 m 36 s | start 1.3 / med 1.4 / max 2.3 |
 | `bench:--platform:android:--plan:quick:--launches:4:--scenario:mount:--n:50:--only:nitro-ui%2Crn-core:--skip-build` | stale | — | ad3a6b2a67ed (not this tree) | 5 m 51 s | start 2.1 / med 1.4 / max 2.3 |
-
 `need --for review`: **satisfied on this code tree** — `check` green; the note says the code diff
 is check-only tooling, so no device gate is asked for beyond `check`. `need --for merge` asks for
 the four device gates, which is the merge stage's bar (AGENTS.md).
