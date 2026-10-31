@@ -1206,6 +1206,30 @@ describe('the merge itself only touches its own component', () => {
   });
 
   /**
+   * The two empty records, told apart (review F2).
+   *
+   * A pre-flight candidate and a run whose every launch failed are the same shape —
+   * every comparability field, no cells — and the merge has to answer them
+   * differently: the first is asking whether it *may* measure, the second has
+   * measured nothing and has nothing to write. One flag distinguishes them
+   * (`candidate: true`, set where the record is built), so this asserts both halves:
+   * without it a startup check would refuse itself, with it a dead run would merge a
+   * provenance entry and no numbers.
+   */
+  it('refuses a measured record with no cells, and defers the pre-flight that has none', () => {
+    const run = makeRun({ component: 'menu' });
+    expect(
+      missingComponentCells({ run: candidate(run), component: 'menu' })
+    ).toBeNull();
+    expect(
+      missingComponentCells({
+        run: { ...candidate(run), candidate: false },
+        component: 'menu',
+      })
+    ).toContain('records no cells at all');
+  });
+
+  /**
    * Which component a row belongs to, on its own (review F3).
    *
    * The key, always. `cellsForComponent` is what decides whose rows a merge deletes
