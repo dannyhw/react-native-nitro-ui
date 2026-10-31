@@ -42,10 +42,204 @@ import {
   buildSchedule,
   loadBlocker,
   loadCeiling,
+  mergeBaselineProblems,
+  mergeRunProblems,
   narrowingProblem,
   parseTimeoutFlags,
   timeoutRuleProblem,
 } from './lib.mjs';
+import { collectDependencies, mergeCandidateRun } from './machine.mjs';
+import { resolvedDependencies } from './deps.mjs';
+
+/**
+ * Everything `--dry-run` prints and decides about a **merge mint**, from inputs it
+ * can gather without booting anything (X14).
+ *
+ * A merge is the one mint `narrowingProblem()` must not refuse - writing one
+ * component's cells into an existing file *is* a narrowed schedule - so the
+ * questions that replace it are asked here, before a device is booted: does this
+ * machine's file exist, does it already hold this component, is anything else
+ * narrowing the run, and is the environment comparable with the file's. Three of
+ * those are pure (a file and a component name); the environment half needs a
+ * stand-in for the run, which is what `mergeCandidateRun()` builds from the host,
+ * a read-only device listing and `bun.lock`.
+ *
+ * Fields the candidate cannot know yet - a system-image fingerprint, an ART compile
+ * state - come back as `deferred`, and `run.mjs` asks them again of the measured run
+ * before writing. `allowDeferred` is only ever passed here, never for the write.
+ *
+ * @param {{
+ *   platform: 'ios'|'android',
+ *   plan: string,
+ *   launches: number,
+ *   perfMarks: boolean,
+ *   component: string | null,
+ *   only?: string | null,
+ *   scenario?: string | null,
+ *   n?: number | null,
+ *   timeouts?: { mountTimeoutMs: number|null, presentedTimeoutMs: number|null } | null,
+ *   dirty?: boolean,
+ *   baseline?: any | null,
+ *   exists?: boolean,
+ *   deviceKey: string | null,
+ *   device?: any,
+ *   dependencies?: any,
+ *   resolved?: Record<string, {value: unknown, why: string} | null>,
+ *   scheduleLength?: number | null,
+ *   componentPlanLength?: number | null,
+ *   allowDeferred?: boolean,
+ *   now?: () => string,
+ * }} input
+ * @returns {{ problems: string[], unverified: Array, deferred: Array, note: string
+ *   | null, seeded: object, foundingDependencies: any, skipped: boolean }}
+ */
+export function mergePreflight(input) {
+  const {
+    platform,
+    plan,
+    launches,
+    perfMarks,
+    component,
+    only = null,
+    scenario = null,
+    n = null,
+    timeouts = null,
+    dirty = false,
+    baseline = null,
+    exists = false,
+    deviceKey,
+    device = {},
+    dependencies = null,
+    scheduleLength = null,
+    componentPlanLength = null,
+    allowDeferred = false,
+    now,
+  } = input;
+  if (component == null) {
+    return {
+      problems: [],
+      unverified: [],
+      deferred: [],
+      note: null,
+      seeded: {},
+      foundingDependencies: null,
+      skipped: true,
+    };
+  }
+  const candidate = mergeCandidateRun({
+    platform,
+    plan,
+    launches,
+    perfMarks,
+    dirty,
+    deviceKey,
+    device,
+    dependencies,
+    timeouts,
+    ...(now == null ? {} : { now }),
+  });
+  const problems = mergeRunProblems({ plan, launches, perfMarks, dirty });
+  const decided = mergeBaselineProblems({
+    run: candidate,
+    baseline,
+    exists,
+    component,
+    filters: { only, scenario, n },
+    scheduled: scheduleLength,
+    componentPlan: componentPlanLength,
+    allowDeferred,
+    ...(input.resolved == null ? {} : { resolved: input.resolved }),
+  });
+  return {
+    problems: [...problems, ...decided.problems],
+    unverified: decided.unverified,
+    deferred: decided.deferred ?? [],
+    note: decided.note,
+    seeded: decided.seeded,
+    foundingDependencies: decided.foundingDependencies,
+    skipped: false,
+  };
+}
+
+/**
+ * The versions a merge pre-flight can name: `bun.lock` in the working tree, plus the
+ * ones recovered from a pre-X14 file's own founding commit (X14).
+ *
+ * The second half is what lets a comparison run against the four committed
+ * baselines, none of which records what app produced it. `git` is injected and
+ * read-only so the unit tests can hand it a fake revision, and a lock or revision
+ * that cannot be read yields nulls - which the merge refuses rather than matching
+ * against another blank.
+ */
+export function mergeDependencyEvidence({
+  lockPath,
+  nodeModulesDir,
+  git = null,
+  baseline = null,
+  read = (file) => fs.readFileSync(file, 'utf8'),
+}) {
+  const tryRead = (file) => {
+    try {
+      return read(file);
+    } catch {
+      return null;
+    }
+  };
+  const resolved = resolvedDependencies({
+    lockText: tryRead(lockPath),
+    manifestText: tryRead(
+      path.join(path.dirname(lockPath), 'bench', 'package.json')
+    ),
+    source: 'bun.lock in the working tree',
+  });
+  const dependencies = {
+    reactNative: resolved.reactNative,
+    expoUi: resolved.expoUi,
+    installedReactNative: null,
+    installedExpoUi: null,
+    source: resolved.source,
+  };
+  if (nodeModulesDir != null) {
+    const installed = collectDependencies({ lockPath, nodeModulesDir });
+    dependencies.installedReactNative = installed.installedReactNative;
+    dependencies.installedExpoUi = installed.installedExpoUi;
+  }
+  return {
+    dependencies,
+    resolved: foundingDependencyEvidence({ git, baseline }),
+    problems: resolved.problems,
+  };
+}
+
+/**
+ * The app versions recorded at the commit a baseline's own `sha` names, in the shape
+ * `mergeBaselineProblems({ resolved })` wants. Kept here rather than imported from
+ * `baseline.mjs` so this module stays free of a cycle: `baseline.mjs` does the same
+ * read for the authoritative check.
+ */
+export function foundingDependencyEvidence({ git = null, baseline = null }) {
+  const sha = typeof baseline?.sha === 'string' ? baseline.sha : null;
+  if (git == null || sha == null) {
+    return {};
+  }
+  const source = `bun.lock at the baseline's founding commit ${sha}`;
+  const show = (file) => {
+    try {
+      return git(['show', `${sha}:${file}`]);
+    } catch {
+      return null;
+    }
+  };
+  const at = resolvedDependencies({
+    lockText: show('bun.lock'),
+    manifestText: show('bench/package.json'),
+    source,
+  });
+  return {
+    'dependencies.reactNative': { value: at.reactNative, why: source },
+    'dependencies.expoUi': { value: at.expoUi, why: source },
+  };
+}
 
 /**
  * The iOS device key from a simulator listing alone.
@@ -96,6 +290,9 @@ export function iosDryRunDevice({ udid, listing }) {
   return {
     deviceKey: iosDeviceKey(runtime, device),
     detail: `"${device.name}" ${String(device.state ?? 'Unknown')}, iOS ${runtime ?? 'unknown'}, class ${iosDeviceClassName(device)}`,
+    // The same shape `collectMachine` reads a live device through, so a merge
+    // pre-flight compares like with like (`run.mjs`'s own pre-flight uses this).
+    device: { name: device.name ?? null, sdk: null, runtime },
     problem: null,
   };
 }
@@ -200,6 +397,16 @@ export function androidDryRunDevice({
       (attached
         ? `attached as ${serial}`
         : `${serial ?? 'no serial'} not attached (a run boots it; this command does not)`),
+    // The shape `collectMachine` reads a live device through (`avd`/`sdk`/`image`),
+    // so a merge pre-flight compares like with like. The system-image fingerprint is
+    // null on purpose: only a booted device can answer that, and inventing one would
+    // let the guard pass on a blank (`androidImage` is a *deferred* field).
+    device: {
+      avd,
+      sdk: hardware.apiLevel,
+      image: null,
+      profile: hardware.profile,
+    },
     problem: problems.length === 0 ? null : problems.join('; '),
   };
 }
@@ -244,7 +451,17 @@ export function dryRunReport(input) {
     loadavg1,
     baselinesDir,
     existsSync = (file) => fs.existsSync(file),
+    readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8')),
     relative = (file) => path.relative(process.cwd(), file),
+    /**
+     * What a merge pre-flight can ask about without a device: the device's
+     * half-answered identity (`{ name, sdk, runtime }` from the AVD config or the
+     * simulator listing) and a gatherer for the app versions, called with the target
+     * file so it can recover what that file's own founding commit pinned. Both are
+     * null in a unit test that asks a different question.
+     */
+    deviceInfo = null,
+    mergeEvidence = null,
   } = input;
 
   const minting = argv.includes('--update-baseline');
@@ -323,6 +540,27 @@ export function dryRunReport(input) {
     });
   }
   const exists = baselinePath == null ? null : existsSync(baselinePath);
+  // A merge pre-flight reads the file it would write into. Read lazily and only for
+  // that shape: a `--check` does not need the contents, and a corrupt file is the
+  // check's problem to report, not something to throw over here.
+  let mergeBaseline = null;
+  if (
+    minting &&
+    !forced &&
+    component != null &&
+    baselinePath != null &&
+    exists === true
+  ) {
+    try {
+      mergeBaseline = readJson(baselinePath);
+    } catch (error) {
+      problems.push(
+        `--update-baseline --component ${String(component)}: ${relative(baselinePath)} could not be read (${String(
+          error instanceof Error ? error.message : error
+        )})`
+      );
+    }
+  }
   lines.push(
     `Baseline:  ${
       baselinePath == null
@@ -333,6 +571,19 @@ export function dryRunReport(input) {
 
   if (minting || checking) {
     const flag = minting ? '--update-baseline' : '--check';
+    const mergeLines = [];
+    // The waiting rule is knowable from the flags, so the dry run answers the same
+    // question the runner asks at startup (review N1): a mint under a non-default
+    // wait is a diagnostic, and "would start" here would be wrong. The same values
+    // are what the merge pre-flight below compares against the file's `timeouts`.
+    const timeouts = parseTimeoutFlags(
+      argv,
+      (name) => {
+        const at = argv.indexOf(name);
+        return at === -1 ? null : (argv[at + 1] ?? null);
+      },
+      platform
+    );
     if (labelProblem != null) {
       // Pushed whole, and un-prefixed: X8's function already names the flag, and its
       // second line is the fix (`export NITRO_UI_MACHINE_LABEL=…`), already indented
@@ -351,17 +602,6 @@ export function dryRunReport(input) {
     // The same narrowing guard `run.mjs` applies before it boots anything, so a dry
     // run cannot print "would start" for a mint the run would refuse.
     if (minting && !forced) {
-      // The waiting rule is knowable from the flags, so the dry run answers the same
-      // question the runner asks at startup (review N1): a mint under a non-default
-      // wait is a diagnostic, and "would start" here would be wrong.
-      const timeouts = parseTimeoutFlags(
-        argv,
-        (name) => {
-          const at = argv.indexOf(name);
-          return at === -1 ? null : (argv[at + 1] ?? null);
-        },
-        platform
-      );
       const waiting = timeoutRuleProblem({
         platform,
         mountTimeoutMs: timeouts.mountTimeoutMs,
@@ -371,7 +611,7 @@ export function dryRunReport(input) {
         problems.push(`--update-baseline: ${waiting}`);
       }
     }
-    if (minting && !forced) {
+    if (minting && !forced && component == null) {
       const narrowed = narrowingProblem({
         scheduled: schedule.length,
         wholePlan: buildSchedule({
@@ -388,11 +628,58 @@ export function dryRunReport(input) {
         );
       }
     }
+    // The merge question (X14), asked of the file the run would write into. A
+    // `--component` mint replaces the narrowing refusal above with this one, so a
+    // dry run has to answer it or it would print "would start" for a run the
+    // runner refuses before booting.
+    if (minting && !forced && component != null) {
+      // Gathered only now, and for this file: the founding-commit half of the
+      // version evidence is a question about the file, not about the machine.
+      const evidence = mergeEvidence?.(mergeBaseline) ?? null;
+      const merged = mergePreflight({
+        platform,
+        plan,
+        launches,
+        perfMarks: argv.includes('--perf-marks'),
+        component,
+        only: filters.only,
+        scenario: filters.scenario,
+        n: filters.n,
+        timeouts,
+        dirty: false,
+        baseline: mergeBaseline,
+        exists: exists === true,
+        deviceKey,
+        device: deviceInfo ?? {},
+        dependencies: evidence?.dependencies ?? null,
+        ...(evidence?.resolved == null ? {} : { resolved: evidence.resolved }),
+        scheduleLength: schedule.length,
+        // The component's own plan size, which is what a merge has to fully cover.
+        componentPlanLength: buildSchedule({
+          plan,
+          launches,
+          platform,
+          perfMarks: argv.includes('--perf-marks'),
+          component,
+        }).length,
+        allowDeferred: true,
+      });
+      problems.push(...merged.problems);
+      for (const entry of merged.unverified) {
+        mergeLines.push(`Merge:     ${entry.reason}`);
+      }
+      for (const entry of merged.deferred) {
+        mergeLines.push(`Merge:     deferred - ${entry.reason}`);
+      }
+    }
     if (checking && exists === false) {
       problems.push(
         `--check: no baseline at ${relative(String(baselinePath))} - create it with --update-baseline`
       );
     }
+    // What the merge accepted without measuring, and what it could not ask yet,
+    // printed before the verdict so a reader sees which fields the answer rested on.
+    lines.push(...mergeLines);
     lines.push(
       `${(minting ? 'Mint:' : 'Check:').padEnd(11)}${
         problems.length === 0 ? 'would start' : 'would refuse'
@@ -486,6 +773,13 @@ export function dryRun({
   baselinesDir,
   env = process.env,
   write = (line) => process.stdout.write(`${line}\n`),
+  /**
+   * Gathers the version evidence a merge pre-flight asks for, called with the target
+   * file (X14). Injected rather than built here because the paths are the caller's:
+   * `run.mjs` knows the repo root, and this module stays free of `build.mjs` so the
+   * unit tests can hand it a fixture instead of the real `bun.lock`.
+   */
+  mergeEvidence = null,
 }) {
   let device;
   if (platform === 'ios') {
@@ -526,9 +820,11 @@ export function dryRun({
     deviceKey: device.deviceKey,
     deviceDetail: device.detail,
     deviceProblem: device.problem,
+    deviceInfo: device.device ?? null,
     cpuCount: os.cpus().length,
     loadavg1: os.loadavg()[0] ?? null,
     baselinesDir,
+    ...(mergeEvidence == null ? {} : { mergeEvidence }),
   });
   for (const line of report.lines) write(line);
   return report.exitCode;
