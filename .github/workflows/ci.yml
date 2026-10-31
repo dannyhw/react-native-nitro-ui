@@ -38,7 +38,14 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel a superseded run on a pull request or a feature branch: nothing there
+  # is a result anybody keeps, and 20-minute jobs on stale commits is how a queue
+  # forms. Never on `main`. It used to cancel there too, so consecutive merges
+  # cancelled each other's CI and a sha could land with no conclusion at all -
+  # one of the reasons main's seven-hour red on 31 Oct went unnoticed (F4). Every
+  # push to main now runs to a conclusion, and `main` is the branch whose green
+  # the release pipeline reads.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Every static gate: tsc, eslint (incl. the perf-contract rules), prettier,
@@ -250,8 +257,13 @@ jobs:
           runner: android
           projectRoot: example
           packageManager: bun
-          # Relative to projectRoot, which is where the action starts the CLI.
-          app: android/app/build/outputs/apk/debug/app-debug.apk
+          # Absolute, and that is not style. The action exports this verbatim as
+          # `HARNESS_APP_PATH`, and the Android platform only ever asks
+          # `existsSync` on it - from `projectRoot`, which is `example/`, not the
+          # checkout root this path would be relative to. A relative one names a
+          # file that does not exist, the app is never installed, and the run dies
+          # as an opaque `AbortError` (A2 lost three runs to that message).
+          app: ${{ github.workspace }}/example/android/app/build/outputs/apk/debug/app-debug.apk
 
   # Builds a Debug simulator app and runs the Harness tests on it. Xcode 27 is
   # required because rn-harness.config.mjs asks for an iOS 27 simulator. The
@@ -259,8 +271,14 @@ jobs:
   # does schedule: a run on 2026-10-24 got the `xcode-27-arm64` image (so the
   # earlier worry that it might never get a runner was wrong). It stays opt-in
   # because a preview image can still be pulled, and a job stuck queued reads
-  # exactly like a hung one. Add a `macos-26` row once the supported iOS floor
-  # is decided, with IOS_VERSION overridden for it.
+  # exactly like a hung one.
+  #
+  # There is no older-iOS row here, and no `macos-26` row that could be one:
+  # neither `xcode-27` nor `macos-26` ships a simulator runtime below iOS 26, so
+  # the declared sizing fallbacks cannot be exercised on an older runtime by any
+  # label this workflow can schedule on. `docs/ci-runner-images.md` records what
+  # each published image manifest installs, which image series has iOS 18 at all
+  # (macos-15), and what moving a device job there would take (F4, rows 6/12).
   harness-ios:
     name: Harness (iOS)
     if: github.event_name == 'workflow_dispatch'
@@ -308,5 +326,5 @@ jobs:
           runner: ios
           projectRoot: example
           packageManager: bun
-          # Relative to projectRoot, which is where the action starts the CLI.
-          app: ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app
+          # Absolute for the same reason as the Android job's: see there.
+          app: ${{ github.workspace }}/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app
