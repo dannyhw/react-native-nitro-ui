@@ -1,0 +1,175 @@
+# Failure excerpt — check
+
+- Ran: 2026-10-31T18:12:03.134Z on code tree `eaa438b41802` at HEAD `4873811` (branch `task/F4-ci-green`)
+- Command: `bun run check`
+- Result: fail, exit 1, 145880 ms
+- Load: start 4.11, end 4.26, median 5.07, max 7.88
+- Device: none recorded (not a device gate)
+- Full log: `task/F4-ci-green/check-2026-10-31T18-12-02.892Z.log` (<store>/task/F4-ci-green/check-2026-10-31T18-12-02.892Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `FAIL scripts/__tests__/build-speed.test.js`
+- `● iosCleanTargets › names what --clean deletes, in the help text as well as in code`
+- `expect(received).toBeGreaterThan(expected)`
+- `Expected: > -1`
+- `Received:   -1`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 426 — the rest is in the full log above)
+
+```
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (8 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.3s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — pass, 0.0s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 9 blocks match example/src/readme-examples.tsx
+check: 11 passed, 1 failed, 5 skipped in 145.7s
+check: failed step(s): test
+check: not started after the first failure: perf:renders, prepare, api-extractor:check, publint, manifest:check
+──────── full log: test ──────────────────────────────────────────────────────────
+$ jest
+OUT={"status":0,"out":"example/ios/Podfile.lock locks NitroUi (0.4.1) while package.json is at 0.5.0.\n  Fix locally:  node scripts/sync-example-lock.mjs --fix   (needs CocoaPods)\n  On a release: the Version Packages pull request should have carried it - the refresh runs inside `bun run release:version`, whose job in .github/workflows/release.yml is the one on a macOS runner. It cannot be fixed on Linux: a path-pod’s checksum is only reproducible by CocoaPods, so this guard can only compare the version.\npod-install: pinned RCT_USE_PREBUILT_RNCORE=1, RCT_USE_RN_DEP=1 - the values '../../../../../../..<tmp>/nitro-ui-lock-sync-caPBTU/example/ios/Podfile.lock' resolves with. Unset here, so React Native would have chosen the same thing; stated so CI and a laptop cannot drift apart.\npod-install: <tmp>/nitro-ui-lock-sync-caPBTU/fake-pod.sh install in <tmp>/nitro-ui-lock-sync-caPBTU/example/ios (COCOAPODS_BIN)\npod-install: ../../../../../../..<tmp>/nitro-ui-lock-sync-caPBTU/example/ios/Podfile.lock changed beyond the CocoaPods stamp (ran 1.19.0, recorded 1.17.0); review the diff.\nexample-lock: kept COCOAPODS: 1.17.0 (this machine ran 1.19.0) - a release refresh changes the version line, not the toolchain.\nexample-lock: restored example/ios/project.pbxproj\nexample-lock: removed untracked example/ios/new-by-product.txt (written by pod install)\nexample-lock: example/ios/Podfile.lock now matches package.json (0.5.0).\n","err":""}
+PASS scripts/__tests__/example-lock.test.js (16.218 s)
+PASS scripts/__tests__/lease.test.js (16.632 s)
+PASS scripts/__tests__/device-ops.test.js (9.158 s)
+PASS scripts/__tests__/gate-check.test.js (26.503 s)
+PASS scripts/__tests__/lease-metro-port.test.js (26.457 s)
+PASS src/__tests__/host.test.tsx
+PASS scripts/__tests__/lease-pool-cli.test.js (27.061 s)
+PASS scripts/__tests__/check-runner.test.js (12.467 s)
+PASS scripts/__tests__/native-tests-android-skip.test.js
+PASS scripts/__tests__/bench-baseline-machine.test.js
+PASS scripts/__tests__/device-pool.test.js
+PASS scripts/__tests__/bench-missing-samples.test.js
+PASS scripts/__tests__/ci-workflows.test.js
+PASS scripts/__tests__/build-slot.test.js
+PASS scripts/__tests__/conformance.test.js
+PASS eslint-rules/__tests__/rules.test.js
+PASS scripts/__tests__/free-lsof-stub.test.js
+PASS scripts/__tests__/registry.test.js
+PASS scripts/__tests__/bench-dry-run.test.js
+PASS scripts/__tests__/patch-nitrogen.test.js
+PASS scripts/__tests__/bench-machine.test.js
+PASS scripts/__tests__/harness-suite-timing.test.js
+PASS scripts/__tests__/bench-baseline-format.test.js
+PASS scripts/__tests__/app-stamp.test.js
+PASS src/__tests__/hostInertStyles.test.tsx
+PASS scripts/__tests__/task-ready.test.js
+PASS scripts/__tests__/bench-deps.test.js
+PASS src/__tests__/segmentedControl.test.tsx
+PASS scripts/__tests__/real-input-a11y-ios.test.js
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS src/__tests__/NitroUiCore.test.ts
+PASS src/__tests__/picker.test.tsx
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/component-coverage.test.js
+PASS src/__tests__/hostLayoutWarning.test.tsx
+  ● Console
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS src/__tests__/useSizingId.test.tsx
+PASS scripts/__tests__/emulator-launch.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+FAIL scripts/__tests__/build-speed.test.js
+  ● iosCleanTargets › names what --clean deletes, in the help text as well as in code
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > -1
+    Received:   -1
+
+      246 |     const lines = source.split('\n');
+      247 |     const start = lines.findIndex((line) => /^\s+'  --clean/.test(line));
+    > 248 |     expect(start).toBeGreaterThan(-1);
+          |                   ^
+      249 |     const region = [];
+      250 |     for (let index = start; index < lines.length; index += 1) {
+      251 |       // The option's paragraph ends at the empty literal that separates it from
+
+      at Object.toBeGreaterThan (scripts/__tests__/build-speed.test.js:248:19)
+
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS src/__tests__/hostReport.test.tsx
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/gate.test.js (48.397 s)
+PASS scripts/__tests__/gate-logs.test.js (49.858 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (76.648 s)
+PASS scripts/__tests__/bench-gate.test.js (141.375 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/build-speed.test.js
+  ● iosCleanTargets › names what --clean deletes, in the help text as well as in code
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > -1
+    Received:   -1
+
+      246 |     const lines = source.split('\n');
+      247 |     const start = lines.findIndex((line) => /^\s+'  --clean/.test(line));
+    > 248 |     expect(start).toBeGreaterThan(-1);
+          |                   ^
+      249 |     const region = [];
+      250 |     for (let index = start; index < lines.length; index += 1) {
+      251 |       // The option's paragraph ends at the empty literal that separates it from
+
+      at Object.toBeGreaterThan (scripts/__tests__/build-speed.test.js:248:19)
+
+
+Test Suites: 1 failed, 56 passed, 57 total
+Tests:       1 failed, 1532 passed, 1533 total
+Snapshots:   0 total
+Time:        141.656 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 145.9 s
+gate: recorded in .gates/task/F4-ci-green.jsonl
+
+```
