@@ -37,6 +37,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import os from 'node:os';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -64,14 +65,22 @@ const QUIET = [1, 1.01, 0.995, 1.005, 0.998, 1.002, 1.004, 0.997];
 const MINE = 'maintainer-mac-1';
 const DEVICE_KEY = 'ios27-sim-testdevice';
 
-/** The iOS defaults, so a mint is not refused for the waiting rule (A4). */
-const IOS_WAIT = { mountTimeoutMs: 1500, presentedTimeoutMs: 8000 };
+/**
+ * The waiting rule each platform's baseline is minted under (A4). Both matter
+ * per platform: the `run.mjs` case below compares a pre-flight candidate's rule
+ * against the file's, and a fixture that recorded iOS's numbers on an Android
+ * baseline would be refused for a reason the test is not about.
+ */
+const WAIT_BY_PLATFORM = {
+  ios: { mountTimeoutMs: 1500, presentedTimeoutMs: 8000 },
+  android: { mountTimeoutMs: 1500, presentedTimeoutMs: 2000 },
+};
 
 /**
  * Records for one arm of one scenario, shaped exactly like the bench app's output.
  * `scenario` is what makes a cell belong to a component (`mount.slider` -> slider).
  */
-function armRecords(scenario, implementation, { latency, n = 50 }) {
+function armRecords(scenario, implementation, { latency, n = 50, wait }) {
   const records = [
     {
       kind: 'meta',
@@ -83,7 +92,7 @@ function armRecords(scenario, implementation, { latency, n = 50 }) {
       measured: ITERATIONS,
       platform: 'ios 27.0',
       probeClock: 'CLOCK_UPTIME_RAW',
-      ...IOS_WAIT,
+      ...wait,
     },
   ];
   for (let launch = 0; launch < LAUNCHES; launch++) {
@@ -168,6 +177,7 @@ function makeRun({
   overrides = {},
 } = {}) {
   const arms = { 'rn-core': 100_000, 'nitro-ui': nitroUi };
+  const wait = WAIT_BY_PLATFORM[platform] ?? WAIT_BY_PLATFORM.ios;
   return {
     schemaVersion: SCHEMA_VERSION,
     platform,
@@ -187,7 +197,7 @@ function makeRun({
     cells: aggregateRecords(
       scenarios.flatMap((scenario) =>
         Object.entries(arms).flatMap(([implementation, latency]) =>
-          armRecords(scenario, implementation, { latency })
+          armRecords(scenario, implementation, { latency, wait })
         )
       ),
       { keepRaw: true }
@@ -1061,30 +1071,238 @@ describe('opening a file for a merge', () => {
   });
 });
 
-/* ------------------------------ the CLI ---------------------------------- */
+/* ------------------------------ the CLIs ---------------------------------- */
 
-/**
- * `report.mjs` over a throwaway tree, so a merge is proven through the same entry
- * point a maintainer types. `bunx` is stubbed: `bench-baseline-format.test.js`
- * already proves the formatting half with the real binary.
- */
-describe('report.mjs merges one component', () => {
-  function copyScripts(from, to) {
-    mkdirSync(to, { recursive: true });
-    for (const entry of readdirSync(from, { withFileTypes: true })) {
-      if (entry.isDirectory() && entry.name === '__tests__') {
-        continue;
-      }
-      const src = path.join(from, entry.name);
-      const dest = path.join(to, entry.name);
-      if (entry.isDirectory()) {
-        copyScripts(src, dest);
-      } else {
-        copyFileSync(src, dest);
-      }
+/** Both CLIs are driven over a throwaway tree, so they both need this repo's `scripts/`. */
+function copyScripts(from, to) {
+  mkdirSync(to, { recursive: true });
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name === '__tests__') {
+      continue;
+    }
+    const src = path.join(from, entry.name);
+    const dest = path.join(to, entry.name);
+    if (entry.isDirectory()) {
+      copyScripts(src, dest);
+    } else {
+      copyFileSync(src, dest);
     }
   }
+}
 
+/**
+ * `run.mjs`, driven over a throwaway tree, for the one thing only it can prove:
+ * that a merge is refused **before** a device is booted, and that `--force` does
+ * not talk it out of that.
+ *
+ * The tree is built so the runner never reaches a device: `ANDROID_HOME` names a
+ * directory with no `platform-tools/adb` in it (so the read-only `adb devices`
+ * the pre-flight does is a no-op rather than a real call), and the AVD's own
+ * `config.ini` is what hands the pre-flight its API level and hardware profile.
+ * The run therefore dies in `resolveAndroidDevice()` — which is the proof that
+ * the pre-flight let it through, in the case where it should.
+ *
+ * Two host facts do leak in here, on purpose: the CPU model and core count, which
+ * the candidate reports from `os.cpus()` and the fixture reads from the same
+ * place. Nothing about another machine is asserted.
+ */
+describe('run.mjs refuses an incomparable merge before booting', () => {
+  const ANDROID_KEY = 'android35-emu-pixel9';
+
+  function tree() {
+    const root = mkdtempSync(path.join(realpathSync(tmpdir()), 'bench-run-'));
+    copyScripts(
+      path.join(process.cwd(), 'scripts'),
+      path.join(root, 'scripts')
+    );
+    const bin = path.join(root, 'bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(path.join(bin, 'bunx'), '#!/bin/sh\nexit 0\n');
+    chmodSync(path.join(bin, 'bunx'), 0o755);
+
+    // An AVD that exists on disk and is nowhere attached: enough for the
+    // pre-flight's device key, not enough for the run itself.
+    const avdHome = path.join(root, 'avd');
+    mkdirSync(path.join(avdHome, 'nitroui_x.avd'), { recursive: true });
+    writeFileSync(
+      path.join(avdHome, 'nitroui_x.avd', 'config.ini'),
+      [
+        'target=android-35',
+        'image.sysdir.1=system-images/android-35/google_apis/arm64-v8a/',
+        'hw.device.name=pixel_9',
+      ].join('\n')
+    );
+    // An adb that reports nothing attached, so the run answers the device
+    // question honestly rather than crashing on a missing binary.
+    mkdirSync(path.join(root, 'no-sdk', 'platform-tools'), { recursive: true });
+    writeFileSync(
+      path.join(root, 'no-sdk', 'platform-tools', 'adb'),
+      '#!/bin/sh\necho "List of devices attached"\necho ""\n'
+    );
+    chmodSync(path.join(root, 'no-sdk', 'platform-tools', 'adb'), 0o755);
+
+    // `bun.lock` for the candidate's version evidence.
+    writeFileSync(
+      path.join(root, 'bun.lock'),
+      `${JSON.stringify(
+        {
+          workspaces: { '': ['bench'] },
+          packages: {
+            'react-native': ['react-native@0.88.0', {}],
+            '@expo/ui': ['@expo/ui@58.0.22', {}],
+          },
+        },
+        null,
+        2
+      )}\n`
+    );
+    mkdirSync(path.join(root, 'bench'), { recursive: true });
+    writeFileSync(
+      path.join(root, 'bench', 'package.json'),
+      `${JSON.stringify(
+        { dependencies: { 'react-native': '0.88.0', '@expo/ui': '58.0.22' } },
+        null,
+        2
+      )}\n`
+    );
+    return { root, bin, avdHome };
+  }
+
+  function runCli({ root, bin, avdHome }, args, env = {}) {
+    const child = spawnSync(
+      process.execPath,
+      [path.join(root, 'scripts', 'bench', 'run.mjs'), ...args],
+      {
+        encoding: 'utf8',
+        cwd: root,
+        timeout: 120_000,
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          NITRO_UI_MACHINE_LABEL: MINE,
+          // An SDK whose only adb reports zero attached devices: the pre-flight's
+          // read-only `adb devices` answers honestly, and a run that gets past it
+          // dies on "no attached emulator" instead of booting or touching a real
+          // server that can see someone else's device.
+          ANDROID_HOME: path.join(root, 'no-sdk'),
+          ANDROID_AVD_HOME: avdHome,
+          ANDROID_AVD: 'nitroui_x',
+          ANDROID_SERIAL: 'emulator-5599',
+          IOS_SIM_UDID: '',
+          AVD: '',
+          ...env,
+        },
+      }
+    );
+    return {
+      status: child.status,
+      all: `${child.stdout ?? ''}${child.stderr ?? ''}`,
+    };
+  }
+
+  /** A current v3 baseline for the Android device this fake AVD names. */
+  function writeAndroidBaseline({ root }, { androidApi = '35' } = {}) {
+    const founding = makeRun({
+      platform: 'android',
+      deviceKey: ANDROID_KEY,
+      scenarios: ['mount'],
+      dependencies: {
+        reactNative: '0.88.0',
+        expoUi: '58.0.22',
+        source: 'fixture',
+      },
+      machine: {
+        ...fixtureMachine('android', { hostname: MINE }),
+        cpuCount: os.cpus().length,
+        cpuModel: os.cpus()[0]?.model ?? null,
+        androidApi,
+      },
+      art: { status: 'speed-profile', primed: true },
+    });
+    const file = path.join(
+      root,
+      'bench',
+      'baselines',
+      MINE,
+      `${ANDROID_KEY}.json`
+    );
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(
+      file,
+      `${JSON.stringify(buildBaseline(founding), null, 2)}\n`
+    );
+    return file;
+  }
+
+  it('refuses a thin launch count, and lets --force past it to the device', () => {
+    const ws = tree();
+    try {
+      writeAndroidBaseline(ws);
+      const thin = runCli(ws, [
+        '--platform',
+        'android',
+        '--plan',
+        'full',
+        '--launches',
+        '4',
+        '--update-baseline',
+        '--component',
+        'slider',
+      ]);
+      expect(thin.status).toBe(2);
+      expect(thin.all).toContain('launches per cell');
+
+      // Under --force the same run is no longer refused for its own measurement,
+      // and gets as far as the emulator that was never attached: proof the
+      // overridable half really is overridable, and proof nothing booted here.
+      const forced = runCli(ws, [
+        '--platform',
+        'android',
+        '--plan',
+        'full',
+        '--launches',
+        '4',
+        '--update-baseline',
+        '--component',
+        'slider',
+        '--force',
+      ]);
+      expect(forced.all).not.toContain('launches per cell');
+      expect(forced.all).toContain('No attached emulator');
+    } finally {
+      rmSync(ws.root, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses an API level that differs even under --force, before the device', () => {
+    const ws = tree();
+    try {
+      writeAndroidBaseline(ws, { androidApi: '34' });
+      const forced = runCli(ws, [
+        '--platform',
+        'android',
+        '--plan',
+        'full',
+        '--launches',
+        '8',
+        '--update-baseline',
+        '--component',
+        'slider',
+        '--force',
+      ]);
+      expect(forced.status).toBe(2);
+      expect(forced.all).toContain('Android API level differs');
+      expect(forced.all).toContain('34');
+      // The point of asking at startup: the device is never reached, so a
+      // mistyped command costs no boot and no measurement.
+      expect(forced.all).not.toContain('No attached emulator');
+    } finally {
+      rmSync(ws.root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('report.mjs merges one component', () => {
   function workspace() {
     const root = mkdtempSync(path.join(realpathSync(tmpdir()), 'bench-merge-'));
     copyScripts(
@@ -1414,7 +1632,7 @@ describe('report.mjs merges one component', () => {
     // belong in this file, so the one guard that is not a measurement judgement has
     // to survive it: without that, one mistyped flag crosses a runtime boundary.
     withTree((ws) => {
-      const { existing, resultsFile } = fixtureTree(ws);
+      const { existing } = fixtureTree(ws);
       const thin = write(
         ws.root,
         'thin.json',
@@ -1476,6 +1694,34 @@ describe('report.mjs merges one component', () => {
       ]);
       expect(forced.status).toBe(2);
       expect(forced.all).toContain('simulator runtime differs');
+    });
+  });
+
+  it('names the baseline schema version it wanted when a pre-D9 file is checked', () => {
+    // The two schema constants describe two different files (X14), and this is the
+    // one line where a reader is told which of them was rejected. Asserting it
+    // through the CLI rather than the function is the point: the call site is what
+    // can pass the wrong constant, and a unit test of the function never sees it.
+    withTree((ws) => {
+      fixtureTree(ws);
+      writeFileSync(
+        path.join(ws.root, baselineRel),
+        `${JSON.stringify({ schemaVersion: 1, machine: { hostname: MINE }, cells: {} }, null, 2)}\n`
+      );
+      const resultsFile = write(
+        ws.root,
+        'check.json',
+        makeRun({
+          scenarios: ['mount'],
+          machine: fixtureMachine('ios', { hostname: MINE }),
+        })
+      );
+      const out = cli(ws, [resultsFile, '--check']);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain(
+        `not a v${String(BASELINE_SCHEMA_VERSION)} ratio baseline`
+      );
+      expect(out.all).not.toContain('not a v2 ratio baseline');
     });
   });
 
