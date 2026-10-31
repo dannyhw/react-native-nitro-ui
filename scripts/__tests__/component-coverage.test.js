@@ -295,16 +295,17 @@ describe('every component is covered by the conformance suite', () => {
     // `known failing` lines from the exemption lists. Deriving one from the other is what
     // keeps a report's coverage table honest when a row is added or removed.
     //
-    // Five cells, each a measurement rather than a guess: the Slider and SegmentedControl
+    // Four cells, each a measurement rather than a guess: the Slider and SegmentedControl
     // names are on nodes a screen reader cannot act on in a dump (Android), the Slider is
     // announced as the wrong kind of control (iOS), a hosted Picker announces its name twice,
-    // and SegmentedControl and Menu hold recycle residue no read-out can show on the platform
-    // that recycles. The two platforms fail some of the same controls for different reasons,
-    // which is why `A11Y_EXEMPTIONS` rows carry a platform.
+    // and Menu holds recycle residue no read-out can show on iOS. SegmentedControl's recycle
+    // cell was the fifth of those until F6 gave the fixture a read-out that can see the
+    // residue; the a11y one stands, because that debt is about a name, not a state. The two
+    // platforms fail some of the same controls for different reasons, which is why
+    // `A11Y_EXEMPTIONS` rows carry a platform.
     const keys = failingKeys();
     expect(keys).toEqual([
       'Menu|recycle-reset',
-      'SegmentedControl|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',

@@ -81,6 +81,7 @@ namespace margelo::nitro::nitroui {
       virtual NitroUiSegmentedControlSize measureContent() = 0;
       virtual void nuiTestPixelProbe(double color) = 0;
       virtual std::string nuiTestPixelReport() = 0;
+      virtual std::string nuiTestDisplayedIndex() = 0;
 
     protected:
       // Hybrid Setup

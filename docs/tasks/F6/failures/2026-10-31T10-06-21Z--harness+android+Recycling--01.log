@@ -1,0 +1,88 @@
+# Failure excerpt — harness:android:Recycling
+
+- Ran: 2026-10-31T10:06:21.142Z on code tree `9712b0b97903` at HEAD `38a1e93` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Recycling`
+- Result: fail, exit 1, 15402 ms
+- Load: start 2.88, end 3.02, median 3.02, max 3.02
+- Device: android / device `emulator-5574` / lease `F6-586pg`
+- Full log: `task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-06-20.948Z.log` (<store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-06-20.948Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● recycling · the pool is real on both platforms (F6) › gives a later mount an instance the pool took back`
+- `expected 0 to be greater than or equal to 1`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-06-20.948Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-586pg (still live)
+  |   F6-586pg                 F6           both              pair-a
+  |   X15-58alc                X15          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.02 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Recycling
+gate: node ../scripts/harness.mjs --harnessRunner android Recycling (cwd example)
+gate: code tree 9712b0b97903 at HEAD 38a1e93
+gate: git tree 73380757b216 with a DIRTY worktree (not reusable)
+gate: log task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-06-20.948Z.log
+gate:       <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-06-20.948Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Recycling
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 9712b0b97903, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.88/4.14 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-06-20.948Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● recycling · the pool is real on both platforms (F6) › gives a later mount an instance the pool took back
+
+    expected 0 to be greater than or equal to 1
+
+      [0m [90m 364 |[39m     )[33m;[39m
+       [90m 365 |[39m     expect(dropped)[33m.[39mtoBeGreaterThanOrEqual([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 366 |[39m     expect(reused)[33m.[39mtoBeGreaterThanOrEqual([35m1[39m)[33m;[39m
+       [90m     |[39m                                          [31m[1m^[22m[39m
+       [90m 367 |[39m   })[33m;[39m
+       [90m 368 |[39m })[33m;[39m
+       [90m 369 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 2 passed, 3 total
+Snapshots:   0 total
+Time:        14.699 s
+Ran all test suites matching Recycling.
+gate: harness:android:Recycling FAIL in 15.4 s
+gate: recorded in .gates/task/F6-recycling-gates.jsonl
+
+
+gate: appended the device context to task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-06-20.948Z.log (5 probe(s))
+
+```

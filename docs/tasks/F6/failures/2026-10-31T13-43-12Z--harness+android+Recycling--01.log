@@ -1,0 +1,76 @@
+# Failure excerpt — harness:android:Recycling
+
+- Ran: 2026-10-31T13:43:12.875Z on code tree `11fe76104803` at HEAD `3aa4fff` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Recycling`
+- Result: fail, exit 1, 26029 ms
+- Load: start 1.92, end 3.43, median 2.49, max 3.43
+- Device: android / device `emulator-5574` / lease `F6-ex2j5`
+- Full log: `task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-43-12.875Z.log` (<store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-43-12.875Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● recycling · the pool is real on both platforms (F6) › gives a later mount an instance the pool took back`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-43-12.875Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-ex2j5 (still live)
+  |   F6-ex2j5                 F6           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.43 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 32 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Recycling
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 11fe76104803, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 1.92/3.16 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-43-12.875Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● recycling · the pool is real on both platforms (F6) › gives a later mount an instance the pool took back
+
+    no mounted control reported a previous mount — highest on a mounted view was drops=0 recycles=0 over 6 rounds [{"drops":0,"recycles":0},{"drops":0,"recycles":0},{"drops":0,"recycles":0},{"drops":0,"recycles":0},{"drops":0,"recycles":0},{"drops":0,"recycles":0}]. Either the pool never handed a view back, or the counters no longer survive a recycle — which is the exact claim this test exists to make.
+
+      [0m [90m 555 |[39m     [90m// learned the hard way).[39m
+       [90m 556 |[39m     [36mif[39m (dropped [33m<[39m [35m1[39m [33m||[39m reused [33m<[39m [35m1[39m) {
+      [31m[1m>[22m[39m[90m 557 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 558 |[39m         [32m`no mounted control reported a previous mount — highest on a mounted view was `[39m [33m+[39m
+       [90m 559 |[39m           [32m`drops=${String(dropped)} recycles=${String(reused)} over `[39m [33m+[39m
+       [90m 560 |[39m           [32m`${String(whileMounted.length)} rounds ${JSON.stringify(whileMounted)}. `[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 5 passed, 6 total
+Snapshots:   0 total
+Time:        25.111 s
+Ran all test suites matching Recycling.
+
+
+
+```

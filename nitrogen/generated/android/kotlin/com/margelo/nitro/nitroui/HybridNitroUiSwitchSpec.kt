@@ -116,6 +116,10 @@ abstract class HybridNitroUiSwitchSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun nuiTestArmedGuards(): String
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestLifetimeReport(): String
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

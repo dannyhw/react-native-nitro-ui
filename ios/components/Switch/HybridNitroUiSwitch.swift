@@ -355,6 +355,16 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     return "|live:"
   }
 
+  /// What this host object has been through since it was allocated (see the spec).
+  ///
+  /// The counters are the host's, so the answer is real here in the same way it is on
+  /// Android - iOS has always recycled, which is exactly what makes this control's
+  /// second mount the interesting one: only a pooled instance can report a drop it
+  /// survived.
+  func nuiTestLifetimeReport() throws -> String {
+    return host.lifetimeReport()
+  }
+
   private var model: SwitchModel {
     return host.model
   }

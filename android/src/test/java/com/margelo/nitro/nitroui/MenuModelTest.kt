@@ -2,6 +2,7 @@ package com.margelo.nitro.nitroui
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -108,6 +109,43 @@ class MenuModelTest {
     model.applyPick("copy")
     assertEquals("a disabled control is inert, but the menu still comes down", listOf("close"), disabled)
     assertFalse(model.expanded)
+  }
+
+  /**
+   * The reset half of the same state, which F6 made worth gating from here.
+   *
+   * Whether a Menu's popup is open is the one piece of state on this control no prop
+   * rewrites, so it is what a recycle has to clear. `Conformance.harness.tsx`'s residue
+   * probe cannot reach it on either platform - on iOS no harness gesture can reach a
+   * SwiftUI `Menu` (DECISIONS D29) and the read-out answers `-1` there
+   * (`HybridNitroUiMenu.swift:762`) - so before F6 the line had no observation anywhere
+   * that could show it missing. Android *can* read the flag (`readMenuReport`) and now
+   * recycles (`example/__tests__/Recycling.harness.tsx`), and this is that guard at the
+   * cheapest possible distance: an open model, one `reset()`, and the control's own
+   * answer. Delete `expanded = false` from [MenuModel.reset] and this goes red on the
+   * report line, which is the assertion a device run cannot make for either platform.
+   *
+   * The empty event list is the other half of the line: `reset` writes `expanded`
+   * directly rather than through [setOpen], on purpose - a recycled model has no mount
+   * left to report a transition to, so the previous owner's `onClose` must not fire for
+   * a popup the *pool* closed.
+   */
+  @Test
+  fun aRecycleClosesThePopupWithoutReportingToItsPreviousOwner() {
+    val events = mutableListOf<String>()
+    val model = openModel(events)
+    assertTrue("the fixture is a menu that is open", model.expanded)
+    assertEquals(
+      "and the report says so, on the side that can read it",
+      "expanded=1",
+      model.readMenuReport().substringBefore(';')
+    )
+
+    model.reset()
+
+    assertFalse(model.expanded)
+    assertEquals("expanded=0", model.readMenuReport().substringBefore(';'))
+    assertEquals("and no callback of the previous owner fires", emptyList<String>(), events)
   }
 
   @Test

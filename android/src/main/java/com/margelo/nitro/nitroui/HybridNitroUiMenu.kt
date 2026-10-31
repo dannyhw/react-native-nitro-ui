@@ -1087,7 +1087,8 @@ class HybridNitroUiMenu(
 
   override fun prepareForRecycle() {
     host.tag = null
-    host.perfInstanceId = NitroUiPerf.NO_INSTANCE
+    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
+    // marked the recycle: clearing it here would hide that mark.
     // `host.sizingPolicy` is not reset: this control never changes it, so a recycled
     // host cannot be left on another policy - unlike Picker's, whose `wheel` variant
     // does. What does get reset is the model, by `host.prepareForRecycle()`, and the

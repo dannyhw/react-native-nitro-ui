@@ -871,7 +871,8 @@ class HybridNitroUiSlider(
 
   override fun prepareForRecycle() {
     host.tag = null
-    host.perfInstanceId = NitroUiPerf.NO_INSTANCE
+    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
+    // marked the recycle: clearing it here would hide that mark.
     // [SliderModel.reset] cancels the drag first: a recycled row that resumes
     // somebody else's drag is a real bug, and the frame callback would still be
     // posted to emit it.

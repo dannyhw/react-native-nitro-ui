@@ -50,6 +50,12 @@ namespace margelo::nitro::nitroui {
       static constexpr int32_t KIND_PROPS_APPLIED = 0;
       /// The hosted content drew its first frame.
       static constexpr int32_t KIND_FIRST_FRAME = 1;
+      /// `onDropView` ran: the mount is over (unmount, or the front door of recycling).
+      static constexpr int32_t KIND_DROPPED = 2;
+      /// `prepareForRecycle` ran, so the instance went into a pool that may hand it
+      /// to the next mount. A `dropped` with no `recycled` after it is a real unmount;
+      /// the pair is what a gate counts to show recycling is live on a platform.
+      static constexpr int32_t KIND_RECYCLED = 3;
       /// Marks fit in the ring until someone drains it; then the oldest drop.
       static constexpr size_t CAPACITY = 4096;
 

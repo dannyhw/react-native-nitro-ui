@@ -145,6 +145,28 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private var firstFrameWatchRegistered = false
 
   /**
+   * What this object has been through, and the post-drop rule. See the class for why
+   * the counters survive a recycle and why the rule is a separate type.
+   */
+  private val lifetime = NitroUiLifetimeGate()
+
+  /** See [NitroUiLifetimeGate.drops]. */
+  val lifetimeDrops: Int
+    get() = lifetime.drops
+
+  /** See [NitroUiLifetimeGate.recycles]. */
+  val lifetimeRecycles: Int
+    get() = lifetime.recycles
+
+  /** Post-drop measure asks by **every** host in this process, not just this one. */
+  val measuresAfterDrop: Int
+    get() = processMeasuresAfterDrop
+
+  /// [measuresAfterDrop], for the layout pass.
+  val layoutsAfterDrop: Int
+    get() = processLayoutsAfterDrop
+
+  /**
    * Whether a pre-draw listener is registered for this mount, with the observer it
    * was registered on.
    *
@@ -590,9 +612,17 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * this model from scratch.
    */
   fun prepareForRecycle() {
-    // No strategy is re-armed here, deliberately: this is pool entry, and the pool
-    // is where a host may never be reused. [onAttachedToWindow] arms the guard for
-    // the mount that follows, before that mount can compose.
+    // First, and while [perfInstanceId] still holds the mount that just ended: the pair
+    // of marks a gate counts to show recycling is live on this platform (`dropped` from
+    // [drop], `recycled` here). `NitroUiPerf.mark` returns at once for `NO_INSTANCE`, so
+    // a host that cleared its id first - which is what every component used to do, one
+    // line each - made the mark invisible.
+    lifetime.onRecycle()
+    NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_RECYCLED)
+    perfInstanceId = NitroUiPerf.NO_INSTANCE
+    // No strategy is re-armed and the dropped window stays shut, deliberately: this is
+    // pool entry, and the pool is where a host may never be reused. [onAttachedToWindow]
+    // arms the guard and opens the host to composing again, for the mount that follows.
     model.reset()
     isDirty = true
     isMeasurePending = true
@@ -634,6 +664,11 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * `docs/tasks/B1-android-mount-oom.report.md`). Hence [unarmCompositionStrategy].
    */
   fun drop() {
+    // The mount is over, and this is the one call site every component's `onDropView`
+    // funnels through - unmount and recycle-front-door both. A `dropped` with no
+    // `recycled` after it is a real unmount; with one, the instance went to the pool.
+    lifetime.onDrop()
+    NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_DROPPED)
     composeContent.disposeComposition()
     // After the dispose, not before: a strategy must be set with no composition
     // in flight, and the guard is worth nothing once the composition is gone.
@@ -729,6 +764,28 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
+   * What a harness asks about (F6): `drops=<n> recycles=<m> measuresAfterDrop=<n>
+   * layoutsAfterDrop=<n> giveUps=<n> floatingFlushes=<n>`.
+   *
+   * Only the first two are about this object. The other four are process-wide totals —
+   * deliberately not per-host, because the run whose leak-path question they answer is a
+   * churn of controls this probe has no handle for: a per-host counter on the 200 dropped
+   * Switches could never be read by anything, and the question B1 asked is whether the
+   * branch happened *anywhere in the process*. A freshly mounted host contributes
+   * nothing to them, so the numbers a test reads are the process's, and it is the one
+   * probe line a harness can read without a new native surface.
+   *
+   * Neither per-object counter is cleared by [prepareForRecycle]; see [lifetimeDrops]
+   * for why that is the entire mechanism.
+   */
+  internal fun lifetimeReport(): String =
+    "drops=${lifetimeDrops} recycles=${lifetimeRecycles}" +
+      " measuresAfterDrop=${measuresAfterDrop}" +
+      " layoutsAfterDrop=${layoutsAfterDrop}" +
+      " giveUps=${giveUpUnregisters}" +
+      " floatingFlushes=${floatingFlushSchedules}"
+
+  /**
    * What a harness asks about (H1 N4): the guards this mount armed for a composition of
    * its own, as one line - `strategy` for an installed [ViewCompositionStrategy] (the
    * activity `LifecycleRegistry` observer), `preDraw` for the first-frame listener once
@@ -791,6 +848,9 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       } else if (isAttachedToWindow) {
         viewTreeObserver
       } else {
+        // The one case with no way back from here, and it is now counted rather than
+        // assumed: see `giveUpUnregisters`.
+        giveUpUnregisters += 1
         return
       }
     try {
@@ -824,6 +884,12 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   // MARK: - View lifecycle
 
   override fun onAttachedToWindow() {
+    // The dropped window closes here and not in [prepareForRecycle]: a host may only
+    // compose when it has a window and a strategy, and this is the one moment both are
+    // true. Pool entry has neither, and a pooled host may never be reused, so opening
+    // the window there is what let the post-drop guard be deleted on Android without
+    // anything noticing (see [NitroUiLifetimeGate]).
+    lifetime.onAttach()
     // The guard goes on before anything can compose, and this is the first moment
     // it can: the child's attach - which is where `AbstractComposeView` creates its
     // composition - is dispatched by `super`, and a measure while detached is
@@ -875,6 +941,19 @@ abstract class NitroComposeHost<M : NitroUiModel>(
    * view out from the frame C++ computed, it does not read the measured dimension.
    */
   override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    if (lifetime.declineMeasure()) {
+      // B1 review N5: `stopSurface` drops views before the root is taken out, so a
+      // dropped host can still be measured while it is attached. Its composition is
+      // disposed and its strategy is un-armed, so a measure here would build a
+      // composition with nothing to dispose it - the leak the drop path exists to
+      // prevent, arriving through the other door. Counted into the process-wide total
+      // *before* the decline, so the number answers "did the path happen" and not merely
+      // "did the guard fire" ([processMeasuresAfterDrop]).
+      processMeasuresAfterDrop += 1
+      isMeasurePending = true
+      setMeasuredDimension(0, 0)
+      return
+    }
     if (isHostedByParent) {
       // A Host draws us; measuring would build a second composition for content
       // that is already in the Host's. Fabric measures every node it lays out,
@@ -948,6 +1027,15 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     right: Int,
     bottom: Int,
   ) {
+    if (lifetime.declineLayout()) {
+      // N5 again, the other door: `ViewGroup.layout` can reach a dropped host that is
+      // still attached without measuring it first, so a counter on [onMeasure] alone
+      // would call the case unreachable when it only went unmeasured. Nothing here is
+      // worth laying out - the composition is disposed - and `measureNow` below would
+      // only ask a dropped host to compose.
+      processLayoutsAfterDrop += 1
+      return
+    }
     if (isHostedByParent) {
       // Nothing to lay out: the only child is the never-measured `composeContent`,
       // and the box RN computed is decorative - Compose places the control inside
@@ -1222,6 +1310,12 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     if (!observer.isAlive) {
       return
     }
+    if (!isAttachedToWindow) {
+      // The precondition of the leak B1 filed as "near-unreachable": a listener on a
+      // floating observer, which dies when it merges into a window's. Counted so the
+      // claim stays a measurement; the listener itself is still removed by [drop].
+      floatingFlushSchedules += 1
+    }
     flushScheduled = true
     val listener =
       object : ViewTreeObserver.OnPreDrawListener {
@@ -1292,6 +1386,53 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private companion object {
     /** Sub-dp wobble that is not a size change. */
     private const val SIZING_EPSILON_DP = 0.5
+
+    /**
+     * Times **any** host in this process declined a measure because it was dropped.
+     *
+     * Process-wide for the same reason as [giveUpUnregisters]: the question B1's review
+     * N5 asks is whether the path exists at all, and the host whose guard fired is the
+     * one object a harness holds no handle for — a per-host count of it could only be
+     * read through the leaked view itself. Reported by [lifetimeReport], so any run can
+     * raise it and none can quietly leave it at zero.
+     *
+     * `@Volatile` because the four totals here are written by the view system, on the UI
+     * thread, and read through [lifetimeReport] by a harness call that arrives on another
+     * one: without it the reader is not promised a writer's value, and a gate that read a
+     * stale zero would pass for the wrong reason. The increments are not atomic either, so
+     * these numbers are for "did it ever happen", never a rate to be divided.
+     */
+    @Volatile internal var processMeasuresAfterDrop = 0
+
+    /// [processMeasuresAfterDrop], for the layout pass.
+    @Volatile internal var processLayoutsAfterDrop = 0
+
+    /**
+     * Times [unregisterPreDraw] had to give up: the captured observer was dead **and**
+     * this host was detached, so no observer it can reach holds the listener.
+     *
+     * A process-wide total, not a per-host count, because the branch is about the one
+     * leak shape this file cannot close from here (see the KDoc's last sentence), and
+     * the question is whether that shape ever happens rather than how often one host
+     * sees it. B1 measured the *divergent-observer* case at 0 of 3200 removals; this
+     * counter is the permanent version of that measurement - a harness run that leaves
+     * it at 0 is a run in which the unreachable branch stayed unreachable, and a
+     * non-zero value is a live leak path with a name.
+     *
+     * `@Volatile` for the same reason as [processMeasuresAfterDrop].
+     */
+    @Volatile internal var giveUpUnregisters = 0
+
+    /**
+     * Times a sizing flush was scheduled while this host had no window, so its listener
+     * went on a floating observer.
+     *
+     * The precondition of the "near-unreachable listener leak" B1 filed (schedule while
+     * detached, then attach, then detach before a frame, then drop). Counted as a
+     * process-wide total for the same reason as [giveUpUnregisters], `@Volatile` for the
+     * same reason as the two post-drop totals.
+     */
+    @Volatile internal var floatingFlushSchedules = 0
   }
 }
 

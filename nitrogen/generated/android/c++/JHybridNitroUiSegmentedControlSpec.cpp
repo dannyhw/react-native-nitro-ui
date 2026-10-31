@@ -204,5 +204,10 @@ namespace margelo::nitro::nitroui {
     auto __result = method(_javaPart);
     return __result->toStdString();
   }
+  std::string JHybridNitroUiSegmentedControlSpec::nuiTestDisplayedIndex() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("nuiTestDisplayedIndex");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
 
 } // namespace margelo::nitro::nitroui

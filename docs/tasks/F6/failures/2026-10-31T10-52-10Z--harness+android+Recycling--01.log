@@ -1,0 +1,77 @@
+# Failure excerpt — harness:android:Recycling
+
+- Ran: 2026-10-31T10:52:10.463Z on code tree `51ef7b0d158d` at HEAD `38a1e93` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Recycling`
+- Result: fail, exit 1, 17683 ms
+- Load: start 3.20, end 2.63, median 2.63, max 3.20
+- Device: android / device `emulator-5574` / lease `F6-586pg`
+- Full log: `task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-52-10.463Z.log` (<store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-52-10.463Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● recycling · churn does not leak (Android, F6) › measures the drop-path branches B1 called unreachable at zero`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-52-10.463Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-586pg (still live)
+  |   F6-586pg                 F6           both              pair-a
+  |   X15-9xz8i                X15          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.63 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 32 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Recycling
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 51ef7b0d158d, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.20/2.76 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-52-10.463Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● recycling · churn does not leak (Android, F6) › measures the drop-path branches B1 called unreachable at zero
+
+    measuresAfterDrop, layoutsAfterDrop, giveUps, floatingFlushes are non-zero, so B1's unreachable drop-path branch is a live leak path: drops=8 recycles=8 measuresAfterDrop=0 layoutsAfterDrop=0 giveUps=0 floatingFlushes=0
+
+      [0m [90m 509 |[39m         [90m// carries `console.log` out of it in none of the runs anyone has tried, and a[39m
+       [90m 510 |[39m         [90m// `toBe` on one field would print one number where the whole line is the evidence.[39m
+      [31m[1m>[22m[39m[90m 511 |[39m         [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 512 |[39m           [32m`${nonZero.join(', ')} ${nonZero.length === 1 ? 'is' : 'are'} non-zero, so `[39m [33m+[39m
+       [90m 513 |[39m             [32m`B1's unreachable drop-path branch is a live leak path: ${raw}`[39m
+       [90m 514 |[39m         )[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 3 passed, 4 total
+Snapshots:   0 total
+Time:        16.693 s
+Ran all test suites matching Recycling.
+
+
+
+```

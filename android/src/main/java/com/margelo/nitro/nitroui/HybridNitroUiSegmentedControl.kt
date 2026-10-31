@@ -139,6 +139,43 @@ internal class SegmentedControlModel : NitroUiModel() {
     }
   }
 
+  /**
+   * What the row of segments is drawing as its selection, as one line.
+   *
+   * Written by [recordDrawnIndex] in the composable, so it is a reading of the hosted
+   * control and not an echo of the `selectedIndex` prop: a commit that stored the index
+   * without repainting the row fails here and passes on the prop. That distinction is
+   * the whole reason this read-out exists (F6, closing X4's blind spot): the handle's
+   * `selectedIndex` answers `state.js`, which is what React sent, and the pixel probe
+   * answers a colour, so neither could tell a recycled SegmentedControl that re-painted
+   * at index 0 from one that merely stopped being told otherwise.
+   *
+   * Answers `displayed=<index>`, or `displayed=none` before the composable has run - a
+   * distinct word rather than `-1` so a test cannot mistake "never drawn" for a legal
+   * index that happens to be negative.
+   */
+  var drawnIndexReport = "displayed=none"
+    private set
+
+  /**
+   * Record what the drawing code was handed.
+   *
+   * Not observed, and deliberately so: writing snapshot state from the measure/draw
+   * path would dirty the node that is drawing and ask for the recomposition that just
+   * happened. The lock is because `nuiTestDisplayedIndex` may be read from the JS
+   * thread.
+   */
+  fun recordDrawnIndex(index: Int) {
+    synchronized(pixelReportLock) {
+      drawnIndexReport = "displayed=$index"
+    }
+  }
+
+  /** What the row displays, as one line. Safe from any thread. */
+  fun readDrawnIndex(): String {
+    synchronized(pixelReportLock) { return drawnIndexReport }
+  }
+
   /** The last probe's report. Safe from any thread. */
   fun readPixelReport(): String {
     synchronized(pixelReportLock) { return pixelReport }
@@ -166,8 +203,13 @@ internal class SegmentedControlModel : NitroUiModel() {
     didApplyDefault = false
     onChange = null
     // Test state too: a recycled view that still reported another owner's pixels
-    // would let a test read a hit that is not its control's.
+    // would let a test read a hit that is not its control's. Same for the drawn
+    // index: it goes back to "never drawn" so a second mount has to draw before it
+    // can answer, and the answer it gives is then this mount's.
     pixelReport = ""
+    synchronized(pixelReportLock) {
+      drawnIndexReport = "displayed=none"
+    }
   }
 
   /**
@@ -335,6 +377,9 @@ private class SegmentedControlHost(
   override fun Component(model: SegmentedControlModel) {
     val options = model.options
     val selectedIndex = model.displayed
+    // The reading of the hosted row that `nuiTestDisplayedIndex()` answers with: taken
+    // from the value this composition is about to paint, not from a prop getter.
+    model.recordDrawnIndex(selectedIndex)
     val enabled = model.enabled
     val tint = model.tintColor
     val label = model.accessibilityLabel
@@ -666,7 +711,8 @@ class HybridNitroUiSegmentedControl(
 
   override fun prepareForRecycle() {
     host.tag = null
-    host.perfInstanceId = NitroUiPerf.NO_INSTANCE
+    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
+    // marked the recycle: clearing it here would hide that mark.
     // Not cleared here: `host.prepareForRecycle()` releases the sizing instance
     // (which needs the id to tell the engine), and `onDropView` has already run.
     // It also resets the model. The composition does not survive a recycle
@@ -708,6 +754,9 @@ class HybridNitroUiSegmentedControl(
   }
 
   override fun nuiTestPixelReport(): String = model.readPixelReport()
+
+  /** What the row is displaying - see `NitroUiSegmentedControlMethods.nuiTestDisplayedIndex`. */
+  override fun nuiTestDisplayedIndex(): String = model.readDrawnIndex()
 }
 
 // MARK: - Pixel probe (test-only)

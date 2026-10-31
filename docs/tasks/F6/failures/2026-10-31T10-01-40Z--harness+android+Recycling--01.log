@@ -1,0 +1,106 @@
+# Failure excerpt — harness:android:Recycling
+
+- Ran: 2026-10-31T10:01:40.566Z on code tree `a0919ab0a00d` at HEAD `38a1e93` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Recycling`
+- Result: fail, exit 1, 4225 ms
+- Load: start 9.39, end 8.71, median 9.05, max 9.39
+- Device: android / device `emulator-5574` / lease `F6-586pg`
+- Full log: `task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-01-40.252Z.log` (<store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-01-40.252Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-01-40.252Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-586pg (still live)
+  |   F6-586pg                 F6           both              pair-a
+  |   X15-58alc                X15          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 8.71 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 61 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Recycling
+gate: node ../scripts/harness.mjs --harnessRunner android Recycling (cwd example)
+gate: code tree a0919ab0a00d at HEAD 38a1e93
+gate: git tree 73380757b216 with a DIRTY worktree (not reusable)
+gate: log task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-01-40.252Z.log
+gate:       <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-01-40.252Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Recycling
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a0919ab0a00d, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.39/5.83 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-01-40.252Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● Test suite failed to run
+
+    The native app crashed while preparing to run this test file.
+    Harness extracted the crash log: .harness/crash-reports/2026-10-31T10-01-41-566Z/android/__tests__-Recycling.harness.tsx/android--logcat--logcat.txt
+    Additional crash artifacts:
+      - .harness/crash-reports/2026-10-31T10-01-41-566Z/android/__tests__-Recycling.harness.tsx/android--dropbox-crash--dropbox-crash.txt
+
+    --------- beginning of crash
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: FATAL EXCEPTION: main
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: Process: nitroui.example, PID: 4356
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: java.lang.RuntimeException: Unable to create application nitroui.example.MainApplication: java.lang.RuntimeException: Feature flags cannot be overridden more than once
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:7510)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2416)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:107)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:232)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:317)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:8705)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: Caused by: java.lang.RuntimeException: Feature flags cannot be overridden more than once
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsCxxInterop.override(Native Method)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsCxxAccessor.override(ReactNativeFeatureFlagsCxxAccessor.kt:895)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at com.facebook.react.internal.featureflags.ReactNativeFeatureFlags.override(ReactNativeFeatureFlags.kt:570)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at nitroui.example.NitroUiFeatureFlags.install(NitroUiFeatureFlags.kt:65)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at nitroui.example.MainApplication.onCreate(MainApplication.kt:31)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java:1386)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:7504)
+    10-31 10:01:44.782  4356  4356 E AndroidRuntime: 	... 9 more
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        3.402 s
+Ran all test suites matching Recycling.
+gate: harness:android:Recycling FAIL in 4.2 s
+gate: recorded in .gates/task/F6-recycling-gates.jsonl
+
+
+gate: appended the device context to task/F6-recycling-gates/harness+android+Recycling-2026-10-31T10-01-40.252Z.log (5 probe(s))
+
+```

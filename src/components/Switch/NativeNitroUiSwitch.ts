@@ -43,6 +43,12 @@ export interface NitroUiSwitchHandle {
    * `NitroUiSwitchMethods.nuiTestArmedGuards`.
    */
   nuiTestArmedGuards(): string;
+  /**
+   * What this native object has been through - see
+   * `NitroUiSwitchMethods.nuiTestLifetimeReport`.
+   * @internal
+   */
+  nuiTestLifetimeReport(): string;
 }
 
 /**
