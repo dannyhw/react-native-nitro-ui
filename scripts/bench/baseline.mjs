@@ -27,6 +27,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { dependenciesSourceAt, resolvedDependencies } from './deps.mjs';
+import { foundingDependencyRecord } from './lib.mjs';
+
 /** What a run records when nobody told it which machine it ran on (D25). */
 export const UNLABELLED_MACHINE = 'unlabelled';
 
@@ -175,7 +178,221 @@ export function mintBaselineFileFor({ baselinesDir, run }) {
 }
 
 /**
- * Why the file at this machine's own path is not this machine's baseline, or null.
+ * The file `--component <name> --update-baseline` would merge into, and whether it
+ * may (X14).
+ *
+ * The merge question is a label question, a path question and a *contents*
+ * question, and all three have to be answered before a device is touched — the
+ * point of the feature is that adding a component costs one component's cells
+ * rather than an eleven-hour window, so a refusal that arrives after the run is
+ * worth nothing. The path comes from the run's own `machine.hostname` through the
+ * one resolver, exactly as `--update-baseline` and `--check` resolve it: a merge
+ * never targets another machine's file, and there is no old top-level path.
+ *
+ * Unlike `openBaselineForCheck()`, the schema question here is not a yes/no gate:
+ * a v2 file is a complete ratio table, and `mergeBaselineProblems()` compares the
+ * writing run's `BASELINE_SCHEMA_VERSION` against the file's recorded
+ * `schemaVersion` field by field with the rest of the regime, so a v2 file can
+ * take a merge and a pre-D9 v1 file cannot. It *does* run the provenance check
+ * twice over: `isCompatibleBaseline()` rejects the pre-D9 shape, and a file that
+ * records a different machine is refused, because a merge writes into this
+ * machine's file and a copied table must not be extended.
+ *
+ * @param {{
+ *   baselinesDir: string,
+ *   run: any,
+ *   component: string,
+ *   readJson?: (file: string) => any,
+ *   existsSync?: (file: string) => boolean,
+ *   isCompatibleBaseline: (baseline: any) => boolean,
+ *   schemaVersion?: number,
+ *   mergeProblems: (input: any) => any, `mergeBaselineProblems()` from `lib.mjs`,
+ *     injected for the same reason `openBaselineForCheck()` injects its predicate
+ *   display?: (file: string) => string,
+ *   resolved?: Record<string, {value: unknown, why: string} | null> |
+ *     ((baseline: any) => Record<string, {value: unknown, why: string} | null>),
+ *     what the caller can recover for fields the file does not record — for a
+ *     pre-X14 file's app versions, `foundingDependencies()` reads `bun.lock` at the
+ *     commit the file's own `sha` names. A function is passed the file once it has
+ *     been read, so the recovery is always about *this* file.
+ *   filters?: Record<string, unknown>, scheduled?: number, componentPlan?: number,
+ *   allowDeferred?: boolean,
+ *     the pre-flight's half of `mergeBaselineProblems`: the filters and schedule
+ *     lengths only the command line knows, and permission to report a field the
+ *     candidate cannot measure yet as deferred. The write-time call passes neither,
+ *     which is what makes the second check the authoritative one.
+ * }} options
+ * @returns {{ file: string | null, display: string | null, baseline: any | null,
+ *   machineLabel: string | null, problems: string[], unverified: Array, note: string | null,
+ *   seeded: object, foundingDependencies: any,
+ *   refusal: { kind: string, message: string } | null }}
+ */
+export function openBaselineForMerge({
+  baselinesDir,
+  run,
+  component,
+  readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8')),
+  existsSync = (file) => fs.existsSync(file),
+  isCompatibleBaseline,
+  schemaVersion,
+  mergeProblems,
+  display = (file) => file,
+  resolved = {},
+}) {
+  const machineLabel = machineLabelOf(run);
+  const labelProblem = machineLabelProblem(machineLabel, {
+    flag: '--update-baseline',
+  });
+  if (labelProblem != null) {
+    return mergeRefusal(null, null, null, 'unlabelled', labelProblem);
+  }
+
+  const file = baselineFileFor({
+    baselinesDir,
+    deviceKey: run.deviceKey,
+    machineLabel,
+  });
+  const shown = display(file);
+  if (!existsSync(file)) {
+    return {
+      ...mergeRefusal(
+        file,
+        shown,
+        machineLabel,
+        'missing',
+        `--update-baseline --component ${String(component)}: no baseline at ${shown} for machine ${machineLabel}, so there is nothing to merge into.\n        The first mint for a machine is a full run: \`--plan full --launches 8 --update-baseline\` with no \`--component\` (bench/baselines/README.md).`
+      ),
+      file,
+    };
+  }
+
+  const baseline = readJson(file);
+  if (!isCompatibleBaseline(baseline)) {
+    return {
+      ...mergeRefusal(
+        file,
+        shown,
+        machineLabel,
+        'incompatible',
+        `--update-baseline --component ${String(component)}: ${shown} is not a v${String(
+          schemaVersion
+        )} ratio baseline (found v${String(baseline?.schemaVersion)}).\n        The pre-D9 baseline gated on absolute rn-core drift and could never fire; re-record it with a full --update-baseline on a clean, quiet commit.`
+      ),
+      file,
+    };
+  }
+  const provenance = baselineProvenanceProblem({
+    machineLabel,
+    baseline,
+    display: shown,
+  });
+  if (provenance != null) {
+    return mergeRefusal(
+      file,
+      shown,
+      machineLabel,
+      'foreign-machine',
+      provenance.replace(/^--check:/, '--update-baseline:')
+    );
+  }
+
+  const decided = mergeProblems({
+    run,
+    baseline,
+    exists: true,
+    component,
+    resolved:
+      typeof resolved === 'function' ? (resolved(baseline) ?? {}) : resolved,
+  });
+  return {
+    file,
+    display: shown,
+    baseline,
+    machineLabel,
+    problems: decided.problems ?? [],
+    unverified: decided.unverified ?? [],
+    note: decided.note ?? null,
+    seeded: decided.seeded ?? {},
+    foundingDependencies: decided.foundingDependencies ?? null,
+    refusal: null,
+  };
+}
+
+function mergeRefusal(file, display, machineLabel, kind, message) {
+  return {
+    file,
+    display,
+    baseline: null,
+    machineLabel,
+    problems: [],
+    unverified: [],
+    note: null,
+    seeded: {},
+    foundingDependencies: null,
+    refusal: { kind, message },
+  };
+}
+
+/**
+ * The versions a baseline file's founding run measured, recovered from git.
+ *
+ * The four committed baselines predate X14's `dependencies` block, so the file
+ * itself cannot say which `@expo/ui` its cells were measured with — but its own
+ * `sha` names a commit, and `bun.lock` is committed, so the answer is in history
+ * rather than in an assumption (X14). `git` is injected and read-only (`git
+ * show`): an invented version would be a comparison this guard then passes for no
+ * reason, so an unreadable revision or lock comes back as nulls and the merge is
+ * refused with the name of what could not be read.
+ *
+ * @param {{
+ *   baseline: any,
+ *   git?: ((args: string[]) => string | null) | null,
+ * }} input
+ * @returns {{ 'dependencies.reactNative'?: {value: string|null, why: string},
+ *   'dependencies.expoUi'?: {value: string|null, why: string},
+ *   dependencies: any, problems: string[] }}
+ */
+export function foundingDependencies({ baseline, git = null }) {
+  const out = { dependencies: null, problems: [] };
+  if (git == null) {
+    return out;
+  }
+  if (baseline?.dependencies != null) {
+    return out;
+  }
+  const sha = typeof baseline?.sha === 'string' ? baseline.sha : null;
+  if (sha == null) {
+    out.problems.push(
+      'the baseline records no founding `sha`, so its app versions cannot be recovered from git'
+    );
+    return out;
+  }
+  const source = `bun.lock at the baseline's founding commit ${sha}`;
+  const resolved = resolvedDependencies({
+    ...dependenciesSourceAt({ git, rev: sha }),
+    source,
+  });
+  for (const problem of resolved.problems ?? []) {
+    out.problems.push(problem);
+  }
+  out.dependencies = foundingDependencyRecord({
+    reactNative: resolved.reactNative,
+    expoUi: resolved.expoUi,
+    source,
+  });
+  out['dependencies.reactNative'] = {
+    value: resolved.reactNative,
+    why: source,
+  };
+  out['dependencies.expoUi'] = {
+    value: resolved.expoUi,
+    why: source,
+  };
+  return out;
+}
+
+/**
+ * Whether a committed baseline was measured on the machine whose directory holds it.
  *
  * The directory *is* the lookup, so a file inside it that records another hostname
  * got here by `cp` or by a `git mv`. That file is still a plausible table of ratios,
