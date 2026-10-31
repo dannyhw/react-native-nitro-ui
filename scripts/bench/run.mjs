@@ -41,7 +41,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { build, flag, locateArtifact } from './build.mjs';
+import { build, flag, locateArtifact, REPO_ROOT } from './build.mjs';
 import {
   adb,
   prepareAndroid,
@@ -52,37 +52,52 @@ import {
   simctl,
 } from './devices.mjs';
 import {
+  androidDryRunDevice,
+  iosDryRunDevice,
+  mergeDependencyEvidence,
+  readAvdHardware,
+  avdHomeFrom,
+  attachedEmulatorSerials,
+  simctlListing,
+} from './dry-run.mjs';
+import {
   ARMS_WITHOUT_COMPONENT,
-  baselineTimeoutsFor,
-  LAUNCHES_PER_CELL,
-  MARK_CAPABLE_IMPLEMENTATIONS,
-  PLANS,
-  SCHEMA_VERSION,
-  LOAD_SAMPLE_INTERVAL_MS,
-  aggregateRecords,
+  BASELINE_SCHEMA_VERSION,
   baselineNoise,
   baselineTable,
+  baselineTimeoutsFor,
   buildSchedule,
   createLoadSampler,
   isCompatibleBaseline,
+  LAUNCHES_PER_CELL,
   launchBudgetMs,
   launchPlanString,
   loadBlocker,
+  MARK_CAPABLE_IMPLEMENTATIONS,
+  mergeBaselineProblems,
+  mergeRunProblems,
   narrowingProblem,
   parseTimeoutFlags,
-  timeoutRuleProblem,
+  PLANS,
   requestedTimeouts,
   resultsFileName,
+  SCHEMA_VERSION,
   summarizeMissingReasons,
+  timeoutRuleProblem,
   componentOf,
+  LOAD_SAMPLE_INTERVAL_MS,
+  aggregateRecords,
 } from './lib.mjs';
 import {
+  foundingDependencies,
   labelPreFlightProblem,
   mintBaselineFileFor,
   openBaselineForCheck,
+  openBaselineForMerge,
 } from './baseline.mjs';
+import { collectMachine, mergeCandidateRun, tryExec } from './machine.mjs';
 import { dryRun } from './dry-run.mjs';
-import { collectMachine, tryExec } from './machine.mjs';
+import { installedDependenciesProblem } from './deps.mjs';
 import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
 import {
   BASELINES_DIR,
@@ -583,6 +598,116 @@ function appendSection(markdownFile, section) {
 
 /* ----------------------------------- main --------------------------------- */
 
+/**
+ * The device key a *pre-flight* can name without booting anything (X14).
+ *
+ * `resolveIosDevice` boots a stopped simulator and `resolveAndroidDevice` requires
+ * a running emulator, which is exactly what a pre-flight must survive - so the key
+ * comes from the read-only paths `--dry-run` already uses, and the two cannot
+ * disagree because both call these same functions.
+ */
+function preflightDevice(platform, env = process.env) {
+  if (platform === 'ios') {
+    const udid = env.IOS_SIM_UDID ?? null;
+    return iosDryRunDevice({
+      udid,
+      listing: udid == null || udid === '' ? null : simctlListing(env),
+    });
+  }
+  const avd = env.ANDROID_AVD ?? env.AVD ?? null;
+  return androidDryRunDevice({
+    avd,
+    serial: env.ANDROID_SERIAL ?? null,
+    hardware: readAvdHardware({
+      avd,
+      avdHome: avdHomeFrom(env),
+      read: (file) => {
+        try {
+          return fs.readFileSync(file, 'utf8');
+        } catch {
+          return null;
+        }
+      },
+    }),
+    attachedSerials: attachedEmulatorSerials(env),
+  });
+}
+
+/**
+ * May this component's cells be merged into this machine's baseline file?
+ *
+ * One question, asked twice: once from what the command line and the host already
+ * know (so a run that can only be refused is never started), and once of the
+ * measured run before a byte is written (X14). The second call is the authoritative
+ * one: it sees a real ART compile state and a real system-image fingerprint, and
+ * only the first call passes `allowDeferred`, which is what lets a field the
+ * pre-flight genuinely cannot measure be *deferred* rather than passed.
+ *
+ * The candidate run is not the run: it is the stand-in `mergeCandidateRun()` builds
+ * so the same guard can be evaluated twice, and it carries nothing the host has not
+ * measured - nulls where the device has not answered, and `bun.lock` for the app
+ * versions.
+ */
+function decideMerge({
+  platform,
+  plan,
+  launches,
+  perfMarks,
+  component,
+  timeouts,
+  filters = {},
+  scheduled = null,
+  run = null,
+  device = null,
+  deviceKey = null,
+  allowDeferred = false,
+}) {
+  const componentPlan = buildSchedule({
+    plan,
+    launches,
+    perfMarks,
+    platform,
+    component,
+  }).length;
+  const candidate =
+    run ??
+    mergeCandidateRun({
+      platform,
+      plan,
+      launches,
+      perfMarks,
+      dirty: isGitDirty(),
+      sha: shortSha(),
+      deviceKey,
+      device: device ?? {},
+      dependencies: mergeDependencyEvidence({
+        lockPath: path.join(REPO_ROOT, 'bun.lock'),
+        nodeModulesDir: path.join(REPO_ROOT, 'node_modules'),
+        git,
+      }).dependencies,
+      timeouts,
+    });
+  const opened = openBaselineForMerge({
+    baselinesDir: BASELINES_DIR,
+    run: candidate,
+    component,
+    isCompatibleBaseline,
+    schemaVersion: BASELINE_SCHEMA_VERSION,
+    readJson,
+    display: (file) => path.relative(process.cwd(), file),
+    resolved: (baseline) => foundingDependencies({ baseline, git }),
+    mergeProblems: (input) =>
+      mergeBaselineProblems({
+        ...input,
+        filters,
+        scheduled,
+        componentPlan,
+        allowDeferred,
+      }),
+  });
+  return { opened, candidate };
+}
+
 export async function main(argv) {
   const platform = flag(argv, '--platform');
   if (platform !== 'ios' && platform !== 'android') {
@@ -604,6 +729,10 @@ export async function main(argv) {
     process.exitCode = 2;
     return;
   }
+  const minting = argv.includes('--update-baseline');
+  const force = argv.includes('--force');
+  const component = flag(argv, '--component');
+  const perfMarks = argv.includes('--perf-marks');
   const launches = Number(
     flag(argv, '--launches') ?? String(LAUNCHES_PER_CELL)
   );
@@ -636,6 +765,13 @@ export async function main(argv) {
       launches,
       component: flag(argv, '--component'),
       baselinesDir: BASELINES_DIR,
+      mergeEvidence: (baseline) =>
+        mergeDependencyEvidence({
+          lockPath: path.join(REPO_ROOT, 'bun.lock'),
+          nodeModulesDir: path.join(REPO_ROOT, 'node_modules'),
+          git,
+          baseline,
+        }),
     });
     return;
   }
@@ -659,7 +795,7 @@ export async function main(argv) {
   // instead of after a three-hour plan. Local feedback runs are not refused -
   // their ratios are same-run pairs, and a busy machine is information there, not
   // a disqualification.
-  if (argv.includes('--update-baseline') && !argv.includes('--force')) {
+  if (minting && !force) {
     const preflight = [];
     const blocker = loadBlocker({
       loadavg1: os.loadavg()[0] ?? null,
@@ -678,23 +814,19 @@ export async function main(argv) {
       scenario: flag(argv, '--scenario'),
       n: argv.includes('--n') ? Number(flag(argv, '--n')) : null,
     };
+    const scheduled = buildSchedule({
+      plan,
+      launches,
+      perfMarks,
+      platform,
+      ...filters,
+    }).length;
     const narrowed = narrowingProblem({
-      scheduled: buildSchedule({
-        plan,
-        launches,
-        perfMarks: argv.includes('--perf-marks'),
-        platform,
-        ...filters,
-      }).length,
-      wholePlan: buildSchedule({
-        plan,
-        launches,
-        perfMarks: argv.includes('--perf-marks'),
-        platform,
-      }).length,
+      scheduled,
+      wholePlan: buildSchedule({ plan, launches, perfMarks, platform }).length,
       filters,
     });
-    if (narrowed != null) {
+    if (narrowed != null && component == null) {
       preflight.push(narrowed);
     }
     // Same for the waiting rule: the runner's own startup line calls any `--timeout-*`
@@ -708,6 +840,48 @@ export async function main(argv) {
     });
     if (waitingProblem != null) {
       preflight.push(waitingProblem);
+    }
+    // A merge mint is the one run `narrowingProblem()` must not refuse: writing one
+    // component's cells into an existing file *is* a narrowed schedule (X14). So for
+    // that shape the narrowing guard is replaced by the question that actually
+    // matters - may this file take this component's cells at all - answered here,
+    // before the device is booted, from what the host already knows. Anything the
+    // pre-flight cannot measure yet (an ART compile state, a system-image
+    // fingerprint) is deferred to the authoritative check below, not passed.
+    if (component != null) {
+      const device = preflightDevice(platform);
+      preflight.push(
+        ...mergeRunProblems({
+          plan,
+          launches,
+          perfMarks,
+          dirty: isGitDirty(),
+        })
+      );
+      const decided = decideMerge({
+        platform,
+        plan,
+        launches,
+        perfMarks,
+        component,
+        timeouts,
+        filters: {
+          only: filters.only,
+          scenario: filters.scenario,
+          n: filters.n,
+        },
+        scheduled,
+        deviceKey: device.deviceKey,
+        device: device.device,
+        allowDeferred: true,
+      });
+      preflight.push(...decided.opened.problems);
+      for (const entry of decided.opened.unverified) {
+        log(`Merge:     ${entry.reason}`);
+      }
+      for (const entry of decided.opened.deferred) {
+        log(`Merge:     deferred - ${entry.reason}`);
+      }
     }
     if (preflight.length > 0) {
       log(
@@ -739,14 +913,12 @@ export async function main(argv) {
     }
   });
 
-  const perfMarks = argv.includes('--perf-marks');
   if (perfMarks) {
     log(
       `Perf marks: ON (${MARK_CAPABLE_IMPLEMENTATIONS.join(', ')} only) - diagnostics, not a gated measurement`
     );
   }
 
-  const force = argv.includes('--force');
   const built = argv.includes('--skip-build')
     ? locateArtifact(platform)
     : build(platform, { prebuildFirst: argv.includes('--prebuild') });
@@ -755,7 +927,6 @@ export async function main(argv) {
       ? iosTarget(device, built.appPath, built.bundleId)
       : androidTarget(device, built.apkPath, built.packageName);
 
-  const component = flag(argv, '--component');
   const componentsInPlan = [
     ...new Set(PLANS[plan].map((cell) => componentOf(cell.scenario))),
   ];
@@ -854,6 +1025,29 @@ export async function main(argv) {
   const raw = writeRawRecords({ fileName: resultsName, records });
   const cells = aggregateRecords(records, { keepRaw: true });
 
+  // The app versions these numbers belong to (X14). Read from `bun.lock` because
+  // that is the record that travels — a baseline minted today has to be
+  // comparable with a file written from a commit this checkout has never seen, and
+  // the lock is the only version list committed at both. The installed packages are
+  // recorded beside it because the measured thing is the install, and a stale one
+  // is a claim about an app that was never run.
+  const dependencyEvidence = mergeDependencyEvidence({
+    lockPath: path.join(REPO_ROOT, 'bun.lock'),
+    nodeModulesDir: path.join(REPO_ROOT, 'node_modules'),
+    git,
+  });
+  const dependencies = dependencyEvidence.dependencies;
+  const installProblem = installedDependenciesProblem({
+    resolved: dependencies,
+    installed: {
+      reactNative: dependencies.installedReactNative,
+      expoUi: dependencies.installedExpoUi,
+    },
+  });
+  if (installProblem != null) {
+    problems.push(installProblem);
+  }
+
   const run = {
     schemaVersion: SCHEMA_VERSION,
     sha: shortSha(),
@@ -865,6 +1059,7 @@ export async function main(argv) {
     launches,
     perfMarks,
     art,
+    dependencies,
     /**
      * The waiting rule this run measured under (A4). Read back from the cells rather
      * than echoed from the flags, so a run whose app binary predates the launch flag
@@ -949,11 +1144,70 @@ export async function main(argv) {
       exitCode = Math.max(exitCode, 2);
     } else {
       const file = mint.file;
-      const outcome = writeBaseline(file, run, { force });
+      // The authoritative merge check (X14). The pre-flight asked the same question
+      // of a candidate run before the device was booted, and was told to *defer*
+      // whatever it could not measure yet; this is the run, so nothing is deferred
+      // and the answers here are the ones the file is written on. `--force` skips
+      // measurement-quality guards, never comparability: `--force` is a human saying
+      // "I know the machine was busy", not "I know this is a different simulator".
+      let merge = null;
+      if (component != null) {
+        merge = decideMerge({
+          platform,
+          plan,
+          launches,
+          perfMarks,
+          component,
+          timeouts,
+          run,
+          scheduled: schedule.length,
+        });
+        const blockers = merge.opened.problems;
+        if (merge.opened.refusal != null) {
+          log(`\n${merge.opened.refusal.message}`);
+          exitCode = Math.max(exitCode, 2);
+          process.exitCode = exitCode;
+          return;
+        }
+        if (blockers.length > 0) {
+          log(
+            `\n--update-baseline --component ${String(
+              component
+            )} refused: this run's numbers cannot live in ${String(merge.opened.display)}\n${blockers
+              .map((reason) => `  - ${reason}`)
+              .join('\n')}`
+          );
+          exitCode = Math.max(exitCode, 2);
+          process.exitCode = exitCode;
+          return;
+        }
+        for (const entry of merge.opened.unverified) {
+          log(`Merge:     ${entry.reason}`);
+        }
+      }
+      const outcome = writeBaseline(file, run, {
+        force,
+        component,
+        existing: merge?.opened.baseline ?? null,
+        componentsBase: merge?.opened.seeded ?? null,
+        dependencies: merge == null ? null : merge.opened.foundingDependencies,
+        comparabilityNotes: merge?.opened.unverified ?? [],
+      });
       if (outcome.written) {
         log(`Baseline written: ${path.relative(process.cwd(), file)}`);
         if (outcome.note != null) {
           log(`  ${outcome.note}`);
+        }
+        if (outcome.merged != null) {
+          log(
+            `  merged:  ${String(outcome.merged.addedCells)} \`${String(
+              component
+            )}\` cell(s) added, ${String(
+              outcome.merged.removedCells
+            )} replaced; ${String(
+              Object.keys(outcome.baseline.cells).length
+            )} cells in the file`
+          );
         }
         if (force) {
           log('  (written with --force; review the guards below)');
