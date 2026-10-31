@@ -9,39 +9,33 @@ All seven items are closed.
 
 **1 — Lease/Metro overlap.** `lease.mjs acquire` asks `lsof` what listens on every configured pair's
 Metro port *before* it takes the lock, and `decideAcquire` treats a pair whose port is served the way
-it treats a leased one: take the quiet pair if there is one, otherwise wait on the port with a reason
-naming the pid and program instead of "every pair is already leased" — which sends a task to
-`lease.mjs list`, where a stale Metro is invisible. `gate.mjs` asks the same question about the port
-its own lease exported, before the build rather than after the app has joined a stranger's Metro, and
-refuses naming the process; `NITRO_UI_GATE_METRO_FORCE=1` is the escape hatch for a Metro started on
-purpose. A task's own pair is exempt, so re-sourcing an env file mid-suite still works. Both checks
-fail open *out loud* where `lsof` cannot answer.
+it treats a leased one: take the quiet pair, otherwise wait with a reason naming the pid and program
+instead of "every pair is already leased" — which sends a task to `lease.mjs list`, where a stale Metro
+is invisible. `gate.mjs` asks the same question about the port its own lease exported, before the build
+rather than after the app has joined a stranger's Metro, and refuses naming the process;
+`NITRO_UI_GATE_METRO_FORCE=1` is the escape hatch for one started on purpose. A task's own pair is
+exempt. Both fail open *out loud* where `lsof` cannot answer.
 
 **2 — `test:native:android`.** A `check` step now, and CI's `build-android` job runs it. Warm cost
-here: 1.9 s inside `check`, 1.2 s after touching a Kotlin file, 11.5 s with `--rerun-tasks`, 37 s on a
-first run that must store its configuration cache — under the brief's 60 s bar at the worst of them,
-so `check` and not just CI. It reads `nitrogen/generated` through the library's own autolinking, so
+here: 1.9 s inside `check`, 1.2 s after touching a Kotlin file, 11.5 s with `--rerun-tasks`, 37 s for a
+first run that stores its configuration cache — under the brief's 60 s bar at the worst of them, so
+`check` and not just CI. It reads `nitrogen/generated` through the library's own autolinking, so
 `prepare` (which deletes that tree) waits on it as it does on `test` and `nitrogen:check`. In CI the
-script skips when `CI` is set and the Android job runs it: that job has JDK 17, accepted licences and
-a gradle cache warmed by a real build, where `checks` has an SDK but no JDK of its own. The skip
-names the job that owns the run, so a green `check` row cannot read as "no Kotlin tests ran
-anywhere".
+script skips when `CI` is set and `build-android` runs it instead: that job has JDK 17, licences and a
+gradle cache warmed by a real build, where `checks` has neither. The skip names the job that owns the
+run, so a green `check` row cannot read as "no Kotlin tests ran".
 
 **4 — bench platform.** `resolveGate` reads the bench's own `--platform` into a new `benchPlatform`,
-and the ledger's `platform`/`device` come from that. `platform` itself stays null for a bench: it is
-the field that claims a device, pre-flights Metro and asks for per-suite timings, and a bench does
-none of those.
+which the ledger's `platform`/`device` now use. `platform` itself stays null for a bench: it claims a
+device, pre-flights Metro and asks for per-suite timings, and a bench does none of those.
 
 **3, 5, 6, 7.** Menu's read-back test waits for each handle through the file's own `pollUntil` — for a
-handle, never for a value, so a wrong prop is exactly as red as before. A reference arm's monotonic
-leak cell says "reported, not gated". `example/src/readme-examples.tsx` is check-only tooling.
-CONTRIBUTING says `macos-26`, with a test that compares every runner label the doc names against what
-the workflows schedule on.
+handle, never a value, so a wrong prop is exactly as red as before. A reference arm's monotonic leak
+cell says "reported, not gated". `example/src/readme-examples.tsx` is check-only tooling. CONTRIBUTING
+says `macos-26`, with a test comparing every runner label the doc names against the workflows'.
 
-One bug found on the way, and it was mine: `metroPreflight()` returns a number and `runGate` read
-`.status` off it, so *every* device gate would have returned `undefined` before starting — exit 0, no
-ledger line, nothing built. That is why two of the new CLI cases exist, and they are named in the
-red proofs.
+One bug found on the way was mine: `runGate` read `.status` off the number `metroPreflight()` returns,
+so every device gate would have exited 0 having run nothing.
 
 ## Gates
 
@@ -59,8 +53,10 @@ merge-stage bar, not review's.
 Both platforms ran `Menu.harness.tsx` green (15 tests each), which is item 3's evidence: the test now
 waits for the three `hybridRef` handles on devices where they used to arrive after the render settled.
 The two harness runs were serialised on purpose: pair-b is one device *pair* with one Metro on 8293, so
-a concurrent `harness:ios` would collide with `harness:android` on exactly the port item 1 guards (and
-item 1's pre-flight is the guard that would say so instead of failing obscurely).
+a concurrent `harness:ios` would collide with `harness:android` on exactly the port item 1 guards. The
+collision's signature — `The app bridge was replaced by a newer app connection`, three lost device runs
+in the incident FOLLOWUPS records — is what `metroPortReason` prints when it refuses, so a refusal names
+both the process and the failure it prevented.
 
 ## Red proofs
 
