@@ -62,7 +62,7 @@ import {
   render,
   waitFor,
 } from 'react-native-harness';
-import { Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { DatePicker, Switch, nitroUiCore } from 'react-native-nitro-ui';
 
 /** The `nuiPerfId` every view in this file mounts with, so its marks are findable. */
 const PERF_ID = 71;
@@ -140,10 +140,10 @@ function lifetime(handle: SwitchHandle): { drops: number; recycles: number } {
 }
 
 /** Every `kind` this instance has marked since the last call, oldest first. */
-function drainKinds(): string[] {
+function drainKinds(instanceId: number = PERF_ID): string[] {
   const kinds: string[] = [];
   for (const event of nitroUiCore.drainPerf()) {
-    if (event.instanceId === PERF_ID) {
+    if (event.instanceId === instanceId) {
       kinds.push(event.kind);
     }
   }
@@ -356,6 +356,108 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
       expect(afterDrop).toEqual(
         expect.arrayContaining(['dropped', 'recycled'])
       );
+    } finally {
+      nitroUiCore.setPerfEnabled(false);
+    }
+  });
+
+  it('hands the next mount a host with no sizing policy left behind', async () => {
+    // The reset rule that F6's flag exposed, and the one that actually broke a suite.
+    // `sizingPolicy` is per-*host* state that a prop setter moves: DatePicker's `variant`
+    // setter sends `compact` → intrinsic and anything else → `fillWidth`, because an
+    // inline calendar takes its width from Yoga's box while a field sizes to its own
+    // text. The setter compares against `model.variant`, and `prepareForRecycle()` puts
+    // that back to `compact` — so the next mount, wanting the default, is "no change"
+    // and returns without touching the policy. The previous owner's `fillWidth` then
+    // survives into a control that is a field, and the field is laid out at its
+    // parent's width. That is how `DatePicker.harness.tsx` · G5 went red on this
+    // branch: three tests failed with a 131.05 dp field laid out at the row's 411.43.
+    //
+    // Shape of a round: an `inline` picker is mounted so its host is legitimately moved
+    // to `fillWidth`, then unmounted — which is what puts that host in the pool — and the
+    // next round mounts a plain `compact` field, the default variant, in a full-width row.
+    // If the policy survived the reset, the field is stretched to the row. So the bound
+    // is `box < row`, and it can only be reached by a control that asked the sizing
+    // engine the *right* question.
+    //
+    // Both mounts carry one perf id, so the `recycled` mark is attributable: without that
+    // witness the box bound below could be satisfied by a run that allocated a fresh view
+    // every time and never ran the reset at all. Three rounds, because which pooled
+    // instance comes back is the pool's choice — the fact this needs is that some round
+    // both recycled and stayed narrow.
+    const POLICY_PERF_ID = 72;
+    const pickers = (variant: 'inline' | 'compact') => (
+      <View testID="policy-row">
+        <DatePicker
+          variant={variant}
+          defaultValue={new Date(2026, 6, 4)}
+          testID="policy-date"
+          nuiPerfId={POLICY_PERF_ID}
+        />
+      </View>
+    );
+    nitroUiCore.setPerfEnabled(true);
+    try {
+      nitroUiCore.drainPerf();
+      let sawRecycle = false;
+      let widestField = 0;
+      let narrowestRow = Number.POSITIVE_INFINITY;
+      for (const round of [0, 1, 2]) {
+        // 1. Leave a `fillWidth` host in the pool.
+        const previous = await render(pickers('inline'), { timeout: 25000 });
+        await waitForTestId('policy-date', 10000);
+        await settle(300);
+        previous.unmount();
+        // Long enough for the drop and, on iOS, for the instance to reach the pool:
+        // `enqueueComponentViewWithComponentHandle` runs `prepareForRecycle` on the
+        // mounting transaction that removes the view (see the identity test below).
+        await settle(500);
+
+        // 2. Mount the default variant, which cannot fix the policy itself.
+        const current = await render(pickers('compact'), { timeout: 25000 });
+        await waitForTestId('policy-date', 10000);
+        await settle(500);
+        const box = harnessUi.queryByTestId('policy-date');
+        const row = harnessUi.queryByTestId('policy-row');
+        if (box == null || row == null) {
+          throw new Error(
+            `round ${String(round)}: the field or the row could not be measured, so ` +
+              'nothing below can say which policy the host was left with'
+          );
+        }
+        const marks = drainKinds(POLICY_PERF_ID).filter(
+          (kind) => kind === 'recycled'
+        ).length;
+        if (marks > 0) {
+          sawRecycle = true;
+        }
+        widestField = Math.max(widestField, box.width);
+        narrowestRow = Math.min(narrowestRow, row.width);
+        console.log(
+          `    · round ${String(round)} (inline -> compact): ` +
+            `box=${box.width.toFixed(2)} row=${row.width.toFixed(2)} ` +
+            `recycledMarks=${String(marks)}`
+        );
+        current.unmount();
+        await settle(300);
+      }
+
+      // The witness first: a run that never pooled would leave the bound below
+      // trivially true, so the loop has to show it reached the reset at all.
+      expect(sawRecycle).toBe(true);
+      // The claim. `widestField` and `narrowestRow` are deliberately the pessimistic
+      // pair across rounds: the assertion holds only if *every* round's field was
+      // narrower than *every* round's row, so a single stretched field fails it. The
+      // two numbers are not from one layout pass, which is what makes this about the
+      // rule rather than about a particular measurement.
+      if (widestField >= narrowestRow - 1) {
+        throw new Error(
+          `a compact field was laid out at its row's width — widest field ` +
+            `${widestField.toFixed(2)} against narrowest row ` +
+            `${narrowestRow.toFixed(2)}, so a recycled host kept the previous ` +
+            `owner's fillWidth sizing policy`
+        );
+      }
     } finally {
       nitroUiCore.setPerfEnabled(false);
     }

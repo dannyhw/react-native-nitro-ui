@@ -1852,6 +1852,17 @@ class HybridNitroUiDatePicker(
     host.tag = null
     // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
     // marked the recycle: clearing it here would hide that mark.
+    // Back to the policy the reset variant implies, and it has to be said here rather
+    // than left to the `variant` setter below. The setter compares against
+    // `model.variant`, and `host.prepareForRecycle()` is about to put that back to
+    // `compact`, so a next mount that wants the default variant is "no change" and
+    // returns before touching the policy - which is how an `inline` previous owner
+    // (a `fillWidth` control) left the next one's `compact` field sized to its box:
+    // `DatePicker.harness.tsx` · G5 saw a 131.05 dp field laid out at the row's
+    // 411.43 dp. iOS says the same line in `HybridNitroUiDatePicker.prepareForRecycle`,
+    // and `HybridNitroUiPicker`/`HybridNitroUiProgress` say it here; only this control
+    // was missing it, which is why the bug showed on Android alone.
+    host.sizingPolicy = NitroUiSizing.POLICY_INTRINSIC
     // The dialog first, before anything else: `host.prepareForRecycle()` resets the model
     // (which clears `presented`, and a `Dialog` that stops being composed closes its
     // window), and the next mount must not inherit an open dialog - or, worse, the
