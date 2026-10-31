@@ -84,9 +84,16 @@ is not a dependency of the example app — so it is reported rather than fixed.
 - `example/__tests__/Recycling.harness.tsx` — new: pool marks, per-object identity, heap floor,
   drop-path counters. New file so it does not collide with X15's edits to `Menu.harness.tsx`.
 - `android/.../core/NitroUiLifetimeGate.kt` (+ its JVM test), `NitroComposeHost.kt` — the
-  post-drop rule as a testable type; the shadowed process-wide counters fixed.
+  post-drop rule as a testable type; the shadowed process-wide counters fixed. Every host's
+  `drop()` now routes through the gate, so the rule has one place to be enforced from.
+- `cpp/core/NitroUiPerf.hpp`, `cpp/HybridNitroUiCore.cpp`, `android/.../core/NitroUiPerf.kt`,
+  `ios/core/NitroSwiftUIHost.swift`, `ios/components/Switch/…` — the `dropped`/`recycled` ring
+  kinds on both platforms, and the per-object `drops=`/`recycles=` read-out on Switch.
 - `ios/.../HybridNitroUiSegmentedControl.swift`, `android/.../HybridNitroUiSegmentedControl.kt` —
   `nuiTestDisplayedIndex`, and the body fix that made the iOS build compile again.
+- `src/**` (Switch + SegmentedControl `.nitro.ts`/native shims) and the nitrogen output under
+  `android/src/main/java/com/margelo/nitro/nitroui/spec` + `cpp/generated` — the two probes are
+  spec methods, so the generated bindings move with them (`check`'s drift step is what says so).
 - `example/__tests__/Conformance.harness.tsx`, `scripts/conformance-core.mjs`,
   `scripts/__tests__/{conformance,component-coverage}.test.js` — two cells flipped to covered,
   one narrowed, the platform section rewritten to say what was measured.
