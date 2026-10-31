@@ -613,7 +613,16 @@ cd example/android && ./gradlew :app:assembleDebug -PreactNativeArchitectures=ar
 ```
 
 A hand-built artifact has no stamp, so a gate asked to use one says so and names
-`build-app.mjs`. `scripts/pod-install.mjs` is the repo's only CocoaPods entry
+`build-app.mjs` — pointing `HARNESS_APP_PATH` at an Xcode or Android Studio build
+does not get past that check, because the refusal is about proof of provenance and
+not about the path. The hatch, for the run that genuinely has no artifact to prove
+(a suite against whatever the emulator already has installed), is
+`NITRO_UI_ALLOW_UNSTAMPED=1`: it is read only when no artifact exists at all, it
+cannot waive the check on one that does, and it prints a red line saying the run
+proves nothing about this checkout. Use it for a deliberate experiment, never to
+get a gate green.
+
+`scripts/pod-install.mjs` is the repo's only CocoaPods entry
 point: it runs the version a `Podfile.lock` already records, so a machine on
 another CocoaPods does not leave a `COCOAPODS:`-trailer-only diff in a tracked
 lock file (four tasks each lost time restoring that line by hand).
@@ -1429,6 +1438,18 @@ request, on free GitHub-hosted runners: `bun run check` (ubuntu, Node from
 them in a `macos-26` job instead), and an Android `assembleDebug` of the
 example.
 
+Every push to `main` reaches a conclusion, by two rules rather than one.
+`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` cancels superseded
+runs on pull requests and feature branches only, and `main` additionally gets a
+concurrency group **per commit**
+(`group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}`).
+The second rule is not optional: GitHub keeps just one running and one pending run
+per group, and a newly queued run replaces the pending one whatever
+`cancel-in-progress` says, so a branch-level group on `main` meant three quick
+merges lost the middle one with no conclusion. `main` is the branch whose
+conclusion the release pipeline and the next person's bisect read, and losing a
+run there is how a red `main` stayed unnoticed for seven hours on 31 Oct (F4).
+
 That Android job is also where the Kotlin JVM tests run. `scripts/native-tests-
 android.sh` skips when `CI` is set, because `check`'s runner has an SDK but no JDK
 of its own and an empty gradle cache, and the Android job has already paid for all
@@ -1443,6 +1464,13 @@ the harness suites, the consumer smoke tests, the benchmarks, the Android releas
 build - stays **manual**: those jobs are `workflow_dispatch` only, because a
 hosted runner has no device, and the device gates that decide a task run locally
 (D22, D25).
+
+The two macOS labels CI schedules on run iOS 26-and-up simulators only, so
+**nothing in CI can exercise the declared sizing fallbacks on an older iOS
+runtime**. `docs/ci-runner-images.md` records what each published image manifest
+installs, which image series has an iOS 18 simulator at all, and what the first
+try at a row there would take. Until that is tried, an older-runtime check is a
+manual run on a maintainer Mac, recorded in a report.
 
 Validate workflow edits locally with
 [`actionlint`](https://github.com/rhysd/actionlint)

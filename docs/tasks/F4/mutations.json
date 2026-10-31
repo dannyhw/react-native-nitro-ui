@@ -1,0 +1,377 @@
+{
+  "task": "F4",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it. Every `before` was verified to occur verbatim in `file` at HEAD cdeb2d1 by the same audit probe X15 used. Each row names the test(s) that went red, with the assertion or log line quoted in the report. Run on maintainer-mac-1, 2026-10-31, lease F4-on9yl. The last 13 rows are fix round 1, run the same way against HEAD 2e76dc0 (lease F4-ral3b), and their `before` strings are read from the files as they ship at that commit. Round 0's row 6 (drop the `if:` on the restore step) was re-run at that commit too, and its `before` now records the text as it ships there.",
+  "mutations": [
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/ci.yml",
+      "mutation": "concurrency goes back to cancelling every ref, main included",
+      "before": "  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}",
+      "after": "  cancel-in-progress: true",
+      "redTests": [
+        "does not cancel an in-progress run of main"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/ci.yml",
+      "mutation": "the fix overshoots and nothing is ever cancelled again",
+      "before": "  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}",
+      "after": "  cancel-in-progress: false",
+      "redTests": [
+        "still cancels a superseded run on a pull request or feature branch"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/ci.yml",
+      "mutation": "the harness job is handed a workflow-relative app path again (A2's AbortError)",
+      "before": "          app: ${{ github.workspace }}/example/android/app/build/outputs/apk/debug/app-debug.apk",
+      "after": "          app: android/app/build/outputs/apk/debug/app-debug.apk",
+      "redTests": [
+        "passes an absolute `app:` path, because the CLI only ever existsSync()es it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/ci.yml",
+      "mutation": "the job that runs check loses its history",
+      "before": "          fetch-depth: 0",
+      "after": "          fetch-depth: 1",
+      "redTests": [
+        "every job that runs `check` or the catch-up script fetches the full history"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/release-tag.yml",
+      "mutation": "the catch-up cron goes back to minute 0",
+      "before": "    - cron: '17 * * * *'",
+      "after": "    - cron: '0 * * * *'",
+      "redTests": [
+        "the catch-up cron does not start on the hour"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/release.yml",
+      "mutation": "the pack job restores a node_modules cache again",
+      "before": "          package-manager-cache: false",
+      "after": "          package-manager-cache: true",
+      "redTests": [
+        "packs the publish artifact without a restored node_modules"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/actions/setup/action.yml",
+      "mutation": "the restore step ignores the new input, so turning caching off is a lie",
+      "before": "      if: inputs.package-manager-cache != 'false'\n      uses: actions/cache/restore",
+      "after": "      uses: actions/cache/restore",
+      "redTests": [
+        "the composite can install without caching, and every cache step obeys it"
+      ],
+      "note": "Round 1 re-ran this mutant at HEAD 2e76dc0, where the `if:` had been rewritten to compare the input as a string. Same mutation (drop the `if:` entirely), same test red; `before` records the text as it ships at that commit."
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/release.yml",
+      "mutation": "the staged-version guard keeps only the older npm wording",
+      "before": "grep -qiE 'cannot publish over the previously published versions|cannot stage previously published version'",
+      "after": "grep -qiE 'cannot publish over the previously published versions'",
+      "redTests": [
+        "a staged-but-not-approved version is recognised from both npm wordings"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/release.yml",
+      "mutation": "the staged-version guard keeps only the E409 wording (the other direction)",
+      "before": "grep -qiE 'cannot publish over the previously published versions|cannot stage previously published version'",
+      "after": "grep -qiE 'cannot stage previously published version'",
+      "redTests": [
+        "a staged-but-not-approved version is recognised from both npm wordings"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": "CONTRIBUTING.md",
+      "mutation": "the escape hatch is described without naming it",
+      "before": "`NITRO_UI_ALLOW_UNSTAMPED=1`:",
+      "after": "the environment variable named in the config:",
+      "redTests": [
+        "CONTRIBUTING documents the escape hatch rather than leaving it in source"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": "example/rn-harness.config.mjs",
+      "mutation": "the no-app refusal advertises a path the same check then refuses (X1 re-review F3)",
+      "before": "      '       an app built another way has no stamp and is refused too -\\n' +\n      '       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite with no artifact check\\n' +\n      '       at all, against whatever the device already has installed.'",
+      "after": "      '       or point HARNESS_APP_PATH at an app built another way;\\n' +\n      '       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite without this check.'",
+      "redTests": [
+        "the no-app refusal does not advertise a path the same check then rejects"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": "docs/ci-runner-images.md",
+      "mutation": "the note claims the labels CI uses can run iOS 18",
+      "before": "**neither image this repo uses can run an iOS 18 simulator.**",
+      "after": "**both images can run iOS 18 if you ask.**",
+      "redTests": [
+        "the claim about an older iOS runtime cites a runner manifest that says it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js + scripts/__tests__/release-catch-up.test.js",
+      "file": "scripts/release-catch-up.mjs",
+      "mutation": "the version-commit walk goes back to pre-ea621e7: first commit whose package.json matches wins, so a later dependency bump takes the tag",
+      "before": "export function findVersionCommit(commits, version, readVersionAt) {\n  let found = null;\n  for (const sha of commits) {\n    if (readVersionAt(sha) === version) {\n      found = sha;\n    } else if (found !== null) {\n      break;\n    }\n  }\n  return found;\n}",
+      "after": "export function findVersionCommit(commits, version, readVersionAt) {\n  for (const sha of commits) {\n    if (readVersionAt(sha) === version) return sha;\n  }\n  return null;\n}",
+      "redTests": [
+        "asks gh for the bump commit, not the newer commit that kept the version",
+        "does not name the dependency bump as the release it is tagging",
+        "and the two matching cases in release-catch-up.test.js (3 failed of 31)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-harness-config.test.js",
+      "file": "scripts/app-stamp-core.mjs",
+      "mutation": "the action's runner environment is ignored - the pre-F4 behaviour that made Harness (Android) refuse over an iOS .app",
+      "before": "  const runner = runnerFromArgv(argv) ?? runnerFromEnv(env) ?? 'ios';",
+      "after": "  const runner = runnerFromArgv(argv) ?? 'ios';",
+      "redTests": [
+        "reads INPUT_RUNNER when argv does not name a runner",
+        "reads HARNESS_RUNNER when argv does not name a runner"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-harness-config.test.js",
+      "file": "scripts/app-stamp-core.mjs",
+      "mutation": "a cache-planning step's config read gates the stamp again (every read is treated as a device run)",
+      "before": "  const ciStep =\n    runnerFromArgv(argv) == null &&\n    argv[2] === 'ci' &&\n    HARNESS_CI_SUBCOMMANDS.includes(String(argv[3] ?? ''));",
+      "after": "  const ciStep = false;",
+      "redTests": [
+        "harness ci load-config gates nothing",
+        "harness ci plan-metro-restore gates nothing",
+        "harness ci snapshot-metro gates nothing",
+        "harness ci plan-metro-save gates nothing",
+        "reads INPUT_RUNNER when argv does not name a runner",
+        "reads HARNESS_RUNNER when argv does not name a runner"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-harness-config.test.js",
+      "file": "scripts/app-stamp-core.mjs",
+      "mutation": "a path written from the repository root stops being understood",
+      "before": "  if (parentDir != null) {\n    const fromParent = joinPath(parentDir, explicit);\n    if (existsSync(fromParent)) return fromParent;\n  }",
+      "after": "",
+      "redTests": [
+        "understands a path written from the repository root, as CI and the reports write it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-harness-config.test.js",
+      "file": "scripts/app-stamp-core.mjs",
+      "mutation": "an explicit HARNESS_APP_PATH is passed through verbatim, as the action hands it over",
+      "before": "    return {\n      runner,\n      artifact: resolveAppPath(explicit, { existsSync, cwd, parentDir }),\n      ciStep,\n    };",
+      "after": "    return { runner, artifact: explicit, ciStep };",
+      "redTests": [
+        "resolves a path relative to the project root, which is where the CLI looks",
+        "understands a path written from the repository root, as CI and the reports write it",
+        "leaves an unresolvable path pointing at the project root, so the CLI names it",
+        "a path with a trailing slash still names the same artifact"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-harness-config.test.js",
+      "file": "scripts/app-stamp-core.mjs",
+      "mutation": "path joining forgets that the input may already be absolute, so it rebases onto example/",
+      "before": "  if (isAbsolutePath(explicit)) return trimTrailingSlash(explicit);\n  const fromCwd = joinPath(cwd, explicit);",
+      "after": "  const fromCwd = joinPath(cwd, explicit);",
+      "redTests": [
+        "keeps an absolute path exactly as given",
+        "a path with a trailing slash still names the same artifact",
+        "an explicit path is preferred over the one this worktree built"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/build-speed.test.js",
+      "file": "scripts/build-app.mjs",
+      "mutation": "the --clean help goes back to the one-liner the X1 re-review complained about",
+      "before": "  \"  --clean  delete this platform's build state first, and never skip:\\n\" +\n  '             ios     - example/ios/build (DerivedData), plus the record of\\n' +\n  '                       what the last pod install was shown; Pods/ is kept\\n' +\n  '             android - example/android/app/build\\n' +\n  '           (bun run clean is what removes Pods/ and every build directory.)\\n' +",
+      "after": "  '  --clean  delete the build directory first (never skips).\\n' +",
+      "redTests": [
+        "names what --clean deletes, in the help text as well as in code"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/build-speed.test.js",
+      "file": "scripts/build-speed-lib.mjs",
+      "mutation": "a third clean target (all of Pods/) is added without describing it in the help",
+      "before": "  return [\n    path.join(String(iosDir), IOS_BUILD_DIR),\n    path.join(String(iosDir), 'Pods', POD_INPUTS_RECORD),\n  ];",
+      "after": "  return [\n    path.join(String(iosDir), IOS_BUILD_DIR),\n    path.join(String(iosDir), 'Pods', POD_INPUTS_RECORD),\n    path.join(String(iosDir), 'Pods'),\n  ];",
+      "redTests": [
+        "names what --clean deletes, in the help text as well as in code"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/actions/setup/action.yml",
+      "mutation": "both cache steps go back to the plain truthiness test round 1 shipped, so the input is inert",
+      "before": "      if: inputs.package-manager-cache != 'false'\n      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0\n      with:\n        path: node_modules\n        # bun.lock records a patchedDependencies *path*, not its contents, so\n        # the patch files must be part of the key as well.\n        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-${{ hashFiles('package.json', 'example/package.json', 'patches/**') }}\n\n    - name: Install dependencies\n      if: steps.bun-cache.outputs.cache-hit != 'true'\n      run: bun install --frozen-lockfile --ignore-scripts\n      shell: bash\n\n    - name: Cache dependencies\n      if: inputs.package-manager-cache != 'false' && steps.bun-cache.outputs.cache-hit != 'true'",
+      "after": "      if: inputs.package-manager-cache\n      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0\n      with:\n        path: node_modules\n        # bun.lock records a patchedDependencies *path*, not its contents, so\n        # the patch files must be part of the key as well.\n        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-${{ hashFiles('package.json', 'example/package.json', 'patches/**') }}\n\n    - name: Install dependencies\n      if: steps.bun-cache.outputs.cache-hit != 'true'\n      run: bun install --frozen-lockfile --ignore-scripts\n      shell: bash\n\n    - name: Cache dependencies\n      if: inputs.package-manager-cache && steps.bun-cache.outputs.cache-hit != 'true'",
+      "redTests": [
+        "packs the publish artifact without a restored node_modules",
+        "the composite can install without caching, and every cache step obeys it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/actions/setup/action.yml",
+      "mutation": "only the save step reverts to truthiness, so a caller that asked for no cache still writes one",
+      "before": "      if: inputs.package-manager-cache != 'false' && steps.bun-cache.outputs.cache-hit != 'true'",
+      "after": "      if: inputs.package-manager-cache && steps.bun-cache.outputs.cache-hit != 'true'",
+      "redTests": [
+        "packs the publish artifact without a restored node_modules",
+        "the composite can install without caching, and every cache step obeys it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/actions/setup/action.yml",
+      "mutation": "the unsupported `type: boolean` key comes back, promising a cast a composite action never applies",
+      "before": "    default: 'true'",
+      "after": "    type: boolean\n    default: 'true'",
+      "redTests": [
+        "the composite can install without caching, and every cache step obeys it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/actions/setup/action.yml",
+      "mutation": "the input's default becomes the YAML boolean true instead of the string 'true'",
+      "before": "    default: 'true'",
+      "after": "    default: true",
+      "redTests": [
+        "the composite can install without caching, and every cache step obeys it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/ci.yml",
+      "mutation": "the concurrency group goes back to the branch-level value round 1 shipped",
+      "before": "  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}",
+      "after": "  group: ${{ github.workflow }}-${{ github.ref }}",
+      "redTests": [
+        "gives every push to main its own concurrency group",
+        "loses no commit when three land on main while the first is still running"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/ci.yml",
+      "mutation": "main gets a group per run attempt rather than per commit",
+      "before": "  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}",
+      "after": "  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}",
+      "redTests": [
+        "gives every push to main its own concurrency group"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": ".github/workflows/ci.yml",
+      "mutation": "the condition is inverted, so main shares one group and every pull request gets one per commit",
+      "before": "  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}",
+      "after": "  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.sha || github.ref }}",
+      "redTests": [
+        "still puts every push to one pull request in the same group"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": "CONTRIBUTING.md",
+      "mutation": "the concurrency paragraph goes back to naming only `cancel-in-progress`, with round 1’s overclaim",
+      "before": "Every push to `main` reaches a conclusion, by two rules rather than one.\n`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` cancels superseded\nruns on pull requests and feature branches only, and `main` additionally gets a\nconcurrency group **per commit**\n(`group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}`).",
+      "after": "A push to `main` is never cancelled by the next one. Concurrency cancels\nsuperseded runs on pull requests and feature branches only\n(`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`).",
+      "redTests": [
+        "CONTRIBUTING states both rules, not just the one a reader would copy"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": "CONTRIBUTING.md",
+      "mutation": "the group is documented but the first sentence still claims a push to main is never cancelled",
+      "before": "Every push to `main` reaches a conclusion, by two rules rather than one.",
+      "after": "A push to `main` is never cancelled by the next one, and reaches a conclusion.",
+      "redTests": [
+        "CONTRIBUTING states both rules, not just the one a reader would copy"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": "docs/ci-runner-images.md",
+      "mutation": "the deleted false claim returns (no iOS 18 runtime for Xcode 26), contradicted by the manifest two lines below",
+      "before": "Note what that pairing rules out: an earlier draft of this file said",
+      "after": "Note what that pairing rules out. Apple does not offer an iOS 18 runtime for\nXcode 26 or 27 at all, so an earlier draft of this file said",
+      "redTests": [
+        "the claim about an older iOS runtime cites the arm64 manifests that say it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": "docs/ci-runner-images.md",
+      "mutation": "the Intel manifest’s image id and OS version are quoted for the arm64 label again",
+      "before": "image `20261026.0455.2`, macOS 26.6.2",
+      "after": "image `20260824.0517.1`, macOS 26.6.1",
+      "redTests": [
+        "the claim about an older iOS runtime cites the arm64 manifests that say it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": "docs/ci-runner-images.md",
+      "mutation": "the arm64 manifest filenames are dropped from the citation",
+      "before": "on `main`, read-only: `images/macos/macos-26-arm64-Readme.md`,\n`images/macos/macos-15-arm64-Readme.md`, `images/macos/xcode-27-arm64-Readme.md`.",
+      "after": "on `main`, read-only, from the published macOS image manifests.",
+      "redTests": [
+        "the claim about an older iOS runtime cites the arm64 manifests that say it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "file": "docs/ci-runner-images.md",
+      "mutation": "the unproven paragraph loses its boot/Xcode clause, so a macos-15 row reads as settled",
+      "before": "whether `simctl` will boot that\nruntime under Xcode 26.3, whether",
+      "after": "whether",
+      "redTests": [
+        "the claim about an older iOS runtime cites the arm64 manifests that say it"
+      ]
+    }
+  ],
+  "notMutated": [
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "note": "`the pinned action can talk to the CLI this repo installs` was not mutated: it compares the installed `react-native-harness/package.json` (version 1.6.0, `harnessActionProtocol: 1`) with `example/package.json`'s devDependency and the 40-char pin. Mutating it means editing node_modules or the pin, and the first `check` run after a dependency bump is the real failure mode; the case was verified to read real data by printing both sides."
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js",
+      "note": "`the release workflows still refuse to cancel a run that may be staging` guards what was already true (row 53's check), so it was run against the real files only. Its exactness (a literal `false`, not `'false'` or an expression) is deliberate and was confirmed by reading the parsed YAML."
+    },
+    {
+      "test": "scripts/__tests__/ci-harness-config.test.js",
+      "note": "`the list of ci subcommands still matches the installed CLI` is itself the drift guard: it was shown to work by deleting one entry from HARNESS_CI_SUBCOMMANDS in the scratch check while writing it, and it is the reason the ci-step excuse cannot widen silently."
+    },
+    {
+      "test": "(not a test)",
+      "note": "Fix round 1 item 5 (the ledger, not the code) rests on evidence rather than mutation: the round-0 `harness:android` row whose log has no `gate: claimed …` line is the run launched without the lease env, and `claimDevicesFromEnv` (scripts/device-pool.mjs) returns null when no pair is named there. The fix is this branch's re-run under a lease, whose ledger row carries `lease: F4-ral3b` and the pair devices."
+    }
+  ],
+  "foundByCheck": [
+    {
+      "test": "scripts/__tests__/build-speed.test.js",
+      "note": "The first `bun run check` on this branch was red for a reason no unit run had shown: the guard located the --clean help paragraph with /^\\s+'  --clean/, but prettier had rewritten that literal with double quotes (its first line contains an apostrophe), so `expect(start).toBeGreaterThan(-1)` failed at 143 s. Both spellings are accepted now, and rows 19-20 above were re-run against the prettier-formatted source afterwards. A source-reading test must read the text, not one formatting of it."
+    }
+  ]
+}

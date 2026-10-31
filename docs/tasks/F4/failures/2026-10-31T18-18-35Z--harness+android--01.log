@@ -1,0 +1,81 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-31T18:18:35.102Z on code tree `24426ca64a8a` at HEAD `ba5c029` (branch `task/F4-ci-green`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 4648 ms
+- Load: start 3.77, end 3.62, median 3.69, max 3.77
+- Device: android / device `emulator-5574` / lease `F4-on9yl`
+- Full log: `task/F4-ci-green/harness+android-2026-10-31T18-18-34.844Z.log` (<store>/task/F4-ci-green/harness+android-2026-10-31T18-18-34.844Z.log)
+- Scrubbed: 3 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F4-ci-green/harness+android-2026-10-31T18-18-34.844Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F4-on9yl (still live)
+  |   F4-on9yl                 F4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.62 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 38 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 24426ca64a8a at HEAD ba5c029
+gate: git tree 8b6ff8276729
+gate: log task/F4-ci-green/harness+android-2026-10-31T18-18-34.844Z.log
+gate:       <store>/task/F4-ci-green/harness+android-2026-10-31T18-18-34.844Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 24426ca64a8a, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.77/4.21 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F4-ci-green/harness+android-2026-10-31T18-18-34.844Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+node:internal/per_context/domexception:76
+    const self = new Error();
+                 ^
+
+DOMException [AbortError]: The operation was aborted
+    at new DOMException (node:internal/per_context/domexception:76:18)
+    at AbortSignal.<anonymous> (file:[scrubbed]@react-native-harness/bundler-metro/dist/factory.js:57:20)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:848:20)
+    at AbortSignal.dispatchEvent (node:internal/event_target:789:26)
+    at runAbort (node:internal/abort_controller:554:10)
+    at abortSignal (node:internal/abort_controller:518:3)
+    at AbortController.abort (node:internal/abort_controller:573:5)
+    at createHarnessSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:434:31)
+    at async JestHarness.runTests (file:[scrubbed]@react-native-harness/jest/dist/index.js:32:33)
+    at async TestScheduler.scheduleTests (<repo>/node_modules/@react-native-harness/cli/node_modules/jest-cli/node_modules/@jest/core/build/index.js:1138:15)
+
+Node.js v24.21.0
+gate: harness:android FAIL in 4.6 s
+gate: recorded in .gates/task/F4-ci-green.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/F4-ci-green/harness+android-2026-10-31T18-18-34.844Z.log (5 probe(s))
+
+```
