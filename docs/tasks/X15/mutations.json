@@ -1,6 +1,6 @@
 {
   "task": "X15",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row. Rows whose fix landed after the test (items 3-7 were written test-first) record the state the test was first run against instead: `before` is the pre-fix source and `after` is the shipped code, which is the same inversion, read the other way. Run on maintainer-mac-1, 2026-10-31, lease X15-58alc.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row. Convention (X14's, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it, so `before` is always findable verbatim in `file` at the commit the table describes - including the rows whose fix landed after the test, where `before` is simply the pre-fix source and `after` the shipped code. An audit probe (does `before` occur in `file`?) was run over every row of this file and X14's at fix round 2; the two rows that had drifted with the source are re-recorded below against today's text, each re-run to red. Not a gate: this table quotes source, so a guard here would redden whenever that source legitimately moves. Run on maintainer-mac-1, 2026-10-31, lease X15-58alc.",
   "mutations": [
     {
       "test": "scripts/__tests__/lease-metro-port.test.js",
@@ -66,11 +66,12 @@
       "test": "scripts/__tests__/native-tests-android-skip.test.js",
       "file": "scripts/native-tests-android.sh",
       "mutation": "the CI hand-off is deleted, so `check` runs it in every job",
-      "before": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ]; then\n  echo \"test:native:android: CI runs this in the build-android job (JDK 17 + warm gradle cache) - skipped here\"\n  exit 0\nfi",
+      "before": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ] &&\n  [ \"${NITRO_UI_ANDROID_JVM_TESTS:-}\" != \"1\" ]; then\n  echo \"test:native:android: CI runs this in the build-android job (JDK 17 + warm gradle cache) - skipped here; NITRO_UI_ANDROID_JVM_TESTS=1 runs it in this job\"\n  exit 0\nfi",
       "after": "",
       "redTests": [
         "hands the run to CI's Android job rather than proving it twice"
-      ]
+      ],
+      "note": "Re-recorded at fix round 2: as first written this row quoted the round-1 skip block, which the opt-in then rewrote, so `before` no longer matched the file. Re-run to red today - the script reaches gradle under CI=true (the row's `redTests` name, 324 ms)."
     },
     {
       "test": "scripts/__tests__/native-tests-android-skip.test.js",
@@ -139,7 +140,7 @@
   ],
   "notMutated": "Item 3 (Menu's read-back) waits for a handle rather than adding an assertion, so no mutation is recorded: the only source change that turns it red is breaking `hybridRef`'s registration in the example app, which would take a device run to reach. Its evidence is that the shape which failed at X14 (`handles.get(...)` read once) no longer appears in that test, and that `harness:ios` and `harness:android` are both green on the tree.",
   "fixRound1": {
-    "how": "Same method, appended for fix round 1 (2026-10-31, lease X15-9xz8i). Rows whose fix landed after the test record the pre-fix source as `before` and the shipped code as `after`.",
+    "how": "Same method and same field convention as the round-1 table, appended for fix round 1 (2026-10-31, lease X15-9xz8i). Two rows re-recorded at fix round 2, both re-run to red: the ci.yml-parser row, which named the wrong file, and the hand-off row, whose `before` had been rewritten by the opt-in.",
     "mutations": [
       {
         "test": "scripts/__tests__/native-tests-android-skip.test.js",
@@ -153,13 +154,14 @@
       },
       {
         "test": "scripts/__tests__/native-tests-android-skip.test.js",
-        "file": "scripts/native-tests-android.sh",
-        "mutation": "first cut of the new test, before it could walk past a comment line: the env block above the step was never found",
-        "before": "expect(envIndex).toBeGreaterThan(-1)",
-        "after": "Expected: > -1 / Received: -1",
+        "file": "scripts/__tests__/native-tests-android-skip.test.js",
+        "mutation": "first cut of the new test's ci.yml parser, before it could step over the comment lines above the step's own `env:`",
+        "before": "    if (indent > 8) continue;\n    if (indent < 8) break;",
+        "after": "    if (indent !== 8) break;",
         "redTests": [
           "runs for real in the CI job it hands off to, with that job’s own env"
-        ]
+        ],
+        "note": "Filed against `scripts/native-tests-android.sh` at round 1, which is not where the parser is: it is a helper in the test. Re-recorded against the helper's two lines, re-run to red (`envIndex` -1) at fix round 2."
       },
       {
         "test": "scripts/__tests__/lease-metro-port.test.js",
@@ -170,7 +172,7 @@
         "redTests": [
           "stops the Metro its own run left on the leased port"
         ],
-        "note": "the run hung to the 90 s jest timeout with the ledger unwritten, which is the failure a leaked server caused before this change"
+        "note": "True as written in round 1, and no longer the outcome: the sweep ran before the read ends were released, so a leaked server held the gate's pipes and the run hung to the 90 s jest timeout with the ledger unwritten. After fix round 2 item 3 the same mutation exits 0, writes the ledger, and reds this test's own assertion on the missing sweep line instead - which is the row `lease-metro-port.test.js / sweep disabled (re-run)` in `fixRound2`."
       },
       {
         "test": "scripts/__tests__/lease-metro-port.test.js",
@@ -258,6 +260,145 @@
           "goes quiet once the same device is leased"
         ],
         "note": "observed while another worktree’s harness held pair-a’s Metro: exactly the six failures this helper exists to prevent"
+      }
+    ]
+  },
+  "fixRound2": {
+    "how": "Same method and same field convention, for fix round 2 (2026-10-31, no lease: check-only tooling). Driven by a per-round script (not committed) that applies the row's `before` -> `after`, runs the suite, and restores the file, refusing any needle that is absent or ambiguous.",
+    "mutations": [
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the drain ends at whichever pipe closes first, as shipped in round 1",
+        "before": "    const markClosed = () => {\n      streamsClosedCount += 1;\n      if (streamsClosedCount < 2) return;\n      childStreamsClosed = true;\n      drainNow?.();\n    };",
+        "after": "    const markClosed = () => {\n      childStreamsClosed = true;\n      drainNow?.();\n    };",
+        "redTests": [
+          "keeps the tail written after the run exits, when it arrives on the slower pipe"
+        ],
+        "note": "364 ms. The log loses the second summary: `Expected substring: \"Tests: 7 passed, 7 total\"`."
+      },
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the read ends on the child's pipes are not released after the sweep",
+        "before": "  for (const stream of [childStreams?.out, childStreams?.err]) {\n    try {\n      stream?.destroy();\n    } catch {\n      /* already gone */\n    }\n  }",
+        "after": "  void childStreams;",
+        "redTests": [
+          "exits with its code when a leaked descendant holds the pipes open"
+        ],
+        "note": "`Expected: < 8000 / Received: 10292` - the gate sat for the holder's whole 10 s instead of its 2 s drain."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the gate's own notes go to the terminal only, not into the run's log",
+        "before": "  const note = (message) => {\n    process.stderr.write(message);\n    logText += message;\n    if (logStreamOpen) logStream.write(message);\n  };",
+        "after": "  const note = (message) => {\n    process.stderr.write(message);\n  };",
+        "redTests": [
+          "stops the Metro its own run left on the leased port"
+        ],
+        "note": "stderr still had the line; the transcript read back from the ledger's `logPath` did not."
+      },
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "SIGHUP is not forwarded, as shipped in round 1",
+        "before": "const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];",
+        "after": "const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'];",
+        "redTests": [
+          "forwards SIGHUP to the running gate, re-raises it, and still writes the ledger"
+        ],
+        "note": "The child's trap never fired: a detached child is in its own group, so a hangup no longer reaches it by inheritance."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/__tests__/lease-metro-port.test.js",
+        "mutation": "the fixture holds the event loop open instead of promising its own exit (round 1's shape)",
+        "before": "  'tryBind(0);const die=setTimeout(()=>process.exit(0),60000);if(die.unref)die.unref();';",
+        "after": "  'tryBind(0);setTimeout(()=>{},1e6);';",
+        "redTests": [
+          "exits by itself even if every killer fails"
+        ],
+        "note": "`Expected: false / Received: true` after 12 s of nobody killing it - the shape that left two real listeners on ports 59909 and 60342."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/__tests__/lease-metro-port.test.js",
+        "mutation": "the pid file is looked at once instead of polled",
+        "before": "  const deadline = Date.now() + limitMs;\n  for (;;) {\n    if (existsSync(pidFile)) {",
+        "after": "  const deadline = Date.now() + limitMs;\n  for (let once = 0; once < 1; once += 1) {\n    if (existsSync(pidFile)) {",
+        "redTests": [
+          "waits for a writer that is late, rather than reading a file that is not there"
+        ],
+        "note": "`Expected: > 750 / Received: 28` ms. With a writer that has not arrived, the one-look version returns `null` - the ENOENT that failed once in four under a parallel run."
+      },
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate-core.mjs",
+        "mutation": "the sweep no longer excludes the leader pid, so a recycled pid matches its own group",
+        "before": "    if (pid === leaderPid) continue;",
+        "after": "    void leaderPid;",
+        "redTests": [
+          "never targets the leader pid itself, even when its group matches"
+        ],
+        "note": "The sweep claimed pid 100, which is the one process the gate knows for certain has already exited."
+      },
+      {
+        "test": "scripts/__tests__/free-lsof-stub.test.js",
+        "file": "scripts/__tests__/helpers/free-lsof-stub.js",
+        "mutation": "the stub directory gets a random suffix again, one per import",
+        "before": "const dir = join(tmpdir(), 'nitro-ui-free-lsof');",
+        "after": "const dir = join(\n  tmpdir(),\n  'nitro-ui-free-lsof-' + Math.random().toString(36).slice(2, 8)\n);",
+        "redTests": [
+          "is where this process and the next one both expect it, and nowhere else",
+          "hands every process the same path, so one run leaves one directory",
+          "builds itself once in an empty temp directory, and reuses it after"
+        ],
+        "note": "Three of four rows red: four imports, four different paths, two directories in one private TMPDIR."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the end-of-run Metro sweep is disabled (re-run of the fix-round-1 row)",
+        "before": "  const leftover = await stopOwnMetro({\n    port: process.env.METRO_PORT,\n    leaderPid: childPid,\n    log: note,\n  });",
+        "after": "  const leftover = await Promise.resolve([]);",
+        "redTests": [
+          "stops the Metro its own run left on the leased port"
+        ],
+        "note": "2.9 s, not a 90 s hang: with the pipes released the gate exits and the ledger is written, and what is missing is the sweep line. This is the row the fix-round-1 note now points at."
+      },
+      {
+        "test": "scripts/__tests__/native-tests-android-skip.test.js",
+        "file": "scripts/__tests__/native-tests-android-skip.test.js",
+        "mutation": "the ci.yml parser cannot step over the comment lines above the step's own `env:`",
+        "before": "    if (indent > 8) continue;\n    if (indent < 8) break;",
+        "after": "    if (indent !== 8) break;",
+        "redTests": [
+          "runs for real in the CI job it hands off to, with that job’s own env"
+        ],
+        "note": "`Expected: > -1 / Received: -1`. Re-runs the fix-round-1 row, which had been filed against the wrong file."
+      },
+      {
+        "test": "scripts/__tests__/native-tests-android-skip.test.js",
+        "file": "scripts/native-tests-android.sh",
+        "mutation": "the CI hand-off is deleted, so `check` runs it in every job",
+        "before": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ] &&\n  [ \"${NITRO_UI_ANDROID_JVM_TESTS:-}\" != \"1\" ]; then\n  echo \"test:native:android: CI runs this in the build-android job (JDK 17 + warm gradle cache) - skipped here; NITRO_UI_ANDROID_JVM_TESTS=1 runs it in this job\"\n  exit 0\nfi",
+        "after": "",
+        "redTests": [
+          "hands the run to CI's Android job rather than proving it twice"
+        ],
+        "note": "Re-runs round-1 row 5 against the shipped text: the script proceeds to gradle under `CI=true`."
+      },
+      {
+        "test": "scripts/__tests__/free-lsof-stub.test.js",
+        "file": "scripts/__tests__/helpers/free-lsof-stub.js",
+        "mutation": "the shared stub is trusted because it exists, not checked against what the helper says",
+        "before": "if (current !== contents) {",
+        "after": "if (current == null) {",
+        "redTests": [
+          "replaces a stub on disk that no longer matches what the helper says"
+        ],
+        "note": "`Expected: not \"#!/bin/sh\" - a stale stub on disk keeps answering exit 0 for every suite that imports it."
       }
     ]
   }

@@ -113,6 +113,13 @@ touches `scripts/gate.mjs`, `scripts/gate-core.mjs`, `scripts/lease-core.mjs`, `
 `scripts/native-tests-android.sh`, `scripts/check-steps.mjs`, `CONTRIBUTING.md`, `ci.yml` and the
 five suites named in the red proofs.
 
+Fix round 2 touches `scripts/gate.mjs` (the counted drain, the read-end release, `note()`,
+`SIGHUP`), `scripts/gate-core.mjs` (the leader-pid exclusion), `scripts/__tests__/gate.test.js`,
+`scripts/__tests__/lease-metro-port.test.js` (the fixture),
+`scripts/__tests__/helpers/free-lsof-stub.js` and its new
+`scripts/__tests__/free-lsof-stub.test.js`, plus `CONTRIBUTING.md` and the two X15 docs files.
+No product or harness code.
+
 ## Follow-ups
 
 - `check`'s new step needs an NDK the first time it configures (`prepareHeaders` runs): on a machine
@@ -169,3 +176,52 @@ Kept out of the fix-round section above, which has a 200-word bar. Twelve rows a
   `example/android/build` alone -> the arrayContaining misses `android/build`.
 - `lease.test.js` (six cases) -> the new helper pointed at `/usr/sbin/lsof` -> pair-a's port served
   by another worktree's harness, which is the failure the helper exists to prevent.
+
+## Fix round 2
+
+The two leaked fixtures (pids 28527, 30581) are dead, their ports free. The fixture that leaked
+them now ends itself (a 60 s unref'd timer), its pid file is polled with a 30 s budget, and
+cleanup kills from that file in a `finally`; four new cases cover the wait, the give-up, the kill
+and the self-exit. Ten sequential runs and two beside the whole `scripts/__tests__` tree were
+green, with nothing surviving.
+
+`markClosed` counts both pipes before ending the drain: the first close lost stdout's tail. After
+the sweep the gate destroys its read ends, so a leaked descendant that is not a Metro on
+`$METRO_PORT` cannot hold it alive. One `note()` puts the sweep's line in the run's log as well as
+stderr. `SIGHUP` joins the forwarded signals: a detached child is outside this process's group.
+
+Nits: the shared `lsof` stub uses one fixed path, not a temp dir per import, with a suite proving
+the reuse; `ownMetroPids` excludes the leader pid outright (a recycled pid matches its own group),
+and the "ignored the leader itself" test says what it tests; two drifted `mutations.json` rows are
+re-recorded and every `before` re-verified; the sweep-disabled note tells the truth.
+
+## Appendix — red proofs (fix round 2)
+
+Twelve rows in `docs/tasks/X15/mutations.json` under `fixRound2`, driven by a script that refuses
+a needle it cannot find exactly once. The one-line form:
+
+- `gate.test.js` "keeps the tail written after the run exits, when it arrives on the slower pipe"
+  -> `markClosed` ending the drain at the first close -> the transcript has no
+  `Tests: 7 passed, 7 total`.
+- `gate.test.js` "exits with its code when a leaked descendant holds the pipes open" -> the read
+  ends not released -> `Expected: < 8000 / Received: 10292`, the holder's whole 10 s.
+- `lease-metro-port.test.js` "stops the Metro its own run left…" -> `note()` writing to stderr
+  only -> the transcript read back from the ledger's own `logPath` has no sweep line.
+- `gate.test.js` "forwards SIGHUP…" -> `FORWARDED_SIGNALS` without `SIGHUP` -> the child's trap
+  never fires.
+- `lease-metro-port.test.js` "exits by itself even if every killer fails" -> the fixture back to
+  `setTimeout(()=>{},1e6)` -> still alive after 12 s.
+- "waits for a writer that is late" -> the pid file looked at once -> `Expected: > 750 /
+  Received: 28` ms.
+- `gate.test.js` "never targets the leader pid itself…" -> the `pid === leaderPid` guard dropped
+  -> the sweep claims a pid it knows has exited.
+- `free-lsof-stub.test.js` (three of four rows) -> a random suffix on the stub directory again ->
+  four imports, four paths, two directories in one private `TMPDIR`.
+- `free-lsof-stub.test.js` "replaces a stub on disk that no longer matches…" -> the shared stub
+  trusted for existing rather than checked by content -> `Expected: not "#!/bin/sh`, and a stale
+  stub still answering `exit 0` for every suite that imports it.
+- re-runs of two older rows, re-recorded: sweep disabled -> 2.9 s and a missing sweep line, not a
+  90 s hang; the CI hand-off deleted -> the script reaches gradle under `CI=true`.
+- the two rows that had drifted against the tree were re-recorded and re-run, not just rewritten:
+  every `before` in this file and X14's now occurs verbatim in the file it names (35 rows audited,
+  none left behind).
