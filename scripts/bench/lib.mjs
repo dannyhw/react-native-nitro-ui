@@ -3460,11 +3460,11 @@ export function seededComponentProvenance(baseline, dependencies = null) {
           plan: baseline?.plan ?? null,
           timeouts: baselineTimeoutRecord({ timeouts: baseline?.timeouts }),
           loadSamples: baseline?.machine?.loadSamples ?? null,
-          dependencies: {
-            reactNative: null,
-            expoUi: null,
-            source: null,
-          },
+          // Only what the caller recovered from the founding `sha`, and named as
+          // such: a seeded entry that quietly carried today's versions would be the
+          // false claim this block exists to make impossible. Nulls here are the
+          // honest answer, and the next merge then has to recover them again.
+          dependencies: dependenciesOf(dependencies),
           cellKeys: keys.sort(),
           seededFromFoundingRun: true,
         },
