@@ -883,6 +883,11 @@ describe('platformMappingFor / tooling class', () => {
       '.changeset/config.json',
       '.gitignore',
       '.prettierignore',
+      // Lives under `example/src/`, which is iOS *and* Android by the directory rule,
+      // but nothing in the app imports it: `readme:check` reads it as text, and tsc,
+      // ESLint and Prettier are what prove it. Before X15 a README-only change asked
+      // for both harness runs off a file no device ever mounts (D3).
+      'example/src/readme-examples.tsx',
     ]) {
       expect(isToolingPath(tooling)).toBe(true);
       expect(platformsOwningFile(tooling)).toEqual([]);

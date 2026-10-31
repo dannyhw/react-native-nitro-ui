@@ -195,6 +195,12 @@ export const TOOLING_FILES = [
   // The template `doctor.mjs --setup` copies to `~/.nitro-ui/devices.json`. A device
   // run reads that copy, never this file, and neither is in the app.
   'scripts/devices.example.json',
+  // The README's code samples, kept in sync by `readme:check`. It sits under
+  // `example/src/`, so the directory rule would call it both platforms, but no app
+  // code imports it - tsc, ESLint, Prettier and `readme:check` are what prove it - so
+  // a README-only change used to ask for two harness runs over a file no device
+  // mounts (D3).
+  'example/src/readme-examples.tsx',
   '.gitignore',
   '.prettierignore',
 ];
