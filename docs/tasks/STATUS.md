@@ -68,3 +68,4 @@
 | F6 | Recycling and drop-path gates: `enableViewRecycling` exercised and leak-gated, B1 drop-path items, X4 recycle blind spots (SegmentedControl, Picker, Menu) | Apex | Opus | merged (`611fd66`) |
 | A6 | maintainer-mac-1's Menu baseline cells by merge mint, both platforms; first task delegated to a linked machine (INV-0391) | Apex (on mac-1) | Opus | merged (`b86faaa`): Android minted; iOS refused by the load guard |
 | F4 | CI green on every trigger: no cancelled `main` runs, dispatched harness jobs fixed, release-pipeline nits, X1 leftovers, iOS < 26 fallback row | Apex | Opus | merged (`072ed4c`) |
+| F8 | The two harness jobs green on GitHub's hosted runners: the 8 iOS failures classified and fixed, the Android emulator boot | Apex | Opus | running |
