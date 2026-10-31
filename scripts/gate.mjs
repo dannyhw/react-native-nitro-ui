@@ -117,6 +117,7 @@ import { claimDevicesFromEnv } from './device-pool.mjs';
 import {
   emulatorSerial,
   isReservedSerial,
+  metroPreflightFromEnv,
   pruneExpired,
   readJson,
   stateHome,
@@ -196,6 +197,9 @@ const BACKGROUND_FLAGS = ['--background', '--background=true'];
 
 /** Set to run a device gate on a device another live run has claimed (see `runGate`). */
 const DEVICE_FORCE_RE = /^(1|true|yes)$/i;
+
+/** Set to start on a Metro port another process is already serving (see `metroPreflight`). */
+const METRO_FORCE_RE = /^(1|true|yes)$/i;
 
 const repoRoot = repoRootOf();
 
@@ -1616,10 +1620,20 @@ function changedCodePaths({ base }) {
  * claims a device another live run holds, for the one case where that is the point - it is an env
  * var rather than a flag because a backgrounded gate is re-spawned from this command line, and a
  * flag here would need stripping in two places to keep it out of the gate's own argv.
+ *
+ * Then the Metro pre-flight (X15 item 1), which the claim cannot cover: a claim is a pid in a
+ * pool record, and the server on a pair's Metro port can belong to a run whose lease has already
+ * ended, so no claim exists to conflict with. That is X4's incident, so the port is asked about
+ * directly, before the build rather than after the app has joined a stranger's Metro.
  */
 async function runGate(name, resolved, options = {}) {
   let claim = null;
   if (resolved.platform != null) {
+    const preflight = metroPreflight();
+    // A number, not `{ status }`: reading `.status` off it is `undefined`, which is
+    // "not 0", so every device gate would have returned `undefined` here - the run
+    // never started, nothing was recorded, and the process exited 0 on the silence.
+    if (preflight !== 0) return preflight;
     try {
       claim = claimDevicesFromEnv({
         gate: name,
@@ -1651,6 +1665,50 @@ async function runGate(name, resolved, options = {}) {
       }
     }
   }
+}
+
+/**
+ * The leased Metro port, asked before the run starts (X15 item 1).
+ *
+ * Returns an exit code - 0 means "run it". A port someone else serves is a refusal that
+ * names the process, because the alternative is the X4 failure: the app joins the other
+ * Metro and the suite dies as `The app bridge was replaced by a newer app connection`,
+ * three runs later and with an error message that does not mention a port. Nothing is
+ * recorded for a refusal, the same way a device-claim refusal records nothing: the run
+ * never started, so there is no evidence to log.
+ *
+ * `NITRO_UI_GATE_METRO_FORCE=1` runs anyway, for the case where the server on the port is
+ * this task's own - a Metro started by hand for a debugging session, which the harness
+ * then attaches to on purpose.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {(command: string, args: string[]) => {ok: boolean, text: string} | null} [run]
+ * @returns {number}
+ */
+function metroPreflight(env = process.env, run) {
+  const answer = metroPreflightFromEnv(env, run);
+  if (answer.warning != null) {
+    // Loud, and still a run: a machine that cannot ask about the port must not be
+    // unable to run its gates (CI, a container without `lsof`).
+    process.stderr.write(
+      `gate: WARN the Metro pre-flight was skipped - ${answer.warning}\n`
+    );
+    return 0;
+  }
+  if (answer.reason == null) return 0;
+  if (METRO_FORCE_RE.test(env.NITRO_UI_GATE_METRO_FORCE ?? '')) {
+    process.stderr.write(
+      `gate: WARN Metro port is not free - ${answer.reason}\n` +
+        '        running anyway (NITRO_UI_GATE_METRO_FORCE=1)\n'
+    );
+    return 0;
+  }
+  process.stderr.write(
+    `gate: refused before the run - ${answer.reason}\n` +
+      '        wait for that run, or set NITRO_UI_GATE_METRO_FORCE=1 to start on this port anyway.\n' +
+      `        (checked because ${env.NITRO_UI_LEASE_ID ?? 'this shell'} exported METRO_PORT=${String(answer.port)})\n`
+  );
+  return 1;
 }
 
 async function runGateUnclaimed(name, resolved, options = {}) {

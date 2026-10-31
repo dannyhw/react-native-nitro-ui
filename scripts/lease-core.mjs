@@ -29,6 +29,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -560,6 +561,199 @@ export function checkEmulatorEnv(
 }
 
 /**
+ * Who is listening on one TCP port, as `lsof` answers it (X15 item 1).
+ *
+ * Why a lease asks: a lease is a naming agreement about a simulator, an emulator and a Metro
+ * port, and the third name is the one that outlives its lease. The incident (FOLLOWUPS, X4
+ * 2026-10-29): a task's harness kept running on pair-a after its lease there ended, the pool
+ * handed pair-a to the next task, and two Metro servers on one port produced
+ * `The app bridge was replaced by a newer app connection` - three device runs lost, and no
+ * error message that mentioned a port. So `acquire` refuses a pair whose Metro port is served
+ * by a live process, and a device gate pre-flights the port it is about to hand to its own
+ * runner. Both ask this one question.
+ *
+ * `lsof -Fpc` is the machine-independent spelling: `p<pid>` and `c<command>` on their own lines,
+ * so the answer is parsed rather than fitted to a column layout that changes between macOS
+ * releases and user/localisations of the header. Empty output with exit 1 is the normal
+ * "nothing is listening" answer, which is why a non-zero status is only an error when it says
+ * something.
+ *
+ * `NITRO_UI_LSOF_BIN` names the program, for the same reason `NITRO_UI_ADB_BIN` and
+ * `NITRO_UI_SIMCTL_BIN` do: the tests point it at a canned answer instead of asking the real
+ * machine, so a check that depends on what some other task happens to be running is not a test.
+ * Production never sets it.
+ *
+ * @param {number} port
+ * @returns {string[]}
+ */
+export function lsofListenArgs(port) {
+  return ['-nP', `-iTCP:${String(port)}`, '-sTCP:LISTEN', '-Fpc'];
+}
+
+/**
+ * @param {string | null | undefined} text lsof's `-Fpc` stdout
+ * @returns {Array<{ pid: number, command: string }>} one entry per listener pid, in file order
+ */
+export function parseLsofListeners(text) {
+  const listeners = [];
+  let current = null;
+  for (const line of String(text ?? '').split('\n')) {
+    const kind = line[0];
+    const value = line.slice(1).trim();
+    if (kind === 'p' && /^\d+$/.test(value)) {
+      if (current != null) listeners.push(current);
+      current = { pid: Number(value), command: '' };
+    } else if (kind === 'c' && current != null && value !== '') {
+      current.command = value;
+    }
+  }
+  if (current != null) listeners.push(current);
+  return listeners;
+}
+
+/** How one listener reads in a refusal: a pid and the program the kernel says owns it. */
+export function describeListener(listener) {
+  return `pid ${String(listener.pid)}${
+    listener.command === '' ? '' : ` (${listener.command})`
+  }`;
+}
+
+/**
+ * Is anything listening on `port`?
+ *
+ * Fail-open by design, with the reason printed: `lsof` can be missing (a CI runner, a container)
+ * or refused by policy, and a machine that cannot ask the question must still be able to lease
+ * devices. What it must not do is *silently* report the port free, so an unchecked answer carries
+ * `error` and every caller says so on stderr.
+ *
+ * @param {object} options
+ * @param {number} options.port
+ * @param {(command: string, args: string[]) => {ok: boolean, text: string} | null} [options.run]
+ * @param {NodeJS.ProcessEnv} [options.env]
+ * @returns {{ port: number, checked: boolean, error: string | null, listeners: Array<{pid: number, command: string}> }}
+ */
+export function portListeners({ port, env = process.env, run = runLsof }) {
+  const command = env.NITRO_UI_LSOF_BIN ?? 'lsof';
+  if (!Number.isInteger(port) || port <= 0) {
+    return {
+      port: Number.isFinite(port) ? port : 0,
+      checked: false,
+      error: `${String(port)} is not a port number`,
+      listeners: [],
+    };
+  }
+  const answer = run(command, lsofListenArgs(port));
+  if (answer == null) {
+    return {
+      port,
+      checked: false,
+      error: `${command} gave no answer`,
+      listeners: [],
+    };
+  }
+  const text = String(answer.text ?? '');
+  if (answer.ok !== true && text.trim() === '') {
+    // lsof's "no matching files" answer is exit 1 with nothing printed.
+    return { port, checked: true, error: null, listeners: [] };
+  }
+  const listeners = parseLsofListeners(text);
+  if (answer.ok !== true && listeners.length === 0) {
+    return {
+      port,
+      checked: false,
+      error: text.trim() || 'lsof failed',
+      listeners: [],
+    };
+  }
+  return { port, checked: true, error: null, listeners };
+}
+
+/** `lsof`, bounded and never fatal. @returns {{ok: boolean, text: string} | null} */
+function runLsof(command, args) {
+  try {
+    const result = spawnSync(command, args, {
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    if (result.error != null) return null;
+    return {
+      ok: result.status === 0,
+      text: `${result.stdout ?? ''}${result.stderr ?? ''}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The sentence that says a pair's Metro port is spoken for, or null when nothing is
+ * listening on it. One home for the wording, because `lease.mjs` (refusing to hand the
+ * pair out) and `gate.mjs` (refusing to start on it) must not describe the same
+ * collision in two different ways.
+ *
+ * @param {{id: string, metroPort: number}} pair
+ * @param {Array<{pid: number, command: string}>} listeners
+ */
+export function metroPortReason(pair, listeners) {
+  if (listeners.length === 0) return null;
+  return (
+    `Metro port ${String(pair?.metroPort)} (pair ${String(pair?.id ?? '?')}) is ` +
+    `served by ${listeners.map(describeListener).join(', ')} - a run is still using ` +
+    'that port, and two Metro servers on one port is the ' +
+    '`app bridge was replaced by a newer app connection` failure'
+  );
+}
+
+/**
+ * A gate's pre-flight: is the Metro port this run was handed free?
+ *
+ * The second net after `lease.mjs`'s. The lease answers once, at acquire time; a run
+ * that starts ten minutes later needs the same question asked again, because that is
+ * how X4's incident worked - F7's harness kept serving Metro on pair-a after F7's lease
+ * ended, and the pool had no way to know. Cost is one `lsof` (about 100 ms), which is
+ * why this is worth doing before a four-minute build rather than during it.
+ *
+ * Only a run that was *given* a port has a port to check: `METRO_PORT` is printed by
+ * `renderEnvFile`, so an unset one means no lease was sourced (CI, a plain `check`), and
+ * the answer is "nothing to check". A machine that cannot ask (no `lsof`) is a warning,
+ * not a refusal, for the same reason `lease.mjs` fails open.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {(command: string, args: string[]) => {ok: boolean, text: string} | null} [run]
+ * @returns {{ checked: boolean, port: number | null, reason: string | null, warning: string | null }}
+ */
+export function metroPreflightFromEnv(env = process.env, run) {
+  const raw = env.METRO_PORT == null ? '' : String(env.METRO_PORT);
+  if (raw === '')
+    return { checked: false, port: null, reason: null, warning: null };
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port <= 0) {
+    return {
+      checked: false,
+      port: null,
+      reason: `METRO_PORT="${raw}" is not a port number`,
+      warning: null,
+    };
+  }
+  const answer = portListeners({ port, env, run });
+  if (!answer.checked) {
+    return {
+      checked: false,
+      port,
+      reason: null,
+      // Not a refusal, but the reason it could not be checked has to travel with the
+      // answer, so the caller says it out loud rather than reporting a clean port.
+      warning: `could not check Metro port ${String(port)} (${String(answer.error)})`,
+    };
+  }
+  const reason = metroPortReason(
+    { id: env.NITRO_UI_LEASE_PAIR ?? 'leased', metroPort: port },
+    answer.listeners
+  );
+  return { checked: true, port, reason, warning: null };
+}
+
+/**
  * When a lease was taken, as milliseconds, from whatever the state file holds.
  *
  * Our own writers use `Date.now()`, but this file is hand-editable and `~/.nitro-ui` is a person's
@@ -656,6 +850,11 @@ export function pruneExpired(state, now) {
  * @param {'ios'|'android'|'both'} options.platform
  * @param {string} options.task
  * @param {object[]} [options.pending] live `pendingExclusive` requests (others')
+ * @param {string[]} [options.portBlocked] pair ids whose Metro port a live process
+ *   still serves (X15 item 1). A pair on that list is skipped the way a leased pair
+ *   is: a task that could take a *quiet* pair takes it, and one that could not waits
+ *   for the port rather than being told "every pair is leased" — which would send it
+ *   to `lease.mjs list`, where nothing looks wrong.
  * @returns {{ok: true, pair: object} | {ok: false, reason: string, waiting: string[]}}
  */
 export function decideAcquire({
@@ -666,6 +865,7 @@ export function decideAcquire({
   platform,
   task,
   pending = [],
+  portBlocked = [],
 }) {
   const held = active.filter((lease) => lease.task !== task);
   const waiting = held.map((lease) => `${lease.task} (${lease.id})`);
@@ -708,12 +908,40 @@ export function decideAcquire({
   // quiet machine, not a free simulator).
   const taken = new Set(held.flatMap((lease) => lease.holds ?? []));
   const free = pairs.filter((pair) => !taken.has(pair.id));
-  const usable = free.filter((pair) => {
-    if (platform === 'ios' && pair.ios == null) return false;
-    if (platform === 'android' && pair.android == null) return false;
-    return pair.ios != null || pair.android != null;
-  });
-  if (usable.length === 0) {
+  // X15 item 1: a pair nobody holds is still not usable while a live process serves
+  // its Metro port. Treat it the way a leased pair is treated, so a task that *can*
+  // have a quiet pair takes it, and one that cannot waits on the port with a reason
+  // that names the process rather than being told "every pair is leased" - which
+  // would send it to `lease.mjs list`, where nothing about the collision is visible.
+  //
+  // A pair this task already holds is not blocked by its own Metro: re-running
+  // `acquire` mid-suite to get the env file again is documented, and the server on
+  // that port is that suite. `acquire` answers an idempotent re-acquire before it
+  // asks, so this keeps the decision itself honest rather than load-bearing.
+  const ownHolds = new Set(
+    active
+      .filter((lease) => lease.task === task)
+      .flatMap((lease) => lease.holds ?? [])
+  );
+  const blocked = new Map(
+    (portBlocked ?? [])
+      .filter((entry) => entry?.id != null && !ownHolds.has(entry.id))
+      .map((entry) => [entry.id, entry.reason ?? 'its Metro port is in use'])
+  );
+  const portWait = free
+    .filter((pair) => blocked.has(pair.id))
+    .map((pair) => blocked.get(pair.id));
+  const usable = free
+    .filter((pair) => !blocked.has(pair.id))
+    .filter((pair) => {
+      if (platform === 'ios' && pair.ios == null) return false;
+      if (platform === 'android' && pair.android == null) return false;
+      return pair.ios != null || pair.android != null;
+    });
+  if (usable.length === 0 || (exclusive && portWait.length > 0)) {
+    if (portWait.length > 0) {
+      return { ok: false, reason: portWait.join('; '), waiting };
+    }
     return {
       ok: false,
       reason:
