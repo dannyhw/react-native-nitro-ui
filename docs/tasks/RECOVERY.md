@@ -47,6 +47,9 @@
 > **A5 merged (`4f67da0`)**: quiet numbers in README and reports, six reversed conclusions stated. **X14 merged (`386a511`)**: Menu's cells are in both of this machine's baselines (Android by X14's proof, iOS by an orchestrator merge mint: 224 launches, 35 min, 28 added, 0 replaced). maintainer-mac-1 still owes Menu on both
 > (`X14-bench-component-mint.md`). The owner finds 11-hour exclusive windows rough, so after X14 a new component's
 > baseline cells are minted alone. A full window is only for a comparability break (Xcode/runtime/RN/bench change).
+> **X15 merged (2026-10-31, `5bc783b`)** after two fix rounds (a Kotlin CI step that skipped itself under `CI=true`;
+> a flaky Metro fixture that leaked processes): all five merge gates green. Each device gate now stops the Metro its own
+> run left on its leased port, and `check` runs the Android JVM tests. F6 merges after it.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
