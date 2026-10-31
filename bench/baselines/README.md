@@ -234,9 +234,9 @@ from the ones already in the file.
 ## Adding one component
 
 A committed table is missing a component until somebody measures it, and until X14 the
-only way to add one was the eleven-hour full mint above — which is why components went
-missing from a table rather than being added to it. One component's cells can now join
-an existing file:
+only way to add one was a full mint — A3's on this machine was 4 h 24 min on iOS and
+5 h 13 min on Android, which is why components went missing from a table rather than
+being added to it. One component's cells can now join an existing file:
 
     NITRO_UI_MACHINE_LABEL=maintainer-mac-2 \
       bun bench --platform android --plan full --launches 8 \
