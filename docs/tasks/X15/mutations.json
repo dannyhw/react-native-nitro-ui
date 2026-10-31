@@ -58,7 +58,9 @@
       "before": "      'test:native:android',\n",
       "after": "",
       "note": "The needs edge removed from prepare's list; findOutputConflicts then reports the pair, which is the row below.",
-      "redTests": ["removing that edge is the red this guards"]
+      "redTests": [
+        "removing that edge is the red this guards"
+      ]
     },
     {
       "test": "scripts/__tests__/native-tests-android-skip.test.js",
@@ -66,7 +68,9 @@
       "mutation": "the CI hand-off is deleted, so `check` runs it in every job",
       "before": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ]; then\n  echo \"test:native:android: CI runs this in the build-android job (JDK 17 + warm gradle cache) - skipped here\"\n  exit 0\nfi",
       "after": "",
-      "redTests": ["hands the run to CI's Android job rather than proving it twice"]
+      "redTests": [
+        "hands the run to CI's Android job rather than proving it twice"
+      ]
     },
     {
       "test": "scripts/__tests__/native-tests-android-skip.test.js",
@@ -74,7 +78,9 @@
       "mutation": "the build-android job stops running the script the skip hands off to",
       "before": "        run: bash scripts/native-tests-android.sh",
       "after": "        run: bash scripts/native-tests.sh",
-      "redTests": ["really is run by the CI job it hands off to"]
+      "redTests": [
+        "really is run by the CI job it hands off to"
+      ]
     },
     {
       "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt",
@@ -105,7 +111,9 @@
       "mutation": "example/src/readme-examples.tsx is not in the check-only allow-list (the state before X15)",
       "before": "  'example/src/readme-examples.tsx',\n",
       "after": "",
-      "redTests": ["treats the check-only allow-list as no platform at all"]
+      "redTests": [
+        "treats the check-only allow-list as no platform at all"
+      ]
     },
     {
       "test": "scripts/__tests__/gate.test.js",
@@ -124,8 +132,133 @@
       "mutation": "the CI section names a runner label no workflow schedules on",
       "before": "them in a `macos-26` job instead), and an Android `assembleDebug` of the",
       "after": "them in a `macos-latest` job instead), and an Android `assembleDebug` of the",
-      "redTests": ["names no runner label that no workflow uses"]
+      "redTests": [
+        "names no runner label that no workflow uses"
+      ]
     }
   ],
-  "notMutated": "Item 3 (Menu's read-back) waits for a handle rather than adding an assertion, so no mutation is recorded: the only source change that turns it red is breaking `hybridRef`'s registration in the example app, which would take a device run to reach. Its evidence is that the shape which failed at X14 (`handles.get(...)` read once) no longer appears in that test, and that `harness:ios` and `harness:android` are both green on the tree."
+  "notMutated": "Item 3 (Menu's read-back) waits for a handle rather than adding an assertion, so no mutation is recorded: the only source change that turns it red is breaking `hybridRef`'s registration in the example app, which would take a device run to reach. Its evidence is that the shape which failed at X14 (`handles.get(...)` read once) no longer appears in that test, and that `harness:ios` and `harness:android` are both green on the tree.",
+  "fixRound1": {
+    "how": "Same method, appended for fix round 1 (2026-10-31, lease X15-9xz8i). Rows whose fix landed after the test record the pre-fix source as `before` and the shipped code as `after`.",
+    "mutations": [
+      {
+        "test": "scripts/__tests__/native-tests-android-skip.test.js",
+        "file": "scripts/native-tests-android.sh",
+        "mutation": "the CI skip is keyed on CI alone, as shipped in round 1 (no job-level opt-in)",
+        "before": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ] &&\n  [ \"${NITRO_UI_ANDROID_JVM_TESTS:-}\" != \"1\" ]; then",
+        "after": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ]; then",
+        "redTests": [
+          "runs for real in the CI job it hands off to, with that job’s own env"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/native-tests-android-skip.test.js",
+        "file": "scripts/native-tests-android.sh",
+        "mutation": "first cut of the new test, before it could walk past a comment line: the env block above the step was never found",
+        "before": "expect(envIndex).toBeGreaterThan(-1)",
+        "after": "Expected: > -1 / Received: -1",
+        "redTests": [
+          "runs for real in the CI job it hands off to, with that job’s own env"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the end-of-run Metro sweep is disabled",
+        "before": "  const leftover = await stopOwnMetro({",
+        "after": "  const leftover = await Promise.resolve([]) || await stopOwnMetro({",
+        "redTests": [
+          "stops the Metro its own run left on the leased port"
+        ],
+        "note": "the run hung to the 90 s jest timeout with the ledger unwritten, which is the failure a leaked server caused before this change"
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate-core.mjs",
+        "mutation": "ownership claims nothing (the group rule dropped)",
+        "before": "    if (group != null && group === leaderPid) owned.push(pid);",
+        "after": "    void group; void leaderPid;",
+        "redTests": [
+          "stops the Metro its own run left on the leased port"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate-core.mjs",
+        "mutation": "ownership claims every listener on the port (kills another task’s Metro)",
+        "before": "    if (group != null && group === leaderPid) owned.push(pid);",
+        "after": "    void group; if (leaderPid != null) owned.push(pid);",
+        "redTests": [
+          "leaves a Metro in another process group alone"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/lease-core.mjs",
+        "mutation": "the Metro-port exception is widened from exclusive acquires to every acquire",
+        "before": "    .filter((pair) => exclusive || !blocked.has(pair.id))",
+        "after": "    .filter(() => true)",
+        "redTests": [
+          "takes the quiet pair when a free pair’s port is served",
+          "is not handed out by acquire, which takes the other pair instead"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/lease-core.mjs",
+        "mutation": "exclusive acquires wait on Metro ports, as shipped in round 1",
+        "before": "  if (usable.length === 0) {",
+        "after": "  if (usable.length === 0 || (exclusive && portWait.length > 0)) {",
+        "redTests": [
+          "lets an exclusive acquire proceed over a busy Metro port, and says so"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the bench's own platform never reaches the ledger row (item 4's wiring)",
+        "before": "    resolved.platform ?? resolved.benchPlatform ?? null",
+        "after": "    resolved.platform",
+        "redTests": [
+          "records a bench's platform and device from its own --platform"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the Metro pre-flight is applied to non-device gates as well",
+        "before": "  if (resolved.platform != null) {\n    const preflight = metroPreflight();",
+        "after": "  const preflightAll = metroPreflight();\n  if (preflightAll !== 0) return preflightAll;\n  if (resolved.platform != null) {\n    const preflight = metroPreflight();",
+        "redTests": [
+          "leaves a run with no METRO_PORT alone (CI, a plain check)"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/check-runner.test.js",
+        "file": "scripts/check-steps.mjs",
+        "mutation": "the Kotlin step names only the root project's build directory, as shipped in round 1",
+        "before": "    writes: ['android/build', 'example/android/build'],",
+        "after": "    writes: ['example/android/build'],",
+        "redTests": [
+          "says where the Kotlin step writes, and the big half is the library module"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease.test.js",
+        "file": "scripts/__tests__/helpers/free-lsof-stub.js",
+        "mutation": "the shared stub points at the machine’s real lsof instead of answering \"free\"",
+        "before": "export const FREE_LSOF = { NITRO_UI_LSOF_BIN: bin };",
+        "after": "export const FREE_LSOF = { NITRO_UI_LSOF_BIN: '/usr/sbin/lsof' };",
+        "redTests": [
+          "prints an env file and remembers the lease",
+          "refuses the third concurrent task, and only the third",
+          "settles a real race with exactly two winners",
+          "lets a short ttl and a long one coexist (review M1)",
+          "hands one stale lock to one stealer, and no pair to both",
+          "goes quiet once the same device is leased"
+        ],
+        "note": "observed while another worktree’s harness held pair-a’s Metro: exactly the six failures this helper exists to prevent"
+      }
+    ]
+  }
 }
