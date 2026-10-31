@@ -1,0 +1,358 @@
+{
+  "task": "X14",
+  "how": "One source mutation applied to the working tree, one jest suite run, then `git checkout -- <file>` before the next row. Driver: a per-task script (not committed) that reads the table below. `redTests` are the names that went red. Run on maintainer-mac-2, 2026-10-31.",
+  "note": "Three rows were re-issued by the second driver after their text turned out not to match the source (a NO-MATCH is not a proof); this file holds only the corrected rows that actually went red.",
+  "mutations": [
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "merge wipes every other component's cells",
+      "before": "  const removed = [];\n  for (const [key, cell] of Object.entries(next.cells)) {\n    if (\n      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component\n    ) {\n      removed.push(key);\n    }\n  }",
+      "after": "  const removed = Object.keys(next.cells);\n  for (const [key, cell] of Object.entries(next.cells)) {\n    if (\n      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component\n    ) {\n      removed.push(key);\n    }\n  }",
+      "redTests": [
+        "leaves every other cell byte-for-byte identical; appends new cell keys instead of re-sorting the table; reports the cells it changed"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "merge writes only the new component's cells (full overwrite)",
+      "before": "    cells: { ...baseline.cells },\n  };",
+      "after": "    cells: {},\n  };",
+      "redTests": [
+        "leaves every other cell byte-for-byte identical; appends new cell keys instead of re-sorting the table; replaces a component of the same name rather than duplicating it"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "merge drops the components block the file already had",
+      "before": "    components: { ...(componentsBase ?? baseline.components ?? {}) },",
+      "after": "    components: { ...(componentsBase ?? {}) },",
+      "redTests": [
+        "keeps the components block the file already had; merges one component and leaves the rest of the file alone"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "merge rewrites the founding run's sha/updatedAt",
+      "before": "  const next = {\n    ...baseline,\n    schemaVersion: BASELINE_SCHEMA_VERSION,",
+      "after": "  const next = {\n    ...baseline,\n    sha: run?.sha ?? null,\n    updatedAt: run?.createdAt ?? null,\n    schemaVersion: BASELINE_SCHEMA_VERSION,",
+      "redTests": [
+        "merges into a pre-X14 file, recovering its versions from its own commit"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "merge re-sorts the whole cells table",
+      "before": "  for (const [key, cell] of Object.entries(built.cells ?? {})) {\n    addedCells[key] = cell;\n    next.cells[key] = cell;\n  }",
+      "after": "  for (const [key, cell] of Object.entries(built.cells ?? {})) {\n    addedCells[key] = cell;\n    next.cells[key] = cell;\n  }\n  next.cells = Object.fromEntries(Object.entries(next.cells).sort());",
+      "redTests": [
+        "appends new cell keys instead of re-sorting the table"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "merge allowed onto a component the file already has",
+      "before": "  const existing = cellsForComponent(baseline.cells, component);\n  if (Object.keys(existing).length > 0) {",
+      "after": "  const existing = cellsForComponent(baseline.cells, component);\n  if (false) {",
+      "redTests": [
+        "refuses when the file already has this component, and counts the cells; refuses a component the file already holds, without writing"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "merge allowed with an extra narrowing filter",
+      "before": "  const missing = Object.entries(filters).filter(([, value]) => value != null);",
+      "after": "  const missing = Object.entries(filters).filter(([, value]) => value == null);",
+      "redTests": [
+        "refuses any other narrowing filter, naming each one"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "comparability stops checking device key, CPU model, runtime, Xcode",
+      "before": "    if (fileValue != null && fileValue === runValue) {\n      continue;\n    }",
+      "after": "    if (fileValue === runValue) {\n      continue;\n    }\n    if (entry.field === 'deviceKey' || entry.field === 'machine.cpuModel' || entry.field === 'machine.simRuntime' || entry.field === 'machine.xcode') {\n      continue;\n    }",
+      "redTests": [
+        "refuses a different platform, device key, CPU model or core count by name; refuses a different simulator runtime or Xcode on iOS, and ignores both on Android; refuses an unrecorded runtime, image or ART state rather than assuming one"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "comparability stops checking the Android system image",
+      "before": "    field: 'machine.androidImage',\n    label: 'Android system image',\n    applies: (side) => side?.platform === 'android',",
+      "after": "    field: 'machine.androidImage',\n    label: 'Android system image',\n    applies: () => false,",
+      "redTests": [
+        "refuses a different Android API level, system image or ART state; refuses an unrecorded runtime, image or ART state rather than assuming one; reports the unknown halves as deferred when allowed"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the platform default waiting rule no longer accepted",
+      "before": "      entry.absent === 'run-default' &&",
+      "after": "      false && entry.absent === 'run-default' &&",
+      "redTests": [
+        "refuses when the file already has this component, and counts the cells; matches pre-X14 app versions against the founding commit, and records the source; accepts the platform default waiting rule for a file that records none"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "a readable v2 file is refused instead of upgraded",
+      "before": "      entry.versionUpgrade === true &&\n      fileValue != null &&",
+      "after": "      entry.versionUpgrade === true && false && fileValue != null &&",
+      "redTests": [
+        "refuses when the file already has this component, and counts the cells; refuses a different simulator runtime or Xcode on iOS, and ignores both on Android; matches pre-X14 app versions against the founding commit, and records the source"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the pre-D9 v1 file becomes readable",
+      "before": "export const READABLE_BASELINE_SCHEMA_VERSIONS = new Set([2, 3]);",
+      "after": "export const READABLE_BASELINE_SCHEMA_VERSIONS = new Set([1, 2, 3]);",
+      "redTests": [
+        "refuses a version it cannot read at all; still accepts the four committed v2 files, and rejects pre-D9 v1; refuses a pre-D9 file before the merge rules run"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "an unanswered field is always deferred, never refused",
+      "before": "    if (allowDeferred && runValue == null && fileValue != null) {",
+      "after": "    if (runValue == null && fileValue != null) {",
+      "redTests": [
+        "refuses the same candidate when the answers are due"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the pre-flight refuses what it cannot measure yet",
+      "before": "    if (allowDeferred && runValue == null && fileValue != null) {",
+      "after": "    if (false && runValue == null && fileValue != null) {",
+      "redTests": [
+        "reports the unknown halves as deferred when allowed"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the pre-flight stops requiring 8 launches",
+      "before": "  if (!isNumber(launches) || launches < BASELINE_LAUNCHES) {",
+      "after": "  if (false && (!isNumber(launches) || launches < BASELINE_LAUNCHES)) {",
+      "redTests": [
+        "refuses a quick plan, a thin launch count, perf marks and a dirty tree; is the same defect the post-run guard refuses, in a different tense"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the pre-flight stops requiring the full plan",
+      "before": "  if (plan !== BASELINE_PLAN) {\n    problems.push(",
+      "after": "  if (false && plan !== BASELINE_PLAN) {\n    problems.push(",
+      "redTests": [
+        "refuses a quick plan, a thin launch count, perf marks and a dirty tree; is the same defect the post-run guard refuses, in a different tense"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "seeded provenance stops marking itself as seeded",
+      "before": "          cellKeys: keys.sort(),\n          seededFromFoundingRun: true,",
+      "after": "          cellKeys: keys.sort(),",
+      "redTests": [
+        "seeds every existing component from the founding run, and marks it; merges into a pre-X14 file, recovering its versions from its own commit"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "seeded provenance loses the recovered versions",
+      "before": "          dependencies: dependencyRecord(dependencies),",
+      "after": "          dependencies: dependencyRecord(null),",
+      "redTests": [
+        "seeds every existing component from the founding run, and marks it; merges into a pre-X14 file, recovering its versions from its own commit"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/baseline.mjs",
+      "mutation": "a file copied in from another machine is accepted",
+      "before": "  const provenance = baselineProvenanceProblem({\n    machineLabel,\n    baseline,\n    display: shown,\n  });\n  if (provenance != null) {",
+      "after": "  const provenance = null;\n  if (false) {",
+      "redTests": [
+        "refuses a file copied in from another machine; refuses to merge into a file another machine measured, from its own directory"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/baseline.mjs",
+      "mutation": "a missing file is not refused at open time",
+      "before": "  if (!existsSync(file)) {\n    return {\n      ...mergeRefusal(",
+      "after": "  if (false) {\n    return {\n      ...mergeRefusal(",
+      "redTests": [
+        "refuses a missing file, and names the full run that creates one; refuses when there is no baseline to merge into"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/report.mjs",
+      "mutation": "the CLI writes a full baseline instead of merging",
+      "before": "        const outcome = writeBaseline(opened.file, run, {\n          force: argv.includes('--force'),\n          component,",
+      "after": "        const outcome = writeBaseline(opened.file, run, {\n          force: argv.includes('--force'),\n          component: null,",
+      "redTests": [
+        "merges into a pre-X14 file, recovering its versions from its own commit; merges one component and leaves the rest of the file alone; refuses an incomparable file under --force too, but not a thin launch count"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-deps.test.js",
+      "file": "scripts/bench/deps.mjs",
+      "mutation": "the lock reader keeps a peer suffix in the version",
+      "before": "  const withoutPeers = spec.split('(')[0];",
+      "after": "  const withoutPeers = spec;",
+      "redTests": [
+        "drops a peer suffix rather than returning it as the version; pairs what the lock resolved with what the manifest asked for; asks for the two files at that revision, and nothing else"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-deps.test.js",
+      "file": "scripts/bench/deps.mjs",
+      "mutation": "a stale install stops being reported",
+      "before": "  if (resolved == null || installed == null) {\n    return null;\n  }",
+      "after": "  if (resolved == null || installed == null) {\n    return null;\n  }\n  if (true) {\n    return null;\n  }",
+      "redTests": [
+        "refuses a stale install, naming both versions; catches the comparison arm drifting on its own"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-deps.test.js",
+      "file": "scripts/bench/deps.mjs",
+      "mutation": "an unreadable revision stops coming back null",
+      "before": "    try {\n      return git(['show', `${rev}:${file}`]);\n    } catch {\n      return null;\n    }",
+      "after": "    return git(['show', `${rev}:${file}`]);",
+      "redTests": [
+        "comes back null when the revision cannot be read, rather than using the working tree"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "merge allowed on a schedule too small for the component",
+      "before": "  if (\n    isNumber(scheduled) &&\n    isNumber(componentPlan) &&\n    scheduled < componentPlan\n  ) {",
+      "after": "  if (false) {",
+      "redTests": [
+        "refuses a schedule that does not cover the component whole"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "comparability stops checking the ART compile state",
+      "before": "    field: 'art.status',\n    label: 'ART compile state',\n    applies: (side) => side?.platform === 'android',",
+      "after": "    field: 'art.status',\n    label: 'ART compile state',\n    applies: () => false,",
+      "redTests": [
+        "refuses a different Android API level, system image or ART state",
+        "refuses an unrecorded runtime, image or ART state rather than assuming one",
+        "reports the unknown halves as deferred when allowed"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "a version the file predates is waved through instead of refused",
+      "before": "      const recovered = resolved[entry.field];\n      if (recovered != null && recovered.value != null) {",
+      "after": "      const recovered = null;\n      if (false) {",
+      "redTests": [
+        "refuses when the file already has this component, and counts the cells",
+        "refuses a different simulator runtime or Xcode on iOS, and ignores both on Android",
+        "matches pre-X14 app versions against the founding commit, and records the source"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "any waiting rule accepted for a file that records none",
+      "before": "        entry.absent === 'run-default' &&\n        runValue != null &&\n        runValue === defaultTimeoutRuleFor(run)",
+      "after": "        entry.absent === 'run-default'",
+      "redTests": [
+        "refuses a pre-X14 file when the run waited under a non-default rule"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/report.mjs",
+      "mutation": "the CLI ignores the merge refusals",
+      "before": "      } else if (opened.problems.length > 0) {",
+      "after": "      } else if (false && opened.problems.length > 0) {",
+      "redTests": [
+        "refuses a component the file already holds, without writing",
+        "refuses a file whose runtime differs, naming the field and both values",
+        "refuses an incomparable file under --force too, but not a thin launch count"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-dry-run.test.js",
+      "file": "scripts/bench/dry-run.mjs",
+      "mutation": "--force silences a merge's comparability refusals",
+      "before": "      const runProblems = merged.problems.filter((reason) =>\n        forced",
+      "after": "      const runProblems = merged.problems.filter((reason) =>\n        true",
+      "redTests": [
+        "refuses a quick plan or a thin launch count without touching the file rules"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-dry-run.test.js",
+      "file": "scripts/bench/dry-run.mjs",
+      "mutation": "the dry run stops asking the merge question at all",
+      "before": "    if (minting && component != null && deviceKey != null) {",
+      "after": "    if (false && component != null && deviceKey != null) {",
+      "redTests": [
+        "answers the merge question instead of refusing a narrowed schedule",
+        "refuses a component the file already holds",
+        "refuses when the file does not exist, and says a full mint comes first"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-dry-run.test.js",
+      "file": "scripts/bench/machine.mjs",
+      "mutation": "a pre-flight with no --timeout flag reports no waiting rule",
+      "before": "    timeouts?.[name] ?? (BASELINE_TIMEOUTS_MS[platform] ?? {})[name] ?? null;",
+      "after": "    timeouts?.[name] ?? null;",
+      "redTests": [
+        "answers the merge question instead of refusing a narrowed schedule",
+        "defers only what a booted device cannot answer yet, and says which"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/run.mjs",
+      "mutation": "the runner lets --force skip the merge refusal",
+      "before": "    const preflight = force ? absolute : [...overridable, ...absolute];",
+      "after": "    const preflight = [...overridable, ...(force ? [] : absolute)];",
+      "redTests": [
+        "refuses a thin launch count, and lets --force past it to the device",
+        "refuses an API level that differs even under --force, before the device"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/baseline.mjs",
+      "mutation": "the pre-flight crashes printing a merge's deferred fields",
+      "before": "    deferred: decided.deferred ?? [],",
+      "after": "    deferred: undefined,",
+      "redTests": [
+        "refuses a thin launch count, and lets --force past it to the device",
+        "refuses an API level that differs even under --force, before the device"
+      ]
+    }
+  ]
+}
