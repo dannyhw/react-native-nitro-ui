@@ -228,19 +228,23 @@ proofs above. They are covered by `check` once X15 lands, so **F6 merges after X
 
 ## Fix round 1
 
-Nine items, no gate weakened. The identity test read counters after the unmount, where a fresh view
-and a reused one read alike; it now reads them **while mounted**, where `recycles >= 1` is reachable
-only through a pool hand-back. Red twice: counters reset on recycle, and `prepareToRecycleView`
-returning `null` — prepared, marked, never pooled, all counters normal.
+The identity test read counters after the unmount, where fresh and reused read alike. It now reads
+them **while mounted**, where `recycles >= 1` takes a pool hand-back. Red twice: counters reset on
+recycle; and `prepareToRecycleView` returning `null` — prepared, marked, never pooled.
 
-The dropped window now closes in `onAttachedToWindow`, not `onRecycle`: pool entry has no window and
-no strategy, so clearing there made the guard unobservable. The two N5 counters are process-wide
-totals like `giveUps`, asserted as a zero delta across 400 controls — and driven, by a probe that
-drops an attached host and measures it. Guard half and counter half red separately.
+The dropped window closes in `onAttachedToWindow`, not `onRecycle`: pool entry has no window or
+strategy. The N5 counters are companion totals like `giveUps`, asserted as a zero delta over 400
+controls, and driven: a probe drops an attached host and measures it; guard and counter halves red
+separately.
 
-iOS's leak arm measured its own premises instead of borrowing MountChurn's: Hermes **is** present
-and `usedJSHeapSize` **is** live, so the reason is no forced collect and no heap limit, in native
-memory either way. Round 1's comment was wrong and is gone.
+iOS's leak arm measured its own premises: Hermes and `usedJSHeapSize` both exist, so the reason is
+no forced collect, no heap limit, and native retention. Round 1's comment was wrong.
+
+Also: the example-only changeset is gone, others cut to user-facing wording;
+`armedGuardsReport`'s KDoc restored, three comments corrected, `@internal` on both probes, the
+report's phantom Swift file removed, FOLLOWUPS matched to what is measured. DatePicker's
+`sawRecycle` counts a mark for a shared perf id, so an inline picker's pool entry satisfies it;
+stated in the test. Per-object proof is the Switch's.
 
 JVM suite by hand: 66 tests, 0 failures; in `check` once X15 lands, so F6 merges after X15.
 
