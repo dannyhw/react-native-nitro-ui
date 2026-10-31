@@ -57,6 +57,12 @@
 > was red from `386a511` to `96ad69c` (a depth-1 checkout had no `HEAD~5`); the jobs that run `check` now fetch history.
 > **0.4.1 staged on npm (2026-10-31):** Version Packages PR #9 merged (`7a4063c`), Release run 41217627377 green with
 > `Stage on npm` succeeded; it waits for the owner's approval, then `Release tag` tags v0.4.1.
+> **0.4.1 live (2026-10-31):** approved by the owner, `latest` on npm, `v0.4.1` tagged at the Version Packages commit
+> (`c7496a8`, as v0.4.0 was) by a dispatched `Release tag`. **F4 merged (`072ed4c`)** after one fix round: `main` runs
+> get a concurrency group per sha, `pack` installs without a cache (seen skipped in run 41234951195), and both CI harness
+> jobs now load their config; their remaining hosted-runner failures are in FOLLOWUPS. **A6 merged (`b86faaa`)**, the first
+> task run on a linked machine (T3 linked environment INV-0391 = maintainer-mac-1, full access, the child pushed only
+> its task branch): mac-1's Android baseline gained Menu's 35 cells; its iOS mint was refused by the load guard.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
