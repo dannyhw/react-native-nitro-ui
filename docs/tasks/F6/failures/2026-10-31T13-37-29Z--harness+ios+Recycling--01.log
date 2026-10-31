@@ -1,0 +1,75 @@
+# Failure excerpt — harness:ios:Recycling
+
+- Ran: 2026-10-31T13:37:29.284Z on code tree `3b46782b923b` at HEAD `3aa4fff` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Recycling`
+- Result: fail, exit 1, 19807 ms
+- Load: start 3.52, end 3.33, median 3.44, max 3.52
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F6-ex2j5`
+- Full log: `task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-37-29.284Z.log` (<store>/task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-37-29.284Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● recycling · what iOS can measure about leaks (F6) › has no JS-visible readout of this process memory, so no slope gate is possible`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-37-29.284Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-ex2j5 (still live)
+  |   F6-ex2j5                 F6           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.33 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Recycling
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 3b46782b923b, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.52/4.19 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+ios+Recycling-2026-10-31T13-37-29.284Z.log.suites.json
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● recycling · what iOS can measure about leaks (F6) › has no JS-visible readout of this process memory, so no slope gate is possible
+
+    MEASURE hermesPresent=true hermesKeys=[] getHeapInfo=undefined heapInfo=null memOwnKeys=[] before=5971048/12582912/null withBallast=4297872/12582912/null afterChurn=9021840/12582912/null
+
+      [0m [90m 831 |[39m       [36mawait[39m settle([35m800[39m)[33m;[39m
+       [90m 832 |[39m       [36mconst[39m afterChurn [33m=[39m read()[33m;[39m
+      [31m[1m>[22m[39m[90m 833 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 834 |[39m         [32m`MEASURE hermesPresent=${String(hermesProbe != null)} `[39m [33m+[39m
+       [90m 835 |[39m           [32m`hermesKeys=${JSON.stringify(Object.keys(hermesProbe ?? {}).slice(0, 40))} `[39m [33m+[39m
+       [90m 836 |[39m           [32m`getHeapInfo=${String(typeof heap)} heapInfo=${heapInfo.slice(0, 400)} `[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 3 passed, 4 total
+Snapshots:   0 total
+Time:        18.804 s
+Ran all test suites matching Recycling.
+
+
+
+```

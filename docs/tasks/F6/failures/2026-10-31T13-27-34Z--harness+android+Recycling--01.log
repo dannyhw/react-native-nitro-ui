@@ -1,0 +1,76 @@
+# Failure excerpt — harness:android:Recycling
+
+- Ran: 2026-10-31T13:27:34.538Z on code tree `82d8904b7fa5` at HEAD `3aa4fff` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Recycling`
+- Result: fail, exit 1, 26922 ms
+- Load: start 1.70, end 1.67, median 1.70, max 1.97
+- Device: android / device `emulator-5574` / lease `F6-ex2j5`
+- Full log: `task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-27-34.538Z.log` (<store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-27-34.538Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● recycling · churn does not leak (Android, F6) › declines, and counts, a host dropped while it is still attached`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-27-34.538Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-ex2j5 (still live)
+  |   F6-ex2j5                 F6           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 1.62 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 32 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Recycling
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 82d8904b7fa5, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 1.70/2.15 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-27-34.538Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● recycling · churn does not leak (Android, F6) › declines, and counts, a host dropped while it is still attached
+
+    the probe found no hosted control to drop, so it proved nothing about the post-drop rule — the app has to have a nitro-ui control on screen. The probe's own look at the tree: no-host|activity=MainActivity|root=DecorView|views=15|reactViews=7
+
+      [0m [90m 702 |[39m
+       [90m 703 |[39m       [36mif[39m (answer[33m.[39mstartsWith([32m'no-host'[39m)) {
+      [31m[1m>[22m[39m[90m 704 |[39m         [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 705 |[39m           [32m`the probe found no hosted control to drop, so it proved nothing about the `[39m [33m+[39m
+       [90m 706 |[39m             [32m`post-drop rule — the app has to have a nitro-ui control on screen. `[39m [33m+[39m
+       [90m 707 |[39m             [32m`The probe's own look at the tree: ${answer}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 5 passed, 6 total
+Snapshots:   0 total
+Time:        25.838 s
+Ran all test suites matching Recycling.
+
+
+
+```
