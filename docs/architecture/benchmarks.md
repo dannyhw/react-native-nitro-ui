@@ -73,7 +73,7 @@ Useful flags:
 | `--compare <ref\|file>` | head/base ratios against another commit or results file       |
 | `--check`             | Compare against the committed baseline, ratios only              |
 | `--update-baseline`   | Record this run as the baseline (refuses dirty/broken/busy runs) |
-| `--force`             | Override a `--update-baseline` refusal (local experiments only)  |
+| `--force`             | Override a `--update-baseline` refusal about the *measurement* (see below) |
 | `--shutdown`          | Shut down a device the runner itself booted when it finishes     |
 | `--perf-marks`        | Diagnostic run: turn on the library's own native perf marks    |
 | `--timeout-mount <ms>` | How long each iteration waits for the mount signal (default 1500) |
@@ -162,7 +162,19 @@ three filters cut it to one cell, and the reported numbers land in the same cell
 normal run - they are simply not mintable. `--update-baseline` refuses a narrowed schedule
 before booting anything: a baseline file *is* the whole table `--check` gates against, and
 minting one from one cell would leave the other 41 reading `not measured in base` - which
-looks like a passing gate. `--force` overrides that too, for a local experiment.
+looks like a passing gate. `--force` overrides that narrowing refusal, for a local
+experiment.
+
+Two refusals `--force` does **not** override, because neither is a judgement about the
+measurement. The first is comparability: schema version, machine, device key, CPU, runtime,
+Android API and system image, ART state, the waiting rule, and the react-native and
+`@expo/ui` versions all survive `--force`, in the pre-flight and at write time. The second
+is `--component <name> --update-baseline` itself: writing one component's cells into an
+existing file *is* a narrowed schedule, so the narrowing guard is replaced for that shape
+by the question "may this file take this component's cells at all" - and its refusals are
+absolute. `--force` means "I know the machine was busy", not "I know this is a different
+simulator", and it never buys a partial block either: a merge writes a component whole, or
+refuses. See `bench/baselines/README.md`, "Adding one component".
 
 `--check` and `--update-baseline` need `NITRO_UI_MACHINE_LABEL`: baselines are keyed
 by machine as well as device, so without a usable label both refuse before the run
