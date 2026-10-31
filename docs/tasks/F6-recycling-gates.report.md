@@ -6,41 +6,36 @@
 ## Summary
 
 **Android recycles, and X4's report said otherwise.** It called `prepareToRecycleView` a legacy
-hook whose only caller is `ViewManager.recycleView`. On RN 0.88 that is incomplete:
+hook called only from `ViewManager.recycleView`. On RN 0.88 that is incomplete:
 `onDropViewInstance` also prepares the view and pushes it onto a pool, and `createViewInstance
-(tag, …)` pops it — guarded on `enableViewRecycling`, whose default is `false`, which is why
-reading the graph in a flag-off app looked like proof. The example app now sets that flag and
+(tag, …)` pops it — guarded on `enableViewRecycling`, whose default is `false`, so reading the
+graph in a flag-off app looked like proof. The example app now sets that flag and
 `Recycling.harness.tsx` measures the result: the ring answers `dropped`+`recycled`, and a control
-**while it is on screen** reports `recycles >= 1` — which a freshly allocated view cannot say,
-because nothing has dropped it yet.
+**while it is on screen** reports `recycles >= 1` — which a freshly allocated view cannot say.
 
 Installing the flag was not a one-liner. `loadReactNative` calls `SoLoader.init`, and the flag
 accessor's class loads `libreactnative.so` in a static initialiser, so an override installed
-ahead of it crashes the launch; installed after, `override` throws — `load` already installed
-RN's provider and the C++ side takes one per process. So: `dangerouslyForceOverride` wrapping
-the RNOSS/Stable provider, after `loadReactNative`.
+ahead of it crashes the launch; installed after, `override` throws — the C++ side takes one
+provider per process. So: `dangerouslyForceOverride` wrapping the RNOSS/Stable provider.
 
 The recycle rule now has teeth on both platforms. SegmentedControl has `nuiTestDisplayedIndex()`,
-written in the body rather than a prop setter, so its cell is a probe and its debt row is gone;
-Picker's second owner now defaults to `2`, making its `didApplyDefault` line the only thing that
-can pass the cell. Both were red on the mutation, on both platforms. Menu's hole **narrowed** to
-iOS alone (no gesture reaches a SwiftUI `Menu`, and `expanded` answers `-1` there); Android's
-reset line is guarded by a JVM test instead.
+written in the body, so its cell is a probe and its debt row is gone; Picker's second owner now
+defaults to `2`, making its `didApplyDefault` line the only thing that can pass the cell. Both were
+red on the mutation, on both platforms. Menu's hole **narrowed** to iOS alone (no gesture reaches a
+SwiftUI `Menu`); Android's reset line is guarded by a JVM test.
 
 B1's two unasserted branches are counted as **process-wide totals** and asserted as a zero *delta*
 across a churn of 400 controls; the post-drop half (N5) is also driven on purpose by an app-side
-probe, so the guard is seen declining and the counter seen moving rather than merely never
-firing. That counting exposed a bug in `38a1e93`: the M2 counters were declared twice, an
-instance field shadowing the companion's total. Screens-pop blanking is unreachable here —
-`react-native-screens` is no example dependency.
+probe, so the guard is seen declining and the counter seen moving. That counting exposed a bug in
+`38a1e93`: the M2 counters were declared twice, an instance field shadowing the companion's total.
+Screens-pop blanking is unreachable here — `react-native-screens` is no example dependency.
 
 **The flag caught a product bug.** Recycling on made three DatePicker G5 tests red: a 131.05 dp
 `compact` field laid out at its row's 411.43. `sizingPolicy` is host state that the `variant`
 setter moves, and that setter compares against `model.variant` — which `prepareForRecycle()` has
 already restored to `compact`. So the next mount saw "no change" and kept the previous owner's
-`fillWidth`, sizing the field by its box. Android's DatePicker was the only host missing the line.
-Fixed in product code with a changeset, and owned by a new recycle test that compares the widest
-field against the narrowest row across rounds.
+`fillWidth`, sizing the field by its box. Android's DatePicker was the only host missing the line;
+fixed in product code, with a recycle test comparing the widest field against the narrowest row.
 
 ## Gates
 
