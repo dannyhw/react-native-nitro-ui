@@ -110,7 +110,10 @@ describe('resolvedDependencies', () => {
       source: 'bun.lock',
     });
     expect(broken.reactNative).toBeNull();
-    expect(broken.problems[0]).toContain('is not JSON');
+    expect(broken.problems).toEqual([expect.stringContaining('is not JSON')]);
+    // One problem, not three: the parse failure already explains every null in
+    // the file, and repeating it as "no resolved version for react-native" reads
+    // as two further defects the reader would go looking for.
   });
 
   it('names a tracked package the lock does not resolve', () => {
