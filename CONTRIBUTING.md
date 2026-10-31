@@ -1097,12 +1097,16 @@ What it refuses, and why each refusal matters:
   `--check` as "not measured in base". Refreshing existing numbers means a full re-mint.
 - **A results file that is not one component's whole run.** `report.mjs` will re-report any
   results file with any flags, so `--component menu` over a full run, or over a `slider`
-  run, or over a `--scenario`-narrowed one, used to write those cells under `menu`. All
-  three refusals are absolute, `--force` included: a record that holds another component's
-  cells, or one whose cell keys claim a different scenario than their own keys store, or
-  one that is missing any cell **the file's plan** measures for the named component — so a
-  `--plan quick` run cannot merge into a `full`-plan file even forced, because the partial
-  block would leave rows nobody could add afterwards.
+  run, or over a `--scenario`-narrowed one, used to write those cells under `menu`. Every
+  refusal here is absolute, `--force` included: a record that holds another component's
+  cells; one measured on a plan the file does not hold; one that is missing any cell **the
+  file's plan** measures for the named component — so `--plan quick --component menu --force`
+  cannot write 12 of menu's 28 rows into a `full`-plan table, because rows left out could
+  never be added afterwards; one whose cells' `scenario` fields disagree with the keys that
+  store them (the key is what `--check` gates and what the merge writes, so the record
+  cannot be trusted to know which component it measured); or one that holds no cells at all,
+  which would write a provenance entry claiming a component was measured with no numbers
+  anywhere to contradict it.
 - **An environment that is not the same measurement** — CPU model and core count,
   simulator runtime and Xcode, Android API level and system image, ART compile state,
   the waiting rule, and the `react-native` and `@expo/ui` versions. Each refusal names

@@ -258,8 +258,12 @@ Which run qualifies is itself a check, because `report.mjs <results.json> --upda
 component's whole run. A file that also holds another component's cells has nowhere to put
 them, and one that holds only part of the named component's would land a block with holes
 that `--check` then reads as "not measured in base" — with no way to fill them later,
-because the file would already count the component as present. Both are refusals, asked of
-the record rather than of the command line.
+because the file would already count the component as present. The count that decides
+"whole" is the one **the file's** plan produces, so a `--plan quick` results file cannot
+merge into a `full`-plan table; that refusal, and the other three (a record holding other
+components' cells, one whose cells' `scenario` fields disagree with the keys that store
+them, and one that holds no cells at all), are absolute — `--force` included. All four are
+asked of the record rather than of the command line.
 
 The first mint for a machine is still a full run — there is nothing to merge into
 before a file exists — and a component the file already holds is a refusal, not an

@@ -7,8 +7,8 @@
       "test": "scripts/__tests__/bench-baseline-merge.test.js",
       "file": "scripts/bench/lib.mjs",
       "mutation": "merge wipes every other component's cells",
-      "before": "  const removed = [];\n  for (const [key, cell] of Object.entries(next.cells)) {\n    if (\n      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component\n    ) {\n      removed.push(key);\n    }\n  }",
-      "after": "  const removed = Object.keys(next.cells);\n  for (const [key, cell] of Object.entries(next.cells)) {\n    if (\n      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component\n    ) {\n      removed.push(key);\n    }\n  }",
+      "before": "  const removed = Object.keys(next.cells).filter(\n    (key) => componentOfKey(key) === component\n  );",
+      "after": "  const removed = Object.keys(next.cells);",
       "redTests": [
         "leaves every other cell byte-for-byte identical; appends new cell keys instead of re-sorting the table; reports the cells it changed"
       ]
@@ -57,8 +57,8 @@
       "test": "scripts/__tests__/bench-baseline-merge.test.js",
       "file": "scripts/bench/lib.mjs",
       "mutation": "merge allowed onto a component the file already has",
-      "before": "  const existing = cellsForComponent(baseline.cells, component);\n  if (Object.keys(existing).length > 0) {",
-      "after": "  const existing = cellsForComponent(baseline.cells, component);\n  if (false) {",
+      "before": "  if (Object.keys(existing).length > 0) {",
+      "after": "  if (false) {",
       "redTests": [
         "refuses when the file already has this component, and counts the cells; refuses a component the file already holds, without writing"
       ]
@@ -451,7 +451,7 @@
       "test": "scripts/__tests__/bench-baseline-merge.test.js",
       "file": "scripts/bench/lib.mjs",
       "mutation": "the merge drops every skippedCells row, not just its own",
-      "before": "  const removedSkipped = [];\n  for (const [key, cell] of Object.entries(next.skippedCells)) {\n    if (\n      componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component\n    ) {\n      removedSkipped.push(key);\n    }\n  }",
+      "before": "  const removedSkipped = Object.keys(next.skippedCells).filter(\n    (key) => componentOfKey(key) === component\n  );",
       "after": "  const removedSkipped = Object.keys(next.skippedCells);",
       "redTests": [
         "carries the other components' skippedCells rows and drops only its own"
@@ -492,8 +492,8 @@
       "test": "scripts/__tests__/bench-baseline-merge.test.js",
       "file": "scripts/bench/lib.mjs",
       "mutation": "a run holding part of the component's cells is not refused",
-      "before": "  const absent = missingComponentCells({ run, component });\n  if (absent != null) {\n    problems.push(absent);\n  }",
-      "after": "  const absent = null;\n  if (absent != null) {\n    problems.push(absent);\n  }",
+      "before": "  const absent = missingComponentCells({\n    run,\n    component,\n    plan: filePlan,\n  });",
+      "after": "  const absent = null;",
       "redTests": [
         "refuses a results file that measured only part of the named component"
       ]
@@ -502,8 +502,8 @@
       "test": "scripts/__tests__/bench-baseline-merge.test.js",
       "file": "scripts/bench/lib.mjs",
       "mutation": "the completeness question is never asked of the record",
-      "before": "  const held = run?.cells;\n  if (held == null || Object.keys(held).length === 0) {\n    return null;\n  }",
-      "after": "  return null;\n  const held = run?.cells;\n  if (held == null || Object.keys(held).length === 0) {\n    return null;\n  }",
+      "before": "export function missingComponentCells({ run, component, plan = null }) {",
+      "after": "export function missingComponentCells({ run, component, plan = null }) {\n  if (true) return null;",
       "redTests": [
         "refuses a results file that measured only part of the named component"
       ]
@@ -697,6 +697,131 @@
       "redTests": [
         "copies only the named component out of a `built` that holds a whole run"
       ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "completeness is counted against the run's plan again",
+      "before": "      plan: plan ?? run.plan ?? BASELINE_PLAN,",
+      "after": "      plan: run.plan ?? BASELINE_PLAN,",
+      "redTests": [
+        "counts a component block complete against the file’s plan, not the run’s"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "a merge stops refusing a plan the file does not hold",
+      "before": "  const filePlan = baseline.plan ?? BASELINE_PLAN;\n  if (run != null && run.plan !== filePlan) {",
+      "after": "  const filePlan = baseline.plan ?? BASELINE_PLAN;\n  if (false) {",
+      "redTests": [
+        "refuses a quick-plan results file under --force, because the file is full-plan"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the pre-flight is identified by an empty cells table again",
+      "before": "  if (run?.candidate === true) {\n    return null;\n  }",
+      "after": "  if (false) {\n    return null;\n  }",
+      "redTests": [
+        "refuses a measured record with no cells, and defers the pre-flight that has none",
+        "refuses when the file already has this component, and counts the cells",
+        "accepts a current file that matches on every field it records",
+        "refuses a different simulator runtime or Xcode on iOS, and ignores both on Android",
+        "matches pre-X14 app versions against the founding commit, and records the source",
+        "accepts the platform default waiting rule for a file that records none",
+        "upgrades a readable v2 file and says so, rather than refusing every merge",
+        "reports the unknown halves as deferred when allowed",
+        "hands back the file, its verdict and the provenance to seed",
+        "refuses a thin launch count, and lets --force past it to the device"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "a record that measured nothing is treated as the pre-flight's stand-in",
+      "before": "  if (held == null || Object.keys(held).length === 0) {\n    return (",
+      "after": "  if (held == null || Object.keys(held).length === 0) {\n    return null;\n  }\n  if (false) {\n    return (",
+      "redTests": [
+        "refuses a measured record with no cells, and defers the pre-flight that has none",
+        "refuses a results file that measured nothing, under --force too"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "cellsForComponent reads the scenario field instead of the key",
+      "before": "  for (const key of Object.keys(cells ?? {})) {\n    if (componentOfKey(key) === component) {\n      out[key] = cells[key];\n    }\n  }",
+      "after": "  for (const [key, cell] of Object.entries(cells ?? {})) {\n    if (componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component) {\n      out[key] = cell;\n    }\n  }",
+      "redTests": [
+        "assigns a cell to the component its key names, never its scenario field"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "a cell whose scenario contradicts its key is no longer refused",
+      "before": "  const contradicted = cellsContradictingTheirKey(run?.cells);\n  if (contradicted.length > 0) {",
+      "after": "  const contradicted = cellsContradictingTheirKey(run?.cells);\n  if (false) {",
+      "redTests": [
+        "refuses a record whose cell keys and scenarios disagree, and does not overwrite"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "a forged cell overwrites the switch row it was never asked about",
+      "hunks": [
+        {
+          "file": "scripts/bench/lib.mjs",
+          "before": "  for (const key of Object.keys(cells ?? {})) {\n    if (componentOfKey(key) === component) {\n      out[key] = cells[key];\n    }\n  }",
+          "after": "  for (const [key, cell] of Object.entries(cells ?? {})) {\n    if (componentOf(cell?.scenario ?? parseCellKey(key).scenario) === component) {\n      out[key] = cell;\n    }\n  }"
+        },
+        {
+          "file": "scripts/bench/lib.mjs",
+          "before": "  const contradicted = cellsContradictingTheirKey(run?.cells);\n  if (contradicted.length > 0) {",
+          "after": "  const contradicted = cellsContradictingTheirKey(run?.cells);\n  if (false) {"
+        }
+      ],
+      "redTests": [
+        "refuses a record whose cell keys and scenarios disagree, and does not overwrite",
+        "assigns a cell to the component its key names, never its scenario field"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-dry-run.test.js",
+      "file": "scripts/bench/machine.mjs",
+      "mutation": "the pre-flight's candidate record stops saying it is a candidate",
+      "before": "    candidate: true,\n    platform,",
+      "after": "    platform,",
+      "redTests": [
+        "answers the merge question instead of refusing a narrowed schedule",
+        "defers only what a booted device cannot answer yet, and says which"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-baseline-merge.test.js",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "a quick-plan merge is complete for its own plan and no plan rule refuses it",
+      "hunks": [
+        {
+          "file": "scripts/bench/lib.mjs",
+          "before": "  const filePlan = baseline.plan ?? BASELINE_PLAN;\n  if (run != null && run.plan !== filePlan) {",
+          "after": "  const filePlan = baseline.plan ?? BASELINE_PLAN;\n  if (false) {"
+        },
+        {
+          "file": "scripts/bench/lib.mjs",
+          "before": "      plan: plan ?? run.plan ?? BASELINE_PLAN,",
+          "after": "      plan: run.plan ?? BASELINE_PLAN,"
+        }
+      ],
+      "redTests": [
+        "refuses a quick-plan merge before booting, under --force too",
+        "refuses a quick-plan results file under --force, because the file is full-plan",
+        "counts a component block complete against the file’s plan, not the run’s"
+      ]
     }
-  ]
+  ],
+  "fixRound2": "Rows 65-73 are fix round 2 (re-review F1, F2, F3), from drivers 7 and 9. Row 73 is the re-review's own experiment: both halves of F1 restored together, which is the only state that reaches the review's damage (exit 0, 12 of 28 cells written), and the only row that turns the runner route red - with just one half dropped, the other guard still refuses that CLI, for a different reason. Row 71 restores both halves of the F3 fix at once, for the same reason. Rows 0, 5, 42, 46 and 47 are re-anchored by driver 8: round 2's edits moved their anchors, not their defects."
 }
