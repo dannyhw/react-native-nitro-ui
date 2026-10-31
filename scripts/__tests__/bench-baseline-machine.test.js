@@ -45,9 +45,11 @@ import {
   openBaselineForCheck,
 } from '../bench/baseline.mjs';
 import {
+  BASELINE_SCHEMA_VERSION,
   SCHEMA_VERSION,
   aggregateRecords,
   buildBaseline,
+  isCompatibleBaseline,
 } from '../bench/lib.mjs';
 
 /** Same shape as `bench-gate.test.js`: 4 quiet launches x 20 measured iterations. */
@@ -312,9 +314,12 @@ describe('opening a machine baseline for --check', () => {
       display: (file) => file,
       readJson: (file) => JSON.parse(files[file]),
       existsSync: (file) => Object.hasOwn(files, file),
-      isCompatibleBaseline: (baseline) =>
-        baseline?.schemaVersion === SCHEMA_VERSION && baseline.cells != null,
-      schemaVersion: SCHEMA_VERSION,
+      // The shipped predicate and the shipped *baseline* version, not a copy of
+      // either: the results file's `SCHEMA_VERSION` is a different number about a
+      // different file, and a fixture that asserted against it would go red on
+      // every mint for the wrong reason (X14 split the two constants).
+      isCompatibleBaseline,
+      schemaVersion: BASELINE_SCHEMA_VERSION,
     });
   }
 
@@ -381,7 +386,9 @@ describe('opening a machine baseline for --check', () => {
       },
     });
     expect(opened.refusal.kind).toBe('incompatible');
-    expect(opened.refusal.message).toContain('not a v2 ratio baseline');
+    expect(opened.refusal.message).toContain(
+      `not a v${String(BASELINE_SCHEMA_VERSION)} ratio baseline`
+    );
   });
 
   it('refuses a baseline that records no machine at all', () => {
