@@ -8,6 +8,14 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.4.1
+
+### Patch Changes
+
+- d6c7b0d: Fix a recycled `DatePicker` keeping the previous owner's sizing policy on Android, which stretched a `compact` field to its parent's width. An app reached it by unmounting an `inline` (or `wheel`) picker and mounting a field afterwards in the same screen, with React Native's view recycling on.
+- 45efa77: Android: a control whose view was unmounted no longer measures or lays itself out until it is attached for a new mount. Before this, a control that was dropped while still attached could answer a measure by building a user interface with nothing left to dispose it, which is a possible Compose leak when a surface stops.
+- 38a1e93: Two test-only read-outs, so the recycle rule can be measured instead of inferred. `nuiTestDisplayedIndex()` on SegmentedControl answers which segment the control is really painting — the handle's `selectedIndex` only echoes what React sent. `nuiTestLifetimeReport()` on Switch answers `drops=` and `recycles=` per native object, and neither is cleared by a recycle, so a control that reports `recycles=1` while it is on screen can only be an instance the pool handed back. `nitroUiCore.drainPerf()` also answers two new kinds, `dropped` and `recycled`. Both methods appear on the `hybridRef` type, alongside the other `nuiTest*` probes; no behaviour an app can see changes.
+
 ## 0.4.0
 
 ### Minor Changes
