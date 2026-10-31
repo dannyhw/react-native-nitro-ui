@@ -167,8 +167,11 @@ experiment.
 
 Two refusals `--force` does **not** override, because neither is a judgement about the
 measurement. The first is comparability: schema version, machine, device key, CPU, runtime,
-Android API and system image, ART state, the waiting rule, and the react-native and
-`@expo/ui` versions all survive `--force`, in the pre-flight and at write time. The second
+Android API and system image, ART state, the waiting rule *the file recorded against the one
+the run waited under*, and the react-native and `@expo/ui` versions all survive `--force`, in
+the pre-flight and at write time. (Asking for a non-default rule in the first place is a
+different refusal, and `--force` does wave that through — it is a statement about the run.)
+The second
 is `--component <name> --update-baseline` itself: writing one component's cells into an
 existing file *is* a narrowed schedule, so the narrowing guard is replaced for that shape
 by the question "may this file take this component's cells at all" - and its refusals are
