@@ -86,4 +86,7 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - mac-1's iOS Menu cells (A6): the mint ran 224/224 launches clean on every comparability field, then the load guard refused it (47% of samples over 7.0, median 6.93) because of the owner's own apps on that machine. Same command, in a quiet window the owner picks; until then Menu's iOS gate measures nothing on maintainer-mac-1.
 - `--check` after a narrowed mint compares only the rows its own run measured, so it cannot show that a merged file's older cells still gate; a `--check-all`, or a docs note to run one full-plan `--check` on the mint host, would close that (A6).
 - `lease.mjs acquire --exclusive` powers off every booted simulator on the machine, including another project's that `doctor` already flagged; on a shared or linked machine it should list what it will switch off first (A6).
+- Android inline `DatePicker` is clipped inside its 320-wide box: the Saturday column is cut off and the "F S" headers run together (`docs/images/components/date-picker-android.png`, PR #11). A user-visible sizing bug.
+- iOS `Menu`, Item Lists story: the File menu omits the untitled destructive "Delete" group that Android shows (PR #11).
+- Android `Menu`: the dropdown is narrow enough to truncate "AirDrop" (PR #11).
 
