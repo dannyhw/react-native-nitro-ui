@@ -123,8 +123,9 @@ five suites named in the red proofs.
 - Metro and the bench: `scripts/bench/devices.mjs:10` records that a release build embeds the bundle
   and ignores `METRO_PORT`, so a bench never joins a Metro and item 1's pre-flight is correctly not
   applied to it. If a debug-build bench is ever wanted, that is the line that changes.
-- The two `?:` reads in Menu's read-back test (`named?.title`) are now dead `?.` on a non-optional
-  value; harmless, and left so the diff stays the three lines that matter.
+- Menu's read-back test reads its two handles with `?.` (`named?.title`, `plain?.disabled`), which is
+  dead optional chaining now that `waitForHandle` returns a value or throws; harmless, and left so the
+  diff stays the three lines that matter.
 
 ## Fix round 1
 
