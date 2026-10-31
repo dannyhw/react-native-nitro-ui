@@ -157,14 +157,17 @@ struct SegmentedControlContent: NitroUIContent {
     // different segment than the one that was drawn. A commit that stored the index
     // without the body ever being handed it fails the test that reads this, which is
     // what makes it a reading of the control rather than an echo of the prop (Progress
-    // does the same with its value).
+    // does the same with its value). The explicit `return` below is what lets this
+    // statement sit in a `ViewBuilder`: without one, a `Void` statement is the body's
+    // value and the compiler refuses it (`type '()' cannot conform to 'View'`).
     let drawn = Int(model.state.displayed)
     model.recordDrawnIndex(drawn)
+
     // A SwiftUI segmented `Picker` is the control iOS users know: one capsule,
     // one segment per option, the selected one filled. It presents nothing, so
     // this host needs no view-controller containment (`needsContainment` stays
     // false, unlike a `.menu` Picker - which is the 0.2 `Picker` component).
-    Picker(selection: selection) {
+    return Picker(selection: selection) {
       // `id: \.offset`, not the label: two options may carry the same text, and
       // a duplicate identity in a `ForEach` is a broken list, not a duplicate
       // segment. The `tag` is the index for the same reason.
