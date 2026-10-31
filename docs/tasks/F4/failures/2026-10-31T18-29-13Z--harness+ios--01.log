@@ -1,0 +1,82 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-10-31T18:29:13.397Z on code tree `24426ca64a8a` at HEAD `ba5c029` (branch `task/F4-ci-green`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 427 ms
+- Load: start 1.72, end 1.72, median 1.72, max 1.72
+- Device: ios
+- Full log: `task/F4-ci-green/harness+ios-2026-10-31T18-29-13.090Z.log` (<store>/task/F4-ci-green/harness+ios-2026-10-31T18-29-13.090Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F4-ci-green/harness+ios-2026-10-31T18-29-13.090Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   F4-on9yl                 F4           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 1.72 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 41 log line(s)
+
+```
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree 24426ca64a8a at HEAD ba5c029
+gate: git tree 8b6ff8276729
+gate: log task/F4-ci-green/harness+ios-2026-10-31T18-29-13.090Z.log
+gate:       <store>/task/F4-ci-green/harness+ios-2026-10-31T18-29-13.090Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp eaa438b4 at 4873811db717540ae34e3ab2aac8d98c8fda5df6, now 24426ca6 at ba5c0295f83d95f97424688e4a6002216a2c5590)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp eaa438b4 at 4873811db717540ae34e3ab2aac8d98c8fda5df6, now 24426ca6 at ba5c0295f83d95f97424688e4a6002216a2c5590)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+gate: harness:ios FAIL in 0.4 s
+gate: recorded in .gates/task/F4-ci-green.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/F4-ci-green/harness+ios-2026-10-31T18-29-13.090Z.log (4 probe(s))
+
+```
