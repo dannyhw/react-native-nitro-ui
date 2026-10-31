@@ -41,9 +41,9 @@ fixed in product code, with a recycle test comparing the widest field against th
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1432 tests / 51 suites | `2d61281c7801` | 2 m 50 s | start 4.1 / med 4.8 / max 11.8 |
-| `harness:ios` | **PASS** | 227 tests / 16 suites | `2d61281c7801` (ios tree) | 3 m 54 s | start 11.5 / med 6.6 / max 14.8 |
-| `harness:android` | **PASS** | 278 tests / 16 suites | `2d61281c7801` (android tree) | 8 m 33 s | start 8.6 / med 8.0 / max 37.2 |
+| `check` | **PASS** | 1432 tests / 51 suites | `9b4359291a44` | 2 m 38 s | start 4.3 / med 4.3 / max 5.5 |
+| `harness:ios` | **PASS** | 227 tests / 16 suites | `9b4359291a44` (ios tree) | 3 m 51 s | start 3.6 / med 4.0 / max 4.9 |
+| `harness:android` | **PASS** | 278 tests / 16 suites | `9b4359291a44` (android tree) | 8 m 06 s | start 3.9 / med 2.3 / max 3.9 |
 | `real-input:ios` | stale | — | 228eff2a30f1 (not this tree) | 16 m 19 s | start 11.6 / med 11.6 / max 56.7 |
 | `real-input:android` | stale | — | 228eff2a30f1 (not this tree) | 20 m 43 s | start 3.3 / med 2.5 / max 13.0 |
 | `harness:android:Conformance` | stale | 2 failed of 40 tests / 1 suites | 49097b0d9fc5 (not this tree) | 1 m 28 s | start 3.1 / med 3.0 / max 3.8 |
@@ -61,8 +61,7 @@ need: review against .gates/task/F6-recycling-gates.jsonl; code diff base 1d9761
   ✓ check — green
   ✓ harness:ios — green on the ios code tree
   ✓ harness:android — green on the android code tree
-  note: treated as both platforms (outside the known prefixes): example/__tests__/Conformance.harness.tsx,
-        example/__tests__/Recycling.harness.tsx, scripts/conformance-core.mjs
+  note: treated as both platforms (outside the known prefixes): example/__tests__/Conformance.harness.tsx, example/__tests__/Recycling.harness.tsx, scripts/conformance-core.mjs
 need: review is satisfied on this code tree.
 ```
 
@@ -237,7 +236,8 @@ code in the diff. Device proofs from round 1 that still stand are kept.
 `test:native:android` into `check` and CI, and this task does not touch those files (the
 wiring would conflict). They ran here by hand — `bun run test:native:android`: **66 tests, 0
 failures**, 7 of them in `NitroUiLifetimeGateTest` — and four of that file's tests are the red
-proofs above. They are covered by `check` once X15 lands, so **F6 merges after X15**.
+proofs above. Re-run after fix round 2's `@Volatile` edit, on the same result. They are covered by
+`check` once X15 lands, so **F6 merges after X15**.
 
 ## Fix round 1
 
@@ -260,6 +260,25 @@ report's phantom Swift file removed, FOLLOWUPS matched to what is measured. Date
 stated in the test. Per-object proof is the Switch's.
 
 JVM suite by hand: 66 tests, 0 failures; in `check` once X15 lands, so F6 merges after X15.
+
+## Fix round 2
+
+The iOS justification argued from the wrong layer; the true sentence is **no native iOS probe exists
+yet, and the retention to gate is native.** Android's `System.gc()` runs inside its app's probe
+module, so "no forced collect" was a fact about plain JS only (a probe could reach JSI
+`instrumentation().collectGarbage()`), and under ARC a deinit is synchronous, so a live-host count
+(`NitroSwiftUIHost` init/deinit, or footprint) needs no GC question. The engine tripwires are gone
+and their proofs withdrawn; the arm is a pending `it.skip` whose reason is that sentence. Item 1 was
+right: that line lived in this report, not the `FOLLOWUPS.md` the comment named. It is there now.
+
+Changesets: DatePicker is the symptom plus "with view recycling on"; drop-path says "a control whose
+view was unmounted", never "hosted", and names the effect: a possible Compose leak when a surface
+stops. `@Volatile` on the four companion counters, written by the view system, read on another
+thread. `findHost`'s KDoc: harness mode renders no app screen, so the probe drops the test's own
+Switch; that test keeps one mounted.
+
+Filed, not fixed: `sawRecycle` is a class-level witness; the M2 zero-delta has no proof it can move;
+item 1's proofs are Android-only.
 
 ## Questions for orchestrator
 
