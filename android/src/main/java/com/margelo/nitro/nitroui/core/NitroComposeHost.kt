@@ -1395,11 +1395,17 @@ abstract class NitroComposeHost<M : NitroUiModel>(
      * one object a harness holds no handle for — a per-host count of it could only be
      * read through the leaked view itself. Reported by [lifetimeReport], so any run can
      * raise it and none can quietly leave it at zero.
+     *
+     * `@Volatile` because the four totals here are written by the view system, on the UI
+     * thread, and read through [lifetimeReport] by a harness call that arrives on another
+     * one: without it the reader is not promised a writer's value, and a gate that read a
+     * stale zero would pass for the wrong reason. The increments are not atomic either, so
+     * these numbers are for "did it ever happen", never a rate to be divided.
      */
-    internal var processMeasuresAfterDrop = 0
+    @Volatile internal var processMeasuresAfterDrop = 0
 
     /// [processMeasuresAfterDrop], for the layout pass.
-    internal var processLayoutsAfterDrop = 0
+    @Volatile internal var processLayoutsAfterDrop = 0
 
     /**
      * Times [unregisterPreDraw] had to give up: the captured observer was dead **and**
@@ -1412,8 +1418,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
      * counter is the permanent version of that measurement - a harness run that leaves
      * it at 0 is a run in which the unreachable branch stayed unreachable, and a
      * non-zero value is a live leak path with a name.
+     *
+     * `@Volatile` for the same reason as [processMeasuresAfterDrop].
      */
-    internal var giveUpUnregisters = 0
+    @Volatile internal var giveUpUnregisters = 0
 
     /**
      * Times a sizing flush was scheduled while this host had no window, so its listener
@@ -1421,9 +1429,10 @@ abstract class NitroComposeHost<M : NitroUiModel>(
      *
      * The precondition of the "near-unreachable listener leak" B1 filed (schedule while
      * detached, then attach, then detach before a frame, then drop). Counted as a
-     * process-wide total for the same reason as [giveUpUnregisters].
+     * process-wide total for the same reason as [giveUpUnregisters], `@Volatile` for the
+     * same reason as the two post-drop totals.
      */
-    internal var floatingFlushSchedules = 0
+    @Volatile internal var floatingFlushSchedules = 0
   }
 }
 
