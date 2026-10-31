@@ -75,7 +75,10 @@ The two `real-input:*` rows are the merge-stage bar and were green on `228eff2a3
 docs/changeset commit back; the diff since is `android/` + `example/__tests__/`, so they are stale
 rather than missing. The filtered rows are the red proofs above (a filtered run records under its
 own name and satisfies nothing), plus `harness:android:Recycling:--background` from a mistyped
-invocation, recorded in `## Follow-ups`.
+invocation, recorded in `## Follow-ups`. `docs/tasks/F6/failures/` holds an excerpt of every failed
+run in the ledger, so beside the proofs above it includes this round's diagnostics: the three
+`no-host` runs that found the probe ordering bug, the stale-app refusals, and the two temporary
+measurement probes that established the iOS numbers (their `MEASURE …` lines are the evidence).
 
 ## Red proofs
 
@@ -101,8 +104,10 @@ code in the diff. Device proofs from round 1 that still stand are kept.
   returns `null` so RN never pools the view -> same failure, on the same line, with the flag still
   on and the marks still moving (13:43). This is the discriminator for the review's objection: a
   run that prepares perfectly and reuses nothing cannot pass.
-- Round 1's proof for the same test (counters read *after* the unmount) is withdrawn: it stayed
-  green on a run with no reuse, which is what the review caught.
+- Round 1's proof for the same test (counters read *after* the unmount) is withdrawn. The review
+  caught why by reading: by the time the read happened, the drop and the pool entry had both run on
+  a freshly allocated view too, so `drops=1 recycles=1` was the same answer either way and
+  `reused >= 1` only proved `prepareForRecycle` had been called.
 - `Recycling` (all three) -> remove the app's `enableViewRecycling` override -> red on the
   precondition: `AssertionError: expected false to be true` at the `expect(enabled).toBe(true)`
   in `beforeAll` — the flag check, not the recycling assertions, which is the order wanted.

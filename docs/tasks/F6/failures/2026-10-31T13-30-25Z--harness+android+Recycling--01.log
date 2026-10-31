@@ -1,0 +1,77 @@
+# Failure excerpt — harness:android:Recycling
+
+- Ran: 2026-10-31T13:30:25.701Z on code tree `1ed761f4b89a` at HEAD `3aa4fff` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Recycling`
+- Result: fail, exit 1, 26231 ms
+- Load: start 4.84, end 4.10, median 4.58, max 4.84
+- Device: android / device `emulator-5574` / lease `F6-ex2j5`
+- Full log: `task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-30-25.701Z.log` (<store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-30-25.701Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● recycling · churn does not leak (Android, F6) › declines, and counts, a host dropped while it is still attached`
+- `expected +0 to be 1 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-30-25.701Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-ex2j5 (still live)
+  |   F6-ex2j5                 F6           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.10 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 32 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Recycling
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 1ed761f4b89a, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.84/2.98 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android+Recycling-2026-10-31T13-30-25.701Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● recycling · churn does not leak (Android, F6) › declines, and counts, a host dropped while it is still attached
+
+    expected +0 to be 1 // Object.is equality
+
+      [0m [90m 729 |[39m       [90m// assertion above could be satisfied by a guard that never ran, which is the failure[39m
+       [90m 730 |[39m       [90m// mode a "must not happen" gate has and a "must happen" gate does not.[39m
+      [31m[1m>[22m[39m[90m 731 |[39m       expect(after[33m.[39mmeasuresAfterDrop)[33m.[39mtoBe((before[33m.[39mmeasuresAfterDrop [33m?[39m[33m?[39m [35m0[39m) [33m+[39m [35m1[39m)[33m;[39m
+       [90m     |[39m                                           [31m[1m^[22m[39m
+       [90m 732 |[39m     })[33m;[39m
+       [90m 733 |[39m   })[33m;[39m
+       [90m 734 |[39m } [36melse[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 5 passed, 6 total
+Snapshots:   0 total
+Time:        25.056 s
+Ran all test suites matching Recycling.
+
+
+
+```
