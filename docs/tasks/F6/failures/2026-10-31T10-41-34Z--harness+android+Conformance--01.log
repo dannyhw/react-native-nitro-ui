@@ -1,0 +1,91 @@
+# Failure excerpt — harness:android:Conformance
+
+- Ran: 2026-10-31T10:41:34.367Z on code tree `49097b0d9fc5` at HEAD `38a1e93` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Conformance`
+- Result: fail, exit 1, 87681 ms
+- Load: start 3.06, end 2.18, median 2.99, max 3.84
+- Device: android / device `emulator-5574` / lease `F6-586pg`
+- Full log: `task/F6-recycling-gates/harness+android+Conformance-2026-10-31T10-41-34.367Z.log` (<store>/task/F6-recycling-gates/harness+android+Conformance-2026-10-31T10-41-34.367Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● conformance · every control, four rules › · SegmentedControl › shows none of its previous owner under one identity`
+- `● conformance · every control, four rules › · Picker › shows none of its previous owner under one identity`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android+Conformance-2026-10-31T10-41-34.367Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-586pg (still live)
+  |   F6-586pg                 F6           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.18 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 46 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Conformance
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 49097b0d9fc5, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.06/2.98 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android+Conformance-2026-10-31T10-41-34.367Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · SegmentedControl › shows none of its previous owner under one identity
+
+    1 conformance finding(s):
+
+        - SegmentedControl × recycle-reset: testID "conformance-segmented" (uncontrolled second owner) kept its identity across lifetimes and the segment the row paints reads 0 where the props say 1 — the view came back wearing its previous owner
+      [0m [90m 891 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 892 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 893 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 894 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 895 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 896 |[39m [32m        .join('\n')}`[39m[0m
+
+  ● conformance · every control, four rules › · Picker › shows none of its previous owner under one identity
+
+    1 conformance finding(s):
+
+        - Picker × recycle-reset: testID "conformance-picker" (uncontrolled second owner) kept its identity across lifetimes and choosing an option other than the second owner’s default emits reads  where the props say conformance-picker:0 — the view came back wearing its previous owner
+      [0m [90m 891 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 892 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 893 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 894 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 895 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 896 |[39m [32m        .join('\n')}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 38 passed, 40 total
+Snapshots:   0 total
+Time:        86.704 s
+Ran all test suites matching Conformance.
+
+
+
+```

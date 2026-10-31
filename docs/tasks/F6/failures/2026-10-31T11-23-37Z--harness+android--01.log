@@ -1,0 +1,178 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-10-31T11:23:37.504Z on code tree `228eff2a30f1` at HEAD `75ad6e3` (branch `task/F6-recycling-gates`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 503113 ms
+- Load: start 3.36, end 3.32, median 2.40, max 3.82
+- Device: android / device `emulator-5574` / lease `F6-586pg`
+- Full log: `task/F6-recycling-gates/harness+android-2026-10-31T11-23-37.504Z.log` (<store>/task/F6-recycling-gates/harness+android-2026-10-31T11-23-37.504Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/DatePicker.harness.tsx`
+- `● Console`
+- `● DatePicker · G5 › gives two compact pickers one box, whatever dates they show`
+- `● DatePicker · G5 › keeps a date field and a time field at their own boxes`
+- `● DatePicker · G5 › re-measures the field when the mode changes`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F6-recycling-gates/harness+android-2026-10-31T11-23-37.504Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F6-586pg (still live)
+  |   F6-586pg                 F6           both              pair-a
+  |   X15-9xz8i                X15          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.32 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 130 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 228eff2a30f1, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.36/2.93 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F6-recycling-gates/harness+android-2026-10-31T11-23-37.504Z.log.suites.json
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/DatePicker.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      variants (android, tzOffset=0): field=131.05x48.00 inline=320.00x512.00 wheel=320.00x512.00 delta={"corrections":3,"immediate":1,"flushes":1,"measurements":12,"epoch":0,"cachedSizes":3}
+
+
+    console.log
+      events (android): ["pick:1799971200000","pick:1800057600000"] default=1780527600000
+
+
+    console.log
+      rejection (android): log=["rejected:1799971200000","rejected:1799971200000"] displayed=1780527600000
+
+
+    console.log
+      clamping (android, tzOffset=0): min=1767225600000 max=1798761600000 log=["bounded-pick:1798761600000","bounded-pick:1772236800000","bounded-pick:1767225600000"]
+
+
+    console.log
+      calendar page (android, tzOffset=0): target=2027-01-04T12:00:00.000Z minimum=2026-08-31T23:00:00.000Z moved=2028-03-15T09:30:00.000Z plain=1815117300000|0|1814400000000|1|1|2|-2|-2 bounded=1836725400000|0|1835481600000|1|1|2|-2|1893455940000
+
+
+    console.log
+      settled platform builds (fresh-inline): 2
+
+
+    console.log
+      settled platform builds (fresh-dialog): 1
+
+
+    console.log
+      re-render bounds (android, tzOffset=0): value=2026-07-04T11:00:00.000Z later=2026-09-15T08:00:00.000Z inline=1783162800000|0|-1|-1|1|3|1767312000006|-2 dialog=1789372800000|1|-1|-1|1|2|1767312000006|1789372800000
+
+
+    console.log
+      settled platform builds (built-bounds): 2
+
+
+    console.log
+      settled platform builds (built-bounds): 3
+
+
+    console.log
+      built bounds (android): built0=2 afterWiden=3 report="1768046400000|0|1767225600000|1|0|3|1764547200000|1768910400000" firstMax=1766232000000 widerMax=1768910400000 between=1768046400000
+
+
+    console.log
+      settled platform builds (built-bounds): 3
+
+
+    console.log
+      dst zone: Wed Jul 01 2026 00:00:00 GMT+0100 winterOffset=0 summerOffset=-60
+
+
+    console.log
+      dst cases: 1 of 7 cross a UTC day - summerNight=1783207800000 winterLate=1767656700000
+
+
+    console.log
+      dst (android, tzOffset=0): winter=1767616200000 summer=1783251000000 spring=1774783800000 autumnEve=1792881900000 autumn=1792971900000 summerNight=1783207800000 winterLate=1767656700000
+
+
+    console.log
+      disabled (android): report="1780527600000|0|-1|-1|0|3|1767312000006|-2" log=[]
+
+
+    console.log
+      remount (android): report="1780527600000|0|-1|-1|0|5|-2|-2" expected=1780527600000|0
+
+  ● DatePicker · G5 › gives two compact pickers one box, whatever dates they show
+
+    testID "narrow" (the 2026 field) never reached 131.05x48.00 - last box 411.43x48.00, control measured 131.05x48.00.
+
+      [0m [90m 363 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 364 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 365 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 366 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 367 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 368 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+  ● DatePicker · G5 › keeps a date field and a time field at their own boxes
+
+    testID "key-date" (the date field) never reached 131.05x48.00 - last box 411.43x48.00, control measured 131.05x48.00.
+
+      [0m [90m 363 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 364 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 365 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 366 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 367 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 368 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+  ● DatePicker · G5 › re-measures the field when the mode changes
+
+    testID "mode-date" (the date field) never reached 131.05x48.00 - last box 411.43x48.00, control measured 131.05x48.00.
+
+      [0m [90m 363 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 364 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 365 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 366 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 367 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 368 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+
+Test Suites: 1 failed, 15 passed, 16 total
+Tests:       3 failed, 273 passed, 276 total
+Snapshots:   0 total
+Time:        502.05 s
+Ran all test suites.
+
+
+
+```
