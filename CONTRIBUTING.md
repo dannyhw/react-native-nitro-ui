@@ -1067,8 +1067,23 @@ node scripts/bench/run.mjs --platform android --plan full --launches 8 \
                                        # startup questions without booting anything
 ```
 
-Everything in the file that is not that component survives byte-for-byte, so the diff
-is one component's cells plus its provenance entry. Then read it back:
+Everything in the file that is not that component survives byte-for-byte. What the diff
+adds depends on whether the file already had X14's bookkeeping. A **current** file gains
+exactly two things: the component's cells and its one `components` entry. The **first**
+merge into a pre-X14 file gains that plus the bookkeeping it never had, all of it written
+so the next merge can check versions without going back to git:
+
+- the file's `components` block, seeded with one entry per component it already holds
+  (marked `seededFromFoundingRun: true`, so a reader can tell a founding run's numbers
+  from a merge's);
+- a top-level `dependencies` block, recovered from `bun.lock` at the commit the file's
+  own `sha` names, whose `source` field says so;
+- `skippedCells`, which the old files never wrote (empty in practice: an incomplete cell
+  on a gated arm was always a refusal);
+- the `schemaVersion` bump from 2 to 3.
+
+None of those is a measured number — that is the promise: the removed lines are the old
+`"schemaVersion": 2,` and one closing brace. Then read it back:
 
 ```sh
 node scripts/bench/run.mjs --platform android --plan full --launches 8 \
@@ -1080,6 +1095,12 @@ What it refuses, and why each refusal matters:
 - **A component the file already holds**, and any other filter (`--scenario`, `--n`,
   `--only`): a merge writes that component's whole block, and a partial one reads to
   `--check` as "not measured in base". Refreshing existing numbers means a full re-mint.
+- **A results file that is not one component's whole run.** `report.mjs` will re-report any
+  results file with any flags, so `--component menu` over a full run, or over a `slider`
+  run, or over a `--scenario`-narrowed one, used to write those cells under `menu`. Both
+  directions are refused now: a record that holds another component's cells, or that is
+  missing any cell the plan measures for the named one, cannot merge — the partial block
+  would leave rows nobody could add afterwards.
 - **An environment that is not the same measurement** — CPU model and core count,
   simulator runtime and Xcode, Android API level and system image, ART compile state,
   the waiting rule, and the `react-native` and `@expo/ui` versions. Each refusal names

@@ -253,6 +253,14 @@ That run measures only `menu`, and writes only `menu`'s cells: every other cell,
 carried through from the file byte-for-byte, so the diff is the component plus its
 provenance entry. `--check` then gates all of it, old rows included.
 
+Which run qualifies is itself a check, because `report.mjs <results.json> --update-baseline
+--component menu` can be handed any results file with any flags: the record must be one
+component's whole run. A file that also holds another component's cells has nowhere to put
+them, and one that holds only part of the named component's would land a block with holes
+that `--check` then reads as "not measured in base" — with no way to fill them later,
+because the file would already count the component as present. Both are refusals, asked of
+the record rather than of the command line.
+
 The first mint for a machine is still a full run — there is nothing to merge into
 before a file exists — and a component the file already holds is a refusal, not an
 overwrite: re-measuring one component into a table that has it would replace numbers
