@@ -58,7 +58,7 @@ export const LOG_STORE_BASENAME = 'nitro-ui-gates';
  *     jest, then perf, then more, and "the last summary wins" made its row report
  *     the 7-test perf step instead of the 391-test unit run (M3).
  *
- * v3 adds `stepTimings` for `check` (X10): what each of the sixteen steps did, with
+ * v3 adds `stepTimings` for `check` (X10): what each of the steps did, with
  * its own duration. `check` is the one gate long enough that "3 m 04 s" is not an
  * actionable number - the thing a reader wants is which step got slower. It is a
  * record, not a rule: no decision in this file reads `stepTimings`, so a v2 line and
@@ -195,6 +195,12 @@ export const TOOLING_FILES = [
   // The template `doctor.mjs --setup` copies to `~/.nitro-ui/devices.json`. A device
   // run reads that copy, never this file, and neither is in the app.
   'scripts/devices.example.json',
+  // The README's code samples, kept in sync by `readme:check`. It sits under
+  // `example/src/`, so the directory rule would call it both platforms, but no app
+  // code imports it - tsc, ESLint, Prettier and `readme:check` are what prove it - so
+  // a README-only change used to ask for two harness runs over a file no device
+  // mounts (D3).
+  'example/src/readme-examples.tsx',
   '.gitignore',
   '.prettierignore',
 ];
@@ -491,7 +497,7 @@ const STEP_STATUS_LABELS = {
  * It is a second table rather than extra cells on the first because it belongs to
  * one gate: `check` is the only run long enough to need it, and its row's duration
  * is the sum of this column's interesting parts. `--full` is the switch because
- * the report's gate table is the one a reviewer reads, and sixteen rows under it
+ * the report's gate table is the one a reviewer reads, and a step row under it
  * would bury the five device rows.
  *
  * @param {object} options
@@ -2956,6 +2962,26 @@ export function canonicalGateName(base, extraArgs = []) {
  * @returns {{gate: string, argv: string[], cwd: 'repo'|'example',
  *   platform: 'ios'|'android'|null, bench: boolean}}
  */
+/**
+ * The platform a bench run says it will drive, read out of its own arguments.
+ *
+ * Spelled the way `run.mjs` reads it - `flag(argv, '--platform')`, i.e. the token
+ * after `--platform` - because this is only worth recording when the runner would
+ * agree: a `--platform=ios` or a colon-packed `bench:--platform:ios` is a run that
+ * refuses to start, and the ledger should say "no platform", the same as a `check`.
+ * Anything but `ios`/`android` (absent, a typo, another flag) is null for the same
+ * reason.
+ *
+ * @param {string[]} args the bench's own arguments
+ * @returns {'ios' | 'android' | null}
+ */
+export function benchPlatformFromArgs(args = []) {
+  const index = args.indexOf('--platform');
+  if (index === -1 || index + 1 >= args.length) return null;
+  const value = args[index + 1];
+  return value === 'ios' || value === 'android' ? value : null;
+}
+
 export function resolveGate(name, extraArgs = []) {
   const args = [...extraArgs];
   if (name === 'check') {
@@ -3038,8 +3064,17 @@ export function resolveGate(name, extraArgs = []) {
       gate: canonicalGateName('bench', extraArgsForRun),
       argv: ['node', 'scripts/bench/run.mjs', ...extraArgsForRun],
       cwd: 'repo',
+      // Deliberately null: what `platform` keys is the device claim, the Metro
+      // pre-flight and the harness suite timings, none of which a bench run today.
       platform: null,
       bench: true,
+      // The bench's own `--platform`, for the ledger (X15 item 4). A5's iOS bench was
+      // recorded as `platform: android` with an Android serial: a bench lease covers
+      // both halves of a pair, so reading the environment answers "which devices does
+      // this task own", not "which device did this run drive". The runner refuses to
+      // start without `--platform`, so a bench that never named one has nothing to
+      // record - the environment must not fill it in.
+      benchPlatform: benchPlatformFromArgs(extraArgsForRun),
     };
   }
   throw new Error(
@@ -3322,6 +3357,54 @@ export function decideWait({
     exitCode: 0,
     message: `${record.gate ?? 'gate'}: ${String(Math.round(elapsedMs / 1000))}s${show}`,
   };
+}
+
+/**
+ * Which of the pids serving a Metro port belong to the run that is ending (X15 review).
+ *
+ * Why this exists: the merge sequence is `real-input:ios` -> `real-input:android` ->
+ * `harness:ios` -> `harness:android` on one lease, and `real-input`'s `ensureMetro` reuses a
+ * server that is already up *by design* (`scripts/real-input/support.mjs`). So a run that
+ * starts the Metro itself must stop it itself: leaving it up means the next gate in the
+ * sequence pre-flights its own leftover and refuses. Attributing a listener by its
+ * environment (`ps eww`, hunting for the lease id) was the other option and is not good
+ * enough - `ps` truncates its env block at a width nobody controls, so a lease id past the cut
+ * reads as somebody else's Metro, and the safe branch there is the leak. Process *groups* are
+ * not approximated: the gate spawns its child `detached`, so the child leads a group of its
+ * own, and a listener whose pgid is that group can only have been started by this run.
+ *
+ * A listener in any other group is another task's Metro, and stopping that is the X4 incident
+ * this feature exists to prevent. So the rule is equality with the leader's pid - never
+ * "whatever is on the port" - and a pid the kernel cannot answer for is left alone.
+ *
+ * The leader itself is never a target, and not because it is unimportant: the sweep runs after
+ * it has exited, so a pid answering to `leaderPid` at that point has been *recycled* to some
+ * unrelated process, and its group would match by accident. That is the one way this sweep
+ * could kill a stranger without violating its own rule, so the leader's number is excluded
+ * rather than trusted (X15 review 6c).
+ *
+ * @param {object} options
+ * @param {Array<{pid: number, command: string}>} [options.listeners] what `lsof` found
+ * @param {number | null} options.leaderPid the run's direct child, which leads its own group
+ * @param {(pid: number) => number | null} options.groupOf the kernel's answer, injected
+ * @returns {number[]} the pids this run owns, in the order they were found
+ */
+export function ownMetroPids({ listeners, leaderPid, groupOf }) {
+  const owned = [];
+  if (leaderPid == null) return owned;
+  for (const listener of listeners ?? []) {
+    const pid = Number(listener?.pid);
+    if (!Number.isInteger(pid) || pid <= 0) continue;
+    if (pid === leaderPid) continue;
+    let group = null;
+    try {
+      group = groupOf(pid);
+    } catch {
+      group = null;
+    }
+    if (group != null && group === leaderPid) owned.push(pid);
+  }
+  return owned;
 }
 
 /**

@@ -40,6 +40,7 @@ import {
   ledgerRelativePath,
   latestByGate,
   listByGate,
+  ownMetroPids,
   parseLedger,
   parseTestCounts,
   parseTestSummaries,
@@ -770,12 +771,183 @@ describe('resolveGate', () => {
     ]);
   });
 
+  it("takes a bench platform from the bench's own --platform (X15)", () => {
+    // A5's iOS bench was recorded as `platform: android` with an Android serial,
+    // because the ledger read the lease env and a bench lease covers both sides of
+    // a pair. The bench knows which device it is driving - it is the one argument it
+    // cannot run without - so that is what the line has to carry.
+    expect(
+      resolveGate('bench', ['--platform', 'ios', '--plan', 'full'])
+        .benchPlatform
+    ).toBe('ios');
+    expect(
+      resolveGate('bench', ['--plan', 'quick', '--platform', 'android'])
+        .benchPlatform
+    ).toBe('android');
+    // The colon spelling a harness gate accepts (`harness:android:ColdSizing`) is not
+    // a bench's: here the whole `--platform:ios:--plan:quick` arrives as one argument,
+    // which `run.mjs` refuses for itself. The ledger must not read a platform out of
+    // something the runner cannot parse.
+    expect(
+      resolveGate('bench:--platform:ios:--plan:quick').benchPlatform
+    ).toBeNull();
+    // The field is separate from `platform` on purpose: `platform` is what claims a
+    // device, pre-flights Metro and asks for per-suite timings, and a bench does none
+    // of those. Reading the run's own device is all this changes.
+    expect(resolveGate('bench', ['--platform', 'ios']).platform).toBeNull();
+    expect(resolveGate('bench', ['--platform', 'ios']).bench).toBe(true);
+    // No `--platform`, no claim: the runner refuses that run itself, and the ledger
+    // must not invent a platform for it.
+    expect(resolveGate('bench', ['--plan', 'quick']).benchPlatform).toBeNull();
+    expect(
+      resolveGate('bench', ['--platform', 'solar']).benchPlatform
+    ).toBeNull();
+    // A value that is another flag is not a platform, and neither is one that is
+    // somebody else's option value.
+    expect(resolveGate('bench', ['--platform']).benchPlatform).toBeNull();
+    expect(
+      resolveGate('bench', ['--only', '--platform']).benchPlatform
+    ).toBeNull();
+    expect(
+      resolveGate('bench', ['--compare', 'HEAD', '--platform', 'ios'])
+        .benchPlatform
+    ).toBe('ios');
+    // `--platform=ios` is not what `run.mjs` parses (its `flag()` looks for the
+    // token), so recording a platform there would describe a run that cannot start.
+    expect(
+      resolveGate('bench', ['--platform=android']).benchPlatform
+    ).toBeNull();
+  });
+
+  it("records the bench platform's device, not the lease's other side", () => {
+    // The other half of the incident: an iOS bench on a lease that exports both
+    // sides used to print `ANDROID_SERIAL`, because "which device" was answered from
+    // the environment rather than from the platform the run named.
+    const env = {
+      NITRO_UI_LEASE_ID: 'A5-1',
+      IOS_SIM_UDID: 'UDID-A',
+      IOS_SIM: 'iPhone 17',
+      ANDROID_SERIAL: 'emulator-5574',
+      ANDROID_AVD: 'nitro-ui-a',
+    };
+    // The old reading, which is what made the wrong line: no platform of its own, so
+    // the environment's Android side answered for an iOS run.
+    expect(deviceFromEnv(env, null).platform).toBe('android');
+    const resolved = resolveGate('bench', [
+      '--platform',
+      'ios',
+      '--plan',
+      'quick',
+    ]);
+    expect(deviceFromEnv(env, resolved.benchPlatform)).toEqual({
+      platform: 'ios',
+      device: 'UDID-A',
+      lease: 'A5-1',
+    });
+  });
+
   it('refuses a gate name it does not know, rather than running something', () => {
     expect(() => resolveGate('harness:both')).toThrow(
       /harness needs a platform/
     );
     expect(() => resolveGate('smoke:maybe')).toThrow(/smoke is one of/);
     expect(() => resolveGate('deploy')).toThrow(/unknown gate/);
+  });
+});
+
+/**
+ * Which Metro server belongs to the run that just ended (X15 review).
+ *
+ * The merge sequence runs four gates on one lease, and `real-input`'s `ensureMetro` reuses a
+ * server that is already up by design, so a run that starts one has to stop one - otherwise
+ * the next gate pre-flights its own leftover and refuses. The authority for "mine" is the
+ * child's process group; everything else is somebody else's server, and stopping that is the
+ * X4 incident. `gate.mjs` cannot be imported (it runs `main` at import), so the rule lives
+ * here with the rest of the gate's pure half, and the end-to-end behaviour - a real listener,
+ * a real group, a real signal - is in `lease-metro-port.test.js`.
+ */
+describe('ownMetroPids', () => {
+  const listeners = (...pids) => pids.map((pid) => ({ pid, command: 'node' }));
+
+  it('claims only the listeners whose group is the run’s own child', () => {
+    expect(
+      ownMetroPids({
+        listeners: listeners(101, 102, 103),
+        leaderPid: 100,
+        groupOf: (pid) => ({ 101: 100, 102: 77, 103: 100 })[pid] ?? null,
+      })
+    ).toEqual([101, 103]);
+  });
+
+  it('claims nothing when the server is in another group - the case that must not kill', () => {
+    // The X4 shape: a task's Metro on a port the pool handed to somebody else. Here the run
+    // owns the port and none of the servers, and the right answer is no signal at all.
+    expect(
+      ownMetroPids({
+        listeners: listeners(202),
+        leaderPid: 100,
+        groupOf: () => 202,
+      })
+    ).toEqual([]);
+  });
+
+  it('claims nothing when the kernel will not answer for the pid', () => {
+    // A pid that will not report a group is also a pid whose signal delivery is a guess, and
+    // "not mine" is the only safe reading. This is also what a dead pid gives: `ps` prints
+    // nothing, and the caller must not treat that as ownership.
+    expect(
+      ownMetroPids({
+        listeners: listeners(301),
+        leaderPid: 100,
+        groupOf: () => null,
+      })
+    ).toEqual([]);
+    const throwing = ownMetroPids({
+      listeners: listeners(302),
+      leaderPid: 100,
+      groupOf: () => {
+        throw new Error('pid gone');
+      },
+    });
+    expect(throwing).toEqual([]);
+  });
+
+  it('never targets the leader pid itself, even when its group matches', () => {
+    // The one way this sweep could kill a stranger while still obeying its own rule. The child
+    // led the group, so a *recycled* pid 100 - the child exited and the OS handed its number to
+    // some unrelated process - answers 100 for both pid and pgid and matches on the group alone.
+    // By the time the sweep runs, `leaderPid` can only mean "not my child any more".
+    expect(
+      ownMetroPids({
+        listeners: [{ pid: 100, command: 'node' }],
+        leaderPid: 100,
+        groupOf: () => 100,
+      })
+    ).toEqual([]);
+  });
+
+  it('ignores nonsense pids and a run with no leader', () => {
+    expect(
+      ownMetroPids({
+        listeners: [
+          { pid: 0, command: '' },
+          { pid: -1, command: '' },
+        ],
+        leaderPid: 100,
+        groupOf: () => 100,
+      })
+    ).toEqual([]);
+    expect(ownMetroPids({ leaderPid: 100, groupOf: () => 100 })).toEqual([]);
+  });
+
+  it('requires a leader pid, so a sweep without one stops nothing', () => {
+    expect(
+      ownMetroPids({
+        listeners: listeners(101),
+        leaderPid: null,
+        groupOf: () => 100,
+      })
+    ).toEqual([]);
   });
 });
 
@@ -883,6 +1055,11 @@ describe('platformMappingFor / tooling class', () => {
       '.changeset/config.json',
       '.gitignore',
       '.prettierignore',
+      // Lives under `example/src/`, which is iOS *and* Android by the directory rule,
+      // but nothing in the app imports it: `readme:check` reads it as text, and tsc,
+      // ESLint and Prettier are what prove it. Before X15 a README-only change asked
+      // for both harness runs off a file no device ever mounts (D3).
+      'example/src/readme-examples.tsx',
     ]) {
       expect(isToolingPath(tooling)).toBe(true);
       expect(platformsOwningFile(tooling)).toEqual([]);
@@ -1373,9 +1550,45 @@ function makeCheckout(files, onBranch = () => {}) {
 function writeFakeRunner(dir) {
   const bin = path.join(dir, 'fake-bin');
   fs.mkdirSync(bin, { recursive: true });
+  // Two leaked-descendant cases (X15 review 2 and 3), branched before the default summary is
+  // printed: each is the run's whole output, so a branch that fell through to the default lines
+  // would test a run with three summaries in it and prove nothing about the tail. A descendant
+  // that outlives the run keeps the child's pipes open, which is the shape of a real one -
+  // real-input's Metro on the 8291 default when `METRO_PORT` was never exported. The gate can
+  // neither wait for those pipes to close nor kill what it does not own, so both cases say how
+  // long they hold for and write `$!` where the test can find it: a fixture that left a `sleep`
+  // behind would be the very leak it is testing for.
+  const leakedDescendantCases =
+    // Holds *both* pipes for 10 s after the run is over: a correct gate stops waiting at its
+    // drain, releases its read ends and exits with its code in about two seconds; one that still
+    // waits for `close` sits for the whole ten. The duration is the measurement.
+    'if [ -n "$FAKE_HOLD_OPEN" ]; then\n' +
+    '  ( sleep 10 ) &\n' +
+    '  echo "$!" > "$FAKE_HOLD_OPEN"\n' +
+    '  echo "Test Suites: 1 passed, 1 total"\n' +
+    '  echo "Tests: 1 passed, 1 total"\n' +
+    '  exit 0\n' +
+    'fi\n' +
+    // The drain case, and it has to be one pipe at a time to prove anything. stdout has no other
+    // holder, so it closes the moment the child exits; the subshell keeps *stderr* open for half a
+    // second and writes a second summary into it through fd 4, with its own stdout and stderr sent
+    // to /dev/null so the only thing that reaches the gate is that summary. A gate that treats the
+    // first close as the end of the output destroys its read ends at once and loses the summary;
+    // one that waits for both gets it, well inside the drain's own budget. The timing is set by
+    // the sleep, not by the machine, so it does not depend on load.
+    'if [ -n "$FAKE_HOLD_TAIL" ]; then\n' +
+    '  echo "Test Suites: 1 passed, 1 total"\n' +
+    '  echo "Tests: 1 passed, 1 total"\n' +
+    '  ( sleep 0.5; echo "Test Suites: 7 passed, 7 total" >&4; ' +
+    'echo "Tests: 7 passed, 7 total" >&4 ) 4>&2 2>/dev/null 1>/dev/null &\n' +
+    '  echo "$!" > "$FAKE_HOLD_TAIL"\n' +
+    '  exit 0\n' +
+    'fi\n';
+
   const script =
     '#!/bin/sh\n' +
     'echo "fake runner: $0 $*"\n' +
+    leakedDescendantCases +
     'echo "Test Suites: 23 passed, 23 total"\n' +
     'echo "Tests: 391 passed, 391 total"\n' +
     'if [ -n "$FAKE_SECOND_SUMMARY" ]; then\n' +
@@ -2117,6 +2330,107 @@ describeCli('gate.mjs --background and wait', () => {
     expect(log).not.toContain('--background');
     expect(log).toContain('ColdSizing');
   }, 90_000);
+
+  it('exits with its code when a leaked descendant holds the pipes open', async () => {
+    // X15 review 3. The gate's child exited, the ledger line is written, and something the run
+    // started is still alive and still holding stdout and stderr - a descendant that is not a
+    // Metro on `$METRO_PORT`, so the sweep is right to leave it alone. If the gate waits for the
+    // pipes to finish closing, it sits for the holder's whole life: a lease doing nothing, and
+    // `wait` reporting a finished run as running. 10 s of holder against a 2 s drain makes the
+    // difference a measurement rather than a race.
+    const dir = checkout(iosOnly);
+    const holder = path.join(dir, 'holder.pid');
+    const startedAt = Date.now();
+    let run = null;
+    try {
+      run = runCli(dir, ['check'], { FAKE_HOLD_OPEN: holder });
+      const elapsed = Date.now() - startedAt;
+      expect(run.status).toBe(0);
+      expect(elapsed).toBeLessThan(8_000);
+      // And the ledger says what happened, so the fast exit is not a crash.
+      const lines = ledgerLines(dir);
+      expect(lines.map((row) => [row.gate, row.result, row.exitCode])).toEqual([
+        ['check', 'pass', 0],
+      ]);
+      expect(lines[0].counts.tests.total).toBe(1);
+    } finally {
+      // The holder is this run's own leaked child, recorded by the shim: killing it is the
+      // point of writing the file, and leaving a 10 s sleep behind would be a test that leaks.
+      try {
+        process.kill(Number(fs.readFileSync(holder, 'utf8').trim()), 'SIGKILL');
+      } catch {
+        /* already gone */
+      }
+    }
+  }, 90_000);
+
+  it('keeps the tail written after the run exits, when it arrives on the slower pipe', async () => {
+    // X15 review 2. A child's two pipes close at different moments: stdout the instant it exits,
+    // stderr only when the last thing holding it lets go. Counting the first close as the end of
+    // the output destroys both read ends there and loses whatever the second pipe was carrying -
+    // and for a harness run that tail is the test summary the ledger's counts are parsed from.
+    // So the drain waits for *both*, and the tail below (a second summary, written into stderr
+    // half a second after the child is gone) has to be in the log and in the counts.
+    const dir = checkout(iosOnly);
+    const tail = path.join(dir, 'tail.pid');
+    let run = null;
+    try {
+      run = runCli(dir, ['check'], { FAKE_HOLD_TAIL: tail });
+      expect(run.status).toBe(0);
+      const [record] = ledgerLines(dir);
+      const log = fs.readFileSync(logFile(dir, record.logPath), 'utf8');
+      expect(log).toContain('Tests: 1 passed, 1 total');
+      expect(log).toContain('Tests: 7 passed, 7 total');
+      // The ledger read the tail too, which is the part a reader actually acts on: the first
+      // summary is `counts` and all of them are `summaries`.
+      expect(record.counts.tests.total).toBe(1);
+      expect(record.summaries.map((entry) => entry.tests.total)).toEqual([
+        1, 7,
+      ]);
+    } finally {
+      try {
+        process.kill(Number(fs.readFileSync(tail, 'utf8').trim()), 'SIGKILL');
+      } catch {
+        /* already gone */
+      }
+    }
+  }, 90_000);
+
+  it("records a bench's platform and device from its own --platform", async () => {
+    // X15 item 4, at the level that actually writes the ledger line. The unit cases
+    // above prove `resolveGate` parses `--platform` and that `deviceFromEnv` would
+    // answer correctly *if called with it*; the incident (A5's iOS bench recorded as
+    // `platform: android` with an Android serial) lived in the one `??` between the
+    // two, and a unit test of either half cannot see it. So: run the real CLI, on a
+    // lease that exports both halves of a pair, and read what it recorded.
+    //
+    // A bench claims no device and pre-flights no Metro (`platform: null`), so the
+    // fixture needs no pool state - and the fake `node` on PATH stands in for
+    // `scripts/bench/run.mjs`, which is the thing under test's child, not its subject.
+    const dir = checkout(iosOnly);
+    const run = runCli(dir, ['bench', '--', '--platform', 'ios'], {
+      NITRO_UI_LEASE_ID: 'A5-1',
+      NITRO_UI_LEASE_TASK: 'A5',
+      NITRO_UI_LEASE_PLATFORM: 'both',
+      IOS_SIM_UDID: 'UDID-A',
+      IOS_SIM: 'iPhone 17',
+      ANDROID_AVD: 'nitro-ui-a',
+      ANDROID_SERIAL: 'emulator-5574',
+      EMULATOR_PORT: '5574',
+      ANDROID_ADB_SERVER_PORT: '5043',
+    });
+    expect(run.status).toBe(0);
+    const lines = ledgerLines(dir);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].platform).toBe('ios');
+    expect(lines[0].device).toBe('UDID-A');
+    expect(lines[0].device).not.toBe('emulator-5574');
+    expect(lines[0].lease).toBe('A5-1');
+    // The bench really was told which platform, and the flag is the runner's, not the
+    // ledger's: the log is the only place the child's argv appears.
+    const log = fs.readFileSync(logFile(dir, lines[0].logPath), 'utf8');
+    expect(log).toContain('--platform ios');
+  }, 90_000);
 });
 
 /**
@@ -2304,9 +2618,14 @@ describeCli(
         fs.rmSync(dir, { recursive: true, force: true });
     });
 
+    // SIGHUP is the third one because the child is `detached` (X15 review 5): it no longer
+    // shares this process's group, so a hangup that used to reach it through that group now
+    // reaches only `gate.mjs`. A gate whose caller's terminal goes away must not leave a
+    // harness holding a leased device.
     for (const [signal, trap] of [
       ['SIGINT', 'INT'],
       ['SIGTERM', 'TERM'],
+      ['SIGHUP', 'HUP'],
     ]) {
       it(`forwards ${signal} to the running gate, re-raises it, and still writes the ledger`, async () => {
         const dir = makeCheckout(IOS_ONLY);

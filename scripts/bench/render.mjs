@@ -22,6 +22,7 @@ import {
   formatRatio,
   formatSpread,
   gate,
+  GATED_IMPLEMENTATIONS,
   IMPLEMENTATIONS,
   incompleteMetrics,
   isNumber,
@@ -229,11 +230,18 @@ export function detailSections(run) {
       }
     }
     if (isNumber(cell.memory?.leakSlopeBytesPerCycle)) {
+      // The word is the claim: a monotonic climb only *refuses a run* on the arm
+      // the gate reads (`GATED_IMPLEMENTATIONS`), and a reference arm's leak is
+      // information about someone else's code. Saying "gated" there sent a
+      // reviewer looking for a verdict that could never exist (A5 review).
+      const leakGated = GATED_IMPLEMENTATIONS.includes(cell.implementation);
       rows.push([
         'leak slope',
         `${formatBytes(cell.memory.leakSlopeBytesPerCycle)}/cycle`,
         cell.memory.leakMonotonic
-          ? 'MONOTONIC (gated as a leak)'
+          ? leakGated
+            ? 'MONOTONIC (gated as a leak)'
+            : 'MONOTONIC (reported, not gated)'
           : 'not monotonic (not gated)',
         '',
         '',

@@ -3,7 +3,8 @@
  *
  * Why (X10): `check` was one long `&&` chain in `package.json`, so every step paid
  * for the one before it whether or not they were related - and a round that
- * touched a doc comment still ran all sixteen. The steps are the same, in the same
+ * touched a doc comment still ran all sixteen. X15 added a seventeenth
+ * (`test:native:android`); the steps are the same, in the same
  * order, but expressed here as a dependency graph so independent ones can overlap.
  *
  * Two rules keep this honest:
@@ -149,6 +150,36 @@ export const CHECK_STEPS = Object.freeze([
     note: 'clang/swiftc into $TMPDIR/nitro-ui-native-tests-$$ - the $$ makes it per-process',
   },
   {
+    // X15 item 2: the Kotlin twin of the event-count handshake (`MenuModelTest`,
+    // `PickerModelTest`, …) lives in `android/src/test` and ran only by hand, because
+    // neither `check` nor CI invoked it (FOLLOWUPS, G7a round 2). A JVM unit test is
+    // exactly what `check` is for, and it is cheap on this machine: 1.9 s with
+    // everything up to date, 1.2 s after touching a Kotlin file, 11.5 s with
+    // `--rerun-tasks`, and 37 s on a first run that has to store its configuration
+    // cache. Under the brief's ~60 s bar even at the worst of those. It skips with its
+    // reason printed when the machine has no Android SDK, the way `test:native` skips
+    // on Linux, and the no-CMake claim is measured rather than assumed: 42 tasks with
+    // no `*CMake*` among them.
+    name: 'test:native:android',
+    needs: [],
+    group: null,
+    // Where this step's output really lands, by measurement rather than by the task's name:
+    // touching `MenuModelTest.kt` and re-running leaves 43 new/changed files under
+    // `android/build` (the library module: `kotlin/`, `test-results/`, `reports/`) and zero
+    // under `example/android/app/build`. `example/android/build` is the root project's
+    // directory, which gradle writes a couple of config-cache files into. Naming only that
+    // last one - what this step first claimed - described a step that wrote 7 MB while it
+    // wrote 215 MB two directories up (X15 review 5b).
+    writes: ['android/build', 'example/android/build'],
+    // The generated tree, because the library's own build reads it: `android/build.gradle`
+    // applies `nitrogen/generated/android/nitroui+autolinking.gradle`, which adds
+    // `nitrogen/generated/android/kotlin` to the Kotlin source set. `prepare` deletes
+    // that directory, so it waits on this step - the same edge `test` and
+    // `nitrogen:check` have, for the same reason.
+    reads: [FINDINGS.generatedDir],
+    note: 'gradle :react-native-nitro-ui:testDebugUnitTest - JVM only, so no emulator and no CMake task runs; reads nitrogen/generated/android through the library autolinking, writes android/build (the library module - 215 MB of intermediates and test results) plus example/android/build and the ~/.gradle cache; skips with a reason when neither ANDROID_HOME nor example/android/local.properties exists, and skips in CI unless NITRO_UI_ANDROID_JVM_TESTS=1 says this job owns the run',
+  },
+  {
     name: 'perf:renders',
     needs: [],
     group: 'jest',
@@ -187,6 +218,10 @@ export const CHECK_STEPS = Object.freeze([
       'nitrogen:check',
       'test',
       'perf:renders',
+      // X15 item 2: the Android JVM test compiles the library, and the library's
+      // autolinking adds `nitrogen/generated/android/kotlin` to its source set - so
+      // this is a reader of the directory this step deletes, like the three above.
+      'test:native:android',
       // X10 review N5: these two read `nitrogen/` (they ignore only `nitrogen/generated`), and this
       // step deletes the directory. Before the region was declared the safety came from `prepare`
       // happening to queue behind the ~140 s `test`; a `needs` edge is the same order, and it is the
@@ -470,7 +505,7 @@ export function parseJobsArgument(argv = []) {
  * The unknown arguments a check run was started with, excluding `--jobs` and its
  * value. An argument the runner does not know is refused rather than passed on to
  * every step: `bun run check -- --update-baseline` would otherwise hand a Reassure
- * flag to all sixteen steps, and most of them would ignore it.
+ * flag to every step in the chain, and most of them would ignore it.
  *
  * @param {string[]} argv
  * @returns {string[]}

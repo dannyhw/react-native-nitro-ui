@@ -87,6 +87,7 @@ import {
   LOG_RETENTION_DAYS,
   LOG_RETENTION_MAX_BYTES,
   ownBackgroundRecords,
+  ownMetroPids,
   parseLedger,
   parseTestCounts,
   parseTestSummaries,
@@ -117,6 +118,9 @@ import { claimDevicesFromEnv } from './device-pool.mjs';
 import {
   emulatorSerial,
   isReservedSerial,
+  metroPreflightFromEnv,
+  pidIsAlive,
+  portListeners,
   pruneExpired,
   readJson,
   stateHome,
@@ -185,7 +189,7 @@ const LOAD_SAMPLE_INTERVAL_MS = 15_000;
  * ledger recorded nothing; forwarding gives the child its own cleanup, and the
  * signal is re-raised on self afterwards so the exit status is still the signal.
  */
-const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'];
+const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
 /**
  * The flags `gate.mjs` itself owns on a gate run, which must never reach the
@@ -196,6 +200,17 @@ const BACKGROUND_FLAGS = ['--background', '--background=true'];
 
 /** Set to run a device gate on a device another live run has claimed (see `runGate`). */
 const DEVICE_FORCE_RE = /^(1|true|yes)$/i;
+
+/** Set to start on a Metro port another process is already serving (see `metroPreflight`). */
+const METRO_FORCE_RE = /^(1|true|yes)$/i;
+
+/**
+ * How long a finished run's output is given to drain before the ledger is written (see the
+ * drain in `runGateUnclaimed`). Two seconds because the thing being waited for is the last
+ * few kilobytes of a harness summary, and the thing being refused is waiting on a descendant
+ * that has already outlived the run it came from.
+ */
+const EXIT_DRAIN_MS = 2_000;
 
 const repoRoot = repoRootOf();
 
@@ -1616,10 +1631,20 @@ function changedCodePaths({ base }) {
  * claims a device another live run holds, for the one case where that is the point - it is an env
  * var rather than a flag because a backgrounded gate is re-spawned from this command line, and a
  * flag here would need stripping in two places to keep it out of the gate's own argv.
+ *
+ * Then the Metro pre-flight (X15 item 1), which the claim cannot cover: a claim is a pid in a
+ * pool record, and the server on a pair's Metro port can belong to a run whose lease has already
+ * ended, so no claim exists to conflict with. That is X4's incident, so the port is asked about
+ * directly, before the build rather than after the app has joined a stranger's Metro.
  */
 async function runGate(name, resolved, options = {}) {
   let claim = null;
   if (resolved.platform != null) {
+    const preflight = metroPreflight();
+    // A number, not `{ status }`: reading `.status` off it is `undefined`, which is
+    // "not 0", so every device gate would have returned `undefined` here - the run
+    // never started, nothing was recorded, and the process exited 0 on the silence.
+    if (preflight !== 0) return preflight;
     try {
       claim = claimDevicesFromEnv({
         gate: name,
@@ -1653,10 +1678,162 @@ async function runGate(name, resolved, options = {}) {
   }
 }
 
+/**
+ * Does a Metro server belong to the run that has just ended?
+ *
+ * The one question with a trustworthy answer, because the alternative is killing another
+ * task's server — which is the X4 incident this feature exists to prevent, not the thing it
+ * permits. Attributing a listener by its environment (`ps eww`, hunting for a lease id) was
+ * the other option: `ps` truncates its env block at a width nobody controls, so an id past
+ * the cut reads as somebody else's server, and the safe branch there is the leak this is
+ * meant to fix. Process groups are not approximated: the gate spawns its child `detached`, so
+ * a server the child started (or any descendant's server) reports that group, and a server
+ * from any other group is not ours. A pid the kernel will not answer for is not ours either.
+ *
+ * Best-effort in the direction that matters: never throws, never changes the run's exit code,
+ * because a gate that passed must not go red over a janitor. SIGTERM first with a short grace
+ * (Metro tidies up on a term; a killed one can leave a lock file), SIGKILL for what ignores
+ * it. `groupOf` and `kill` are injected so the rule is testable without a real server.
+ *
+ * @param {object} options
+ * @param {number} options.port the leased port (`METRO_PORT`)
+ * @param {number | null} options.leaderPid the run's direct child, which led its own group
+ * @param {(pid: number) => number | null} [options.groupOf]
+ * @param {(pid: number, signal: NodeJS.Signals) => void} [options.kill]
+ * @param {(pid: number) => boolean} [options.isAlive]
+ * @param {(message: string) => void} [options.log]
+ * @returns {Promise<number[]>} the pids it stopped
+ */
+async function stopOwnMetro({
+  port,
+  leaderPid,
+  groupOf = processGroupId,
+  kill = (pid, signal) => process.kill(pid, signal),
+  isAlive = pidIsAlive,
+  log = () => {},
+}) {
+  const value = Number(port ?? '');
+  if (!Number.isInteger(value) || value <= 0 || leaderPid == null) return [];
+  let answer;
+  try {
+    answer = portListeners({ port: value });
+  } catch {
+    return [];
+  }
+  if (!answer.checked || answer.listeners.length === 0) return [];
+  const owned = ownMetroPids({
+    listeners: answer.listeners,
+    leaderPid,
+    groupOf,
+  });
+  if (owned.length === 0) {
+    // Somebody else's Metro on our port. The pre-flight owns the verdict on that state; this
+    // function's job is to leave it standing.
+    return [];
+  }
+  for (const pid of owned) {
+    try {
+      kill(pid, 'SIGTERM');
+    } catch {
+      /* already gone */
+    }
+  }
+  // Bounded, and paid for only by a run that leaked a server. `Atomics.wait` because this is a
+  // CLI process at the end of its work: nothing else is waiting on the loop, and a timer would
+  // need the unref dance to avoid holding the process open.
+  for (let waited = 0; waited < 10; waited += 1) {
+    if (owned.every((pid) => !isAlive(pid))) break;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+  }
+  for (const pid of owned) {
+    if (!isAlive(pid)) continue;
+    try {
+      kill(pid, 'SIGKILL');
+      log(`gate: Metro pid ${String(pid)} ignored SIGTERM and was killed\n`);
+    } catch {
+      /* gone between the check and the signal */
+    }
+  }
+  return owned;
+}
+
+/**
+ * The process group id of `pid`, or null when the kernel will not say.
+ *
+ * `ps -o pgid=` rather than a syscall binding: no native dependency, and this runs at most
+ * once per gate. A dead pid makes `ps` print nothing, which is null - the answer a caller has
+ * to treat as "not mine".
+ */
+function processGroupId(pid) {
+  try {
+    const result = spawnSync('ps', ['-o', 'pgid=', '-p', String(pid)], {
+      encoding: 'utf8',
+      timeout: 5_000,
+    });
+    if (result.status !== 0) return null;
+    const group = Number(String(result.stdout ?? '').trim());
+    return Number.isInteger(group) && group > 0 ? group : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The leased Metro port, asked before the run starts (X15 item 1).
+ *
+ * Returns an exit code - 0 means "run it". A port someone else serves is a refusal that
+ * names the process, because the alternative is the X4 failure: the app joins the other
+ * Metro and the suite dies as `The app bridge was replaced by a newer app connection`,
+ * three runs later and with an error message that does not mention a port. Nothing is
+ * recorded for a refusal, the same way a device-claim refusal records nothing: the run
+ * never started, so there is no evidence to log.
+ *
+ * `NITRO_UI_GATE_METRO_FORCE=1` runs anyway, for the case where the server on the port is
+ * this task's own - a Metro started by hand for a debugging session, which the harness
+ * then attaches to on purpose.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {(command: string, args: string[]) => {ok: boolean, text: string} | null} [run]
+ * @returns {number}
+ */
+function metroPreflight(env = process.env, run) {
+  const answer = metroPreflightFromEnv(env, run);
+  if (answer.warning != null) {
+    // Loud, and still a run: a machine that cannot ask about the port must not be
+    // unable to run its gates (CI, a container without `lsof`).
+    process.stderr.write(
+      `gate: WARN the Metro pre-flight was skipped - ${answer.warning}\n`
+    );
+    return 0;
+  }
+  if (answer.reason == null) return 0;
+  if (METRO_FORCE_RE.test(env.NITRO_UI_GATE_METRO_FORCE ?? '')) {
+    process.stderr.write(
+      `gate: WARN Metro port is not free - ${answer.reason}\n` +
+        '        running anyway (NITRO_UI_GATE_METRO_FORCE=1)\n'
+    );
+    return 0;
+  }
+  process.stderr.write(
+    `gate: refused before the run - ${answer.reason}\n` +
+      '        wait for that run, or set NITRO_UI_GATE_METRO_FORCE=1 to start on this port anyway.\n' +
+      `        (checked because ${env.NITRO_UI_LEASE_ID ?? 'this shell'} exported METRO_PORT=${String(answer.port)})\n`
+  );
+  return 1;
+}
+
 async function runGateUnclaimed(name, resolved, options = {}) {
   const branch = currentBranch();
   const before = readTrees();
-  const device = deviceFromEnv(process.env, resolved.platform);
+  // A bench says which device it drives (`--platform`) and a lease covers both
+  // halves of a pair, so the bench's own answer wins over the environment's guess -
+  // which is how A5's iOS bench came to be recorded on an Android serial (X15 item 4).
+  // Every other gate passes its platform, or null, which keeps the old reading: no
+  // platform of its own means the lease's environment describes the run.
+  const device = deviceFromEnv(
+    process.env,
+    resolved.platform ?? resolved.benchPlatform ?? null
+  );
   const startedAt = Date.now();
   const startedLoad = os.loadavg()[0] ?? null;
   const samples = [startedLoad];
@@ -1710,9 +1887,26 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // counts - the damage is to the reader who follows the `gate: log …` line and
   // finds a transcript with every line in it twice. Foreground runs still echo.
   const echo = !backgrounded;
+  let logStreamOpen = true;
+  /**
+   * The gate's own news, in the transcript as well as on the terminal (X15 review 4). What the
+   * evidence store keeps is the log file, and a sweep that stopped a server or a signal that
+   * was re-raised is exactly the fact a reader needs three days later: on stderr alone it is
+   * gone the moment the run scrolls past. Written to both, not moved, because the person
+   * watching the run needs it now too.
+   */
+  const note = (message) => {
+    process.stderr.write(message);
+    logText += message;
+    if (logStreamOpen) logStream.write(message);
+  };
   const tee = (chunk, output) => {
     logText += String(chunk);
-    logStream.write(chunk);
+    // Guarded, because the drain above can end the stream while a descendant of the run is
+    // still talking through it - and a write after `end()` throws asynchronously, which on an
+    // unhandled stream error is an exit the ledger never records. Better a log missing its
+    // tail than a green run reporting nothing at all.
+    if (logStreamOpen) logStream.write(chunk);
     if (echo) output.write(chunk);
   };
 
@@ -1741,9 +1935,29 @@ async function runGateUnclaimed(name, resolved, options = {}) {
       `gate:       ${absoluteLog}\n`
   );
 
+  let childPid = null;
+  // The run's output as one question: has *all* of it arrived? Answered by the child's two
+  // pipes closing, counted rather than taken from the first `close` to arrive (X15 review 2):
+  // stdout and stderr close independently, and treating either one as the end loses the other
+  // one's tail - which for a harness run is the test summary the ledger's counts are parsed
+  // from. Declared out here because the answer arrives from inside the promise below and is
+  // read after it.
+  let childStreamsClosed = false;
+  let streamsClosedCount = 0;
+  let drainNow = null;
+  let childStreams = null;
   const exit = await new Promise((resolvePromise) => {
     const child = spawn(resolved.argv[0], resolved.argv.slice(1), {
       cwd,
+      // Its own process group, so "what did this run leave behind?" has a kernel answer
+      // (X15 review). A gate's Metro is a descendant of this child, and a run that was
+      // killed - or a wrapper whose `stopMetro` never ran - leaves it serving the leased
+      // port, which the *next* gate's pre-flight then refuses: exactly the merge sequence
+      // (`real-input:ios` -> `real-input:android` -> `harness:ios` -> `harness:android`)
+      // on one lease. `detached` does not mean ignored; it puts the child in a new group,
+      // and the signal handlers below reach that group, so a Ctrl-C still stops the
+      // descendants a terminal Ctrl-C used to reach through the shared group.
+      detached: true,
       // `NITRO_UI_GATE_LOG` is this runner's own instruction and must not go further:
       // a `gate.mjs` nested inside a gate (a check that shells out to one, say) would
       // otherwise append to *this* run's log and mark *this* run's record done with
@@ -1768,17 +1982,28 @@ async function runGateUnclaimed(name, resolved, options = {}) {
       })(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    // Remembered for the sweep and the release below: `child` is inside this promise's scope,
+    // and both run after it settles.
+    childPid = child.pid ?? null;
+    childStreams = { out: child.stdout, err: child.stderr };
     let forwarded = null;
     const handlers = FORWARDED_SIGNALS.map((signal) => {
       const handler = () => {
-        // Only the direct child gets it: a signal sent to this PID alone used to
-        // orphan a harness that still held the leased device (N4). A Ctrl-C from a
-        // terminal reaches the child as well, via the process group.
+        // The whole group, not just the direct child: the child is detached (above), so a
+        // signal that used to reach its Metro through the *shared* group now has to be
+        // sent to that group on purpose. Killing only the leader is the regression this
+        // avoids - a harness that dies while its bundle server keeps serving the leased
+        // port (N4's failure, one level down). The direct child is still the fallback: a
+        // platform where the negative pid is refused must not lose its signal entirely.
         forwarded = signal;
         try {
-          child.kill(signal);
+          process.kill(-child.pid, signal);
         } catch {
-          /* already gone */
+          try {
+            child.kill(signal);
+          } catch {
+            /* already gone */
+          }
         }
       };
       process.on(signal, handler);
@@ -1802,16 +2027,89 @@ async function runGateUnclaimed(name, resolved, options = {}) {
         forwarded: null,
       });
     });
-    child.on('close', (code, signal) => {
+    // Both pipes, counted: see `streamsClosedCount`. A leaked descendant holds *both* open
+    // (it inherits them), so waiting for the pair costs nothing in the case the drain exists
+    // for, and saves the tail in the ordinary one where the two close a chunk apart.
+    const markClosed = () => {
+      streamsClosedCount += 1;
+      if (streamsClosedCount < 2) return;
+      childStreamsClosed = true;
+      drainNow?.();
+    };
+    child.stdout.on('close', markClosed);
+    child.stderr.on('close', markClosed);
+    child.on('exit', (code, signal) => {
       stopListening();
       resolvePromise({ code, signal, failedToStart: false, forwarded });
     });
   });
 
+  // The await above resolves on the child's *exit*, not its `close`, because a run that
+  // leaves a Metro up makes the two differ by minutes or forever: the server inherits the
+  // child's stdout and stderr, so its end holds both pipes open long after the harness is
+  // gone. Resolving on `close` is what hung a gate for its whole timeout, and a leaked
+  // server must not be able to do that. So the pipes get a bounded moment to drain - long
+  // enough for the tail of a normal run, which is what the test-count parse reads - and
+  // whatever is still holding them at the end of that moment is dealt with below: the sweep
+  // stops a Metro this run owns, and the release below drops our read ends whatever it is,
+  // because a descendant the sweep may not touch is not a reason to stay alive. The drain is
+  // a constant rather than a knob: nobody should tune how much of their own log they read.
+  if (!childStreamsClosed) {
+    await new Promise((resolveDrain) => {
+      const timer = setTimeout(() => {
+        drainNow = null;
+        resolveDrain();
+      }, EXIT_DRAIN_MS);
+      timer.unref?.();
+      drainNow = () => {
+        clearTimeout(timer);
+        drainNow = null;
+        resolveDrain();
+      };
+    });
+  }
+
   clearInterval(sampler);
+  // The Metro this run started, if it left one behind (X15 review). A device gate's own
+  // child may spawn a bundle server and either exit without stopping it (a killed run, a
+  // wrapper whose cleanup did not run) or keep it up by design; on one lease that is enough
+  // to make the *next* gate in the sequence refuse on its own leftover. Stop exactly what
+  // this run owns - the listeners in the child's process group - and say so. Never anything
+  // else's Metro: that is the X4 incident, and the whole reason the group is the test.
+  const leftover = await stopOwnMetro({
+    port: process.env.METRO_PORT,
+    leaderPid: childPid,
+    log: note,
+  });
+  if (leftover.length > 0) {
+    note(
+      `gate: stopped the Metro this run started (${leftover.join(', ')}) on port ${String(
+        process.env.METRO_PORT
+      )} - the next gate on this lease gets a free port\n`
+    );
+  }
+  // Our read ends on the child's output are done with, unconditionally (X15 review 3): the run
+  // is recorded and swept, so there is nothing left to read and two ways a held pipe still
+  // hurts. A descendant that is not a Metro on the leased port (a real-input server on the
+  // 8291 default, with no `METRO_PORT` in the environment to sweep by) is not ours to stop, and
+  // holding the read end is what keeps *this* process alive: a lease doing nothing until an
+  // orphan decides to close, and `wait` reporting a finished gate as still running. It also
+  // holds the tail hostage - the drain ends when both pipes have closed, and a gate that keeps
+  // reading after that is reading output it has already written up.
+  //
+  // `destroy`, not `end`: nothing is left to flush on a read stream, and `end` would wait for
+  // the other side.
+  for (const stream of [childStreams?.out, childStreams?.err]) {
+    try {
+      stream?.destroy();
+    } catch {
+      /* already gone */
+    }
+  }
   samples.push(os.loadavg()[0] ?? Number.NaN);
   const durationMs = Date.now() - startedAt;
   const after = readTrees();
+  logStreamOpen = false;
   logStream.end();
   // Wait for the log to reach the disk before any re-raise below can kill the
   // process: a ledger line pointing at a truncated log is half the evidence.
@@ -2291,7 +2589,7 @@ function commandTable({ stage, full, reuse = true }) {
   if (full === true) {
     // Per-step durations, for the one gate where the total is not the useful
     // number. Under `--full`, because a report's gate table is five device rows and
-    // sixteen step rows would bury them. Gates with no breakdown print nothing, so
+    // a step row apiece would bury them. Gates with no breakdown print nothing, so
     // this stays `check`'s section in practice without naming it as such.
     const steps = renderStepTimings({ entries, gates: MERGE_GATES });
     if (steps !== '') process.stdout.write(`\n${steps}\n`);

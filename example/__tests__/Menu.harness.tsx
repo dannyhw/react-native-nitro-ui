@@ -263,6 +263,29 @@ function measuredButton(testId: string): Size | null {
   return buttonHandles.get(testId)?.measureContent() ?? null;
 }
 
+/**
+ * Poll until the hybrid handle for `testId` exists, so its props can be read.
+ *
+ * `hybridRef` fires when the native view is created, which is after the commit that
+ * `render` waits for - so reading a handle once can land in that gap and answer
+ * `undefined` for a control that is fine. That is how X14's merge saw
+ * `expected undefined to be null` once at `read-back-fallback`, and it is the same
+ * reason the sizing gates poll for a measured size instead of reading it once.
+ *
+ * The wait is for *a handle*, never for a particular value, so a prop that really is
+ * wrong is exactly as red as it was and fails on the same expectation line - the only
+ * thing that changes is that a slow registration stops being a test failure.
+ */
+async function waitForHandle(
+  testId: string,
+  what: string
+): Promise<MenuHandle> {
+  return await pollUntil(
+    () => handles.get(testId) ?? null,
+    () => new Error(`"${testId}" (${what}) never handed back a hybrid handle.`)
+  );
+}
+
 /** Poll until the *Button* control reports a size. */
 async function waitForMeasuredButton(testId: string, what: string) {
   return await pollUntil(
@@ -1814,8 +1837,13 @@ describe('Menu · inside a Host', () => {
     await waitForTestId('read-back');
     await waitForTestId('read-back-plain');
     await waitForMeasured('read-back', 'the named menu');
-    const named = handles.get('read-back');
-    const plain = handles.get('read-back-plain');
+    // Every handle this test reads is waited for, not read once: `hybridRef` lands
+    // after the commit `render` resolves, so a single read is a race with view
+    // creation. `read-back-fallback` is the one X14's merge tripped on, and
+    // `read-back-plain` is the same shape one line earlier - it just happens to be
+    // behind a `waitForMeasured` that only waits for `read-back`.
+    const named = await waitForHandle('read-back', 'the named menu');
+    const plain = await waitForHandle('read-back-plain', 'the disabled menu');
     expect(named?.title).toBe('Named');
     expect(named?.variant).toBe('outlined');
     expect(named?.size).toBe('large');
@@ -1852,7 +1880,11 @@ describe('Menu · inside a Host', () => {
         `fallback=${describeSize(fallbackElement)} ` +
         `plain=${describeSize(harnessUi.queryByAccessibilityLabel('Plain'))}`
     );
-    expect(handles.get('read-back-fallback')?.accessibilityLabel).toBeNull();
+    const fallback = await waitForHandle(
+      'read-back-fallback',
+      'the menu with no accessibilityLabel'
+    );
+    expect(fallback.accessibilityLabel).toBeNull();
     if (Platform.OS === 'ios') {
       const namedBox = await waitForTestId('read-back');
       expect(namedElement).not.toBeNull();

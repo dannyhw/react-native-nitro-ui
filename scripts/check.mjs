@@ -6,7 +6,7 @@
  *   bun run check -- --jobs 1   the same steps, one at a time
  *   bun run check:serial        the old `&&` chain, for comparing the two
  *
- * The steps are the same sixteen and no more - `package.json`'s `check:serial` is
+ * The steps are the same seventeen and no more - `package.json`'s `check:serial` is
  * the reference, and a unit test fails if the two ever disagree
  * (`scripts/__tests__/check-runner.test.js`). What changed is *when* they run:
  * `scripts/check-steps.mjs` says what each step needs and what it writes, so
@@ -160,7 +160,7 @@ export async function main(argv = process.argv.slice(2), io = {}) {
       `check: refusing to run - the graph does not describe the chain:\n` +
         `${problems.map((problem) => `  - ${problem}`).join('\n')}\n` +
         "check: scripts/check-steps.mjs and package.json's `check:serial` are\n" +
-        'check: the same sixteen steps and must change together.\n'
+        'check: the same steps and must change together.\n'
     );
     return 2;
   }
