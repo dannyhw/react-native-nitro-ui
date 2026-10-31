@@ -232,10 +232,10 @@ overFraction }`. A run is refused when its **median** sample is over the ceiling
 `--update-baseline` prints every reason it refused.
 
 `--force` overrides the load, cleanliness and plan guards in the list above. It does
-**not** override a label refusal or a merge's comparability refusal: those guards judge
-the quality of a measurement, and a missing label means there is no path to write the
-result to while a comparability refusal says these numbers are a different measurement
-from the ones already in the file.
+**not** override a label refusal or any refusal of the merge in "Adding one component"
+below: those guards judge the quality of a measurement, and a missing label means there is
+no path to write the result to while a merge refusal says these numbers do not belong in
+this file.
 
 ## Adding one component
 
