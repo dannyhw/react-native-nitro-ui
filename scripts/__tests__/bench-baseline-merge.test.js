@@ -1408,6 +1408,77 @@ describe('report.mjs merges one component', () => {
     });
   });
 
+  it('refuses an incomparable file under --force too, but not a thin launch count', () => {
+    // `--force` is a human overruling judgements about *their measurement* - the
+    // plan, the launch count, the load. It says nothing about whether these numbers
+    // belong in this file, so the one guard that is not a measurement judgement has
+    // to survive it: without that, one mistyped flag crosses a runtime boundary.
+    withTree((ws) => {
+      const { existing, resultsFile } = fixtureTree(ws);
+      const thin = write(
+        ws.root,
+        'thin.json',
+        makeRun({
+          scenarios: ['mount.button'],
+          machine: fixtureMachine('ios', { hostname: MINE }),
+          overrides: { launches: 4 },
+        })
+      );
+      const thinForced = cli(ws, [
+        thin,
+        '--update-baseline',
+        '--component',
+        'button',
+        '--force',
+      ]);
+      expect(thinForced.status).toBe(0);
+      // And the same thin run without --force is refused for exactly that reason.
+      const thinPlain = cli(ws, [
+        thin,
+        '--update-baseline',
+        '--component',
+        'button',
+      ]);
+      expect(thinPlain.status).toBe(2);
+      expect(thinPlain.all).toContain('launches per cell');
+
+      // Roll the forced write back so the comparability case starts from the file
+      // the test built rather than from the one the force just merged into.
+      write(ws.root, baselineRel, existing);
+      const runtimeDiffers = write(
+        ws.root,
+        'head2.json',
+        makeRun({
+          scenarios: ['update.button'],
+          machine: fixtureMachine('ios', {
+            hostname: MINE,
+            simRuntime: '18.4',
+          }),
+        })
+      );
+      writeFileSync(
+        path.join(ws.root, baselineRel),
+        `${JSON.stringify(
+          {
+            ...existing,
+            machine: { ...existing.machine, simRuntime: '18.3.1' },
+          },
+          null,
+          2
+        )}\n`
+      );
+      const forced = cli(ws, [
+        runtimeDiffers,
+        '--update-baseline',
+        '--component',
+        'button',
+        '--force',
+      ]);
+      expect(forced.status).toBe(2);
+      expect(forced.all).toContain('simulator runtime differs');
+    });
+  });
+
   it('is gated by --check afterwards, for the merged and the untouched cells', () => {
     withTree((ws) => {
       const { resultsFile } = fixtureTree(ws);
