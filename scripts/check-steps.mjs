@@ -163,14 +163,21 @@ export const CHECK_STEPS = Object.freeze([
     name: 'test:native:android',
     needs: [],
     group: null,
-    writes: ['example/android/build'],
+    // Where this step's output really lands, by measurement rather than by the task's name:
+    // touching `MenuModelTest.kt` and re-running leaves 43 new/changed files under
+    // `android/build` (the library module: `kotlin/`, `test-results/`, `reports/`) and zero
+    // under `example/android/app/build`. `example/android/build` is the root project's
+    // directory, which gradle writes a couple of config-cache files into. Naming only that
+    // last one - what this step first claimed - described a step that wrote 7 MB while it
+    // wrote 215 MB two directories up (X15 review 5b).
+    writes: ['android/build', 'example/android/build'],
     // The generated tree, because the library's own build reads it: `android/build.gradle`
     // applies `nitrogen/generated/android/nitroui+autolinking.gradle`, which adds
     // `nitrogen/generated/android/kotlin` to the Kotlin source set. `prepare` deletes
     // that directory, so it waits on this step - the same edge `test` and
     // `nitrogen:check` have, for the same reason.
     reads: [FINDINGS.generatedDir],
-    note: 'gradle :react-native-nitro-ui:testDebugUnitTest - JVM only, so no emulator and no CMake task runs; reads nitrogen/generated/android through the library autolinking, writes example/android/build and the ~/.gradle cache; skips with a reason when neither ANDROID_HOME nor example/android/local.properties exists',
+    note: 'gradle :react-native-nitro-ui:testDebugUnitTest - JVM only, so no emulator and no CMake task runs; reads nitrogen/generated/android through the library autolinking, writes android/build (the library module - 215 MB of intermediates and test results) plus example/android/build and the ~/.gradle cache; skips with a reason when neither ANDROID_HOME nor example/android/local.properties exists, and skips in CI unless NITRO_UI_ANDROID_JVM_TESTS=1 says this job owns the run',
   },
   {
     name: 'perf:renders',

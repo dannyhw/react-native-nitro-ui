@@ -152,21 +152,75 @@ describe('test:native:android', () => {
     expect(forced.gradleArgs ?? []).toContain('--rerun-tasks');
   });
 
-  it('really is run by the CI job it hands off to', () => {
-    // The skip above is only honest if the job it names runs the script. Together the
-    // two assertions say "exactly one place in CI runs this": remove the step from
-    // `ci.yml` and the skip becomes the coverage vanishing from CI, quietly.
-    const workflow = fs.readFileSync(
-      path.join(REPO_ROOT, '.github', 'workflows', 'ci.yml'),
-      'utf8'
-    );
-    const buildAndroid =
-      /\n {2}build-android:\n([\s\S]*?)(?=\n {2}[a-z-]+:\n|\n {2}#)/.exec(
-        workflow
-      );
-    expect(buildAndroid).not.toBeNull();
-    expect(String(buildAndroid?.[1])).toMatch(
-      /scripts\/native-tests-android\.sh/
+  it('runs for real in the CI job it hands off to, with that job’s own env', () => {
+    // The skip is only honest if the job it names actually runs the script *and* gets
+    // past the skip. GitHub Actions exports `CI=true` on every step of every job, so a
+    // script that declines on CI alone declines in the job that owns the run - which is
+    // what X15 review found: the step printed the skip line and ran nothing, green. So
+    // read the env off that step in ci.yml and run the script with it, rather than
+    // grepping for the script's name and calling the handoff proved.
+    const step = readAndroidJvmStepEnv();
+    expect(step.env.NITRO_UI_ANDROID_JVM_TESTS).toBe('1');
+    expect(step.run).toMatch(/scripts\/native-tests-android\.sh/);
+
+    const run = runScript({ sdk: true, env: { CI: 'true', ...step.env } });
+    expect(run.output).not.toMatch(/skipped/);
+    expect(run.gradleArgs).not.toBeNull();
+    expect(run.gradleArgs).toContain(
+      ':react-native-nitro-ui:testDebugUnitTest'
     );
   });
 });
+
+/**
+ * The `Android JVM unit tests` step of `build-android`: its `run:` line and the `env:`
+ * map written above it, as the runner would hand them over.
+ *
+ * Parsed from the workflow text rather than `require`d from a YAML library: this repo
+ * has no YAML dependency in the tooling path, and the shape is fixed by the file's own
+ * indentation - a step is six spaces, its keys eight, a map's entries ten. The job's
+ * text is found the way the previous version of this test found it, and a step whose env
+ * cannot be parsed is a failure, not a skip: an empty map here would be the very hole
+ * this test exists to close.
+ *
+ * @returns {{run: string, env: Record<string, string>}}
+ */
+function readAndroidJvmStepEnv() {
+  const workflow = fs.readFileSync(
+    path.join(REPO_ROOT, '.github', 'workflows', 'ci.yml'),
+    'utf8'
+  );
+  const job =
+    /\n {2}build-android:\n([\s\S]*?)(?=\n {2}[a-z-]+:\n|\n {2}#)/.exec(
+      workflow
+    );
+  expect(job).not.toBeNull();
+  const lines = String(job?.[1]).split('\n');
+  const runIndex = lines.findIndex((line) =>
+    /^ {8}run:.*native-tests-android\.sh/.test(line)
+  );
+  expect(runIndex).toBeGreaterThan(-1);
+
+  const env = {};
+  // Walk back over the step's own keys (eight spaces) and anything indented below them
+  // to its `env:` map, then down through the ten-space entries that belong to it.
+  let envIndex = -1;
+  for (let i = runIndex - 1; i >= 0; i -= 1) {
+    const line = lines[i] ?? '';
+    if (line.trim() === '') continue;
+    const indent = String(/^ */.exec(line)?.[0]).length;
+    if (indent > 8) continue;
+    if (indent < 8) break;
+    if (/^ {8}env:\s*$/.test(line)) {
+      envIndex = i;
+      break;
+    }
+  }
+  expect(envIndex).toBeGreaterThan(-1);
+  for (let i = envIndex + 1; i < runIndex; i += 1) {
+    const entry = /^ {10}([\w.-]+):\s*(.*?)\s*$/.exec(lines[i] ?? '');
+    if (entry == null) continue;
+    env[entry[1]] = entry[2].replace(/^['"]|['"]$/g, '');
+  }
+  return { run: lines[runIndex] ?? '', env };
+}
