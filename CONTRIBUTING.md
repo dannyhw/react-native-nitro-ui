@@ -413,7 +413,10 @@ these rules apply to it specifically:
   group, so another task's server is never touched). That is what lets a merge run
   `real-input:ios` → `real-input:android` → `harness:ios` → `harness:android` on
   one lease: `real-input` reuses a Metro that is already up by design, so without
-  the sweep each gate would refuse on the previous one's leftover.
+  the sweep each gate would refuse on the previous one's leftover. A descendant it
+  may not stop - a server on a port it was never given - is no reason to linger:
+  once the ledger line is written the gate drops its read ends on the run's output
+  and exits with its code, so `wait` never reports a finished gate as running.
 - an **`--exclusive`** acquire (a bench, a baseline mint) does **not** wait on
   Metro ports, and says why, naming the process. A bench builds a Release app with
   the bundle inside it, so it never uses the port; waiting an hour for one would
