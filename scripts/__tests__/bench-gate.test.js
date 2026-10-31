@@ -478,6 +478,42 @@ describe('benchmark gate', () => {
     );
   });
 
+  it("labels a reference arm's monotonic climb as reported, not gated (X15)", () => {
+    // Only `GATED_IMPLEMENTATIONS` can fail the gate, so the same word in both
+    // arms' cells told a reviewer that a third-party leak refused a run it cannot
+    // refuse (A5 review). The word is the claim: the arm that carries no verdict
+    // says so.
+    const cells = aggregateRecords(
+      [
+        ...memoryRecords({
+          scenario: 'leak',
+          implementation: 'nitro-ui',
+          leakPerCycle: 9_000,
+        }),
+        ...memoryRecords({
+          scenario: 'leak',
+          implementation: 'expo-ui-host-per-control',
+          leakPerCycle: 9_000,
+        }),
+      ],
+      { keepRaw: true }
+    );
+    const detail = detailSections({ platform: 'ios', cells });
+    const sectionFor = (implementation) => {
+      const start = detail.indexOf(`### leak N=200 - ${implementation}\n`);
+      expect(start).toBeGreaterThanOrEqual(0);
+      const next = detail.indexOf('\n### ', start + 1);
+      return detail.slice(start, next === -1 ? undefined : next);
+    };
+    expect(sectionFor('nitro-ui')).toContain('MONOTONIC (gated as a leak)');
+    expect(sectionFor('expo-ui-host-per-control')).toContain(
+      'MONOTONIC (reported, not gated)'
+    );
+    expect(sectionFor('expo-ui-host-per-control')).not.toContain(
+      'gated as a leak'
+    );
+  });
+
   it('is the same gate behind the standalone reporter (review S11)', () => {
     const noisyHead = makeRun({
       'nitro-ui': { mounted: 220_000, presented: 260_000, spread: true },
