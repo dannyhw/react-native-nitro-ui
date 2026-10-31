@@ -24,6 +24,7 @@ android/src/main/java/com/margelo/nitro/nitroui/NitroUiSliderValue.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiDeclaredFallbacks.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiHost.kt
+android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiLifetimeGate.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
