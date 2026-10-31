@@ -446,7 +446,12 @@ function acquire({ devices, paths, options, log }) {
           if (others.length > 0) next.pendingExclusive = others;
           else delete next.pendingExclusive;
           writeJsonAtomic(paths.leases, next);
-          return { kind: 'acquired', lease, pair: decision.pair };
+          return {
+            kind: 'acquired',
+            lease,
+            pair: decision.pair,
+            note: decision.note ?? null,
+          };
         },
       });
     } catch (error) {
@@ -670,6 +675,10 @@ function main(argv) {
   }
 
   const { lease, pair } = result;
+  // What an exclusive acquire decided over a busy Metro port (X15 review): it does not
+  // wait for a port a bench never uses, but the human about to measure 8 hours of load
+  // numbers has to know somebody's Metro is still on the machine.
+  if (result.note != null) log(`lease: ${result.note}`);
   const pool = poolFor({ devices, paths, options, log });
   if (lease.exclusive && pool != null) {
     // The one reap an `acquire` runs (X11 fix round 2): an exclusive lease *promises* a quiet
@@ -745,7 +754,6 @@ function main(argv) {
  *
  * @param {object} options
  * @param {ReturnType<typeof normalizeDevices>} options.devices
- * @param {boolean} options.exclusive
  * @param {(message: string) => void} [options.log]
  * @returns {Array<{id: string, reason: string}>}
  */
