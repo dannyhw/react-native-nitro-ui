@@ -27,6 +27,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { FREE_LSOF } from './helpers/free-lsof-stub.js';
+
 const REPO_ROOT = join(__dirname, '..', '..');
 const CLI = join(REPO_ROOT, 'scripts', 'lease.mjs');
 const EXAMPLE_CONFIG = join(REPO_ROOT, 'scripts', 'devices.example.json');
@@ -207,6 +209,9 @@ describe('the lease owns the device lifecycle', () => {
         NITRO_UI_ADB_BIN: join(bins, 'adb'),
         EMULATOR_BIN: join(bins, 'emulator'),
         NITRO_UI_FAKE_CALLS: calls,
+        // The pool's `acquire` asks about Metro ports; nothing is listening, always
+        // (helper), so no case here depends on another task's harness.
+        ...FREE_LSOF,
         ...extraEnv,
       },
       timeout: 60_000,
