@@ -210,7 +210,10 @@ a needle it cannot find exactly once. The one-line form:
 - `gate.test.js` "forwards SIGHUP…" -> `FORWARDED_SIGNALS` without `SIGHUP` -> the child's trap
   never fires.
 - `lease-metro-port.test.js` "exits by itself even if every killer fails" -> the fixture back to
-  `setTimeout(()=>{},1e6)` -> still alive after 12 s.
+  `setTimeout(()=>{},1e6)` -> still alive after 12 s. Re-running that mutation once the block had
+  an `afterAll` pid-file sweep left no process behind, which is the half a passing test cannot
+  show: a red fixture case is exactly when no `finally` has run, and it is how the two listeners
+  in the review's list came to exist.
 - "waits for a writer that is late" -> the pid file looked at once -> `Expected: > 750 /
   Received: 28` ms.
 - `gate.test.js` "never targets the leader pid itself…" -> the `pid === leaderPid` guard dropped

@@ -319,7 +319,7 @@
         "redTests": [
           "exits by itself even if every killer fails"
         ],
-        "note": "`Expected: false / Received: true` after 12 s of nobody killing it - the shape that left two real listeners on ports 59909 and 60342."
+        "note": "`Expected: false / Received: true` after 12 s of nobody killing it - the shape that left two real listeners on ports 59909 and 60342. A red case is itself a leak path (a failing assertion gets no `finally` that has not already run), so the block also gained an `afterAll` that kills every pid file it wrote: the same mutation run again afterwards left no process behind, and the two survivors this row produced at its first run are the evidence for that."
       },
       {
         "test": "scripts/__tests__/lease-metro-port.test.js",
