@@ -28,7 +28,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { dependenciesSourceAt, resolvedDependencies } from './deps.mjs';
-import { foundingDependencyRecord } from './lib.mjs';
+import {
+  BASELINE_SCHEMA_VERSION,
+  READABLE_BASELINE_SCHEMA_VERSIONS,
+  foundingDependencyRecord,
+} from './lib.mjs';
 
 /** What a run records when nobody told it which machine it ran on (D25). */
 export const UNLABELLED_MACHINE = 'unlabelled';
@@ -227,6 +231,37 @@ export function mintBaselineFileFor({ baselinesDir, run }) {
  *   seeded: object, foundingDependencies: any,
  *   refusal: { kind: string, message: string } | null }}
  */
+/**
+ * The refusal for a baseline file this reader will not open.
+ *
+ * The version lives here rather than in a caller's argument. Splitting the schema
+ * constants (X14) put two numbers in scope at every call site - the results file's
+ * `SCHEMA_VERSION` and the baseline's `BASELINE_SCHEMA_VERSION` - and `run.mjs`'s
+ * `--check` was passing the results one, so a v1 file was refused with "not a v2
+ * ratio baseline" while the predicate underneath had just accepted v2. A message
+ * about *what this reader reads* cannot be handed the wrong number, because it takes
+ * no number.
+ *
+ * @param {{flag: string, display: string, found: number | null | undefined,
+ *   fullMint?: boolean}} input
+ */
+export function unreadableBaselineMessage({
+  flag,
+  display,
+  found,
+  fullMint = false,
+}) {
+  const reads = [...READABLE_BASELINE_SCHEMA_VERSIONS].sort((a, b) => a - b);
+  return (
+    `${flag}: ${display} is not a baseline this version reads (found ` +
+    `v${String(found)}; it reads v${reads.join(' and v')} ratio baselines and writes ` +
+    `v${String(BASELINE_SCHEMA_VERSION)}).\n        The pre-D9 baseline gated on ` +
+    'absolute rn-core drift and could never fire; re-record it with ' +
+    (fullMint ? 'a full --update-baseline' : '--update-baseline') +
+    ' on a clean, quiet commit.'
+  );
+}
+
 export function openBaselineForMerge({
   baselinesDir,
   run,
@@ -234,7 +269,6 @@ export function openBaselineForMerge({
   readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8')),
   existsSync = (file) => fs.existsSync(file),
   isCompatibleBaseline,
-  schemaVersion,
   mergeProblems,
   display = (file) => file,
   resolved = {},
@@ -274,9 +308,12 @@ export function openBaselineForMerge({
         shown,
         machineLabel,
         'incompatible',
-        `--update-baseline --component ${String(component)}: ${shown} is not a v${String(
-          schemaVersion
-        )} ratio baseline (found v${String(baseline?.schemaVersion)}).\n        The pre-D9 baseline gated on absolute rn-core drift and could never fire; re-record it with a full --update-baseline on a clean, quiet commit.`
+        unreadableBaselineMessage({
+          flag: `--update-baseline --component ${String(component)}`,
+          display: shown,
+          found: baseline?.schemaVersion,
+          fullMint: true,
+        })
       ),
       file,
     };
@@ -450,7 +487,6 @@ export function baselineProvenanceProblem({ machineLabel, baseline, display }) {
  * @param {(file: string) => any} [options.readJson]
  * @param {(file: string) => boolean} [options.existsSync]
  * @param {(baseline: any) => boolean} options.isCompatibleBaseline from `lib.mjs`
- * @param {number} [options.schemaVersion]
  * @returns {{ file: string | null, display: string | null, baseline: any | null,
  *   machineLabel: string | null, refusal: { kind: string, message: string } | null }}
  */
@@ -461,7 +497,6 @@ export function openBaselineForCheck({
   readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8')),
   existsSync = (file) => fs.existsSync(file),
   isCompatibleBaseline,
-  schemaVersion,
 }) {
   const machineLabel = machineLabelOf(run);
   const labelProblem = machineLabelProblem(machineLabel, { flag: '--check' });
@@ -503,7 +538,11 @@ export function openBaselineForCheck({
       machineLabel,
       refusal: {
         kind: 'incompatible',
-        message: `--check: ${shown} is not a v${String(schemaVersion)} ratio baseline (found v${String(baseline?.schemaVersion)}).\n        The pre-D9 baseline gated on absolute rn-core drift and could never fire; re-record it with --update-baseline on a clean, quiet commit.`,
+        message: unreadableBaselineMessage({
+          flag: '--check',
+          display: shown,
+          found: baseline?.schemaVersion,
+        }),
       },
     };
   }
