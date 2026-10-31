@@ -37,14 +37,19 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # `main` gets one group **per commit**, not one per branch. `cancel-in-progress:
+  # false` below only says "do not cancel the running one"; GitHub still keeps just
+  # one running and one pending run per group, and a newly queued run *replaces*
+  # the pending one whatever that flag says. So three quick merges to `main` meant:
+  # sha A running, sha B pending, sha C arrives, B is dropped with no conclusion at
+  # all - the same hole this task set out to close, one level down (F4 fix round 1).
+  # Every other ref keeps the branch group, where queueing behind the newest push
+  # is the point.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
   # Cancel a superseded run on a pull request or a feature branch: nothing there
   # is a result anybody keeps, and 20-minute jobs on stale commits is how a queue
-  # forms. Never on `main`. It used to cancel there too, so consecutive merges
-  # cancelled each other's CI and a sha could land with no conclusion at all -
-  # one of the reasons main's seven-hour red on 31 Oct went unnoticed (F4). Every
-  # push to main now runs to a conclusion, and `main` is the branch whose green
-  # the release pipeline reads.
+  # forms. Never on `main`, whose runs now have a group each anyway - the flag is
+  # the second of the two rules that keep a push to main's conclusion (F4).
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
