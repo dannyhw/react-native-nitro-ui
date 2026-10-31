@@ -39,18 +39,21 @@ so every device gate would have exited 0 having run nothing.
 
 ## Gates
 
-`need --for review` exits 0 on this code tree ("need: review is satisfied"). Fix round 1 also ran the
-merge-stage gates, in the order the merge runs them, so all five rows below are this tree's.
+`need --for review` exits 0 on this code tree ("need: review is satisfied"). Fix round 2 is check-only
+tooling - `gate.mjs`, `gate-core.mjs` and tests - so it re-ran `check` and nothing else; the four device
+rows are fix round 1's, which is what `need` accepts because this round moves neither platform's half of
+the tree (`ios 679e6f43b090`, `android 1d1424bf21fb`, unchanged).
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1480 tests / 54 suites | `24974b5e0603` | 3 m 09 s | start 2.5 / med 14.5 / max 25.3 |
+| `check` | **PASS** | 1494 tests / 55 suites | `f9b6dd65d930` | 2 m 42 s | start 3.1 / med 5.0 / max 5.6 |
 | `harness:ios` | **PASS** | 223 tests / 15 suites | `24974b5e0603` (ios tree) | 3 m 37 s | start 2.2 / med 2.3 / max 5.8 |
 | `harness:android` | **PASS** | 272 tests / 15 suites | `24974b5e0603` (android tree) | 7 m 43 s | start 4.7 / med 2.7 / max 4.8 |
 | `real-input:ios` | **PASS** | — | `24974b5e0603` (ios tree) | 15 m 60 s | start 31.3 / med 6.7 / max 56.7 |
 | `real-input:android` | **PASS** | — | `24974b5e0603` (android tree) | 20 m 51 s | start 4.7 / med 2.3 / max 5.6 |
 
-All five ran on lease `X15-9xz8i`, serially, with no `NITRO_UI_GATE_METRO_FORCE` anywhere: pair-b is one
+The four device gates ran on lease `X15-9xz8i`, serially, with no `NITRO_UI_GATE_METRO_FORCE` anywhere;
+round 2's `check` needed no lease. Pair-b is one
 device *pair* with one Metro on 8293, so two of them at once would collide on exactly the port item 1
 guards. The order above is the merge's order (`real-input:ios` → `real-input:android` → `harness:ios` →
 `harness:android`), which is the sequence item 2 of the fix round had to make work.
