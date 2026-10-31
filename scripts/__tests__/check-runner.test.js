@@ -326,6 +326,25 @@ describe('steps that share an output are ordered', () => {
     ]);
   });
 
+  it('says where the Kotlin step writes, and the big half is the library module', () => {
+    // X15 review 5b. This step first declared `example/android/build` alone, which is the
+    // root project's directory: gradle drops a couple of config-cache files there. Measured
+    // by touching `MenuModelTest.kt` and re-running, the step leaves 43 new or changed files
+    // under `android/build` - the library module's `kotlin/`, `test-results/` and
+    // `reports/`, 215 MB in total - and none under the app's directory. A step that names a
+    // directory it barely writes is a step whose conflicts nobody can find, so the assertion
+    // is on both halves and on the order of the claim.
+    const step = CHECK_STEPS.find(
+      (entry) => entry.name === 'test:native:android'
+    );
+    expect(step.writes).toEqual(
+      expect.arrayContaining(['android/build', 'example/android/build'])
+    );
+    // The app module is *not* written by this step, and saying it was would put a phantom
+    // conflict on a step that builds the app.
+    expect(step.writes).not.toContain('example/android/app/build');
+  });
+
   it('the lib readers wait for the build', () => {
     for (const name of ['api-extractor:check', 'publint', 'manifest:check']) {
       expect(CHECK_STEPS.find((step) => step.name === name).needs).toContain(

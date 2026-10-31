@@ -128,9 +128,16 @@ jobs:
       # a warm gradle cache from the build above, so the JVM tests are seconds rather
       # than a cold dependency download (X15 item 2 - the same split the macOS
       # `native-tests` job makes for the Swift half).
+      #
+      # `NITRO_UI_ANDROID_JVM_TESTS=1` is what makes this step run at all: the script
+      # skips on `CI`, which Actions sets on *every* step, so without the opt-in the
+      # job it hands off to would print the skip and run nothing (X15 review).
+      # `scripts/__tests__/native-tests-android-skip.test.js` runs this step's own env
+      # against the script and fails if the two ever disagree.
       - name: Android JVM unit tests
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
+          NITRO_UI_ANDROID_JVM_TESTS: '1'
         run: bash scripts/native-tests-android.sh
 
   # A release build of the example app: this is what catches codegen/dex/R8
