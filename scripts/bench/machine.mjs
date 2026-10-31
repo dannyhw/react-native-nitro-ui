@@ -18,10 +18,18 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 
 import { machineLabelFromEnv } from './baseline.mjs';
-import { isNumber, loadBlocker } from './lib.mjs';
+import { installedVersion, lockedVersion } from './deps.mjs';
+import {
+  BASELINE_TIMEOUTS_MS,
+  baselineTimeoutRecord,
+  isNumber,
+  loadBlocker,
+} from './lib.mjs';
 
 /** Bounded best-effort command execution: null rather than a throw or a hang. */
 export function tryExec(command, args) {
@@ -33,6 +41,122 @@ export function tryExec(command, args) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Records `bun.lock` and `node_modules`, so a baseline can name the versions its
+ * ratios were measured against (X14).
+ *
+ * `bun.lock` is the answer that travels: it is committed, so the same read works
+ * at the commit an older baseline file names (`deps.mjs` `dependenciesSourceAt`),
+ * which is what lets a merge compare versions instead of assuming them.
+ * `node_modules/<name>/package.json` is recorded beside it because the measured
+ * thing is the installed package, and the two disagreeing is worth a line - a
+ * merged cell has to be comparable with the file it joins, and a stale install
+ * would otherwise smuggle an unrecorded app into the comparison.
+ *
+ * Nulls rather than guesses throughout: an empty `bun.lock` read, an
+ * unresolvable name, or an uninstalled package all record "not recorded", which a
+ * merge refuses rather than matching against another blank.
+ *
+ * @param {{ lockPath: string, nodeModulesDir: string, source?: string }} paths
+ */
+export function collectDependencies({ lockPath, nodeModulesDir, source }) {
+  const read = (file) => {
+    try {
+      return fs.readFileSync(file, 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  let lock = null;
+  try {
+    lock = JSON.parse(read(lockPath) ?? '');
+  } catch {
+    lock = null;
+  }
+  const installed = (name) => {
+    try {
+      return installedVersion(
+        JSON.parse(read(path.join(nodeModulesDir, name, 'package.json')) ?? '')
+      );
+    } catch {
+      return null;
+    }
+  };
+  return {
+    reactNative: lockedVersion(lock, 'react-native'),
+    expoUi: lockedVersion(lock, '@expo/ui'),
+    installedReactNative: installed('react-native'),
+    installedExpoUi: installed('@expo/ui'),
+    source: source ?? "bun.lock at the run's commit",
+  };
+}
+
+/**
+ * A run-shaped record of everything a *pre-flight* already knows, for the question
+ * it can only ask of a run: "may this file take this component's cells?" (X14).
+ *
+ * The merge guards compare a run's regime with a file's, so answering them before a
+ * device is booted needs a stand-in for the run. It carries only what is knowable
+ * now - the host (`collectMachine` with no load sampler, so no `loadSamples`), the
+ * device from a read-only listing or an AVD's config files, the flags, and the
+ * versions in `bun.lock` - and leaves the rest null on purpose: a system-image
+ * fingerprint or an ART compile state is a question for the booted device, and
+ * `mergeBaselineProblems({ allowDeferred: true })` reports those as deferred rather
+ * than refusing on a blank. The authoritative check happens with the measured run,
+ * before a byte is written.
+ *
+ * @param {{
+ *   platform: 'ios'|'android',
+ *   plan: string,
+ *   launches: number,
+ *   perfMarks?: boolean,
+ *   dirty?: boolean,
+ *   sha?: string | null,
+ *   deviceKey: string | null,
+ *   device?: any,
+ *   dependencies?: any,
+ *   timeouts?: { mountTimeoutMs?: number|null, presentedTimeoutMs?: number|null } | null,
+ *   now?: () => string,
+ * }} input
+ */
+export function mergeCandidateRun({
+  platform,
+  plan,
+  launches,
+  perfMarks = false,
+  dirty = false,
+  sha = null,
+  deviceKey,
+  device = {},
+  dependencies = null,
+  timeouts = null,
+  now = () => new Date().toISOString(),
+}) {
+  return {
+    platform,
+    plan,
+    launches,
+    perfMarks,
+    dirty,
+    sha,
+    deviceKey,
+    deviceName: device.name ?? null,
+    machine: collectMachine(platform, device, null),
+    // Null, not 'verify': the state the app is in is decided by the install, which
+    // has not happened yet, and inventing one would make the guard pass on it.
+    art: null,
+    dependencies,
+    timeouts: baselineTimeoutRecord({
+      timeouts: timeouts ??
+        BASELINE_TIMEOUTS_MS[platform] ?? {
+          mountTimeoutMs: null,
+          presentedTimeoutMs: null,
+        },
+    }),
+    createdAt: now(),
+  };
 }
 
 /**
