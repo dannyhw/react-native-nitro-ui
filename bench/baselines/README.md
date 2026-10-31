@@ -123,6 +123,12 @@ both platforms and `DatePicker` on Android. `--check` reports their cells as
 `maintainer-mac-2`'s Android file recorded every scenario for every component the plan has
 on Android, so nothing is `new arm` there but the `leak` cells, which store no slope.
 
+`Menu` is the exception, and the first component added by the cheaper path below: its
+Android cells are in `maintainer-mac-2`'s file (35 cells, merged in by
+`--component menu --update-baseline`), and it is missing from the other three files —
+`maintainer-mac-2`'s iOS file, and both of `maintainer-mac-1`'s — where its cells read as
+`new arm` until somebody mints them.
+
 The one Android baseline committed before this one (`bb41d00`) was recorded while
 nitro-ui self-skipped: all seven of its nitro-ui cells carry a `skipReason` and zero
 metrics, so every `--check` against it degraded to `new-arm` and could never fail. It
@@ -224,6 +230,83 @@ overFraction }`. A run is refused when its **median** sample is over the ceiling
   back (seen on `android35-emu-pixel9.json`, 244017 -> 216717 bytes).
 
 `--update-baseline` prints every reason it refused.
+
+`--force` overrides the load, cleanliness and plan guards in the list above. It does
+**not** override a label refusal or any refusal of the merge in "Adding one component"
+below: those guards judge the quality of a measurement, and a missing label means there is
+no path to write the result to while a merge refusal says these numbers do not belong in
+this file.
+
+## Adding one component
+
+A committed table is missing a component until somebody measures it, and until X14 the
+only way to add one was a full mint — A3's on this machine was 4 h 24 min on iOS and
+5 h 13 min on Android, which is why components went missing from a table rather than
+being added to it. One component's cells can now join an existing file:
+
+    NITRO_UI_MACHINE_LABEL=maintainer-mac-2 \
+      bun bench --platform android --plan full --launches 8 \
+        --component menu --update-baseline
+
+That run measures only `menu`, and writes only `menu`'s cells: every other cell, every
+`skippedCells` row and every founding field (`sha`, `updatedAt`, `machine`, `art`) is
+carried through from the file byte-for-byte, so the diff is the component plus its
+provenance entry. `--check` then gates all of it, old rows included.
+
+Which run qualifies is itself a check, because `report.mjs <results.json> --update-baseline
+--component menu` can be handed any results file with any flags: the record must be one
+component's whole run. A file that also holds another component's cells has nowhere to put
+them, and one that holds only part of the named component's would land a block with holes
+that `--check` then reads as "not measured in base" — with no way to fill them later,
+because the file would already count the component as present. The count that decides
+"whole" is the one **the file's** plan produces, so a `--plan quick` results file cannot
+merge into a `full`-plan table; that refusal, and the other three (a record holding other
+components' cells, one whose cells' `scenario` fields disagree with the keys that store
+them, and one that holds no cells at all), are absolute — `--force` included. All four are
+asked of the record rather than of the command line.
+
+The first mint for a machine is still a full run — there is nothing to merge into
+before a file exists — and a component the file already holds is a refusal, not an
+overwrite: re-measuring one component into a table that has it would replace numbers
+measured under one run's conditions with numbers from another. Full re-mint to refresh.
+
+**What a merge insists on.** It asks, field by field, whether this run is the same
+measurement as the file: baseline schema version, platform, `deviceKey`, CPU model and
+core count, the simulator runtime and Xcode on iOS, the Android API level and system
+image, the ART compile state, the waiting rule, and the `react-native` and `@expo/ui`
+versions the bench app was built from. Every refusal names the field and both values,
+because the fix differs per field — a different `@expo/ui` means the file's cells were
+measured against a different pair of reference arms, and a different simulator runtime
+is a different device. Two of those are worth naming: an `@expo/ui` bump moves the two
+comparison arms, and a React Native bump moves `rn-core`, which is the denominator of
+every ratio in the table.
+
+`--dry-run` answers the same question without booting anything, and the live run asks
+it twice — once from the command line, before the device is started, and once against
+the measured record immediately before the write. Fields only a booted device can
+answer (its system-image fingerprint, its ART compile state) are **deferred** by the
+first question, never passed by it, and the printed line says which.
+
+**What a file that predates a field may answer with.** The four committed baselines
+were minted before any of this was recorded, so each field has one of three policies,
+and the default is refusal:
+
+| Absent field                      | Accepted answer                                                                                                                                           |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dependencies` (the two versions) | `bun.lock` read at the commit the file's own `sha` names (`git show <sha>:bun.lock`). The recovery is recorded as the entry's `source`.                   |
+| `timeouts`                        | the run measured its platform's **default** rule, which is the rule every gated ratio in a committed table was recorded under. A non-default run refuses. |
+| runtime, Xcode, API, image, ART   | nothing. These are regime changes no commit can vouch for, so the merge refuses and a full re-mint is the fix.                                            |
+
+Anything matched that way is listed in the merged entry's `comparabilityNotes`, so a
+reviewer can see what the verdict rested on, and the file's existing components get a
+provenance entry seeded from the founding run and marked `seededFromFoundingRun`.
+
+After the first merge the file records `dependencies` and `components` itself, so the
+next one compares against what the file says rather than going back to git. The
+top-level `sha`, `updatedAt` and `machine.loadSamples` keep meaning _the full run this
+file was founded on_; per-component `sha`, date, launch count, load summary and
+versions say who measured each component. Bench files stay readable at schema v2 and
+v3 (`READABLE_BASELINE_SCHEMA_VERSIONS`); a v1 file is refused, as it always was.
 
 ## renders.json
 

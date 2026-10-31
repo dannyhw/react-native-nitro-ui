@@ -1050,6 +1050,79 @@ its label and comment triggers are off, so it is `workflow_dispatch` only. The
 gate that always blocks is the Reassure render count, below, because it is
 deterministic.
 
+### Adding a component to a committed baseline
+
+A baseline that is missing a component gates nothing for it, and the only way to add
+one used to be a full mint — A3's on this machine was 4 h 24 min on iOS and 5 h 13 min
+on Android, so components went missing rather than being added. One component's cells
+can now join an existing file, which is one component's launches instead of the whole
+matrix: Menu on Android is 7 cells x 5 arms x 8 launches = 280 launches, and the run
+that did it took 35 min:
+
+```sh
+export NITRO_UI_MACHINE_LABEL=maintainer-mac-2
+node scripts/lease.mjs acquire --task <ID> --exclusive --boot
+node scripts/bench/run.mjs --platform android --plan full --launches 8 \
+  --component menu --update-baseline   # add --dry-run first: it answers the same
+                                       # startup questions without booting anything
+```
+
+Everything in the file that is not that component survives byte-for-byte. What the diff
+adds depends on whether the file already had X14's bookkeeping. A **current** file gains
+exactly two things: the component's cells and its one `components` entry. The **first**
+merge into a pre-X14 file gains that plus the bookkeeping it never had, all of it written
+so the next merge can check versions without going back to git:
+
+- the file's `components` block, seeded with one entry per component it already holds
+  (marked `seededFromFoundingRun: true`, so a reader can tell a founding run's numbers
+  from a merge's);
+- a top-level `dependencies` block, recovered from `bun.lock` at the commit the file's
+  own `sha` names, whose `source` field says so;
+- `skippedCells`, which the old files never wrote (empty in practice: an incomplete cell
+  on a gated arm was always a refusal);
+- the `schemaVersion` bump from 2 to 3.
+
+None of those is a measured number — that is the promise: the removed lines are the old
+`"schemaVersion": 2,` and one closing brace. Then read it back:
+
+```sh
+node scripts/bench/run.mjs --platform android --plan full --launches 8 \
+  --component menu --check            # or report.mjs <results.json> --check
+```
+
+What it refuses, and why each refusal matters:
+
+- **A component the file already holds**, and any other filter (`--scenario`, `--n`,
+  `--only`): a merge writes that component's whole block, and a partial one reads to
+  `--check` as "not measured in base". Refreshing existing numbers means a full re-mint.
+- **A results file that is not one component's whole run.** `report.mjs` will re-report any
+  results file with any flags, so `--component menu` over a full run, or over a `slider`
+  run, or over a `--scenario`-narrowed one, used to write those cells under `menu`. Every
+  refusal here is absolute, `--force` included: a record that holds another component's
+  cells; one measured on a plan the file does not hold; one that is missing any cell **the
+  file's plan** measures for the named component — so `--plan quick --component menu --force`
+  cannot write 12 of menu's 28 rows into a `full`-plan table, because rows left out could
+  never be added afterwards; one whose cells' `scenario` fields disagree with the keys that
+  store them (the key is what `--check` gates and what the merge writes, so the record
+  cannot be trusted to know which component it measured); or one that holds no cells at all,
+  which would write a provenance entry claiming a component was measured with no numbers
+  anywhere to contradict it.
+- **An environment that is not the same measurement** — CPU model and core count,
+  simulator runtime and Xcode, Android API level and system image, ART compile state,
+  the waiting rule, and the `react-native` and `@expo/ui` versions. Each refusal names
+  the field and both values. `--force` does not get you past this one: it is a human
+  overruling judgements about their own measurement, and "this is a different
+  simulator" is not one.
+- **A field the file predates that it cannot answer for.** `bun.lock` at the commit the
+  file's own `sha` names recovers the two app versions, and the platform's default
+  waiting rule stands in for a `timeouts` block a v2 file never wrote; a runtime,
+  image or ART state cannot be recovered from anything, so those refuse. What was
+  matched that way is recorded in the merged entry's `comparabilityNotes`, and the
+  versions land in the file so the next merge does not have to ask git again.
+
+The details, including the provenance a merged file keeps per component, are
+`bench/baselines/README.md` ("Adding one component").
+
 ## Perf contract
 
 Hybrid Views are easy to make slow, so these rules are enforced by the local

@@ -45,9 +45,11 @@ import {
   openBaselineForCheck,
 } from '../bench/baseline.mjs';
 import {
+  BASELINE_SCHEMA_VERSION,
   SCHEMA_VERSION,
   aggregateRecords,
   buildBaseline,
+  isCompatibleBaseline,
 } from '../bench/lib.mjs';
 
 /** Same shape as `bench-gate.test.js`: 4 quiet launches x 20 measured iterations. */
@@ -312,9 +314,12 @@ describe('opening a machine baseline for --check', () => {
       display: (file) => file,
       readJson: (file) => JSON.parse(files[file]),
       existsSync: (file) => Object.hasOwn(files, file),
-      isCompatibleBaseline: (baseline) =>
-        baseline?.schemaVersion === SCHEMA_VERSION && baseline.cells != null,
-      schemaVersion: SCHEMA_VERSION,
+      // The shipped predicate and the shipped *baseline* version, not a copy of
+      // either: the results file's `SCHEMA_VERSION` is a different number about a
+      // different file, and a fixture that asserted against it would go red on
+      // every mint for the wrong reason (X14 split the two constants).
+      isCompatibleBaseline,
+      schemaVersion: BASELINE_SCHEMA_VERSION,
     });
   }
 
@@ -381,7 +386,19 @@ describe('opening a machine baseline for --check', () => {
       },
     });
     expect(opened.refusal.kind).toBe('incompatible');
-    expect(opened.refusal.message).toContain('not a v2 ratio baseline');
+    // Names what the reader reads, not a version handed in by a caller: X14 split
+    // the results and baseline constants, and a refusal that quoted one of them by
+    // argument could (did) quote the wrong one.
+    expect(opened.refusal.message).toContain(
+      'is not a baseline this version reads'
+    );
+    expect(opened.refusal.message).toContain('found v1');
+    // Every readable version, not one of them: the point of a refusal is saying
+    // what would be accepted, and after X14 that is a set rather than a number.
+    expect(opened.refusal.message).toContain('it reads v2 and v3');
+    expect(opened.refusal.message).toContain(
+      `writes v${String(BASELINE_SCHEMA_VERSION)}`
+    );
   });
 
   it('refuses a baseline that records no machine at all', () => {

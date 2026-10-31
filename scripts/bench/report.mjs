@@ -40,8 +40,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mintBaselineFileFor, openBaselineForCheck } from './baseline.mjs';
+import {
+  foundingDependencies,
+  openBaselineForMerge,
+  mintBaselineFileFor,
+  openBaselineForCheck,
+} from './baseline.mjs';
 import { formatCommittedJsonFile } from './format.mjs';
+import { tryExec } from './machine.mjs';
 
 import {
   SCHEMA_VERSION,
@@ -50,6 +56,8 @@ import {
   baselineTable,
   buildBaseline,
   isCompatibleBaseline,
+  mergeBaselineProblems,
+  mergeComponentBaseline,
   newestResultsName,
   skippedCellNotes,
 } from './lib.mjs';
@@ -96,32 +104,119 @@ export function resolveCompareTarget(value, platform) {
   );
 }
 
-/** Baseline write, with the D9 guards. Returns the block reasons, if any. */
-export function writeBaseline(file, run, { force = false } = {}) {
+/**
+ * Baseline write, with the D9 guards. Returns the block reasons, if any.
+ *
+ * Two shapes, and the difference is the whole of X14:
+ *
+ * - **full mint** (no `component`): `buildBaseline(run)` replaces the file. This
+ *   is what makes a *filtered* full mint dangerous - it would write one
+ *   component's cells and delete every other row, which reads to `--check` as
+ *   "not measured in base" - so `narrowingProblem()` refuses a narrowed schedule
+ *   for it, before the run.
+ * - **merge** (`component`, plus the `existing` file the caller already checked it
+ *   against): only that component's cells are written and everything else is
+ *   carried through from the file unchanged, with one `components` entry added.
+ *
+ * `baselineBlockers()` guards both. `--force` overrides those per-run judgements
+ * (load, cleanliness, plan, completeness) and nothing else: the comparability and
+ * already-has-cells refusals come from `mergeBaselineProblems()`, which the caller
+ * runs whether or not `--force` was passed.
+ */
+export function writeBaseline(
+  file,
+  run,
+  {
+    force = false,
+    component = null,
+    existing = null,
+    componentsBase = null,
+    dependencies = null,
+    comparabilityNotes = [],
+  } = {}
+) {
   const blockers = force ? [] : baselineBlockers(run);
   if (blockers.length > 0) {
     return { written: false, blockers, baseline: null, skippedCellNotes: [] };
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const baseline = buildBaseline(run);
-  fs.writeFileSync(file, `${JSON.stringify(baseline, null, 2)}\n`);
+  const built = buildBaseline(run);
+  let merged = null;
+  if (component != null) {
+    if (existing == null) {
+      throw new Error(
+        `writeBaseline: merging --component ${String(
+          component
+        )} needs the file it merges into, and none was given`
+      );
+    }
+    merged = mergeComponentBaseline({
+      baseline: existing,
+      run,
+      component,
+      built,
+      componentsBase,
+      dependencies,
+      comparabilityNotes,
+    });
+  }
+  // A merge that would add nothing was refused a moment ago by
+  // `mergeBaselineProblems()` -> `missingComponentCells()`, which asks it of any record
+  // that is not the pre-flight's stand-in (review F2). There is no second guard here on
+  // `merged.addedCells === 0` deliberately: `report.mjs` is the only caller of this
+  // function and it always asks that question first, so a guard here could not be run
+  // red, and a branch nobody can demonstrate failing is not a guard. The same reasoning
+  // that keeps `missingComponentCells()` honest — it is in `lib.mjs`, where a test can
+  // reach it — is why that is where the rule lives.
+  const baseline = merged?.baseline ?? built;
+  const text = `${JSON.stringify(baseline, null, 2)}\n`;
+  // Write, format, then rename — in that order (review L2). The committed file is
+  // every machine's gate table, and prettier runs on it *after* the write: writing
+  // in place means a crash mid-write, or a prettier that dies half-way, leaves a
+  // truncated or re-wrapped table where a byte-identical one should be. The temp
+  // file is in the same directory, so the rename is atomic and a reader sees either
+  // the old file or the finished new one. It keeps a `.json` extension because
+  // prettier infers its parser from the file it is handed.
+  const tempFile = path.join(
+    path.dirname(file),
+    `.${path.basename(file, '.json')}.${String(process.pid)}.tmp.json`
+  );
+  fs.writeFileSync(tempFile, text);
   // The baseline is a committed file, and `bun run format` checks committed
   // files - so the mint formats what it wrote instead of leaving a formatting
   // diff for whoever commits it (A1b follow-up).
   // From the repo root, so bunx finds this repo's prettier rather than the
   // bench app's (see scripts/bench/format.mjs).
-  const { note } = formatCommittedJsonFile(file, { cwd: REPO_ROOT });
-  return {
-    written: true,
-    blockers: [],
-    file,
-    baseline,
-    formatted: note == null,
-    note,
-    skippedCellNotes: skippedCellNotes(baseline, {
-      display: path.relative(REPO_ROOT, file),
-    }),
-  };
+  try {
+    const { note } = formatCommittedJsonFile(tempFile, { cwd: REPO_ROOT });
+    if (note != null) {
+      // Prettier could not run, or exited non-zero — possibly after writing a
+      // half-formatted file. Serialise what we meant to write over whatever it left
+      // behind: an unformatted baseline is a formatting diff for a human to fix
+      // (`bun run format:write`), a corrupt one is a lost table.
+      fs.writeFileSync(tempFile, text);
+    }
+    fs.renameSync(tempFile, file);
+    return {
+      written: true,
+      blockers: [],
+      file,
+      baseline,
+      formatted: note == null,
+      // The note tells a human to run prettier on the file, and it was written for
+      // the temp name it has just lost: re-point it at the path that now exists.
+      note: note == null ? null : note.split(tempFile).join(file),
+      merged,
+      changedCells: merged?.changedCells ?? null,
+      skippedCellNotes: skippedCellNotes(baseline, {
+        display: path.relative(REPO_ROOT, file),
+      }),
+    };
+  } catch (error) {
+    // Nothing was committed; take the half-written temp with us.
+    fs.rmSync(tempFile, { force: true });
+    throw error;
+  }
 }
 
 export function writeReportFiles({ run, markdown, fileName }) {
@@ -163,7 +258,8 @@ if (
   const resultsFile = argv.find((entry) => !entry.startsWith('--'));
   if (resultsFile == null) {
     process.stderr.write(
-      'usage: node scripts/bench/report.mjs <results.json> [--compare <ref|file>] [--check] [--update-baseline] [--force]\n'
+      'usage: node scripts/bench/report.mjs <results.json> [--compare <ref|file>] [--check]\n' +
+        '                                 [--update-baseline [--component <name>]] [--force]\n'
     );
     process.exit(2);
   }
@@ -178,6 +274,11 @@ if (
     );
     process.exit(2);
   }
+  // Read-only git, for recovering the app versions a pre-X14 baseline's founding
+  // commit pinned (X14). Same shape `run.mjs` passes, and the same failure rule:
+  // an unreadable revision comes back null and the merge refuses rather than
+  // matching a version invented from the working tree.
+  const gitShow = (args) => tryExec('git', args);
 
   process.stdout.write(`${renderMarkdown(run)}\n`);
 
@@ -205,10 +306,67 @@ if (
   }
 
   if (argv.includes('--update-baseline')) {
+    const component = flag('--component');
     const mint = mintBaselineFileFor({ baselinesDir: BASELINES_DIR, run });
     if (mint.refusal != null) {
       process.stderr.write(`\n${mint.refusal}\n`);
       exitCode = Math.max(exitCode, 2);
+    } else if (component != null) {
+      // The merge path (X14): the results file holds one component's cells and the
+      // committed file holds the rest. Everything the guards need is asked of the
+      // file here, so a re-report of an old results file cannot append a cell that
+      // does not belong in this machine's table.
+      const opened = openBaselineForMerge({
+        baselinesDir: BASELINES_DIR,
+        run,
+        component,
+        isCompatibleBaseline,
+        readJson,
+        display: (file) => path.relative(REPO_ROOT, file),
+        resolved: (baseline) =>
+          foundingDependencies({ baseline, git: gitShow }),
+        mergeProblems: (input) => mergeBaselineProblems(input),
+      });
+      if (opened.refusal != null) {
+        process.stderr.write(`\n${opened.refusal.message}\n`);
+        exitCode = Math.max(exitCode, 2);
+      } else if (opened.problems.length > 0) {
+        process.stderr.write(
+          `\n--update-baseline --component ${String(
+            component
+          )} refused: this run's numbers cannot live in ${String(opened.display)}\n${opened.problems
+            .map((reason) => `  - ${reason}`)
+            .join('\n')}\n`
+        );
+        exitCode = Math.max(exitCode, 2);
+      } else {
+        const outcome = writeBaseline(opened.file, run, {
+          force: argv.includes('--force'),
+          component,
+          existing: opened.baseline,
+          componentsBase: opened.seeded,
+          // The founding run's versions as recovered from its own commit, which is
+          // what the file's top-level `dependencies` may claim; the merged
+          // component's entry takes the measuring run's versions from `run`.
+          dependencies: opened.foundingDependencies,
+          comparabilityNotes: opened.unverified,
+        });
+        if (outcome.written) {
+          process.stdout.write(
+            `\nMerged baseline ${path.relative(REPO_ROOT, opened.file)}: ${String(
+              outcome.merged.addedCells
+            )} \`${String(component)}\` cell(s)\n` +
+              (outcome.note == null ? '' : `  ${outcome.note}\n`)
+          );
+        } else {
+          process.stderr.write(
+            `\n--update-baseline refused (pass --force to override):\n${outcome.blockers
+              .map((reason) => `  - ${reason}`)
+              .join('\n')}\n`
+          );
+          exitCode = Math.max(exitCode, 2);
+        }
+      }
     } else {
       const outcome = writeBaseline(mint.file, run, {
         force: argv.includes('--force'),
@@ -236,7 +394,6 @@ if (
       display: (file) => path.relative(REPO_ROOT, file),
       readJson,
       isCompatibleBaseline,
-      schemaVersion: SCHEMA_VERSION,
     });
     if (opened.refusal != null) {
       process.stderr.write(`\n${opened.refusal.message}\n`);
