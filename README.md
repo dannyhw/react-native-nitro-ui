@@ -156,8 +156,19 @@ a run on an older iOS runtime.
 Each control has the props of the platform control it wraps, not a
 lowest-common-denominator subset. The tables in the component docs list every
 prop against the TypeScript type; these are the shapes you will actually write.
+The screenshots are the example app's Storybook (`bun run storybook:ios` /
+`bun run storybook:android`) on an iPhone 17 simulator (iOS 27) and an Android 15
+emulator, light appearance.
 
 ### Switch
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/switch-ios.png" width="300" alt="Switch states: off, on, disabled and tinted on iOS" /></td>
+    <td><img src="docs/images/components/switch-android.png" width="300" alt="Switch states: off, on, disabled and tinted on Android" /></td>
+  </tr>
+</table>
 
 Controlled by `value`; omit it and native owns the displayed state (a toggle
 then costs no React render).
@@ -181,6 +192,14 @@ export function WifiSettings() {
 
 ### Slider
 
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/slider-ios.png" width="300" alt="Sliders: continuous, stepped, disabled and tinted on iOS" /></td>
+    <td><img src="docs/images/components/slider-android.png" width="300" alt="Sliders: continuous, stepped, disabled and tinted on Android" /></td>
+  </tr>
+</table>
+
 `onValueChange` fires at most once per frame during a drag;
 `onSlidingComplete` always fires once with the value the gesture settled on.
 
@@ -203,6 +222,14 @@ export function VolumeSlider() {
 
 ### Progress
 
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/progress-ios.png" width="300" alt="Linear and circular progress, determinate and indeterminate, tinted on iOS" /></td>
+    <td><img src="docs/images/components/progress-android.png" width="300" alt="Linear and circular progress, determinate and indeterminate, tinted on Android" /></td>
+  </tr>
+</table>
+
 `value` is a fraction of the whole; `null` means indeterminate rather than
 empty.
 
@@ -214,6 +241,14 @@ export function UploadProgress({ fraction }: { fraction: number | null }) {
 ```
 
 ### Button
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/button-ios.png" width="300" alt="Button variants (filled, tonal, outlined, text, elevated) and sizes on iOS" /></td>
+    <td><img src="docs/images/components/button-android.png" width="300" alt="Button variants (filled, tonal, outlined, text, elevated) and sizes on Android" /></td>
+  </tr>
+</table>
 
 `variant` and `size` map to the closest idiomatic style on each platform, so the
 two columns deliberately do not look alike — neither one fakes the other.
@@ -236,6 +271,14 @@ export function SaveButton() {
 
 ### SegmentedControl
 
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/segmented-control-ios.png" width="300" alt="Segmented controls with two to five segments and long labels on iOS" /></td>
+    <td><img src="docs/images/components/segmented-control-android.png" width="300" alt="Segmented controls with two to five segments and long labels on Android" /></td>
+  </tr>
+</table>
+
 `options` is the whole API surface of a segmented row, and it is also what
 decides the control's width.
 
@@ -254,6 +297,14 @@ export function ViewToggle() {
 ```
 
 ### Picker
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/picker-ios.png" width="300" alt="Picker menu and wheel variants on iOS" /></td>
+    <td><img src="docs/images/components/picker-android.png" width="300" alt="Picker menu and wheel variants on Android" /></td>
+  </tr>
+</table>
 
 The value is an index into `options`, as with `SegmentedControl`; `label` is
 drawn as the Material 3 field's label on Android and used for accessibility on
@@ -276,6 +327,14 @@ export function SizePicker() {
 
 ### DatePicker
 
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/date-picker-ios.png" width="300" alt="DatePicker compact, inline and wheel variants on iOS" /></td>
+    <td><img src="docs/images/components/date-picker-android.png" width="300" alt="DatePicker compact, inline and wheel variants on Android" /></td>
+  </tr>
+</table>
+
 Dates are `Date` objects. `variant` picks `compact` (a field that opens the
 platform picker, the default), `inline` or `wheel`; `mode` picks `date`, `time`
 or `datetime`.
@@ -291,6 +350,14 @@ export function DueDate() {
 ```
 
 ### Menu
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/menu-ios.png" width="300" alt="An open Menu with a disabled row on iOS" /></td>
+    <td><img src="docs/images/components/menu-android.png" width="300" alt="An open Menu with a disabled row on Android" /></td>
+  </tr>
+</table>
 
 A trigger that opens a list of actions. It has no value, so there is nothing to
 keep in sync: `onSelect` reports the `id` of the row that was picked, and the
