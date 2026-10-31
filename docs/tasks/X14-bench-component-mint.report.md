@@ -168,6 +168,9 @@ rather than the function, because a call site is what can pass the wrong constan
   the printed `wait` line needs that exact form. Cosmetic, but it cost one retried wait.
 - The menu mint and the narrowed check-run both record `--skip-build`; nothing re-verified the APK
   against the tree mid-window beyond the stamp the build wrote at 01:05.
+- Hygiene incident, one: the Gradle daemon this branch's build started (pid 62468) had also served
+  an A3 worktree that no longer exists; I stopped that PID by number after confirming no gradle
+  client, gate or Metro of any task was live. Costs anyone else one daemon start, not an answer.
 
 ## Questions for orchestrator
 
