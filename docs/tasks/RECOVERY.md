@@ -50,6 +50,11 @@
 > **X15 merged (2026-10-31, `5bc783b`)** after two fix rounds (a Kotlin CI step that skipped itself under `CI=true`;
 > a flaky Metro fixture that leaked processes): all five merge gates green. Each device gate now stops the Metro its own
 > run left on its leased port, and `check` runs the Android JVM tests. F6 merges after it.
+> **F6 merged (2026-10-31, `611fd66`)** after two fix rounds: the example runs with RN view recycling on, the Recycling
+> harness proves pool reuse while mounted, Android `DatePicker` resets its sizing policy on recycle, and a dropped Android
+> host no longer measures until it is re-attached. All five merge gates green (`check` on a re-run: X15's self-exit
+> fixture raced a busy port once, fixed in the next commit). Three patch changesets are pending for 0.4.1. CI on `main`
+> was red from `386a511` to `96ad69c` (a depth-1 checkout had no `HEAD~5`); the jobs that run `check` now fetch history.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
