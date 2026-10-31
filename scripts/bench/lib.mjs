@@ -3245,7 +3245,10 @@ export function mergeBaselineProblems({
       unverified: [],
       deferred: [],
       note: null,
-      seeded: {},
+      // null = "no new provenance to add", which `mergeComponentBaseline` reads as
+      // "keep the file's own `components` block". An empty object would be spread
+      // over it and drop every entry a previous run wrote.
+      seeded: null,
       foundingDependencies: null,
     };
   }
@@ -3260,7 +3263,7 @@ export function mergeBaselineProblems({
       unverified: [],
       deferred: [],
       note: null,
-      seeded: {},
+      seeded: null,
       foundingDependencies: null,
     };
   }
@@ -3308,10 +3311,14 @@ export function mergeBaselineProblems({
   return {
     problems,
     unverified: check.unverified,
+    deferred: check.deferred,
     note,
+    // `null` means "this file already has a current `components` block, use it";
+    // an empty object would be spread over it and silently drop every entry a
+    // previous run wrote.
     seeded:
       note == null
-        ? {}
+        ? null
         : seededComponentProvenance(baseline, foundingDepsFrom(resolved)),
     foundingDependencies: foundingDepsFrom(resolved),
   };
@@ -3464,7 +3471,7 @@ export function seededComponentProvenance(baseline, dependencies = null) {
           // such: a seeded entry that quietly carried today's versions would be the
           // false claim this block exists to make impossible. Nulls here are the
           // honest answer, and the next merge then has to recover them again.
-          dependencies: dependenciesOf(dependencies),
+          dependencies: dependencyRecord(dependencies),
           cellKeys: keys.sort(),
           seededFromFoundingRun: true,
         },
