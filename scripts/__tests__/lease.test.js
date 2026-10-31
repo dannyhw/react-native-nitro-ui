@@ -33,6 +33,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { FREE_LSOF } from './helpers/free-lsof-stub.js';
+
 import {
   DEFAULT_MAX_DEVICE_LEASES,
   EXCLUSIVE_TTL_MINUTES,
@@ -810,6 +812,10 @@ describe('the CLI, in a real state directory', () => {
         ...process.env,
         NITRO_UI_HOME: home,
         NITRO_UI_LEASE_POLL_MS: '50',
+        // Nothing is listening on any port (helper): otherwise an acquire in this file
+        // asks the real machine, and a second worktree's harness on pair-a's Metro makes
+        // every case here refuse for a port the file never mentions.
+        ...FREE_LSOF,
         ...env,
       },
     });
@@ -830,6 +836,7 @@ describe('the CLI, in a real state directory', () => {
           ...process.env,
           NITRO_UI_HOME: home,
           NITRO_UI_LEASE_POLL_MS: '50',
+          ...FREE_LSOF,
           ...env,
         },
       });
@@ -1006,7 +1013,11 @@ describe('the CLI, in a real state directory', () => {
       [CLI, 'acquire', '--task', 'G6'],
       {
         encoding: 'utf8',
-        env: { ...process.env, NITRO_UI_HOME: join(home, 'missing') },
+        env: {
+          ...process.env,
+          NITRO_UI_HOME: join(home, 'missing'),
+          ...FREE_LSOF,
+        },
       }
     );
     expect(result.status).toBe(2);
@@ -1391,6 +1402,7 @@ describe('`list` names devices nobody leased', () => {
         NITRO_UI_LEASE_POLL_MS: '50',
         NITRO_UI_SIMCTL_BIN: join(bins, 'simctl'),
         NITRO_UI_ADB_BIN: join(bins, 'adb'),
+        ...FREE_LSOF,
         ...extraEnv,
       },
     });

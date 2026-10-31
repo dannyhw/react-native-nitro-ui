@@ -104,7 +104,7 @@ Run from the repo root.
 | `bun run format`              | Prettier check (`format:write` to fix)                                      |
 | `bun run test`                | Jest unit tests (JS wrappers, lint rules, patch script)                     |
 | `bun run test:native`         | Host-side C++ and Swift unit tests of the core (macOS only)                 |
-| `bun run test:native:android` | JVM unit tests of the Kotlin core (needs the Android SDK; not in `check`)   |
+| `bun run test:native:android` | JVM unit tests of the Kotlin core (needs the Android SDK; in `check`)       |
 | `bun run nitrogen`            | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`              |
 | `bun run nitrogen:check`      | Regenerate into a temp dir and fail on drift against `nitrogen/`            |
 | `bun run registry`            | Write the per-component lists from `src/components/*/component.json`        |
@@ -140,8 +140,9 @@ Run from the repo root.
 | `bun run hooks:uninstall`     | Remove them again                                                           |
 | `bun run clean`               | Delete build outputs (`lib/`, native build dirs)                            |
 
-`bun run check` is sixteen steps — typecheck, lock:check, bench:typecheck, lint,
-format, test, test:native, perf:renders, nitrogen:check, registry:check,
+`bun run check` is seventeen steps — typecheck, lock:check, bench:typecheck, lint,
+format, test, test:native, test:native:android, perf:renders, nitrogen:check,
+registry:check,
 autolinking:check, prepare, api-extractor:check, publint, manifest:check,
 readme:check — run through a small scheduler (`scripts/check.mjs` + the step graph in
 `scripts/check-steps.mjs`), so independent ones overlap: up to half the machine's
@@ -391,6 +392,37 @@ Four rules are enforced rather than written down:
   or which names the reserved serial, is refused by the harness config and by
   real-input before anything is installed on a device.
 
+A Metro port is part of the pair, and it is the part that outlives its lease, so
+these rules apply to it specifically:
+
+- **a pair whose Metro port a live process serves is not handed out.** The lease
+  file cannot see that state - the run holding the port holds no lease - so
+  `acquire` asks the kernel (`lsof`) as well as the file. A free pair with a busy
+  port is skipped like a leased one, and a task that has nowhere else to go waits
+  on the port with a reason that names the pid and program rather than being told
+  "every pair is already leased", which would send it to `list` to find nothing
+  wrong. A machine that cannot answer the question (`lsof` missing) says so once
+  and leases anyway.
+- **a device gate pre-flights the port its own lease exported**, before the build
+  rather than after the app has joined somebody else's Metro, and refuses naming
+  the process. When the server on the port is yours on purpose - a Metro started
+  by hand for a debugging session, which the harness then attaches to - set
+  **`NITRO_UI_GATE_METRO_FORCE=1`**; nothing else in a normal round needs it, and
+  the gate prints the line telling you it did run anyway.
+  A gate also **stops a Metro its own run left behind** (matched by process
+  group, so another task's server is never touched). That is what lets a merge run
+  `real-input:ios` → `real-input:android` → `harness:ios` → `harness:android` on
+  one lease: `real-input` reuses a Metro that is already up by design, so without
+  the sweep each gate would refuse on the previous one's leftover. A descendant it
+  may not stop - a server on a port it was never given - is no reason to linger:
+  once the ledger line is written the gate drops its read ends on the run's output
+  and exits with its code, so `wait` never reports a finished gate as running.
+- an **`--exclusive`** acquire (a bench, a baseline mint) does **not** wait on
+  Metro ports, and says why, naming the process. A bench builds a Release app with
+  the bundle inside it, so it never uses the port; waiting an hour for one would
+  also block every other task behind the pending-exclusive marker. The device reap
+  it does run is the guard it actually needs.
+
 The pool is one file per machine, because UDIDs, AVD names and ports do not
 travel between machines. Copy `scripts/devices.example.json` and edit it:
 
@@ -607,7 +639,7 @@ The merge bar is `check`, both full harness runs and both real-input runs; a
 filtered harness run satisfies nothing. `table --full` adds the log path to every
 row and, under it, the per-step durations of the `check` run — `check` is the one
 gate long enough that its total is not an actionable number, so the ledger keeps
-what each of the sixteen steps cost. At merge, `need` may accept a `check` from
+what each of the steps cost. At merge, `need` may accept a `check` from
 another branch's ledger when it passed on this exact code tree and its commit is
 merged here (see `docs/tasks/ORCHESTRATOR.md`, "The loop" step 5); `--no-reuse`
 asks the strict question. A task report starts from
@@ -1394,8 +1426,19 @@ None of this is a contributor's step, and none of it lives in this repo to chang
 request, on free GitHub-hosted runners: `bun run check` (ubuntu, Node from
 `.nvmrc`), the host native ASan tests (**macOS**: they need a Swift toolchain and
 `xcrun`, so `scripts/native-tests.sh` prints its skip reason on Linux and CI runs
-them in a `macos-latest` job instead), and an Android `assembleDebug` of the
-example. Anything that needs one of this project's devices or a Mac's simulators -
+them in a `macos-26` job instead), and an Android `assembleDebug` of the
+example.
+
+That Android job is also where the Kotlin JVM tests run. `scripts/native-tests-
+android.sh` skips when `CI` is set, because `check`'s runner has an SDK but no JDK
+of its own and an empty gradle cache, and the Android job has already paid for all
+three. The skip is per job, not per workflow, so the step in `build-android` sets
+`NITRO_UI_ANDROID_JVM_TESTS=1` to say "this job owns the run": Actions exports
+`CI=true` on every step of every job, so without that variable the job it hands off
+to would print the skip and run nothing, on a green row (X15 review). A job that
+runs this script sets that variable; nothing else in CI runs it.
+
+Anything that needs one of this project's devices or a Mac's simulators -
 the harness suites, the consumer smoke tests, the benchmarks, the Android release
 build - stays **manual**: those jobs are `workflow_dispatch` only, because a
 hosted runner has no device, and the device gates that decide a task run locally

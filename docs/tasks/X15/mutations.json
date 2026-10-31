@@ -1,0 +1,405 @@
+{
+  "task": "X15",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row. Convention (X14's, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it, so `before` is always findable verbatim in `file` at the commit the table describes - including the rows whose fix landed after the test, where `before` is simply the pre-fix source and `after` the shipped code. An audit probe (does `before` occur in `file`?) was run over every row of this file and X14's at fix round 2; the two rows that had drifted with the source are re-recorded below against today's text, each re-run to red. Not a gate: this table quotes source, so a guard here would redden whenever that source legitimately moves. Run on maintainer-mac-1, 2026-10-31, lease X15-58alc.",
+  "mutations": [
+    {
+      "test": "scripts/__tests__/lease-metro-port.test.js",
+      "file": "scripts/lease.mjs",
+      "mutation": "acquire stops asking about the pool's Metro ports",
+      "before": "    const portBlocked = metroPortBlockers({ devices, log });",
+      "after": "    const portBlocked = [];",
+      "redTests": [
+        "is not handed out by acquire, which takes the other pair instead",
+        "refuses when every pair is leased, naming the processes on the ports",
+        "says so once when the machine cannot answer, and leases anyway"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/lease-metro-port.test.js",
+      "file": "scripts/gate.mjs",
+      "mutation": "the gate never asks about its leased Metro port",
+      "before": "    const preflight = metroPreflight();",
+      "after": "    const preflight = 0;",
+      "redTests": [
+        "makes gate.mjs refuse a leased pair whose Metro port someone else serves",
+        "runs the gate under NITRO_UI_GATE_METRO_FORCE=1"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/lease-metro-port.test.js",
+      "file": "scripts/gate.mjs",
+      "mutation": "the pre-flight's exit code is read as an object (the shape first written)",
+      "before": "    if (preflight !== 0) return preflight;",
+      "after": "    if (preflight.status !== 0) return preflight.status;",
+      "note": "Not a hypothetical: this is what the first implementation did, and it is the reason the two CLI cases exist. `undefined` is truthy-not-0, so every device gate returned before starting - exit 0, no child, no ledger line. A test that only asserted the refusal message would have passed while the harness gate stopped running entirely.",
+      "redTests": [
+        "makes gate.mjs refuse a leased pair whose Metro port someone else serves",
+        "runs the gate under NITRO_UI_GATE_METRO_FORCE=1"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/check-runner.test.js",
+      "file": "package.json",
+      "mutation": "the new step is in the graph but not in the serial chain",
+      "before": "\"check:serial\": \"bun run typecheck && bun run lock:check && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run test:native:android && bun run perf:renders",
+      "after": "\"check:serial\": \"bun run typecheck && bun run lock:check && bun run bench:typecheck && bun run lint && bun run format && bun run test && bun run test:native && bun run perf:renders",
+      "note": "Applied in the other direction at first (step added to CHECK_STEPS, package.json untouched), which is how it was actually caught.",
+      "redTests": [
+        "`check:serial` in package.json is exactly what the graph declares",
+        "a step added to the chain and not to the graph is the failure this guards",
+        "the runner refuses to start when the chain and the graph differ, either way",
+        "the step names, in order, are the ones the chain runs"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/check-runner.test.js",
+      "file": "scripts/check-steps.mjs",
+      "mutation": "prepare no longer waits on the Android JVM test",
+      "before": "      'test:native:android',\n",
+      "after": "",
+      "note": "The needs edge removed from prepare's list; findOutputConflicts then reports the pair, which is the row below.",
+      "redTests": [
+        "removing that edge is the red this guards"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/native-tests-android-skip.test.js",
+      "file": "scripts/native-tests-android.sh",
+      "mutation": "the CI hand-off is deleted, so `check` runs it in every job",
+      "before": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ] &&\n  [ \"${NITRO_UI_ANDROID_JVM_TESTS:-}\" != \"1\" ]; then\n  echo \"test:native:android: CI runs this in the build-android job (JDK 17 + warm gradle cache) - skipped here; NITRO_UI_ANDROID_JVM_TESTS=1 runs it in this job\"\n  exit 0\nfi",
+      "after": "",
+      "redTests": [
+        "hands the run to CI's Android job rather than proving it twice"
+      ],
+      "note": "Re-recorded at fix round 2: as first written this row quoted the round-1 skip block, which the opt-in then rewrote, so `before` no longer matched the file. Re-run to red today - the script reaches gradle under CI=true (the row's `redTests` name, 324 ms)."
+    },
+    {
+      "test": "scripts/__tests__/native-tests-android-skip.test.js",
+      "file": ".github/workflows/ci.yml",
+      "mutation": "the build-android job stops running the script the skip hands off to",
+      "before": "        run: bash scripts/native-tests-android.sh",
+      "after": "        run: bash scripts/native-tests.sh",
+      "redTests": [
+        "really is run by the CI job it hands off to"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "mutation": "applyPick closes the popup before it reports the choice (D32's order inverted)",
+      "before": "  fun applyPick(id: String) {\n    if (enabled) {",
+      "after": "  fun applyPick(id: String) {\n    setOpen(false)\n    if (enabled) {",
+      "note": "The second hunk drops the trailing `setOpen(false)`. This is the test item 2 exists to run: `bun run test:native:android` went red in 2 s with it, which is the whole argument for the step being in `check`.",
+      "redTests": [
+        "aPickReportsTheChoiceThenClosesThePopup",
+        "aPickFromASubmenuOrASectionReportsUnderItsOwnIdAndStillCloses",
+        "aCloseOnlyReportsTheTransition"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-gate.test.js",
+      "file": "scripts/bench/render.mjs",
+      "mutation": "every arm's monotonic leak cell says it is gated (the shipped behaviour before X15)",
+      "before": "        cell.memory.leakMonotonic\n          ? leakGated\n            ? 'MONOTONIC (gated as a leak)'\n            : 'MONOTONIC (reported, not gated)'\n          : 'not monotonic (not gated)',",
+      "after": "        cell.memory.leakMonotonic\n          ? 'MONOTONIC (gated as a leak)'\n          : 'not monotonic (not gated)',",
+      "redTests": [
+        "labels a reference arm's monotonic climb as reported, not gated (X15)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/gate.test.js",
+      "file": "scripts/gate-core.mjs",
+      "mutation": "example/src/readme-examples.tsx is not in the check-only allow-list (the state before X15)",
+      "before": "  'example/src/readme-examples.tsx',\n",
+      "after": "",
+      "redTests": [
+        "treats the check-only allow-list as no platform at all"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/gate.test.js",
+      "file": "scripts/gate-core.mjs",
+      "mutation": "resolveGate records no platform for a bench (the state before X15)",
+      "before": "      benchPlatform: benchPlatformFromArgs(extraArgsForRun),",
+      "after": "      benchPlatform: null,",
+      "redTests": [
+        "takes a bench platform from the bench's own --platform (X15)",
+        "records the bench platform's device, not the lease's other side"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/contributing-ci-claims.test.js",
+      "file": "CONTRIBUTING.md",
+      "mutation": "the CI section names a runner label no workflow schedules on",
+      "before": "them in a `macos-26` job instead), and an Android `assembleDebug` of the",
+      "after": "them in a `macos-latest` job instead), and an Android `assembleDebug` of the",
+      "redTests": [
+        "names no runner label that no workflow uses"
+      ]
+    }
+  ],
+  "notMutated": "Item 3 (Menu's read-back) waits for a handle rather than adding an assertion, so no mutation is recorded: the only source change that turns it red is breaking `hybridRef`'s registration in the example app, which would take a device run to reach. Its evidence is that the shape which failed at X14 (`handles.get(...)` read once) no longer appears in that test, and that `harness:ios` and `harness:android` are both green on the tree.",
+  "fixRound1": {
+    "how": "Same method and same field convention as the round-1 table, appended for fix round 1 (2026-10-31, lease X15-9xz8i). Two rows re-recorded at fix round 2, both re-run to red: the ci.yml-parser row, which named the wrong file, and the hand-off row, whose `before` had been rewritten by the opt-in.",
+    "mutations": [
+      {
+        "test": "scripts/__tests__/native-tests-android-skip.test.js",
+        "file": "scripts/native-tests-android.sh",
+        "mutation": "the CI skip is keyed on CI alone, as shipped in round 1 (no job-level opt-in)",
+        "before": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ] &&\n  [ \"${NITRO_UI_ANDROID_JVM_TESTS:-}\" != \"1\" ]; then",
+        "after": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ]; then",
+        "redTests": [
+          "runs for real in the CI job it hands off to, with that job’s own env"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/native-tests-android-skip.test.js",
+        "file": "scripts/__tests__/native-tests-android-skip.test.js",
+        "mutation": "first cut of the new test's ci.yml parser, before it could step over the comment lines above the step's own `env:`",
+        "before": "    if (indent > 8) continue;\n    if (indent < 8) break;",
+        "after": "    if (indent !== 8) break;",
+        "redTests": [
+          "runs for real in the CI job it hands off to, with that job’s own env"
+        ],
+        "note": "Filed against `scripts/native-tests-android.sh` at round 1, which is not where the parser is: it is a helper in the test. Re-recorded against the helper's two lines, re-run to red (`envIndex` -1) at fix round 2."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the end-of-run Metro sweep is disabled",
+        "before": "  const leftover = await stopOwnMetro({",
+        "after": "  const leftover = await Promise.resolve([]) || await stopOwnMetro({",
+        "redTests": [
+          "stops the Metro its own run left on the leased port"
+        ],
+        "note": "True as written in round 1, and no longer the outcome: the sweep ran before the read ends were released, so a leaked server held the gate's pipes and the run hung to the 90 s jest timeout with the ledger unwritten. After fix round 2 item 3 the same mutation exits 0, writes the ledger, and reds this test's own assertion on the missing sweep line instead - which is the row `lease-metro-port.test.js / sweep disabled (re-run)` in `fixRound2`."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate-core.mjs",
+        "mutation": "ownership claims nothing (the group rule dropped)",
+        "before": "    if (group != null && group === leaderPid) owned.push(pid);",
+        "after": "    void group; void leaderPid;",
+        "redTests": [
+          "stops the Metro its own run left on the leased port"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate-core.mjs",
+        "mutation": "ownership claims every listener on the port (kills another task’s Metro)",
+        "before": "    if (group != null && group === leaderPid) owned.push(pid);",
+        "after": "    void group; if (leaderPid != null) owned.push(pid);",
+        "redTests": [
+          "leaves a Metro in another process group alone"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/lease-core.mjs",
+        "mutation": "the Metro-port exception is widened from exclusive acquires to every acquire",
+        "before": "    .filter((pair) => exclusive || !blocked.has(pair.id))",
+        "after": "    .filter(() => true)",
+        "redTests": [
+          "takes the quiet pair when a free pair’s port is served",
+          "is not handed out by acquire, which takes the other pair instead"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/lease-core.mjs",
+        "mutation": "exclusive acquires wait on Metro ports, as shipped in round 1",
+        "before": "  if (usable.length === 0) {",
+        "after": "  if (usable.length === 0 || (exclusive && portWait.length > 0)) {",
+        "redTests": [
+          "lets an exclusive acquire proceed over a busy Metro port, and says so"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the bench's own platform never reaches the ledger row (item 4's wiring)",
+        "before": "    resolved.platform ?? resolved.benchPlatform ?? null",
+        "after": "    resolved.platform",
+        "redTests": [
+          "records a bench's platform and device from its own --platform"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the Metro pre-flight is applied to non-device gates as well",
+        "before": "  if (resolved.platform != null) {\n    const preflight = metroPreflight();",
+        "after": "  const preflightAll = metroPreflight();\n  if (preflightAll !== 0) return preflightAll;\n  if (resolved.platform != null) {\n    const preflight = metroPreflight();",
+        "redTests": [
+          "leaves a run with no METRO_PORT alone (CI, a plain check)"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/check-runner.test.js",
+        "file": "scripts/check-steps.mjs",
+        "mutation": "the Kotlin step names only the root project's build directory, as shipped in round 1",
+        "before": "    writes: ['android/build', 'example/android/build'],",
+        "after": "    writes: ['example/android/build'],",
+        "redTests": [
+          "says where the Kotlin step writes, and the big half is the library module"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/lease.test.js",
+        "file": "scripts/__tests__/helpers/free-lsof-stub.js",
+        "mutation": "the shared stub points at the machine’s real lsof instead of answering \"free\"",
+        "before": "export const FREE_LSOF = { NITRO_UI_LSOF_BIN: bin };",
+        "after": "export const FREE_LSOF = { NITRO_UI_LSOF_BIN: '/usr/sbin/lsof' };",
+        "redTests": [
+          "prints an env file and remembers the lease",
+          "refuses the third concurrent task, and only the third",
+          "settles a real race with exactly two winners",
+          "lets a short ttl and a long one coexist (review M1)",
+          "hands one stale lock to one stealer, and no pair to both",
+          "goes quiet once the same device is leased"
+        ],
+        "note": "observed while another worktree’s harness held pair-a’s Metro: exactly the six failures this helper exists to prevent"
+      }
+    ]
+  },
+  "fixRound2": {
+    "how": "Same method and same field convention, for fix round 2 (2026-10-31, no lease: check-only tooling). Driven by a per-round script (not committed) that applies the row's `before` -> `after`, runs the suite, and restores the file, refusing any needle that is absent or ambiguous.",
+    "mutations": [
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the drain ends at whichever pipe closes first, as shipped in round 1",
+        "before": "    const markClosed = () => {\n      streamsClosedCount += 1;\n      if (streamsClosedCount < 2) return;\n      childStreamsClosed = true;\n      drainNow?.();\n    };",
+        "after": "    const markClosed = () => {\n      childStreamsClosed = true;\n      drainNow?.();\n    };",
+        "redTests": [
+          "keeps the tail written after the run exits, when it arrives on the slower pipe"
+        ],
+        "note": "364 ms. The log loses the second summary: `Expected substring: \"Tests: 7 passed, 7 total\"`."
+      },
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the read ends on the child's pipes are not released after the sweep",
+        "before": "  for (const stream of [childStreams?.out, childStreams?.err]) {\n    try {\n      stream?.destroy();\n    } catch {\n      /* already gone */\n    }\n  }",
+        "after": "  void childStreams;",
+        "redTests": [
+          "exits with its code when a leaked descendant holds the pipes open"
+        ],
+        "note": "`Expected: < 8000 / Received: 10292` - the gate sat for the holder's whole 10 s instead of its 2 s drain."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the gate's own notes go to the terminal only, not into the run's log",
+        "before": "  const note = (message) => {\n    process.stderr.write(message);\n    logText += message;\n    if (logStreamOpen) logStream.write(message);\n  };",
+        "after": "  const note = (message) => {\n    process.stderr.write(message);\n  };",
+        "redTests": [
+          "stops the Metro its own run left on the leased port"
+        ],
+        "note": "stderr still had the line; the transcript read back from the ledger's `logPath` did not."
+      },
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "SIGHUP is not forwarded, as shipped in round 1",
+        "before": "const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];",
+        "after": "const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'];",
+        "redTests": [
+          "forwards SIGHUP to the running gate, re-raises it, and still writes the ledger"
+        ],
+        "note": "The child's trap never fired: a detached child is in its own group, so a hangup no longer reaches it by inheritance."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/__tests__/lease-metro-port.test.js",
+        "mutation": "the fixture holds the event loop open instead of promising its own exit (round 1's shape)",
+        "before": "  'tryBind(0);const die=setTimeout(()=>process.exit(0),60000);if(die.unref)die.unref();';",
+        "after": "  'tryBind(0);setTimeout(()=>{},1e6);';",
+        "redTests": [
+          "exits by itself even if every killer fails"
+        ],
+        "note": "`Expected: false / Received: true` after 12 s of nobody killing it - the shape that left two real listeners on ports 59909 and 60342. A red case is itself a leak path (a failing assertion gets no `finally` that has not already run), so the block also gained an `afterAll` that kills every pid file it wrote: the same mutation run again afterwards left no process behind, and the two survivors this row produced at its first run are the evidence for that."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/__tests__/lease-metro-port.test.js",
+        "mutation": "the pid file is looked at once instead of polled",
+        "before": "  const deadline = Date.now() + limitMs;\n  for (;;) {\n    if (existsSync(pidFile)) {",
+        "after": "  const deadline = Date.now() + limitMs;\n  for (let once = 0; once < 1; once += 1) {\n    if (existsSync(pidFile)) {",
+        "redTests": [
+          "waits for a writer that is late, rather than reading a file that is not there"
+        ],
+        "note": "`Expected: > 750 / Received: 28` ms. With a writer that has not arrived, the one-look version returns `null` - the ENOENT that failed once in four under a parallel run."
+      },
+      {
+        "test": "scripts/__tests__/gate.test.js",
+        "file": "scripts/gate-core.mjs",
+        "mutation": "the sweep no longer excludes the leader pid, so a recycled pid matches its own group",
+        "before": "    if (pid === leaderPid) continue;",
+        "after": "    void leaderPid;",
+        "redTests": [
+          "never targets the leader pid itself, even when its group matches"
+        ],
+        "note": "The sweep claimed pid 100, which is the one process the gate knows for certain has already exited."
+      },
+      {
+        "test": "scripts/__tests__/free-lsof-stub.test.js",
+        "file": "scripts/__tests__/helpers/free-lsof-stub.js",
+        "mutation": "the stub directory gets a random suffix again, one per import",
+        "before": "const dir = join(tmpdir(), 'nitro-ui-free-lsof');",
+        "after": "const dir = join(\n  tmpdir(),\n  'nitro-ui-free-lsof-' + Math.random().toString(36).slice(2, 8)\n);",
+        "redTests": [
+          "is where this process and the next one both expect it, and nowhere else",
+          "hands every process the same path, so one run leaves one directory",
+          "builds itself once in an empty temp directory, and reuses it after"
+        ],
+        "note": "Three of four rows red: four imports, four different paths, two directories in one private TMPDIR."
+      },
+      {
+        "test": "scripts/__tests__/lease-metro-port.test.js",
+        "file": "scripts/gate.mjs",
+        "mutation": "the end-of-run Metro sweep is disabled (re-run of the fix-round-1 row)",
+        "before": "  const leftover = await stopOwnMetro({\n    port: process.env.METRO_PORT,\n    leaderPid: childPid,\n    log: note,\n  });",
+        "after": "  const leftover = await Promise.resolve([]);",
+        "redTests": [
+          "stops the Metro its own run left on the leased port"
+        ],
+        "note": "2.9 s, not a 90 s hang: with the pipes released the gate exits and the ledger is written, and what is missing is the sweep line. This is the row the fix-round-1 note now points at."
+      },
+      {
+        "test": "scripts/__tests__/native-tests-android-skip.test.js",
+        "file": "scripts/__tests__/native-tests-android-skip.test.js",
+        "mutation": "the ci.yml parser cannot step over the comment lines above the step's own `env:`",
+        "before": "    if (indent > 8) continue;\n    if (indent < 8) break;",
+        "after": "    if (indent !== 8) break;",
+        "redTests": [
+          "runs for real in the CI job it hands off to, with that job’s own env"
+        ],
+        "note": "`Expected: > -1 / Received: -1`. Re-runs the fix-round-1 row, which had been filed against the wrong file."
+      },
+      {
+        "test": "scripts/__tests__/native-tests-android-skip.test.js",
+        "file": "scripts/native-tests-android.sh",
+        "mutation": "the CI hand-off is deleted, so `check` runs it in every job",
+        "before": "if [ -n \"${CI:-}\" ] && [ \"${CI:-}\" != \"false\" ] &&\n  [ \"${NITRO_UI_ANDROID_JVM_TESTS:-}\" != \"1\" ]; then\n  echo \"test:native:android: CI runs this in the build-android job (JDK 17 + warm gradle cache) - skipped here; NITRO_UI_ANDROID_JVM_TESTS=1 runs it in this job\"\n  exit 0\nfi",
+        "after": "",
+        "redTests": [
+          "hands the run to CI's Android job rather than proving it twice"
+        ],
+        "note": "Re-runs round-1 row 5 against the shipped text: the script proceeds to gradle under `CI=true`."
+      },
+      {
+        "test": "scripts/__tests__/free-lsof-stub.test.js",
+        "file": "scripts/__tests__/helpers/free-lsof-stub.js",
+        "mutation": "the shared stub is trusted because it exists, not checked against what the helper says",
+        "before": "if (current !== contents) {",
+        "after": "if (current == null) {",
+        "redTests": [
+          "replaces a stub on disk that no longer matches what the helper says"
+        ],
+        "note": "`Expected: not \"#!/bin/sh\" - a stale stub on disk keeps answering exit 0 for every suite that imports it."
+      }
+    ]
+  }
+}

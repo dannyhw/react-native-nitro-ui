@@ -36,6 +36,8 @@ import {
   EXCLUSIVE_TTL_MINUTES,
   assertLeasable,
   leaseAcquiredAtMs,
+  metroPortReason,
+  portListeners,
   pruneExpired,
   decideAcquire,
   newLeaseId,
@@ -359,6 +361,13 @@ function acquire({ devices, paths, options, log }) {
   const leaseId = newLeaseId(options.task, Date.now());
 
   for (;;) {
+    // X15 item 1: a free entry in `leases.json` is not a free Metro port. Read the
+    // ports *before* taking the lock - the question goes to a subprocess, and the
+    // lease lock is not something to hold while waiting for one - and let the
+    // decision below treat a busy pair the way it treats a leased one. The snapshot
+    // can be a moment stale in either direction; that is the same window the lease
+    // file itself has, and the gate's own pre-flight (`gate.mjs`) is the second net.
+    const portBlocked = metroPortBlockers({ devices, log });
     let attempt;
     try {
       attempt = withLock({
@@ -378,7 +387,9 @@ function acquire({ devices, paths, options, log }) {
           );
           if (sameTask != null) {
             // Idempotent: a task that asks twice keeps what it already has, so a
-            // retried command cannot consume a second pair.
+            // retried command cannot consume a second pair. No Metro check either:
+            // the server on this pair's port would be this task's own run, which is
+            // precisely what re-sourcing an env file *during* a suite looks like.
             return {
               kind: 'acquired',
               lease: sameTask,
@@ -394,6 +405,7 @@ function acquire({ devices, paths, options, log }) {
             platform: options.platform,
             task: options.task,
             pending: others,
+            portBlocked,
           });
           if (!decision.ok) {
             if (options.exclusive) {
@@ -434,7 +446,12 @@ function acquire({ devices, paths, options, log }) {
           if (others.length > 0) next.pendingExclusive = others;
           else delete next.pendingExclusive;
           writeJsonAtomic(paths.leases, next);
-          return { kind: 'acquired', lease, pair: decision.pair };
+          return {
+            kind: 'acquired',
+            lease,
+            pair: decision.pair,
+            note: decision.note ?? null,
+          };
         },
       });
     } catch (error) {
@@ -658,6 +675,10 @@ function main(argv) {
   }
 
   const { lease, pair } = result;
+  // What an exclusive acquire decided over a busy Metro port (X15 review): it does not
+  // wait for a port a bench never uses, but the human about to measure 8 hours of load
+  // numbers has to know somebody's Metro is still on the machine.
+  if (result.note != null) log(`lease: ${result.note}`);
   const pool = poolFor({ devices, paths, options, log });
   if (lease.exclusive && pool != null) {
     // The one reap an `acquire` runs (X11 fix round 2): an exclusive lease *promises* a quiet
@@ -718,6 +739,46 @@ function main(argv) {
     process.stdout.write(envFile);
   }
   return 0;
+}
+
+/**
+ * Which configured pairs have a Metro port a live process still serves, and why.
+ *
+ * `lsof` is one subprocess per port, so the whole pool is answered in one pass rather
+ * than per candidate pair, and the caller hands the result to `decideAcquire`, which is
+ * where "usable pair" is decided.
+ *
+ * A port the machine cannot ask about (`lsof` missing, refused) counts as free and is
+ * said out loud once, because a machine that cannot check must still be able to lease
+ * devices - see `portListeners`' fail-open.
+ *
+ * @param {object} options
+ * @param {ReturnType<typeof normalizeDevices>} options.devices
+ * @param {(message: string) => void} [options.log]
+ * @returns {Array<{id: string, reason: string}>}
+ */
+function metroPortBlockers({ devices, log = () => {} }) {
+  const blockers = [];
+  let warned = false;
+  for (const pair of devices.pairs ?? []) {
+    const answer = portListeners({ port: pair.metroPort });
+    if (!answer.checked) {
+      if (!warned) {
+        warned = true;
+        log(
+          `lease: could not check the pool's Metro ports ` +
+            `(${String(answer.error)}) - leasing on the lease file alone`
+        );
+      }
+      continue;
+    }
+    if (answer.listeners.length === 0) continue;
+    blockers.push({
+      id: pair.id,
+      reason: metroPortReason(pair, answer.listeners),
+    });
+  }
+  return blockers;
 }
 
 /**

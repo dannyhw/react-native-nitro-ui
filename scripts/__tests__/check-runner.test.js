@@ -66,9 +66,9 @@ describe('the check step list is the chain', () => {
     for (const name of parsed.names) {
       expect(packageJson.scripts[name]).toEqual(expect.any(String));
     }
-    // The old order, kept as the reference: 16 steps, `prepare` before the three
+    // The old order, kept as the reference: 17 steps, `prepare` before the three
     // that read `lib/`.
-    expect(parsed.names).toHaveLength(16);
+    expect(parsed.names).toHaveLength(17);
     expect(parsed.names.indexOf('prepare')).toBeLessThan(
       parsed.names.indexOf('api-extractor:check')
     );
@@ -81,13 +81,13 @@ describe('the check step list is the chain', () => {
     const chain = serialChainFromSteps(CHECK_STEPS);
     const added = `${chain} && bun run smoke:pack`;
     expect(stepsFromSerialChain(added).names).not.toEqual(stepNames());
-    expect(stepsFromSerialChain(added).names.slice(0, 16)).toEqual(stepNames());
+    expect(stepsFromSerialChain(added).names.slice(0, 17)).toEqual(stepNames());
 
     const dropped = stepsFromSerialChain(
       chain.replace(' && bun run readme:check', '')
     ).names;
     expect(dropped).not.toEqual(stepNames());
-    expect(dropped).toHaveLength(15);
+    expect(dropped).toHaveLength(16);
   });
 
   it('the runner refuses to start when the chain and the graph differ, either way', () => {
@@ -166,6 +166,7 @@ describe('the check step list is the chain', () => {
       'format',
       'test',
       'test:native',
+      'test:native:android',
       'perf:renders',
       'nitrogen:check',
       'registry:check',
@@ -251,6 +252,10 @@ describe('steps that share an output are ordered', () => {
       'prepare writes nitrogen while lint reads it',
       'prepare writes nitrogen while format reads it',
       'prepare writes nitrogen/generated while test reads it',
+      // X15 item 2: the Android JVM test compiles the library, whose autolinking adds
+      // `nitrogen/generated/android/kotlin` to the Kotlin source set - so bob deleting
+      // the directory underneath it is the same race the three above are.
+      'prepare writes nitrogen/generated while test:native:android reads it',
       'prepare writes nitrogen/generated while perf:renders reads it',
       'prepare writes nitrogen/generated while nitrogen:check reads it',
     ]);
@@ -319,6 +324,25 @@ describe('steps that share an output are ordered', () => {
     expect(findOutputConflicts(ungrouped).map((c) => c.kind)).toEqual([
       'test and perf:renders both write jest-cache',
     ]);
+  });
+
+  it('says where the Kotlin step writes, and the big half is the library module', () => {
+    // X15 review 5b. This step first declared `example/android/build` alone, which is the
+    // root project's directory: gradle drops a couple of config-cache files there. Measured
+    // by touching `MenuModelTest.kt` and re-running, the step leaves 43 new or changed files
+    // under `android/build` - the library module's `kotlin/`, `test-results/` and
+    // `reports/`, 215 MB in total - and none under the app's directory. A step that names a
+    // directory it barely writes is a step whose conflicts nobody can find, so the assertion
+    // is on both halves and on the order of the claim.
+    const step = CHECK_STEPS.find(
+      (entry) => entry.name === 'test:native:android'
+    );
+    expect(step.writes).toEqual(
+      expect.arrayContaining(['android/build', 'example/android/build'])
+    );
+    // The app module is *not* written by this step, and saying it was would put a phantom
+    // conflict on a step that builds the app.
+    expect(step.writes).not.toContain('example/android/app/build');
   });
 
   it('the lib readers wait for the build', () => {
@@ -998,7 +1022,7 @@ describe('check.mjs, spawning real steps', () => {
     }
   }, 60_000);
 
-  it('refuses an argument it does not know instead of handing it to sixteen steps', () => {
+  it('refuses an argument it does not know instead of handing it to every step', () => {
     const run = runRunner(['--update-baseline']);
     expect(run.status).toBe(2);
     expect(run.stderr).toContain('unknown argument');
