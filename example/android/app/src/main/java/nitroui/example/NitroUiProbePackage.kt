@@ -207,8 +207,14 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
   /**
    * Depth-first search for the first hosted control in the app's view tree.
    *
-   * Any control will do: the rule under test is `NitroComposeHost`'s, shared by all of
-   * them, and the harness's own screen has a Switch on it.
+   * The one control on screen is the harness's own: in harness mode the example's component
+   * screen is never rendered, so the tree is the test's root and this finds the control the
+   * running test mounted. That is what makes the probe's precondition a test concern - the
+   * test has to keep a control mounted (see `Recycling.harness.tsx`), because walking after
+   * the last `unmount()` finds an empty app and answers `no-host`.
+   *
+   * Any control will do for the answer: the rule under test is `NitroComposeHost`'s, shared
+   * by all of them.
    */
   private fun findHost(
     view: android.view.View

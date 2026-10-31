@@ -124,7 +124,10 @@ code in the diff. Device proofs from round 1 that still stand are kept.
   first sample twice, so the churn stops being sampled -> `expected 5098792 not to be 5098792`
   (`harness:ios:Recycling`, 31 Oct 13:39). -> and the reverse: assert `collectGarbage` *is*
   defined -> `expected undefined to be defined`, which is the assertion that says the collect
-  handle does not exist.
+  handle does not exist. **Withdrawn in round 2** along with the assertions themselves: those two
+   mutations go red only on an engine upgrade, never on a nitro-ui regression, which is the
+   signature of a tripwire and not of a gate. The `MEASURE` runs that established the numbers stay
+   in `docs/tasks/F6/failures/` as the evidence behind the corrected wording.
 - `Conformance › · SegmentedControl` -> delete `didApplyDefault = false` from Android's
   `SegmentedControlModel.reset` -> `the segment the row paints reads 0 where the props say 1`
   (31 Oct 10:41). The same mutation in iOS's `prepareForRecycle` goes red on the same line
@@ -205,13 +208,28 @@ code in the diff. Device proofs from round 1 that still stand are kept.
   fails on `expect(run.status).toBe(1)`. It cost one `check` cycle here. Either strip the
   variable in `runCli`/`spawnCli` unless a case passes it explicitly, or have the test name it
   `undefined`; the first keeps any future case from inheriting the same hole.
-- iOS recycling leak gate: the recycling gate's *leak* half is Android-only, and this round
-  measured why — iOS has a live `performance.memory.usedJSHeapSize` but no way to force a
-  collection and no `jsHeapSizeLimit`, and the retention shape lives in native memory anyway.
-  The gate for it is a JS-visible `HermesInternal.collectGarbage()` handle, or an iOS example-app
-  probe with a live-host count like Android's `heapStats`; either makes the churn-slope gate
-  buildable, and `Recycling.harness.tsx`'s iOS branch goes red when one appears so nobody adds
-  one quietly.
+- iOS recycling leak gate: the recycling gate's *leak* half is Android-only because **no native
+  iOS probe exists yet, and the retention to gate is native** (SwiftUI/UIKit objects, not the JS
+  heap — `performance.memory` is present and live, but it is the wrong layer). The options are an
+  example-app iOS `NitroUiProbe` with a live-host count (an `init`/`deinit` pair on
+  `NitroSwiftUIHost`, deterministic under ARC with no GC question), or a process-footprint reading.
+  Full line in `docs/tasks/FOLLOWUPS.md`; the pending test is
+  `Recycling.harness.tsx`'s `it.skip`, which says the same sentence.
+- Recycling: `sawRecycle` in the sizing-policy test is a *class-level* witness — a `recycled` mark
+  for the shared perf id, which an inline picker's own pool entry also satisfies. It proves this
+  control class hit the drop-and-pool path, not that the compact field was reused. The per-object
+  proof is the Switch identity test's; giving DatePicker its own lifetime probe would be a second
+  `hybridRef` method for a weaker copy of it.
+- Recycling: the `giveUps` / `floatingFlushes` zero-delta has no proof that the counter can move —
+  only the two post-drop counters are driven (by `simulatePostDropMeasure`). Both are process-wide
+  and read on every churn, but "the M2 shape stayed unreachable" is B1's hand-measured claim
+  extended, not one this branch demonstrated. The M2 shape needs its own probe, or a JVM-level one
+  on the same companion, to be a measured negative.
+- Recycling: item 1's red proofs are Android-only, which is the honest limit of the shape. iOS
+  recycles — `RCTComponentViewRegistry` pools and calls `prepareForRecycle` — and the identity test
+  goes green there, but the counter-reset and never-pooled mutations were only run on Android; the
+  iOS equivalents would be mutations in `RCTComponentViewRegistry` behaviour or the Swift
+  `prepareForRecycle`, neither of which is a one-line edit behind a build.
 
 ## Merge note — the JVM tests
 

@@ -739,96 +739,43 @@ if (Platform.OS === 'android') {
   });
 } else {
   /**
-   * iOS: measured, not cited, because round 1 of this file asserted two absences that
-   * turned out not to be true. It said `HermesInternal` does not exist and
-   * `performance.memory` is unimplemented; a run says `HermesInternal` **is** present and
-   * `performance.memory.usedJSHeapSize` **is** readable and live. So the reason iOS has no
-   * recycling leak gate is not that JS cannot see memory, and the reason has to be stated
-   * as three facts this test measures every run:
+   * iOS has no recycling leak gate, and the reason is that **no native iOS probe has been
+   * written yet — and the retention to gate is native**, not JS. Registered as pending
+   * rather than deleted so the gap is in the run's output, with the reason attached.
    *
-   * 1. **No way to force a collection.** `HermesInternal` exposes no enumerable methods,
-   *    and neither `getHeapInfo` nor `collectGarbage` is among them. The Android gate is a
-   *    slope on a *post-collect* floor (`Runtime.totalMemory()` after `System.gc()`);
-   *    without a collect, a series of readings measures when the GC happened to run, not
-   *    what is retained.
-   * 2. **No ceiling to size a tolerance against.** `jsHeapSizeLimit` is `null`, so the
-   *    "the floor still has room to grow" half of the Android assertion — which is what
-   *    stops a pass at the heap limit — has no iOS equivalent.
-   * 3. **The leak this gate exists to catch is not on the JS heap.** On Android the
-   *    retention B1 measured was Java-heap objects (host, `ComposeContent`,
-   *    `AndroidComposeView`, ~42 KiB and one lifecycle observer each), which is why the
-   *    probe reads the Java heap. On iOS the same shape would be SwiftUI/UIKit objects in
-   *    native memory, which a JS-heap number cannot see at any sampling rate.
+   * ## Why that is the reason, and what earlier drafts of this comment got wrong
    *
-   * Point 1 is why the number cannot be patched into a gate anyway, and the test below
-   * shows the number *is* live rather than frozen — `usedJSHeapSize` did move across a
-   * churn (5.97 MiB before, 8.60 MiB after 200 Switches, in the run that established
-   * this). A live number you cannot pin to a collection is still not a floor.
+   * Round 1 said Hermes was absent and `performance.memory` unimplemented. Both were
+   * false: `HermesInternal` is there, and `usedJSHeapSize` is readable and live. Round 2
+   * then argued from three facts about the JS side and was wrong in the same way twice
+   * more, by reasoning about plain JS when the Android gate does not use plain JS at all:
    *
-   * Registered, not skipped: a skipped test asserts nothing. This one pins the three facts
-   * and has a future — the day a collect handle or a heap limit appears, it goes red and
-   * tells whoever added it to write the gate (the follow-up in
-   * `docs/tasks/FOLLOWUPS.md` is the same instruction).
+   * - "No way to force a collection" holds only from JS. Android's forced `System.gc()`
+   *   happens *inside the app*, in `NitroUiProbeModule`, not in JS; an iOS probe could
+   *   collect the same way (JSI `instrumentation().collectGarbage()`), so the absence is
+   *   in our probe, not in the platform.
+   * - "Native retention" does not need a collect at all under ARC. A refcount release is
+   *   synchronous, so a live-host count — an init/deinit pair on `NitroSwiftUIHost` — or
+   *   the process footprint is deterministic without any GC question.
+   *
+   * The Android gate reads the Java heap because that is where B1's retention lived
+   * (`host` → `ComposeContent` → `AndroidComposeView`, plus one lifecycle observer per
+   * control). iOS's equivalent is SwiftUI/UIKit objects in native memory, so the readout
+   * that would gate it is a native one: an iOS `NitroUiProbe` module with a live-host
+   * counter or a footprint reading. Neither exists. That is the whole gap, and it is the
+   * follow-up in `docs/tasks/FOLLOWUPS.md`.
+   *
+   * What is deliberately *not* asserted here: any of the engine facts above. They go red
+   * only when Hermes or React Native changes, never when nitro-ui regresses, and a gate
+   * that can only fail for the wrong reason trains people to ignore it. What iOS *is*
+   * gated on is the recycle machinery itself — the marks and the per-object identity
+   * checks above run on both platforms, and they are the part of the rule that broke.
    */
-  /**
-   * `performance.memory.usedJSHeapSize` on both sides of a churn, because the test needs
-   * the pair and `churnCycle` returns nothing.
-   */
-  async function sampleUsedJsHeapAcrossChurn(prefix: string): Promise<{
-    before: number;
-    after: number;
-  }> {
-    const read = () =>
-      (
-        globalThis as unknown as {
-          performance?: { memory?: { usedJSHeapSize?: number } };
-        }
-      ).performance?.memory?.usedJSHeapSize ?? 0;
-    const before = read();
-    await churnCycle(prefix);
-    await settle(400);
-    return { before, after: read() };
-  }
-
-  describe('recycling · what iOS can measure about leaks (F6)', () => {
-    it('has a JS heap number but no way to pin it to a collection, so no floor gate', async () => {
-      const g = globalThis as unknown as {
-        HermesInternal?: Record<string, unknown>;
-        performance?: { memory?: Record<string, number | undefined> };
-      };
-      const hermes = g.HermesInternal;
-      const asHeap = hermes as unknown as {
-        getHeapInfo?: unknown;
-        collectGarbage?: unknown;
-      };
-      const memory = g.performance?.memory;
-      const used = memory?.usedJSHeapSize;
-
-      // The readout has to be a real number, or the rest of this test is about nothing.
-      expect(typeof used).toBe('number');
-      expect(used).toBeGreaterThan(0);
-      expect(memory?.jsHeapSizeLimit).toBeNull();
-      expect(asHeap?.getHeapInfo).toBeUndefined();
-      expect(asHeap?.collectGarbage).toBeUndefined();
-
-      // And live, not frozen: `performance.memory` could in principle be a constant stub,
-      // in which case "we could not gate on it" would be the wrong reason. Sampled across
-      // a real churn, it has to answer differently. Measured on the simulator, it is also
-      // *not* monotonic in an obvious way — an 8 MiB JS ballast made it go down (5.97 MiB
-      // before, 4.30 MiB holding the ballast, 9.02 MiB after a 200-Switch churn) — which is
-      // exactly the problem: a series of uncollected readings tracks when the GC happened
-      // to run, so only its direction is safe to assert, not its sign or its slope.
-      const samples = await sampleUsedJsHeapAcrossChurn('ios-readout');
-      // Thrown evidence is what survives a device run, but the pair is worth logging too:
-      // it is the number a future reader needs in order to judge whether a slope gate
-      // would even be stable here.
-      console.log(
-        `    · iOS usedJSHeapSize across a churn: ${String(
-          samples.before
-        )} -> ${String(samples.after)} (no forced collect, no limit)`
-      );
-      expect(samples.after).toBeGreaterThan(0);
-      expect(samples.after).not.toBe(samples.before);
-    });
+  describe('recycling · churn does not leak (iOS)', () => {
+    it.skip(
+      'is pending: no native iOS probe has been written yet, and the retention to ' +
+        'gate is native (see the comment above, and the iOS line in FOLLOWUPS)',
+      () => {}
+    );
   });
 }
