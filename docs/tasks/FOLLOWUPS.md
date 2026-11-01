@@ -85,7 +85,7 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - `--check` after a narrowed mint compares only the rows its own run measured, so it cannot show that a merged file's older cells still gate; a `--check-all`, or a docs note to run one full-plan `--check` on the mint host, would close that (A6).
 - `lease.mjs acquire --exclusive` powers off every booted simulator on the machine, including another project's that `doctor` already flagged; on a shared or linked machine it should list what it will switch off first (A6).
 - Android inline `DatePicker` is clipped inside its 320-wide box: the Saturday column is cut off and the "F S" headers run together (`docs/images/components/date-picker-android.png`, PR #11). A user-visible sizing bug.
-- iOS `Menu`, Item Lists story: the File menu omits the untitled destructive "Delete" group that Android shows (PR #11).
+- iOS `Menu` untitled section: **done by G9** — the `Divider()` header made SwiftUI build an empty group; see `G9-ios-menu-untitled-group.report.md`.
 - Android `Menu`: the dropdown is narrow enough to truncate "AirDrop" (PR #11).
 - `lease.mjs acquire --exclusive --boot` ignores `--boot`: the boot branch in `poolHandoff` is `if (!lease.exclusive)`, so a bench host boots its leased simulator by hand (A6b report).
 - `gate.mjs bench --help` records a FAIL row in the branch ledger; a help probe should not be a gate run (A6b report).
