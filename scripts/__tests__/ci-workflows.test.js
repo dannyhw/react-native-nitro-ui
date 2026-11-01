@@ -846,6 +846,63 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     }
   });
 
+  /**
+   * `-accel-check` cannot be allowed to decide how long the preflight takes.
+   *
+   * The step's own purpose is to describe a machine whose emulator is misbehaving, so
+   * the binary that answers "is KVM usable?" is asked exactly when it may never answer —
+   * and this job has already lost a 90-minute step to a diagnostics command that blocked
+   * on a tool. So the preflight asks it with a deadline, and the deadline is what this
+   * executes: a `-accel-check` that never returns must still leave a preflight that
+   * finishes, exits 0, and prints the rest of the machine.
+   *
+   * The budget is overridden to two seconds so the case is fast, and paired with the
+   * healthy stub everywhere else — the same rule `ci-emulator-diagnostics.mjs` follows,
+   * that a shortened deadline must be tested alongside a tool that is merely alive,
+   * since a guard that only fires for a knob nobody sets is not a guard.
+   */
+  it('the preflight does not wait forever for -accel-check', () => {
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const step = (job.steps ?? []).find((candidate) =>
+      String(candidate.name ?? '').includes('Show the emulator configuration')
+    );
+    const box = sandbox({ accel: 'hang' });
+    const startedAt = Date.now();
+    try {
+      const ran = runStepBody(String(step.run), {
+        ...box,
+        env: { ...box.env, NITRO_UI_CI_ACCEL_TIMEOUT: '2' },
+      });
+      const out = String(ran.stdout ?? '') + String(ran.stderr ?? '');
+      expect({
+        status: ran.status,
+        // The stub really was asked — otherwise "it did not hang" would only mean the
+        // step never reached the line the bound is for.
+        asked: out.includes('SANDBOX_ACCEL_HANG'),
+        saidItGaveUp: out.includes('gave no answer in 2s'),
+        // And the rest of the step still ran, which is the reason this is a per-command
+        // deadline rather than a whole-step one.
+        printedRest:
+          out.includes('gpu mode:') &&
+          out.includes('avd (from rn-harness.config.mjs): nitroui'),
+        elapsedMs: Date.now() - startedAt,
+      }).toEqual(
+        expect.objectContaining({
+          status: 0,
+          asked: true,
+          saidItGaveUp: true,
+          printedRest: true,
+        })
+      );
+      // Two seconds of patience plus the rest of the step's own work. The stub stops
+      // answering for 25 s, so this is the line that separates a bounded call from an
+      // unbounded one: without the guard the body waits for the stub and lands at ~26 s.
+      expect(Date.now() - startedAt).toBeLessThan(20_000);
+    } finally {
+      box.dispose();
+    }
+  });
+
   /* The diagnostics pair, executed. Both of these steps exist only to leave
    * evidence, and both managed not to: run 41256853746's Android job reached them
    * with nothing to explain, and the collect step's last command was
@@ -886,15 +943,17 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
    * `node scripts/ci-avd-name.mjs`, and that line is part of what is under test, so
    * it reads the real config rather than a copy that could disagree with it.
    *
-   * @param {{avd?: boolean, adb?: 'none' | 'path' | 'platform-tools'}} shape what the
-   *   machine looks like: whether the harness got as far as creating an AVD, and
-   *   where (or whether) `adb` can be found.
+   * @param {{avd?: boolean, adb?: 'none' | 'path' | 'platform-tools' | 'hang' | 'slow',
+   *   accel?: 'ok' | 'hang', hangTools?: boolean}} options shape what the machine
+   *   looks like: whether the harness got as far as creating an AVD, where (or
+   *   whether) `adb` can be found, and whether `-accel-check` answers at all.
    * @returns {{cwd: string, home: string, env: Record<string,string>, androidHome: string,
    *   diag: (name: string) => string, dispose: () => void}}
    */
   function sandbox({
     avd = false,
     adb = 'none',
+    accel = 'ok',
     hangTools = adb === 'hang',
   } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nui-ci-diag-'));
@@ -911,11 +970,24 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     // `-accel-check` is the one external binary the preflight needs, and the
     // machine running this test may not have an SDK. The stub says what the real one
     // says on a runner with KVM, so the assertion is about the step plumbing to it.
+    // `accel: 'hang'` is the shape that bound exists for: the question asked of a
+    // machine whose emulator is wedged, which is the machine that gets here.
     const emulatorBin = path.join(androidHome, 'emulator');
     fs.mkdirSync(emulatorBin, { recursive: true });
     fs.writeFileSync(
       path.join(emulatorBin, 'emulator'),
-      '#!/bin/sh\nif [ "$1" = "-accel-check" ]; then echo "kvm usable"; fi\n',
+      accel === 'hang'
+        ? [
+            '#!/bin/sh',
+            '/bin/echo "SANDBOX_ACCEL_HANG ran: $*" >&2',
+            // Self-limiting rather than `sleep 600`: the mutation this case exists to
+            // catch leaves the step body with nothing to kill it, and a stub that outlives
+            // the test is an orphan on a machine running other tasks' emulators. Long
+            // enough to outlast any budget the step might honestly set.
+            'exec sleep 25',
+            '',
+          ].join('\n')
+        : '#!/bin/sh\nif [ "$1" = "-accel-check" ]; then echo "kvm usable"; fi\n',
       { mode: 0o755 }
     );
     const avdDir = path.join(home, '.android', 'avd', 'nitroui.avd');
@@ -1094,6 +1166,9 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     if (hangTools) {
       warm([path.join(androidHome, 'platform-tools', 'adb'), 'devices']);
       warm([path.join(bin, 'sudo'), '-n', 'dmesg']);
+    }
+    if (accel === 'hang') {
+      warm([path.join(androidHome, 'emulator', 'emulator'), '-accel-check']);
     }
     return {
       cwd,

@@ -200,6 +200,48 @@ async function collectTrace(
   }
 }
 
+/**
+ * The `hybridRef` handle for the control a test just rendered, once it arrives.
+ *
+ * `hybridRef` fires on a props turn *after* the mount that puts the view on screen, so
+ * reading the module-level capture right after a render is a race the runner wins at
+ * load and loses at rest: CI 41282238854 measured the box at `61.00x28.00` and the
+ * content as `null` in the same test, at load1 394 on 3 cores. The box is Fabric's, so
+ * it was already right; the handle had simply not been handed over yet. Waiting for the
+ * handle is waiting for a thing to exist, which is allowed; the assertions on what it
+ * then reports are untouched.
+ */
+async function handleArrived(what: string): Promise<SwitchHandle> {
+  return pollUntil(
+    () => hybrid,
+    () =>
+      new Error(
+        `no hybridRef handle for ${what} — the control rendered, but never handed itself over.`
+      )
+  );
+}
+
+/**
+ * What the hosted control measured, once it has measured.
+ *
+ * Same race one level in: the host caches `nil` until its first layout pass has run,
+ * and `measureContent()` answers that as `0x0` rather than blocking for the main thread.
+ * So a read can be early in two different ways — no handle, or a handle that has not
+ * measured yet — and both are "not yet", not "wrong". This waits for a real size, which
+ * is the only answer the test can compare against; a control that never measures one
+ * still goes red, on the message below.
+ */
+async function measuredContent(what: string): Promise<Size> {
+  const handle = await handleArrived(what);
+  return pollUntil(
+    () => {
+      const size = handle.measureContent();
+      return size.width > 0 && size.height > 0 ? size : null;
+    },
+    () => new Error(`${what}: measureContent() never reported a size.`)
+  );
+}
+
 /** Enough to read a first frame: the drawn sample has arrived. */
 const hasDrawnSample = (events: NitroUiSizingTraceEvent[]) =>
   events.some((event) => event.stage === 'drew');
@@ -359,7 +401,7 @@ describe('Sizing · intrinsic (T11)', () => {
       <Switch defaultValue testID="cold" hybridRef={captureHybrid} />
     );
     const box = await waitForTestId('cold');
-    const content = hybrid?.measureContent() ?? null;
+    const content = await measuredContent('the cold Switch');
     const trace = await collectTrace(hasDrawnSample);
 
     console.log(
@@ -368,13 +410,12 @@ describe('Sizing · intrinsic (T11)', () => {
         `d=${JSON.stringify(delta(before, stats()))}`
     );
 
-    expect(content).not.toBeNull();
     expect(boxMatches(box, expectedBox!)).toBe(true);
-    expect(Math.abs(content!.width - expectedBox!.width)).toBeLessThan(1.5);
-    expect(Math.abs(content!.height - expectedBox!.height)).toBeLessThan(1.5);
+    expect(Math.abs(content.width - expectedBox!.width)).toBeLessThan(1.5);
+    expect(Math.abs(content.height - expectedBox!.height)).toBeLessThan(1.5);
     // The invariant that holds in every environment: the box is the control.
-    expect(Math.abs(box!.width - content!.width)).toBeLessThan(0.6);
-    expect(Math.abs(box!.height - content!.height)).toBeLessThan(0.6);
+    expect(Math.abs(box!.width - content.width)).toBeLessThan(0.6);
+    expect(Math.abs(box!.height - content.height)).toBeLessThan(0.6);
 
     // The first instance of a configuration pays exactly one state update: the
     // shadow tree has to learn the size it will keep handing out - asserted on

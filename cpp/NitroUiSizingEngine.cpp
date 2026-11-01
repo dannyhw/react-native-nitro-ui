@@ -740,11 +740,11 @@ namespace margelo::nitro::nitroui {
      *
      * So the entry is filed, but *held* rather than in `ledger_`: `ledger_` counts
      * live instances, and an id that has been through `forget` is not one until it
-     * binds again. `registerInstance` and `report` claim a held entry — both are
-     * proof of life, and a report can legitimately precede its bind (the ordering
-     * `kUnboundReportRetries` exists for). An orphan is reclaimed by the prune in
-     * {@link stageLateFilingLocked}, whose bound is the ring's width rather than a
-     * timer, so nothing here has a cadence to race. See {@link lateFilings_}.
+     * binds again. Only `registerInstance` claims a hold, because it is the one call
+     * that means "this id has a `State` in the shadow tree"; a hold that no bind comes
+     * for is reclaimed by the prune {@link pruneLateFilingsLocked}, whose bound is the
+     * window — a bind that arrives after it is charged a fresh measure rather than left
+     * with nothing. See {@link lateFilings_}.
      */
     const bool filedLate = isForgottenLocked(instanceId);
 
