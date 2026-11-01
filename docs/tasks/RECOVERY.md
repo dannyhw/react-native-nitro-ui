@@ -63,6 +63,9 @@
 > jobs now load their config; their remaining hosted-runner failures are in FOLLOWUPS. **A6 merged (`b86faaa`)**, the first
 > task run on a linked machine (T3 linked environment INV-0391 = maintainer-mac-1, full access, the child pushed only
 > its task branch): mac-1's Android baseline gained Menu's 35 cells; its iOS mint was refused by the load guard.
+> **A6b merged (2026-11-01, `fa99b05`, PR #13):** mac-1's iOS baseline gained Menu's 28 cells (quiet run after 1am:
+> median load 2.42 of 7.0), so Menu is now in both machines' baselines on both platforms. The link to mac-1 runs through
+> T3 Connect's relay, not Tailscale; the owner is to revoke it on mac-1.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
