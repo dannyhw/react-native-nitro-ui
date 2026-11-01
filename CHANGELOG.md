@@ -8,6 +8,15 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.4.2
+
+### Patch Changes
+
+- c9df6a0: The iOS `DatePicker`'s declared fallback is now **107 × 36.33 pt** instead of 103 × 36.33, so a first `compact` `date` mount in `en_US` — and in most locales that write a date as `M/D/YYYY` — is laid out at its own size and costs no correction. The `compact` field's width is the widest string the _locale's_ date formatter produces, so the 103 that was declared is what the control measures under `en_PT`; in `en_US` the same control is 107 wide, which meant every cold mount was 4 pt narrow for a frame and then paid a horizontal correction to get it back. The height never moves with the locale and is unchanged. A locale _narrower_ than `en_US` now has the 4 pt of dead padding for one frame instead (no locale has been measured narrower than 103 wide), and `mode = "time"` is unaffected: it has its own sizing key either way.
+- 5ac18ce: Fixed a per-instance memory leak that a scrolling or churning list hit once per dropped control, and two ways a control could be left at the wrong size. A dropped view whose size correction was still on its way, and a control whose mount was abandoned after it had been laid out, both left a record behind that nothing ever reclaimed — one per occurrence, for the life of the process, on top of showing up in `sizingStats()`.
+
+  Also fixed: hiding a control with `display: none` and showing it again could leave it unable to accept a size correction for the rest of its life, so a later `sizingKey` or font-scale change had no effect on it. A long list's first frame, and a commit that re-showes more controls than before, are likewise no longer a case where some controls keep the guessed size instead of being corrected.
+
 ## 0.4.1
 
 ### Patch Changes
