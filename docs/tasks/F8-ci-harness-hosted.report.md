@@ -158,17 +158,18 @@ platforms.
 
 ## Fix round 2
 
-**Lease:** `F8-a6ro7` (pair-a). Eleven commits, ending `64916aa`.
+**Lease:** `F8-a6ro7` (pair-a). Ten code commits, plus this report, the changeset note and
+ledger exports.
 
-**Picker's leak is real and is a second route to the same leaked entry.** Its clue is the
-half CI did not report as failing: `registry` stayed flat. `measure` is the only creator of a
-ledger row and files one for an *unbound* id too (layout precedes the bind), so a layout whose
-mount never arrives leaves a row `forget` is never told about and the registry sweep cannot
-reach — its trigger is the registry *growing*. Rows now get the held set's one-second mount
-window and are then **demoted** into it rather than deleted, so a bind that is merely very late
-still claims its correction. The window is closed on flush too, because the leaking workload is
-a churn that has already stopped. The sweep's trigger now follows the registry *down*. The
-Picker-shaped native churn CI asked for exists and covers both routes.
+**Picker's leak is real, and is a second route to the same leaked entry.** Its clue is the half
+CI did not report failing: `registry` stayed flat. `measure` is the only creator of a ledger row
+and files one for an *unbound* id too (layout precedes the bind), so a layout whose mount never
+arrives leaves a row `forget` is never told about and the registry sweep cannot reach — its
+trigger is the registry *growing*. Such rows now get the held set's one-second mount window and
+are then **demoted** into it rather than deleted, so a bind that is merely very late still claims
+its correction. The window closes on flush too, because the leaking workload is a churn that has
+already stopped. The sweep's trigger follows the registry *down*. The Picker-shaped native churn
+CI asked for exists, and covers both routes.
 
 **The 90-minute step is now `scripts/ci-emulator-diagnostics.mjs`:** every command killed at its
 own deadline, cheap file evidence first, the step at 5 min and the jobs at 75/60.
@@ -194,7 +195,7 @@ fails as designed (`the app runs in en-PT …`), and with `NITRO_UI_ALLOW_LOCALE
 - same -> the file site stops checking `registry_` -> 4 red, `the window releases a hold whose bind never came`
 - `sizing · a flush with nothing to apply still closes windows` -> prune only from `measure` -> `got 10, want 0`
 - `sizing · the sweep still runs after the registry has shrunk` -> no gate re-anchor -> 4 red, both sweep cases
-- `harness · Sizing · re-shown switch` -> engine back to `fb397d2`, both platforms -> `never reached 100 wide - last box 40.00x20.00`
+- `harness · Sizing · re-shown switch` -> engine back to `fb397d2` -> both iOS cases `never reached 100 wide - last box 40.00x20.00`. iOS only, by the fixture's own rule: `expectHidePath` asserts Android takes the *kept-alive* `display: none` path, so a re-show is not on that platform's table at all. Both cases were then run green on both platforms.
 - `ci-workflows · returns when every tool would hang` -> `timeout: 0` -> the case runs to its own 30 s kill
 - same -> partial output discarded on kill -> `Expected substring: "SANDBOX_ADB_HANG devices"`
 - same -> a hung command not recorded -> `Expected substring: "incomplete"`
@@ -203,7 +204,7 @@ fails as designed (`the app runs in en-PT …`), and with `NITRO_UI_ALLOW_LOCALE
 ### Follow-ups
 
 - android-ci-harness-failure: the `Run Harness tests` failure on `fb397d2` is still unexplained — the job log is to be forwarded; this round changed nothing in that path.
-- picker-leak-repro: Picker's leak never reproduced locally (16 iOS + Android Conformance runs); the engine case is the proof, and both platforms are green.
+- picker-leak-repro: Picker's leak never appeared locally — no run in this branch's ledger, on either platform, contains that rule's failure, so the engine case is the only proof, and both platforms are green with it.
 - sizing-stats: `unboundFilingCount()` is C++-only. Surfacing it in `sizingStats()` would let a device rule name the table it is looking at instead of inferring it.
 
 ### CI to dispatch
