@@ -69,3 +69,4 @@
 | A6 | maintainer-mac-1's Menu baseline cells by merge mint, both platforms; first task delegated to a linked machine (INV-0391) | Apex (on mac-1) | Opus | merged: Android (`b86faaa`), iOS by A6b (`fa99b05`, PR #13) |
 | F4 | CI green on every trigger: no cancelled `main` runs, dispatched harness jobs fixed, release-pipeline nits, X1 leftovers, iOS < 26 fallback row | Apex | Opus | merged (`072ed4c`) |
 | F8 | The two harness jobs green on GitHub's hosted runners: the 8 iOS failures classified and fixed, the Android emulator boot | Apex | Opus | running |
+| F8b | F8's sizing-engine fix finished: no in-window eviction from the held set, one false red proof moved, flush prunes, changeset trimmed | Apex | Opus | running |
