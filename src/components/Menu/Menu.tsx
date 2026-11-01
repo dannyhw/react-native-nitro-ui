@@ -152,11 +152,18 @@ export interface MenuProps extends ViewProps {
         nuiTestSelectRow(id: string): void;
         /**
          * Test-only popup witness (G7a): `expanded=...;live=...;anchor=...;` +
-         * `menu=...;rows=...`. Android measures it; iOS answers `-1` in every field
-         * but `rows`, because a SwiftUI `Menu` keeps its open state and its window to
-         * itself. `@internal` (D14) - see `NitroUiMenuHandle`.
+         * `menu=...;rows=...;drawn=...`. Android measures the first five; iOS
+         * answers `-1` in every field but `rows` and `drawn`, because a SwiftUI
+         * `Menu` keeps its open state and its window to itself. `@internal` (D14) -
+         * see `NitroUiMenuHandle`.
          */
         nuiTestMenuReport(): string;
+        /**
+         * Test-only (G9): on iOS, open the menu, copy the `UIMenu` UIKit built
+         * for it into the report's `drawn` field, and close it. A no-op on
+         * Android. `@internal` (D14) - see `NitroUiMenuHandle`.
+         */
+        nuiTestMenuProbe(): void;
       }) => void)
     | undefined;
   /**

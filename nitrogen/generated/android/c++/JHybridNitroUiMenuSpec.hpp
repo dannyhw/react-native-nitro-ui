@@ -90,6 +90,7 @@ namespace margelo::nitro::nitroui {
     NitroUiMenuSize measureContent() override;
     void nuiTestSelectRow(const std::string& id) override;
     std::string nuiTestMenuReport() override;
+    void nuiTestMenuProbe() override;
 
   private:
     jni::global_ref<JHybridNitroUiMenuSpec::JavaPart> _javaPart;
