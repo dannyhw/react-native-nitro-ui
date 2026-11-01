@@ -1178,11 +1178,18 @@ private class DatePickerHost(
       // No modifier, deliberately: `BoxWithConstraints` with none forwards the incoming
       // constraints to its content with only the minimums cleared and reports the
       // content's own size, so the host measures the calendar's size as it always did. A
-      // `fillMaxWidth()` here would report the *box's* width and throw under the host's
-      // unbounded-parent arm. The subcompose pass costs this calendar one extra measure
-      // per pass and nothing else; `DatePicker.harness.tsx`'s "lays each variant out at
-      // the size the control measured" is the test that says the height report and the
-      // engine's corrections survived it.
+      // `fillMaxWidth()` here would not throw under the host's unbounded-parent arm -
+      // `fillMaxWidth` is a no-op when the incoming maximum is infinite - but it would make
+      // the box the thing that decides this node's width wherever the parent *is* bounded,
+      // and the width the host reports has to stay the calendar's own. What the wrapper
+      // costs one recomposition of *this lambda* per measure pass - `BoxWithConstraints`
+      // re-runs its content to re-derive the constraints, so `narrow` is recomputed from two
+      // constraint fields - and nothing more. The calendar under it is called with the same
+      // state it had, in the same slot, so it is not rebuilt: see the single
+      // `CompositionLocalProvider` below, which is what keeps it that way across this
+      // threshold. `DatePicker.harness.tsx`'s "lays each variant out at the size the
+      // control measured" is the test that says the height report and the engine's
+      // corrections survived it.
       BoxWithConstraints {
         val narrow =
           constraints.hasBoundedWidth &&
