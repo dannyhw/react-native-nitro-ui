@@ -69,7 +69,8 @@ interface MenuSection  { id: string; title?: string; items: MenuAction[] }
 - `id` is required on every row, submenu and section. It is what `onSelect` reports and
   what a test presses, so it must be unique within the menu and stable across renders;
   a re-ordered list keeps each row's identity.
-- `title` is optional on a section: a section with no title is just a divider.
+- `title` is optional on a section: a section with no title is its rows set off by a
+  divider, with no header (iOS draws it as a `Section` with no header — see G9 below).
 - A submenu holds actions only. Depth stops at one level — the public type cannot
   express a submenu inside a submenu, and the wrapper has nothing to normalise into.
 - An empty `group` renders a trigger that opens nothing.
@@ -91,7 +92,7 @@ re-conversion of the struct array (`docs/research/nitro-patterns.md`).
 | Trigger            | Button's label, Button's `.buttonStyle`, `.menuIndicator(.hidden)`    | Button's M3 button (`NitroUiM3Button`), one semantics node        |
 | Rows               | `Button`, `Section`, `Divider`, `Menu` inside `Menu`                 | `DropdownMenuItem`, `HorizontalDivider`, a non-interactive header row |
 | Submenu            | **nests** — a real second-level menu                                 | renders its items **inline under a divider**                     |
-| Section header     | `Section(header:)`                                                   | a non-interactive header row under a divider                     |
+| Section header     | `Section(header:)`; an untitled section is `Section` with **no** header | a non-interactive header row under a divider; none when untitled |
 | Destructive row    | `Button(role: .destructive)`                                         | Material 3 error colour                                          |
 | Test id            | RN's `testID` → `accessibilityIdentifier`                            | `host.tag` (Compose has no test id)                              |
 | Recycle            | hosting controller reused                                            | objects reused; composition disposed and rebuilt (`core.md` §6)  |
@@ -315,6 +316,12 @@ that list with VoiceOver and TalkBack remains a human pass.
   chrome stops at the trigger and no `.buttonStyle(.plain)` was needed on the row content. (What
   G2 measured still holds for the *harness*: its synthesised `UITouch` never opened a `Menu` in any
   style, which is why this answer came from XCUITest rather than from a harness test.)
+- An untitled section must have **no** header on iOS, not an empty-looking one: G9 found that
+  a `Section` whose header was `Divider()` is built by SwiftUI as an inline `UIMenu` with no
+  children, so every row of an untitled group was missing on iOS. `Menu.harness.tsx`'s "draws
+  every row of an untitled group" reads the `UIMenu` UIKit actually built (through the
+  test-only `nuiTestMenuProbe`, which opens the menu with `performPrimaryAction()` and closes
+  it) and holds the rows and their roles (`G9-ios-menu-untitled-group.report.md`).
 - One submenu level, and no nesting of sections. No checkmarks, no per-row state —
   a menu reports a pick and forgets it, which is the point of having no value.
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated.

@@ -436,7 +436,9 @@ internal class MenuModel : NitroUiModel() {
         } else {
           "-1,-1,-1,-1"
         } +
-        ";menu=$menuLeft,$menuTop,$menuRight,$menuBottom;rows=$menuRowCount"
+        ";menu=$menuLeft,$menuTop,$menuRight,$menuBottom;rows=$menuRowCount" +
+        // `nuiTestMenuProbe`'s field, which only iOS can answer (see that method).
+        ";drawn=-1"
     }
   }
 
@@ -1186,4 +1188,12 @@ class HybridNitroUiMenu(
    * few integers, so it is safe on the JS thread and never waits for the UI thread.
    */
   override fun nuiTestMenuReport(): String = model.readMenuReport()
+
+  /**
+   * A no-op here: the probe asks iOS's second renderer (UIKit's `UIMenu`) what it
+   * built, and Android has none - `rows` in the report is already counted from the
+   * rows the popup composed, so `drawn` answers `-1`. See
+   * `NitroUiMenuMethods.nuiTestMenuProbe`.
+   */
+  override fun nuiTestMenuProbe() = Unit
 }

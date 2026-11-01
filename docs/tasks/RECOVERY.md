@@ -72,6 +72,15 @@
 > for re-shown views. **Merge exception:** this host's simulators could not launch apps, so `harness:ios` was taken from
 > the CI run on the same head (92ffe64) and `real-input:ios` was not run; check, real-input:android and harness:android
 > ran locally on the merged tree. Three patch changesets are pending for 0.4.2.
+> **0.4.2 staged on npm (2026-11-01):** Version Packages PR #14 merged (`323818a`), Release run 41308986511 green with
+> `Stage on npm` succeeded (two patch notes: DatePicker's iOS fallback at `en_US`; the sizing-engine leak and re-show fix).
+> **F8's iOS gate exception closed (V1, PR #16, `eaedc73`):** on maintainer-mac-1, `real-input:ios` 14/14 and `harness:ios`
+> 227 passed on `main` at `161e7d2` (which carries 0.4.2), so every merge gate has now run on a device. Stale duplicate
+> Version Packages PR #15 closed.
+> **G9 merged (2026-11-01, `baf9811`, PR #17):** iOS `Menu` now draws an untitled section's rows (its header was a
+> `Divider()`, which UIKit built as an empty inline menu). Run on maintainer-mac-1 by **Claude Opus 5.5 at `auto`**: the
+> first linked task in auto mode, with nothing blocked. iOS gates ran there on the same code tree; check and both Android
+> gates ran here on the merged tree, plus an Android red proof the orchestrator added (`ce4ba14`).
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure

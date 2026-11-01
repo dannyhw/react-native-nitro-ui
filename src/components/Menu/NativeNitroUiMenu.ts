@@ -57,9 +57,15 @@ export interface NitroUiMenuHandle {
   nuiTestSelectRow(id: string): void;
   /**
    * Test-only (`@internal`, D14): the popup witness -
-   * `expanded=…;live=…;anchor=…;menu=…;rows=…`, per `Menu.nitro.ts`.
+   * `expanded=…;live=…;anchor=…;menu=…;rows=…;drawn=…`, per `Menu.nitro.ts`.
    */
   nuiTestMenuReport(): string;
+  /**
+   * Test-only (`@internal`, D14): on iOS, read the `UIMenu` UIKit built from the
+   * rows into the witness's `drawn` field (it opens and closes the menu to do it);
+   * a no-op on Android. Per `Menu.nitro.ts`.
+   */
+  nuiTestMenuProbe(): void;
 }
 
 /**
