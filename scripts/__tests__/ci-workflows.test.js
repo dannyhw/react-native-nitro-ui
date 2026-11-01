@@ -1066,6 +1066,35 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
         mode: 0o755,
       });
     }
+    /**
+     * Warm the hostile stubs once, so the case measures the script and not the machine.
+     *
+     * The failing assertion was the *first* stub the script execs, every time, and only
+     * under `check`'s load: the first exec of a file that was just written pays for the
+     * path lookup, the code-signing check and the vnode work, and under a load average in
+     * the tens that alone can outrun a 700 ms budget — so the stub was killed before it
+     * had printed anything, and the witness for "this command really was asked" was
+     * missing. That is test-setup cost being measured as script behaviour. Running each
+     * stub once here, with its output discarded, pays that cost up front; the case's own
+     * timing then says something about the script rather than about the file system.
+     *
+     * The healthy stubs need no warm-up: they exit, and an exiting command is answered
+     * however long it took to start.
+     *
+     * @param {string[]} command
+     */
+    const warm = (command) =>
+      spawnSync(command[0], command.slice(1), {
+        // Killed on purpose — these stubs never return. The point is the exec, not the
+        // answer, so the deadline only has to outlast process startup.
+        timeout: 1000,
+        killSignal: 'SIGKILL',
+        stdio: 'ignore',
+      });
+    if (hangTools) {
+      warm([path.join(androidHome, 'platform-tools', 'adb'), 'devices']);
+      warm([path.join(bin, 'sudo'), '-n', 'dmesg']);
+    }
     return {
       cwd,
       home,
