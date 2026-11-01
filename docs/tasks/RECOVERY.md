@@ -72,6 +72,8 @@
 > for re-shown views. **Merge exception:** this host's simulators could not launch apps, so `harness:ios` was taken from
 > the CI run on the same head (92ffe64) and `real-input:ios` was not run; check, real-input:android and harness:android
 > ran locally on the merged tree. Three patch changesets are pending for 0.4.2.
+> **0.4.2 staged on npm (2026-11-01):** Version Packages PR #14 merged (`323818a`), Release run 41308986511 green with
+> `Stage on npm` succeeded (two patch notes: DatePicker's iOS fallback at `en_US`; the sizing-engine leak and re-show fix).
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
