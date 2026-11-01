@@ -62,9 +62,43 @@ export const DAYS_IN_WEEK = 7;
 /**
  * Material 3's own day-cell width — `DatePickerModalTokens.DateContainerWidth` — which
  * is also the minimum its weekday header cells ask for. This is the floor a column may
- * not go under and still be the calendar the design system describes.
+ * not go under, and it is what a calendar in a box narrower than
+ * [CALENDAR_WIDE_MIN_DP] is asked to produce.
  */
 export const DAY_CELL_MIN_DP = 40;
+
+/**
+ * Material's default interactive minimum, and what a calendar in a box this wide or
+ * wider must still be laying its grid out at.
+ *
+ * The two numbers are the two halves of what the shipped control decides: below
+ * `CALENDAR_WIDE_MIN_DP` dp the calendar asks Material for the 40 dp day cell so the
+ * grid fits, and at or above it the calendar keeps Material's 48 dp default. A rule that
+ * only ever accepted 40 dp would go green on a control that shaved 8 dp off every touch
+ * target on a full-width phone, which is the regression the width decision exists to
+ * avoid. `HybridNitroUiDatePicker.kt`'s `CALENDAR_WIDE_MIN_DP` is the same 360.
+ */
+export const INTERACTIVE_DEFAULT_DP = 48;
+
+/**
+ * The narrowest box in which Material's 48 dp grid fits: seven columns of 48 dp plus the
+ * 12 dp the calendar's grid keeps at each edge. Mirrors `CALENDAR_WIDE_MIN_DP` in
+ * `HybridNitroUiDatePicker.kt`; the caller compares a measured box against it to decide
+ * which floor that box should have produced.
+ */
+export const CALENDAR_WIDE_MIN_DP = 360;
+
+/**
+ * Which touch-target floor a box of this width should have produced, in dp.
+ *
+ * One place, so a check that measures a 320 dp box and one that measures a 393 dp box
+ * cannot quietly disagree about what "correct" means.
+ */
+export function expectedColumnDp(widthDp) {
+  return widthDp < CALENDAR_WIDE_MIN_DP
+    ? DAY_CELL_MIN_DP
+    : INTERACTIVE_DEFAULT_DP;
+}
 
 /**
  * How far a correct column may differ from its widest neighbour.
@@ -74,6 +108,18 @@ export const DAY_CELL_MIN_DP = 40;
  * measured 240 dp reading was 105 beside 41.
  */
 const COLUMN_ROUNDING_PX = 2;
+
+/**
+ * How much of a pixel the dp floor may forgive, so that a device whose density is not a
+ * multiple of 160 is not called broken for rounding.
+ *
+ * A column asked for 40 dp is `round(40 × 1.331) = 53` px on a 213 dpi screen, and 53 px
+ * divides back to 39.8 dp. Comparing that against the floor with no allowance fails a
+ * calendar that was laid out exactly as asked, on every density that is not 1, 2 or 3.
+ * Half a pixel is more than enough for a whole-pixel round and far too little to hide the
+ * tens-of-pixels shortfall this rule exists for.
+ */
+const DP_FLOOR_TOLERANCE_PX = 0.5;
 
 /**
  * How few same-row boxes still count as "this calendar's header row".
@@ -107,7 +153,12 @@ const ROW_HEIGHT_TOLERANCE = 1.5;
  * @typedef {object} CalendarGrid
  * @property {Array<{x1: number, width: number}>} columns the seven header boxes, in
  *   reading order; fewer than seven when columns are missing
+ * @property {number} density the density `measureCalendarGrid` was given, carried so the
+ *   floor can be compared in the same units the dump reports
+ * @property {number} minWidthPx the narrowest column, in pixels
+ * @property {number} maxWidthPx the widest column, in pixels
  * @property {number} minWidthDp the narrowest column, in dp
+ * @property {number} maxWidthDp the widest column, in dp
  * @property {number} spreadPx `max(width) − min(width)`, in pixels
  * @property {string} detail a one-line rendering for the log and the failure message
  */
@@ -175,7 +226,11 @@ export function measureCalendarGrid(tree, box, density) {
   const maxWidth = Math.max(...widths);
   return {
     columns,
+    density,
+    minWidthPx: minWidth,
+    maxWidthPx: maxWidth,
     minWidthDp: minWidth / density,
+    maxWidthDp: maxWidth / density,
     spreadPx: maxWidth - minWidth,
     detail:
       `${String(columns.length)} columns of ` +
@@ -186,22 +241,31 @@ export function measureCalendarGrid(tree, box, density) {
 /**
  * Every problem with a calendar grid, as sentences.
  *
- * Three separate claims, because the bug shows up as each of them alone:
+ * Four separate claims, because the bug shows up as each of them alone:
  *
  * - **the columns do not add up.** Seven is a week. At a 240 dp box the seventh header
  *   was not merely narrow, it was *gone* from the tree, and a rule that only measured
  *   widths would have been handed six fine columns to congratulate.
- * - **a column is below Material's own 40 dp day cell.** The squeeze itself: the grid
- *   wants 7 × 40 + 2 × 12 = 304 dp and a box narrower than that takes it out of whatever
- *   is left over, from the right.
+ * - **a column is below the touch target the calendar was asked for.** `minColumnDp` is
+ *   the caller's statement of which token this box should have produced — Material's
+ *   48 dp default in a box wide enough for it, the 40 dp day cell in one that is not —
+ *   so the same rule proves both halves of the width decision rather than only the half
+ *   that shipped first. The comparison is made in px with [DP_FLOOR_TOLERANCE_PX] of
+ *   allowance, because a design dp divides back to a non-integer dp on any density that
+ *   is not a multiple of 160: 40 dp at 213 dpi is 53 px, which is 39.8 dp.
  * - **the columns are not each other's width.** What catches the squeeze by its shape
  *   rather than its arithmetic, and what makes a mutant that hands one column the
  *   leftover say so.
  *
- * @param {CalendarGrid} grid
+ * @param {CalendarGrid} grid as `measureCalendarGrid` measured it
+ * @param {{minColumnDp?: number}} [options] the touch-target token this box should have
+ *   produced; `DAY_CELL_MIN_DP` when unset, which is the narrow case
  * @returns {string[]} empty when the grid is laid out
  */
-export function calendarGridProblems(grid) {
+export function calendarGridProblems(
+  grid,
+  { minColumnDp = DAY_CELL_MIN_DP } = {}
+) {
   /** @type {string[]} */
   const problems = [];
   if (grid.columns.length < DAYS_IN_WEEK) {
@@ -210,10 +274,11 @@ export function calendarGridProblems(grid) {
         'columns are laid out'
     );
   }
-  if (grid.minWidthDp < DAY_CELL_MIN_DP) {
+  const floorPx = minColumnDp * grid.density - DP_FLOOR_TOLERANCE_PX;
+  if (grid.minWidthPx < floorPx) {
     problems.push(
-      `the narrowest column is ${grid.minWidthDp.toFixed(1)} dp, under Material's ` +
-        `${String(DAY_CELL_MIN_DP)} dp day cell`
+      `the narrowest column is ${grid.minWidthDp.toFixed(1)} dp, under the ` +
+        `${String(minColumnDp)} dp touch target this box should have produced`
     );
   }
   if (grid.columns.length > 1 && grid.spreadPx > COLUMN_ROUNDING_PX) {

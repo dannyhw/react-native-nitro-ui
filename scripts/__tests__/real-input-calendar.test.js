@@ -24,8 +24,11 @@ import { describe, expect, it } from '@jest/globals';
 
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
 import {
+  CALENDAR_WIDE_MIN_DP,
   DAY_CELL_MIN_DP,
+  INTERACTIVE_DEFAULT_DP,
   calendarGridProblems,
+  expectedColumnDp,
   measureCalendarGrid,
 } from '../real-input/android-calendar.mjs';
 
@@ -158,12 +161,88 @@ describe('real-input Android calendar grid', () => {
     expect(calendarGridProblems(grid)).toEqual([]);
   });
 
+  it("refuses 40 dp columns in a box wide enough for Material's 48 dp", () => {
+    // The regression this exists to catch: the first version of the fix provided 40 dp
+    // at *every* width, so a full-width phone got 8 dp smaller day cells, prev/next
+    // buttons and year toggles than Material would have drawn. The narrow dump above,
+    // judged as the wide case it now is, has to be the failure - 40 dp is 105 px at this
+    // density and 48 dp is 126, so the row is 21 px short of what the box asked for.
+    const grid = measureCalendarGrid(screen(FIXED_320), BOX, DENSITY);
+    expect(
+      calendarGridProblems(grid, { minColumnDp: INTERACTIVE_DEFAULT_DP })
+    ).toEqual([
+      'the narrowest column is 40.0 dp, under the 48 dp touch target this box should ' +
+        'have produced',
+    ]);
+  });
+
+  it('accepts 48 dp columns in a wide box, and only those', () => {
+    // A calendar laid out at Material's default in a box that fits it. At this density
+    // 48 dp is 126 px, so a 393 dp box (1 031 px) has room for 7 × 126 plus the grid's
+    // own 24 dp of edge padding. `BOX` is a 320 dp calendar's box and the rule filters to
+    // the named calendar's box, so the wide row needs its own: seven 126 px columns do not
+    // fit inside 840 px, and the columns that fall outside it are not this calendar's.
+    const wideBox = { x1: 0, y1: 72, x2: 1031, y2: 1416 };
+    const grid = measureCalendarGrid(
+      screen(headerRow([126, 126, 126, 126, 126, 126, 126])),
+      wideBox,
+      DENSITY
+    );
+    expect(grid.columns).toHaveLength(7);
+    expect(grid.minWidthDp).toBeCloseTo(48, 5);
+    expect(
+      calendarGridProblems(grid, { minColumnDp: INTERACTIVE_DEFAULT_DP })
+    ).toEqual([]);
+    // And the same row read as the narrow case is not a pass: it clears a 40 dp floor, so
+    // the two readings are genuinely different rules rather than one loose one.
+    expect(calendarGridProblems(grid)).toEqual([]);
+  });
+
+  it('picks the touch target from the measured box, at the boundary', () => {
+    // The threshold is Material's own arithmetic - seven 48 dp columns plus the 12 dp the
+    // grid keeps at each edge - and it is an exclusive test on the narrow side: at
+    // exactly 360 dp the 48 dp grid fits, so the wide answer is the right one there.
+    expect(expectedColumnDp(320)).toBe(DAY_CELL_MIN_DP);
+    expect(expectedColumnDp(CALENDAR_WIDE_MIN_DP - 0.1)).toBe(DAY_CELL_MIN_DP);
+    expect(expectedColumnDp(CALENDAR_WIDE_MIN_DP)).toBe(INTERACTIVE_DEFAULT_DP);
+    expect(expectedColumnDp(393)).toBe(INTERACTIVE_DEFAULT_DP);
+    // 360 is the fixture, not the answer: seven 48 dp columns plus the 12 dp the
+    // calendar's grid keeps at each edge. If the library's constant and this arithmetic
+    // ever drift apart, the check is measuring the wrong box.
+    expect(CALENDAR_WIDE_MIN_DP).toBe(7 * INTERACTIVE_DEFAULT_DP + 2 * 12);
+  });
+
+  it('forgives the half pixel a non-integer density costs a 40 dp column', () => {
+    // 213 dpi (density 1.331): a column asked for 40 dp is `round(40 x 1.331) = 53` px,
+    // and 53 px divides back to 39.8 dp. A floor compared in dp with no allowance calls
+    // that calendar broken on every device whose density is not 1, 2 or 3 - and the
+    // fixture's own numbers (105 px = exactly 40.0 dp) would never show it, because this
+    // host is at 420 dpi.
+    const DENSITY_213 = 213 / 160;
+    const grid = measureCalendarGrid(
+      screen(headerRow([53, 53, 53, 53, 53, 53, 53])),
+      BOX,
+      DENSITY_213
+    );
+    expect(grid.minWidthDp.toFixed(1)).toBe('39.8');
+    expect(calendarGridProblems(grid)).toEqual([]);
+    // Half a pixel is the whole allowance: one px short of the floor is the shortfall
+    // this rule exists to report, not a rounding artefact.
+    const shortByOne = measureCalendarGrid(
+      screen(headerRow([52, 52, 52, 52, 52, 52, 52])),
+      BOX,
+      DENSITY_213
+    );
+    expect(calendarGridProblems(shortByOne).length).toBe(1);
+  });
+
   it('names the clipped calendar the dump showed before the fix', () => {
     const grid = measureCalendarGrid(screen(BROKEN_320), BOX, DENSITY);
     expect(grid).not.toBeNull();
     expect(grid.minWidthDp.toFixed(1)).toBe('7.6');
     expect(calendarGridProblems(grid)).toEqual([
-      "the narrowest column is 7.6 dp, under Material's 40 dp day cell",
+      'the narrowest column is 7.6 dp, under the 40 dp touch target this box should ' +
+        'have produced',
       'columns differ by 106 px wide, so they are not sharing the width out evenly',
     ]);
   });

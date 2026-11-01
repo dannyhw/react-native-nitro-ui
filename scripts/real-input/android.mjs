@@ -48,8 +48,9 @@ import {
 } from './uiautomator.mjs';
 import { nativeChecked } from './android-tree.mjs';
 import {
-  DAY_CELL_MIN_DP,
+  CALENDAR_WIDE_MIN_DP,
   calendarGridProblems,
+  expectedColumnDp,
   measureCalendarGrid,
 } from './android-calendar.mjs';
 import { runA11ySweep } from './a11y-sweep.mjs';
@@ -1689,7 +1690,7 @@ const CHECKS = {
 
     // And the thing no press can see: that the calendar in the README's 320 dp box is
     // laid out as a week rather than as six columns and a sliver.
-    await checkNarrowCalendarGrid(t);
+    await checkInlineCalendarGrids(t);
   },
   /**
    * A menu picker: a real tap must open a popup, a real tap on a row must bring the
@@ -2474,7 +2475,7 @@ function isCancelLabel(node) {
 }
 
 /**
- * The narrow inline calendar's grid: seven weekday columns, each its full width.
+ * The two inline calendars whose grid the box is supposed to decide, both measured.
  *
  * The rule is in `./android-calendar.mjs`, and the reason it lives outside the app is
  * there too: an `inline` picker is a `fillWidth` control, so `measureContent()` answers
@@ -2482,70 +2483,108 @@ function isCancelLabel(node) {
  * Compose nodes the in-app queries cannot reach. The dump is the only thing that can see
  * the columns, and this is the only gate that takes one on a known screen.
  *
- * The fixture is the last row of `DatePickerScreen`, in a 320 dp box — the width the
- * README story uses, and narrow enough to squeeze the grid.
+ * Two fixtures, because the control now makes a decision rather than applying one size:
+ * a 320 dp box, the width the README story uses, which is too narrow for Material's 48 dp
+ * grid and must have come out at the 40 dp day cell; and a calendar stretched past 360 dp
+ * by the page's own edges, which has to still be laying itself out at 48 dp. A calendar
+ * that asked for 40 dp everywhere - which is what this fix first did - is caught by the
+ * wide row, and one that never asks at all is caught by the narrow one.
  *
  * @param {ReturnType<typeof makeContext>} t
  */
-async function checkNarrowCalendarGrid(t) {
-  const LABEL = 'Narrow inline calendar';
+async function checkInlineCalendarGrids(t) {
   const density = t.density();
 
-  // The search is for a *measurable* grid, not merely for the control's name. Two
-  // reasons, both measured on this page: the fixture is its last row, so it is only
-  // reachable by scrolling, and a calendar whose name is in the dump can still have no
-  // columns in it — Compose keeps naming a scrolled-past node and reports it with
-  // `bounds=[0,0][0,0]`, and the header row itself is ~470 px below the top of a
-  // calendar whose box is 1344 px tall, so a box clipped to the bottom of the screen is
-  // a box with no header in it. Stopping at "the name has a box" is what made this abort
-  // on a run where the calendar was partly on screen and perfectly measurable two
-  // swipes later.
-  //
-  // One dump per throw, and the page is scrolled down: this is the last row, so down is
-  // monotonic. 600 px a throw, twelve throws — the whole scrollable length of a page
-  // carrying four inline calendars, each about 1300 px tall.
-  /** @type {{ grid: import('./android-calendar.mjs').CalendarGrid, box: {x1: number, y1: number, x2: number, y2: number} } | null} */
-  let found = null;
+  /** The two rows `DatePickerScreen` draws for this, and what each box should produce. */
+  const wanted = [
+    { label: 'Wide inline calendar', wide: true, grid: null, box: null },
+    { label: 'Narrow inline calendar', wide: false, grid: null, box: null },
+  ];
   let namedWithNoBox = 0;
-  for (let attempt = 0; attempt < 12 && found == null; attempt += 1) {
+
+  // The search is for a *measurable* grid, not merely for a control's name. Two reasons,
+  // both measured on this page: these rows are only reachable by scrolling, and a
+  // calendar whose name is in the dump can still have no columns in it - Compose keeps
+  // naming a scrolled-past node and reports it with `bounds=[0,0][0,0]`, and the header
+  // row itself is ~470 px below the top of a calendar whose box is 1344 px tall, so a box
+  // clipped to the bottom of the screen is a box with no header in it. Stopping at "the
+  // name has a box" is what made this abort on a run where the calendar was partly on
+  // screen and perfectly measurable two swipes later.
+  //
+  // One dump per throw, and the page is scrolled down: the wide row sits directly above
+  // the narrow one, so one downward pass can collect both and down stays monotonic. 600
+  // px a throw, twelve throws - more than the distance from the top of this page to the
+  // foot of the narrow row.
+  for (
+    let attempt = 0;
+    attempt < 12 && wanted.some((want) => want.grid == null);
+    attempt += 1
+  ) {
     const tree = t.dump();
-    const node = tree.find((candidate) => candidate.contentDesc === LABEL);
-    if (node != null) {
-      if (node.bounds.width > 0 && node.bounds.height > 0) {
-        const grid = measureCalendarGrid(tree, node.bounds, density);
-        if (grid != null) {
-          found = { grid, box: node.bounds };
-        }
-      } else {
+    for (const want of wanted) {
+      if (want.grid != null) {
+        continue;
+      }
+      const node = tree.find(
+        (candidate) => candidate.contentDesc === want.label
+      );
+      if (node == null) {
+        continue;
+      }
+      if (node.bounds.width <= 0 || node.bounds.height <= 0) {
         namedWithNoBox += 1;
+        continue;
+      }
+      const grid = measureCalendarGrid(tree, node.bounds, density);
+      if (grid != null) {
+        want.grid = grid;
+        want.box = node.bounds;
       }
     }
-    if (found != null) {
-      break;
+    if (wanted.some((want) => want.grid == null)) {
+      await t.scrollPage(600);
     }
-    await t.scrollPage(600);
   }
-  if (found == null) {
-    t.log.abort(
-      `"${LABEL}" never showed a weekday header row, scrolling to the end of the ` +
-        'page - the calendar is either not laid out at all or is drawn without one'
-    );
-  }
-  const { grid, box } = found;
-  const problems = calendarGridProblems(grid);
-  const widthDp = (box.x2 - box.x1) / density;
+
   if (namedWithNoBox > 0) {
     t.log.note(
-      `"${LABEL}" was named with a zero-sized box ${String(namedWithNoBox)} time` +
-        `${namedWithNoBox === 1 ? '' : 's'} before its columns came on screen`
+      `an inline calendar was named with a zero-sized box ${String(namedWithNoBox)} ` +
+        'time before its columns came on screen'
     );
   }
-  t.log.check(
-    `the ${widthDp.toFixed(0)} dp inline calendar lays out a whole week: ${grid.detail} ` +
-      `(narrowest ${grid.minWidthDp.toFixed(1)} dp, Material's floor is ` +
-      `${String(DAY_CELL_MIN_DP)} dp)${problems.length === 0 ? '' : ` — ${problems.join('; ')}`}`,
-    problems.length === 0
-  );
+
+  for (const want of wanted) {
+    if (want.grid == null) {
+      t.log.abort(
+        `"${want.label}" never showed a weekday header row, scrolling to the end of ` +
+          'the page - the calendar is either not laid out at all or is drawn without one'
+      );
+    }
+    const widthDp = (want.box.x2 - want.box.x1) / density;
+    const expectedDp = expectedColumnDp(widthDp);
+    // The premise of each row, asserted rather than assumed: a fixture that quietly
+    // stopped being wide (or narrow) would still be *measurable*, and the rule below
+    // would then measure it against the other row's floor and agree with whatever the
+    // control did. `wideBox`'s negative margins are what make one row wide at all.
+    t.log.check(
+      `"${want.label}" is laid out in a ${widthDp.toFixed(0)} dp box, ` +
+        `${want.wide ? 'at' : 'under'} the ${String(CALENDAR_WIDE_MIN_DP)} dp ` +
+        'width that decides the touch target',
+      want.wide
+        ? widthDp >= CALENDAR_WIDE_MIN_DP
+        : widthDp < CALENDAR_WIDE_MIN_DP
+    );
+    const problems = calendarGridProblems(want.grid, {
+      minColumnDp: expectedDp,
+    });
+    t.log.check(
+      `the ${widthDp.toFixed(0)} dp inline calendar lays a whole week out on ` +
+        `${String(expectedDp)} dp targets: ${want.grid.detail} ` +
+        `(narrowest ${want.grid.minWidthDp.toFixed(1)} dp)` +
+        `${problems.length === 0 ? '' : ` - ${problems.join('; ')}`}`,
+      problems.length === 0
+    );
+  }
 }
 
 /**
