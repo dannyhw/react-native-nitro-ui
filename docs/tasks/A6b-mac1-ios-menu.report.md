@@ -127,7 +127,9 @@ committed merge, then red per mutation, with the file restored byte-identical ea
 - `bench/baselines/maintainer-mac-1/ios27-sim-iphone17.json` — +28 Menu cells, schema 2 → 3,
   `components`/`dependencies`/`skippedCells` bookkeeping (commit `fb5c83c`).
 - `docs/tasks/A6b-mac1-ios-menu.report.md`, `docs/tasks/A6b-mac1-ios-menu/gates.jsonl` — this
-  report and the exported ledger.
+  report and the exported ledger (3 lines). `gate.mjs export` also wrote one scrubbed failure
+  excerpt, `docs/tasks/A6b-mac1-ios-menu/failures/2026-11-01T01-26-04Z--bench+--help--01.log`,
+  for the `bench:--help` usage probe above; it is the export's normal behaviour for any failed run.
 - `android35-emu-pixel9.json` — untouched: Android Menu is already merged on `main`.
 
 ## Setup and load notes
