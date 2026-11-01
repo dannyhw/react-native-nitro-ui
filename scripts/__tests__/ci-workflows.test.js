@@ -714,6 +714,45 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     // once the job has one. The preflight runs before the harness, so it only has
     // to exist.
     expect(stepNamed('Show the emulator configuration')).not.toBeUndefined();
+    // And it has to *run*. The first version of this step died before it printed
+    // a single line: its `AVD_NAME=` helper took file contents where it took a
+    // path, so it exited with `ENAMETOOLONG` and the whole preflight — and the
+    // evidence it was written to gather — never existed. Reading the YAML cannot
+    // find that, so this executes the real prefix of the real step body under the
+    // same shell flags Actions uses, and asks it for the name the config declares.
+    const preflight = String(stepNamed('Show the emulator configuration').run);
+    const lines = preflight.split('\n');
+    const through = lines.findIndex((line) =>
+      line.includes('avd (from rn-harness.config.mjs)')
+    );
+    expect(through).toBeGreaterThan(0);
+    const ran = spawnSync(
+      '/bin/bash',
+      [
+        '--noprofile',
+        '--norc',
+        '-eo',
+        'pipefail',
+        '-c',
+        lines.slice(0, through + 1).join('\n'),
+      ],
+      { cwd: root, encoding: 'utf8' }
+    );
+    const want = fs
+      .readFileSync(path.join(root, 'example', 'rn-harness.config.mjs'), 'utf8')
+      .match(/const DEFAULT_AVD = '([^']+)'/u)?.[1];
+    expect({
+      status: ran.status,
+      stderr:
+        String(ran.stderr ?? '')
+          .split('\n')
+          .find(Boolean) ?? '',
+      printed: String(ran.stdout ?? '').trim(),
+    }).toEqual({
+      status: 0,
+      stderr: '',
+      printed: `avd (from rn-harness.config.mjs): ${want}`,
+    });
     for (const needle of [
       'Collect emulator boot diagnostics',
       'Upload emulator boot diagnostics',
@@ -732,6 +771,306 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     const show = String(stepNamed('Show the emulator configuration').run);
     expect(show).toContain('emulatorGpuModeForHost');
     expect(show).toContain('accel-check');
+    // The AVD's hardware lines must be collected *somewhere* in the job, or moving
+    // them out of the preflight would just be losing them.
+    expect(
+      String(stepNamed('Collect emulator boot diagnostics').run)
+    ).toContain('config.ini');
+  });
+
+  it('the preflight prints nothing about an AVD that does not exist yet', () => {
+    // The other half of the ordering claim, executed. The harness creates or restores
+    // the AVD in the step *after* this one, so on a cache miss the AVD directory is
+    // empty here and run 41256853746's preflight spent three lines on
+    // `grep: …/nitroui.avd/config.ini: No such file or directory` — evidence that
+    // reads like a misconfigured AVD, about a file that cannot exist yet. So this
+    // runs the whole body on a machine shaped like the runner's first minute — no
+    // AVD, `adb` nowhere — and requires that it completes and never mentions the
+    // file. Re-adding the read here, or writing it into any other pre-run step, is
+    // red.
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const step = (job.steps ?? []).find((candidate) =>
+      String(candidate.name ?? '').includes('Show the emulator configuration')
+    );
+    const box = sandbox();
+    try {
+      const ran = runStepBody(String(step.run), box);
+      const out = String(ran.stdout ?? '') + String(ran.stderr ?? '');
+      expect({
+        status: ran.status,
+        mentionsAvdFile: out.includes('config.ini'),
+      }).toEqual({
+        status: 0,
+        mentionsAvdFile: false,
+      });
+      // And it still says the things the preflight exists to say.
+      expect(out).toContain('avd (from rn-harness.config.mjs): nitroui');
+      expect(out).toContain('accel: kvm usable');
+      expect(out).toContain('gpu mode:');
+    } finally {
+      box.dispose();
+    }
+  });
+
+  /* The diagnostics pair, executed. Both of these steps exist only to leave
+   * evidence, and both managed not to: run 41256853746's Android job reached them
+   * with nothing to explain, and the collect step's last command was
+   * `tail -80 "$DIAG"/emulator-*.log`, which exits 1 when the glob matches nothing
+   * — so the step that existed to report a failure reported one of its own, on a job
+   * whose harness had not even started. Then the upload step, pointed at
+   * `.harness-diag`, printed "No files were found with the provided path" while the
+   * step before it had listed two files, because `upload-artifact` v4 resolves a path
+   * with `omitHidden: include-hidden-files` and that input defaults to false (the
+   * run's own log prints `include-hidden-files: false`). A green harness run would
+   * have been turned red by the first, and every run's evidence dropped by the
+   * second. Reading the YAML cannot see either, so this runs the real bodies. */
+
+  /**
+   * Run one step body the way a runner does: `bash -e {0}`, no profile, no rcfile.
+   *
+   * `-e` and nothing else, because that is what the log of this very job shows
+   * (`shell: /usr/bin/bash -e {0}`) — no `pipefail`, which matters: with `pipefail`
+   * the `grep | tail` in this step would fail on a quiet emulator, and the test would
+   * be asserting a shell the job does not use.
+   *
+   * @param {string} body the `run:` text, verbatim from the workflow
+   * @param {{cwd: string, env: Record<string,string>}} sandbox
+   */
+  function runStepBody(body, { cwd, env }) {
+    return spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-c', body], {
+      cwd,
+      env,
+      encoding: 'utf8',
+    });
+  }
+
+  /**
+   * A checkout-shaped working directory and a HOME, both throwaway, so a CI step
+   * body can be run for real without writing inside the repo.
+   *
+   * `scripts` and `example` are symlinks to the real ones: the step calls
+   * `node scripts/ci-avd-name.mjs`, and that line is part of what is under test, so
+   * it reads the real config rather than a copy that could disagree with it.
+   *
+   * @param {{avd?: boolean, adb?: 'none' | 'path' | 'platform-tools'}} shape what the
+   *   machine looks like: whether the harness got as far as creating an AVD, and
+   *   where (or whether) `adb` can be found.
+   * @returns {{cwd: string, home: string, env: Record<string,string>, androidHome: string,
+   *   diag: (name: string) => string, dispose: () => void}}
+   */
+  function sandbox({ avd = false, adb = 'none' } = {}) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nui-ci-diag-'));
+    const cwd = path.join(dir, 'checkout');
+    const home = path.join(dir, 'home');
+    const androidHome = path.join(dir, 'sdk');
+    const bin = path.join(dir, 'bin');
+    for (const sub of [cwd, home, androidHome, bin]) {
+      fs.mkdirSync(sub, { recursive: true });
+    }
+    for (const link of ['scripts', 'example']) {
+      fs.symlinkSync(path.join(root, link), path.join(cwd, link), 'dir');
+    }
+    // `-accel-check` is the one external binary the preflight needs, and the
+    // machine running this test may not have an SDK. The stub says what the real one
+    // says on a runner with KVM, so the assertion is about the step plumbing to it.
+    const emulatorBin = path.join(androidHome, 'emulator');
+    fs.mkdirSync(emulatorBin, { recursive: true });
+    fs.writeFileSync(
+      path.join(emulatorBin, 'emulator'),
+      '#!/bin/sh\nif [ "$1" = "-accel-check" ]; then echo "kvm usable"; fi\n',
+      { mode: 0o755 }
+    );
+    const avdDir = path.join(home, '.android', 'avd', 'nitroui.avd');
+    if (avd) {
+      fs.mkdirSync(avdDir, { recursive: true });
+      // The line this job's GPU change is judged by, and a fixture that cannot
+      // coincide with a plausible default (`auto` is what an unpatched AVD says).
+      fs.writeFileSync(
+        path.join(avdDir, 'config.ini'),
+        'hw.gpu.enabled=yes\nhw.gpu.mode=swift_ind\nhw.cpu.ncore=4\nimage.sysdir.1=system-images/android-35/\n'
+      );
+      fs.writeFileSync(
+        path.join(avdDir, 'emulator-5554.log'),
+        'emulator: Waiting for the emulator to become ready…\nqemu: FIREFOX_MARKER_LINE\n'
+      );
+    }
+    const fakeAdb = [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  devices) echo "List of devices attached"; echo "emulator-5554   device product:sdk_gphone64 model:sdk_gphone64";;',
+      '  -e)',
+      '    case "$2" in',
+      '      shell) echo 1;;',
+      '      logcat) echo "I/BootReceiver( 1234): sys.boot_completed=1";;',
+      '    esac;;',
+      'esac',
+      '',
+    ].join('\n');
+    if (adb === 'path') {
+      fs.writeFileSync(path.join(bin, 'adb'), fakeAdb, { mode: 0o755 });
+    } else if (adb === 'platform-tools') {
+      // The runner's own shape for a step body that has not been told where the SDK
+      // is: `adb` is on the *harness action's* PATH and nowhere else, so only an
+      // `$ANDROID_HOME/platform-tools/adb` candidate can find it. Run 41256853746's
+      // host.log is eight "command not found" lines, which is the whole reason this
+      // resolution exists.
+      fs.mkdirSync(path.join(androidHome, 'platform-tools'), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(androidHome, 'platform-tools', 'adb'),
+        fakeAdb,
+        { mode: 0o755 }
+      );
+    }
+    return {
+      cwd,
+      home,
+      androidHome,
+      diag: (file) => path.join(cwd, 'harness-diag', file),
+      dispose: () => fs.rmSync(dir, { recursive: true, force: true }),
+      env: {
+        // Nothing inherited: a CI step body that works only with a developer's
+        // `$PATH`/`$HOME` is the thing being tested for.
+        PATH: [
+          adb === 'path' ? bin : null,
+          path.dirname(process.execPath),
+          '/usr/bin',
+          '/bin',
+        ]
+          .filter(Boolean)
+          .join(path.delimiter),
+        HOME: home,
+        ANDROID_HOME: androidHome,
+      },
+    };
+  }
+
+  it('the diagnostics step exits 0 with nothing on the machine to collect', () => {
+    // Run 41256853746 exactly: no AVD (the job died in the preflight, so the
+    // harness never created one), hence no `emulator-*.log`, and no `logcat.txt`
+    // because there was no `adb`. That is the shape the old last line could not
+    // survive.
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const step = (job.steps ?? []).find((candidate) =>
+      String(candidate.name ?? '').includes('Collect emulator boot diagnostics')
+    );
+    expect(step).not.toBeUndefined();
+    const box = sandbox();
+    try {
+      const ran = runStepBody(String(step.run), box);
+      expect({
+        status: ran.status,
+        err:
+          String(ran.stderr ?? '')
+            .split('\n')
+            .find(Boolean) ?? '',
+        tail: String(ran.stdout ?? '')
+          .trim()
+          .split('\n')
+          .slice(-1)[0],
+      }).toEqual({
+        status: 0,
+        err: '',
+        tail: 'diagnostics: 2 file(s) in harness-diag',
+      });
+      // `host.log` and `avd.log` are written before anything can fail, which is the
+      // whole point of the step: some evidence, whatever else happened.
+      expect(fs.existsSync(box.diag('host.log'))).toBe(true);
+      // And the tool that is missing is *named* as missing rather than swallowed:
+      // "command not found" inside the file is what let the first version of this
+      // step look like a healthy report about a machine with no emulator in it.
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        '== adb ==\nnot found'
+      );
+    } finally {
+      box.dispose();
+    }
+  });
+
+  it('the diagnostics step still prints what exists, including the AVD config', () => {
+    // The other half of "tolerate a missing log while still printing the ones that
+    // exist": with a booted emulator, its stderr, its `config.ini` and its
+    // properties must all reach the log and the artifact. `config.ini` is here and
+    // not in the preflight because the harness creates or restores the AVD in the
+    // step after the preflight, where the preflight's read of it could only ever
+    // print "No such file" on a cache miss — which is what run 41256853746 showed.
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const step = (job.steps ?? []).find((candidate) =>
+      String(candidate.name ?? '').includes('Collect emulator boot diagnostics')
+    );
+    const box = sandbox({ avd: true, adb: 'platform-tools' });
+    try {
+      const ran = runStepBody(String(step.run), box);
+      expect(ran.status).toBe(0);
+      const out = String(ran.stdout ?? '');
+      // Found through `$ANDROID_HOME/platform-tools`, with `adb` nowhere on PATH.
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        path.join(box.androidHome, 'platform-tools', 'adb')
+      );
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        'sys.boot_completed=1'
+      );
+      // The hardware lines, in the artifact, from the AVD the job really used.
+      expect(fs.readFileSync(box.diag('avd.log'), 'utf8')).toContain(
+        'hw.gpu.mode=swift_ind'
+      );
+      // Copied, and printed: a log that exists must be readable in the step's own
+      // output, not only in the artifact someone has to download.
+      expect(fs.existsSync(box.diag('emulator-5554.log'))).toBe(true);
+      expect(out).toContain('qemu: FIREFOX_MARKER_LINE');
+      expect(out).toContain('sys.boot_completed=1');
+    } finally {
+      box.dispose();
+    }
+  });
+
+  it('uploads a directory the uploader can actually see, and the one the step wrote', () => {
+    // Two steps, one path, and a default that bites: `upload-artifact` v4 resolves
+    // `path` with hidden entries excluded unless `include-hidden-files: true`, so a
+    // dot-directory collects files and uploads nothing, silently, under
+    // `if-no-files-found: ignore`. Run 41256853746 is the proof: the collect step
+    // listed `host.log` and `logcat.txt`, and the upload step's own input dump shows
+    // `include-hidden-files: false` next to "No files were found with the provided
+    // path: .harness-diag". So the path must be visible, and must be the same string
+    // the collect step writes to — drift between the two is the same bug in a
+    // different spelling.
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const steps = job.steps ?? [];
+    const collect = steps.find((candidate) =>
+      String(candidate.name ?? '').includes('Collect emulator boot diagnostics')
+    );
+    const upload = steps.find((candidate) =>
+      String(candidate.name ?? '').includes('Upload emulator boot diagnostics')
+    );
+    expect(upload).not.toBeUndefined();
+    const withs = upload.with ?? {};
+    const target = String(withs.path ?? '').replace(/\/+$/u, '');
+    expect(target).not.toBe('');
+    // Not hidden, in any segment, because the uploader's globber drops a hidden
+    // *segment*, not just hidden file names.
+    expect(target.split('/').some((segment) => segment.startsWith('.'))).toBe(
+      false
+    );
+    // The same directory the step writes into, read out of the step body rather than
+    // repeated here as a second copy of the answer.
+    const assigned = String(collect.run).match(/^DIAG=(\S+)$/mu)?.[1];
+    expect(assigned).toBe(target);
+    // And "we found nothing" has to be a red step. `ignore` is what made the
+    // uploader's silence indistinguishable from a run that needed no diagnostics.
+    expect(String(withs['if-no-files-found'])).toBe('error');
+    // Behaviourally: after a real run of the body, the uploader's `path` resolves to
+    // a directory holding at least one visible file.
+    const box = sandbox();
+    try {
+      expect(runStepBody(String(collect.run), box).status).toBe(0);
+      const uploaded = fs
+        .readdirSync(path.join(box.cwd, target))
+        .filter((name) => !name.startsWith('.'));
+      expect(uploaded.length).toBeGreaterThan(0);
+    } finally {
+      box.dispose();
+    }
   });
 });
 
