@@ -1091,6 +1091,124 @@ namespace {
     kept_.erase(aliased);
   }
 
+  /**
+   * `reportsConfirmed` counts reports, not instances — the fact behind the device
+   * rule that reads it as "a free report per control".
+   *
+   * CI went red on `confirmed=74` for a batch of 50 Switches, which reads like the
+   * engine confirming controls twice and charging for it. It is not: an instance that
+   * measures again and reports the same size confirms again, and every one of those
+   * reports cost nothing, which is exactly what the counter is for. A Compose host
+   * legitimately measures more than once per mount, and a `fillWidth` control reports on
+   * every box it is laid out at. So the instance count is a *floor* on confirmations,
+   * never a ceiling, and a device assertion that treated it as one was bound to go red
+   * on the next runner that laid a control out an extra time.
+   *
+   * Zero corrections across all of it is the half that must stay exact: the day a
+   * re-report of a size the engine already believes costs a state update, that is the
+   * regression, and it is what this case goes red on.
+   */
+  /**
+   * F8b: the *other* overflow, on the first frame of a long list.
+   *
+   * A commit that mounts N views lays all N out before its mount transaction binds any
+   * of them, so N rows are legitimately "filed, unbound" at the same moment. Past
+   * {@link kUnboundFilingCapacity} the excess is demoted into the held table — into the
+   * same 256-slot ceiling this round removed, which is why the two caps compounded: a
+   * first commit of 1,324 views overflowed by 300, the held table took 256 of them, and
+   * 44 controls were left at whatever size a guess had laid them out at. Their commit
+   * was not wrong, their binds were not late, and no counter showed it.
+   *
+   * The case above this one covers 1,224 layouts, which is *below* that cliff: 200
+   * overflow rows fit inside a table of 256, so it stayed green through the whole bug.
+   * This one is the size that was not, expressed as an overflow of 300 rather than a
+   * total — the number that matters is how many arrive at the table at once, and an
+   * overflow that large is what the table now has to be able to hold.
+   */
+  void testAFirstCommitWhoseOverflowExceedsTheOldHeldCapKeepsEveryCorrection() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    const int64_t count = static_cast<int64_t>(NitroUiSizingEngine::kUnboundFilingCapacity) + 300;
+    for (int64_t cycle = 0; cycle < count; cycle++) {
+      measure(47000 + cycle, "");
+    }
+    checkEquals(engine().unboundFilingCount(), NitroUiSizingEngine::kUnboundFilingCapacity,
+                "the valve opened, as it must — this is about where the overflow went, not whether");
+
+    // The mount transaction, in order: every layout above gets its instance.
+    for (int64_t cycle = 0; cycle < count; cycle++) {
+      bind(47000 + cycle, static_cast<int>(47000 + cycle));
+    }
+    checkEquals(engine().stats().ledgerEntries, count,
+                "every row of the commit is still there — a demoted one was claimed back by its bind");
+    checkEquals(engine().lateFilingCount(), size_t{0}, "and the held table gave them all back");
+
+    pushes.clear();
+    for (int64_t cycle = 0; cycle < count; cycle++) {
+      engine().report(47000 + cycle, 61, 28, 0);
+    }
+    check(engine().flush(), "the whole commit is corrected");
+    checkEquals(pushes.size(), static_cast<size_t>(count),
+                "one push per instance — none of them lost to a table that ran out of room");
+  }
+
+  void testAConfirmationCountsReportsAndNeverCostsACommit() {
+    resetEngine();
+    // Provisional and equal to what the control will report: the answer is already
+    // the control's own, so a report about it is a confirmation and nothing more.
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+    engine().seedSize("NitroUiSwitch", "", 61, 28, 0);
+    bind(46000, 46000);
+    measure(46000, "");
+
+    const NitroUiSizingCounters before = engine().stats();
+    for (int round = 0; round < 3; round++) {
+      measure(46000, "");
+      engine().report(46000, 61, 28, 0);
+      engine().flush();
+    }
+    const NitroUiSizingCounters after = engine().stats();
+    checkEquals(after.reportsConfirmed - before.reportsConfirmed, int64_t{3},
+                "one instance confirming three times is three confirmations — reports, not instances");
+    checkEquals(after.correctionsImmediate + after.correctionsBatched -
+                    (before.correctionsImmediate + before.correctionsBatched),
+                int64_t{0},
+                "and not one of them cost a state update, which is the promise");
+    checkEquals(pushes.size(), size_t{0}, "literally nothing was pushed to the control");
+
+    /**
+     * The same fact on the path the device rule takes, which is a different line of
+     * the engine: a batch of instances of one configuration, all reporting into one
+     * flush. `applyReports` walks the whole configuration and confirms each instance
+     * already on screen at the reported size — 50 Switches of one key, which is
+     * exactly the `provisional n=50` batch whose counter CI read as 74.
+     *
+     * Its own key, deliberately: the instance above already promoted its
+     * configuration to authoritative, and a batch measured against an authoritative
+     * entry takes the per-report free path instead. Provisional is the state a real
+     * batch mounts from, and the only one that reaches the walk.
+     */
+    engine().seedSize("NitroUiSwitch", "batch", 61, 28, 0);
+    for (int64_t cycle = 0; cycle < 5; cycle++) {
+      bind(46010 + cycle, static_cast<int>(46010 + cycle));
+      measure(46010 + cycle, "batch");
+    }
+    const NitroUiSizingCounters batchBefore = engine().stats();
+    for (int64_t cycle = 0; cycle < 5; cycle++) {
+      engine().report(46010 + cycle, 61, 28, 0);
+    }
+    engine().flush();
+    const NitroUiSizingCounters batchAfter = engine().stats();
+    checkEquals(batchAfter.correctionsImmediate + batchAfter.correctionsBatched -
+                    (batchBefore.correctionsImmediate + batchBefore.correctionsBatched),
+                int64_t{0},
+                "a batch whose configuration is already right costs no state update");
+    checkEquals(pushes.size(), size_t{0}, "and no commit at all, which is what the device rule's budget counts");
+    check(batchAfter.reportsConfirmed - batchBefore.reportsConfirmed >= 5,
+          "every instance of the configuration was confirmed by the batch's reports");
+  }
+
   void testColdMountFallsBackAndCorrects() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -2256,6 +2374,8 @@ int main() {
   testABigFirstCommitKeepsEveryCorrection();
   testABindThatArrivesAfterItsWindowStillClaimsItsRowBack();
   testAPickerShapedChurnOfDroppedAndUnboundMountsLeavesNothingBehind();
+  testAFirstCommitWhoseOverflowExceedsTheOldHeldCapKeepsEveryCorrection();
+  testAConfirmationCountsReportsAndNeverCostsACommit();
   testAReshowOfMoreControlsThanTheOldCapacityLosesNoCorrection();
   testTheHeldTableStillCannotGrowWithoutBound();
   testABindLaterThanBothWindowsIsChargedAFreshMeasure();

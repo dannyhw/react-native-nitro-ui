@@ -490,12 +490,12 @@ describe('Sizing · intrinsic (T11)', () => {
       <Switch defaultValue testID="warm" hybridRef={captureHybrid} />
     );
     const box = await waitForTestId('warm');
-    const content = hybrid?.measureContent() ?? null;
+    const content = await measuredContent('the warm Switch');
     const d = delta(before, stats());
 
     console.log(`warm: box=${describeBox(box)} d=${JSON.stringify(d)}`);
     expect(boxMatches(box, expectedBox!)).toBe(true);
-    expect(Math.abs(content!.width - expectedBox!.width)).toBeLessThan(1.5);
+    expect(Math.abs(content.width - expectedBox!.width)).toBeLessThan(1.5);
     expect(d.corrections).toBe(0);
     expect(d.dropped).toBeGreaterThan(0);
     unmount();
@@ -1002,7 +1002,7 @@ describe('Sizing · intrinsic (T11)', () => {
         ),
       8000
     );
-    const content = hybrid?.measureContent() ?? null;
+    const content = await measuredContent('the Switch inside the Modal');
     const cold = delta(before, stats());
     const own = trace.filter(
       (event: NitroUiSizingTraceEvent) => event.instanceId === instanceId
@@ -1018,7 +1018,6 @@ describe('Sizing · intrinsic (T11)', () => {
         `trace=${String(JSON.stringify(own.map(sizingEventLabel)))} d=${JSON.stringify(cold)}`
     );
 
-    expect(content).not.toBeNull();
     // The dialog mounted from the poisoned guess (the wait above proves a report
     // reached the engine, and `laidOut` names the box the first measure answered
     // with), so `corrected` is the control's own measurement outranking it - and
@@ -1027,11 +1026,11 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(Math.abs(laidOut[0]!.width - WRONG_GUESS.width)).toBeLessThan(1.5);
     expect(Math.abs(laidOut[0]!.height - WRONG_GUESS.height)).toBeLessThan(1.5);
     expect(corrected.length).toBeGreaterThan(0);
-    expect(Math.abs(content!.width - expectedBox!.width)).toBeLessThan(1.5);
-    expect(Math.abs(content!.height - expectedBox!.height)).toBeLessThan(1.5);
+    expect(Math.abs(content.width - expectedBox!.width)).toBeLessThan(1.5);
+    expect(Math.abs(content.height - expectedBox!.height)).toBeLessThan(1.5);
     for (const event of corrected) {
-      expect(Math.abs(event.width - content!.width)).toBeLessThan(0.6);
-      expect(Math.abs(event.height - content!.height)).toBeLessThan(0.6);
+      expect(Math.abs(event.width - content.width)).toBeLessThan(0.6);
+      expect(Math.abs(event.height - content.height)).toBeLessThan(0.6);
     }
     // The dialog is the only window doing work, so the flush that pushed this
     // correction is this mount's.
@@ -1082,6 +1081,13 @@ describe('Sizing · intrinsic (T11)', () => {
     const lateCorrected = lateOwn.filter(
       (event: NitroUiSizingTraceEvent) => event.stage === 'corrected'
     );
+    /**
+     * Read directly rather than through `measuredContent`, because this handle has
+     * already reported a *different* size: the control above was laid out at the
+     * narrow box, and `measuredContent` waits only for "a size", which this one still
+     * holds. Same reason it is read before the second render below — inside one test,
+     * the module-level capture can name either control.
+     */
     const wideContent = hybrid?.measureContent() ?? null;
     console.log(
       `modal late: content=${describeBox(wideContent)} ` +
@@ -1449,7 +1455,7 @@ describe('Sizing · intrinsic (T11)', () => {
       TEST_WIDTH,
       'a control whose width arrived with its first props'
     );
-    const measured = hybrid?.measureContent() ?? null;
+    const measured = await measuredContent('the first-commit wide Switch');
     const d = delta(before, stats());
     const trace = await collectTrace(hasDrawnSample);
     console.log(
@@ -1492,6 +1498,11 @@ describe('Sizing · intrinsic (T11)', () => {
       'a plain control mounted on a host that measured a wider one'
     );
     const recycledDelta = delta(recycled, stats());
+    /**
+     * Read directly, as before, for the reason at `wideContent` above: this is the
+     * second control in one test, so the capture may still hold the first one's
+     * handle, and `measuredContent` would accept that one's size as an answer.
+     */
     console.log(
       `after recycle: box=${describeBox(plainBox)} measured=${describeBox(
         hybrid?.measureContent() ?? null
@@ -1973,8 +1984,24 @@ describe('Sizing · intrinsic (T11)', () => {
     perInstance: number;
     corrections: number;
     confirmed: number;
+    /**
+     * Layouts the engine answered, and reports it saw. Both are per *call*, not per
+     * instance, which is what makes them readable next to `confirmed` — see the note on
+     * the assertion that uses them.
+     */
+    measurements: number;
+    queued: number;
+    dropped: number;
     flushes: number;
     maxFlushMs: number;
+    /** What was in the engine when the batch's counters were read. */
+    ledgerEntries: number;
+    registryEntries: number;
+    /**
+     * Instances mounted in this process that are not in this batch — the reason a
+     * global counter can legitimately exceed `count`, and the number that says so.
+     */
+    otherInstancesMounted: number;
   };
 
   /**
@@ -2003,7 +2030,17 @@ describe('Sizing · intrinsic (T11)', () => {
     }
     const before = stats();
     const { mountedIn, unmount } = await mountMany(count, prefix);
-    const d = delta(before, stats());
+    /**
+     * Read the counters before unmounting, and read the totals as well as the deltas.
+     *
+     * The totals matter because a global counter can only be compared against a global
+     * total: if the process holds more instances than this batch mounted, then `count`
+     * and `confirmed` are not the same quantity. That is the measurement which decides
+     * whether a `confirmed` above `count` double-counts these controls or correctly
+     * counts someone else's reports (see the assertion that reads it).
+     */
+    const after = stats();
+    const d = delta(before, after);
     unmount();
     return {
       count,
@@ -2012,9 +2049,37 @@ describe('Sizing · intrinsic (T11)', () => {
       perInstance: mountedIn / count,
       corrections: d.corrections,
       confirmed: d.confirmed,
+      measurements: d.measurements,
+      queued: d.queued,
+      dropped: d.dropped,
       flushes: d.flushes,
       maxFlushMs: d.maxFlushMs,
+      ledgerEntries: after.ledgerEntries,
+      registryEntries: after.registryEntries,
+      otherInstancesMounted: after.registryEntries - count,
     } satisfies BenchRow;
+  }
+
+  /**
+   * Report one batch's counters, with the extra numbers that make a counter readable.
+   *
+   * A CI run of this test went red on `confirmed=74` for a batch of 50, and the log
+   * line had nothing in it that could say why: `confirmed` is a *report* counter, so
+   * the number of instances is not its upper bound, and the only way to tell a
+   * legitimate extra report from a double-count is to see the reports and the mounted
+   * instances beside it. That diagnosis needed a local rebuild with a probe in it,
+   * which is the thing a log line should spare everyone.
+   */
+  function logBenchRow(row: BenchRow): void {
+    console.log(
+      `bench: ${row.guess} n=${row.count} ` +
+        `${row.mountedIn.toFixed(1)}ms (${row.perInstance.toFixed(2)}ms each) ` +
+        `corrections=${row.corrections} confirmed=${row.confirmed} ` +
+        `flushes=${row.flushes} maxFlushMs=${row.maxFlushMs.toFixed(3)} · ` +
+        `measures=${row.measurements} queued=${row.queued} dropped=${row.dropped} · ` +
+        `registry=${row.registryEntries} (this batch ${row.count}, ` +
+        `others still mounted ${row.otherInstancesMounted}) ledger=${row.ledgerEntries}`
+    );
   }
 
   it('mounts the same batch from every starting guess, at the right size', async () => {
@@ -2035,13 +2100,7 @@ describe('Sizing · intrinsic (T11)', () => {
       }
     }
     for (const row of rows) {
-      console.log(
-        `bench: ${row.guess} n=${row.count} ` +
-          `${row.mountedIn.toFixed(1)}ms (${row.perInstance.toFixed(2)}ms each) ` +
-          `corrections=${row.corrections} confirmed=${row.confirmed} ` +
-          `flushes=${row.flushes} ` +
-          `maxFlushMs=${row.maxFlushMs.toFixed(3)}`
-      );
+      logBenchRow(row);
     }
     for (const count of [1, 50]) {
       for (const guess of guesses) {
@@ -2050,8 +2109,41 @@ describe('Sizing · intrinsic (T11)', () => {
         )!;
         // A guess that agrees with the control costs nothing to confirm; a wrong
         // one costs exactly one update per instance, and no more.
+        //
+        // `corrections` is the assertion with teeth, and it stays exact: a state
+        // update is the expensive thing, and one per instance is the promise.
         expect(row.corrections).toBe(guess === 'wrongGuess' ? count : 0);
-        expect(row.confirmed).toBe(guess === 'wrongGuess' ? 0 : count);
+        if (guess === 'wrongGuess') {
+          // A wrong guess corrects; it does not also confirm. A batch that did
+          // both is pushing something twice that `corrections` alone would not
+          // show, so this half stays exact.
+          expect(row.confirmed).toBe(0);
+          continue;
+        }
+        // An agreeing guess owes at least one free confirmation per instance —
+        // the direction that catches a control left unable to answer for its own
+        // size, which is what every other case in this file is about.
+        //
+        // It used to be `toBe(count)`, and CI's `confirmed=74` for 50 was not the
+        // engine over-confirming. `reportsConfirmed` counts *reports*, not
+        // instances, and reports are not bounded by the instance count:
+        //  - a host that re-measures and re-reports the same size confirms again
+        //    (proved natively: one instance, three measure+report cycles, three
+        //    confirmations, zero corrections), and a Compose host legitimately
+        //    measures more than once per mount — this batch reads `measures=100`
+        //    for 50 instances on Android; and
+        //  - `seedGuess` bumps the environment epoch, which marks *every* mounted
+        //    row of this configuration inexact, so a Switch another suite left
+        //    mounted is confirmed by this batch's flush as well. A probe read
+        //    `registry=7` before a batch, from this file's own earlier tests.
+        // Either way an extra confirmation is a report that cost no commit, which
+        // is the outcome this rule wants. So the ceiling is deliberately not
+        // asserted: any ceiling I would write is a guess at this process's
+        // population and its layout passes, and a number fitted to the last run
+        // is a red waiting for the next one. `logBenchRow` carries the measures,
+        // the reports and the registry, so a count that moves can be read from
+        // the log rather than re-diagnosed with a local rebuild.
+        expect(row.confirmed).toBeGreaterThanOrEqual(count);
         await expectTimingBudget({
           label: `bench: mount a batch of ${String(count)}`,
           measuredMs: row.mountedIn,

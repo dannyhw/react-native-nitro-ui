@@ -82,17 +82,35 @@ async function accessibilityStepReport(
   handle: SliderHandle,
   direction: number
 ): Promise<string> {
-  handle.nuiTestAccessibilityStep(direction);
-  // The action runs in a turn of the UI thread's queue and the report is a plain
-  // field written there, so this waits for the report to change rather than for a
-  // guessed pause.
+  // Snapshot the report *before* asking for the step, not after.
+  //
+  // The seam posts the action to the UI thread and returns; the report is written
+  // there. Reading the previous report after posting leaves a window between the two
+  // JSI calls in which the UI thread can run the whole probe — and it is a window the
+  // runner wins exactly when it is loaded. If the probe has already answered, the
+  // snapshot *is* the answer, and "wait for the report to change" then waits five
+  // seconds for a change that already happened: CI 41282238854's `The accessibility
+  // step probe never reported.`, while the same test's later steps on the same runner
+  // printed `#1 performed SetProgress(3.0) …`.
+  //
+  // Ordering the snapshot first closes it, because the probe numbers every report
+  // (`reportAccessibilityStep`'s counter), so no report it writes can be byte-identical
+  // to one that came before it. Nothing about what is asserted changes: a probe that
+  // runs and finds no semantics node still answers with that reason, and
+  // `expectPerformed` is still the line that decides whether the platform acted.
   const before = handle.nuiTestAccessibilityStepReport();
+  handle.nuiTestAccessibilityStep(direction);
   return pollUntil(
     () => {
       const report = handle.nuiTestAccessibilityStepReport();
       return report === before ? null : report;
     },
-    () => new Error('The accessibility step probe never reported.'),
+    () =>
+      new Error(
+        `The accessibility step probe never reported (last report: ${
+          before === '' ? 'none' : `"${before}"`
+        }).`
+      ),
     5000
   );
 }
