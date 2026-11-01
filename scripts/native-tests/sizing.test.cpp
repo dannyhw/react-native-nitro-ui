@@ -22,8 +22,10 @@
 #include <cstdio>
 #include <functional>
 #include <memory>
+#include <chrono>
 #include <string>
 #include <unordered_map>
+#include <thread>
 #include <vector>
 
 using namespace margelo::nitro::nitroui;
@@ -337,6 +339,199 @@ namespace {
     check(engine().flush(), "and the re-bound instance still gets its correction");
     checkEquals(pushes.size(), size_t{1}, "one push, for the instance that is live");
     checkEquals(pushes[0].tag, 4700, "and it went to the re-bound instance");
+  }
+
+  /**
+   * F8 round 2: a *re-shown* view must keep the correction it is owed.
+   *
+   * Round 1's guard assumed an id that mounts again is a new id. It is not.
+   * `useSizingId` mints one id per React mount, and iOS Fabric creates no native
+   * view for a `display: none` node — so hiding a control deletes its view
+   * (`drop()` -> `forget(X)`), and showing it again creates a *new native view
+   * under the same id X*. The order on re-show is layout first, mount second:
+   *
+   *   measure(X)      <- guard refuses: no ledger entry
+   *   registerInstance(X) <- clears the mark: the id is live again
+   *   report(X)       <- `report` finds no ledger entry and returns (line ~576)
+   *
+   * so the control sits at its fallback with nothing left to correct it, and
+   * `invalidateEnvironment` cannot help either: it re-keys `ledger_`, and this
+   * instance is not in it. One lost correction per hide/show, forever, for a
+   * control behind a `display: none` toggle.
+   *
+   * The shape of these cases is the order that actually happens, and the order
+   * round 1's test hid: forget -> measure -> bind -> report. The test that
+   * existed measured a second time *after* the rebind, which files an entry by
+   * the normal path and makes the case pass whatever the guard does in between.
+   */
+  void testAReshownViewIsStillCorrectedAfterItsLateLayout() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    // First mount, corrected, then hidden: `display: none` deletes the native view.
+    bind(4800, 4800);
+    measure(4800, "");
+    engine().report(4800, 61, 28, 0);
+    engine().flush();
+    engine().forget(4800);
+    kept_.erase(4800);
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "hiding it leaves nothing behind");
+
+    // Shown again: the layout pass runs before the mount transaction, so this is
+    // the layout of the new native view arriving while the id still reads as
+    // finished. Same id, because the React mount never ended.
+    measure(4800, "reshown");
+
+    // The mount transaction. `registerInstance` is the proof of life.
+    bind(4800, 4800);
+    checkEquals(engine().stats().ledgerEntries, int64_t{1}, "a re-shown view has a ledger entry — the layout that arrived first is not thrown away");
+
+    // And the correction reaches it. This is the assertion the whole case exists
+    // for: `report` reads the ledger, so an entry filed by nothing is a control
+    // that stays at 52x48 for the rest of its life.
+    pushes.clear();
+    engine().report(4800, 61, 28, 0);
+    check(engine().flush(), "and its first measurement is still a correction it can receive");
+    checkEquals(pushes.size(), size_t{1}, "exactly one push");
+    checkEquals(pushes[0].tag, 4800, "to the re-shown instance");
+    checkEquals(pushes[0].width, 61.0f, "with the size the control measured");
+  }
+
+  /**
+   * The same hole on the other side: an environment change (font scale, density,
+   * a fold) re-keys every entry in `ledger_` and marks it inexact, so the next
+   * report is a correction. A re-shown view with no entry is not in that walk, so
+   * it is not in the correction either — it keeps the size the *old* environment
+   * produced, which is the exact failure S2 was written against, arriving through
+   * round 1's guard instead of through a missing re-key.
+   */
+  void testAReshownViewIsStillCorrectedByAnEnvironmentChange() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    bind(4900, 4900);
+    measure(4900, "");
+    engine().report(4900, 61, 28, 0);
+    engine().flush();
+    engine().forget(4900);
+    kept_.erase(4900);
+
+    measure(4900, "");
+    bind(4900, 4900);
+
+    // The environment moves while the view is mounted and laid out.
+    engine().invalidateEnvironment();
+    pushes.clear();
+    engine().report(4900, 74, 33, 0);
+    check(engine().flush(), "an environment change still corrects a re-shown view");
+    checkEquals(pushes.size(), size_t{1}, "one push for the re-shown instance");
+    checkEquals(pushes[0].width, 74.0f, "at the new environment's size, not the old one");
+  }
+
+  /**
+   * The hold is a bounded table, not the leak wearing a hat.
+   *
+   * Round 1 fixed this leak by refusing to file; round 2 files and holds, which is
+   * only an improvement if what it holds stays small. `ledgerEntries` cannot answer
+   * that — a hold is deliberately outside the ledger, which is the whole trick — so
+   * `lateFilingCount()` exists to be assertable, and this is the case that reads it:
+   * a thousand drops with a late layout each, which is a scrolling list, and a
+   * bound that must never be exceeded however the app churns.
+   *
+   * The fixture deliberately uses ids *below* the ring's width and a single burst,
+   * so this cannot pass because of id arithmetic: the only thing reclaiming here is
+   * the capacity in `stageLateFilingLocked`.
+   */
+  void testAHeldLateFilingIsBoundedUnderABurstOfDrops() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    int64_t peak = 0;
+    for (int64_t cycle = 0; cycle < 1000; cycle++) {
+      const int64_t id = 5100 + cycle;
+      bind(id, static_cast<int>(id));
+      measure(id, "");
+      engine().forget(id);
+      kept_.erase(id);
+      // The orphaning layout, one cycle late, exactly as an async commit is.
+      measure(id, "");
+      const int64_t held = static_cast<int64_t>(engine().lateFilingCount());
+      peak = held > peak ? held : peak;
+    }
+    check(peak > 0, "the late layouts really were held — otherwise this case proves nothing");
+    check(peak <= static_cast<int64_t>(NitroUiSizingEngine::kLateFilingCapacity),
+          "the held table stays bounded under a thousand drops");
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "and none of it reached the ledger");
+    checkEquals(engine().stats().registryEntries, int64_t{0}, "nor the registry");
+  }
+
+  /**
+   * The hold's window is real in both directions.
+   *
+   * `lateFilings_` gives an entry up three ways: a bind claims it, capacity evicts
+   * the oldest (proved by the case above), and age. Age is the one with a bug on
+   * each side, so this proves both halves:
+   *
+   *  - a window too short, and a bind that is merely late loses its held layout —
+   *    the re-show bug back again, arriving only under load, i.e. exactly when
+   *    nobody can reproduce it;
+   *  - no window at all, and an orphan's row is held for the life of the process,
+   *    which is the thing this table exists to avoid.
+   *
+   * The waits come from the engine's own constant rather than a repeated literal,
+   * so the case cannot drift from the window, and the long one is clamped: a window
+   * that grew past the clamp makes the release go *red* instead of hanging the
+   * suite. Ids are unrelated to the ring's width, and one hold cannot reach a
+   * capacity of 256, so nothing here can be reclaimed for any other reason than age.
+   */
+  void testAHeldLateFilingIsReleasedWhenItsBindMissesTheWindow() {
+    using namespace std::chrono_literals;
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    constexpr auto kGrace = std::chrono::nanoseconds(NitroUiSizingEngine::kLateFilingGraceNs);
+    // Long enough to be inside the window, far short of it.
+    constexpr auto kWaitInsideWindow = std::chrono::milliseconds(60);
+    // Past it, but never long enough to hang the suite if the window is wrong.
+    constexpr auto kWaitAfterWindow = kGrace + std::chrono::milliseconds(300) > std::chrono::seconds(5)
+                                          ? std::chrono::seconds(5)
+                                          : kGrace + std::chrono::milliseconds(300);
+
+    // Mount, drop, and let one layout arrive late: a hold.
+    bind(5200, 5200);
+    measure(5200, "");
+    engine().forget(5200);
+    kept_.erase(5200);
+    measure(5200, "reshown");
+    checkEquals(engine().lateFilingCount(), size_t{1}, "the late layout is on hold");
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "and it is not in the ledger while it is");
+
+    /**
+     * Still inside the window, and the re-shown control is then bound. The
+     * neighbour's layout in between is not decoration: a re-show is never alone in
+     * a commit — the row it belongs to is laid out with the rest of the list, and
+     * every one of those layouts runs the reclaim. So this is the order that could
+     * take the hold away early, and the assertion is that it does not.
+     */
+    std::this_thread::sleep_for(kWaitInsideWindow);
+    bind(5201, 5201);
+    measure(5201, "");
+    checkEquals(engine().lateFilingCount(), size_t{1}, "a bind that is merely slow has not lost its layout");
+    bind(5200, 5200);
+    checkEquals(engine().lateFilingCount(), size_t{0}, "binding claims it");
+    checkEquals(engine().stats().ledgerEntries, int64_t{2}, "as that instance's own row, beside its neighbour's");
+
+    // Past the window, with no bind ever arriving.
+    engine().forget(5200);
+    kept_.erase(5200);
+    measure(5200, "orphaned");
+    checkEquals(engine().lateFilingCount(), size_t{1}, "the second late layout is on hold too");
+    std::this_thread::sleep_for(kWaitAfterWindow);
+
+    bind(5202, 5202);
+    measure(5202, "");
+    checkEquals(engine().lateFilingCount(), size_t{0}, "the window releases a hold whose bind never came");
+    checkEquals(engine().stats().ledgerEntries, int64_t{2}, "and only that hold — the two live instances are untouched");
   }
 
   void testColdMountFallsBackAndCorrects() {
@@ -1446,6 +1641,10 @@ int main() {
   testALateLayoutAfterForgetFilesNothing();
   testALayoutBeforeItsBindStillGetsCorrected();
   testAnIdThatBindsAgainIsNotTreatedAsFinished();
+  testAReshownViewIsStillCorrectedAfterItsLateLayout();
+  testAReshownViewIsStillCorrectedByAnEnvironmentChange();
+  testAHeldLateFilingIsBoundedUnderABurstOfDrops();
+  testAHeldLateFilingIsReleasedWhenItsBindMissesTheWindow();
   testExpiredStatesAreSweptWithoutForget();
   testInstanceIdsAreMonotonic();
   testImmediateBudgetCapsOneFlush();

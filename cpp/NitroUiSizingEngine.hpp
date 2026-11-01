@@ -24,6 +24,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <shared_mutex>
 #include <string>
@@ -374,6 +375,14 @@ namespace margelo::nitro::nitroui {
       size_t cachedSizeCount() const;
 
       /**
+       * How many entries are on hold for a bind that has not arrived (see
+       * {@link lateFilings_}). Diagnostics and tests, and the only number that can
+       * answer "did the leak fix move the leak, or bound it?" - `ledgerEntries`
+       * cannot, because a hold is deliberately outside the ledger.
+       */
+      size_t lateFilingCount() const;
+
+      /**
        * Adopt a component's declared size as this environment's *provisional*
        * answer for its default configuration (the empty sizing key): the first
        * instance is laid out with it, and the first control that measures either
@@ -404,8 +413,9 @@ namespace margelo::nitro::nitroui {
       /// grown this much since the last walk.
       static constexpr size_t kRegistrySweepStride = 512;
       /**
-       * How many finished instance ids the engine keeps, to answer "is this id
-       * done?" in O(1). Four KiB, always, whatever an app does.
+       * How many finished instance ids the engine keeps, to answer "has this id
+       * been through?" in O(1). Four KiB (512 slots × 8 bytes), always, whatever
+       * an app does.
        *
        * Must be a power of two: {@link forgotten_} is direct-mapped by the id's
        * low bits, and ids are monotonic, so a capacity of 2^n means the last 2^n
@@ -414,11 +424,23 @@ namespace margelo::nitro::nitroui {
        */
       static constexpr size_t kForgottenCapacity = 512;
       /**
-       * How many finished instance ids `measure` remembers refusing (see
-       * {@link rememberForgottenLocked}). Four KiB, always, and the only cost of
-       * the rule.
+       * How long a layout that arrived for a finished id may be held before the
+       * engine stops waiting for its bind, and how many are held at once. Together
+       * they are the whole cost of the leak rule: a bounded table of at most
+       * `kLateFilingCapacity` ledger rows (about 24 KiB), and one pass over the
+       * front of it per `measure`, only while anything is held.
+       *
+       * The window has to cover the gap between a shadow-tree layout and the mount
+       * transaction that binds the same instance: one React commit, so milliseconds
+       * in a healthy app. One second, because the two costs are not symmetric —
+       * holding too long costs a table entry, releasing too early costs a control
+       * its correction for the rest of its life, which is the bug this fix is about
+       * — and a saturated runner is where a tight budget gets measured and lost (F8
+       * saw load1 380 on 3 cores). It is a monotonic clock, never wall time, so a
+       * user changing their clock can neither hold an entry nor release one early.
        */
-      static constexpr size_t kForgottenRingCapacity = 512;
+      static constexpr int64_t kLateFilingGraceNs = 1000000000;
+      static constexpr size_t kLateFilingCapacity = 256;
 
       /// Trace on/off (off by default: `measure` only compares two floats).
       void setTraceEnabled(bool enabled);
@@ -528,6 +550,24 @@ namespace margelo::nitro::nitroui {
       /// Drop every trace of an instance (see `forget`). Caller holds the lock.
       void forgetLocked(int64_t instanceId);
 
+      /**
+       * Hold the entry a layout produced for an id the engine has finished, until
+       * a bind claims it or the horizon passes it. Caller holds the lock. See
+       * {@link lateFilings_}.
+       */
+      void stageLateFilingLocked(int64_t instanceId, const LedgerEntry& entry);
+      /**
+       * Drop held entries the id horizon has passed. Caller holds the lock, and
+       * `measure` runs it from inside the lock it already holds.
+       */
+      void pruneLateFilingsLocked();
+      /**
+       * Move a held entry into the ledger, and hand back whether there was one.
+       * `registerInstance` calls it for the id it binds — the only proof that a
+       * held layout was meant for a live instance. Caller holds the lock.
+       */
+      bool claimLateFilingLocked(int64_t instanceId);
+
       /// Mark an id finished, so a layout that arrives for it afterwards files
       /// nothing (see {@link forgotten_}). Caller holds the lock.
       void rememberForgottenLocked(int64_t instanceId);
@@ -565,7 +605,9 @@ namespace margelo::nitro::nitroui {
       std::unordered_map<uint64_t, GuessEntry> guesses_;
       std::unordered_map<int64_t, LedgerEntry> ledger_;
       /**
-       * The ids `forget` has finished, direct-mapped by their low bits.
+       * The ids `forget` has finished, direct-mapped by their low bits, so "has
+       * this id been through?" is one array read under the lock `measure` already
+       * holds.
        *
        * Why this exists: a correction is an `Asynchronous` state update, and RN runs
        * its callback later, scheduling a layout pass over the tree revision that
@@ -579,22 +621,77 @@ namespace margelo::nitro::nitroui {
        * process. That is F8's `Menu × no-leak-on-drop: 1 ledger entry(ies) survived
        * 50 drops`, in a run whose registry read `0→0` across the same window.
        *
-       * Why the shape is safe: ids come from `nextInstanceId()`, a monotonic counter
-       * whose values are never reused, so recording a slot per id answers "is this id
-       * the one I finished?" *exactly* — a false positive would need an id equal to
-       * the one stored in its own slot, which is that id. The price is the opposite
-       * error: an id whose slot was taken by the id exactly `kForgottenCapacity`
-       * newer is no longer remembered, so a layout arriving *that* late re-files its
-       * orphan. The window that matters is one layout pass, not five hundred drops.
+       * What it answers is "was this id finished?", never "is this id live?",
+       * because those are not in conflict: `measure` runs *before* `registerInstance`
+       * on every real mount (layout is on the shadow thread, the bind is on the mount
+       * transaction), so a rule about unbound ids would swallow corrections, which is
+       * the failure S7 exists to stop. Being finished is a fact about the past, and
+       * {@link lateFilings_} is what makes it survivable.
        *
-       * The alternative that would also work — refusing an id merely because it is
-       * not bound — cannot: `measure` legitimately runs *before* `registerInstance`
-       * on a real mount (layout is on the shadow thread, the bind is on the mount
-       * transaction), and swallowing a correction is the failure S7 exists to stop.
-       * Hence a memory of finished ids rather than a rule about live ones, and
-       * `registerInstance` clearing the mark: an id that binds again is live.
+       * Why the shape is exact: ids come from `nextInstanceId()`, a monotonic counter
+       * whose values are never reused, so a slot holding an id answers for that id and
+       * no other — a false positive would need an id equal to the one in its own slot.
+       * The failure mode is the other one: an id whose slot was taken by the id
+       * exactly `kForgottenCapacity` newer is no longer remembered as finished, so a
+       * layout arriving *that* late is filed normally and its orphan survives. The
+       * window that matters is one layout pass, not five hundred drops.
        */
       std::array<int64_t, kForgottenCapacity> forgotten_{};
+      /**
+       * An entry a layout produced for a finished id, and when it was put on hold.
+       * Same shape as a ledger row because that is exactly what it becomes if the id
+       * binds.
+       */
+      struct HeldFiling final {
+        LedgerEntry entry{};
+        int64_t stagedAtNs = 0;
+      };
+      /**
+       * Entries that arrived for a finished id, held until a bind claims one or the
+       * window on it closes.
+       *
+       * Why not simply refuse them, which is what round 1 of this fix did: the id of
+       * a re-shown view is *not* a new id. `useSizingId` mints one per **React**
+       * mount, and iOS Fabric creates no native view for a `display: none` node, so
+       * hiding a control runs `drop()` -> `forget(X)` while its React mount — and its
+       * id — survive. Showing it again lays the new native view out *before* the
+       * mount transaction binds it, so refusing that layout left the instance bound
+       * with no ledger entry: `report` returns at its first line without one, and
+       * `invalidateEnvironment` re-keys `ledger_` and so never sees it. A new `sizingKey`
+       * while hidden, or a font-scale change after a re-show, then had nothing left to
+       * correct it. Refusing loses corrections; filing loses the leak fix. Holding costs
+       * neither, because a hold is not in `ledger_` and no counter counts it.
+       *
+       * Who claims one: `registerInstance`, and only `registerInstance`. It is the one
+       * call that means "this id has a `State` in the shadow tree". `report` must not
+       * claim: a report can arrive from a revision that is already gone, and filing an
+       * entry for it would be the leak this table exists to prevent, arriving through
+       * the fix. (It could not fire anyway: binding claims immediately and `forget`
+       * clears both, so no id in `registry_` has a hold.)
+       *
+       * Who reclaims one: `forget`, which drops the id's hold whenever it is finished
+       * again — the exact case, since anything still arriving for a finished id comes
+       * from a revision being torn down. And `pruneLateFilingsLocked`, for an orphan,
+       * whose `forget` has *already* run by the time its late layout lands: no future
+       * call is coming for it, so the window is what reclaims it. An orphan therefore
+       * never enters `ledger_`, which is why the on-device leak rule sees zero without
+       * a sweep, a cadence, or a race.
+       */
+      std::unordered_map<int64_t, HeldFiling> lateFilings_{};
+      /**
+       * The ids in {@link lateFilings_}, oldest hold first: the reclaim order, and
+       * the capacity the table is bounded by.
+       *
+       * A slot outlives its entry when the id is claimed or forgotten, and
+       * `pruneLateFilingsLocked` drops such a slot on sight rather than counting it.
+       * That is deliberate: removing an arbitrary id from a deque is a scan, and
+       * `forget` runs on every dropped view, so the hot path pays nothing and the
+       * stale slot costs one compare the next time the queue's front reaches it. The
+       * bound still holds, because the queue itself never exceeds
+       * {@link kLateFilingCapacity} slots and the map only ever holds ids the queue
+       * has slots for.
+       */
+      std::deque<int64_t> lateFilingQueue_{};
       /// hash -> instances that last laid out with a size that is not the cache's.
       std::unordered_map<uint64_t, std::vector<int64_t>> needsCorrection_;
       std::unordered_map<int64_t, BoundInstance> registry_;
