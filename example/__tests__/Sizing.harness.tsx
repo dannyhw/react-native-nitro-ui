@@ -1542,6 +1542,162 @@ describe('Sizing · intrinsic (T11)', () => {
     unmount();
   });
 
+  /**
+   * A control hidden with `display: 'none'` and shown again keeps its correction.
+   *
+   * Round 1's forgotten-id guard refused to file a layout for an id the engine had
+   * finished, on the assumption that an id which mounts again is a new id. It is not:
+   * `useSizingId` mints one per **React** mount (`src/core/useSizingId.ts`), so a hide
+   * that tears the native view down (`onDropView` → `host.drop()` → `forget(id)`)
+   * without ending the React mount leaves an id that comes back later attached to a
+   * brand-new native view — laid out one step *before* the mount transaction re-binds
+   * it. Round 1 refused that layout, the bind then cleared the mark, and the instance
+   * was left bound with no ledger entry: `report` returns at its first line without
+   * one, and `invalidateSizingEnvironment` re-keys `ledger_` and so cannot reach it.
+   * The control kept the size it was laid out at for the rest of its life, and a size
+   * change made while hidden was never corrected. One lost correction per hide/show.
+   *
+   * These two cases drive that sequence — a size-affecting prop moved while hidden,
+   * then the re-show — once with the correction owed by the configuration and once
+   * with the environment moved in between. The wrong guess is seeded first (review S8)
+   * so a correction that never arrives shows up as a box that stays wrong instead of
+   * passing quietly.
+   *
+   * The first `console.log` in each is the witness for *which* platform path ran. iOS
+   * Fabric creates no native view for a `display: none` node, so the hide is a real
+   * teardown and the ledger drops; Android honours `display: none` as `INVISIBLE`
+   * (`NitroComposeHost.kt:424`), so its view survives, nothing is forgotten, and the
+   * re-show is a visibility flip. Both platforms have to end up with the corrected box,
+   * and the correction is counted across the whole hide→show window rather than after
+   * the re-show, because which half of it Android pays for in is exactly what differs.
+   * The log names the path so a run cannot bank Android's easy pass as the regression
+   * guard. The ordering the regression is about is pinned natively, in the engine both
+   * platforms ship, by `testAReshownViewIsStillCorrectedAfterItsLateLayout` and its
+   * environment-change sibling in `scripts/native-tests/sizing.test.cpp`.
+   */
+  const reShownSwitch = (hidden: boolean, width: number | null) => (
+    <Switch
+      defaultValue
+      nuiTestWidth={width}
+      testID="reshown"
+      accessibilityLabel="Sizing re-shown switch"
+      hybridRef={captureHybrid}
+      {...(hidden ? { style: { display: 'none' } } : {})}
+    />
+  );
+
+  /** What the ledger did across a hide, and a note naming the platform path it proves. */
+  function describeHide(before: number, after: number) {
+    const tornDown = after < before;
+    return (
+      `ledger ${String(before)}->${String(after)} — display:none ` +
+      (tornDown
+        ? 'tore the native view down: this run exercised the re-show path'
+        : 'left the native view alive: this run exercised the visibility flip only')
+    );
+  }
+
+  it('corrects a control hidden with display:none when it is shown again', async () => {
+    seedWrongGuess();
+    const before = stats();
+
+    // Mounted and correct.
+    const { rerender, unmount } = await render(reShownSwitch(false, null));
+    await waitForBoxWidth(
+      'reshown',
+      expectedBox.width,
+      'the control before it was hidden'
+    );
+    await settle(300);
+    const mounted = stats();
+    expect(mounted.ledgerEntries).toBeGreaterThan(0);
+
+    // Hidden, with its size-affecting prop moved while it has no visible layout.
+    await rerender(reShownSwitch(true, TEST_WIDTH));
+    await settle(600);
+    const hidden = stats();
+    console.log(
+      `  hide + new key: ${describeHide(mounted.ledgerEntries, hidden.ledgerEntries)}`
+    );
+
+    // Shown again with no further change: the re-shown view's own layout is the first
+    // the engine sees for this configuration, and it is the one round 1 threw away.
+    await rerender(reShownSwitch(false, TEST_WIDTH));
+    const box = await waitForBoxWidth(
+      'reshown',
+      TEST_WIDTH,
+      'the control after it was shown again'
+    );
+    const d = delta(mounted, stats());
+    console.log(
+      `  re-show: box=${describeBox(box)} corrections=${String(d.corrections)} ` +
+        `dropped=${String(d.dropped)}`
+    );
+    expect(boxMatches(box, wideBox)).toBe(true);
+    // Exactly one, counted across the hide: a platform that corrected it while hidden
+    // and again after is two commits for one size change, which is its own bug.
+    expect(d.corrections).toBe(1);
+
+    unmount();
+    await settle(600);
+    const dropped = stats();
+    console.log(
+      `  unmount: ledger ${String(before.ledgerEntries)}->` +
+        `${String(dropped.ledgerEntries)} registry ` +
+        `${String(before.registryEntries)}->${String(dropped.registryEntries)}`
+    );
+    expect(dropped.ledgerEntries).toBeLessThanOrEqual(before.ledgerEntries);
+    expect(dropped.registryEntries).toBeLessThanOrEqual(before.registryEntries);
+  });
+
+  it('corrects a control shown again after the environment moved while it was hidden', async () => {
+    seedWrongGuess();
+    const before = stats();
+    const epoch = stats().environmentEpoch;
+
+    const { rerender, unmount } = await render(reShownSwitch(false, null));
+    await waitForBoxWidth(
+      'reshown',
+      expectedBox.width,
+      'the control before it was hidden'
+    );
+    await settle(300);
+    const mounted = stats();
+
+    await rerender(reShownSwitch(true, TEST_WIDTH));
+    await settle(600);
+    const hidden = stats();
+    console.log(
+      `  hide: ${describeHide(mounted.ledgerEntries, hidden.ledgerEntries)}`
+    );
+
+    // The environment moves while it is hidden: every ledger entry is re-keyed and
+    // marked inexact so the next report is a correction (`invalidateEnvironment`,
+    // review S2). An instance with no entry is not in that walk at all.
+    nitroUiCore.invalidateSizingEnvironment();
+    await settle(300);
+    expect(stats().environmentEpoch).toBe(epoch + 1);
+
+    await rerender(reShownSwitch(false, TEST_WIDTH));
+    const box = await waitForBoxWidth(
+      'reshown',
+      TEST_WIDTH,
+      'the control after it was shown again, in the new environment'
+    );
+    const d = delta(mounted, stats());
+    console.log(
+      `  re-show after an environment change: box=${describeBox(box)} ` +
+        `corrections=${String(d.corrections)} dropped=${String(d.dropped)}`
+    );
+    expect(boxMatches(box, wideBox)).toBe(true);
+    expect(d.corrections).toBe(1);
+
+    unmount();
+    await settle(600);
+    expect(stats().ledgerEntries).toBeLessThanOrEqual(before.ledgerEntries);
+    expect(stats().registryEntries).toBeLessThanOrEqual(before.registryEntries);
+  });
+
   it('never lets a pre-warmed size outlive the control that contradicts it', async () => {
     // Review B2, the case DECISIONS D16 was written for: an app pre-warms the
     // library's declared number at startup - on iOS 26 the 61x28 SwiftUI Switch -
