@@ -70,3 +70,4 @@
 | F4 | CI green on every trigger: no cancelled `main` runs, dispatched harness jobs fixed, release-pipeline nits, X1 leftovers, iOS < 26 fallback row | Apex | Opus | merged (`072ed4c`) |
 | F8 | The two harness jobs green on GitHub's hosted runners: the 8 iOS failures classified and fixed, the Android emulator boot | Apex | Opus | merged (`e011d8e`, PR #12) |
 | F8b | F8's sizing-engine fix finished: no in-window eviction from the held set, one false red proof moved, flush prunes, changeset trimmed | Apex | Opus | merged with F8 (`e011d8e`) |
+| G8 | Android visual fixes from the README screenshots: inline DatePicker clipped, Menu dropdown truncating labels | Apex | Opus | running |
