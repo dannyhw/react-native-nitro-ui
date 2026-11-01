@@ -9,7 +9,7 @@ Both README defects were the Android platform's own sizing rules, applied where 
 
 **Menu.** `ExposedDropdownMenu` defaults `matchAnchorWidth = true`, and the modifier that flag drives sets `minWidth = maxWidth = anchorWidth`. Every row was measured against the button's box, so a label longer than the title lost its tail — "AirDrop" rendered as "AirDr". The call site's comment claimed `exposedDropdownSize()` was not in use; it is, inside Material, so the claim held and the bug stayed. The call now passes `false`, leaving the list at Material's content sizing: nothing under the 112 dp floor or over the 280 dp a row's content caps at, aligned with the trigger's start edge so it still opens under it.
 
-**DatePicker.** Material lays the calendar's seven weekday columns out with `Arrangement.SpaceEvenly` and sizes each to `LocalMinimumInteractiveComponentSize` — 48 dp by default — so the grid wants 7 × 48 + 2 × 12 = 360 dp. An `inline` picker is `fillWidth`, so Compose is asked what it wants *at* the box's width and `Modifier.size` enforces that maximum: the columns on the right lost width instead of the box growing. Measured in the story's 320 dp box: header columns `126 ×6, 20` — Saturday at 7.6 dp, each day's 40 dp disc wider than the cell holding it. The inline calendar now provides **40 dp**, the token the disc is drawn at, but only in a box narrower than the 360 dp where 48 dp stops fitting (fix round 1; round 0 provided it everywhere), so the grid needs 304 dp and 320 fits with every column equal. What 40 dp costs is stated in the changeset and the component docs; `date-picker-ios.png` puts iOS's columns on a 42.8 pt pitch in its 320 pt box, so the platforms agree there. Below 304 dp it is still clipped; `compact` is untouched — its dialog is a window of its own.
+**DatePicker.** Material lays the calendar's seven weekday columns out with `Arrangement.SpaceEvenly` and sizes each to `LocalMinimumInteractiveComponentSize` — 48 dp by default — so the grid wants 7 × 48 + 2 × 12 = 360 dp. An `inline` picker is `fillWidth`, so Compose is asked what it wants *at* the box's width and `Modifier.size` enforces that maximum: the columns on the right lost width instead of the box growing. Measured in the story's 320 dp box: header columns `126 ×6, 20` — Saturday at 7.6 dp — over day rows of `126 ×6, 73`, so the last column's cell (27.8 dp) was narrower than the 40 dp disc it draws. The inline calendar now provides **40 dp**, the token the disc is drawn at, but only in a box narrower than the 360 dp where 48 dp stops fitting (fix round 1; round 0 provided it everywhere), so the grid needs 304 dp and 320 fits with every column equal. What 40 dp costs is stated in the changeset and the component docs; `date-picker-ios.png` puts iOS's columns on a 42.8 pt pitch in its 320 pt box, so the platforms agree there. Below 304 dp it is still clipped; `compact` is untouched — its dialog is a window of its own.
 
 **Where the guard could not live.** A harness test cannot see the calendar: `measureContent()` returned the box width at 240, 320 and 361 dp alike, and the cells are Compose nodes, not `View`s. So the rule reads a `uiautomator` dump of the weekday header row — `scripts/real-input/android-calendar.mjs`, applied by `CHECKS['date-picker']` on Android-only fixtures, unit-tested against real dumps. The Menu's popup window the witness already reports, so that is guarded in `Menu.harness.tsx`.
 
@@ -18,11 +18,12 @@ Both screenshots re-taken from the same stories, device and appearance, cropped 
 ## Gates
 
 Round 0 measured `check` at `8342fd0bb41b` and both device gates at `0b1dbaf71795`; every run
-of both rounds is in the exported ledger (`docs/tasks/G8/gates.jsonl`). The generated table
-for the code this branch now carries is the one at the end of `## Fix round 1`, so each gate
-is stated once with the ledger's own numbers. The two iOS gates are the host's known gap
-(FOLLOWUPS: this machine's simulators cannot launch apps); the diff is Android-only plus
-tooling and tests, and the brief leaves those two to CI.
+of every round is in the exported ledger (`docs/tasks/G8/gates.jsonl`). The generated table
+for the code this branch now carries is the one at the end of `## Fix round 2`, so each gate
+is stated once with the ledger's own numbers. `harness:ios` and `real-input:ios` ran on
+maintainer-mac-1 against `8c4d2fd`; fix round 2's diff is Android-only plus check-only tests
+and docs, so that half of the tree is byte-identical and those runs still speak for this tip
+(that is `trees.ios` in the ledger, not a claim about how the runs went).
 
 ## Red proofs
 
@@ -41,20 +42,21 @@ rewrote that file, so they do not resolve in it any more — the assertions them
 
 ## Files changed
 
-- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt` — `matchAnchorWidth = false`; the stale comment about `exposedDropdownSize()` corrected.
-- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt` — `LocalMinimumInteractiveComponentSize` of 40 dp around the inline calendar, provided only below `CALENDAR_WIDE_MIN_DP` (round 1).
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt` — `matchAnchorWidth = false`; the stale comment about `exposedDropdownSize()` corrected; `MENU_CONTENT_MAX_DP` moved above `MenuHost`'s doc so the class has its doc back (round 2).
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt` — `LocalMinimumInteractiveComponentSize` of 40 dp around the inline calendar, provided only below `CALENDAR_WIDE_MIN_DP` (round 1); the comments around that wrapper corrected, and its two wrong measurements replaced with the dumps' own numbers (round 2).
 - `example/__tests__/Menu.harness.tsx` — the popup-width, floor and header-cap tests.
 - `example/src/DatePickerScreen.tsx` — the Android-only "Wide inline calendar" and 320 dp "Narrow inline calendar" fixtures.
-- `scripts/real-input/android-calendar.mjs`, `scripts/__tests__/real-input-calendar.test.js` — the grid rule, its width-dependent floor, and its 13 tests.
+- `scripts/real-input/android-calendar.mjs`, `scripts/__tests__/real-input-calendar.test.js` — the grid rule, its width-dependent floor, and its 13 tests; the day-cell fixture carries the dump's real widths and names its cells on purpose (round 2).
 - `scripts/real-input/android.mjs` — `density()`, `checkInlineCalendarGrids()` in `CHECKS['date-picker']`.
-- `docs/components/date-picker.md`, `docs/components/menu.md` — the Android width behaviour, stated as behaviour.
-- `docs/images/components/date-picker-android.png`, `menu-android.png` — re-taken; `.changeset/g8-*.md` — two patch entries.
-- `docs/tasks/FOLLOWUPS.md` — the two closed lines replaced by one pointing here; the iOS Menu line left open.
+- `docs/components/date-picker.md`, `docs/components/menu.md` — the Android width behaviour, stated as behaviour; the height measured not to depend on width (round 2).
+- `docs/images/components/date-picker-android.png`, `menu-android.png` — re-taken; `.changeset/g8-*.md` — two patch entries, the DatePicker one corrected to "a calendar 360 dp or wider is unchanged" (round 2).
+- `docs/tasks/FOLLOWUPS.md` — the two closed lines replaced by one pointing here; the iOS Menu line left open; three lines added across rounds 1 and 2.
 
 ## Follow-ups
 
-- date-picker: below 304 dp the inline calendar is clipped rather than scaled; only the 320 dp case is guarded, since nothing smaller is a usable touch target to benchmark. (Round 1 re-measured that box; the numbers are in the module header's table.)
+- date-picker: below 304 dp the inline calendar is clipped rather than scaled; only the 320 dp case is guarded, since nothing smaller is a usable touch target to benchmark. Round 1 re-measured that box (`105 ×5, 41`, no seventh column).
 - real-input: the two calendar fixtures are mid-page, not the page's last row — the reason is documented at the call site — and one downward scroll pass now collects both.
+- The two wording/number fixes that could not go in this round are in `docs/tasks/FOLLOWUPS.md` with their reasons: `Menu.harness.tsx` says "either platform" where it means iOS (that file is frozen while the iOS gates run), and the calendar module's day-cell table describes widths that dump does not contain (that file maps to both platforms).
 - tooling: recorded properly in `docs/tasks/FOLLOWUPS.md` — `check` cannot run in a shell with a sourced lease env (25 failures across `gate.test.js`, `gate-check.test.js` and `gate-logs.test.js`); the workaround is to unset the lease env for `check` and source it for device gates.
 
 ## Fix round 1
@@ -65,16 +67,27 @@ Round 2 of 2 · lease `G8-6ih23` (`emulator-5570`) · merged `origin/main` (`5c4
 
 Red (`mutations.json`): `narrow = true` -> the 411 dp row refuses 40 dp targets, 320 dp green; `expectedColumnDp` always-40 or `= 400`; tolerance `0`; `width(112.dp)`; no header `widthIn`. A start-edge assertion was **removed** — `offset(x = 12.dp)` left the window's rect unchanged, 19 green; kept as a negative control.
 
+This round's own gates are the generated table at the end of `## Fix round 2`; it measured
+`check` and both Android device gates at `d3be8bf7c71b` after the round's last commit.
+
+## Fix round 2
+
+Round 3 of 3 · lease `G8-clgez` (`emulator-5574`) · **no shared TS touched** (two Kotlin files, one check-only test, docs), so `trees.ios` is unchanged and mac-1's iOS runs still speak for this tip.
+
+**Item 1: the height does not move with the width.** In-app `measureContent()` puts an `inline` and a `wheel` calendar at **512.00 dp tall, both at 320 dp and at 411.43 dp wide** — `date` and `datetime`, four-row month and six. Eight reads, one number, so the key stays `${variant}|${mode}`: sizing.md §5 wants the width in the key only where height follows it. The `uiautomator` boxes (198.86 vs 246.10 dp) are viewport clipping, not the control; `date-picker.md` carries the numbers.
+
+Also: the wrapper's cost is a recomposition of its own lambda, not a measure of the calendar, and its no-modifier reason is not that `fillMaxWidth()` throws (a no-op unbounded); `MENU_CONTENT_MAX_DP` back above `MenuHost`'s doc; the changeset's 360 dp. Two more invented measurements surfaced there — fixed where reachable, one left as a FOLLOWUPS line because that file is both-platform.
+
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1603 tests / 60 suites | `aecd47415e31` | 2 m 33 s | start 2.1 / med 4.2 / max 6.5 |
+| `check` | **PASS** | 1603 tests / 60 suites | `d3be8bf7c71b` | 2 m 34 s | start 2.4 / med 4.1 / max 4.6 |
 | `harness:ios` | missing | — | — | — | — |
-| `harness:android` | **PASS** | 284 tests / 16 suites | `aecd47415e31` (android tree) | 8 m 11 s | start 2.7 / med 2.1 / max 2.9 |
+| `harness:android` | **PASS** | 284 tests / 16 suites | `d3be8bf7c71b` (android tree) | 8 m 10 s | start 2.9 / med 2.4 / max 3.0 |
 | `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | **PASS** | — | `aecd47415e31` (android tree) | 21 m 46 s | start 3.0 / med 2.2 / max 3.7 |
+| `real-input:android` | **PASS** | — | `d3be8bf7c71b` (android tree) | 21 m 49 s | start 3.9 / med 2.4 / max 3.9 |
 | `harness:android:Menu` | stale | 19 tests / 1 suites | 5a87eea76d84 (not this tree) | 20.2 s | start 2.4 / med 2.3 / max 2.4 |
 | `harness:android:Menu:--background` | stale | — | 3ec81511c2fa (not this tree) | 0.5 s | start 2.9 / med 2.9 / max 2.9 |
 | `real-input:android:--control:date-picker` | stale | — | fa50a01394c8 (not this tree) | 8 m 15 s | start 2.8 / med 2.0 / max 2.9 |
+| `real-input:android:date-picker:--control:date-picker` | stale | — | ffbfe429f7ce (not this tree) | 0.2 s | start 2.8 / med 2.8 / max 2.8 |
 
-The `stale` rows are this round's filtered proof runs and the 240 dp measurement, each on a
-tree a later commit replaced. `need --for review`: `1 gate(s) missing: harness:ios`.
+`need`: `1 gate(s) missing: harness:ios`. `stale` rows are rounds 1–2's filtered runs and one gate name I mis-typed (a usage error, not a measurement).
