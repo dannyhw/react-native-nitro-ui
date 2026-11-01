@@ -342,9 +342,16 @@ struct MenuContent: NitroUIContent {
           }
         }
       case .section(let section):
-        // `Section` is what renders as a menu group. A section with no title gets
-        // the same view as one with an empty header - `Divider()`, which reads as a
-        // group break and nothing else.
+        // `Section` is what renders as a menu group: SwiftUI turns it into an
+        // inline `UIMenu`, which UIKit sets off from its neighbours with a
+        // separator, so a section with no title needs no header at all to read as
+        // a group break.
+        //
+        // It must not be *given* one. Until G9 the untitled branch passed
+        // `Divider()` as the header, and SwiftUI built that section as an inline
+        // `UIMenu` with no children: every row of an untitled group was missing
+        // from the menu on iOS, while the model, `rows` and Android all had them
+        // (`docs/tasks/G9-ios-menu-untitled-group.report.md`).
         if let title = section.title {
           Section(header: Text(title)) {
             ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
@@ -356,8 +363,6 @@ struct MenuContent: NitroUIContent {
             ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
               rowButton(item)
             }
-          } header: {
-            Divider()
           }
         }
       }
@@ -707,6 +712,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     model.onOpen = nil
     model.onClose = nil
     model.primaryAction = nil
+    // A probe's answer describes the previous owner's menu.
+    storeDrawn("-1")
     host.prepareForRecycle()
   }
 
@@ -756,10 +763,99 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   /// `anchor` and `menu` answer `-1`, "not measurable here", rather than a `0` that
   /// would read as "checked, and none left behind". `rows` is the one field that *is*
   /// knowable here, because the items are data we were handed rather than a window we
-  /// cannot see, so it answers the real count. Picker says the same about its menu
-  /// (`HybridNitroUiPicker.swift:555-565`).
+  /// cannot see, so it answers the model's count. Picker says the same about its menu
+  /// (`HybridNitroUiPicker.swift:555-565`). `drawn` is the other half: what UIKit
+  /// actually built from those rows, as ``nuiTestMenuProbe()`` last read it.
   func nuiTestMenuReport() throws -> String {
-    return "expanded=-1;live=-1;anchor=-1,-1,-1,-1;menu=-1,-1,-1,-1;rows=\(host.model.actionableRowCount)"
+    return "expanded=-1;live=-1;anchor=-1,-1,-1,-1;menu=-1,-1,-1,-1"
+      + ";rows=\(host.model.actionableRowCount);drawn=\(readDrawn())"
+  }
+
+  /// Open the menu, copy the tree UIKit built for it, and close it - from a test.
+  ///
+  /// Test-only; see the spec. `rows` above counts the model, which is what we
+  /// *asked* SwiftUI to draw, and G9 is the case where the two differed: an untitled
+  /// section was in the model and missing from the menu. What a person sees is the
+  /// `UIMenu` SwiftUI hands the trigger's `UIButton`, and SwiftUI only fills it in
+  /// when the menu is presented (it reads empty on a trigger nobody has opened), so
+  /// the probe presents it - the same `performPrimaryAction()` a tap on a
+  /// menu-as-primary-action button runs - reads it, and dismisses it in one
+  /// main-thread turn. Hops to main because JS calls it; the answer is left for
+  /// ``nuiTestMenuReport()`` under ``drawnLock`` rather than returned, so JS never
+  /// waits on the main thread.
+  func nuiTestMenuProbe() throws {
+    let run = { [weak self] in
+      guard let self else { return }
+      self.storeDrawn(self.probeDrawnMenu())
+    }
+    if Thread.isMainThread {
+      run()
+    } else {
+      DispatchQueue.main.async { run() }
+    }
+  }
+
+  /// The probe's last answer, or `-1` before there is one.
+  private var drawn = "-1"
+  /// `drawn` is written on main and read from JS.
+  private let drawnLock = NSLock()
+
+  private func storeDrawn(_ value: String) {
+    drawnLock.lock()
+    drawn = value
+    drawnLock.unlock()
+  }
+
+  private func readDrawn() -> String {
+    drawnLock.lock()
+    defer { drawnLock.unlock() }
+    return drawn
+  }
+
+  /// What UIKit holds for this trigger, as the spec's `drawn` tree, or `-1`.
+  private func probeDrawnMenu() -> String {
+    nitroUiAssertMainThread()
+    // A trigger with a `primaryAction` acts on a tap rather than opening, and a
+    // disabled one does nothing: pressing either would not read the menu, and the
+    // first would report a press nobody made.
+    guard #available(iOS 17.4, *), !model.hasPrimaryAction, !model.disabled,
+      let button = Self.menuButton(in: host), button.showsMenuAsPrimaryAction
+    else { return "-1" }
+    button.performPrimaryAction()
+    let tree = button.menu.map { Self.describe($0.children) } ?? "-1"
+    button.contextMenuInteraction?.dismissMenu()
+    return tree
+  }
+
+  /// The trigger's `UIButton`: the one view under the host that carries a menu.
+  ///
+  /// Matched by public API only - a `UIButton` whose `menu` is set - rather than by
+  /// SwiftUI's own class name, which is not ours to depend on.
+  private static func menuButton(in view: UIView) -> UIButton? {
+    if let button = view as? UIButton, button.menu != nil { return button }
+    for child in view.subviews {
+      if let found = menuButton(in: child) { return found }
+    }
+    return nil
+  }
+
+  /// The spec's `drawn` notation for one level of a `UIMenu`.
+  private static func describe(_ elements: [UIMenuElement]) -> String {
+    elements.map { element -> String in
+      if let menu = element as? UIMenu {
+        let rows = describe(menu.children)
+        return menu.options.contains(.displayInline)
+          ? "(\(menu.title):\(rows))"
+          : "{\(menu.title):\(rows)}"
+      }
+      if let action = element as? UIAction {
+        return action.title
+          + (action.attributes.contains(.destructive) ? "!" : "")
+          + (action.attributes.contains(.disabled) ? "~" : "")
+      }
+      return "?"
+    }
+    .joined(separator: ",")
   }
 
   private var model: MenuModel {
