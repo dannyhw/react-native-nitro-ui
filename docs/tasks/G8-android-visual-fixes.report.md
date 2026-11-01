@@ -54,6 +54,23 @@ Recorded as data in `docs/tasks/G8-android-visual-fixes/mutations.json`.
 
 ## Follow-ups
 
-- date-picker: below 304 dp the inline calendar is clipped rather than scaled; only the 320 dp case is guarded, since nothing smaller is a usable touch target to benchmark.
-- real-input: `checkNarrowCalendarGrid` scrolls to the bottom of `DatePickerScreen`, the page's last row — ~12 throws worst case, and the reason is documented at the call site.
-- tooling: `bun run check` inherits `NITRO_UI_LEASE_ID` and friends from a sourced lease env, and 15 tests in `scripts/__tests__/gate-logs.test.js` fail on it; running device gates and `check` from the same shell needs the env unset.
+- date-picker: below 304 dp the inline calendar is clipped rather than scaled; only the 320 dp case is guarded, since nothing smaller is a usable touch target to benchmark. (Round 1 re-measured that box: see the table in the module's header and `## Fix round 1`.)
+- real-input: the two calendar fixtures are mid-page, not the page's last row — the reason is documented at the call site — and one downward scroll pass now collects both.
+- tooling: recorded properly in `docs/tasks/FOLLOWUPS.md` — `check` cannot run in a shell with a sourced lease env (25 failures across `gate.test.js`, `gate-check.test.js` and `gate-logs.test.js`); the workaround is to unset the lease env for `check` and source it for device gates.
+## Fix round 1
+
+Round 2 of 2 · lease `G8-6ih23` (`emulator-5570`) · merged `origin/main` (`5c4b39d`, G9), both suites kept.
+
+**The 40 dp cut is width-conditional.** `BoxWithConstraints` — no modifier, so the host still measures the calendar, not the box — provides 40 dp only under `CALENDAR_WIDE_MIN_DP` = 360 dp; above it, the inherited 48 dp. One provider, not `if`/`else`, so crossing the threshold mid-measure cannot rebuild a mounted calendar. The month buttons and year toggle read the same local and shrink too; the changeset and `date-picker.md` now say so, placing 40 dp above WCAG 2.2 AA's 24 px, below Material's 48 dp. `real-input` measures a 411 dp calendar at 48 dp and the 320 dp one at 40 dp, each asserting its own width premise.
+
+Red (`mutations.json`): `narrow = true` -> the 411 dp row refuses 40 dp targets, 320 dp green; `expectedColumnDp` always-40 or `= 400`; tolerance `0`; `width(112.dp)` on the popup; no header `widthIn`. `MenuHeader` is capped and the wide popup must beat the floor list. One start-edge assertion was **removed, not shipped**: `offset(x = 12.dp)` left the window's rect unchanged, 19 green — kept as a negative control.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1603 tests / 60 suites | `aecd47415e31` | 2 m 33 s | start 2.1 / med 4.2 / max 6.5 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | **PASS** | 284 tests / 16 suites | `aecd47415e31` (android tree) | 8 m 11 s | start 2.7 / med 2.1 / max 2.9 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | **PASS** | — | `aecd47415e31` (android tree) | 21 m 46 s | start 3.0 / med 2.2 / max 3.7 |
+
+`need --for review`: `1 gate(s) missing: harness:ios`.

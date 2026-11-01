@@ -1,6 +1,6 @@
 {
   "task": "G8",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored byte for byte and its sha256 re-checked (X14/X15/F4's convention, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it. Rows 4-9 are the rule's own unit tests, run on maintainer-mac-1 on 2026-11-01 against code tree 8342fd0bb41b. The first three rows are not mutations: they are the shipped Menu code and the shipped DatePicker code run in the configuration the brief says is broken - which is what a red proof of a visual fix is, since the defect is the unmutated program. Lease G8-ty8hr, emulator-5574. Round 1's rows are at the bottom, on lease G8-6ih23 / emulator-5570 against code tree 3ec81511c2fa.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored byte for byte and its sha256 re-checked (X14/X15/F4's convention, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it. Rows 4-9 are round 0's rule unit tests, run on maintainer-mac-1 on 2026-11-01 against code tree 8342fd0bb41b. The first three rows are not mutations: they are the shipped Menu code and the shipped DatePicker code run in the configuration the brief says is broken - which is what a red proof of a visual fix is, since the defect is the unmutated program. Lease G8-ty8hr, emulator-5574. Rows marked `round: 1` are fix round 1's, on lease G8-6ih23 / emulator-5570; the code tree is named per row because the tree moved as the round's commits landed. The last row is a negative control: a mutant that was expected to go red and did not, kept because it is the reason a check was not written.",
   "mutations": [
     {
       "test": "example/__tests__/Menu.harness.tsx · Menu · G7a › gives the list the width its items need, not the trigger's",
@@ -123,6 +123,43 @@
       "before": "        val narrow =\n          constraints.hasBoundedWidth &&\n            with(LocalDensity.current) { constraints.maxWidth.toDp() < CALENDAR_WIDE_MIN_DP }",
       "after": "        val narrow = true",
       "red": "✗ the 411 dp inline calendar lays a whole week out on 48 dp targets: 7 columns of 105px x7 (narrowest 40.0 dp) - the narrowest column is 40.0 dp, under the 48 dp touch target this box should have produced. The 320 dp row in the same run stayed green (40 dp is right there), which is the pair proving the decision rather than one size: this is the shipped round-0 control, which asked for 40 dp at every width."
+    },
+    {
+      "round": 1,
+      "tree": "aecd47415e31",
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › refuses a grid that lost its last column rather than only shrinking it",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "  if (grid.columns.length < DAYS_IN_WEEK) {",
+      "after": "  if (false) {",
+      "red": "expect(calendarGridProblems(grid)).toEqual([...]) - the real 240 dp row (`105 ×5, 41`) is then judged only on widths, and a mutant that reports nothing about the missing Saturday cannot pass. Re-run against round 1's rewritten fixture; round 0 proved the same mutant against the older six-equal-column fixture."
+    },
+    {
+      "round": 1,
+      "tree": "aecd47415e31",
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › refuses a grid that lost its last column rather than only shrinking it",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "const MIN_COLUMNS_TO_BE_A_WEEK = 5;",
+      "after": "const MIN_COLUMNS_TO_BE_A_WEEK = 7;",
+      "red": "Received: null - recognition now needs seven boxes, so the clipped calendar is answered as 'no calendar here' and the caller aborts instead of reporting a broken grid. Re-run against round 1's fixture."
+    },
+    {
+      "round": 1,
+      "tree": "aecd47415e31",
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › calls a clipped header missing rather than measuring a week of day cells",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "    if (node.clickable === 'true') {",
+      "after": "    if (false) {",
+      "red": "expect(grid).toBeNull() - the day row is returned as the week. The fixture is now the real dump's day cells (`110, 110, 111, 110, 110, 110, 126`), so the mutant's answer is a 16 px spread it invented, which is the other way this check lies about a healthy calendar."
+    },
+    {
+      "round": 1,
+      "negativeControl": true,
+      "tree": "5a87eea76d84",
+      "test": "example/__tests__/Menu.harness.tsx · Menu · G7a › (a start-edge assertion that was written and then removed)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "before": "      ExposedDropdownMenu(\n        expanded = expanded,\n        matchAnchorWidth = false,",
+      "after": "      ExposedDropdownMenu(\n        expanded = expanded,\n        modifier = Modifier.offset(x = 12.dp),\n        matchAnchorWidth = false,",
+      "red": "DID NOT GO RED: 19 passed, 19 total. The witness's `menu=` rect is the popup's window, and `Modifier.offset` on the list moves the rows inside that window, not the window - Material's own `ExposedDropdownMenuPositionProvider` still places it at the anchor. So an assertion that the popup's start edge equals the trigger's could not be shown to fail by any product-level lever this call exposes, and it was removed rather than shipped unfalsifiable; the start edges are printed instead. Horizontal placement stays guarded by the hosted test's `Math.abs(mLeft - aLeft) < 40`, whose red proof is G7b round 1's `DropdownMenu(offset = DpOffset(0.dp, 64.dp))` - the mutant that really did move a window, 16 px below the anchor's bottom to 168 px."
     }
   ]
 }
