@@ -1081,26 +1081,35 @@ final class HybridNitroUiDatePicker: HybridNitroUiDatePickerSpec, RecyclableView
   /// and every other configuration is a first instance of *its own* configuration
   /// that gets corrected the turn it measures (`docs/architecture/sizing.md` §9).
   ///
-  /// Measured on the gate simulator (iOS 27, iPhone Air, regular text size,
-  /// `AppleLocale = en_PT`) with `variant = "compact"`, `mode = "date"`: the field's
-  /// box is **103.00 x 36.33 pt** - the size the harness logs for that configuration
-  /// (`variants (ios, ...): field=103.00x36.33`), not a round number picked to look
-  /// tidy. Declaring what the control actually measures puts the pair inside the
+  /// Measured on the gate simulator (iOS 27, iPhone 17, regular text size,
+  /// `AppleLocale = en_US`) with `variant = "compact"`, `mode = "date"`: the field's
+  /// box is **107.00 x 36.33 pt** - the size the harness logs for that configuration
+  /// and the one the conformance suite compares against, not a round number picked to
+  /// look tidy. Declaring what the control actually measures puts the pair inside the
   /// engine's 0.5 pt `kEpsilon`, so a cold `compact` `date` mount is laid out at its
   /// own size and pays no correction (D17).
+  ///
+  /// `en_US` is the configuration this pair is tuned to because it is both GitHub's
+  /// runner default and the most common locale this control ships into; the harness
+  /// pins it (`example/rn-harness.config.mjs`), so the conformance comparison always
+  /// measures the majority case rather than whatever a maintainer's simulator
+  /// happened to be set to. The previous declaration here was 103.00, measured under
+  /// `AppleLocale = en_PT`, which left every `en_US` first instance laid out 4 pt
+  /// narrow for one frame plus a horizontal correction.
   ///
   /// The height is the one number here that does not move with the locale. The width
   /// is the widest `date` string the *locale's* formatter produces (see
   /// ``NitroUiDatePickerField``), so it is exact for the configuration it was measured
-  /// in and approximate for the rest: the same configuration measures 107.00 under
-  /// `en_US`, and `mode = "time"` measures 48.00 here against 72.00 there. A locale
-  /// wider than this one costs that configuration's first instance one horizontal
-  /// correction, which is the documented price of a sizing key that excludes the
+  /// in and approximate for the rest: the same configuration measures 103.00 under
+  /// `en_PT`, and `mode = "time"` measures 48.00 under `en_PT` against 72.00 under
+  /// `en_US`. A locale *narrower* than this one leaves that configuration's first
+  /// instance with 4 pt of dead padding for one frame, and pays a horizontal
+  /// correction to lose it - the documented price of a sizing key that excludes the
   /// value. That is a price, not a safe side: `core.md` section 7 says neither
   /// direction is safe - too narrow is the dead-touch story, and too wide is dead
   /// padding beside the control - so the honest statement is how far wrong this
-  /// pair can be for a configuration it was not measured in (4 pt narrow for
-  /// `en_US`), not that being wrong there is free.
+  /// pair can be for a configuration it was not measured in (4 pt wide for
+  /// `en_PT`), not that being wrong there is free.
   ///
   /// As everywhere else, a fallback *smaller* than the control is the dead-touch
   /// story in `core.md` §7, and a `compact` field that is 44 pt wide for one frame
@@ -1126,7 +1135,7 @@ final class HybridNitroUiDatePicker: HybridNitroUiDatePickerSpec, RecyclableView
   }
 
   /// The declared fallback - see ``declaresFallback``.
-  private static let fallbackSize = (width: 103.0, height: 36.33)
+  private static let fallbackSize = (width: 107.0, height: 36.33)
 
   /// The Nitro `view` - created once here and never replaced.
   override init() {
