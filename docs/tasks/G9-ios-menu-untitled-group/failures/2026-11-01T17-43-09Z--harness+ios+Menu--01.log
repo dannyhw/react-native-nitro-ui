@@ -1,0 +1,83 @@
+# Failure excerpt — harness:ios:Menu
+
+- Ran: 2026-11-01T17:43:09.125Z on code tree `39c26f8d3333` at HEAD `bfa6ba3` (branch `task/G9-ios-menu-untitled-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Menu`
+- Result: fail, exit 1, 21967 ms
+- Load: start 5.79, end 7.42, median 7.42, max 7.72
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G9-3rusj`
+- Full log: `task/G9-ios-menu-untitled-group/harness+ios+Menu-2026-11-01T17-43-08.806Z.log` (<store>/task/G9-ios-menu-untitled-group/harness+ios+Menu-2026-11-01T17-43-08.806Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › draws every row of an untitled group, with its role (G9)`
+- `expected [] to deeply equal [ 'Delete!', 'Archive~' ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G9-ios-menu-untitled-group/harness+ios+Menu-2026-11-01T17-43-08.806Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G9-3rusj (still live)
+  |   G9-3rusj                 G9           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.42 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: harness:ios:Menu
+gate: node ../scripts/harness.mjs --harnessRunner ios Menu (cwd example)
+gate: code tree 39c26f8d3333 at HEAD bfa6ba3
+gate: git tree dffe7744cec3 with a DIRTY worktree (not reusable)
+gate: log task/G9-ios-menu-untitled-group/harness+ios+Menu-2026-11-01T17-43-08.806Z.log
+gate:       <store>/task/G9-ios-menu-untitled-group/harness+ios+Menu-2026-11-01T17-43-08.806Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Menu
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 39c26f8d3333, 9 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.79/4.75 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G9-ios-menu-untitled-group/harness+ios+Menu-2026-11-01T17-43-08.806Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › draws every row of an untitled group, with its role (G9)
+
+    expected [] to deeply equal [ 'Delete!', 'Archive~' ]
+
+      [0m [90m 1338 |[39m       [90m// The claim: the untitled group is its own group, with both of its rows and[39m
+       [90m 1339 |[39m       [90m// their roles. Before G9 this read `[]` - the group was there, empty.[39m
+      [31m[1m>[22m[39m[90m 1340 |[39m       expect(drawnGroup(drawn[33m,[39m [32m''[39m))[33m.[39mtoEqual([33mUNTITLED_ROWS[39m)[33m;[39m
+       [90m      |[39m                                            [31m[1m^[22m[39m
+       [90m 1341 |[39m       [90m// And the whole menu, in order, so a row moved between groups is red too.[39m
+       [90m 1342 |[39m       expect(drawn)[33m.[39mtoBe(
+       [90m 1343 |[39m         [32m`Open,(Share:AirDrop,Mail),(:${UNTITLED_ROWS.join(',')}),(More:Get Info)`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 15 passed, 16 total
+Snapshots:   0 total
+Time:        20.88 s
+Ran all test suites matching Menu.
+gate: harness:ios:Menu FAIL in 22.0 s
+gate: recorded in .gates/task/G9-ios-menu-untitled-group.jsonl
+
+
+gate: appended the device context to task/G9-ios-menu-untitled-group/harness+ios+Menu-2026-11-01T17-43-08.806Z.log (4 probe(s))
+
+```
