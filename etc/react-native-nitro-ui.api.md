@@ -135,6 +135,7 @@ export interface MenuProps extends ViewProps {
         };
         nuiTestSelectRow(id: string): void;
         nuiTestMenuReport(): string;
+        nuiTestMenuProbe(): void;
     }) => void) | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;
